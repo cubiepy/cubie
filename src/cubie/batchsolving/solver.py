@@ -539,7 +539,7 @@ class Solver:
         kernel_settings, kernel_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_KERNEL_PARAMETERS,
-            user_settings={"auto_performance": auto_performance},
+            user_settings={},
         )
         recognized_kwargs = (
             step_recognized
@@ -562,6 +562,7 @@ class Solver:
             output_settings=output_settings,
             memory_settings=memory_settings,
             cache=cache,
+            auto_performance=auto_performance,
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)

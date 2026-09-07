@@ -734,7 +734,7 @@ def solver_settings(solver_settings_override, system, precision):
         "inexact_newton": False,
         "attempt_dense_prediction": True,
         "krylov_max_iters": 50,
-        "newton_max_iters": 50,
+        "newton_max_iters": None,
         "newton_target_iters": 5,
         "min_step_shrink": precision(0.1),
         "max_step_growth": precision(5.0),

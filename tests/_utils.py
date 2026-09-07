@@ -2057,6 +2057,8 @@ LARGE_TSIT5 = {**LARGE_STATE_ONLY, "algorithm": "tsit5"}
 
 LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
 
+LARGE_FIRK = {**LARGE_STATE_ONLY, "algorithm": "radau_iia_3"}
+
 # Unique sets: the final-save schedule is a function of exact
 # dt/save_every/duration ratios, so each case pins its own timing.
 # The base pins a fixed euler step with time-domain output only.

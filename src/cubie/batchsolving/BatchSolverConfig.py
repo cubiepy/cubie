@@ -161,7 +161,6 @@ ALL_KERNEL_PARAMETERS = (
             "kernel_name",
             "cache",
             "blocksize",
-            "auto_performance",
         }
     )
     | ALL_CACHE_PARAMETERS
@@ -227,10 +226,10 @@ class BatchSolverConfig(CUDAFactoryConfig):
         ``{algorithm}_{system name}``; the LTO state is appended as
         ``_ltoon``/``_ltooff`` either way.
     cache
-        Hash-excluded :class:`CacheSettings`; accepts the ``cache``
-        shorthand and loose ``cache_*`` keys through ``update``.
+        :class:`CacheSettings`; accepts the ``cache`` shorthand and
+        loose ``cache_*`` keys through ``update``.
     blocksize
-        Hash-excluded threads per block for every launch.
+        Threads per block for every launch.
     """
 
     loop_fn: Optional[Callable] = attrs.field(

@@ -27,7 +27,7 @@ from abc import abstractmethod
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 from warnings import warn
 
-from attrs import field, fields, frozen, validators
+from attrs import field, frozen, validators
 from numpy import ndarray
 
 from cubie._utils import (
@@ -35,7 +35,7 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.CUDAFactory import _CubieConfigBase
+from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
     BaseStepConfig,
@@ -85,30 +85,6 @@ _CORRECTION_TYPE_CLASSES = {
     "bicgstab": BiCGSTABSolver,
     "lu": LUSolver,
 }
-
-
-@frozen
-class HelperOperationCounts(_CubieConfigBase):
-    """Binary-operator counts of the helpers an implicit step calls.
-
-    Attributes
-    ----------
-    residual, lu_solve, operator, preconditioner
-        Helpers the Newton iteration calls.
-    prepare, error_solve, apply_mass, evaluate_inv_mass_f,
-    time_derivative
-        Helpers called once per step.
-    """
-
-    residual: int = 0
-    lu_solve: int = 0
-    operator: int = 0
-    preconditioner: int = 0
-    prepare: int = 0
-    error_solve: int = 0
-    apply_mass: int = 0
-    evaluate_inv_mass_f: int = 0
-    time_derivative: int = 0
 
 
 def _validated_correction_type(value: str) -> str:
@@ -210,9 +186,9 @@ class ImplicitStepConfig(BaseStepConfig):
         validator=validators.optional(is_device_validator),
         eq=False,
     )
-    helper_operation_counts: HelperOperationCounts = field(
-        factory=HelperOperationCounts,
-        validator=validators.instance_of(HelperOperationCounts),
+    helper_operation_counts: OperationCounts = field(
+        factory=OperationCounts,
+        validator=validators.instance_of(OperationCounts),
         eq=False,
     )
 
@@ -839,27 +815,34 @@ class ODEImplicitStep(BaseAlgorithmStep):
             {
                 "solver_function": self.solver.device_function,
                 "prepare_jacobian_function": prepare_function,
-                "helper_operation_counts": HelperOperationCounts(**counts),
+                "helper_operation_counts": OperationCounts(**counts),
             }
         )
 
-    # Helpers the Newton iteration calls; the rest run once per step.
     NEWTON_HELPERS = ("residual", "lu_solve", "operator", "preconditioner")
+    """Helpers the Newton iteration calls."""
+
+    PER_STEP_HELPERS = (
+        "prepare",
+        "error_solve",
+        "apply_mass",
+        "evaluate_inv_mass_f",
+        "time_derivative",
+    )
+    """Helpers called once per step."""
 
     @property
     def newton_body_operation_count(self) -> int:
         """Operator count of one Newton iteration's helpers."""
-        counts = self.compile_settings.helper_operation_counts
-        return sum(getattr(counts, name) for name in self.NEWTON_HELPERS)
+        return self.compile_settings.helper_operation_counts.total(
+            self.NEWTON_HELPERS
+        )
 
     @property
     def per_step_operation_count(self) -> int:
         """Operator count of the helpers called once per step."""
-        counts = self.compile_settings.helper_operation_counts
-        return sum(
-            getattr(counts, fld.name)
-            for fld in fields(HelperOperationCounts)
-            if fld.init and fld.name not in self.NEWTON_HELPERS
+        return self.compile_settings.helper_operation_counts.total(
+            self.PER_STEP_HELPERS
         )
 
     @property

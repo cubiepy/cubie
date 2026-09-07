@@ -57,14 +57,14 @@ from cubie.cuda_simsafe import int32
 from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
-from cubie.cuda_simsafe import (
+from cubie.backend.utils import (
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
     device_hardware,
-    is_cudasim_enabled,
     kernel_resources,
     max_shared_memory_per_block,
 )
+from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cubie_cache import CUBIECache
 
 from cubie.time_logger import CUDAEvent
@@ -244,10 +244,7 @@ class BatchSolverCache(CUDADispatcherCache):
 
 
 RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
-"""Fraction of L2 the resident blocks' local memory may fill."""
-
-MIN_RESIDENT_BLOCKS = 2
-"""Lowest block count per SM the L2 rule pads down to while two fit in L2."""
+"""Fraction of L2 three or more resident blocks' local memory may fill."""
 
 DYNAMIC_SHARED_PAD_STEP = 256
 """Bytes the residency pad steps by."""
@@ -292,16 +289,19 @@ class BatchSolverKernel(CUDAFactory):
         the default location, ``False`` disables caching,
         ``"flush_on_change"`` selects that mode, a string/``Path``
         sets the cache directory.
+    auto_performance
+        Fill unset unroll, placement and residency settings from the
+        system's size and the GPU.
     kernel_settings
         Kernel-level compile settings forwarded to
         :class:`BatchSolverConfig`; loose ``cache_*`` keys override
-        ``cache``; ``auto_performance`` reaches the integrator.
+        ``cache``.
 
     Attributes
     ----------
     resident_blocks
-        Blocks per SM every launch is held at by padding dynamic
-        shared memory; ``None`` follows the L2 footprint rule.
+        Blocks per SM on the GPU, set by ``auto_performance`` and
+        ``Solver.optimize``.
 
     Notes
     -----
@@ -324,6 +324,7 @@ class BatchSolverKernel(CUDAFactory):
         output_settings: Optional[Dict[str, Any]] = None,
         memory_settings: Optional[Dict[str, Any]] = None,
         cache: Union[bool, str, Path] = True,
+        auto_performance: bool = True,
         kernel_settings: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
@@ -356,13 +357,7 @@ class BatchSolverKernel(CUDAFactory):
         self._work_complete = True
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
-        self._launch_geometry_key = None
-        self._launch_geometry = None
-
-        if kernel_settings is None:
-            kernel_settings = {}
-        kernel_settings = kernel_settings.copy()
-        auto_performance = kernel_settings.pop("auto_performance", True)
+        self._launch_geometries = {}
 
         # Child factory: driver settings join config_hash; the
         # placeholder input covers zero-driver operation.
@@ -410,6 +405,9 @@ class BatchSolverKernel(CUDAFactory):
             self.driver_interpolator.update(unroll_settings, silent=True)
             self.single_integrator.update(unroll_settings, silent=True)
 
+        if kernel_settings is None:
+            kernel_settings = {}
+        kernel_settings = kernel_settings.copy()
         # Seed the baked coefficient layout from the interpolator.
         driver_coefficients_shape = kernel_settings.pop(
             "driver_coefficients_shape",
@@ -965,19 +963,17 @@ class BatchSolverKernel(CUDAFactory):
         if blocksize is None:
             blocksize = self.compile_settings.blocksize
         runs = self.run_params[0].runs
-        # Memoised per compiled kernel and launch request.
         key = (
-            self.kernel,
+            self.config_hash,
             blocksize,
             runs,
             self.resident_blocks,
             self.single_integrator.auto_performance,
         )
-        if key == self._launch_geometry_key:
-            return self._launch_geometry
-        geometry = self._compute_launch_geometry(blocksize, runs)
-        self._launch_geometry_key = key
-        self._launch_geometry = geometry
+        geometry = self._launch_geometries.get(key)
+        if geometry is None:
+            geometry = self._compute_launch_geometry(blocksize, runs)
+            self._launch_geometries[key] = geometry
         return geometry
 
     def _compute_launch_geometry(
@@ -995,6 +991,9 @@ class BatchSolverKernel(CUDAFactory):
         )
         # The compiler needs a nonzero dynamic shared declaration.
         dynamic_sharedmem = max(4, dynamic_sharedmem)
+        blocks = self.resident_blocks
+        if blocks is None and not self.single_integrator.auto_performance:
+            return blocksize, dynamic_sharedmem
         dispatcher = self.kernel
         compile_kernel_specialization(
             dispatcher, self._kernel_launch_args(self.run_params[0])
@@ -1002,37 +1001,38 @@ class BatchSolverKernel(CUDAFactory):
         natural = active_blocks_per_multiprocessor(
             dispatcher, blocksize, dynamic_sharedmem
         )
-        blocks = self.resident_blocks
         if blocks is None:
             blocks = self._resident_blocks_within_l2(
                 dispatcher, blocksize, natural
             )
-        if blocks is None or blocks >= natural:
+        if blocks >= natural:
             return blocksize, dynamic_sharedmem
         return blocksize, self._dynamic_shared_for_blocks(
             dispatcher, blocksize, dynamic_sharedmem, blocks
         )
 
+    @staticmethod
     def _resident_blocks_within_l2(
-        self, dispatcher: Any, blocksize: int, natural: int
-    ) -> Optional[int]:
-        """Return the block count whose local footprint fits the L2 budget."""
-        if not self.single_integrator.auto_performance:
-            return None
+        dispatcher: Any, blocksize: int, natural: int
+    ) -> int:
+        """Return the most blocks per SM whose local frames fit in L2."""
         frame = kernel_resources(dispatcher).local_bytes_per_thread
         if frame == 0:
-            return None
+            return natural
         hardware = device_hardware()
-        budget = RESIDENT_FOOTPRINT_L2_FRACTION * hardware.l2_cache_bytes
-        per_block = frame * blocksize * hardware.multiprocessor_count
+        l2_bytes = hardware.l2_cache_bytes
+        footprint = frame * blocksize * hardware.multiprocessor_count
         blocks = natural
-        while blocks > MIN_RESIDENT_BLOCKS and per_block * blocks > budget:
+        while blocks > 1:
+            # Two blocks may fill the whole L2; more share two-thirds.
+            budget = (
+                l2_bytes
+                if blocks == 2
+                else RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
+            )
+            if footprint * blocks <= budget:
+                break
             blocks -= 1
-        # Two blocks whose footprint overflows the whole L2 lose to one.
-        if blocks == MIN_RESIDENT_BLOCKS and (
-            per_block * blocks > hardware.l2_cache_bytes
-        ):
-            blocks = 1
         return blocks
 
     @staticmethod

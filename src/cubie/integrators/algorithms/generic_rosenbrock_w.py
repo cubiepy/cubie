@@ -55,10 +55,10 @@ from cubie.integrators.algorithms.base_algorithm_step import (
     AlgorithmDefaults,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
-    HelperOperationCounts,
     ImplicitStepConfig,
     ODEImplicitStep,
 )
+from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
     DEFAULT_ROSENBROCK_TABLEAU,
     RosenbrockTableau,
@@ -352,7 +352,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 ),
                 "prepare_jacobian_function": prepare_jacobian,
                 "apply_mass_function": apply_mass_function,
-                "helper_operation_counts": HelperOperationCounts(**counts),
+                "helper_operation_counts": OperationCounts(**counts),
             }
         )
 

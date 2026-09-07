@@ -12,12 +12,8 @@ from pathlib import Path
 
 import numpy as np
 import cubie  # noqa: F401
-from cubie.cuda_simsafe import (
-    INSTRUCTION_CACHE_BYTES,
-    compile_kwargs,
-    cuda,
-    device_hardware,
-)
+from cubie.backend.utils import INSTRUCTION_CACHE_BYTES, device_hardware
+from cubie.cuda_simsafe import compile_kwargs, cuda
 
 ACCUMULATORS = 8
 KNEE_RATIO = 1.25

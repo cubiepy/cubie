@@ -290,8 +290,6 @@ def failure_summary(result) -> Tuple[int, Dict[str, int]]:
 def achieved_waves(solver, n_runs: int) -> float:
     """Return occupancy waves filled at the actual launch geometry."""
     (kern,) = solver.kernel.kernel.overloads.values()
-    if hasattr(kern, "_ensure_kernel_attrs"):
-        kern._ensure_kernel_attrs()
     cufunc = kern._codelibrary.get_cufunc()
     actual_blocksize, dynshared = solver.kernel.launch_geometry(blocksize)
     context = cuda.current_context()

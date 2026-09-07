@@ -3,7 +3,7 @@ import pytest
 
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import max_shared_memory_per_block
+from cubie.backend.utils import max_shared_memory_per_block
 from cubie.outputhandling.output_sizes import BatchOutputSizes
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs

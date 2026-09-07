@@ -22,17 +22,31 @@ Published Classes
     Frozen description of one helper lookup.
 :class:`HelperResult`
     A bound helper member: device callable plus typed metadata.
+:class:`OperationCounts`
+    Binary-operator counts of bound device functions by role.
 :class:`SolverHelperCache`
     Memoized generated factories and bound members for one live ODE
     build.
 """
 
+import ast
+import inspect
 from enum import Enum
-from typing import Any, Callable, FrozenSet, Optional, Tuple, Type
+from textwrap import dedent
+from typing import (
+    Any,
+    Callable,
+    FrozenSet,
+    Iterable,
+    Optional,
+    Tuple,
+    Type,
+)
 
-from attrs import Factory, define, field, frozen, validators
+from attrs import Factory, define, field, fields, frozen, validators
 
 from cubie._utils import inrangetype_validator
+from cubie.CUDAFactory import _CubieConfigBase
 from cubie.cuda_simsafe import UnrollFlag, unroll_flag_converter
 
 __all__ = [
@@ -44,6 +58,8 @@ __all__ = [
     "ORDERED_FACTORY_ARGS",
     "SolverHelperRequest",
     "HelperResult",
+    "OperationCounts",
+    "device_function_operation_count",
     "SolverHelperCache",
 ]
 
@@ -426,6 +442,47 @@ class HelperResult:
     lu_nnz: Optional[int] = None
     operation_count: int = 0
     prepare_operation_count: int = 0
+
+
+def device_function_operation_count(device_function: Any) -> int:
+    """Return the binary-operator count of a device function's source."""
+    source = inspect.getsource(device_function.py_func)
+    tree = ast.parse(dedent(source))
+    return sum(isinstance(node, ast.BinOp) for node in ast.walk(tree))
+
+
+@frozen
+class OperationCounts(_CubieConfigBase):
+    """Binary-operator counts of bound device functions, by role.
+
+    Attributes
+    ----------
+    dxdt, observables
+        The system's own device functions.
+    residual, lu_solve, operator, preconditioner
+        Helpers the Newton iteration calls.
+    prepare, error_solve, apply_mass, evaluate_inv_mass_f,
+    time_derivative
+        Helpers called once per step.
+    """
+
+    dxdt: int = 0
+    observables: int = 0
+    residual: int = 0
+    lu_solve: int = 0
+    operator: int = 0
+    preconditioner: int = 0
+    prepare: int = 0
+    error_solve: int = 0
+    apply_mass: int = 0
+    evaluate_inv_mass_f: int = 0
+    time_derivative: int = 0
+
+    def total(self, names: Optional[Iterable[str]] = None) -> int:
+        """Return the summed counts of ``names``, or of every role."""
+        if names is None:
+            names = [fld.name for fld in fields(type(self)) if fld.init]
+        return sum(getattr(self, name) for name in names)
 
 
 @define

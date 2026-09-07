@@ -30,12 +30,8 @@ from numpy import asarray, finfo as np_finfo
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType, unpack_dict_values
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import (
-    ALL_UNROLL_PARAMETERS,
-    SASS_INSTRUCTION_BYTES,
-    UnrollChoice,
-    device_hardware,
-)
+from cubie.backend.utils import SASS_INSTRUCTION_BYTES, device_hardware
+from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollChoice
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -131,7 +127,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     """
 
     # Keys the user may fix that the performance defaults never touch.
-    _USER_SETTABLE_KEYS = (
+    _USER_PERF_OVERRIDES = (
         ALL_ALGORITHM_STEP_PARAMETERS | ALL_UNROLL_PARAMETERS | {"unroll"}
     )
 
@@ -175,7 +171,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         # Step and unroll parameters the user set explicitly.
         self._user_given_keys = {
             key
-            for key in self._USER_SETTABLE_KEYS
+            for key in self._USER_PERF_OVERRIDES
             if algorithm_settings.get(key) is not None
         }
 
@@ -710,7 +706,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         # User-given keys, before derived values are injected.
         requested_keys = {
             key
-            for key in set(updates_dict) & self._USER_SETTABLE_KEYS
+            for key in set(updates_dict) & self._USER_PERF_OVERRIDES
             if updates_dict[key] is not None
         }
 

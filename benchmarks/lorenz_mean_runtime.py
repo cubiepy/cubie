@@ -402,8 +402,6 @@ def compile_meta(solver):
     # numba-cuda kernels expose the same names as plain properties.
     # Both reach the loaded driver function via ``_codelibrary`` (the
     # public ``library`` is a numba-cuda-only spelling).
-    if hasattr(kern, "_ensure_kernel_attrs"):
-        kern._ensure_kernel_attrs()
     cufunc = kern._codelibrary.get_cufunc()
 
     cubin, entry_name = _compiled_cubin(kern)
@@ -419,19 +417,7 @@ def compile_meta(solver):
         log, entry_name
     )
 
-    # Fall back to limit_blocksize on a cubie without launch_geometry.
-    launch_geometry = getattr(solver.kernel, "launch_geometry", None)
-    if launch_geometry is not None:
-        actual_blocksize, dynshared = launch_geometry(blocksize)
-    else:
-        first_chunk_runs = int(solver.kernel.run_params[0].runs)
-        pad = 4 if solver.kernel.shared_memory_needs_padding else 0
-        padded_bytes = solver.kernel.shared_memory_bytes + pad
-        dynshared = padded_bytes * min(first_chunk_runs, blocksize)
-        actual_blocksize, dynshared = solver.kernel.limit_blocksize(
-            blocksize, dynshared, padded_bytes, first_chunk_runs
-        )
-        dynshared = max(4, dynshared)
+    actual_blocksize, dynshared = solver.kernel.launch_geometry(blocksize)
     context = cuda.current_context()
     blocks_per_sm = context.get_active_blocks_per_multiprocessor(
         cufunc, actual_blocksize, dynshared

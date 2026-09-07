@@ -23,18 +23,19 @@ from cubie.batchsolving.solveresult import (
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
+from cubie.backend.utils import (
+    active_blocks_per_multiprocessor,
+    device_hardware,
+    kernel_resources,
+)
 from cubie.batchsolving.BatchSolverKernel import (
-    MIN_RESIDENT_BLOCKS,
     RESIDENT_FOOTPRINT_L2_FRACTION,
 )
 from cubie.cuda_simsafe import (
     ALL_UNROLL_PARAMETERS,
     UnrollFlags,
-    active_blocks_per_multiprocessor,
     cuda,
-    device_hardware,
     is_device_array,
-    kernel_resources,
 )
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
@@ -2547,12 +2548,18 @@ def test_auto_residency_keeps_local_footprint_in_l2(
     blocks = active_blocks_per_multiprocessor(
         kernel.kernel, blocksize, dynamic_shared
     )
-    per_block = frame * blocksize * hardware.multiprocessor_count
-    budget = RESIDENT_FOOTPRINT_L2_FRACTION * hardware.l2_cache_bytes
-    assert blocks <= MIN_RESIDENT_BLOCKS or per_block * blocks <= budget
-    if blocks < MIN_RESIDENT_BLOCKS:
-        assert per_block * MIN_RESIDENT_BLOCKS > hardware.l2_cache_bytes
+    footprint = frame * blocksize * hardware.multiprocessor_count
+    l2_bytes = hardware.l2_cache_bytes
+
+    def budget(count):
+        if count == 2:
+            return l2_bytes
+        return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
+
+    assert blocks == 1 or footprint * blocks <= budget(blocks)
     natural_blocks = active_blocks_per_multiprocessor(
         kernel.kernel, blocksize, _natural_dynamic_shared(kernel, blocksize)
     )
-    assert blocks == natural_blocks or per_block * (blocks + 1) > budget
+    assert blocks == natural_blocks or (
+        footprint * (blocks + 1) > budget(blocks + 1)
+    )

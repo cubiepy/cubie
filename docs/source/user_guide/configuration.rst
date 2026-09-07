@@ -187,7 +187,7 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
        ``Path``)
      - :doc:`caching`
    * - Kernel
-     - ``max_registers``, ``blocksize``, ``auto_performance``
+     - ``max_registers``, ``blocksize``
      - :doc:`speed`
 
 A keyword argument that matches no group raises ``KeyError`` at

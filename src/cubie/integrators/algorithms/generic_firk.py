@@ -58,10 +58,10 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
     FIRKTableau,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
-    HelperOperationCounts,
     ImplicitStepConfig,
     ODEImplicitStep,
 )
+from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.norms import (
     FIRKCorrectionNorm,
     ScaledNorm,
@@ -599,7 +599,7 @@ class FIRKStep(ODEImplicitStep):
                     else None
                 ),
                 "apply_mass_function": apply_mass_function,
-                "helper_operation_counts": HelperOperationCounts(**counts),
+                "helper_operation_counts": OperationCounts(**counts),
             }
         )
 

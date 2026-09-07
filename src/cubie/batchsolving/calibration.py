@@ -29,7 +29,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from attrs import define, frozen
 from numpy import asarray, count_nonzero, ndarray
 
-from cubie.cuda_simsafe import active_blocks_per_multiprocessor, cuda
+from cubie.backend.utils import active_blocks_per_multiprocessor
+from cubie.cuda_simsafe import cuda
 from cubie.integrators.algorithms import resolve_alias
 from cubie.integrators.stage_predictors import (
     tableau_supports_dense_prediction,

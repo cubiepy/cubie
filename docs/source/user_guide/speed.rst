@@ -94,11 +94,14 @@ needed, use ``float64``.
 Buffer Location Tuning
 ----------------------
 
-Working arrays can be placed in shared memory (fast, limited) or local
-memory (slower, larger).  With ``auto_performance=True`` (the default)
-CuBIE picks buffer locations, loop unrolling and how many blocks stay
-resident per SM from your system's size and your GPU; you can override
-any buffer through ``optional_arguments``.  See :doc:`optional_arguments`
+Working arrays can be placed in local memory (faster until all
+registers are full, after which it is slow to read and write from) or
+shared memory, which is slower than registers to read and write from
+but does not slow down under load.  Shared memory is a limited
+resource.  With ``auto_performance=True`` (the default) CuBIE picks
+buffer locations, loop unrolling and how many threads run at once on
+your GPU from your system's size and your GPU; you can override any
+buffer through ``optional_arguments``.  See :doc:`optional_arguments`
 for details.
 
 Reusing Solvers
