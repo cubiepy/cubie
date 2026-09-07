@@ -178,7 +178,7 @@ CONTROLLER_GAIN_NAMES = (
 CONTROLLER_GAIN_PARAMETERS = frozenset(
     {*CONTROLLER_GAIN_NAMES, "filter_coefficients"}
 )
-"""Gain keys excluded from ``settings_dict`` swap carryover."""
+"""Gain keys a controller swap does not carry over."""
 
 GAIN_CONTROLLER_CHAIN = ("i", "pi", "pid")
 """Gain-carrying controllers, each a superset of the one before."""
@@ -394,21 +394,12 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
     def is_adaptive(self) -> bool:
         """Return ``True`` when the controller adapts its step size."""
 
-    @property
-    @abstractmethod
-    def settings_dict(self) -> dict[str, object]:
-        """Return a dictionary of configuration settings."""
-
-        return {
-            "n": self.n,
-            "atol": self.atol,
-            "rtol": self.rtol,
-            "mass_flags": self.mass_flags,
-        }
 
 
 class BaseStepController(CUDAFactory):
     """Factory interface for compiling CUDA step-size controllers."""
+
+    settings_keys = frozenset(ALL_STEP_CONTROLLER_PARAMETERS)
 
     _config_class = None  # Subclasses must override
     _timestep_buffer_elements = 0  # History slots; overridden per controller
@@ -445,6 +436,21 @@ class BaseStepController(CUDAFactory):
         self.setup_compile_settings(config)
         self._ensure_sane_bounds()
         self.register_buffers()
+
+    @property
+    def settings_dict(self) -> dict[str, object]:
+        """Return the settings; step bounds only as they were given."""
+        settings = super().settings_dict
+        for key in ("dt", "dt_min", "dt_max"):
+            settings.pop(key, None)
+        settings.update(
+            {
+                key: value
+                for key, value in self._user_step_params.items()
+                if value is not None
+            }
+        )
+        return settings
 
     def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
         """Resolve step parameters and track user-provided values.
@@ -603,11 +609,6 @@ class BaseStepController(CUDAFactory):
         """Return the per-state mass-diagonal flags."""
 
         return self.compile_settings.mass_flags
-
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the compile-time settings as a dictionary."""
-        return self.compile_settings.settings_dict
 
     def update(
         self,

@@ -187,6 +187,17 @@ class SystemValues:
     # Mutable + value-equal cannot satisfy the hash contract.
     __hash__ = None
 
+    def __getstate__(self) -> dict:
+        """Return the pickled state without the read-only view."""
+        state = dict(self.__dict__)
+        state.pop("values_dict", None)
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore the state and rebuild the read-only view."""
+        self.__dict__.update(state)
+        self.__dict__["values_dict"] = MappingProxyType(self._values_backing)
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Reject attribute rebinding on a frozen snapshot member."""
         if self._snapshot_frozen:

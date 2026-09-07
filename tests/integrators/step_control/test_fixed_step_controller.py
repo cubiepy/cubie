@@ -55,14 +55,13 @@ def test_config_is_adaptive_false():
     assert cfg.is_adaptive is False
 
 
-def test_config_settings_dict_contains_dt_and_n():
-    """settings_dict contains 'dt' from this class and 'n' from super."""
-    cfg = FixedStepControlConfig(
-        precision=np.float32, n=5, dt=0.003,
-    )
-    sd = cfg.settings_dict
+def test_settings_dict_contains_dt_and_n():
+    """settings_dict carries the given dt and n."""
+    controller = FixedStepController(precision=np.float32, n=5, dt=0.003)
+    sd = controller.settings_dict
     assert sd["dt"] == pytest.approx(np.float32(0.003))
     assert sd["n"] == 5
+    assert controller.copy().compile_settings == controller.compile_settings
 
 
 # ── FixedStepController (via fixture) ───────────────────────── #

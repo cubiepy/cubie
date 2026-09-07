@@ -35,6 +35,7 @@ See Also
 """
 
 from abc import abstractmethod
+from copy import deepcopy
 from typing import Any, Callable, Dict, Optional, Set
 
 from attrs import define, field
@@ -378,6 +379,17 @@ class BaseODE(CUDAFactory):
     def sizes(self):
         """System component sizes cached for solvers."""
         return self.compile_settings.sizes
+
+    def __getstate__(self) -> dict:
+        """Return the pickled state without the build cache."""
+        state = dict(self.__dict__)
+        state["_cache"] = None
+        state["_cache_valid"] = False
+        return state
+
+    def copy(self) -> "BaseODE":
+        """Return an independent system with these values and no build."""
+        return deepcopy(self)
 
     @property
     def evaluate_f(self):

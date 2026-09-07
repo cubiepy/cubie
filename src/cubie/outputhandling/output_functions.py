@@ -155,6 +155,8 @@ class OutputFunctions(CUDAFactory):
     per configuration and cached by :class:`cubie.CUDAFactory`.
     """
 
+    settings_keys = frozenset(ALL_OUTPUT_FUNCTION_PARAMETERS)
+
     def __init__(
         self,
         max_states: int,

@@ -5,16 +5,18 @@ import pytest
 
 from tests._utils import CONTROLLER_TOLERANCE_SETS
 
-from cubie.integrators.step_control.adaptive_step_controller import (
-    AdaptiveStepControlConfig,
+from cubie.integrators.step_control.adaptive_PID_controller import (
+    AdaptivePIDController,
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
 )
 from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
+    CONTROLLER_GAIN_PARAMETERS,
 )
 from cubie.integrators.step_control.gustafsson_controller import (
+    GustafssonController,
     GustafssonStepControlConfig,
 )
 
@@ -46,19 +48,19 @@ def test_config_newton_target_iters_validates_nonnegative():
         )
 
 
-def test_config_settings_dict_extends_parent():
+def test_settings_dict_extends_parent():
     """settings_dict adds the controller's Newton-work target."""
-    cfg = GustafssonStepControlConfig(
+    controller = GustafssonController(
         precision=np.float64, safety=0.85, newton_target_iters=11
     )
-    settings = cfg.settings_dict
+    settings = controller.settings_dict
     assert settings["safety"] == pytest.approx(0.85)
     assert settings["newton_target_iters"] == 11
     assert "gamma" not in settings
     assert "newton_max_iters" not in settings
     parent_keys = set(
-        AdaptiveStepControlConfig(precision=np.float64).settings_dict
-    )
+        AdaptivePIDController(precision=np.float64).settings_dict
+    ) - CONTROLLER_GAIN_PARAMETERS
     assert parent_keys <= set(settings)
 
 

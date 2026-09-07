@@ -80,6 +80,7 @@ from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrays,
 )
 from cubie.batchsolving.BatchSolverConfig import (
+    ALL_KERNEL_PARAMETERS,
     ActiveOutputs,
     BatchSolverConfig,
 )
@@ -302,6 +303,8 @@ class BatchSolverKernel(CUDAFactory):
     resident_blocks
         Blocks per SM on the GPU, set by ``auto_performance`` and
         ``Solver.optimize``.
+    blocksize_given
+        Whether ``blocksize`` was set explicitly.
 
     Notes
     -----
@@ -310,6 +313,8 @@ class BatchSolverKernel(CUDAFactory):
     executes the compiled loop function against kernel-managed memory slices
     and distributes work across GPU threads for each input batch.
     """
+
+    settings_keys = frozenset(ALL_KERNEL_PARAMETERS)
 
     def __init__(
         self,
@@ -408,6 +413,7 @@ class BatchSolverKernel(CUDAFactory):
         if kernel_settings is None:
             kernel_settings = {}
         kernel_settings = kernel_settings.copy()
+        self.blocksize_given = "blocksize" in kernel_settings
         # Seed the baked coefficient layout from the interpolator.
         driver_coefficients_shape = kernel_settings.pop(
             "driver_coefficients_shape",
@@ -1272,6 +1278,8 @@ class BatchSolverKernel(CUDAFactory):
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
 
         all_unrecognized = set(updates_dict.keys())
+        if "blocksize" in updates_dict:
+            self.blocksize_given = True
 
         driver_recognised = self.driver_interpolator.update(
             updates_dict, silent=True
@@ -1476,6 +1484,45 @@ class BatchSolverKernel(CUDAFactory):
     def build(self) -> BatchSolverCache:
         """Compile the integration kernel and return it."""
         return BatchSolverCache(solver_kernel=self.build_kernel())
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the keys rebuilding this kernel; ``blocksize`` if given."""
+        settings = super().settings_dict
+        if not self.blocksize_given:
+            settings.pop("blocksize", None)
+        settings["lineinfo"] = self.compile_settings.lineinfo
+        settings.update(self.single_integrator.settings_dict)
+        settings.update(
+            stream_group=self.stream_group,
+            mem_proportion=self.mem_proportion,
+            host_spill_threshold=self.host_spill_threshold,
+            spill_directory=self.spill_directory,
+        )
+        return settings
+
+    def copy(self) -> "BatchSolverKernel":
+        """Return a kernel with these settings on a system copy."""
+        settings = self.settings_dict
+        grouped = self.single_integrator.grouped_settings()
+        return type(self)(
+            self.system.copy(),
+            lineinfo=settings["lineinfo"],
+            memory_settings={
+                "memory_manager": self.memory_manager,
+                "stream_group": self.stream_group,
+                "mem_proportion": self.mem_proportion,
+                "host_spill_threshold": self.host_spill_threshold,
+                "spill_directory": self.spill_directory,
+            },
+            cache=settings["cache"],
+            kernel_settings={
+                key: settings[key]
+                for key in ("max_registers", "kernel_name", "blocksize")
+                if key in settings
+            },
+            **grouped,
+        )
 
     @property
     def memory_manager(self) -> "MemoryManager":

@@ -86,12 +86,6 @@ class FixedStepControlConfig(BaseStepControllerConfig):
         """Return ``False`` because the controller is not adaptive."""
         return False
 
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update({"dt": self.dt})
-        return settings_dict
 
 
 class FixedStepController(BaseStepController):

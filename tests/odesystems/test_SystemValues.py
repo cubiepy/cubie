@@ -1,7 +1,22 @@
+import pickle
+
 import pytest
 import numpy as np
 
 from cubie.odesystems.SystemValues import SystemValues
+
+
+def test_pickle_round_trip_keeps_values_and_seal():
+    """A pickled container restores its values, view and frozen state."""
+    params = SystemValues({"a": 1.0, "b": 2.0}, np.float32, name="P")
+    params.freeze()
+    restored = pickle.loads(pickle.dumps(params))
+    assert restored == params
+    assert restored.values_dict == {"a": 1.0, "b": 2.0}
+    assert restored.name == "P"
+    assert restored._snapshot_frozen
+    with pytest.raises(AttributeError):
+        restored.name = "Q"
 
 
 def test_init_edge_cases():

@@ -6,6 +6,9 @@ import numpy as np
 import pytest
 
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
+from cubie.integrators.algorithms.base_algorithm_step import (
+    ALL_ALGORITHM_STEP_PARAMETERS,
+)
 from cubie.integrators.algorithms.generic_firk import FIRKStep
 from cubie.integrators.algorithms.generic_rosenbrock_w import (
     GenericRosenbrockWStep,
@@ -149,25 +152,26 @@ def test_is_linear_marks_direct_linear_solver_ownership(precision):
     assert not step.is_linear
 
 
-def test_implicit_config_settings_dict_includes_implicit_fields(precision):
-    """ImplicitStepConfig.settings_dict merges base and implicit fields."""
+def test_implicit_step_settings_dict_includes_implicit_fields(precision):
+    """settings_dict carries the base and implicit step fields."""
     step = BackwardsEulerStep(precision=precision, n=3)
-    settings = step.compile_settings.settings_dict
+    settings = step.settings_dict
     assert settings['beta'] == step.compile_settings.beta
     assert settings['gamma'] == step.compile_settings.gamma
+    assert settings['n'] == 3
     assert 'M' not in settings
     assert (
         settings['preconditioner_order']
-        == step.compile_settings.preconditioner_order
+        == step.compile_settings._preconditioner_order
     )
     assert (
         settings['preconditioner_type']
         == step.compile_settings.preconditioner_type
     )
-    assert (
-        settings['get_solver_helper_fn']
-        == step.compile_settings.get_solver_helper_fn
-    )
+    assert set(settings) <= ALL_ALGORITHM_STEP_PARAMETERS
+    twin = step.copy()
+    assert twin.compile_settings == step.compile_settings
+    assert twin.solver.compile_settings == step.solver.compile_settings
 
 
 def test_implicit_step_beta_gamma_properties(precision):
@@ -255,12 +259,13 @@ def test_implicit_step_update_invokes_register_buffers_override(precision):
 
 
 def test_implicit_step_settings_dict_merges_solver_settings(precision):
-    """ODEImplicitStep.settings_dict merges algorithm and solver keys."""
+    """ODEImplicitStep.settings_dict merges the solver's step-level keys."""
     step = BackwardsEulerStep(precision=precision, n=3)
     settings = step.settings_dict
     solver_settings = step.solver.settings_dict
     for key, value in solver_settings.items():
-        assert key in settings
+        if key in ALL_ALGORITHM_STEP_PARAMETERS:
+            assert key in settings
 
 
 _RESIDUAL_IDS = ["newton-mr", "newton-bicgstab", "direct-linear"]
