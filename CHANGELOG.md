@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.12.0](https://github.com/cubiepy/cubie/compare/v0.11.1...v0.12.0) (2026-09-08)
+
+
+### Features
+
+* **backend:** Newton and Krylov iteration loops take separate unroll flags ([#910](https://github.com/cubiepy/cubie/issues/910)) ([1391bf3](https://github.com/cubiepy/cubie/commit/1391bf35b9ec7bef9e957ebe7874cfe17914a142))
+* **batchsolving:** auto_performance sets unrolling and buffer placements heuristically ([#917](https://github.com/cubiepy/cubie/issues/917)) ([5933578](https://github.com/cubiepy/cubie/commit/5933578096ec4501fd961a98f8a8f4309f6fecf4))
+* **batchsolving:** Solver.copy rebuilds from each factory's settings_dict ([#919](https://github.com/cubiepy/cubie/issues/919)) ([be507c2](https://github.com/cubiepy/cubie/commit/be507c211b99539c6dc1253e3bfe465d3684769e))
+* **batchsolving:** Solver.optimize times unroll, placement and launch candidates on a copy ([#918](https://github.com/cubiepy/cubie/issues/918)) ([75d8050](https://github.com/cubiepy/cubie/commit/75d80508b6e1b6f215b566b2ca5de036220e8e87))
+
+
+### Bug Fixes
+
+* **cache:** radau gamma host-invariant, index writes retried, mutable fixtures restore system flags ([#907](https://github.com/cubiepy/cubie/issues/907)) ([e801689](https://github.com/cubiepy/cubie/commit/e8016899b9a4bf11ec5df9fcf5c57b989d70d4e9))
+* **integrators:** iteration counter buffer width updated when output requested ([#916](https://github.com/cubiepy/cubie/issues/916)) ([46c2643](https://github.com/cubiepy/cubie/commit/46c2643e0ce796a586663d35a8ef57a96ba34db3))
+* **integrators:** per-step iteration counters sum across stages ([#909](https://github.com/cubiepy/cubie/issues/909)) ([5f31d6c](https://github.com/cubiepy/cubie/commit/5f31d6c2f536597e4494579ffba4ab0330cd66c8))
+
 ## [0.11.1](https://github.com/cubiepy/cubie/compare/v0.11.0...v0.11.1) (2026-09-03)
 
 
