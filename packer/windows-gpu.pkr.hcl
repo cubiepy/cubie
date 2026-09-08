@@ -149,7 +149,7 @@ build {
     scripts = ["ci/tools/install_gpu_driver.ps1"]
   }
 
-  # Toolcache Pythons, latest runner agent, local-only driver search.
+  # Toolcache Pythons, runner agent, local-only driver search, docker off.
   provisioner "powershell" {
     scripts = ["ci/tools/prepare_ci_image.ps1"]
   }
@@ -160,7 +160,7 @@ build {
     destination = "C:/Windows/Temp/pyproject.toml"
   }
 
-  # Pre-download the CUDA test matrix's wheels into C:\uv-cache.
+  # Wheels into C:\uv-cache and one compiled venv per lane in C:\cubie-venvs.
   provisioner "powershell" {
     scripts = ["ci/tools/populate_uv_cache.ps1"]
   }
