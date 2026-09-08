@@ -284,9 +284,7 @@ def main():
         return
     log = pl.make_logger(args.log)
     pl.check_device(log)
-    pl.apply_icache_override(
-        None if args.icache_kib is None else args.icache_kib * 1024
-    )
+    pl.apply_icache_override(pl.icache_bytes_from(args))
     if args.preset == "quick":
         configs = list(QUICK_CONFIGS)
     else:

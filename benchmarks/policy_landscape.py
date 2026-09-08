@@ -474,10 +474,13 @@ def _compile_worker(payload):
     set_cache_root(cache_root)
     apply_icache_override(icache_bytes)
     started = time.perf_counter()
-    system = build_system(system_name)
-    spec = ArmSpec(label, decode_settings(settings), auto_performance)
-    solver = build_solver(system, system_name, algo_name, spec, duration)
+    solver = None
     try:
+        system = build_system(system_name)
+        spec = ArmSpec(label, decode_settings(settings), auto_performance)
+        solver = build_solver(
+            system, system_name, algo_name, spec, duration
+        )
         sizes = system.sizes
         solver.compile(
             np.zeros((sizes.states, n_runs), dtype=PRECISION),
@@ -494,7 +497,15 @@ def _compile_worker(payload):
             time.perf_counter() - started, repr(exc)[:300],
         )
     finally:
-        solver.close()
+        if solver is not None:
+            solver.close()
+
+
+def icache_bytes_from(args):
+    """Return the ``--icache-kib`` argument in bytes, or ``None``."""
+    if args.icache_kib is None:
+        return None
+    return int(args.icache_kib) * 1024
 
 
 def apply_icache_override(icache_bytes):
@@ -769,7 +780,7 @@ def run_config(
     blocks = []
     if timed:
         reference_arm, others = timed[0], timed[1:]
-        width = max(1, block_arms - 1)
+        width = block_arms - 1
         blocks = [
             [reference_arm] + others[i:i + width]
             for i in range(0, len(others), width)
@@ -900,14 +911,30 @@ def run_config(
 # --- records ---------------------------------------------------------------
 
 
-def done_keys(path: Path):
+def run_signature(system_name, algo_name, n_runs, duration, specs,
+                  blocksizes, icache_bytes):
+    """Identity of one configuration run for resuming a records file."""
+    return dict(
+        system=system_name,
+        algo=algo_name,
+        n_runs=int(n_runs),
+        duration=float(duration),
+        arms=[spec.label for spec in specs],
+        blocksizes=None if blocksizes is None else list(blocksizes),
+        icache_bytes=icache_bytes,
+    )
+
+
+def done_signatures(path: Path):
+    """Run signatures of the rows already in ``path``."""
     if not path.exists():
-        return set()
-    out = set()
+        return []
+    out = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             row = json.loads(line)
-            out.add((row["system"], row["algo"]))
+            if "run_signature" in row:
+                out.append(row["run_signature"])
     return out
 
 
@@ -1160,8 +1187,9 @@ def score_factorial(row, groups, buffers, within=0.05):
 def add_common_arguments(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--out", type=Path, required=True,
-        help="records file (JSON lines); finished configurations are "
-        "skipped on a re-run",
+        help="records file (JSON lines); a configuration recorded with "
+        "the same run count, duration, arms, block sizes and icache "
+        "setting is skipped on a re-run",
     )
     parser.add_argument(
         "--workers", type=int, default=4,
@@ -1179,9 +1207,10 @@ def add_common_arguments(parser: argparse.ArgumentParser):
         "cell is capped",
     )
     parser.add_argument(
-        "--block-arms", type=int, default=BLOCK_ARMS,
-        help="solvers alive at once during timing (each holds its "
-        "batch buffers; the reference arm is re-timed in every block)",
+        "--block-arms", type=_at_least_two, default=BLOCK_ARMS,
+        help="solvers alive at once during timing, at least 2 (each "
+        "holds its batch buffers; the reference arm is re-timed in "
+        "every block)",
     )
     parser.add_argument(
         "--blocksizes", default=None,
@@ -1201,6 +1230,13 @@ def add_common_arguments(parser: argparse.ArgumentParser):
         "--score", action="store_true",
         help="score the records file and exit",
     )
+
+
+def _at_least_two(text):
+    value = int(text)
+    if value < 2:
+        raise argparse.ArgumentTypeError("--block-arms must be at least 2")
+    return value
 
 
 def parse_blocksizes(text):
@@ -1248,18 +1284,12 @@ def run_jobs(configs, arms_for, args, log, duration_override=None):
     ``duration_override`` replaces the bank durations;
     ``args.duration_scale`` multiplies either.
     """
-    finished = done_keys(args.out)
-    pending = [
-        (system_name, algo_name, n_runs)
-        for system_name, algo_name, n_runs in configs
-        if (system_name, algo_name) not in finished
-    ]
-    if not pending:
-        log("nothing to do; every configuration is in the records file")
-        return
+    finished = done_signatures(args.out)
+    blocksizes = parse_blocksizes(args.blocksizes)
+    icache_bytes = icache_bytes_from(args)
     jobs = []
     plans = []
-    for system_name, algo_name, n_runs in pending:
+    for system_name, algo_name, n_runs in configs:
         settled = (
             duration_for(system_name, algo_name)
             if duration_override is None
@@ -1267,24 +1297,36 @@ def run_jobs(configs, arms_for, args, log, duration_override=None):
         )
         duration = settled * args.duration_scale
         specs = arms_for(system_name, algo_name)
-        plans.append((system_name, algo_name, n_runs, duration, specs))
+        signature = run_signature(
+            system_name, algo_name, n_runs, duration, specs, blocksizes,
+            icache_bytes,
+        )
+        if signature in finished:
+            continue
+        plans.append(
+            (system_name, algo_name, n_runs, duration, specs, signature)
+        )
         jobs.extend(
             (system_name, algo_name, spec, n_runs, duration)
             for spec in specs
         )
+    if not plans:
+        log("nothing to do; every configuration is in the records file")
+        return
     log(f"{len(plans)} configurations, {len(jobs)} kernels to compile")
     started = time.perf_counter()
-    compile_in_workers(jobs, args.workers, args.icache_kib, log)
+    compile_in_workers(jobs, args.workers, icache_bytes, log)
     log(f"compiles done in {time.perf_counter() - started:.0f} s")
-    for system_name, algo_name, n_runs, duration, specs in plans:
+    for system_name, algo_name, n_runs, duration, specs, signature in plans:
         log(f"=== {system_name}/{algo_name} n_runs {n_runs} duration "
             f"{duration} arms {len(specs)}")
         started = time.perf_counter()
         row = run_config(
             system_name, algo_name, specs, n_runs, duration, log,
-            blocksizes=parse_blocksizes(args.blocksizes), cap=args.cap,
+            blocksizes=blocksizes, cap=args.cap,
             block_arms=args.block_arms,
         )
+        row["run_signature"] = signature
         row["wall_s"] = round(time.perf_counter() - started, 1)
         append_row(args.out, row)
         log(f"=== {system_name}/{algo_name} done in {row['wall_s']} s")
@@ -1294,6 +1336,7 @@ __all__ = [
     "ALGOS", "SYSTEMS", "Arm", "ArmSpec", "Cell", "FULL", "ROLLED",
     "UNROLL_GROUPS", "add_common_arguments", "apply_icache_override",
     "best_overall", "cell_time", "check_device", "duration_for",
-    "format_loss", "load_rows", "make_logger", "optimize_choice",
-    "policy_time", "row_arms", "run_jobs", "settings_label",
+    "format_loss", "icache_bytes_from", "load_rows", "make_logger",
+    "optimize_choice", "policy_time", "row_arms", "run_jobs",
+    "settings_label",
 ]

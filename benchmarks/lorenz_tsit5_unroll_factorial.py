@@ -49,9 +49,7 @@ def main():
         return
     log = pl.make_logger(args.log)
     pl.check_device(log)
-    pl.apply_icache_override(
-        None if args.icache_kib is None else args.icache_kib * 1024
-    )
+    pl.apply_icache_override(pl.icache_bytes_from(args))
     arms = pl.factorial_arms(groups, buffers, pl.PUBLICATION_LORENZ)
     log(f"{len(arms)} kernels: groups {groups} buffers {buffers}")
     pl.run_jobs(
