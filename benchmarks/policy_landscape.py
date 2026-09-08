@@ -26,21 +26,23 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 import cubie
-from cubie.cache_root import get_cache_root, set_cache_root
-from cubie.cuda_simsafe import (
-    ALL_UNROLL_PARAMETERS,
-    CUDA_SIMULATION,
+from cubie.backend.utils import (
     INSTRUCTION_CACHE_BYTES,
-    IS_MLIR,
-    UnrollChoice,
     active_blocks_per_multiprocessor,
-    cuda,
     device_hardware,
     kernel_resources,
 )
-from cubie.batchsolving.BatchSolverKernel import (
+from cubie.batchsolving.optimize import (
     LOCAL_LAUNCH_BLOCKSIZES,
     SHARED_LAUNCH_BLOCKSIZES,
+)
+from cubie.cache_root import get_cache_root, set_cache_root
+from cubie.cuda_backend import IS_MLIR
+from cubie.cuda_simsafe import (
+    ALL_UNROLL_PARAMETERS,
+    CUDA_SIMULATION,
+    UnrollChoice,
+    cuda,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.time_logger import default_timelogger
