@@ -912,7 +912,7 @@ def run_config(
 
 
 def run_signature(system_name, algo_name, n_runs, duration, specs,
-                  blocksizes, icache_bytes):
+                  blocksizes, icache_bytes, cap, block_arms):
     """Identity of one configuration run for resuming a records file."""
     return dict(
         system=system_name,
@@ -922,6 +922,8 @@ def run_signature(system_name, algo_name, n_runs, duration, specs,
         arms=[spec.label for spec in specs],
         blocksizes=None if blocksizes is None else list(blocksizes),
         icache_bytes=icache_bytes,
+        cap=float(cap),
+        block_arms=int(block_arms),
     )
 
 
@@ -1188,8 +1190,8 @@ def add_common_arguments(parser: argparse.ArgumentParser):
     parser.add_argument(
         "--out", type=Path, required=True,
         help="records file (JSON lines); a configuration recorded with "
-        "the same run count, duration, arms, block sizes and icache "
-        "setting is skipped on a re-run",
+        "the same run count, duration, arms, block sizes, icache, cap "
+        "and block-arms settings is skipped on a re-run",
     )
     parser.add_argument(
         "--workers", type=int, default=4,
@@ -1299,7 +1301,7 @@ def run_jobs(configs, arms_for, args, log, duration_override=None):
         specs = arms_for(system_name, algo_name)
         signature = run_signature(
             system_name, algo_name, n_runs, duration, specs, blocksizes,
-            icache_bytes,
+            icache_bytes, args.cap, args.block_arms,
         )
         if signature in finished:
             continue
