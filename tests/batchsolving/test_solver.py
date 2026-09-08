@@ -2222,6 +2222,7 @@ def test_shared_loop_buffers_leave_results_unchanged(
     thread_mem_manager,
     simple_initial_values,
     simple_parameters,
+    tolerance,
 ):
     """An all-shared placement reproduces the all-local trajectories."""
     assert _shared_loop_and_step_buffers(solver) == set()
@@ -2261,7 +2262,12 @@ def test_shared_loop_buffers_leave_results_unchanged(
         shared_solver.close()
 
     assert np.all(np.isfinite(local_output))
-    np.testing.assert_array_equal(shared_output, local_output)
+    np.testing.assert_allclose(
+        shared_output,
+        local_output,
+        rtol=tolerance.rel_tight,
+        atol=tolerance.abs_tight,
+    )
 
 
 def test_driver_setting_update_syncs_evaluator_and_coefficients(

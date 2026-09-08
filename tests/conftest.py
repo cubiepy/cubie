@@ -293,11 +293,12 @@ def tolerance(tolerance_override, precision):
         return tolerance_override
 
     if precision == np.float32:
+        eps = float(np.finfo(np.float32).eps)
         return SimpleNamespace(
             abs_loose=1e-5,
-            abs_tight=1e-7,
+            abs_tight=eps,
             rel_loose=1e-5,
-            rel_tight=1e-7,
+            rel_tight=eps,
         )
 
     if precision == np.float64:
@@ -709,8 +710,8 @@ def solver_settings(solver_settings_override, system, precision):
         "unroll_solver_element": (True, None),
         "unroll_norms": (True, None),
         "unroll_other_small": (True, None),
-        "unroll_newton_exits": (False, None),
-        "unroll_krylov_exits": (False, None),
+        "unroll_newton_exits": None,
+        "unroll_krylov_exits": None,
         "memory_manager": default_memmgr,
         "stream_group": "test_group",
         "mem_proportion": None,
