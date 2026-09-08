@@ -1,27 +1,9 @@
-"""Prepare a fresh git worktree of cubie for agent work.
+"""Build a worktree's own ``.venv`` with cubie installed editable.
 
-Orca runs this from the new worktree after ``worktree create`` (see
-``orca.yaml``); it also runs by hand from any worktree::
-
-    python ci/tools/worktree_setup.py
-
-Every worktree gets its own ``.venv`` so the editable install resolves
-``cubie`` from that worktree and never from the main checkout. The
-interpreter is the one the main checkout's ``.venv`` was built from, so
-worktrees match it. With ``uv`` on PATH the wheels are hardlinked from
-its cache (seconds, no duplicated CUDA wheels); otherwise ``venv`` and
-``pip`` do the same work.
-
-Environment:
-
-``ORCA_WORKTREE_PATH``
-    The worktree to prepare (default: this file's repo root).
-``ORCA_ROOT_PATH``
-    The main checkout (default: the owner of the shared ``.git``).
-``CUBIE_WORKTREE_EXTRAS``
-    Extras installed alongside ``-e .`` (default ``dev,cuda13``: the
-    mlir dev lane plus the numba-cuda backend, both of which
-    ``benchmarks/ab_gate.py`` needs).
+Uses the main checkout's ``.venv`` interpreter, ``uv`` when on PATH, and
+copies ``.claude/settings.local.json``. Env: ``ORCA_WORKTREE_PATH``
+(default: this repo root), ``ORCA_ROOT_PATH`` (default: the main
+checkout), ``CUBIE_WORKTREE_EXTRAS`` (default ``dev,cuda13``).
 """
 
 import configparser
@@ -101,7 +83,7 @@ def build_venv(worktree, interpreter, extras):
 
 
 def copy_local_settings(root, worktree):
-    """Gitignored per-repo Claude settings travel with the worktree."""
+    """Copy the gitignored Claude settings into the worktree."""
     source = root / ".claude" / "settings.local.json"
     target = worktree / ".claude" / "settings.local.json"
     if source.is_file() and not target.exists():

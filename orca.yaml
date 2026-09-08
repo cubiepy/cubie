@@ -1,7 +1,4 @@
-# Orca worktree defaults. `scripts.setup` runs from the new worktree with
-# ORCA_ROOT_PATH (the main checkout) and ORCA_WORKTREE_PATH set; the agent
-# starts once it has exited 0. The `||` fallback covers hosts where only
-# `python3` is on PATH.
+# Orca runs setup from the new worktree; `||` covers python3-only hosts.
 scripts:
   setup: python ci/tools/worktree_setup.py || python3 ci/tools/worktree_setup.py
 setupAgentStartupPolicy: wait-for-setup
