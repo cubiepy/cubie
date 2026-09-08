@@ -52,10 +52,10 @@ See Also
     Name-based lookup of available ERK tableaus.
 """
 
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import PrecisionDType, build_config
@@ -585,6 +585,15 @@ class ERKStep(ODEExplicitStep):
     def is_multistage(self) -> bool:
         """Return ``True`` when the method has multiple stages."""
         return self.tableau.stage_count > 1
+
+    @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """``other_small`` unrolling crossed with ``state`` placement."""
+        return tuple(
+            {"unroll_other_small": unroll, "state_location": location}
+            for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
+            for location in ("local", "shared")
+        )
 
     @property
     def has_error_estimate(self) -> bool:

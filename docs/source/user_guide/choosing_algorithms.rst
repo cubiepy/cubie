@@ -319,5 +319,24 @@ and failure counts.  By default the winning configuration is applied
 to the solver in place; pass ``apply=False`` to get the race results
 without modifying the solver.
 
+With the algorithm settled, :meth:`Solver.optimize
+<cubie.batchsolving.solver.Solver.optimize>` tries a few different
+configurations of where buffers sit in memory, which loops get
+unrolled, and how many threads run at once on the GPU to find the
+fastest configuration for your system:
+
+.. code-block:: python
+
+   report = solver.optimize(
+       {"x": x0_values},
+       {"alpha": alpha_values},
+       duration=10.0,
+   )
+   print(report.summary())
+
+Settings you gave, or an earlier ``optimize`` applied, stay fixed
+unless ``force=True``. The fastest configuration is applied in place;
+``apply=False`` only reports.
+
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.

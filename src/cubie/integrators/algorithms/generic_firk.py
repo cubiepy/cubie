@@ -35,11 +35,11 @@ See Also
     Configuration for this step.
 """
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
 from numpy import int32 as np_int32
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -1002,6 +1002,15 @@ class FIRKStep(ODEImplicitStep):
         """Share ``stage_increment`` above the measured state-count cut."""
         shared = self.n > SHARED_STAGE_INCREMENT_MIN_STATES
         return {"stage_increment_location": "shared" if shared else "local"}
+
+    @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """Newton unrolling crossed with ``stage_increment`` placement."""
+        return tuple(
+            {"unroll_newton_exits": unroll, "stage_increment_location": loc}
+            for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
+            for loc in ("local", "shared")
+        )
 
     @property
     def has_error_estimate(self) -> bool:

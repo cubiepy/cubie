@@ -810,6 +810,24 @@ def solver_settings(solver_settings_override, system, precision):
 
 
 @pytest.fixture(scope="session")
+def simple_initial_values(system):
+    """Two values for the system's first two states."""
+    return {
+        list(system.initial_values.names)[0]: [0.1, 0.5],
+        list(system.initial_values.names)[1]: [0.2, 0.6],
+    }
+
+
+@pytest.fixture(scope="session")
+def simple_parameters(system):
+    """Two values for the system's first two parameters."""
+    return {
+        list(system.parameters.names)[0]: [1.0, 2.0],
+        list(system.parameters.names)[1]: [0.5, 1.5],
+    }
+
+
+@pytest.fixture(scope="session")
 def driver_settings_override(request):
     """Optional override for driver array configuration."""
 

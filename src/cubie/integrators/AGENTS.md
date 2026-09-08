@@ -90,8 +90,8 @@ drops `CONTROLLER_GAIN_PARAMETERS`.
 ### build() delegates to IVPLoop
 `SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates
 `_algo_step` if the system's `evaluate_f`/`evaluate_observables`/`get_solver_helper_fn`
-changed; (2) applies `_apply_performance_defaults` (`auto_performance` only: the step's
-`performance_defaults` plus `unroll_newton_exits`, skipping user-given keys); (3)
+changed; (2) applies `_apply_performance_defaults` (skips user-given keys, as
+`optimisation_candidates` does); (3)
 re-registers child allocators; (4) calls `self._loop.update(...)` with the latest compiled
 device-function references; (5) accesses `self._loop.device_function` (triggering the
 loop's build if invalid); (6) returns

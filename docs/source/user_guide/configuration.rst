@@ -51,7 +51,8 @@ single batch solve.
        differs from** ``Solver.solve`` **below.**
    * - ``time_logging_level``
      - ``None``
-     - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``, or
+     - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``,
+       ``'silent'`` (record GPU events, print nothing), or
        ``None``/``'None'`` to disable.
    * - ``nan_error_trajectories``
      - ``True``
