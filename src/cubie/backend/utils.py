@@ -25,7 +25,7 @@ from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
 SASS_INSTRUCTION_BYTES = 16
 """Bytes per SASS instruction."""
 
-INSTRUCTION_CACHE_BYTES = {(8, 9): 131072}
+INSTRUCTION_CACHE_BYTES = {(7, 5): 65536, (8, 9): 131072}
 """Measured instruction-cache capacity by compute capability."""
 
 DEFAULT_INSTRUCTION_CACHE_BYTES = 131072
