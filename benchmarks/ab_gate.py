@@ -132,10 +132,13 @@ def installed_backends():
 
 
 def performance_core_mask():
-    """Mask of the fastest-class cores; None off Windows or one class."""
+    """Fastest-class core mask; None off Windows, >1 group, or 1 class."""
     if sys.platform != "win32":
         return None
     from ctypes import wintypes
+    kernel32 = ctypes.windll.kernel32
+    if kernel32.GetActiveProcessorGroupCount() != 1:
+        return None
 
     class GroupAffinity(ctypes.Structure):
         _fields_ = [
@@ -161,7 +164,6 @@ def performance_core_mask():
         ]
 
     relation_processor_core = 0
-    kernel32 = ctypes.windll.kernel32
     size = wintypes.DWORD(0)
     kernel32.GetLogicalProcessorInformationEx(
         relation_processor_core, None, ctypes.byref(size))
@@ -174,9 +176,10 @@ def performance_core_mask():
     offset = 0
     while offset < size.value:
         info = ProcessorInformation.from_buffer(buffer, offset)
-        group = info.Processor.GroupMask[0]
-        if group.Group == 0:
-            cores.append((info.Processor.EfficiencyClass, group.Mask))
+        cores.append((
+            info.Processor.EfficiencyClass,
+            info.Processor.GroupMask[0].Mask,
+        ))
         offset += info.Size
     classes = {efficiency for efficiency, _ in cores}
     if len(classes) < 2:
