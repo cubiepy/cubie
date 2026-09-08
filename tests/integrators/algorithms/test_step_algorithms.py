@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from attrs import fields
 
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep
@@ -26,6 +27,9 @@ from cubie.integrators.algorithms.generic_firk import FIRKStep
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     DEFAULT_FIRK_TABLEAU,
     FIRK_TABLEAU_REGISTRY,
+)
+from cubie.integrators.matrix_free_solvers.newton_krylov import (
+    NewtonKrylovConfig,
 )
 from cubie.integrators.norms import DIRKCorrectionNorm, FIRKCorrectionNorm
 from cubie.integrators.algorithms.generic_rosenbrock_w import (
@@ -624,9 +628,15 @@ def test_algorithm(
             assert step_object.preconditioner_order == solver_settings[
                 "preconditioner_order"
             ], "preconditioner order set"
-            assert step_object.newton_max_iters == solver_settings[
-                "newton_max_iters"
-            ], "newton_max_iters set"
+            # An unset Newton cap resolves to the solver default.
+            requested_newton_max_iters = solver_settings["newton_max_iters"]
+            if requested_newton_max_iters is None:
+                requested_newton_max_iters = fields(
+                    NewtonKrylovConfig
+                ).max_iters.default
+            assert (
+                step_object.newton_max_iters == requested_newton_max_iters
+            ), "newton_max_iters set"
             # Unset newton tolerances derive from the controller's.
             requested_newton_atol = solver_settings["newton_atol"]
             if requested_newton_atol is None:
@@ -692,8 +702,8 @@ def test_algorithm(
             if base_newton_rtol is None:
                 base_newton_rtol = solver_settings["rtol"] / 10.0
             updates = {
-                "newton_max_iters": int(
-                    max(1, solver_settings["newton_max_iters"] // 2)
+                "newton_max_iters": max(
+                    1, step_object.newton_max_iters // 2
                 ),
                 "krylov_atol":
                 solver_settings["krylov_atol"] * 0.5,

@@ -35,6 +35,7 @@ from cubie._utils import (
     is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
+from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
     BaseStepConfig,
@@ -129,6 +130,8 @@ class ImplicitStepConfig(BaseStepConfig):
         tableau diagonal instead of frozen Jacobian entries.
     cached_auxiliaries_location
         Buffer location for the step-start Jacobian cache.
+    helper_operation_counts
+        Operator counts of the helpers the last build requested.
 
     Notes
     -----
@@ -181,6 +184,11 @@ class ImplicitStepConfig(BaseStepConfig):
     error_solver_function: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
+        eq=False,
+    )
+    helper_operation_counts: OperationCounts = field(
+        factory=OperationCounts,
+        validator=validators.instance_of(OperationCounts),
         eq=False,
     )
 
@@ -689,8 +697,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
         Returns
         -------
         tuple
-            The prepare device function and the ``cached_auxiliaries``
-            element count.
+            The prepare device function, the ``cached_auxiliaries``
+            element count and the helper operator counts.
         """
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
@@ -722,12 +730,16 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 use_cached_auxiliaries=True,
                 solver_width=config.solver_width,
             )
+            counts = dict(
+                lu_solve=lu_result.operation_count,
+                prepare=lu_result.prepare_operation_count,
+            )
         else:
-            preconditioner = get_fn(
+            preconditioner_result = get_fn(
                 config.preconditioner_type,
                 jacobian_at="step",
                 **request_kwargs,
-            ).device_function
+            )
             operator_result = get_fn(
                 "linear_operator", jacobian_at="step", **request_kwargs
             )
@@ -735,12 +747,17 @@ class ODEImplicitStep(BaseAlgorithmStep):
             cached_count = operator_result.cached_auxiliary_count
             self.solver.update(
                 operator_apply=operator_result.device_function,
-                preconditioner=preconditioner,
+                preconditioner=preconditioner_result.device_function,
                 residual_function=residual,
                 use_cached_auxiliaries=True,
                 solver_width=config.solver_width,
             )
-        return prepare_function, cached_count
+            counts = dict(
+                operator=operator_result.operation_count,
+                preconditioner=preconditioner_result.operation_count,
+                prepare=operator_result.prepare_operation_count,
+            )
+        return prepare_function, cached_count, counts
 
     def build_implicit_helpers(self) -> None:
         """Construct the nonlinear solver chain used by implicit methods."""
@@ -751,14 +768,17 @@ class ODEImplicitStep(BaseAlgorithmStep):
         get_fn = config.get_solver_helper_fn
 
         # Get device functions from ODE system
-        residual = get_fn("residual", **request_kwargs).device_function
+        residual_result = get_fn("residual", **request_kwargs)
+        residual = residual_result.device_function
+        counts = dict(residual=residual_result.operation_count)
 
         prepare_function = None
         cached_count = 0
         if self.uses_cached_solve:
-            prepare_function, cached_count = (
+            prepare_function, cached_count, inexact_counts = (
                 self._build_inexact_helpers(residual)
             )
+            counts.update(inexact_counts)
         elif self.uses_direct_solver:
             lu_result = get_fn(
                 "lu_solve",
@@ -771,21 +791,22 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
+            counts["lu_solve"] = lu_result.operation_count
         else:
-            preconditioner = get_fn(
+            preconditioner_result = get_fn(
                 config.preconditioner_type, **request_kwargs
-            ).device_function
-            operator = get_fn(
-                "linear_operator", **request_kwargs
-            ).device_function
+            )
+            operator_result = get_fn("linear_operator", **request_kwargs)
 
             self.solver.update(
-                operator_apply=operator,
-                preconditioner=preconditioner,
+                operator_apply=operator_result.device_function,
+                preconditioner=preconditioner_result.device_function,
                 residual_function=residual,
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
+            counts["operator"] = operator_result.operation_count
+            counts["preconditioner"] = preconditioner_result.operation_count
 
         buffer_registry.update_buffer(
             "cached_auxiliaries", self, size=cached_count
@@ -794,8 +815,40 @@ class ODEImplicitStep(BaseAlgorithmStep):
             {
                 "solver_function": self.solver.device_function,
                 "prepare_jacobian_function": prepare_function,
+                "helper_operation_counts": OperationCounts(**counts),
             }
         )
+
+    NEWTON_HELPERS = ("residual", "lu_solve", "operator", "preconditioner")
+    """Helpers the Newton iteration calls."""
+
+    PER_STEP_HELPERS = (
+        "prepare",
+        "error_solve",
+        "apply_mass",
+        "evaluate_inv_mass_f",
+        "time_derivative",
+    )
+    """Helpers called once per step."""
+
+    @property
+    def newton_body_operation_count(self) -> int:
+        """Operator count of one Newton iteration's helpers."""
+        return self.compile_settings.helper_operation_counts.total(
+            self.NEWTON_HELPERS
+        )
+
+    @property
+    def per_step_operation_count(self) -> int:
+        """Operator count of the helpers called once per step."""
+        return self.compile_settings.helper_operation_counts.total(
+            self.PER_STEP_HELPERS
+        )
+
+    @property
+    def newton_solves_per_step(self) -> int:
+        """Newton solves one step runs."""
+        return 0 if self.is_linear else 1
 
     @property
     def is_implicit(self) -> bool:

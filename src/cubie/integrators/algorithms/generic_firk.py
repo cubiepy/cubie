@@ -35,7 +35,7 @@ See Also
     Configuration for this step.
 """
 
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 from attrs import field, validators, frozen
 from numpy import int32 as np_int32
@@ -61,6 +61,7 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
+from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.norms import (
     FIRKCorrectionNorm,
     ScaledNorm,
@@ -96,6 +97,9 @@ FIRK_FIXED_DEFAULTS = AlgorithmDefaults(
     }
 )
 """Defaults for errorless FIRK tableaus."""
+
+SHARED_STAGE_INCREMENT_MIN_STATES = 20
+"""``stage_increment`` goes to shared memory above this state count."""
 
 
 @frozen
@@ -422,12 +426,14 @@ class FIRKStep(ODEImplicitStep):
             stage_nodes=tableau.stage_nodes,
         )
 
-        residual = get_fn(
+        residual_result = get_fn(
             "residual",
             jacobian_at="stage",
             stacked=True,
             **stage_kwargs,
-        ).device_function
+        )
+        residual = residual_result.device_function
+        counts = dict(residual=residual_result.operation_count)
 
         prepare_function = None
         cached_count = 0
@@ -450,6 +456,8 @@ class FIRKStep(ODEImplicitStep):
                     use_cached_auxiliaries=True,
                     solver_width=config.solver_width,
                 )
+                counts["lu_solve"] = lu_result.operation_count
+                counts["prepare"] = lu_result.prepare_operation_count
             else:
                 operator_result = get_fn(
                     "linear_operator",
@@ -457,21 +465,26 @@ class FIRKStep(ODEImplicitStep):
                     stacked=True,
                     **stage_kwargs,
                 )
-                preconditioner = get_fn(
+                preconditioner_result = get_fn(
                     config.preconditioner_type,
                     jacobian_at="step",
                     stacked=True,
                     **stage_kwargs,
-                ).device_function
+                )
                 prepare_function = operator_result.prepare_jac
                 cached_count = operator_result.cached_auxiliary_count
                 self.solver.update(
                     operator_apply=operator_result.device_function,
-                    preconditioner=preconditioner,
+                    preconditioner=preconditioner_result.device_function,
                     residual_function=residual,
                     use_cached_auxiliaries=True,
                     solver_width=config.solver_width,
                 )
+                counts["operator"] = operator_result.operation_count
+                counts["preconditioner"] = (
+                    preconditioner_result.operation_count
+                )
+                counts["prepare"] = operator_result.prepare_operation_count
         elif self.uses_direct_solver:
             # Coupled all-stages factorisation per Newton iteration.
             lu_result = get_fn(
@@ -487,33 +500,36 @@ class FIRKStep(ODEImplicitStep):
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
+            counts["lu_solve"] = lu_result.operation_count
         else:
-            operator = get_fn(
+            operator_result = get_fn(
                 "linear_operator",
                 jacobian_at="stage",
                 stacked=True,
                 **stage_kwargs,
-            ).device_function
-
-            preconditioner = get_fn(
+            )
+            preconditioner_result = get_fn(
                 config.preconditioner_type,
                 jacobian_at="stage",
                 stacked=True,
                 **stage_kwargs,
-            ).device_function
+            )
 
             self.solver.update(
-                operator_apply=operator,
-                preconditioner=preconditioner,
+                operator_apply=operator_result.device_function,
+                preconditioner=preconditioner_result.device_function,
                 residual_function=residual,
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
+            counts["operator"] = operator_result.operation_count
+            counts["preconditioner"] = preconditioner_result.operation_count
 
         buffer_registry.update_buffer(
             "cached_auxiliaries", self, size=cached_count
         )
 
+        apply_mass_function = None
         if self.smooth_error:
             if self.uses_direct_solver:
                 if self.uses_cached_solve:
@@ -531,6 +547,7 @@ class FIRKStep(ODEImplicitStep):
                         lu_nnz=smoothing.lu_nnz,
                         solver_width=config.n,
                     )
+                    counts["error_solve"] = smoothing.operation_count
                 else:
                     lu_at_state = get_fn(
                         "lu_solve",
@@ -542,20 +559,30 @@ class FIRKStep(ODEImplicitStep):
                         lu_nnz=lu_at_state.lu_nnz,
                         solver_width=config.n,
                     )
+                    counts["error_solve"] = lu_at_state.operation_count
             else:
+                operator_at_state = get_fn(
+                    "linear_operator",
+                    jacobian_at="state",
+                    **stage_kwargs,
+                )
+                preconditioner_at_state = get_fn(
+                    config.preconditioner_type,
+                    jacobian_at="state",
+                    **stage_kwargs,
+                )
                 self.error_solver.update(
-                    operator_apply=get_fn(
-                        "linear_operator",
-                        jacobian_at="state",
-                        **stage_kwargs,
-                    ).device_function,
-                    preconditioner=get_fn(
-                        config.preconditioner_type,
-                        jacobian_at="state",
-                        **stage_kwargs,
-                    ).device_function,
+                    operator_apply=operator_at_state.device_function,
+                    preconditioner=preconditioner_at_state.device_function,
                     solver_width=config.n,
                 )
+                counts["error_solve"] = (
+                    operator_at_state.operation_count
+                    + preconditioner_at_state.operation_count
+                )
+            apply_mass = get_fn("apply_mass")
+            apply_mass_function = apply_mass.device_function
+            counts["apply_mass"] = apply_mass.operation_count
 
         self.update_compile_settings(
             {
@@ -571,11 +598,8 @@ class FIRKStep(ODEImplicitStep):
                     if self.smooth_error
                     else None
                 ),
-                "apply_mass_function": (
-                    get_fn("apply_mass").device_function
-                    if self.smooth_error
-                    else None
-                ),
+                "apply_mass_function": apply_mass_function,
+                "helper_operation_counts": OperationCounts(**counts),
             }
         )
 
@@ -972,6 +996,12 @@ class FIRKStep(ODEImplicitStep):
         """Return ``True`` as the method has multiple stages."""
 
         return self.stage_count > 1
+
+    @property
+    def performance_defaults(self) -> Dict[str, Any]:
+        """Share ``stage_increment`` above the measured state-count cut."""
+        shared = self.n > SHARED_STAGE_INCREMENT_MIN_STATES
+        return {"stage_increment_location": "shared" if shared else "local"}
 
     @property
     def has_error_estimate(self) -> bool:

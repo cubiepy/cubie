@@ -48,6 +48,7 @@ from cubie.odesystems.ODEData import ODEData
 from cubie.odesystems._mass_utils import mass_diagonal_flags
 from cubie.odesystems.solver_helpers import (
     HelperResult,
+    OperationCounts,
     SolverHelperCache,
 )
 from cubie.odesystems.SystemValues import SystemValues
@@ -67,11 +68,14 @@ class ODECache(CUDADispatcherCache):
         Memoized solver-helper factories and bound members for this
         build. A true compile-setting change produces a fresh
         ``ODECache`` and therefore a fresh member map.
+    operation_counts
+        Binary-operator counts of the ``dxdt`` and observables sources.
     """
 
     dxdt: Callable = field()
     observables: Optional[Callable] = field(default=None)
     helpers: SolverHelperCache = field(factory=SolverHelperCache)
+    operation_counts: OperationCounts = field(factory=OperationCounts)
 
 
 class BaseODE(CUDAFactory):
@@ -388,6 +392,13 @@ class BaseODE(CUDAFactory):
         t)`` device function.
         """
         return self.get_cached_output("observables")
+
+    @property
+    def operation_count(self) -> int:
+        """Binary-operator count of the ``dxdt`` and observables sources."""
+        return self.get_cached_output("operation_counts").total(
+            ("dxdt", "observables")
+        )
 
     @property
     def _constants_hash(self) -> str:

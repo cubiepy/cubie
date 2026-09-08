@@ -420,7 +420,11 @@ def test_unroll_flags_update_reads_field_keys():
 
 def test_unroll_flag_converter_forms():
     """Bools and pairs convert to ``(unroll, count)``; bad pairs raise."""
-    from cubie.cuda_simsafe import UnrollFlags, unroll_flag_converter
+    from cubie.cuda_simsafe import (
+        UnrollChoice,
+        UnrollFlags,
+        unroll_flag_converter,
+    )
 
     assert unroll_flag_converter(True) == (True, None)
     assert unroll_flag_converter(False) == (False, None)
@@ -448,7 +452,12 @@ def test_unroll_flag_converter_forms():
         unroll_norms=True,
         unroll_other_small=True,
         unroll_newton_exits=True,
-        unroll_krylov_exits=True,
+        unroll_krylov_exits=(True, 1),
+    )
+    assert unroll_flag_converter(UnrollChoice.FULL) == (True, None)
+    assert unroll_flag_converter(UnrollChoice.ROLLED) == (True, 1)
+    assert UnrollFlags(unroll_stage=UnrollChoice.ROLLED) == UnrollFlags(
+        unroll_stage=(True, 1)
     )
 
 

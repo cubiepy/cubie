@@ -83,6 +83,7 @@ See Also
 from __future__ import annotations
 
 from ctypes import c_void_p
+from enum import Enum
 import os
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Tuple, Union
@@ -156,25 +157,6 @@ else:
     from numba import types as numba_types
 
     INLINE_ALWAYS = "always"
-
-
-if CUDA_SIMULATION:
-
-    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
-        """No-op: the simulator interprets kernels without compiling."""
-
-elif IS_MLIR:
-
-    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
-        """Compile the specialization a launch with ``args`` reuses."""
-        dispatcher.compile_for(*args)
-
-else:
-
-    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> None:
-        """Compile the specialization a launch with ``args`` reuses."""
-        argtypes = tuple(dispatcher.typeof_pyval(arg) for arg in args)
-        dispatcher.compile(argtypes)
 
 
 @frozen
@@ -292,8 +274,19 @@ UnrollFlag = Tuple[bool, Optional[int]]
 """Loop-group flag: ``(unroll, count)``."""
 
 
-def unroll_flag_converter(value: Union[bool, UnrollFlag]) -> UnrollFlag:
-    """Return a bool or ``(unroll, count)`` pair as ``(unroll, count)``."""
+class UnrollChoice(Enum):
+    """Named ``(unroll, count)`` flags: fully unrolled or rolled."""
+
+    FULL = (True, None)
+    ROLLED = (True, 1)
+
+
+def unroll_flag_converter(
+    value: Union[bool, UnrollFlag, UnrollChoice],
+) -> UnrollFlag:
+    """Return a bool, pair or :class:`UnrollChoice` as ``(unroll, count)``."""
+    if isinstance(value, UnrollChoice):
+        value = value.value
     if isinstance(value, bool):
         return value, None
     unroll, count = value
@@ -337,7 +330,9 @@ class UnrollFlags:
     unroll_norms: UnrollFlag = _unroll_flag_field()
     unroll_other_small: UnrollFlag = _unroll_flag_field()
     unroll_newton_exits: UnrollFlag = _unroll_flag_field()
-    unroll_krylov_exits: UnrollFlag = _unroll_flag_field()
+    unroll_krylov_exits: UnrollFlag = field(
+        default=UnrollChoice.ROLLED, converter=unroll_flag_converter
+    )
 
     def update(self, updates_dict=None, **kwargs):
         """Derive a replacement snapshot with new flag values.
@@ -900,30 +895,12 @@ def compute_capability_code() -> Optional[str]:
     return f"{major}.{minor}"
 
 
-def max_shared_memory_per_block() -> int:
-    """Return the device's dynamic shared-memory limit per block.
-
-    Returns
-    -------
-    int
-        Per-block shared-memory limit in bytes. numba-cuda does not
-        set ``CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES``, so
-        the default (non-opt-in) device limit applies to every
-        launch. Under CUDASIM the ubiquitous 48 kiB default is
-        returned.
-    """
-    if CUDA_SIMULATION:  # pragma: no cover - simulated
-        return 49152
-    return int(
-        cuda.get_current_device().MAX_SHARED_MEMORY_PER_BLOCK
-    )
-
-
 __all__ = [
     "activemask",
     "all_sync",
     "any_sync",
     "bool_",
+    "UnrollChoice",
     "CacheImpl",
     "compile_kwargs",
     "consteval",
@@ -952,8 +929,6 @@ __all__ = [
     "is_cudasim_enabled",
     "is_device_array",
     "is_pinned_array",
-    "compile_kernel_specialization",
-    "max_shared_memory_per_block",
     "is_devfunc",
     "MappedNDArray",
     "selp",

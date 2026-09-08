@@ -38,7 +38,7 @@ See Also
 
 from typing import Callable, Optional
 
-from attrs import field, validators, frozen
+from attrs import evolve, field, validators, frozen
 from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
@@ -440,6 +440,7 @@ class DIRKStep(ODEImplicitStep):
         get_fn = config.get_solver_helper_fn
 
         apply_mass_function = None
+        counts = {}
         if self.smooth_error:
             # Smoothing solves at the accepted state, not an increment.
             if self.uses_direct_solver:
@@ -450,29 +451,40 @@ class DIRKStep(ODEImplicitStep):
                     lu_solve_function=lu_at_state.device_function,
                     lu_nnz=lu_at_state.lu_nnz,
                 )
+                counts["error_solve"] = lu_at_state.operation_count
             else:
+                operator_at_state = get_fn(
+                    "linear_operator",
+                    jacobian_at="state",
+                    **request_kwargs,
+                )
+                preconditioner_at_state = get_fn(
+                    config.preconditioner_type,
+                    jacobian_at="state",
+                    **request_kwargs,
+                )
                 self.error_solver.update(
-                    operator_apply=get_fn(
-                        "linear_operator",
-                        jacobian_at="state",
-                        **request_kwargs,
-                    ).device_function,
-                    preconditioner=get_fn(
-                        config.preconditioner_type,
-                        jacobian_at="state",
-                        **request_kwargs,
-                    ).device_function,
+                    operator_apply=operator_at_state.device_function,
+                    preconditioner=preconditioner_at_state.device_function,
+                )
+                counts["error_solve"] = (
+                    operator_at_state.operation_count
+                    + preconditioner_at_state.operation_count
                 )
             # The smoothing rhs is M @ raw_error.
-            apply_mass_function = get_fn("apply_mass").device_function
+            apply_mass = get_fn("apply_mass")
+            apply_mass_function = apply_mass.device_function
+            counts["apply_mass"] = apply_mass.operation_count
 
         # Explicit stages evaluate k = M**-1 @ f in one call.
         evaluate_inv_mass_f_function = None
         tableau = config.tableau
         if tableau.explicit_first_stage or tableau.explicit_last_stage:
-            evaluate_inv_mass_f_function = get_fn(
-                "evaluate_inv_mass_f"
-            ).device_function
+            evaluate_inv_mass_f = get_fn("evaluate_inv_mass_f")
+            evaluate_inv_mass_f_function = evaluate_inv_mass_f.device_function
+            counts["evaluate_inv_mass_f"] = (
+                evaluate_inv_mass_f.operation_count
+            )
 
         self.update_compile_settings(
             {
@@ -489,6 +501,9 @@ class DIRKStep(ODEImplicitStep):
                 'apply_mass_function': apply_mass_function,
                 'evaluate_inv_mass_f_function': (
                     evaluate_inv_mass_f_function
+                ),
+                'helper_operation_counts': evolve(
+                    config.helper_operation_counts, **counts
                 ),
             }
         )
@@ -1081,6 +1096,11 @@ class DIRKStep(ODEImplicitStep):
     def is_multistage(self) -> bool:
         """Return ``True`` as the method has multiple stages."""
         return self.tableau.stage_count > 1
+
+    @property
+    def newton_solves_per_step(self) -> int:
+        """Newton solves one step runs: one per implicit stage."""
+        return len(self.tableau.implicit_stages)
 
     @property
     def has_error_estimate(self) -> bool:

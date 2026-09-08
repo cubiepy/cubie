@@ -72,7 +72,6 @@ from cubie.array_interpolator import ArrayInterpolator
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
 )
-from cubie.integrators.memory_heuristics import auto_memory_locations
 from cubie.integrators.loops.ode_loop import (
     ALL_LOOP_SETTINGS,
 )
@@ -413,16 +412,11 @@ class Solver:
     time_logging_level : str or None, default='default'
         Time logging verbosity level. Options are 'default', 'verbose',
         'debug', None, or 'None' to disable timing.
-    auto_memory : bool, default=True
-        Apply measured shared-memory placements for buffer
-        configurations where they beat the all-local defaults (see
-        :mod:`cubie.integrators.memory_heuristics`). Thresholds are
-        calibrated per GPU architecture; cards without a calibrated
-        entry use the default entry. Explicit ``*_location``
-        arguments always take precedence; pass ``False`` to keep
-        every unspecified buffer local. Placement is chosen at
-        construction and is not revisited by later :meth:`update`
-        calls.
+    auto_performance : bool, default=True
+        Set buffer locations, loop unrolling and launch residency
+        from your hardware and CuBIE's best guess. Never overrides
+        explicit ``unroll_*`` or ``*_location`` arguments. Turning it
+        off on a built solver keeps the last derived values.
     **kwargs
         Additional keyword arguments forwarded to internal components. See
         "Optional Arguments" in the docs for the possibilities.
@@ -455,7 +449,7 @@ class Solver:
         loop_settings: Optional[Dict[str, object]] = None,
         time_logging_level: Optional[str] = None,
         cache: Union[bool, str, Path] = True,
-        auto_memory: bool = True,
+        auto_performance: bool = True,
         **kwargs: Any,
     ) -> None:
         if output_settings is None:
@@ -568,6 +562,7 @@ class Solver:
             output_settings=output_settings,
             memory_settings=memory_settings,
             cache=cache,
+            auto_performance=auto_performance,
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
@@ -586,25 +581,6 @@ class Solver:
                 "Unrecognized keyword arguments: "
                 f"{set(kwargs) - recognized_kwargs}"
             )
-
-        if auto_memory:
-            user_location_keys = {
-                key
-                for source in (
-                    kwargs,
-                    algorithm_settings,
-                    loop_settings,
-                    step_control_settings,
-                )
-                for key in source
-                if key.endswith("_location")
-            }
-            placements = auto_memory_locations(
-                self.kernel.single_integrator,
-                user_location_keys,
-            )
-            if placements:
-                self.kernel.update(placements)
 
     def close(self, shutdown_timeout: Optional[float] = None) -> None:
         """Release GPU resources after pending transfers finish.
@@ -691,7 +667,7 @@ class Solver:
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        blocksize: int = 256,
+        blocksize: Optional[int] = None,
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
@@ -723,7 +699,8 @@ class Solver:
         t0
             Initial integration time. Default ``0.0``.
         blocksize
-            CUDA block size used for kernel launch. Default ``256``.
+            CUDA block size for this launch; ``None`` uses the
+            solver's ``blocksize`` setting (default ``64``).
         grid_type
             Strategy for constructing the integration grid from inputs.
             Only used when dict inputs trigger grid construction.

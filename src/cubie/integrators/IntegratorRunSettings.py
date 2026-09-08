@@ -39,6 +39,8 @@ class IntegratorRunSettings(CUDAFactoryConfig):
         Name of the integration step algorithm.
     step_controller
         Name of the step-size controller.
+    auto_performance
+        Fill unset unroll and placement settings at build; hash-excluded.
     """
 
     algorithm: str = attrs.field(
@@ -48,6 +50,11 @@ class IntegratorRunSettings(CUDAFactoryConfig):
     step_controller: str = attrs.field(
         default="fixed",
         validator=attrs.validators.instance_of(str),
+    )
+    auto_performance: bool = attrs.field(
+        default=True,
+        validator=attrs.validators.instance_of(bool),
+        eq=False,
     )
 
     def __attrs_post_init__(self):
