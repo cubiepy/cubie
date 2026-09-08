@@ -115,7 +115,7 @@ import numpy as np
 
 import cubie as qb
 from cubie.cache_root import get_cache_root
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+from cubie.cuda_simsafe import CUDA_SIMULATION, cuda, empty_pinned
 from cubie.time_logger import default_timelogger
 
 discarded_solves = 20
@@ -330,6 +330,13 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
     }
 
 
+def pinned_copy(array):
+    """Copy a host array into page-locked memory."""
+    pinned = empty_pinned(array.shape, array.dtype)
+    pinned[...] = array
+    return pinned
+
+
 def load_grid(solver, n_runs, grid_cache):
     """Load the input grid from cache, or build and save it.
 
@@ -345,8 +352,11 @@ def load_grid(solver, n_runs, grid_cache):
         else None
     )
     if gfile is not None and os.path.exists(gfile):
+        # Cached grids come back pinned, as build_grid returns them.
         with np.load(gfile) as grid:
-            return grid["inits"], grid["params"]
+            return tuple(
+                pinned_copy(grid[name]) for name in ("inits", "params")
+            )
     parameters = {"rho": np.linspace(0.0, 21.0, n_runs)}
     inits, params = solver.build_grid(
         initial_values=initial_conditions, parameters=parameters
