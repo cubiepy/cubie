@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from attrs import define, frozen
 from numpy import asarray, count_nonzero, ndarray
 
+from cubie.backend.utils import active_blocks_per_multiprocessor
 from cubie.cuda_simsafe import cuda
 from cubie.integrators.algorithms import resolve_alias
 from cubie.integrators.stage_predictors import (
@@ -959,21 +960,10 @@ class _CalibrationRunner:
 def _achieved_waves(solver: Any, blocksize: int) -> float:
     """Return occupancy waves the batch fills at the actual geometry."""
     kernel_factory = solver.kernel
-    (kern,) = kernel_factory.kernel.overloads.values()
-    if hasattr(kern, "_ensure_kernel_attrs"):
-        kern._ensure_kernel_attrs()
-    cufunc = kern._codelibrary.get_cufunc()
     runs = int(kernel_factory.run_params[0].runs)
-    pad = 4 if kernel_factory.shared_memory_needs_padding else 0
-    padded_bytes = kernel_factory.shared_memory_bytes + pad
-    dynshared = padded_bytes * min(runs, blocksize)
-    actual_blocksize, dynshared = kernel_factory.limit_blocksize(
-        blocksize, dynshared, padded_bytes, runs
-    )
-    dynshared = max(4, dynshared)
-    context = cuda.current_context()
-    blocks_per_sm = context.get_active_blocks_per_multiprocessor(
-        cufunc, actual_blocksize, dynshared
+    actual_blocksize, dynshared = kernel_factory.launch_geometry(blocksize)
+    blocks_per_sm = active_blocks_per_multiprocessor(
+        kernel_factory.kernel, actual_blocksize, dynshared
     )
     device = cuda.get_current_device()
     threads_per_loop = (

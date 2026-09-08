@@ -285,6 +285,19 @@ class _CubieConfigBase:
         return asdict(self, recurse=True, filter=attribute_is_hashable)
 
     @property
+    def init_kwargs(self) -> Dict[str, Any]:
+        """Return the init fields by init name, minus device-function slots."""
+        kwargs = {}
+        for fld in fields(type(self)):
+            value = getattr(self, fld.name)
+            if not fld.init:
+                continue
+            if fld.eq is False and (value is None or callable(value)):
+                continue
+            kwargs[fld.alias or fld.name] = value
+        return kwargs
+
+    @property
     def values_hash(self) -> str:
         """Canonical digest of the snapshot's semantic fields.
 
@@ -422,11 +435,30 @@ class CUDAFactory(ABC):
     is valid and False otherwise.
     """
 
+    settings_keys: Optional[frozenset] = None
+    """Loose keys the factory accepts; ``None`` accepts every field."""
+
     def __init__(self):
         """Initialize the CUDA factory."""
         self._compile_settings = None
         self._cache_valid = True
         self._cache = None
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the keyword arguments that rebuild this configuration."""
+        settings = self.compile_settings.init_kwargs
+        if self.settings_keys is None:
+            return settings
+        return {
+            key: value
+            for key, value in settings.items()
+            if key in self.settings_keys
+        }
+
+    def copy(self) -> "CUDAFactory":
+        """Return a new factory with these settings and no build cache."""
+        return type(self)(**self.settings_dict)
 
     @abstractmethod
     def build(self):

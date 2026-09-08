@@ -35,6 +35,7 @@ See Also
 """
 
 from abc import abstractmethod
+from copy import deepcopy
 from typing import Any, Callable, Dict, Optional, Set
 
 from attrs import define, field
@@ -48,6 +49,7 @@ from cubie.odesystems.ODEData import ODEData
 from cubie.odesystems._mass_utils import mass_diagonal_flags
 from cubie.odesystems.solver_helpers import (
     HelperResult,
+    OperationCounts,
     SolverHelperCache,
 )
 from cubie.odesystems.SystemValues import SystemValues
@@ -67,11 +69,14 @@ class ODECache(CUDADispatcherCache):
         Memoized solver-helper factories and bound members for this
         build. A true compile-setting change produces a fresh
         ``ODECache`` and therefore a fresh member map.
+    operation_counts
+        Binary-operator counts of the ``dxdt`` and observables sources.
     """
 
     dxdt: Callable = field()
     observables: Optional[Callable] = field(default=None)
     helpers: SolverHelperCache = field(factory=SolverHelperCache)
+    operation_counts: OperationCounts = field(factory=OperationCounts)
 
 
 class BaseODE(CUDAFactory):
@@ -375,6 +380,17 @@ class BaseODE(CUDAFactory):
         """System component sizes cached for solvers."""
         return self.compile_settings.sizes
 
+    def __getstate__(self) -> dict:
+        """Return the pickled state without the build cache."""
+        state = dict(self.__dict__)
+        state["_cache"] = None
+        state["_cache_valid"] = False
+        return state
+
+    def copy(self) -> "BaseODE":
+        """Return an independent system with these values and no build."""
+        return deepcopy(self)
+
     @property
     def evaluate_f(self):
         """Compiled ``dxdt(state, parameters, drivers, observables, out, t)``
@@ -388,6 +404,13 @@ class BaseODE(CUDAFactory):
         t)`` device function.
         """
         return self.get_cached_output("observables")
+
+    @property
+    def operation_count(self) -> int:
+        """Binary-operator count of the ``dxdt`` and observables sources."""
+        return self.get_cached_output("operation_counts").total(
+            ("dxdt", "observables")
+        )
 
     @property
     def _constants_hash(self) -> str:

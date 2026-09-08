@@ -253,7 +253,6 @@ def test_default_controller_settings_from_algorithm(
         if callable(expected):
             expected = expected(order)
         if key in CONTROLLER_GAIN_PARAMETERS:
-            # Gains are not in settings_dict; read the controller.
             actual = getattr(run._step_controller, key)
         else:
             assert key in controller_settings
@@ -618,6 +617,25 @@ def test_save_last_when_no_save_every(single_integrator_run):
 def test_is_duration_dependent_no_timing(single_integrator_run):
     """is_duration_dependent True when summaries requested with no timing."""
     assert single_integrator_run.is_duration_dependent is True
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [SUMMARY_ONLY_NO_TIMING],
+    indirect=True,
+)
+def test_copy_keeps_the_schedule_duration_dependent(
+    single_integrator_run_mutable,
+):
+    """A copy re-derives the summary schedule instead of pinning it."""
+    run = single_integrator_run_mutable
+    run.set_summary_timing_from_duration(2.0)
+    settings = run.settings_dict
+    assert "summarise_every" not in settings
+    assert "sample_summaries_every" not in settings
+    twin = run.copy()
+    assert twin.is_duration_dependent is True
+    assert twin.config_hash == run.copy().config_hash
 
 
 @pytest.mark.parametrize(

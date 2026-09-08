@@ -51,7 +51,8 @@ single batch solve.
        differs from** ``Solver.solve`` **below.**
    * - ``time_logging_level``
      - ``None``
-     - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``, or
+     - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``,
+       ``'silent'`` (record GPU events, print nothing), or
        ``None``/``'None'`` to disable.
    * - ``nan_error_trajectories``
      - ``True``
@@ -85,6 +86,11 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
      - ``True``
      - Compiled-kernel disk caching; accepts ``bool``, a cache-mode
        string, or a ``Path``. See :doc:`caching`.
+   * - ``auto_performance``
+     - ``True``
+     - Whether to use in-built heuristics for buffer locations in
+       memory and loop unrolling. Does not override manual
+       ``unroll_*`` or ``*_location`` arguments.
    * - ``time_logging_level``
      - ``None``
      - Same options as above.
@@ -114,8 +120,9 @@ loose keyword arguments (see "Kwarg routing" below).
      - ``0.0``
      - Initial integration time.
    * - ``blocksize``
-     - ``256``
-     - CUDA threads per block for the kernel launch.
+     - ``None``
+     - CUDA threads per block for this launch; ``None`` uses the
+       solver's ``blocksize`` setting (default ``64``).
    * - ``grid_type``
      - ``"verbatim"``
      - **Differs from** ``solve_ivp``'s default of
@@ -181,7 +188,7 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
        ``Path``)
      - :doc:`caching`
    * - Kernel
-     - ``max_registers``
+     - ``max_registers``, ``blocksize``
      - :doc:`speed`
 
 A keyword argument that matches no group raises ``KeyError`` at
@@ -205,6 +212,10 @@ Notes on selected parameters
     Per-thread register cap forwarded to ``cuda.jit``. Default
     ``None`` leaves register allocation to ``ptxas``; capping trades
     spill traffic for more resident warps. See :doc:`speed`.
+
+**blocksize**
+    Threads per block for every launch (default ``64``);
+    ``solve(blocksize=...)`` overrides one launch.
 
 **mem_proportion**
     Proportion of VRAM (0.0–1.0) reserved for this solver's

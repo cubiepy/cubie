@@ -15,8 +15,14 @@ from numpy import sqrt
 from numpy.testing import assert_array_equal
 
 from cubie.integrators.norms import ATOL_FLOOR, TwoRefMaskedScaledNorm
+from cubie.integrators.step_control.adaptive_PID_controller import (
+    AdaptivePIDController,
+)
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
+)
+from cubie.integrators.step_control.base_step_controller import (
+    ALL_STEP_CONTROLLER_PARAMETERS,
 )
 
 
@@ -236,24 +242,36 @@ def test_config_is_adaptive():
 # ── settings_dict (item 67) ─────────────────────────────────────── #
 
 
-def test_config_settings_dict_keys():
-    """settings_dict contains all expected adaptive controller keys."""
-    cfg = AdaptiveStepControlConfig(
+def test_settings_dict_keys():
+    """settings_dict carries the controller keys and the given bounds."""
+    controller = AdaptivePIDController(
         precision=np.float64, dt=1e-3, dt_min=1e-5, dt_max=0.5,
         algorithm_order=2,
     )
-    d = cfg.settings_dict
+    d = controller.settings_dict
     expected_keys = {
         "dt_min", "dt_max", "atol", "rtol", "algorithm_order",
         "min_step_shrink", "max_step_growth", "safety", "deadband_min",
-        "deadband_max", "dt", "n",
+        "deadband_max", "dt", "n", "integral_gain",
     }
     assert expected_keys <= set(d.keys())
-    assert d["dt_min"] == cfg.dt_min
-    assert d["dt_max"] == cfg.dt_max
-    assert d["algorithm_order"] == cfg.algorithm_order
-    assert d["safety"] == cfg.safety
-    assert d["dt"] == cfg.dt
+    assert d["dt_min"] == 1e-5
+    assert d["dt_max"] == 0.5
+    assert d["dt"] == 1e-3
+    assert d["algorithm_order"] == 2
+    assert d["safety"] == controller.safety
+    assert set(d) <= ALL_STEP_CONTROLLER_PARAMETERS
+
+
+def test_settings_dict_leaves_derived_bounds_out():
+    """Bounds the controller derived from dt are not returned."""
+    controller = AdaptivePIDController(precision=np.float64, dt=1e-3)
+    d = controller.settings_dict
+    assert d["dt"] == 1e-3
+    assert "dt_min" not in d
+    assert "dt_max" not in d
+    twin = controller.copy()
+    assert twin.compile_settings == controller.compile_settings
 
 
 # ── BaseAdaptiveStepController __init__ (item 68) ────────────────── #
@@ -520,12 +538,12 @@ def test_config_mass_flags_default_every_state_differential():
     assert cfg.mass_flags == (True, True, True)
 
 
-def test_config_mass_flags_carried_into_settings_dict():
-    cfg = AdaptiveStepControlConfig(
+def test_mass_flags_carried_into_settings_dict():
+    controller = AdaptivePIDController(
         precision=np.float64, n=3, mass_flags=[True, False, True]
     )
-    assert cfg.mass_flags == (True, False, True)
-    assert cfg.settings_dict["mass_flags"] == (True, False, True)
+    assert controller.compile_settings.mass_flags == (True, False, True)
+    assert controller.settings_dict["mass_flags"] == (True, False, True)
 
 
 def test_controller_mass_flags_length_must_match_n():

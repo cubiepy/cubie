@@ -57,11 +57,14 @@ from cubie.cuda_simsafe import int32
 from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
-from cubie.cuda_simsafe import (
+from cubie.backend.utils import (
+    active_blocks_per_multiprocessor,
     compile_kernel_specialization,
-    is_cudasim_enabled,
+    device_hardware,
+    kernel_resources,
     max_shared_memory_per_block,
 )
+from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cubie_cache import CUBIECache
 
 from cubie.time_logger import CUDAEvent
@@ -77,6 +80,7 @@ from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrays,
 )
 from cubie.batchsolving.BatchSolverConfig import (
+    ALL_KERNEL_PARAMETERS,
     ActiveOutputs,
     BatchSolverConfig,
 )
@@ -240,6 +244,13 @@ class BatchSolverCache(CUDADispatcherCache):
     solver_kernel: Union[int, Callable] = field(default=-1)
 
 
+RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
+"""Fraction of L2 three or more resident blocks' local memory may fill."""
+
+DYNAMIC_SHARED_PAD_STEP = 256
+"""Bytes the residency pad steps by."""
+
+
 class BatchSolverKernel(CUDAFactory):
     """Factory for CUDA kernel which coordinates a batch integration.
 
@@ -279,10 +290,21 @@ class BatchSolverKernel(CUDAFactory):
         the default location, ``False`` disables caching,
         ``"flush_on_change"`` selects that mode, a string/``Path``
         sets the cache directory.
+    auto_performance
+        Fill unset unroll, placement and residency settings from the
+        system's size and the GPU.
     kernel_settings
         Kernel-level compile settings forwarded to
         :class:`BatchSolverConfig`; loose ``cache_*`` keys override
         ``cache``.
+
+    Attributes
+    ----------
+    resident_blocks
+        Blocks per SM on the GPU, set by ``auto_performance`` and
+        ``Solver.optimize``.
+    blocksize_given
+        Whether ``blocksize`` was set explicitly.
 
     Notes
     -----
@@ -291,6 +313,8 @@ class BatchSolverKernel(CUDAFactory):
     executes the compiled loop function against kernel-managed memory slices
     and distributes work across GPU threads for each input batch.
     """
+
+    settings_keys = frozenset(ALL_KERNEL_PARAMETERS)
 
     def __init__(
         self,
@@ -305,6 +329,7 @@ class BatchSolverKernel(CUDAFactory):
         output_settings: Optional[Dict[str, Any]] = None,
         memory_settings: Optional[Dict[str, Any]] = None,
         cache: Union[bool, str, Path] = True,
+        auto_performance: bool = True,
         kernel_settings: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__()
@@ -336,6 +361,8 @@ class BatchSolverKernel(CUDAFactory):
         self._last_stream = None
         self._work_complete = True
         self._memory_manager = self._setup_memory_manager(memory_settings)
+        self.resident_blocks = None
+        self._launch_geometries = {}
 
         # Child factory: driver settings join config_hash; the
         # placeholder input covers zero-driver operation.
@@ -372,6 +399,7 @@ class BatchSolverKernel(CUDAFactory):
             step_control_settings=step_control_settings,
             algorithm_settings=algorithm_settings,
             output_settings=output_settings,
+            auto_performance=auto_performance,
         )
         # Explicit lineinfo and unroll settings reach every child factory.
         if lineinfo is not None:
@@ -385,6 +413,7 @@ class BatchSolverKernel(CUDAFactory):
         if kernel_settings is None:
             kernel_settings = {}
         kernel_settings = kernel_settings.copy()
+        self.blocksize_given = "blocksize" in kernel_settings
         # Seed the baked coefficient layout from the interpolator.
         driver_coefficients_shape = kernel_settings.pop(
             "driver_coefficients_shape",
@@ -592,7 +621,7 @@ class BatchSolverKernel(CUDAFactory):
         params: NDArray[floating],
         driver_coefficients: Optional[NDArray[floating]],
         duration: float,
-        blocksize: int = 256,
+        blocksize: Optional[int] = None,
         warmup: float = 0.0,
         t0: float = 0.0,
         transfer_outputs: bool = True,
@@ -617,7 +646,8 @@ class BatchSolverKernel(CUDAFactory):
         duration
             Duration of the simulation window.
         blocksize
-            CUDA block size for kernel execution.
+            CUDA block size for this launch; ``None`` uses the
+            ``blocksize`` compile setting.
         warmup
             Warmup time before the main simulation.
         t0
@@ -777,7 +807,7 @@ class BatchSolverKernel(CUDAFactory):
         params: NDArray[floating],
         driver_coefficients: Optional[NDArray[floating]],
         duration: float,
-        blocksize: int,
+        blocksize: Optional[int],
         stream: Optional[Any],
         warmup: float,
         t0: float,
@@ -816,25 +846,7 @@ class BatchSolverKernel(CUDAFactory):
                     "batch size."
                 )
 
-        # Get first chunk runs for initial block size calculation
-        first_chunk_params = self.run_params[0]
-        runs = first_chunk_params.runs
-
-        pad = 4 if self.shared_memory_needs_padding else 0
-        padded_bytes = self.shared_memory_bytes + pad
-        dynamic_sharedmem = int(padded_bytes * min(runs, blocksize))
-
-        blocksize, dynamic_sharedmem = self.limit_blocksize(
-            blocksize,
-            dynamic_sharedmem,
-            padded_bytes,
-            runs,
-        )
-
-        # We need a nonzero number to tell the compiler we're using dynamic
-        # memory. If zero, then the cuda.shared.array(0) call fails as we
-        # can't declare a size-0 static shared memory array.
-        dynamic_sharedmem = max(4, dynamic_sharedmem)
+        blocksize, dynamic_sharedmem = self.launch_geometry(blocksize)
         threads_per_loop = self.single_integrator.threads_per_step
         runsperblock = int(blocksize / self.single_integrator.threads_per_step)
 
@@ -889,7 +901,7 @@ class BatchSolverKernel(CUDAFactory):
         bytes_per_run: int,
         numruns: int,
     ) -> tuple[int, int]:
-        """Reduce block size until dynamic shared memory fits within limits.
+        """Halve the block size until dynamic shared memory is launchable.
 
         Parameters
         ----------
@@ -905,30 +917,15 @@ class BatchSolverKernel(CUDAFactory):
         Returns
         -------
         tuple[int, int]
-            Adjusted block size and shared-memory footprint per block.
+            Adjusted block size and shared-memory footprint per block,
+            within the device's opt-in per-block limit.
 
         Raises
         ------
         ValueError
             If a single run's shared-memory demand exceeds the
             device's per-block limit, so no block size can launch.
-
-        Notes
-        -----
-        Reduction is two-staged. The performance stage targets a
-        32 kiB footprint (three blocks per SM on CC7* hardware;
-        larger requests reduce per-thread L1 availability) but is
-        floored at one warp: profiling shows sub-warp blocks starve
-        the SMs of resident threads and run slower than exceeding
-        the target. The hardware stage then reduces below one warp
-        only when the device's per-block shared-memory limit leaves
-        no alternative — there a sub-warp block is a launchability
-        requirement, not a tuning choice.
         """
-        while dynamic_sharedmem >= 32768 and blocksize > 32:
-            blocksize = max(32, int(blocksize // 2))
-            dynamic_sharedmem = int(bytes_per_run * min(numruns, blocksize))
-
         hardware_limit = max_shared_memory_per_block()
         if dynamic_sharedmem > hardware_limit:
             if bytes_per_run > hardware_limit:
@@ -938,25 +935,134 @@ class BatchSolverKernel(CUDAFactory):
                     f"{hardware_limit} B per block. Move buffers to "
                     "local memory to reduce per-run shared usage."
                 )
-            warn(
-                "Per-run shared memory exceeds the device's "
-                "per-block limit at one warp per block; block size "
-                "is reduced below warp width. Performance will "
-                "degrade. Consider moving buffers to local memory."
-            )
             while dynamic_sharedmem > hardware_limit and blocksize > 1:
                 blocksize = int(blocksize // 2)
                 dynamic_sharedmem = int(
                     bytes_per_run * min(numruns, blocksize)
                 )
-        elif dynamic_sharedmem >= 32768:
-            warn(
-                "Dynamic shared memory exceeds the 32 kiB per-block "
-                "performance target at the minimum block size of 32 "
-                "threads. Occupancy will be reduced. Consider moving "
-                "buffers to local memory."
-            )
+            if blocksize < 32:
+                warn(
+                    "Per-run shared memory exceeds the device's "
+                    "per-block limit at one warp per block; block size "
+                    "is reduced below warp width. Performance will "
+                    "degrade. Consider moving buffers to local memory."
+                )
         return blocksize, dynamic_sharedmem
+
+    def launch_geometry(
+        self, blocksize: Optional[int] = None
+    ) -> tuple[int, int]:
+        """Return the block size and dynamic shared bytes of a launch.
+
+        Parameters
+        ----------
+        blocksize
+            Requested CUDA block size; ``None`` uses the ``blocksize``
+            compile setting.
+
+        Returns
+        -------
+        tuple[int, int]
+            Block size and dynamic shared bytes, padded to hold the
+            resident block count.
+        """
+        if blocksize is None:
+            blocksize = self.compile_settings.blocksize
+        runs = self.run_params[0].runs
+        key = (
+            self.config_hash,
+            blocksize,
+            runs,
+            self.resident_blocks,
+            self.single_integrator.auto_performance,
+        )
+        geometry = self._launch_geometries.get(key)
+        if geometry is None:
+            geometry = self._compute_launch_geometry(blocksize, runs)
+            self._launch_geometries[key] = geometry
+        return geometry
+
+    def _compute_launch_geometry(
+        self, blocksize: int, runs: int
+    ) -> tuple[int, int]:
+        """Return the launch geometry of ``blocksize`` for ``runs``."""
+        pad = 4 if self.shared_memory_needs_padding else 0
+        padded_bytes = self.shared_memory_bytes + pad
+        dynamic_sharedmem = int(padded_bytes * min(runs, blocksize))
+        blocksize, dynamic_sharedmem = self.limit_blocksize(
+            blocksize,
+            dynamic_sharedmem,
+            padded_bytes,
+            runs,
+        )
+        # The compiler needs a nonzero dynamic shared declaration.
+        dynamic_sharedmem = max(4, dynamic_sharedmem)
+        blocks = self.resident_blocks
+        if blocks is None and not self.single_integrator.auto_performance:
+            return blocksize, dynamic_sharedmem
+        dispatcher = self.kernel
+        compile_kernel_specialization(
+            dispatcher, self._kernel_launch_args(self.run_params[0])
+        )
+        natural = active_blocks_per_multiprocessor(
+            dispatcher, blocksize, dynamic_sharedmem
+        )
+        if blocks is None:
+            blocks = self._resident_blocks_within_l2(
+                dispatcher, blocksize, natural
+            )
+        if blocks >= natural:
+            return blocksize, dynamic_sharedmem
+        return blocksize, self._dynamic_shared_for_blocks(
+            dispatcher, blocksize, dynamic_sharedmem, blocks
+        )
+
+    @staticmethod
+    def _resident_blocks_within_l2(
+        dispatcher: Any, blocksize: int, natural: int
+    ) -> int:
+        """Return the most blocks per SM whose local frames fit in L2."""
+        frame = kernel_resources(dispatcher).local_bytes_per_thread
+        if frame == 0:
+            return natural
+        hardware = device_hardware()
+        l2_bytes = hardware.l2_cache_bytes
+        footprint = frame * blocksize * hardware.multiprocessor_count
+        blocks = natural
+        while blocks > 1:
+            # Two blocks may fill the whole L2; more share two-thirds.
+            budget = (
+                l2_bytes
+                if blocks == 2
+                else RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
+            )
+            if footprint * blocks <= budget:
+                break
+            blocks -= 1
+        return blocks
+
+    @staticmethod
+    def _dynamic_shared_for_blocks(
+        dispatcher: Any, blocksize: int, dynamic_sharedmem: int, blocks: int
+    ) -> int:
+        """Return the smallest dynamic shared pad holding ``blocks`` per SM."""
+        hardware = device_hardware()
+        limit = hardware.max_dynamic_shared_memory_per_block
+        # Start at the most any block may take when ``blocks`` share an SM.
+        padded = (
+            hardware.shared_memory_per_multiprocessor // blocks
+            - hardware.reserved_shared_memory_per_block
+        )
+        padded = max(min(padded, limit), dynamic_sharedmem)
+        # Step down until the driver reports the target block count.
+        while padded > dynamic_sharedmem:
+            resident = active_blocks_per_multiprocessor(
+                dispatcher, blocksize, padded
+            )
+            if resident >= blocks:
+                return padded
+            padded -= DYNAMIC_SHARED_PAD_STEP
+        return dynamic_sharedmem
 
     def build_kernel(self) -> None:
         """Build and compile the CUDA integration kernel."""
@@ -1172,6 +1278,8 @@ class BatchSolverKernel(CUDAFactory):
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
 
         all_unrecognized = set(updates_dict.keys())
+        if "blocksize" in updates_dict:
+            self.blocksize_given = True
 
         driver_recognised = self.driver_interpolator.update(
             updates_dict, silent=True
@@ -1376,6 +1484,45 @@ class BatchSolverKernel(CUDAFactory):
     def build(self) -> BatchSolverCache:
         """Compile the integration kernel and return it."""
         return BatchSolverCache(solver_kernel=self.build_kernel())
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the keys rebuilding this kernel; ``blocksize`` if given."""
+        settings = super().settings_dict
+        if not self.blocksize_given:
+            settings.pop("blocksize", None)
+        settings["lineinfo"] = self.compile_settings.lineinfo
+        settings.update(self.single_integrator.settings_dict)
+        settings.update(
+            stream_group=self.stream_group,
+            mem_proportion=self.mem_proportion,
+            host_spill_threshold=self.host_spill_threshold,
+            spill_directory=self.spill_directory,
+        )
+        return settings
+
+    def copy(self) -> "BatchSolverKernel":
+        """Return a kernel with these settings on a system copy."""
+        settings = self.settings_dict
+        grouped = self.single_integrator.grouped_settings()
+        return type(self)(
+            self.system.copy(),
+            lineinfo=settings["lineinfo"],
+            memory_settings={
+                "memory_manager": self.memory_manager,
+                "stream_group": self.stream_group,
+                "mem_proportion": self.mem_proportion,
+                "host_spill_threshold": self.host_spill_threshold,
+                "spill_directory": self.spill_directory,
+            },
+            cache=settings["cache"],
+            kernel_settings={
+                key: settings[key]
+                for key in ("max_registers", "kernel_name", "blocksize")
+                if key in settings
+            },
+            **grouped,
+        )
 
     @property
     def memory_manager(self) -> "MemoryManager":

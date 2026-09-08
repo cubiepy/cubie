@@ -22,6 +22,19 @@ def tiny_system():
     )
 
 
+def test_copy_is_an_independent_unbuilt_system(tiny_system):
+    """A copy hashes the same, owns its values and holds no build."""
+    tiny_system.evaluate_f
+    twin = tiny_system.copy()
+    assert twin is not tiny_system
+    assert twin.config_hash == tiny_system.config_hash
+    assert twin.cache_valid is False
+    assert tiny_system.cache_valid is True
+    twin.update(c0=3.0)
+    assert tiny_system.constants.values_dict["c0"] == 1.0
+    assert twin.constants.values_dict["c0"] == 3.0
+
+
 class TestUpdate:
     """Cover the BaseODE.update dispatch branches."""
 

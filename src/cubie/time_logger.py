@@ -34,6 +34,11 @@ import attrs
 from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cuda_simsafe import cuda
 
+VERBOSITY_LEVELS = frozenset(
+    {"silent", "default", "verbose", "debug", None, "None"}
+)
+"""Accepted verbosity levels; ``"silent"`` records events, prints nothing."""
+
 RUNTIME_SPANS = ("solve_ivp", "solver_solve")
 """Runtime spans, outermost first. The first one recorded is the total."""
 
@@ -235,10 +240,10 @@ class TimeLogger:
     """
 
     def __init__(self, verbosity: Optional[str] = None) -> None:
-        if verbosity not in {"default", "verbose", "debug", None, "None"}:
+        if verbosity not in VERBOSITY_LEVELS:
             raise ValueError(
-                f"verbosity must be 'default', 'verbose', 'debug', "
-                f"None, or 'None', got '{verbosity}'"
+                f"verbosity must be 'silent', 'default', 'verbose', "
+                f"'debug', None, or 'None', got '{verbosity}'"
             )
         # Normalize string 'None' to None
         if verbosity == "None":
@@ -640,6 +645,10 @@ class TimeLogger:
         if any(name in self._active_starts for name in RUNTIME_SPANS):
             return
 
+        if self.verbosity == "silent":
+            self._clear_events()
+            return
+
         # Retrieve CUDA event timings when printing runtime summary
         if category == "runtime" or category is None:
             self._retrieve_cuda_events()
@@ -718,17 +727,18 @@ class TimeLogger:
         Parameters
         ----------
         verbosity : str or None
-            New verbosity level. Options are 'default', 'verbose',
-            'debug', None, or 'None'.
+            New verbosity level. Options are 'silent' (record CUDA
+            events, print nothing), 'default', 'verbose', 'debug',
+            None, or 'None'.
 
         Notes
         -----
         Changing verbosity does not clear existing events.
         """
-        if verbosity not in {"default", "verbose", "debug", None, "None"}:
+        if verbosity not in VERBOSITY_LEVELS:
             raise ValueError(
-                f"verbosity must be 'default', 'verbose', 'debug', "
-                f"None, or 'None', got '{verbosity}'"
+                f"verbosity must be 'silent', 'default', 'verbose', "
+                f"'debug', None, or 'None', got '{verbosity}'"
             )
         # Normalize string 'None' to None
         if verbosity == "None":

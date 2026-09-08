@@ -52,7 +52,7 @@ See Also
     Parent tableau class.
 """
 
-from typing import Dict
+from typing import Dict, Tuple
 
 import attrs
 import math
@@ -110,11 +110,16 @@ class DIRKTableau(ButcherTableau):
         return self.a[-1][-1] != 0.0
 
     @property
+    def implicit_stages(self) -> Tuple[int, ...]:
+        """Return the indices of the Newton-solved stages."""
+        return tuple(
+            idx for idx in range(self.stage_count) if self.a[idx][idx] != 0.0
+        )
+
+    @property
     def last_implicit_stage(self) -> int:
         """Return the index of the last Newton-solved stage."""
-        implicit = [
-            idx for idx in range(self.stage_count) if self.a[idx][idx] != 0.0
-        ]
+        implicit = self.implicit_stages
         return implicit[-1] if implicit else 0
 
     @property

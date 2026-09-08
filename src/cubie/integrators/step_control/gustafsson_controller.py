@@ -71,13 +71,6 @@ class GustafssonStepControlConfig(AdaptiveStepControlConfig):
         """Return the Newton-work reference used for gain damping."""
         return int(self._newton_target_iters)
 
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update({"newton_target_iters": self.newton_target_iters})
-        return settings_dict
-
 
 class GustafssonController(BaseAdaptiveStepController):
     """Adaptive controller using Gustafsson acceleration."""

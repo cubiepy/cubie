@@ -181,24 +181,6 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
 
         return self.precision(self._deadband_max)
 
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the configuration as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update(
-            {
-                "dt_min": self.dt_min,
-                "dt_max": self.dt_max,
-                "algorithm_order": self.algorithm_order,
-                "min_step_shrink": self.min_step_shrink,
-                "max_step_growth": self.max_step_growth,
-                "safety": self.safety,
-                "deadband_min": self.deadband_min,
-                "deadband_max": self.deadband_max,
-                "dt": self.dt,
-            }
-        )
-        return settings_dict
 
 
 class BaseAdaptiveStepController(BaseStepController):

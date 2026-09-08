@@ -21,7 +21,7 @@ See Also
     Compile settings container used by this class.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
 from warnings import warn
 
 from attrs import define, field
@@ -30,6 +30,8 @@ from numpy import asarray, finfo as np_finfo
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType, unpack_dict_values
 from cubie.buffer_registry import buffer_registry
+from cubie.backend.utils import SASS_INSTRUCTION_BYTES, device_hardware
+from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollChoice
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -120,7 +122,18 @@ class SingleIntegratorRunCore(CUDAFactory):
         adaptive controllers.  Supported identifiers include ``"fixed"``,
         ``"i"``, ``"pi"``, ``"pid"``, and ``"gustafsson"``.  When
         ``None`` the algorithm defaults are used.
+    auto_performance
+        Fill unset unroll and placement settings at build.
     """
+
+    settings_keys = frozenset(
+        {"algorithm", "step_controller", "auto_performance"}
+    )
+
+    # Keys the user may fix that the performance defaults never touch.
+    _USER_PERF_OVERRIDES = (
+        ALL_ALGORITHM_STEP_PARAMETERS | ALL_UNROLL_PARAMETERS | {"unroll"}
+    )
 
     _INNER_TOLERANCE_KEYS = (
         "krylov_atol",
@@ -129,6 +142,22 @@ class SingleIntegratorRunCore(CUDAFactory):
         "newton_atol",
         "newton_rtol",
     )
+
+    # Child keys this run writes from the system, step or controller.
+    _INJECTED_KEYS = frozenset(
+        {
+            "precision",
+            "n",
+            "n_drivers",
+            "mass_flags",
+            "algorithm_order",
+            "is_adaptive",
+            "save_last",
+            "save_regularly",
+            "summarise_regularly",
+        }
+    )
+    _TIMING_KEYS = ("save_every", "summarise_every", "sample_summaries_every")
 
     def __init__(
         self,
@@ -139,6 +168,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         driver_del_t: Optional[Callable] = None,
         algorithm_settings: Optional[Dict[str, Any]] = None,
         step_control_settings: Optional[Dict[str, Any]] = None,
+        auto_performance: bool = True,
     ) -> None:
         super().__init__()
 
@@ -158,10 +188,10 @@ class SingleIntegratorRunCore(CUDAFactory):
             for key in self._INNER_TOLERANCE_KEYS
             if algorithm_settings.get(key) is not None
         }
-        # Algorithm step parameters the user set explicitly.
-        self._user_given_algorithm_keys = {
+        # Step and unroll parameters the user set explicitly.
+        self._user_given_keys = {
             key
-            for key in ALL_ALGORITHM_STEP_PARAMETERS
+            for key in self._USER_PERF_OVERRIDES
             if algorithm_settings.get(key) is not None
         }
 
@@ -241,6 +271,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             precision=system.precision,
             algorithm=algorithm_settings["algorithm"],
             step_controller=controller_settings["step_controller"],
+            auto_performance=auto_performance,
         )
 
         self.setup_compile_settings(config)
@@ -261,13 +292,8 @@ class SingleIntegratorRunCore(CUDAFactory):
             evaluate_driver_at_t=evaluate_driver_at_t,
         )
 
-        # Keep the timing parameters explicitly set by the user at run level
-        # Only pass the loop values to implement.
-        self._user_timing = {
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        }
+        # Timing keys as the user gave them.
+        self._user_timing = dict.fromkeys(self._TIMING_KEYS)
         self.is_duration_dependent = False
         self._process_loop_timing(loop_settings)
 
@@ -308,13 +334,8 @@ class SingleIntegratorRunCore(CUDAFactory):
             ``save_every``, ``summarise_every``, and
             ``sample_summaries_every``.
         """
-        timing_params = (
-            "save_every",
-            "summarise_every",
-            "sample_summaries_every",
-        )
         # 1. Overwrite "user intent" with incoming values
-        for p in timing_params:
+        for p in self._TIMING_KEYS:
             if p in settings_dict:
                 self._user_timing[p] = settings_dict[p]
 
@@ -692,10 +713,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
         user_named_controller = "step_controller" in updates_dict
 
-        # User-given algorithm keys, before derived values are injected.
-        requested_algorithm_keys = {
+        # User-given keys, before derived values are injected.
+        requested_keys = {
             key
-            for key in set(updates_dict) & ALL_ALGORITHM_STEP_PARAMETERS
+            for key in set(updates_dict) & self._USER_PERF_OVERRIDES
             if updates_dict[key] is not None
         }
 
@@ -765,7 +786,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._INNER_TOLERANCE_KEYS:
             if updates_dict.get(key) is not None:
                 self._user_given_inner_tols.add(key)
-        self._user_given_algorithm_keys |= requested_algorithm_keys
+        self._user_given_keys |= requested_keys
 
         # Re-derive unset inner-solver tolerances when the controller
         # tolerances change or the algorithm is swapped, so they keep
@@ -842,6 +863,8 @@ class SingleIntegratorRunCore(CUDAFactory):
             buffer_registry.clear_parent(self._algo_step)
             old_settings = self._algo_step.settings_dict
             old_settings["algorithm"] = new_algo
+            # The system's device functions carry over to the new step.
+            old_settings.update(self._step_device_functions())
             self._algo_step = get_algorithm_step(
                     precision=precision,
                     settings=old_settings,
@@ -947,7 +970,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             The default keys forwarded to the algorithm step.
         """
         defaults = self._algo_step.step_default_settings
-        user_given = self._user_given_algorithm_keys
+        user_given = self._user_given_keys
         if (
             "linear_correction_type" in user_given
             and self._algo_step.is_implicit
@@ -969,7 +992,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """Fill unset linear solve keys from ``DAE_SOLVER_DEFAULTS``."""
         if self._system.mass is None or not self._algo_step.is_implicit:
             return set()
-        user_given = self._user_given_algorithm_keys
+        user_given = self._user_given_keys
         updates = {
             key: value
             for key, value in DAE_SOLVER_DEFAULTS.items()
@@ -1012,6 +1035,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         if new_controller != self.compile_settings.step_controller:
             buffer_registry.clear_parent(self._step_controller)
             old_settings = self._step_controller.settings_dict
+            # A new controller starts from its own gain defaults.
+            for key in CONTROLLER_GAIN_PARAMETERS:
+                old_settings.pop(key, None)
             old_settings["step_controller"] = new_controller
             old_settings["algorithm_order"] = updates_dict.get(
                 "algorithm_order", self._algo_step.controller_order)
@@ -1048,6 +1074,7 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         # Build algorithm fn after change made
         self._algo_step.update(compiled_fns_dict)
+        self._apply_performance_defaults()
 
         # Building the step and controller functions must precede the
         # child-buffer registration below: an implicit step refreshes
@@ -1096,6 +1123,167 @@ class SingleIntegratorRunCore(CUDAFactory):
         loop_fn = self._loop.device_function
 
         return SingleIntegratorRunCache(single_integrator_function=loop_fn)
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the keys rebuilding this run; derived ones only as given."""
+        step = self._algo_step
+        settings = super().settings_dict
+        # The run writes the loop's dt and schedule itself.
+        loop_settings = self._loop.settings_dict
+        for key in ("dt", *self._TIMING_KEYS):
+            loop_settings.pop(key, None)
+        settings.update(loop_settings)
+        for child in (self._output_functions, self._step_controller, step):
+            settings.update(child.settings_dict)
+        for key in self._INJECTED_KEYS:
+            settings.pop(key, None)
+        settings.pop("sample_summaries_every", None)
+        settings.update(
+            {
+                key: value
+                for key, value in self._user_timing.items()
+                if value is not None
+            }
+        )
+        for key in self._INNER_TOLERANCE_KEYS:
+            if key not in self._user_given_inner_tols:
+                settings.pop(key, None)
+
+        # Performance defaults stay derived while auto_performance is on.
+        user_given = self._user_given_keys
+        if "unroll" in user_given:
+            user_given = user_given | ALL_UNROLL_PARAMETERS
+        auto = self.compile_settings.auto_performance
+        for key in step.performance_defaults:
+            if auto and key not in user_given:
+                settings.pop(key, None)
+        flags = self.compile_settings.unroll
+        settings.update(
+            {
+                key: getattr(flags, key)
+                for key in ALL_UNROLL_PARAMETERS & user_given
+            }
+        )
+        if not auto and step.is_implicit:
+            settings["unroll_newton_exits"] = (
+                step.compile_settings.unroll.unroll_newton_exits
+            )
+        return settings
+
+    def grouped_settings(self) -> Dict[str, Dict[str, Any]]:
+        """Return ``settings_dict`` split into the constructor's groups."""
+        settings = self.settings_dict
+        groups = {
+            "loop_settings": self._loop.settings_keys,
+            "output_settings": self._output_functions.settings_keys,
+            "step_control_settings": self._step_controller.settings_keys,
+            "algorithm_settings": self._algo_step.settings_keys,
+            "unroll_settings": ALL_UNROLL_PARAMETERS,
+        }
+        grouped = {
+            name: {
+                key: value
+                for key, value in settings.items()
+                if key in keys
+            }
+            for name, keys in groups.items()
+        }
+        grouped["auto_performance"] = settings["auto_performance"]
+        return grouped
+
+    def _step_device_functions(self) -> Dict[str, Optional[Callable]]:
+        """Return the device functions the step holds, by settings key."""
+        config = self._algo_step.compile_settings
+        return {
+            key: getattr(config, key, None)
+            for key in (
+                "evaluate_f",
+                "evaluate_observables",
+                "evaluate_driver_at_t",
+                "driver_del_t",
+                "get_solver_helper_fn",
+            )
+        }
+
+    def copy(self) -> "SingleIntegratorRunCore":
+        """Return a new run with these settings on a copy of the system."""
+        drivers = self._step_device_functions()
+        grouped = self.grouped_settings()
+        unroll_settings = grouped.pop("unroll_settings")
+        twin = type(self)(
+            self._system.copy(),
+            evaluate_driver_at_t=drivers["evaluate_driver_at_t"],
+            driver_del_t=drivers["driver_del_t"],
+            **grouped,
+        )
+        if unroll_settings:
+            twin.update(unroll_settings, silent=True)
+        return twin
+
+    def _apply_performance_defaults(self) -> set:
+        """Fill unset unroll and placement keys from size and hardware.
+
+        Returns
+        -------
+        set of str
+            The keys forwarded to the algorithm step.
+        """
+        step = self._algo_step
+        if not self.compile_settings.auto_performance or not step.is_implicit:
+            return set()
+        step.build_implicit_helpers()
+        updates = dict(step.performance_defaults)
+        if step.newton_solves_per_step > 0:
+            unrolled = (
+                self._system.operation_count
+                + step.per_step_operation_count
+                + step.newton_max_iters
+                * step.newton_solves_per_step
+                * step.newton_body_operation_count
+            )
+            capacity = (
+                device_hardware().instruction_cache_bytes
+                // SASS_INSTRUCTION_BYTES
+            )
+            updates["unroll_newton_exits"] = (
+                UnrollChoice.ROLLED
+                if unrolled > capacity
+                else UnrollChoice.FULL
+            )
+        user_given = self._user_given_keys
+        if "unroll" in user_given:
+            user_given = user_given | ALL_UNROLL_PARAMETERS
+        updates = {
+            key: value
+            for key, value in updates.items()
+            if key not in user_given
+        }
+        if not updates:
+            return set()
+        return step.update(updates, silent=True)
+
+    def optimisation_candidates(
+        self, force: bool = False
+    ) -> Tuple[Dict[str, Any], ...]:
+        """Return the step's candidate settings minus keys the user fixed.
+
+        Parameters
+        ----------
+        force
+            Vary the user-fixed keys too.
+        """
+        fixed = set() if force else set(self._user_given_keys)
+        if "unroll" in fixed:
+            fixed |= ALL_UNROLL_PARAMETERS
+        candidates = []
+        for combo in self._algo_step.optimisation_candidates:
+            free = {
+                key: value for key, value in combo.items() if key not in fixed
+            }
+            if free not in candidates:
+                candidates.append(free)
+        return tuple(candidates)
 
     @property
     def time_domain_outputs_requested(self) -> bool:

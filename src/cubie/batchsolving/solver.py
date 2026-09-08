@@ -58,6 +58,7 @@ from cubie.batchsolving.calibration import (
     CalibrationResult,
     run_calibration,
 )
+from cubie.batchsolving.optimize import OptimizeResult, run_optimization
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -72,7 +73,6 @@ from cubie.array_interpolator import ArrayInterpolator
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
 )
-from cubie.integrators.memory_heuristics import auto_memory_locations
 from cubie.integrators.loops.ode_loop import (
     ALL_LOOP_SETTINGS,
 )
@@ -292,8 +292,8 @@ def solve_ivp(
         ``"verbatim"`` pairs each input vector while ``"combinatorial"``
         produces every combination of provided values.
     time_logging_level : str or None, default='default'
-        Time logging verbosity level. Options are 'default', 'verbose',
-        'debug', None, or 'None' to disable timing.
+        Time logging verbosity level. Options are 'silent', 'default',
+        'verbose', 'debug', None, or 'None' to disable timing.
     nan_error_trajectories : bool, default=True
         When ``True`` (default), trajectories with nonzero solver status
         codes are automatically set to NaN, protecting users from analyzing
@@ -411,18 +411,13 @@ class Solver:
         ``save_every`` and ``summarise_every`` may also be supplied as loose
         keyword arguments.
     time_logging_level : str or None, default='default'
-        Time logging verbosity level. Options are 'default', 'verbose',
-        'debug', None, or 'None' to disable timing.
-    auto_memory : bool, default=True
-        Apply measured shared-memory placements for buffer
-        configurations where they beat the all-local defaults (see
-        :mod:`cubie.integrators.memory_heuristics`). Thresholds are
-        calibrated per GPU architecture; cards without a calibrated
-        entry use the default entry. Explicit ``*_location``
-        arguments always take precedence; pass ``False`` to keep
-        every unspecified buffer local. Placement is chosen at
-        construction and is not revisited by later :meth:`update`
-        calls.
+        Time logging verbosity level. Options are 'silent', 'default',
+        'verbose', 'debug', None, or 'None' to disable timing.
+    auto_performance : bool, default=True
+        Set buffer locations, loop unrolling and launch residency
+        from your hardware and CuBIE's best guess. Never overrides
+        explicit ``unroll_*`` or ``*_location`` arguments. Turning it
+        off on a built solver keeps the last derived values.
     **kwargs
         Additional keyword arguments forwarded to internal components. See
         "Optional Arguments" in the docs for the possibilities.
@@ -455,7 +450,7 @@ class Solver:
         loop_settings: Optional[Dict[str, object]] = None,
         time_logging_level: Optional[str] = None,
         cache: Union[bool, str, Path] = True,
-        auto_memory: bool = True,
+        auto_performance: bool = True,
         **kwargs: Any,
     ) -> None:
         if output_settings is None:
@@ -568,6 +563,7 @@ class Solver:
             output_settings=output_settings,
             memory_settings=memory_settings,
             cache=cache,
+            auto_performance=auto_performance,
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
@@ -587,25 +583,6 @@ class Solver:
                 f"{set(kwargs) - recognized_kwargs}"
             )
 
-        if auto_memory:
-            user_location_keys = {
-                key
-                for source in (
-                    kwargs,
-                    algorithm_settings,
-                    loop_settings,
-                    step_control_settings,
-                )
-                for key in source
-                if key.endswith("_location")
-            }
-            placements = auto_memory_locations(
-                self.kernel.single_integrator,
-                user_location_keys,
-            )
-            if placements:
-                self.kernel.update(placements)
-
     def close(self, shutdown_timeout: Optional[float] = None) -> None:
         """Release GPU resources after pending transfers finish.
 
@@ -620,6 +597,20 @@ class Solver:
         finalizer = getattr(self, "_finalizer", None)
         if finalizer is not None:
             finalizer.detach()
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the kwargs rebuilding this solver; derived ones as given."""
+        settings = self.kernel.settings_dict
+        for key in _OUTPUT_SELECTION_KEYS:
+            settings.pop(key, None)
+        settings.update(self._output_selection_intent)
+        settings["time_logging_level"] = default_timelogger.verbosity
+        return settings
+
+    def copy(self) -> "Solver":
+        """Return a solver with these settings on a system copy; no drivers."""
+        return type(self)(self.system.copy(), **self.settings_dict)
 
     def __enter__(self) -> "Solver":
         """Return self so the solver can be used as a context manager."""
@@ -691,7 +682,7 @@ class Solver:
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        blocksize: int = 256,
+        blocksize: Optional[int] = None,
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
@@ -723,7 +714,8 @@ class Solver:
         t0
             Initial integration time. Default ``0.0``.
         blocksize
-            CUDA block size used for kernel launch. Default ``256``.
+            CUDA block size for this launch; ``None`` uses the
+            solver's ``blocksize`` setting (default ``64``).
         grid_type
             Strategy for constructing the integration grid from inputs.
             Only used when dict inputs trigger grid construction.
@@ -979,6 +971,81 @@ class Solver:
             grid_type=grid_type,
             apply=apply,
             verbose=verbose,
+        )
+
+    def optimize(
+        self,
+        initial_values: Union[ndarray, Dict[str, Any]],
+        parameters: Union[ndarray, Dict[str, Any]],
+        drivers: Optional[Dict[str, Any]] = None,
+        duration: float = 1.0,
+        settling_time: float = 0.0,
+        t0: float = 0.0,
+        grid_type: str = "verbatim",
+        apply: bool = True,
+        verbose: bool = True,
+        force: bool = False,
+    ) -> OptimizeResult:
+        """Find the fastest buffer placement, unrolling and launch.
+
+        Tries a few configurations of where buffers sit in memory,
+        which loops get unrolled, and how many threads run at once on
+        the GPU, on a copy of this solver, and keeps the fastest.
+        Settings you gave, or an earlier ``optimize`` applied, stay
+        fixed unless ``force=True``. Takes a few minutes.
+
+        Parameters
+        ----------
+        initial_values
+            Initial state values per run: a dict of state names to
+            values, or an (n_states, n_runs) array.
+        parameters
+            Parameter values per run: a dict or an (n_params, n_runs)
+            array.
+        drivers
+            Time-domain sampled driver values.
+        duration
+            Integration time of each timed solve. Default ``1.0``.
+        settling_time
+            Warm-up period before outputs are recorded. Default ``0.0``.
+        t0
+            Initial integration time. Default ``0.0``.
+        grid_type
+            Grid strategy when dict inputs build a grid.
+        apply
+            Apply the fastest settings to this solver. Default ``True``.
+        verbose
+            Print per-launch progress lines. Default ``True``.
+        force
+            Vary the settings you gave or applied earlier too.
+
+        Returns
+        -------
+        OptimizeResult
+            Every launch, the best one, and the applied settings.
+
+        Raises
+        ------
+        ValueError
+            If the system declares drivers but none are supplied.
+
+        Notes
+        -----
+        Use a batch of the size you will run in practice; a warning
+        says how much larger it must be to fill the GPU.
+        """
+        return run_optimization(
+            self,
+            initial_values,
+            parameters,
+            drivers=drivers,
+            duration=duration,
+            settling_time=settling_time,
+            t0=t0,
+            grid_type=grid_type,
+            apply=apply,
+            verbose=verbose,
+            force=force,
         )
 
     def update(

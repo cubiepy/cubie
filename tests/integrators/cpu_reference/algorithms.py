@@ -3,6 +3,7 @@
 from typing import Any, Callable, Optional, Sequence, Union
 
 import numpy as np
+from attrs import fields
 
 from cubie.integrators.algorithms import (
     BackwardsEulerPCStep,
@@ -36,6 +37,9 @@ from cubie.integrators.algorithms.generic_erk_tableaus import (
 from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
     DEFAULT_ROSENBROCK_TABLEAU,
     RosenbrockTableau,
+)
+from cubie.integrators.matrix_free_solvers.newton_krylov import (
+    NewtonKrylovConfig,
 )
 
 from .cpu_ode_system import CPUODESystem
@@ -2258,6 +2262,10 @@ def get_ref_stepper(
         preconditioner_order = getattr(
             step_object, "preconditioner_order", 2
         )
+    if newton_max_iters is None:
+        newton_max_iters = getattr(step_object, "newton_max_iters", None)
+        if newton_max_iters is None:
+            newton_max_iters = fields(NewtonKrylovConfig).max_iters.default
     factory = get_ref_step_factory(algorithm, tableau=tableau)
     return factory(
         evaluator,

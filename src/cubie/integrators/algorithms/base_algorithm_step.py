@@ -691,16 +691,6 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
     )
 
     @property
-    def settings_dict(self) -> Dict[str, object]:
-        """Return a mutable view of the configuration state."""
-
-        return {
-            "n": self.n,
-            "n_drivers": self.n_drivers,
-            "precision": self.precision,
-        }
-
-    @property
     def first_same_as_last(self) -> bool:
         """Return ``True`` when the first and last stages align.
 
@@ -759,9 +749,10 @@ class BaseAlgorithmStep(CUDAFactory):
     usage.
     """
 
-    #: Linearly-implicit steps own their linear solver directly (no
-    #: Newton iteration) and override this to ``True``.
+    #: Linearly-implicit steps own their linear solver directly.
     is_linear = False
+
+    settings_keys = frozenset(ALL_ALGORITHM_STEP_PARAMETERS)
 
     def __init__(
         self,
@@ -898,6 +889,16 @@ class BaseAlgorithmStep(CUDAFactory):
         }
 
     @property
+    def performance_defaults(self) -> Dict[str, Any]:
+        """Return size-dependent settings ``auto_performance`` applies."""
+        return {}
+
+    @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """Return the setting combinations ``Solver.optimize`` times."""
+        return ({},)
+
+    @property
     @abstractmethod
     def threads_per_step(self) -> int:
         raise NotImplementedError
@@ -990,10 +991,11 @@ class BaseAlgorithmStep(CUDAFactory):
         """Return the cached device function that advances the solution."""
         return self.get_cached_output("step")
 
-    @property
-    def settings_dict(self) -> Dict[str, object]:
-        """Return the configuration dictionary for the algorithm step."""
-        return self.compile_settings.settings_dict
+    def copy(self) -> "BaseAlgorithmStep":
+        """Return a new step of this family with these settings."""
+        return type(self)(
+            tableau=self.compile_settings.tableau, **self.settings_dict
+        )
 
     @property
     def evaluate_f(self) -> Optional[Callable]:

@@ -480,6 +480,28 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Where the boot went: OS start, PnP, EC2Launch, RunsOn bootstrap.
+      - name: Windows boot log
+        if: matrix.os == 'windows'
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $boot = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+          Write-Host "OS boot: $($boot.ToUniversalTime().ToString('o'))"
+          Write-Host "::group::System events since boot"
+          Get-WinEvent -FilterHashtable @{
+            LogName = 'System'; StartTime = $boot
+          } -ErrorAction SilentlyContinue |
+            Sort-Object TimeCreated |
+            Select-Object @{n='UTC'; e={$_.TimeCreated.ToUniversalTime().ToString('HH:mm:ss.fff')}}, Id, ProviderName, @{n='Message'; e={($_.Message -split "`n")[0]}} |
+            Format-Table -AutoSize -Wrap | Out-String -Width 200 | Write-Host
+          Write-Host "::endgroup::"
+          foreach ($log in 'C:\runs-on\output.log', 'C:\ProgramData\Amazon\EC2Launch\log\agent.log') {
+            Write-Host "::group::$log"
+            if (Test-Path $log) { Get-Content $log -Tail 400 } else { Write-Host 'absent' }
+            Write-Host "::endgroup::"
+          }
+
       # Linux legs ride actions/cache; Windows legs use the baked cache.
       - name: Set up uv
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
@@ -495,11 +517,20 @@ jobs:
           name: kernel-env-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
           path: kernel-cache
 
+      # A Windows leg installs into its baked venv and puts it on PATH.
       - name: Install cubie (${{ matrix.extra }})
         shell: bash
         run: |
           if [ "${{ matrix.os }}" = "windows" ]; then
             export UV_CACHE_DIR='C:\uv-cache'
+            venv='C:\cubie-venvs\py${{ matrix.python-version }}-${{ matrix.extra }}'
+            if [ -x "$venv\\Scripts\\python.exe" ]; then
+              uv pip install --python "$venv\\Scripts\\python.exe" \
+                -e ".[${{ matrix.extra }}]" -c kernel-cache/constraints.txt
+              echo "$venv\\Scripts" >> "$GITHUB_PATH"
+              exit 0
+            fi
+            echo "no baked venv at $venv; installing into the toolcache"
           fi
           uv pip install --system -e ".[${{ matrix.extra }}]" \
             -c kernel-cache/constraints.txt

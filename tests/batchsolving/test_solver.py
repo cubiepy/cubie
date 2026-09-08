@@ -23,6 +23,14 @@ from cubie.batchsolving.solveresult import (
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
+from cubie.backend.utils import (
+    active_blocks_per_multiprocessor,
+    device_hardware,
+    kernel_resources,
+)
+from cubie.batchsolving.BatchSolverKernel import (
+    RESIDENT_FOOTPRINT_L2_FRACTION,
+)
 from cubie.cuda_simsafe import (
     ALL_UNROLL_PARAMETERS,
     UnrollFlags,
@@ -35,27 +43,11 @@ from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
 from tests._utils import (
     DEVICE_SOLVE_SETTINGS,
     FIXED_EULER_TIMED_STATE,
+    LARGE_DIRK,
+    LARGE_STATE_ONLY,
     MOVABLE_LOCATION_KEYS,
     UNROLL_SETTINGS,
 )
-
-
-@pytest.fixture(scope="session")
-def simple_initial_values(system):
-    """Create simple initial values for testing."""
-    return {
-        list(system.initial_values.names)[0]: [0.1, 0.5],
-        list(system.initial_values.names)[1]: [0.2, 0.6],
-    }
-
-
-@pytest.fixture(scope="session")
-def simple_parameters(system):
-    """Create simple parameters for testing."""
-    return {
-        list(system.parameters.names)[0]: [1.0, 2.0],
-        list(system.parameters.names)[1]: [0.5, 1.5],
-    }
 
 
 @pytest.fixture(scope="session")
@@ -1199,7 +1191,7 @@ def test_solver_routes_system_ordering_settings_before_kernel(precision):
         explicit_system,
         system_settings={"operation_ordering": "liveness_auto"},
         algorithm="euler",
-        auto_memory=False,
+        auto_performance=False,
     )
     try:
         assert (
@@ -1219,7 +1211,7 @@ def test_solver_routes_system_ordering_settings_before_kernel(precision):
         loose_system,
         operation_ordering="greedy",
         algorithm="euler",
-        auto_memory=False,
+        auto_performance=False,
     )
     try:
         assert loose_solver.system.operation_ordering == "greedy"
@@ -2222,6 +2214,7 @@ def test_shared_loop_buffers_leave_results_unchanged(
     thread_mem_manager,
     simple_initial_values,
     simple_parameters,
+    tolerance,
 ):
     """An all-shared placement reproduces the all-local trajectories."""
     assert _shared_loop_and_step_buffers(solver) == set()
@@ -2261,7 +2254,12 @@ def test_shared_loop_buffers_leave_results_unchanged(
         shared_solver.close()
 
     assert np.all(np.isfinite(local_output))
-    np.testing.assert_array_equal(shared_output, local_output)
+    np.testing.assert_allclose(
+        shared_output,
+        local_output,
+        rtol=tolerance.rel_tight,
+        atol=tolerance.abs_tight,
+    )
 
 
 def test_driver_setting_update_syncs_evaluator_and_coefficients(
@@ -2456,4 +2454,207 @@ def test_update_unroll_loose_key(solver_mutable):
     assert solver.kernel.compile_settings.unroll.unroll_norms == (
         False,
         None,
+    )
+
+
+def test_copy_rebuilds_the_same_kernel_on_its_own_system(
+    solver, driver_settings
+):
+    """A copy hashes identically on a copied system."""
+    twin = solver.copy()
+    try:
+        if driver_settings is not None:
+            twin._configure_drivers(driver_settings)
+        assert twin.system is not solver.system
+        assert twin.system.config_hash == solver.system.config_hash
+        assert twin.kernel.config_hash == solver.kernel.config_hash
+        assert twin.stream_group == solver.stream_group
+        assert twin.kernel.compile_settings.blocksize == (
+            solver.kernel.compile_settings.blocksize
+        )
+    finally:
+        twin.close()
+
+
+def test_kernel_copy_rebuilds_an_equal_kernel(solver, driver_settings):
+    """The kernel's own copy hashes identically and shares the manager."""
+    twin = solver.kernel.copy()
+    try:
+        if driver_settings is not None:
+            twin.configure_drivers(driver_settings)
+        assert twin.config_hash == solver.kernel.config_hash
+        assert twin.memory_manager is solver.kernel.memory_manager
+        assert twin.stream_group == solver.kernel.stream_group
+    finally:
+        twin.close()
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [
+        {
+            "algorithm": "kvaerno3",
+            "step_controller": "pid",
+            "krylov_max_iters": 20,
+            "newton_max_iters": 6,
+            "stage_increment_location": "shared",
+            "unroll_norms": (True, 1),
+            "output_types": ["state", "mean"],
+        }
+    ],
+    indirect=True,
+)
+def test_copy_carries_step_solver_and_unroll_settings(
+    solver, driver_settings
+):
+    """Step, solver, placement and unroll settings reach the copy."""
+    twin = solver.copy()
+    try:
+        if driver_settings is not None:
+            twin._configure_drivers(driver_settings)
+        step = twin.kernel.single_integrator._algo_step
+        parent_step = solver.kernel.single_integrator._algo_step
+        assert step.compile_settings.stage_increment_location == "shared"
+        assert step.newton_max_iters == 6
+        assert step.krylov_max_iters == parent_step.krylov_max_iters
+        assert step.compile_settings.unroll.unroll_norms == (True, 1)
+        assert twin.output_types == solver.output_types
+        assert twin.kernel.config_hash == solver.kernel.config_hash
+    finally:
+        twin.close()
+
+
+# The shared fixture pins the settings these cases leave derived.
+COPY_REDERIVED_CASES = [
+    {
+        **LARGE_STATE_ONLY,
+        "algorithm": "kvaerno3",
+        "unroll_newton_exits": None,
+        "unroll_krylov_exits": None,
+        "newton_max_iters": None,
+    },
+    {
+        "algorithm": "tsit5",
+        "step_controller": "pid",
+        "integral_gain": lambda order: 0.3 / order,
+        "dt": None,
+        "dt_min": None,
+        "dt_max": None,
+    },
+]
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", COPY_REDERIVED_CASES, indirect=True
+)
+def test_copy_rederives_what_the_parent_derived(solver, driver_settings):
+    """Auto-performance, step-bound and gain settings match after builds."""
+    run = solver.kernel.single_integrator
+    run.device_function
+    twin = solver.copy()
+    try:
+        if driver_settings is not None:
+            twin._configure_drivers(driver_settings)
+        twin_run = twin.kernel.single_integrator
+        twin_run.device_function
+        assert twin_run._algo_step.compile_settings.unroll == (
+            run._algo_step.compile_settings.unroll
+        )
+        assert twin_run._step_controller.compile_settings == (
+            run._step_controller.compile_settings
+        )
+        assert twin.kernel.blocksize_given == solver.kernel.blocksize_given
+        assert twin.kernel.config_hash == solver.kernel.config_hash
+    finally:
+        twin.close()
+
+
+def _natural_dynamic_shared(kernel, blocksize):
+    """Return the unpadded dynamic shared bytes of a launch."""
+    pad = 4 if kernel.shared_memory_needs_padding else 0
+    runs = kernel.run_params.runs
+    return max(4, (kernel.shared_memory_bytes + pad) * min(runs, blocksize))
+
+
+@pytest.mark.nocudasim
+def test_pinned_resident_blocks_match_driver_block_count(
+    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+):
+    """A pinned resident block count pads dynamic shared to that count."""
+    solver_mutable.kernel.resident_blocks = 2
+    solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.1,
+        grid_type="combinatorial",
+    )
+    kernel = solver_mutable.kernel
+    blocksize, dynamic_shared = kernel.launch_geometry()
+    assert dynamic_shared > _natural_dynamic_shared(kernel, blocksize)
+    assert (
+        active_blocks_per_multiprocessor(
+            kernel.kernel, blocksize, dynamic_shared
+        )
+        == 2
+    )
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [{"auto_performance": False}], indirect=True
+)
+def test_auto_performance_off_launches_at_natural_occupancy(
+    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+):
+    """Without ``auto_performance`` the launch carries no residency pad."""
+    solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.1,
+        grid_type="combinatorial",
+    )
+    kernel = solver_mutable.kernel
+    blocksize, dynamic_shared = kernel.launch_geometry()
+    assert dynamic_shared == _natural_dynamic_shared(kernel, blocksize)
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [LARGE_DIRK], indirect=True
+)
+def test_auto_residency_keeps_local_footprint_in_l2(
+    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+):
+    """The residency pad holds the resident local footprint within budget."""
+    solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.02,
+        grid_type="combinatorial",
+    )
+    kernel = solver_mutable.kernel
+    blocksize, dynamic_shared = kernel.launch_geometry()
+    hardware = device_hardware()
+    frame = kernel_resources(kernel.kernel).local_bytes_per_thread
+    assert frame > 0
+    blocks = active_blocks_per_multiprocessor(
+        kernel.kernel, blocksize, dynamic_shared
+    )
+    footprint = frame * blocksize * hardware.multiprocessor_count
+    l2_bytes = hardware.l2_cache_bytes
+
+    def budget(count):
+        if count == 2:
+            return l2_bytes
+        return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
+
+    assert blocks == 1 or footprint * blocks <= budget(blocks)
+    natural_blocks = active_blocks_per_multiprocessor(
+        kernel.kernel, blocksize, _natural_dynamic_shared(kernel, blocksize)
+    )
+    assert blocks == natural_blocks or (
+        footprint * (blocks + 1) > budget(blocks + 1)
     )

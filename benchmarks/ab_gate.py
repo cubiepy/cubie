@@ -40,9 +40,10 @@ sub-millisecond wall statistic is the per-call host cost of
 (``--host-overhead-threshold``) — a fixed per-call cost is a
 rounding error against the percent thresholds at the other configs'
 sizes — and it reports no kernel row, since an eight-trajectory
-kernel time is launch-dominated. Both workers run this repository's
-benchmark script (only the ``cubie`` import differs per side); a
-config announced by only one worker is skipped with a notice.
+kernel time is launch-dominated. Each side runs its own tree's
+benchmark script; ``--bench-from B`` runs this repository's script on
+both sides. A config announced by only one worker is skipped with a
+notice.
 
 Why blocks: the floor of the kernel-time distribution tracks the
 compiled kernel's intrinsic cost but wanders a few tenths of a
@@ -69,7 +70,8 @@ Usage::
         [--pairs P] [--min-count K] [--threshold PCT]
         [--wall-threshold PCT] [--host-overhead-threshold MS]
         [--n-runs N] [--chunked-runs N]
-        [--chunked-proportion P] [--calibrate] [--keep]
+        [--chunked-proportion P] [--bench-from each|B]
+        [--calibrate] [--keep]
 
 ``--calibrate`` points B at ``main`` too (A-vs-A); rerun it a few
 times to measure this machine's null |delta| for both statistics and
@@ -91,7 +93,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-BENCH = Path(__file__).resolve().parent / "lorenz_mean_runtime.py"
+BENCH_NAME = "lorenz_mean_runtime.py"
 
 # Solves per block for every config. Fixed on purpose: the verdict
 # statistics assume the same block shape on every run and machine,
@@ -224,7 +226,7 @@ def start_worker(tree, backend, cache_dir, grid_dir, args):
     env["PYTHONPATH"] = str(Path(tree) / "src")
     env["CUBIE_CUDA_BACKEND"] = BACKENDS[backend][1]
     env["CUBIE_CACHE_DIR"] = str(cache_dir)
-    cmd = [sys.executable, str(BENCH), "--worker",
+    cmd = [sys.executable, str(bench), "--worker",
            "--grid-cache", str(grid_dir), "--no-clear-cache"]
     if args.chunked_runs is not None:
         cmd.extend(("--chunked-runs", str(args.chunked_runs)))
@@ -410,9 +412,10 @@ def run_backend(backend, main_tree, b_tree, base, args):
     metas = {}
     try:
         for side, tree in (("A", main_tree), ("B", b_tree)):
+            bench_tree = b_tree if args.bench_from == "B" else tree
             workers[side] = start_worker(
-                tree, backend, base / f"{side}_{backend}", grid_dir,
-                args)
+                tree, Path(bench_tree) / "benchmarks" / BENCH_NAME,
+                backend, base / f"{side}_{backend}", grid_dir, args)
         ready = {}
         for side in ("A", "B"):
             ready[side], metas[side] = read_startup(
@@ -586,6 +589,11 @@ def main():
                         help="Regression threshold for the "
                              "host_overhead config's wall delta, in "
                              "absolute milliseconds per solve.")
+    parser.add_argument("--bench-from", choices=("each", "B"),
+                        default="each",
+                        help="Which tree's benchmark script each side "
+                             "runs: its own (each) or this "
+                             "repository's on both sides (B).")
     parser.add_argument("--calibrate", action="store_true",
                         help="Point B at main too (A-vs-A null).")
     parser.add_argument("--keep", action="store_true",

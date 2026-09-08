@@ -1,8 +1,10 @@
-##  Bake-time uv wheel-cache populate for the cubie Windows GPU CI AMI.
+##  Bake-time uv wheel cache and per-lane venvs for the Windows GPU AMI.
 
 $ErrorActionPreference = 'Stop'
 
 $cacheDir = 'C:\uv-cache'
+# One venv per lane; the GPU leg installs into it and puts it on PATH.
+$venvRoot = 'C:\cubie-venvs'
 $pyprojectPath = 'C:\Windows\Temp\pyproject.toml'
 $uvReleaseUrl =
     'https://api.github.com/repos/astral-sh/uv/releases/latest'
@@ -69,29 +71,37 @@ if (-not (Test-Path -Path $pyprojectPath)) {
 $uv = Get-UvExecutable
 $env:UV_CACHE_DIR = $cacheDir
 New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
-$stagingDir = Join-Path $env:TEMP 'uv-cache-staging'
+New-Item -ItemType Directory -Path $venvRoot -Force | Out-Null
 
 foreach ($combo in $combos) {
     $spec = $combo[0]
     $extra = $combo[1]
     $python = Get-ToolcachePython -Spec $spec
-    $venv = Join-Path $stagingDir "venv-$spec-$extra"
+    $venv = Join-Path $venvRoot "py$spec-$extra"
     $elapsed = Measure-Command {
         Invoke-Uv -Uv $uv -Arguments @('venv', $venv, '--python', $python)
         Invoke-Uv -Uv $uv -Arguments @(
             'pip', 'install',
             '--python', (Join-Path $venv 'Scripts\python.exe'),
+            '--link-mode', 'hardlink', '--compile-bytecode',
             '-r', $pyprojectPath, '--extra', $extra
         )
     }
-    Remove-Item -Path $venv -Recurse -Force
-    Write-Host ("PREP-MARKER uv-cache ${spec}/${extra}: " +
+    Write-Host ("PREP-MARKER venv ${spec}/${extra}: " +
         "$([int]$elapsed.TotalSeconds)s")
 }
 
-$bytes = (Get-ChildItem -Path $cacheDir -Recurse -File |
-    Measure-Object -Property Length -Sum).Sum
-Write-Host ("PREP-MARKER uv-cache total: {0:N1} GB" -f ($bytes / 1GB))
+# The runner user installs drifted pins into the venvs at job time.
+cmd /c "icacls $venvRoot /grant *S-1-5-32-545:(OI)(CI)M /t /c /q 2>&1" |
+    Out-Null
+cmd /c "icacls $cacheDir /grant *S-1-5-32-545:(OI)(CI)M /t /c /q 2>&1" |
+    Out-Null
+
+foreach ($dir in @($cacheDir, $venvRoot)) {
+    $bytes = (Get-ChildItem -Path $dir -Recurse -File |
+        Measure-Object -Property Length -Sum).Sum
+    Write-Host ("PREP-MARKER $dir total: {0:N1} GB" -f ($bytes / 1GB))
+}
 
 # Packer exits with the wrapper's $LastExitCode; leave it clean.
 exit 0
