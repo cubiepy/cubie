@@ -79,6 +79,14 @@ Order matters — each component seeds the next:
    the shared updates dict with the system's `mass_diagonal_flags` injected; no-op
    configurations register zero-size buffers.
 
+`settings_dict` merges the children's `settings_dict`s minus the keys the core injects
+(`_INJECTED_KEYS`, the loop's `dt` and schedule); timing comes from `_user_timing`, inner
+tolerances only when in `_user_given_inner_tols`, performance defaults and unroll flags only
+when in `_user_given_keys` (all of them when `auto_performance` is off). `grouped_settings()`
+splits it by the children's `settings_keys`; `copy()` rebuilds on `system.copy()` from those
+groups. Hot swaps carry `settings_dict` plus the step's device functions; a controller swap
+drops `CONTROLLER_GAIN_PARAMETERS`.
+
 ### build() delegates to IVPLoop
 `SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates
 `_algo_step` if the system's `evaluate_f`/`evaluate_observables`/`get_solver_helper_fn`

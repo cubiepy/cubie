@@ -73,6 +73,50 @@ def _make_factory_with_settings(precision=np.float32):
     return factory
 
 
+@attrs.frozen
+class _SettingsConfig(_CubieConfigBase):
+    _value: int = attrs.field(default=1)
+    flag: bool = attrs.field(default=True, eq=False)
+    handle: object = attrs.field(default=None, eq=False)
+    derived: int = attrs.field(default=0, init=False)
+
+
+def test_init_kwargs_names_fields_by_init_name():
+    """``init_kwargs`` keeps init fields by init name, no device slots."""
+    config = _SettingsConfig(value=3, handle=lambda: None)
+    assert config.init_kwargs == {"value": 3, "flag": True}
+    assert _SettingsConfig(value=3).init_kwargs == {"value": 3, "flag": True}
+
+
+class _SettingsFactory(CUDAFactory):
+    def __init__(self, value=1, flag=True, handle=None):
+        super().__init__()
+        self.setup_compile_settings(
+            _SettingsConfig(value=value, flag=flag, handle=handle)
+        )
+
+    def build(self):
+        return CUDADispatcherCache()
+
+
+def test_settings_dict_and_copy_default_to_the_init_fields():
+    """The default settings_dict rebuilds an equal factory."""
+    factory = _SettingsFactory(value=4, flag=False, handle=lambda: None)
+    assert factory.settings_dict == {"value": 4, "flag": False}
+    twin = factory.copy()
+    assert twin is not factory
+    assert twin.compile_settings == factory.compile_settings
+
+
+def test_settings_keys_limit_the_settings_dict():
+    """A declared key set filters the default settings_dict."""
+
+    class _Keyed(_SettingsFactory):
+        settings_keys = frozenset({"value"})
+
+    assert _Keyed(value=2).settings_dict == {"value": 2}
+
+
 # ── attribute_is_hashable ──────────────────────────────────── #
 
 

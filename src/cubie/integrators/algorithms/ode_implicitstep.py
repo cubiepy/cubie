@@ -243,23 +243,6 @@ class ImplicitStepConfig(BaseStepConfig):
         """Return the implicit integration gamma coefficient."""
         return self.precision(self._gamma)
 
-    @property
-    def settings_dict(self) -> dict:
-        """Return configuration fields as a dictionary."""
-        settings_dict = super().settings_dict
-        settings_dict.update(
-            {
-                "beta": self.beta,
-                "gamma": self.gamma,
-                "preconditioner_order": self.preconditioner_order,
-                "preconditioner_type": self.preconditioner_type,
-                "use_smoothed_error": self.use_smoothed_error,
-                "inexact_newton": self.inexact_newton,
-                "prefactored": self.prefactored,
-                "get_solver_helper_fn": self.get_solver_helper_fn,
-            }
-        )
-        return settings_dict
 
 
 class ODEImplicitStep(BaseAlgorithmStep):
@@ -959,22 +942,13 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
     @property
     def settings_dict(self) -> dict:
-        """Return merged algorithm and solver settings.
-
-        Combines implicit step configuration (beta, gamma, etc.)
-        with solver settings (Newton and linear solver parameters).
-
-        Returns
-        -------
-        dict
-            Merged configuration dictionary containing:
-            - Base step settings (n, n_drivers, precision) from BaseStepConfig
-            - Implicit step settings (beta, gamma, preconditioner_order,
-              get_solver_helper_fn) from ImplicitStepConfig
-            - Solver settings (newton_atol, krylov_rtol, etc.)
-              from NewtonKrylov or LinearSolverBase
-            - All buffer location parameters from solver hierarchy
-        """
+        """Return the step's settings plus its solver's step-level keys."""
         settings = super().settings_dict
-        settings.update(self.solver.settings_dict)
+        settings.update(
+            {
+                key: value
+                for key, value in self.solver.settings_dict.items()
+                if key in self.settings_keys
+            }
+        )
         return settings

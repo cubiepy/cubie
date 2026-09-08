@@ -66,7 +66,7 @@ controllers.
   applicable to the current controller emit a `UserWarning` and are dropped (so
   cross-controller kwarg forwarding is safe); genuinely unknown keys still raise
   `KeyError` per the base contract.
-- **Gain carryover**: `settings_dict` excludes `CONTROLLER_GAIN_PARAMETERS`; a swapped-in controller uses its own gain defaults unless the ordering update supplies gains explicitly.
+- **Gain carryover**: `settings_dict` is the generic `CUDAFactory` one over `ALL_STEP_CONTROLLER_PARAMETERS`; the core's controller swap drops `CONTROLLER_GAIN_PARAMETERS`, so a swapped-in controller uses its own gain defaults unless the ordering update supplies gains explicitly.
 - **Gain semantics**: `beta1 = kI+kP+kD`, `beta2 = -(kP+2kD)`, `beta3 = kD`, each divided by `order+1` at build; `filter_coefficients` (beta triple or preset name) maps to gains on `i`/`pi`/`pid` and raises when mixed with explicit gains.
 - **Adding a controller**: subclass the config + controller bases, set `_config_class`,
   implement `build_controller(...) → ControllerCache`, register the controller's history

@@ -194,6 +194,8 @@ class IVPLoop(CUDAFactory):
         None values are ignored.
     """
 
+    settings_keys = frozenset(ALL_LOOP_SETTINGS)
+
     def __init__(
         self,
         precision: PrecisionDType,

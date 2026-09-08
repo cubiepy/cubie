@@ -44,6 +44,7 @@ from tests._utils import (
     DEVICE_SOLVE_SETTINGS,
     FIXED_EULER_TIMED_STATE,
     LARGE_DIRK,
+    LARGE_STATE_ONLY,
     MOVABLE_LOCATION_KEYS,
     UNROLL_SETTINGS,
 )
@@ -2472,6 +2473,118 @@ def test_update_unroll_loose_key(solver_mutable):
         False,
         None,
     )
+
+
+def test_copy_rebuilds_the_same_kernel_on_its_own_system(
+    solver, driver_settings
+):
+    """A copy hashes identically on a copied system."""
+    twin = solver.copy()
+    try:
+        if driver_settings is not None:
+            twin._configure_drivers(driver_settings)
+        assert twin.system is not solver.system
+        assert twin.system.config_hash == solver.system.config_hash
+        assert twin.kernel.config_hash == solver.kernel.config_hash
+        assert twin.stream_group == solver.stream_group
+        assert twin.kernel.compile_settings.blocksize == (
+            solver.kernel.compile_settings.blocksize
+        )
+    finally:
+        twin.close()
+
+
+def test_kernel_copy_rebuilds_an_equal_kernel(solver, driver_settings):
+    """The kernel's own copy hashes identically and shares the manager."""
+    twin = solver.kernel.copy()
+    try:
+        if driver_settings is not None:
+            twin.configure_drivers(driver_settings)
+        assert twin.config_hash == solver.kernel.config_hash
+        assert twin.memory_manager is solver.kernel.memory_manager
+        assert twin.stream_group == solver.kernel.stream_group
+    finally:
+        twin.close()
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [
+        {
+            "algorithm": "kvaerno3",
+            "step_controller": "pid",
+            "krylov_max_iters": 20,
+            "newton_max_iters": 6,
+            "stage_increment_location": "shared",
+            "unroll_norms": (True, 1),
+            "output_types": ["state", "mean"],
+        }
+    ],
+    indirect=True,
+)
+def test_copy_carries_step_solver_and_unroll_settings(
+    solver, driver_settings
+):
+    """Step, solver, placement and unroll settings reach the copy."""
+    twin = solver.copy()
+    try:
+        if driver_settings is not None:
+            twin._configure_drivers(driver_settings)
+        step = twin.kernel.single_integrator._algo_step
+        parent_step = solver.kernel.single_integrator._algo_step
+        assert step.compile_settings.stage_increment_location == "shared"
+        assert step.newton_max_iters == 6
+        assert step.krylov_max_iters == parent_step.krylov_max_iters
+        assert step.compile_settings.unroll.unroll_norms == (True, 1)
+        assert twin.output_types == solver.output_types
+        assert twin.kernel.config_hash == solver.kernel.config_hash
+    finally:
+        twin.close()
+
+
+# The shared fixture pins the settings these cases leave derived.
+COPY_REDERIVED_CASES = [
+    {
+        **LARGE_STATE_ONLY,
+        "algorithm": "kvaerno3",
+        "unroll_newton_exits": None,
+        "unroll_krylov_exits": None,
+        "newton_max_iters": None,
+    },
+    {
+        "algorithm": "tsit5",
+        "step_controller": "pid",
+        "integral_gain": lambda order: 0.3 / order,
+        "dt": None,
+        "dt_min": None,
+        "dt_max": None,
+    },
+]
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", COPY_REDERIVED_CASES, indirect=True
+)
+def test_copy_rederives_what_the_parent_derived(solver, driver_settings):
+    """Auto-performance, step-bound and gain settings match after builds."""
+    run = solver.kernel.single_integrator
+    run.device_function
+    twin = solver.copy()
+    try:
+        if driver_settings is not None:
+            twin._configure_drivers(driver_settings)
+        twin_run = twin.kernel.single_integrator
+        twin_run.device_function
+        assert twin_run._algo_step.compile_settings.unroll == (
+            run._algo_step.compile_settings.unroll
+        )
+        assert twin_run._step_controller.compile_settings == (
+            run._step_controller.compile_settings
+        )
+        assert twin.kernel.blocksize_given == solver.kernel.blocksize_given
+        assert twin.kernel.config_hash == solver.kernel.config_hash
+    finally:
+        twin.close()
 
 
 def _natural_dynamic_shared(kernel, blocksize):

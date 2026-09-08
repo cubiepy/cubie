@@ -372,8 +372,11 @@ class LinearSolverBase(MatrixFreeSolver):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return linear solver configuration as dictionary."""
-        return dict(self.compile_settings.settings_dict)
+        """Return the solver configuration plus its norm's tolerances."""
+        settings = dict(self.compile_settings.settings_dict)
+        settings["krylov_atol"] = self.atol
+        settings["krylov_rtol"] = self.rtol
+        return settings
 
 
 class IterativeLinearSolverBase(LinearSolverBase):
@@ -406,10 +409,8 @@ class IterativeLinearSolverBase(LinearSolverBase):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return iterative solver configuration as dictionary."""
-        result = dict(self.compile_settings.settings_dict)
-        result["krylov_atol"] = self.krylov_atol
-        result["krylov_rtol"] = self.krylov_rtol
+        """Return the solver configuration plus the stopping settings."""
+        result = super().settings_dict
         result["krylov_residual_reduction"] = self.krylov_residual_reduction
         result["krylov_residual_floor"] = self.krylov_residual_floor
         return result

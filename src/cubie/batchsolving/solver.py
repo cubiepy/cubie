@@ -597,6 +597,20 @@ class Solver:
         if finalizer is not None:
             finalizer.detach()
 
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the kwargs rebuilding this solver; derived ones as given."""
+        settings = self.kernel.settings_dict
+        for key in _OUTPUT_SELECTION_KEYS:
+            settings.pop(key, None)
+        settings.update(self._output_selection_intent)
+        settings["time_logging_level"] = default_timelogger.verbosity
+        return settings
+
+    def copy(self) -> "Solver":
+        """Return a solver with these settings on a system copy; no drivers."""
+        return type(self)(self.system.copy(), **self.settings_dict)
+
     def __enter__(self) -> "Solver":
         """Return self so the solver can be used as a context manager."""
         return self
