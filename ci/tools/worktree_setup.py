@@ -1,13 +1,10 @@
 """Build a worktree's own ``.venv`` with cubie installed editable.
 
-Uses the main checkout's ``.venv`` interpreter and ``uv``, and copies
-``.claude/settings.local.json``. When ``uv`` is not on PATH the pinned
-release archive is downloaded from GitHub, checked against its SHA256
-recorded here, and unpacked. An existing ``.venv`` built on a different
-interpreter is rebuilt. Env: ``ORCA_WORKTREE_PATH`` (default: this repo
-root), ``ORCA_ROOT_PATH`` (default: the main checkout),
-``CUBIE_WORKTREE_EXTRAS`` (default ``dev,cuda13``), ``UV_INSTALL_DIR``
-(where ``uv`` is unpacked; default ``~/.local/bin``).
+Interpreter: the main checkout's ``.venv`` base. ``uv`` from PATH, else
+the pinned release verified by SHA256 into ``UV_INSTALL_DIR`` (default
+``~/.local/bin``). A ``.venv`` on another interpreter is rebuilt. Env:
+``ORCA_WORKTREE_PATH``, ``ORCA_ROOT_PATH``, ``CUBIE_WORKTREE_EXTRAS``
+(default ``dev,cuda13``).
 """
 
 import configparser
