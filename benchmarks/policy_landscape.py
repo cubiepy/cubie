@@ -60,6 +60,8 @@ CAP = 2.0
 REFERENCE_BLOCKSIZE = 64
 BLOCK_ARMS = 8
 """Solvers alive at once during timing; each holds its batch buffers."""
+COMPILES_PER_WORKER = 8
+"""Compile jobs a worker process runs before it is replaced."""
 
 UNROLL_GROUPS = (
     "unroll_stage",
@@ -115,6 +117,28 @@ def build_lorenz96(n):
     )
 
 
+FABBRI_CELLML = (
+    Path(__file__).resolve().parent.parent
+    / "tests" / "fixtures" / "cellml" / "Fabbri_Linder.cellml"
+)
+FABBRI_PARAMETERS = (
+    "Rate_modulation_experiments_ACh",
+    "Rate_modulation_experiments_Iso_cas",
+)
+
+
+def build_fabbri():
+    """The Fabbri-Linder sinoatrial model with autonomic modulation on."""
+    system = cubie.load_cellml_model(
+        str(FABBRI_CELLML),
+        precision=PRECISION,
+        parameters=list(FABBRI_PARAMETERS),
+        voltage_variable="Membrane$V_ode",
+    )
+    system.set_constants({"Rate_modulation_experiments_ANS": 1.0})
+    return system
+
+
 def build_chain(n, consts_per_eq, n_params=2):
     """Nonlinear nearest-neighbour ring chain of the placement bank."""
     rng = np.random.default_rng(1234)
@@ -153,6 +177,20 @@ def grid_param(name, low, high):
     return grid
 
 
+def grid_fabbri(solver, n_runs):
+    """ACh by Iso mesh, truncated to ``n_runs`` trajectories."""
+    side = int(np.ceil(np.sqrt(n_runs)))
+    ach, iso = np.meshgrid(
+        np.linspace(0.0, 2e-8, side), np.linspace(0.0, 1.0, side)
+    )
+    return solver.build_grid(
+        parameters={
+            FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
+            FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
+        }
+    )
+
+
 def grid_chain(solver, n_runs):
     return solver.build_grid(
         parameters={
@@ -163,6 +201,7 @@ def grid_chain(solver, n_runs):
 
 
 TIGHT = {"atol": 1e-6, "rtol": 1e-6, "dt_min": 1e-12, "dt_max": 1e3}
+FABBRI_TOLS = {"atol": 1e-6, "rtol": 1e-4, "dt_min": 1e-12, "dt_max": 1e-2}
 
 SYSTEMS = {
     "lorenz": dict(
@@ -196,6 +235,10 @@ SYSTEMS = {
     "chain64": dict(
         build=lambda: build_chain(64, 3), grid=grid_chain,
         n_states=64, kwargs=TIGHT, erk_duration=51.2,
+    ),
+    "fabbri": dict(
+        build=build_fabbri, grid=grid_fabbri,
+        n_states=35, kwargs=FABBRI_TOLS, erk_duration=1.0,
     ),
 }
 
@@ -286,6 +329,7 @@ DURATIONS = {
     ("chain32", "radau_iia_3"): 0.2,
     ("chain32", "radau_iia_5"): 0.4,
     ("chain32", "rosenbrock23"): 25.6,
+    ("fabbri", "radau_iia_5"): 1.0,
 }
 
 
@@ -530,7 +574,10 @@ def compile_in_workers(jobs, workers, icache_bytes, log):
         for system_name, algo_name, spec, n_runs, duration in jobs
     ]
     context = multiprocessing.get_context("spawn")
-    with context.Pool(min(workers, len(payloads))) as pool:
+    # Fresh worker after COMPILES_PER_WORKER jobs: compiler heaps creep.
+    with context.Pool(
+        min(workers, len(payloads)), maxtasksperchild=COMPILES_PER_WORKER
+    ) as pool:
         for result in pool.imap_unordered(_compile_worker, payloads):
             system_name, algo_name, label, digest, seconds, error = result
             if error:
@@ -685,6 +732,10 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP):
                     solve_ms(arm, cell, d_inits, d_params, duration)
                 )
             floor = min(floor, cell.best_ms)
+            log(f"  round {round_index + 1} {arm.spec.label:32s} "
+                f"{cell.name:9s} warm {warm:9.2f} timed "
+                + " ".join(f"{t:9.2f}" for t in cell.times_ms[-TIMED_SOLVES:])
+                + " ms")
 
 
 # --- per-configuration driver -------------------------------------------
