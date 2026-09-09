@@ -489,12 +489,13 @@ def buffer_tree(root):
 
 def resolved_settings(solver):
     """Unroll flags and buffer locations the built kernel uses."""
-    flags = solver.kernel.compile_settings.unroll
+    run = solver.kernel.single_integrator
+    # The step carries the auto_performance Newton-exit choice.
+    flags = run._algo_step.compile_settings.unroll
     out = {
         name: "1" if getattr(flags, name) == FULL.value else "0"
         for name in UNROLL_GROUPS
     }
-    run = solver.kernel.single_integrator
     for parent, group in buffer_tree(run._loop):
         for name in group.relocatable_names():
             entry = group.entries[name]
