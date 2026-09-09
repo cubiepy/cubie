@@ -61,6 +61,9 @@ REFERENCE_BLOCKSIZE = 64
 BLOCK_ARMS = 8
 """Solvers alive at once during timing; each holds its batch buffers."""
 
+COMPILE_TASKS_PER_CHILD = 8
+"""Compiles per worker process; a replaced worker returns its memory."""
+
 UNROLL_GROUPS = (
     "unroll_stage",
     "unroll_step_element",
@@ -530,7 +533,10 @@ def compile_in_workers(jobs, workers, icache_bytes, log):
         for system_name, algo_name, spec, n_runs, duration in jobs
     ]
     context = multiprocessing.get_context("spawn")
-    with context.Pool(min(workers, len(payloads))) as pool:
+    with context.Pool(
+        min(workers, len(payloads)),
+        maxtasksperchild=COMPILE_TASKS_PER_CHILD,
+    ) as pool:
         for result in pool.imap_unordered(_compile_worker, payloads):
             system_name, algo_name, label, digest, seconds, error = result
             if error:
