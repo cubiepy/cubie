@@ -1,9 +1,10 @@
 """Build a worktree's own ``.venv`` with cubie installed editable.
 
 Uses the main checkout's ``.venv`` interpreter, ``uv`` when on PATH, and
-copies ``.claude/settings.local.json``. Env: ``ORCA_WORKTREE_PATH``
-(default: this repo root), ``ORCA_ROOT_PATH`` (default: the main
-checkout), ``CUBIE_WORKTREE_EXTRAS`` (default ``dev,cuda13``).
+copies ``.claude/settings.local.json``. An existing ``.venv`` built on a
+different interpreter is rebuilt. Env: ``ORCA_WORKTREE_PATH`` (default:
+this repo root), ``ORCA_ROOT_PATH`` (default: the main checkout),
+``CUBIE_WORKTREE_EXTRAS`` (default ``dev,cuda13``).
 """
 
 import configparser
@@ -43,13 +44,20 @@ def venv_python(venv):
     return venv / "bin" / "python"
 
 
+def venv_config(venv):
+    """The ``pyvenv.cfg`` keys of ``venv``, or ``None`` without one."""
+    config = venv / "pyvenv.cfg"
+    if not config.is_file():
+        return None
+    parser = configparser.ConfigParser()
+    parser.read_string("[venv]\n" + config.read_text(encoding="utf-8"))
+    return parser["venv"]
+
+
 def base_interpreter(root):
     """Interpreter the main checkout's .venv was built from."""
-    config = root / ".venv" / "pyvenv.cfg"
-    if config.is_file():
-        parser = configparser.ConfigParser()
-        parser.read_string("[venv]\n" + config.read_text(encoding="utf-8"))
-        section = parser["venv"]
+    section = venv_config(root / ".venv")
+    if section is not None:
         executable = section.get("executable")
         if executable and Path(executable).is_file():
             return Path(executable)
@@ -59,13 +67,28 @@ def base_interpreter(root):
                 candidate = Path(home) / name
                 if candidate.is_file():
                     return candidate
-    print(f"no usable {config}; falling back to {sys.executable}")
+    print(f"no usable {root / '.venv' / 'pyvenv.cfg'}; "
+          f"falling back to {sys.executable}")
     return Path(sys.executable)
+
+
+def venv_matches(venv, interpreter):
+    """Whether ``venv`` records ``interpreter``'s directory as its home."""
+    section = venv_config(venv)
+    if section is None:
+        return False
+    home = section.get("home")
+    if not home:
+        return False
+    return Path(home).resolve() == interpreter.parent.resolve()
 
 
 def build_venv(worktree, interpreter, extras):
     venv = worktree / ".venv"
     python = venv_python(venv)
+    if venv.exists() and not venv_matches(venv, interpreter):
+        print(f"rebuilding {venv}: not built on {interpreter}")
+        shutil.rmtree(venv)
     uv = shutil.which("uv")
     if uv:
         if not python.is_file():
@@ -92,18 +115,32 @@ def copy_local_settings(root, worktree):
         print(f"copied {source} -> {target}")
 
 
-def verify(python, worktree):
+def python_version(python):
+    result = subprocess.run(
+        [str(python), "-c", "import sys; print(sys.version.split()[0])"],
+        check=True, capture_output=True, text=True,
+    )
+    return result.stdout.strip()
+
+
+def verify(python, interpreter, worktree):
     probe = ("import cubie, sys; print(cubie.__file__); "
              "print(sys.executable)")
     result = subprocess.run([str(python), "-c", probe], check=True,
                             capture_output=True, text=True, cwd=worktree)
-    module_file, executable = result.stdout.split()
+    module_file, executable = result.stdout.strip().splitlines()
     resolved = Path(module_file).resolve()
     if worktree not in resolved.parents:
         raise SystemExit(
             f"cubie resolves to {resolved}, not inside {worktree}")
+    version = python_version(python)
+    base_version = python_version(interpreter)
+    if version != base_version:
+        raise SystemExit(
+            f"venv python is {version}; base {interpreter} is "
+            f"{base_version}")
     print(f"cubie      {resolved}")
-    print(f"python     {executable}")
+    print(f"python     {executable} ({version})")
 
 
 def main():
@@ -116,7 +153,7 @@ def main():
     print(f"base       {interpreter}")
     python = build_venv(worktree, interpreter, extras)
     copy_local_settings(root, worktree)
-    verify(python, worktree)
+    verify(python, interpreter, worktree)
 
 
 if __name__ == "__main__":
