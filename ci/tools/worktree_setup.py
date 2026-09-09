@@ -76,7 +76,11 @@ def venv_config(venv):
     if not config.is_file():
         return None
     parser = configparser.ConfigParser()
-    parser.read_string("[venv]\n" + config.read_text(encoding="utf-8"))
+    try:
+        parser.read_string("[venv]\n" + config.read_text(encoding="utf-8"))
+    except configparser.Error as error:
+        print(f"unreadable {config}: {error}")
+        return None
     return parser["venv"]
 
 
