@@ -1,20 +1,44 @@
 """Build a worktree's own ``.venv`` with cubie installed editable.
 
-Uses the main checkout's ``.venv`` interpreter and ``uv``, installing
-``uv`` with its official installer when it is not on PATH, and copies
-``.claude/settings.local.json``. An existing ``.venv`` built on a
-different interpreter is rebuilt. Env: ``ORCA_WORKTREE_PATH`` (default:
-this repo root), ``ORCA_ROOT_PATH`` (default: the main checkout),
+Uses the main checkout's ``.venv`` interpreter and ``uv``, and copies
+``.claude/settings.local.json``. When ``uv`` is not on PATH the pinned
+release archive is downloaded from GitHub, checked against its SHA256
+recorded here, and unpacked. An existing ``.venv`` built on a different
+interpreter is rebuilt. Env: ``ORCA_WORKTREE_PATH`` (default: this repo
+root), ``ORCA_ROOT_PATH`` (default: the main checkout),
 ``CUBIE_WORKTREE_EXTRAS`` (default ``dev,cuda13``), ``UV_INSTALL_DIR``
-(where the installer puts ``uv``; default ``~/.local/bin``).
+(where ``uv`` is unpacked; default ``~/.local/bin``).
 """
 
 import configparser
+import hashlib
+import io
 import os
+import platform
 import shutil
 import subprocess
 import sys
+import tarfile
+import urllib.request
+import zipfile
 from pathlib import Path
+
+UV_VERSION = "0.12.12"
+UV_RELEASE = f"https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/"
+UV_SHA256 = {
+    "x86_64-pc-windows-msvc":
+        "3d54912924c36e862c14f427d04f2ed70a99e8001d1c30caa101f6d5711626d5",
+    "aarch64-pc-windows-msvc":
+        "36559da51ecee83b2b1d80aa1a0ede2f80e2d9e5761fffcbb9e9366a7f3d022a",
+    "x86_64-unknown-linux-gnu":
+        "ab9b309d4586403f024e100abaceb396616e178a553e2500c36087d180f09509",
+    "aarch64-unknown-linux-gnu":
+        "fe08db50cc1b56cd1da7801065ed1103d27ed3f9571cd122386cfc7faf1b8df5",
+    "x86_64-apple-darwin":
+        "0dc8cd6c961582b0d140b5398f96b23502885277fb3464241456a2435e460dfa",
+    "aarch64-apple-darwin":
+        "46740540b63fdee9a6cb2e19baf3f1f475b850c440a33e63455087a6871263f1",
+}
 
 
 def run(cmd, **kwargs):
@@ -74,8 +98,46 @@ def base_interpreter(root):
     return Path(sys.executable)
 
 
+def uv_target():
+    """Release archive target triple for this machine."""
+    machine = platform.machine().lower()
+    arch = {"amd64": "x86_64", "x86_64": "x86_64",
+            "arm64": "aarch64", "aarch64": "aarch64"}.get(machine)
+    if arch is None:
+        raise SystemExit(f"no pinned uv build for machine {machine!r}")
+    if os.name == "nt":
+        return f"{arch}-pc-windows-msvc"
+    if sys.platform == "darwin":
+        return f"{arch}-apple-darwin"
+    return f"{arch}-unknown-linux-gnu"
+
+
+def install_uv(uv):
+    """Download the pinned uv release, verify its SHA256, unpack ``uv``."""
+    target = uv_target()
+    archive = f"uv-{target}" + (".zip" if os.name == "nt" else ".tar.gz")
+    url = UV_RELEASE + archive
+    print(f"downloading {url}")
+    with urllib.request.urlopen(url) as response:
+        data = response.read()
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != UV_SHA256[target]:
+        raise SystemExit(
+            f"{archive} sha256 {digest} != pinned {UV_SHA256[target]}")
+    uv.parent.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        with zipfile.ZipFile(io.BytesIO(data)) as bundle:
+            uv.write_bytes(bundle.read("uv.exe"))
+    else:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as bundle:
+            member = bundle.extractfile(f"uv-{target}/uv")
+            uv.write_bytes(member.read())
+        uv.chmod(0o755)
+    print(f"installed uv {UV_VERSION} to {uv}")
+
+
 def uv_executable():
-    """``uv`` from PATH, else installed with the official installer."""
+    """``uv`` from PATH, else the pinned release unpacked locally."""
     found = shutil.which("uv")
     if found:
         return Path(found)
@@ -85,16 +147,8 @@ def uv_executable():
     else:
         install_dir = Path.home() / ".local" / "bin"
     uv = install_dir / ("uv.exe" if os.name == "nt" else "uv")
-    if uv.is_file():
-        return uv
-    print(f"uv not found; installing to {install_dir}")
-    if os.name == "nt":
-        run(["powershell", "-ExecutionPolicy", "ByPass", "-NoProfile", "-c",
-             "irm https://astral.sh/uv/install.ps1 | iex"])
-    else:
-        run(["sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"])
     if not uv.is_file():
-        raise SystemExit(f"uv installer did not produce {uv}")
+        install_uv(uv)
     return uv
 
 
