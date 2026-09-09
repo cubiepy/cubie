@@ -220,7 +220,7 @@ def pin_process(proc, mask):
         kernel32.CloseHandle(handle)
 
 
-def start_worker(tree, backend, cache_dir, grid_dir, args):
+def start_worker(tree, bench, backend, cache_dir, grid_dir, args):
     """Start one persistent benchmark worker; return the process."""
     env = dict(os.environ)
     env["PYTHONPATH"] = str(Path(tree) / "src")
