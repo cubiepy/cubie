@@ -60,8 +60,9 @@ CAP = 2.0
 REFERENCE_BLOCKSIZE = 64
 BLOCK_ARMS = 8
 """Solvers alive at once during timing; each holds its batch buffers."""
-COMPILES_PER_WORKER = 8
-"""Compile jobs a worker process runs before it is replaced."""
+
+COMPILE_TASKS_PER_CHILD = 8
+"""Compiles per worker process; a replaced worker returns its memory."""
 
 UNROLL_GROUPS = (
     "unroll_stage",
@@ -575,9 +576,9 @@ def compile_in_workers(jobs, workers, icache_bytes, log):
         for system_name, algo_name, spec, n_runs, duration in jobs
     ]
     context = multiprocessing.get_context("spawn")
-    # Fresh worker after COMPILES_PER_WORKER jobs: compiler heaps creep.
     with context.Pool(
-        min(workers, len(payloads)), maxtasksperchild=COMPILES_PER_WORKER
+        min(workers, len(payloads)),
+        maxtasksperchild=COMPILE_TASKS_PER_CHILD,
     ) as pool:
         for result in pool.imap_unordered(_compile_worker, payloads):
             system_name, algo_name, label, digest, seconds, error = result
