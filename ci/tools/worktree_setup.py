@@ -1,10 +1,12 @@
 """Build a worktree's own ``.venv`` with cubie installed editable.
 
-Uses the main checkout's ``.venv`` interpreter, ``uv`` when on PATH, and
-copies ``.claude/settings.local.json``. An existing ``.venv`` built on a
+Uses the main checkout's ``.venv`` interpreter and ``uv``, installing
+``uv`` with its official installer when it is not on PATH, and copies
+``.claude/settings.local.json``. An existing ``.venv`` built on a
 different interpreter is rebuilt. Env: ``ORCA_WORKTREE_PATH`` (default:
 this repo root), ``ORCA_ROOT_PATH`` (default: the main checkout),
-``CUBIE_WORKTREE_EXTRAS`` (default ``dev,cuda13``).
+``CUBIE_WORKTREE_EXTRAS`` (default ``dev,cuda13``), ``UV_INSTALL_DIR``
+(where the installer puts ``uv``; default ``~/.local/bin``).
 """
 
 import configparser
@@ -72,6 +74,30 @@ def base_interpreter(root):
     return Path(sys.executable)
 
 
+def uv_executable():
+    """``uv`` from PATH, else installed with the official installer."""
+    found = shutil.which("uv")
+    if found:
+        return Path(found)
+    install_dir = os.environ.get("UV_INSTALL_DIR")
+    if install_dir:
+        install_dir = Path(install_dir)
+    else:
+        install_dir = Path.home() / ".local" / "bin"
+    uv = install_dir / ("uv.exe" if os.name == "nt" else "uv")
+    if uv.is_file():
+        return uv
+    print(f"uv not found; installing to {install_dir}")
+    if os.name == "nt":
+        run(["powershell", "-ExecutionPolicy", "ByPass", "-NoProfile", "-c",
+             "irm https://astral.sh/uv/install.ps1 | iex"])
+    else:
+        run(["sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"])
+    if not uv.is_file():
+        raise SystemExit(f"uv installer did not produce {uv}")
+    return uv
+
+
 def venv_matches(venv, interpreter):
     """Whether ``venv`` records ``interpreter``'s directory as its home."""
     section = venv_config(venv)
@@ -83,25 +109,17 @@ def venv_matches(venv, interpreter):
     return Path(home).resolve() == interpreter.parent.resolve()
 
 
-def build_venv(worktree, interpreter, extras):
+def build_venv(worktree, interpreter, extras, uv):
     venv = worktree / ".venv"
     python = venv_python(venv)
     if venv.exists() and not venv_matches(venv, interpreter):
         print(f"rebuilding {venv}: not built on {interpreter}")
         shutil.rmtree(venv)
-    uv = shutil.which("uv")
-    if uv:
-        if not python.is_file():
-            run([uv, "venv", "--python", str(interpreter), str(venv)],
-                cwd=worktree)
-        run([uv, "pip", "install", "--python", str(python),
-             "-e", f".[{extras}]"], cwd=worktree)
-    else:
-        if not python.is_file():
-            run([str(interpreter), "-m", "venv", str(venv)])
-        run([str(python), "-m", "pip", "install", "--upgrade", "pip"])
-        run([str(python), "-m", "pip", "install", "-e", f".[{extras}]"],
+    if not python.is_file():
+        run([str(uv), "venv", "--python", str(interpreter), str(venv)],
             cwd=worktree)
+    run([str(uv), "pip", "install", "--python", str(python),
+         "-e", f".[{extras}]"], cwd=worktree)
     return python
 
 
@@ -151,7 +169,9 @@ def main():
     print(f"root       {root}")
     interpreter = base_interpreter(root)
     print(f"base       {interpreter}")
-    python = build_venv(worktree, interpreter, extras)
+    uv = uv_executable()
+    print(f"uv         {uv}")
+    python = build_venv(worktree, interpreter, extras, uv)
     copy_local_settings(root, worktree)
     verify(python, interpreter, worktree)
 
