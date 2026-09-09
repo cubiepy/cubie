@@ -184,7 +184,9 @@ def score(rows):
             print(f"{key:30s} no timed cells")
             continue
         plain_ms, _ = pl.policy_time(row, "plain", [("natural", 64)])
-        tier_ms, _ = pl.policy_time(row, "tierA", [("rule", 64)])
+        tier_ms, _ = pl.policy_time(
+            row, "tierA", [("auto", None), ("rule", 64)]
+        )
         nat_ms, _ = pl.policy_time(row, "tierA", [("natural", 64)])
         opt_ms, opt_label = pl.optimize_choice(row)
         if opt_ms == float("inf"):

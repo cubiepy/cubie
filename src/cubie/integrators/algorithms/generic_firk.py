@@ -38,7 +38,14 @@ See Also
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from numpy import int32 as np_int32
+from numpy import dtype as np_dtype, int32 as np_int32
+
+from cubie.backend.utils import (
+    MAX_REGISTERS_PER_THREAD,
+    device_hardware,
+    register_limited_threads,
+    shared_limited_threads,
+)
 from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
@@ -97,10 +104,6 @@ FIRK_FIXED_DEFAULTS = AlgorithmDefaults(
     }
 )
 """Defaults for errorless FIRK tableaus."""
-
-SHARED_STAGE_INCREMENT_MIN_STATES = 20
-"""``stage_increment`` goes to shared memory above this state count."""
-
 
 @frozen
 class FIRKStepConfig(ImplicitStepConfig):
@@ -999,8 +1002,16 @@ class FIRKStep(ODEImplicitStep):
 
     @property
     def performance_defaults(self) -> Dict[str, Any]:
-        """Share ``stage_increment`` above the measured state-count cut."""
-        shared = self.n > SHARED_STAGE_INCREMENT_MIN_STATES
+        """Share ``stage_increment`` for a Krylov solve at full occupancy."""
+        shared = False
+        if not self.uses_direct_solver:
+            hardware = device_hardware()
+            itemsize = np_dtype(self.precision).itemsize
+            # One element of slack covers the launch's alignment pad.
+            bytes_per_run = (self.stage_count * self.n + 1) * itemsize
+            shared = shared_limited_threads(
+                hardware, bytes_per_run
+            ) >= register_limited_threads(hardware, MAX_REGISTERS_PER_THREAD)
         return {"stage_increment_location": "shared" if shared else "local"}
 
     @property

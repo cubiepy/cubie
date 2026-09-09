@@ -55,10 +55,18 @@ See Also
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
+from numpy import dtype as np_dtype
+
 from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import PrecisionDType, build_config
+from cubie.backend.utils import (
+    MAX_REGISTERS_PER_THREAD,
+    device_hardware,
+    register_limited_threads,
+    shared_limited_threads,
+)
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import all_sync, activemask
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -585,6 +593,20 @@ class ERKStep(ODEExplicitStep):
     def is_multistage(self) -> bool:
         """Return ``True`` when the method has multiple stages."""
         return self.tableau.stage_count > 1
+
+    @property
+    def performance_defaults(self) -> Dict[str, Any]:
+        """Share ``state`` when stage vectors exceed the register file."""
+        shared = False
+        if self.n * self.stage_count > MAX_REGISTERS_PER_THREAD:
+            hardware = device_hardware()
+            itemsize = np_dtype(self.precision).itemsize
+            # One element of slack covers the launch's alignment pad.
+            bytes_per_run = (self.n + 1) * itemsize
+            shared = shared_limited_threads(
+                hardware, bytes_per_run
+            ) >= register_limited_threads(hardware, MAX_REGISTERS_PER_THREAD)
+        return {"state_location": "shared" if shared else "local"}
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:

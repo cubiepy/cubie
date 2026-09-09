@@ -24,11 +24,14 @@ from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
 from cubie.backend.utils import (
+    LAUNCH_BLOCKSIZES,
     active_blocks_per_multiprocessor,
     device_hardware,
     kernel_resources,
+    minimum_scheduler_blocks,
 )
 from cubie.batchsolving.BatchSolverKernel import (
+    LARGE_KERNEL_BLOCKSIZE,
     RESIDENT_FOOTPRINT_L2_FRACTION,
 )
 from cubie.cuda_simsafe import (
@@ -2645,16 +2648,110 @@ def test_auto_residency_keeps_local_footprint_in_l2(
     )
     footprint = frame * blocksize * hardware.multiprocessor_count
     l2_bytes = hardware.l2_cache_bytes
+    floor = minimum_scheduler_blocks(hardware, blocksize)
 
     def budget(count):
         if count == 2:
             return l2_bytes
         return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
 
-    assert blocks == 1 or footprint * blocks <= budget(blocks)
     natural_blocks = active_blocks_per_multiprocessor(
         kernel.kernel, blocksize, _natural_dynamic_shared(kernel, blocksize)
     )
-    assert blocks == natural_blocks or (
-        footprint * (blocks + 1) > budget(blocks + 1)
+    expected = natural_blocks
+    while expected > floor and footprint * expected > budget(expected):
+        expected -= 1
+    if footprint * expected > budget(expected):
+        expected = natural_blocks
+    assert blocks == expected
+    assert blocks >= min(floor, natural_blocks)
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [LARGE_DIRK], indirect=True
+)
+def test_auto_blocksize_follows_instruction_cache(
+    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+):
+    """A local-memory kernel launches 256 threads over half the icache."""
+    solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.02,
+        grid_type="combinatorial",
     )
+    kernel = solver_mutable.kernel
+    assert kernel.shared_memory_bytes == 0
+    assert not kernel.blocksize_given
+    blocksize, _ = kernel.launch_geometry()
+    resources = kernel_resources(kernel.kernel)
+    capacity = device_hardware().instruction_cache_bytes
+    if 2 * resources.sass_bytes > capacity:
+        assert blocksize == LARGE_KERNEL_BLOCKSIZE
+    else:
+        assert blocksize == kernel.compile_settings.blocksize
+    assert kernel.launch_geometry(64)[0] == 64
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [LARGE_DIRK], indirect=True
+)
+def test_given_blocksize_is_kept(
+    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+):
+    """An explicit ``blocksize`` setting is launched as given."""
+    solver_mutable.update(blocksize=64)
+    solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.02,
+        grid_type="combinatorial",
+    )
+    kernel = solver_mutable.kernel
+    assert kernel.blocksize_given
+    assert kernel.launch_geometry()[0] == 64
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{
+        "algorithm": "radau_iia_3",
+        "linear_correction_type": "bicgstab",
+        "preconditioner_type": "jacobi",
+        "step_controller": "fixed",
+    }],
+    indirect=True,
+)
+def test_auto_blocksize_of_shared_kernel_maximises_threads(
+    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+):
+    """A shared-memory kernel launches the block size with most threads."""
+    solver_mutable.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.1,
+        grid_type="combinatorial",
+    )
+    kernel = solver_mutable.kernel
+    assert kernel.shared_memory_bytes > 0
+    blocksize, dynamic = kernel.launch_geometry()
+    chosen = blocksize * active_blocks_per_multiprocessor(
+        kernel.kernel, blocksize, dynamic
+    )
+    for candidate in LAUNCH_BLOCKSIZES:
+        kernel.resident_blocks = None
+        actual, candidate_dynamic = kernel.launch_geometry(candidate)
+        if actual != candidate:
+            continue
+        threads = candidate * active_blocks_per_multiprocessor(
+            kernel.kernel, candidate, candidate_dynamic
+        )
+        assert threads <= chosen
+        if threads == chosen:
+            assert blocksize <= candidate

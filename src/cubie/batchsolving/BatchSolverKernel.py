@@ -58,11 +58,13 @@ from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
 from cubie.backend.utils import (
+    LAUNCH_BLOCKSIZES,
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
     device_hardware,
     kernel_resources,
     max_shared_memory_per_block,
+    minimum_scheduler_blocks,
 )
 from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cubie_cache import CUBIECache
@@ -247,6 +249,9 @@ class BatchSolverCache(CUDADispatcherCache):
 RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
 """Fraction of L2 three or more resident blocks' local memory may fill."""
 
+LARGE_KERNEL_BLOCKSIZE = 256
+"""Block size of a local-memory kernel over half the instruction cache."""
+
 DYNAMIC_SHARED_PAD_STEP = 256
 """Bytes the residency pad steps by."""
 
@@ -363,6 +368,7 @@ class BatchSolverKernel(CUDAFactory):
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
         self._launch_geometries = {}
+        self._default_blocksizes = {}
 
         # Child factory: driver settings join config_hash; the
         # placeholder input covers zero-driver operation.
@@ -966,9 +972,9 @@ class BatchSolverKernel(CUDAFactory):
             Block size and dynamic shared bytes, padded to hold the
             resident block count.
         """
-        if blocksize is None:
-            blocksize = self.compile_settings.blocksize
         runs = self.run_params[0].runs
+        if blocksize is None:
+            blocksize = self._default_blocksize(runs)
         key = (
             self.config_hash,
             blocksize,
@@ -981,6 +987,57 @@ class BatchSolverKernel(CUDAFactory):
             geometry = self._compute_launch_geometry(blocksize, runs)
             self._launch_geometries[key] = geometry
         return geometry
+
+    def _default_blocksize(self, runs: int) -> int:
+        """Return the block size a launch without one uses.
+
+        The compile setting when given or ``auto_performance`` is off;
+        else 256 for a local-memory kernel over half the instruction
+        cache, and the most-resident-threads block size (smaller on a
+        tie) for a shared-memory kernel.
+        """
+        configured = self.compile_settings.blocksize
+        if (
+            self.blocksize_given
+            or not self.single_integrator.auto_performance
+        ):
+            return configured
+        key = (self.config_hash, runs)
+        chosen = self._default_blocksizes.get(key)
+        if chosen is not None:
+            return chosen
+        dispatcher = self.kernel
+        compile_kernel_specialization(
+            dispatcher, self._kernel_launch_args(self.run_params[0])
+        )
+        if self.shared_memory_bytes == 0:
+            resources = kernel_resources(dispatcher)
+            capacity = device_hardware().instruction_cache_bytes
+            chosen = (
+                LARGE_KERNEL_BLOCKSIZE
+                if 2 * resources.sass_bytes > capacity
+                else configured
+            )
+        else:
+            pad = 4 if self.shared_memory_needs_padding else 0
+            padded_bytes = self.shared_memory_bytes + pad
+            chosen, most = configured, -1
+            for candidate in LAUNCH_BLOCKSIZES:
+                actual, dynamic = self.limit_blocksize(
+                    candidate,
+                    int(padded_bytes * min(runs, candidate)),
+                    padded_bytes,
+                    runs,
+                )
+                if actual != candidate:
+                    continue
+                threads = candidate * active_blocks_per_multiprocessor(
+                    dispatcher, candidate, dynamic
+                )
+                if threads > most:
+                    chosen, most = candidate, threads
+        self._default_blocksizes[key] = chosen
+        return chosen
 
     def _compute_launch_geometry(
         self, blocksize: int, runs: int
@@ -1021,24 +1078,29 @@ class BatchSolverKernel(CUDAFactory):
     def _resident_blocks_within_l2(
         dispatcher: Any, blocksize: int, natural: int
     ) -> int:
-        """Return the most blocks per SM whose local frames fit in L2."""
+        """Return the most blocks per SM whose local frames fit in L2.
+
+        Never below one warp per scheduler; natural when no count fits.
+        """
         frame = kernel_resources(dispatcher).local_bytes_per_thread
         if frame == 0:
             return natural
         hardware = device_hardware()
         l2_bytes = hardware.l2_cache_bytes
         footprint = frame * blocksize * hardware.multiprocessor_count
-        blocks = natural
-        while blocks > 1:
+        floor = minimum_scheduler_blocks(hardware, blocksize)
+
+        def budget(count):
             # Two blocks may fill the whole L2; more share two-thirds.
-            budget = (
-                l2_bytes
-                if blocks == 2
-                else RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
-            )
-            if footprint * blocks <= budget:
-                break
+            if count == 2:
+                return l2_bytes
+            return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
+
+        blocks = natural
+        while blocks > floor and footprint * blocks > budget(blocks):
             blocks -= 1
+        if footprint * blocks > budget(blocks):
+            return natural
         return blocks
 
     @staticmethod

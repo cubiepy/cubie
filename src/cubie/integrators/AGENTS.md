@@ -91,7 +91,8 @@ drops `CONTROLLER_GAIN_PARAMETERS`.
 `SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates
 `_algo_step` if the system's `evaluate_f`/`evaluate_observables`/`get_solver_helper_fn`
 changed; (2) applies `_apply_performance_defaults` (skips user-given keys, as
-`optimisation_candidates` does); (3)
+`optimisation_candidates` does; keys the step does not own, such as
+`state_location`, go to the loop); (3)
 re-registers child allocators; (4) calls `self._loop.update(...)` with the latest compiled
 device-function references; (5) accesses `self._loop.device_function` (triggering the
 loop's build if invalid); (6) returns

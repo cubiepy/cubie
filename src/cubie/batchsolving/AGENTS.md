@@ -106,8 +106,12 @@ summarised defaults to saved when all summarise inputs are `None`.
 - **Launch geometry:** `launch_geometry(blocksize=None)` returns a launch's block size and
   dynamic shared bytes: `limit_blocksize` halves the block size until dynamic shared memory
   fits the opt-in per-block limit, then a pad holds `resident_blocks` per SM (`None` = the
-  L2 rule under `auto_performance`). `blocksize` is a `BatchSolverConfig` field (default
-  64); `run(blocksize=None)` uses it; `blocksize_given` records an explicit setting. `shared_memory_needs_padding` adds a 4-byte skew only
+  L2 rule under `auto_performance`, floored at one warp per scheduler, natural when no count
+  fits). `blocksize` is a `BatchSolverConfig` field (default 64); `run(blocksize=None)` uses
+  `_default_blocksize`: the setting when `blocksize_given` or `auto_performance` is off, else
+  `LARGE_KERNEL_BLOCKSIZE` for a local-memory kernel whose SASS exceeds half the instruction
+  cache, else the `LAUNCH_BLOCKSIZES` entry with most resident threads (smaller on a tie).
+  `shared_memory_needs_padding` adds a 4-byte skew only
   for single precision with an even element count (float64 never pads — it would misalign).
 
 ### Results

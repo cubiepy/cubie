@@ -132,7 +132,9 @@ class SingleIntegratorRunCore(CUDAFactory):
 
     # Keys the user may fix that the performance defaults never touch.
     _USER_PERF_OVERRIDES = (
-        ALL_ALGORITHM_STEP_PARAMETERS | ALL_UNROLL_PARAMETERS | {"unroll"}
+        ALL_ALGORITHM_STEP_PARAMETERS
+        | ALL_UNROLL_PARAMETERS
+        | {"unroll", "state_location"}
     )
 
     _INNER_TOLERANCE_KEYS = (
@@ -188,11 +190,12 @@ class SingleIntegratorRunCore(CUDAFactory):
             for key in self._INNER_TOLERANCE_KEYS
             if algorithm_settings.get(key) is not None
         }
-        # Step and unroll parameters the user set explicitly.
+        # Step, unroll and placement parameters the user set explicitly.
         self._user_given_keys = {
             key
             for key in self._USER_PERF_OVERRIDES
             if algorithm_settings.get(key) is not None
+            or loop_settings.get(key) is not None
         }
 
         precision = system.precision
@@ -1227,14 +1230,15 @@ class SingleIntegratorRunCore(CUDAFactory):
         Returns
         -------
         set of str
-            The keys forwarded to the algorithm step.
+            The keys forwarded to the algorithm step or the loop.
         """
         step = self._algo_step
-        if not self.compile_settings.auto_performance or not step.is_implicit:
+        if not self.compile_settings.auto_performance:
             return set()
-        step.build_implicit_helpers()
+        if step.is_implicit:
+            step.build_implicit_helpers()
         updates = dict(step.performance_defaults)
-        if step.newton_solves_per_step > 0:
+        if step.is_implicit and step.newton_solves_per_step > 0:
             unrolled = (
                 self._system.operation_count
                 + step.per_step_operation_count
@@ -1261,7 +1265,16 @@ class SingleIntegratorRunCore(CUDAFactory):
         }
         if not updates:
             return set()
-        return step.update(updates, silent=True)
+        recognised = step.update(updates, silent=True)
+        # Placement keys the step does not own belong to the loop.
+        loop_updates = {
+            key: value
+            for key, value in updates.items()
+            if key not in recognised
+        }
+        if loop_updates:
+            recognised |= self._loop.update(loop_updates, silent=True)
+        return recognised
 
     def optimisation_candidates(
         self, force: bool = False

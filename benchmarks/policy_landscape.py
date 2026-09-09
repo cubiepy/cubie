@@ -604,6 +604,14 @@ def cells_for(arm, blocksizes):
         )
     cells = {}
     keys = {}
+    # The launch the kernel chooses for itself.
+    kernel.resident_blocks = None
+    actual, dynamic = kernel.launch_geometry(None)
+    blocks = active_blocks_per_multiprocessor(kernel.kernel, actual, dynamic)
+    keys["auto"] = (actual, blocks, dynamic)
+    cells[f"bs{actual}x{blocks}"] = Cell(
+        f"bs{actual}x{blocks}", actual, None, blocks, dynamic
+    )
     for blocksize in blocksizes:
         kernel.resident_blocks = NATURAL
         actual, dynamic = kernel.launch_geometry(blocksize)
@@ -1043,12 +1051,14 @@ def policy_time(row, label, role_blocksizes):
     if target.get("error"):
         return None, None
     for role, blocksize in role_blocksizes:
-        key = arm["cell_keys"].get(f"{role}@bs{blocksize}")
+        # ``blocksize`` None names the launch the kernel chose itself.
+        name = role if blocksize is None else f"{role}@bs{blocksize}"
+        key = arm["cell_keys"].get(name)
         if key is None:
             continue
         ms = cell_time(target, key)
         if ms is not None:
-            return ms, f"{label}@{role}@bs{blocksize}"
+            return ms, f"{label}@{name}"
     return None, None
 
 
