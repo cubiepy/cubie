@@ -58,8 +58,8 @@ result accessor on `kernel` and expose it as a `Solver` property.
 System changes (constant values included) reach a live solver through
 `Solver.update`/solve kwargs; after the kernel update, `Solver.update`
 re-resolves the recorded output-variable selection against the system's
-current layout. The kernel records the system's `config_hash` after every
-update; a stale hash at `Solver.solve` triggers `kernel.resync_system()`,
+current layout. The kernel records the system's compile-settings snapshot
+after every update; a replaced snapshot at `Solver.solve` triggers `kernel.resync_system()`,
 which replays the system's current values through the same update chain.
 
 ### Solver teardown
@@ -109,6 +109,11 @@ summarised defaults to saved when all summarise inputs are `None`.
   L2 rule under `auto_performance`). `blocksize` is a `BatchSolverConfig` field (default
   64); `run(blocksize=None)` uses it; `blocksize_given` records an explicit setting. `shared_memory_needs_padding` adds a 4-byte skew only
   for single precision with an even element count (float64 never pads — it would misalign).
+  Memoised per `(blocksize, runs, resident_blocks, auto_performance)` on the build's
+  `BatchSolverCache`, alongside its `duration_counts` and `output_array_heights`.
+- **Kept across solves:** the system snapshot identity (`system_config_stale`), the chunk
+  partition until an allocation replaces it, and the timing `CUDAEvent`s while timing is
+  on (rebuilt on a chunk-count or verbosity change).
 
 ### Results
 Every solve returns one `SolveResult` that **owns the solve's host buffers** — nothing is

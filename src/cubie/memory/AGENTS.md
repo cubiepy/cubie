@@ -110,7 +110,8 @@ must be allocated (via `allocate_queue`) before `to_device` copies into them.
   the group stay queued until their own owner triggers.
 - **Notary instances** — same stream group and owner, no queued requests — still get an
   `allocation_ready_hook` with an empty `arr` dict but correct `chunks`/`chunk_length`; hooks
-  must handle empty `arr`.
+  must handle empty `arr`. With nothing queued for the owner, `allocate_queue` returns
+  without calling any hook; callers keep the partition from their last response.
 - Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True` keeps the
   full shape.
 - `get_chunk_parameters` offers a request `min((1 − CHUNK_HEADROOM_FRACTION) × available,

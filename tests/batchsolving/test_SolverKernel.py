@@ -36,8 +36,8 @@ def test_getters_get(solverkernel):
     assert solverkernel.threads_per_loop is not None, (
         "BatchSolverKernel.threads_per_loop returning None"
     )
-    assert solverkernel.output_heights is not None, (
-        "BatchSolverKernel.output_heights returning None"
+    assert solverkernel.output_array_heights is not None, (
+        "BatchSolverKernel.output_array_heights returning None"
     )
     assert solverkernel.output_length is not None, (
         "BatchSolverKernel.output_length returning None"

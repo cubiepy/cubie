@@ -892,6 +892,8 @@ class MemoryManager:
 
         """
         self.stream_groups.reinit_streams()
+        for settings in self.registry.values():
+            settings.completion_event = None
 
     def invalidate_all(self) -> None:
         """
@@ -1220,10 +1222,15 @@ class MemoryManager:
     def end_work(self, owner: object, stream: Stream) -> None:
         """Record completion of an owner's submitted CUDA work."""
         owned = self._owner_settings(id(owner))
+        # The owner's registrations share one event, re-recorded each time.
         event = None
-        if not CUDA_SIMULATION:
+        for settings in owned:
+            if settings.completion_event is not None:
+                event = settings.completion_event
+                break
+        if event is None:
             event = cuda.event()
-            event.record(stream)
+        event.record(stream)
         for settings in owned:
             settings.last_stream = stream
             settings.completion_event = event
@@ -1956,10 +1963,8 @@ class MemoryManager:
         other owners in the group stay queued until their own owner
         triggers. The owner's instances with no queued requests
         receive an empty response carrying the owner's chunk
-        parameters. When nothing of the owner's is queued (all
-        allocations already in place from an earlier call), each of
-        its instances receives the stored chunk parameters, so
-        per-instance chunk state is restored on repeat runs.
+        parameters. When nothing of the owner's is queued the call
+        returns at once.
 
         """
         stream_group = self.get_stream_group(triggering_instance)
@@ -1986,23 +1991,6 @@ class MemoryManager:
             self._queued_allocations.pop(stream_group, None)
 
         if not queued_requests:
-            cached_parameters = self._group_chunk_parameters.get(cache_key)
-            if cached_parameters is None:
-                return None
-            chunk_length, num_chunks = cached_parameters
-            for peer in peers:
-                peer_settings = self.registry.get(peer)
-                if peer_settings is None:
-                    # Released by an earlier hook in this loop.
-                    continue
-                peer_settings.allocation_ready_hook(
-                    ArrayResponse(
-                        arr={},
-                        chunks=num_chunks,
-                        chunk_length=chunk_length,
-                        chunked_shapes={},
-                    )
-                )
             return None
 
         if stream is None:

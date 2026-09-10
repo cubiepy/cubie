@@ -67,7 +67,7 @@ from cubie.backend.utils import (
 from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cubie_cache import CUBIECache
 
-from cubie.time_logger import CUDAEvent
+from cubie.time_logger import CUDAEvent, default_timelogger
 from numpy.typing import NDArray
 
 from cubie.array_interpolator import ArrayInterpolator
@@ -87,6 +87,7 @@ from cubie.batchsolving.BatchSolverConfig import (
 from cubie.batchsolving._utils import name_and_compile_kernel
 from cubie.odesystems.baseODE import BaseODE
 from cubie.outputhandling.output_config import OutputCompileFlags
+from cubie.outputhandling.output_sizes import OutputArrayHeights
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
 from cubie._utils import (
     getype_validator,
@@ -239,9 +240,24 @@ class RunParams:
         )
 
 
+@define(frozen=True)
+class DurationCounts:
+    """Event counts of one build for one duration."""
+
+    output_length: int
+    summaries_length: int
+    save_events: int
+    summary_samples: int
+
+
 @define()
 class BatchSolverCache(CUDADispatcherCache):
+    """Compiled kernel plus the per-build memos of its consumers."""
+
     solver_kernel: Union[int, Callable] = field(default=-1)
+    output_array_heights: Optional[OutputArrayHeights] = field(default=None)
+    duration_counts: Dict[float, DurationCounts] = field(factory=dict)
+    launch_geometries: Dict[Tuple, Tuple[int, int]] = field(factory=dict)
 
 
 RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
@@ -356,13 +372,13 @@ class BatchSolverKernel(CUDAFactory):
         # CUDA event tracking for timing
         self._cuda_events: List = []
         self._gpu_workload_event: Optional[CUDAEvent] = None
+        self._cuda_events_key = None
 
         self._closed = False
         self._last_stream = None
         self._work_complete = True
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
-        self._launch_geometries = {}
 
         # Child factory: driver settings join config_hash; the
         # placeholder input covers zero-driver operation.
@@ -441,7 +457,7 @@ class BatchSolverKernel(CUDAFactory):
 
         self.output_arrays.update(self)
 
-        self._known_system_config_hash = system.config_hash
+        self._known_system_config = system.compile_settings
 
     def _setup_memory_manager(
         self, settings: Dict[str, Any]
@@ -502,7 +518,7 @@ class BatchSolverKernel(CUDAFactory):
         return memory_manager
 
     def _setup_cuda_events(self, chunks: int) -> None:
-        """Create CUDA events for timing instrumentation.
+        """Provide the timing events for this run.
 
         Parameters
         ----------
@@ -511,21 +527,26 @@ class BatchSolverKernel(CUDAFactory):
 
         Notes
         -----
-        Creates one GPU workload event and 3 events per chunk
-        (h2d_transfer, kernel, d2h_transfer).
-        Events are created regardless of verbosity - they become no-ops
-        internally when verbosity is None.
+        One workload event plus three per chunk. While timing is on
+        they are kept between runs and rebuilt when the chunk count or
+        logger verbosity changes; with timing off each run gets fresh
+        no-op events.
         """
-        # Create overall GPU workload event
+        verbosity = default_timelogger.verbosity
+        key = (chunks, verbosity)
+        if verbosity is not None and key == self._cuda_events_key:
+            self._gpu_workload_event.register()
+            for event in self._cuda_events:
+                event.register()
+            return
         self._gpu_workload_event = CUDAEvent("gpu_workload")
-
-        # Create per-chunk events (3 events per chunk: h2d, kernel, d2h)
         self._cuda_events = []
         for i in range(chunks):
             h2d_event = CUDAEvent(f"h2d_transfer_chunk_{i}")
             kernel_event = CUDAEvent(f"kernel_chunk_{i}")
             d2h_event = CUDAEvent(f"d2h_transfer_chunk_{i}")
             self._cuda_events.extend([h2d_event, kernel_event, d2h_event])
+        self._cuda_events_key = key
 
     def _get_chunk_events(self, chunk_idx: int) -> Tuple:
         """Get the three CUDA events for a specific chunk.
@@ -730,15 +751,28 @@ class BatchSolverKernel(CUDAFactory):
         finally:
             self._memory_manager.end_work(self, stream)
 
+    def _duration_counts(self, duration: float) -> DurationCounts:
+        """Return the event counts for ``duration``, memoised per build."""
+        counts = self.get_cached_output("duration_counts")
+        key = float(duration)
+        entry = counts.get(key)
+        if entry is None:
+            integrator = self.single_integrator
+            entry = DurationCounts(
+                output_length=integrator.output_length(duration),
+                summaries_length=integrator.summaries_length(duration),
+                save_events=integrator.save_event_count(duration),
+                summary_samples=integrator.summary_sample_count(duration),
+            )
+            counts[key] = entry
+        return entry
+
     def _kernel_launch_args(self, chunk_run_params: RunParams) -> Tuple:
         """Return the kernel's positional arguments for one chunk."""
         duration, warmup, t0 = chunk_run_params.time_scalars
-        save_count = np_int32(
-            self.single_integrator.save_event_count(duration)
-        )
-        summary_count = np_int32(
-            self.single_integrator.summary_sample_count(duration)
-        )
+        counts = self._duration_counts(duration)
+        save_count = np_int32(counts.save_events)
+        summary_count = np_int32(counts.summary_samples)
         return (
             self.input_arrays.device_initial_values,
             self.input_arrays.device_parameters,
@@ -771,8 +805,9 @@ class BatchSolverKernel(CUDAFactory):
         # Time parameters always use float64 for accumulation accuracy
         duration = np_float64(duration)
 
-        # Update run params with actual values before allocation
-        self.run_params = RunParams(
+        # The partition follows the live arrays; an allocation replaces it.
+        self.run_params = evolve(
+            self.run_params,
             duration=duration,
             warmup=np_float64(warmup),
             t0=np_float64(t0),
@@ -970,16 +1005,16 @@ class BatchSolverKernel(CUDAFactory):
             blocksize = self.compile_settings.blocksize
         runs = self.run_params[0].runs
         key = (
-            self.config_hash,
             blocksize,
             runs,
             self.resident_blocks,
             self.single_integrator.auto_performance,
         )
-        geometry = self._launch_geometries.get(key)
+        geometries = self.get_cached_output("launch_geometries")
+        geometry = geometries.get(key)
         if geometry is None:
             geometry = self._compute_launch_geometry(blocksize, runs)
-            self._launch_geometries[key] = geometry
+            geometries[key] = geometry
         return geometry
 
     def _compute_launch_geometry(
@@ -1316,7 +1351,7 @@ class BatchSolverKernel(CUDAFactory):
         )
 
         recognised = set(updates_dict.keys()) - all_unrecognized
-        self._known_system_config_hash = self.system.config_hash
+        self._known_system_config = self.system.compile_settings
 
         if all_unrecognized:
             if not silent:
@@ -1467,12 +1502,6 @@ class BatchSolverKernel(CUDAFactory):
             disk_cache.flush_cache()
 
     @property
-    def output_heights(self) -> Any:
-        """Height metadata for each host output array."""
-
-        return self.single_integrator.output_array_heights
-
-    @property
     def kernel(self) -> Callable:
         """Compiled integration kernel callable."""
         return self.device_function
@@ -1482,8 +1511,11 @@ class BatchSolverKernel(CUDAFactory):
         return self.get_cached_output("solver_kernel")
 
     def build(self) -> BatchSolverCache:
-        """Compile the integration kernel and return it."""
-        return BatchSolverCache(solver_kernel=self.build_kernel())
+        """Compile the integration kernel and return it with its memos."""
+        return BatchSolverCache(
+            solver_kernel=self.build_kernel(),
+            output_array_heights=self.single_integrator.output_array_heights,
+        )
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -1611,21 +1643,13 @@ class BatchSolverKernel(CUDAFactory):
 
     @property
     def output_length(self) -> int:
-        """Number of saved trajectory samples in the main run.
-
-        Delegates to SingleIntegratorRun.output_length() with the current
-        duration.
-        """
-        return self.single_integrator.output_length(self.duration)
+        """Number of saved trajectory samples in the main run."""
+        return self._duration_counts(self.duration).output_length
 
     @property
     def summaries_length(self) -> int:
-        """Number of complete summary intervals across the integration window.
-
-        Delegates to SingleIntegratorRun.summaries_length() with the current
-        duration.
-        """
-        return self.single_integrator.summaries_length(self.duration)
+        """Number of complete summary intervals in the integration window."""
+        return self._duration_counts(self.duration).summaries_length
 
     @property
     def system(self) -> "BaseODE":
@@ -1637,7 +1661,7 @@ class BatchSolverKernel(CUDAFactory):
     def system_config_stale(self) -> bool:
         """``True`` when the system changed outside the update chain."""
 
-        return self.system.config_hash != self._known_system_config_hash
+        return self.system.compile_settings is not self._known_system_config
 
     def resync_system(self) -> None:
         """Replay the system's current values through the update chain.
@@ -1734,10 +1758,10 @@ class BatchSolverKernel(CUDAFactory):
         return self.system_sizes.drivers
 
     @property
-    def output_array_heights(self) -> Any:
+    def output_array_heights(self) -> OutputArrayHeights:
         """Height metadata for the batched output arrays."""
 
-        return self.single_integrator.output_array_heights
+        return self.get_cached_output("output_array_heights")
 
     @property
     def summary_legend_per_variable(self) -> Any:
