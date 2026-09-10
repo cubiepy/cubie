@@ -558,23 +558,12 @@ def test_failed_run_message_reports_counts_codes_and_settings():
         "linear_correction_type": "bicgstab",
         "inexact_newton": True,
     }
-    message = _failed_run_message(codes, diagnostics, masked=True)
+    message = _failed_run_message(codes, diagnostics)
     assert "3 of 4 runs failed and were set to NaN" in message
     assert "MAX_NEWTON_ITERATIONS_EXCEEDED (2)" in message
     assert "STEP_TOO_SMALL (1)" in message
     assert "linear_correction_type='bicgstab'" in message
     assert "Try: inexact_newton=False" in message
-
-
-def test_unmasked_failed_run_message_points_at_status_codes():
-    """The unmasked message offers status_codes and the masking flag."""
-    codes = np.array(
-        [0, int(CUBIE_RESULT_CODES.STEP_TOO_SMALL)], dtype=np.int32
-    )
-    message = _failed_run_message(codes, {}, masked=False)
-    assert "1 of 2 runs failed." in message
-    assert "Check status_codes for the failing runs" in message
-    assert "nan_error_trajectories=True" in message
 
 
 class TestNaNProcessing:
@@ -616,20 +605,18 @@ class TestNaNProcessing:
         for key in diagnostics:
             assert key in message
 
-    def test_nan_disabled_preserves_error_data(
+    def test_nan_disabled_keeps_failed_run_data(
         self, solved_batch_solver_errorcode
     ):
-        """Unmasked failures keep their data and warn with the hint."""
-        with pytest.warns(UserWarning) as caught:
-            result = SolveResult.from_solver(
-                solved_batch_solver_errorcode,
-                nan_error_trajectories=False,
-            )
-        assert not np.all(np.isnan(result.time_domain_array[..., 1]))
-        message = str(caught[0].message)
-        assert "1 of 3 runs failed." in message
-        assert "Check status_codes for the failing runs" in message
-        assert "nan_error_trajectories=True" in message
+        """With masking off a failed run keeps its data."""
+        result = SolveResult.from_solver(
+            solved_batch_solver_errorcode,
+            nan_error_trajectories=False,
+        )
+        assert result.status_codes[1] == 1
+        assert not np.any(np.isnan(result.time_domain_array[..., 1]))
+        if result.summaries_array.size > 0:
+            assert not np.any(np.isnan(result.summaries_array[..., 1]))
 
     def test_successful_runs_unchanged_with_nan_enabled(
         self, solved_batch_solver_errorcode
