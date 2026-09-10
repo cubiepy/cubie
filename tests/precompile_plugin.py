@@ -169,45 +169,38 @@ if POPULATION:
     backend_cuda.default_stream = lambda: _fake_stream
     backend_cuda.external_stream = lambda ptr: _fake_stream
 
-if POPULATION and BACKEND == "numba-cuda":
+if POPULATION:
     from cuda.core._device import ComputeCapability  # noqa: E402
-    import numba.cuda.dispatcher as nb_dispatcher  # noqa: E402
-    from numba.cuda.cudadrv import devices as nb_devices  # noqa: E402
 
+    # Driverless stand-in for the device cubie queries outside launches.
     _fake_device = SimpleNamespace(
         compute_capability=ComputeCapability(*TARGET_CC),
         id=0,
         name=b"cubie-precompile",
         MAX_SHARED_MEMORY_PER_BLOCK=49152,
+        MAX_SHARED_MEMORY_PER_BLOCK_OPTIN=49152,
+        MAX_SHARED_MEMORY_PER_MULTIPROCESSOR=65536,
+        RESERVED_SHARED_MEMORY_PER_BLOCK=1024,
+        MULTIPROCESSOR_COUNT=1,
+        L2_CACHE_SIZE=4 << 20,
         WARP_SIZE=32,
     )
     _fake_context = SimpleNamespace(device=_fake_device)
+    backend_cuda.get_current_device = lambda: _fake_device
+
+if POPULATION and BACKEND == "numba-cuda":
+    import numba.cuda.dispatcher as nb_dispatcher  # noqa: E402
+    from numba.cuda.cudadrv import devices as nb_devices  # noqa: E402
+
     nb_dispatcher.get_current_device = lambda: _fake_device
     nb_devices.get_context = lambda *args, **kwargs: _fake_context
-    backend_cuda.get_current_device = lambda: _fake_device
 
 if POPULATION and BACKEND == "mlir":
     from numba_cuda_mlir.numba_cuda.cudadrv import (  # noqa: E402
         devices as mlir_devices,
     )
 
-    # cubie queries the live device outside any launch: the
-    # memory-placement heuristics call
-    # ``cuda.get_current_device().compute_capability`` during Solver
-    # construction (``resolve_thresholds``), which initialises the
-    # real CUDA driver and raises on the driverless population
-    # runner, erroring every affected fixture before its kernels
-    # reach the cache. Mirror the numba-cuda fakes above.
-    _fake_device = SimpleNamespace(
-        compute_capability=ComputeCapability(*TARGET_CC),
-        id=0,
-        name=b"cubie-precompile",
-        MAX_SHARED_MEMORY_PER_BLOCK=49152,
-        WARP_SIZE=32,
-    )
-    _fake_context = SimpleNamespace(device=_fake_device)
     mlir_devices.get_context = lambda *args, **kwargs: _fake_context
-    backend_cuda.get_current_device = lambda: _fake_device
 
 
 def _host_copy(self, instance, from_arrays, to_arrays, stream=None):
@@ -542,7 +535,42 @@ if POPULATION:
     )
     # No CUDA driver here, so the pool flush must not touch cupy.
     mem_manager.free_all_pinned_blocks = lambda: None
-    _batch_solver_kernel.max_shared_memory_per_block = lambda: 49152
+
+    # Compile the launch specialization; stand in for driver queries.
+    _backend_utils = importlib.import_module("cubie.backend.utils")
+    _production_compile = _backend_utils._compile
+
+    def _population_compile_kernel_specialization(dispatcher, args):
+        _attach_pending()
+        _attach_cache(dispatcher)
+        _production_compile(dispatcher, args)
+
+    _backend_utils.compile_kernel_specialization = (
+        _population_compile_kernel_specialization
+    )
+    _backend_utils.kernel_resources = (
+        lambda dispatcher: _backend_utils.KernelResources(0, 0)
+    )
+    _backend_utils.active_blocks_per_multiprocessor = (
+        lambda dispatcher, blocksize, dynamic_shared: 1
+    )
+    for _module_name in (
+        "cubie.batchsolving.BatchSolverKernel",
+        "cubie.batchsolving.calibration",
+        "cubie.batchsolving.optimize",
+    ):
+        _module = importlib.import_module(_module_name)
+        for _helper_name in (
+            "active_blocks_per_multiprocessor",
+            "compile_kernel_specialization",
+            "kernel_resources",
+        ):
+            if hasattr(_module, _helper_name):
+                setattr(
+                    _module,
+                    _helper_name,
+                    getattr(_backend_utils, _helper_name),
+                )
 
     _MemoryManager = mem_manager.MemoryManager
     _MemoryManager.allocate = (
