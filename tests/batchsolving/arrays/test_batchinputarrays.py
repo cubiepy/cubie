@@ -333,3 +333,120 @@ def test_stage_array_releases_the_buffer_when_the_copy_fails(solverkernel):
     pooled = arrays._buffer_pool._buffers["initial_values"]
     assert pooled
     assert all(not buffer.in_use for buffer in pooled)
+
+
+# ── Driver coefficient uploads ──────────────────────────── #
+
+
+def _attached_run_inputs(ia):
+    """Return the host arrays attached to the per-run input slots."""
+    return ia.host.initial_values.array, ia.host.parameters.array
+
+
+def test_uploaded_driver_coefficients_are_not_requeued(
+    solverkernel_mutable, system, precision
+):
+    """Re-supplying the uploaded table queues only the per-run inputs."""
+    sk = solverkernel_mutable
+    ia = sk.input_arrays
+    n_states = system.sizes.states
+    n_params = system.sizes.parameters
+    n_drivers = system.sizes.drivers
+    inits = np.ones((n_states, 1), dtype=precision)
+    params = np.full((n_params, 1), 2.0, dtype=precision)
+    drivers = np.ones((4, n_drivers, 1), dtype=precision) * 3.0
+    ia.update(sk, inits, params, drivers)
+    ia._memory_manager.allocate_queue(ia)
+    ia.initialise(0)
+    assert ia._needs_overwrite == []
+
+    attached_inits, attached_params = _attached_run_inputs(ia)
+    ia.update(sk, attached_inits, attached_params, drivers)
+
+    assert ia.host.driver_coefficients.array is drivers
+    assert ia._needs_overwrite == ["initial_values", "parameters"]
+
+
+def test_new_driver_coefficient_table_is_queued(
+    solverkernel_mutable, system, precision
+):
+    """A different table object queues a coefficient upload."""
+    sk = solverkernel_mutable
+    ia = sk.input_arrays
+    n_states = system.sizes.states
+    n_params = system.sizes.parameters
+    n_drivers = system.sizes.drivers
+    inits = np.ones((n_states, 1), dtype=precision)
+    params = np.full((n_params, 1), 2.0, dtype=precision)
+    drivers = np.ones((4, n_drivers, 1), dtype=precision) * 3.0
+    ia.update(sk, inits, params, drivers)
+    ia._memory_manager.allocate_queue(ia)
+    ia.initialise(0)
+
+    replacement = drivers * 2.0
+    attached_inits, attached_params = _attached_run_inputs(ia)
+    ia.update(sk, attached_inits, attached_params, replacement)
+
+    assert ia.host.driver_coefficients.array is replacement
+    assert set(ia._needs_overwrite) == {
+        "initial_values", "parameters", "driver_coefficients"
+    }
+    assert_array_equal(ia.driver_coefficients, replacement)
+
+
+def test_dropped_device_buffers_requeue_the_driver_coefficients(
+    solverkernel_mutable, system, precision
+):
+    """A rebuilt device buffer receives the table again."""
+    sk = solverkernel_mutable
+    ia = sk.input_arrays
+    n_states = system.sizes.states
+    n_params = system.sizes.parameters
+    n_drivers = system.sizes.drivers
+    inits = np.ones((n_states, 1), dtype=precision)
+    params = np.full((n_params, 1), 2.0, dtype=precision)
+    drivers = np.ones((4, n_drivers, 1), dtype=precision) * 3.0
+    ia.update(sk, inits, params, drivers)
+    ia._memory_manager.allocate_queue(ia)
+    ia.initialise(0)
+
+    ia._invalidate_hook()
+    attached_inits, attached_params = _attached_run_inputs(ia)
+    ia.update(sk, attached_inits, attached_params, drivers)
+    ia._memory_manager.allocate_queue(ia)
+
+    assert set(ia._needs_overwrite) == {
+        "initial_values", "parameters", "driver_coefficients"
+    }
+    assert is_device_array(ia.device_driver_coefficients)
+
+
+def test_zero_sized_driver_coefficients_attach_a_unit_stand_in(
+    solverkernel_mutable, system, precision
+):
+    """An empty table is held as one stable unit array, uploaded once."""
+    sk = solverkernel_mutable
+    ia = sk.input_arrays
+    n_states = system.sizes.states
+    n_params = system.sizes.parameters
+    inits = np.ones((n_states, 1), dtype=precision)
+    params = np.full((n_params, 1), 2.0, dtype=precision)
+    ia.update(sk, inits, params, np.zeros((0, 0, 4), dtype=precision))
+    stand_in = ia.host.driver_coefficients.array
+    assert stand_in.shape == (1, 1, 1)
+    assert stand_in.dtype == precision
+    assert "driver_coefficients" in ia._needs_overwrite
+    ia._memory_manager.allocate_queue(ia)
+    ia.initialise(0)
+    assert tuple(ia.device_driver_coefficients.shape) == (1, 1, 1)
+
+    attached_inits, attached_params = _attached_run_inputs(ia)
+    ia.update(
+        sk,
+        attached_inits,
+        attached_params,
+        np.zeros((0, 0, 4), dtype=precision),
+    )
+
+    assert ia.host.driver_coefficients.array is stand_in
+    assert ia._needs_overwrite == ["initial_values", "parameters"]

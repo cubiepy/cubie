@@ -43,7 +43,6 @@ from numpy import (
     allclose,
     any as np_any,
     arange,
-    array_equal,
     asarray,
     column_stack,
     concatenate,
@@ -84,10 +83,29 @@ FloatArray = NDArray[floating]
 
 @define
 class InterpolatorCache(CUDADispatcherCache):
-    """Cached device helpers emitted by :class:`ArrayInterpolator`."""
+    """Build outputs of :class:`ArrayInterpolator`.
+
+    Attributes
+    ----------
+    evaluation_function
+        Device function evaluating every input at a time.
+    driver_del_t
+        Device function evaluating every input's time derivative.
+    coefficients
+        Host ``(num_segments, num_inputs, order + 1)`` table; pinned,
+        or zero-sized with no inputs.
+    """
 
     evaluation_function: Optional[Callable] = field(default=None)
     driver_del_t: Optional[Callable] = field(default=None)
+    coefficients: Optional[FloatArray] = field(default=None)
+
+
+def _input_array_converter(value: Any) -> FloatArray:
+    """Copy sampled inputs into an owned read-only 2-D array."""
+    array = asarray(value).copy()
+    array.setflags(write=False)
+    return array
 
 
 @frozen
@@ -110,12 +128,15 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         start time of input samples
     driver_sample_period : float
         Temporal spacing between consecutive driver samples.
+    input_array : numpy.ndarray
+        Samples as ``(num_samples, num_inputs)`` columns; not hashed,
+        a value change invalidates the build only.
     num_inputs : int
-        Number of separate input vectors
+        Column count of ``input_array``.
     num_segments : int
-        Number of polynomial segments in the coefficient table. For
-        clamped, non-wrapping inputs this includes two ghost segments that
-        transition from and to zero-valued padding samples.
+        Polynomial segments in the table: samples minus one, plus two
+        ghost segments for clamped non-wrapping inputs, zero with no
+        inputs.
     """
 
     order: int = field(
@@ -136,17 +157,53 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         default=1e-16, validator=getype_validator(float, 0)
     )
     t0: float = field(default=0.0, validator=getype_validator(float, 0))
-    num_inputs: int = field(
-        default=0,
-        validator=validators.instance_of(int),
+    input_array: FloatArray = field(
+        factory=lambda: _input_array_converter(empty((0, 0))),
+        converter=_input_array_converter,
+        eq=False,
     )
-    num_segments: int = field(
-        default=0,
-        validator=validators.instance_of(int),
-    )
+    num_inputs: int = field(default=0, init=False)
+    num_segments: int = field(default=0, init=False)
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
+        num_samples, num_inputs = self.input_array.shape
+        self._check_periodic(num_samples)
+        object.__setattr__(self, "num_inputs", int(num_inputs))
+        object.__setattr__(
+            self, "num_segments", self._segment_count(num_samples)
+        )
+
+    def _check_periodic(self, num_samples: int) -> None:
+        """Reject periodic settings without wrap or matching ends."""
+        if self.boundary_condition != "periodic":
+            return
+        if not self.wrap:
+            raise ValueError(
+                "Periodic boundary conditions require wrap=True so that "
+                "the input repeats after the final segment."
+            )
+        if num_samples and not allclose(
+            self.input_array[0], self.input_array[-1]
+        ):
+            raise ValueError(
+                "Periodic boundary conditions require the first and "
+                "last samples to match."
+            )
+
+    def _segment_count(self, num_samples: int) -> int:
+        """Return the segment count the coefficient table holds."""
+        if num_samples == 0:
+            return 0
+        pad_clamped = (not self.wrap) and (
+            self.boundary_condition == "clamped"
+        )
+        return num_samples - 1 + (2 if pad_clamped else 0)
+
+    @property
+    def num_samples(self) -> int:
+        """Number of samples per input."""
+        return int(self.input_array.shape[0])
 
 
 class ArrayInterpolator(CUDAFactory):
@@ -180,8 +237,6 @@ class ArrayInterpolator(CUDAFactory):
         )
         self.setup_compile_settings(config)
         self._memory_manager = memory_manager
-        self._coefficients = None
-        self._input_array = None
         self.update_from_dict(input_dict)
 
     def update_from_dict(self, input_dict: Dict[str, Any]) -> bool:
@@ -226,6 +281,8 @@ class ArrayInterpolator(CUDAFactory):
             ``"periodic"`` when wrapping is enabled.
 
         The input arrays must all be one-dimensional and of the same length.
+        No input arrays gives an empty interpolator with a zero-sized
+        table; timing entries are then optional.
 
         The final interpolation result is an array of polynomial
         coefficients with shape (num_segments, num_inputs, order + 1),
@@ -257,70 +314,53 @@ class ArrayInterpolator(CUDAFactory):
         }
         time = {k: v for k, v in input_dict.items() if k in self.time_info}
 
-        # Update order first, for checks  in _normalise_input_array
-        initial_hash = self.compile_settings.values_hash
-        self.update_compile_settings(config)
-
-        input_array = self._normalise_input_array(inputs)
-        arrays_changed = not array_equal(input_array, self.input_array)
-        if arrays_changed:
-            self._input_array = input_array
-
-        sample_period, t0 = self._validate_time_inputs(time)
+        input_array = self._normalise_input_array(
+            inputs, config.get("order", self.order)
+        )
+        sample_period, t0 = self._validate_time_inputs(
+            time, input_array.shape[0]
+        )
         config.update(
             {
                 "t0": t0,
                 "driver_sample_period": sample_period,
-                "num_inputs": self.num_inputs,
+                "input_array": input_array,
             }
         )
+        self._default_boundary_condition(config)
 
-        # Final update; invalidates cache if settings have changed.
-        self._derive_segment_settings(config)
+        # Any change invalidates the build; only hashed keys move the hash.
+        initial_hash = self.compile_settings.values_hash
         self.update_compile_settings(config)
-        fn_changed = self.compile_settings.values_hash != initial_hash
-        if fn_changed or arrays_changed:
-            self._coefficients = self._compute_coefficients()
+        return self.compile_settings.values_hash != initial_hash
 
-        return fn_changed
-
-    def _derive_segment_settings(self, config: Dict[str, Any]) -> None:
-        """Fill derived boundary-condition and segment-count settings.
+    def _default_boundary_condition(self, config: Dict[str, Any]) -> None:
+        """Default an absent boundary condition from the wrap setting.
 
         Parameters
         ----------
         config
-            Pending driver configuration updates, modified in place.
-            ``boundary_condition`` defaults from the wrap setting when
-            absent, and ``num_segments`` is set from the sample count
-            and boundary condition.
+            Pending updates, modified in place: ``"periodic"`` when
+            wrapping, else ``"clamped"``.
         """
-        base_segments = self.num_samples - 1
+        if "boundary_condition" in config:
+            return
         wrap_setting = config.get("wrap", self.wrap)
-        if wrap_setting:
-            if "boundary_condition" not in config:
-                config["boundary_condition"] = "periodic"
-            num_segments = base_segments
-        elif "boundary_condition" not in config:
-            config["boundary_condition"] = "clamped"
-            num_segments = base_segments + 2
-        else:
-            boundary = config["boundary_condition"]
-            if boundary == "clamped":
-                num_segments = base_segments + 2
-            else:
-                num_segments = base_segments
-        config["num_segments"] = num_segments
+        config["boundary_condition"] = (
+            "periodic" if wrap_setting else "clamped"
+        )
 
     def _normalise_input_array(
-        self, input_dict: Dict[str, FloatArray]
+        self, input_dict: Dict[str, FloatArray], order: int
     ) -> FloatArray:
         """Construct inputs array and check sizes.
 
         Parameters
         ----------
         input_dict
-            Dictionary mapping input names to 1d arrays of samples.
+            Input names to 1d sample arrays; empty gives ``(0, 0)``.
+        order
+            Polynomial order the samples must support.
 
         Returns
         -------
@@ -333,6 +373,8 @@ class ArrayInterpolator(CUDAFactory):
             Raised when the input array is the wrong shape, type,
             or multiple arrays have different lengths.
         """
+        if not input_dict:
+            return empty((0, 0), dtype=self.precision)
 
         for key, array in input_dict.items():
             try:
@@ -357,7 +399,7 @@ class ArrayInterpolator(CUDAFactory):
                 "on the same grid",
             )
         input_array = column_stack(input_vectors)
-        if input_array.shape[0] < self.order + 1:
+        if input_array.shape[0] < order + 1:
             raise ValueError(
                 "At least order + 1 samples are required to construct"
                 " splines.",
@@ -365,7 +407,7 @@ class ArrayInterpolator(CUDAFactory):
         return input_array
 
     def _validate_time_inputs(
-        self, time_dict: Dict[str, Any]
+        self, time_dict: Dict[str, Any], num_samples: int
     ) -> Tuple[float, float]:
         """Process and check time inputs.
 
@@ -377,7 +419,10 @@ class ArrayInterpolator(CUDAFactory):
             and "t0" will be fetched from the dict or default to 0.0.
             If "time" is provided, the sample period will be calculated
             as the difference between samples, and t0 as
-            time_dict['time'][0].
+            time_dict['time'][0]. Empty with no samples keeps the
+            current timing.
+        num_samples
+            Sample count of the input arrays being configured.
         Returns
         -------
         tuple (float, float)
@@ -404,7 +449,7 @@ class ArrayInterpolator(CUDAFactory):
             timeArray = time_dict["time"]
             if timeArray.ndim != 1:
                 raise ValueError("Time array must be one-dimensional.")
-            if timeArray.shape[0] != self.num_samples:
+            if timeArray.shape[0] != num_samples:
                 raise ValueError(
                     "Time array length must match the number of"
                     " samples in provided input vectors."
@@ -421,6 +466,9 @@ class ArrayInterpolator(CUDAFactory):
             ):
                 raise ValueError("Time array must be uniformly spaced.")
             sample_period = time_differences[0]
+        elif num_samples == 0:
+            sample_period = self.driver_sample_period
+            t0 = self.t0
         else:
             raise ValueError(
                 "Either a time array or driver_sample_period must be "
@@ -432,14 +480,15 @@ class ArrayInterpolator(CUDAFactory):
     # ---------------------------------------------------------------------- #
     # Evaluation function machinery
     # ---------------------------------------------------------------------- #
-    def build(self) -> Callable:
-        """Compile device helpers and return them alongside host coefficients.
+    def build(self) -> InterpolatorCache:
+        """Compute the coefficient table and compile its device evaluators.
 
         Returns
         -------
-        Callable
-            Device function which evaluates input polynomials at a given time.
+        InterpolatorCache
+            Host coefficients and the device functions that read them.
         """
+        coefficients = self._compute_coefficients()
         precision = self.precision
 
         order = self.order
@@ -562,6 +611,7 @@ class ArrayInterpolator(CUDAFactory):
         cache = InterpolatorCache(
             evaluation_function=evaluate_all,
             driver_del_t=evaluate_time_derivative,
+            coefficients=coefficients,
         )
         return cache
 
@@ -594,12 +644,9 @@ class ArrayInterpolator(CUDAFactory):
 
         Notes
         -----
-        Updates naming a key in ``config_keys`` rederive
-        ``num_segments`` from the resulting wrap and boundary
-        condition; keys absent from the update keep their current
-        values. Changed settings recompute the host coefficients so
-        they always match the configuration captured by the compiled
-        device evaluators.
+        ``num_segments`` derives from the resulting wrap and boundary
+        condition; absent keys keep their values. A change invalidates
+        the build, rebuilding coefficients and evaluators on next access.
         """
         if updates_dict is None:
             updates_dict = {}
@@ -609,7 +656,6 @@ class ArrayInterpolator(CUDAFactory):
         if updates_dict == {}:
             return set()
 
-        initial_hash = self.compile_settings.values_hash
         recognised = self.update_compile_settings(updates_dict, silent=True)
         unrecognised = set(updates_dict.keys()) - recognised
 
@@ -618,20 +664,6 @@ class ArrayInterpolator(CUDAFactory):
                 f"Unrecognized parameters in update: {unrecognised}. "
                 "These parameters were not updated.",
             )
-
-        driver_config = {
-            key: updates_dict[key]
-            for key in recognised
-            if key in self.config_keys
-        }
-        if driver_config:
-            driver_config.setdefault(
-                "boundary_condition", self.boundary_condition
-            )
-            self._derive_segment_settings(driver_config)
-            self.update_compile_settings(driver_config, silent=True)
-        if self.compile_settings.values_hash != initial_hash:
-            self._coefficients = self._compute_coefficients()
 
         return recognised
 
@@ -649,8 +681,8 @@ class ArrayInterpolator(CUDAFactory):
 
     @property
     def coefficients(self) -> FloatArray:
-        """Return the host-side coefficients array."""
-        return self._coefficients
+        """Host coefficient table matching the compiled evaluators."""
+        return self.get_cached_output("coefficients")
 
     @property
     def coefficients_shape(self) -> Tuple[int, int, int]:
@@ -662,7 +694,7 @@ class ArrayInterpolator(CUDAFactory):
     # ---------------------------------------------------------------------- #
     def get_input_array(self) -> FloatArray:
         """Return the input array."""
-        return self._input_array
+        return self.input_array
 
     def get_interpolated(
         self,
@@ -685,8 +717,6 @@ class ArrayInterpolator(CUDAFactory):
         ------
         ValueError
             Raised when ``eval_times`` is not one-dimensional.
-        RuntimeError
-            Raised when interpolation coefficients are unavailable.
         """
 
         times = asarray(eval_times, dtype=self.precision)
@@ -694,15 +724,10 @@ class ArrayInterpolator(CUDAFactory):
             raise ValueError("eval_times must be one-dimensional.")
 
         num_points = times.size
-        if num_points == 0:
-            return empty((0, self.num_inputs), dtype=self.precision)
+        if num_points == 0 or self.num_inputs == 0:
+            return empty((num_points, self.num_inputs), dtype=self.precision)
 
         coefficients = self.coefficients
-        if coefficients is None:
-            raise RuntimeError(
-                "Interpolation coefficients have not been generated."
-            )
-
         device_eval = self.evaluation_function
 
         # no cover: start
@@ -919,21 +944,22 @@ class ArrayInterpolator(CUDAFactory):
         Returns
         -------
         numpy.ndarray
-            Segment-major coefficient array of shape ``(num_segments,
-            num_inputs, order + 1)``.
+            Fresh pinned ``(num_segments, num_inputs, order + 1)``
+            array; zero-sized with no inputs.
 
         Raises
         ------
         ValueError
-            Raised when periodic constraints are incompatible with the
-            input configuration.
+            Raised when the constraints do not form a square system.
         """
         boundary_condition = self.boundary_condition
 
         precision = self.precision
-        base_inputs = self.input_array.astype(precision, copy=False)
         num_inputs = self.num_inputs
         order = self.order
+        if num_inputs == 0:
+            return zeros((0, 0, order + 1), dtype=precision)
+        base_inputs = self.input_array.astype(precision, copy=False)
 
         pad_with_zeros = (not self.wrap) and boundary_condition == "clamped"
         if pad_with_zeros:
@@ -943,18 +969,6 @@ class ArrayInterpolator(CUDAFactory):
             inputs = base_inputs
 
         num_segments = inputs.shape[0] - 1
-
-        if boundary_condition == "periodic":
-            if not self.wrap:
-                raise ValueError(
-                    "Periodic boundary conditions require wrap=True so that "
-                    "the input repeats after the final segment."
-                )
-            if not allclose(inputs[0], inputs[-1]):
-                raise ValueError(
-                    "Periodic boundary conditions require the first and "
-                    "last samples to match."
-                )
 
         num_coeffs = num_segments * (order + 1)
         matrix = zeros((num_coeffs, num_coeffs), dtype=precision)
@@ -1100,19 +1114,10 @@ class ArrayInterpolator(CUDAFactory):
         solution = np_solve(matrix, rhs)
         coefficients = solution.reshape(num_segments, order + 1, num_inputs)
         coefficients = np_transpose(coefficients, (0, 2, 1))
-        return self._land_coefficients(coefficients)
-
-    def _land_coefficients(self, coefficients: FloatArray) -> FloatArray:
-        """Copy coefficients into a reused pinned-or-pageable buffer."""
-        buffer = self._coefficients
-        if (
-            buffer is None
-            or buffer.shape != coefficients.shape
-            or buffer.dtype != self.precision
-        ):
-            buffer = self._memory_manager.create_host_array(
-                coefficients.shape, self.precision, "pinned"
-            )
+        # Fresh pinned buffer per build.
+        buffer = self._memory_manager.create_host_array(
+            coefficients.shape, precision, "pinned"
+        )
         buffer[...] = coefficients
         return buffer
 
@@ -1123,17 +1128,17 @@ class ArrayInterpolator(CUDAFactory):
     @property
     def num_inputs(self) -> int:
         """Return the number of input signals."""
-        return self.input_array.shape[1]
+        return self.compile_settings.num_inputs
 
     @property
     def num_samples(self) -> int:
         """Number of samples available for interpolation."""
-        return self.input_array.shape[0]
+        return self.compile_settings.num_samples
 
     @property
     def input_array(self) -> FloatArray:
-        """Return the normalised input array."""
-        return self._input_array
+        """Return the normalised, read-only input array."""
+        return self.compile_settings.input_array
 
     @property
     def order(self) -> int:

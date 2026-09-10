@@ -49,7 +49,6 @@ from numpy import (
     float64 as np_float64,
     floating,
     int32 as np_int32,
-    zeros as np_zeros,
 )
 from cubie.cuda_simsafe import cuda, float64
 from cubie.cuda_simsafe import int32
@@ -364,14 +363,10 @@ class BatchSolverKernel(CUDAFactory):
         self.resident_blocks = None
         self._launch_geometries = {}
 
-        # Child factory: driver settings join config_hash; the
-        # placeholder input covers zero-driver operation.
+        # Child factory in config_hash; empty until configure_drivers.
         self.driver_interpolator = ArrayInterpolator(
             precision=precision,
-            input_dict={
-                "placeholder": np_zeros(6, dtype=precision),
-                "driver_sample_period": 0.1,
-            },
+            input_dict={},
             memory_manager=self._memory_manager,
         )
 
@@ -381,14 +376,7 @@ class BatchSolverKernel(CUDAFactory):
             system_name = f"unnamed_{system_hash[:8]}"
         self._system_name = system_name
 
-        # Seed driver evaluation from the owned interpolator unless
-        # the caller supplied an evaluator.
-        if evaluate_driver_at_t is None and system.sizes.drivers > 0:
-            evaluate_driver_at_t = (
-                self.driver_interpolator.evaluation_function
-            )
-            if driver_del_t is None:
-                driver_del_t = self.driver_interpolator.driver_del_t
+        # configure_drivers wires the driver evaluators once inputs exist.
 
         # Build the single integrator to derive compile-critical metadata
         self.single_integrator = SingleIntegratorRun(
@@ -1285,15 +1273,7 @@ class BatchSolverKernel(CUDAFactory):
             updates_dict, silent=True
         )
         if driver_recognised and self.n_drivers > 0:
-            updates_dict["evaluate_driver_at_t"] = (
-                self.driver_interpolator.evaluation_function
-            )
-            updates_dict["driver_del_t"] = (
-                self.driver_interpolator.driver_del_t
-            )
-            updates_dict["driver_coefficients_shape"] = (
-                self.driver_interpolator.coefficients_shape
-            )
+            updates_dict.update(self._driver_evaluator_settings())
         all_unrecognized -= driver_recognised
 
         all_unrecognized -= self.single_integrator.update(
@@ -1339,19 +1319,20 @@ class BatchSolverKernel(CUDAFactory):
         )
         fn_changed = self.driver_interpolator.update_from_dict(drivers)
         if fn_changed:
-            self.update(
-                {
-                    "evaluate_driver_at_t": (
-                        self.driver_interpolator.evaluation_function
-                    ),
-                    "driver_del_t": (
-                        self.driver_interpolator.driver_del_t
-                    ),
-                    "driver_coefficients_shape": (
-                        self.driver_interpolator.coefficients_shape
-                    ),
-                }
+            self.update(self._driver_evaluator_settings())
+
+    def _driver_evaluator_settings(self) -> Dict[str, Any]:
+        """Return the coefficient layout and, once inputs exist, evaluators."""
+        interpolator = self.driver_interpolator
+        settings = {
+            "driver_coefficients_shape": interpolator.coefficients_shape,
+        }
+        if interpolator.num_inputs > 0:
+            settings["evaluate_driver_at_t"] = (
+                interpolator.evaluation_function
             )
+            settings["driver_del_t"] = interpolator.driver_del_t
+        return settings
 
     def wait_for_writeback(
         self, timeout: Optional[float] = None

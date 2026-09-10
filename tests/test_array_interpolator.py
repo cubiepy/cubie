@@ -1228,22 +1228,59 @@ def test_get_interpolated_empty_times_returns_empty_array(quadratic_input):
     assert result.shape == (0, quadratic_input.num_inputs)
 
 
-def test_get_interpolated_requires_coefficients(quadratic_input):
-    """get_interpolated raises RuntimeError if coefficients are missing.
+def test_get_interpolated_with_no_inputs_returns_empty_columns(precision):
+    """An empty interpolator evaluates to a (times, 0) array."""
+    interp = ArrayInterpolator(precision=precision, input_dict={})
+    result = interp.get_interpolated(np.array([0.5, 1.5], dtype=precision))
+    assert result.shape == (2, 0)
+    assert result.dtype == precision
 
-    Coefficients are always populated by construction; this exercises
-    the documented defensive guard by clearing the cached array
-    directly, the only way to reach the un-set state.
-    """
-    original = quadratic_input._coefficients
-    try:
-        quadratic_input._coefficients = None
-        with pytest.raises(RuntimeError, match="have not been generated"):
-            quadratic_input.get_interpolated(
-                np.array([0.5], dtype=np.float64)
-            )
-    finally:
-        quadratic_input._coefficients = original
+
+# ── Empty input set ─────────────────────────────────────────────────── #
+
+
+def test_empty_input_dict_configures_empty_interpolator(precision):
+    """No inputs means no segments and a zero-sized coefficient table."""
+    interp = ArrayInterpolator(precision=precision, input_dict={})
+    assert interp.num_inputs == 0
+    assert interp.num_samples == 0
+    assert interp.num_segments == 0
+    assert interp.input_array.shape == (0, 0)
+    assert interp.coefficients_shape == (0, 0, interp.order + 1)
+    assert interp.coefficients.shape == interp.coefficients_shape
+    assert interp.coefficients.dtype == precision
+    assert callable(interp.evaluation_function)
+    assert callable(interp.driver_del_t)
+
+
+def test_empty_interpolator_keeps_its_identity_across_empty_updates(
+    precision,
+):
+    """Re-applying an empty input set changes nothing."""
+    interp = ArrayInterpolator(precision=precision, input_dict={})
+    identity = interp.compile_settings.values_hash
+    coefficients = interp.coefficients
+    assert interp.update_from_dict({}) is False
+    assert interp.compile_settings.values_hash == identity
+    assert interp.coefficients is coefficients
+
+
+def test_empty_interpolator_populates_from_samples(precision):
+    """Samples supplied later build a full table and a new identity."""
+    interp = ArrayInterpolator(precision=precision, input_dict={})
+    identity = interp.compile_settings.values_hash
+    times = np.arange(0.0, 6.0, 1.0, dtype=precision)
+    changed = interp.update_from_dict(
+        {"values": times**2, "time": times, "order": 2, "wrap": False}
+    )
+    assert changed is True
+    assert interp.compile_settings.values_hash != identity
+    assert interp.num_inputs == 1
+    assert interp.num_samples == 6
+    assert interp.coefficients_shape == (7, 1, 3)
+    assert interp.coefficients.shape == interp.coefficients_shape
+    evaluated = interp.get_interpolated(times[:-1] + precision(0.5))
+    assert np.all(np.isfinite(evaluated))
 
 
 # ── check_against_system_drivers ────────────────────────────────────── #
@@ -1406,23 +1443,68 @@ def test_update_from_dict_applies_config_change_with_equal_arrays(
     assert interp.coefficients.shape == interp.coefficients_shape
 
 
-# ── Coefficient buffer backing and reuse ─────────────────── #
+# ── Coefficients as cached build outputs ─────────────────── #
 
 
-def test_coefficients_buffer_reused_for_value_updates(precision):
-    """Same-shape value updates land in the same coefficients array."""
+def test_coefficients_are_a_cached_build_output(precision):
+    """The table is read from the build cache and rebuilt with it."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
     input_dict = {"values": times**2, "time": times, "order": 2,
                   "wrap": False}
     interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
     first = interp.coefficients
+    assert interp.cache_valid
+    assert interp.get_cached_output("coefficients") is first
+    assert interp.coefficients is first
+
+    interp.update(order=3)
+    assert not interp.cache_valid
+    rebuilt = interp.coefficients
+    assert interp.cache_valid
+    assert rebuilt is not first
+    assert rebuilt.shape == interp.coefficients_shape == (7, 1, 4)
+
+
+def test_value_update_rebuilds_the_table_without_changing_identity(
+    precision,
+):
+    """New sample values yield a new table under the same settings hash."""
+    times = np.arange(0.0, 6.0, 1.0, dtype=precision)
+    input_dict = {"values": times**2, "time": times, "order": 2,
+                  "wrap": False}
+    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    first = interp.coefficients
+    identity = interp.compile_settings.values_hash
 
     changed = dict(input_dict)
     changed["values"] = times**2 + 1.0
-    interp.update_from_dict(changed)
+    assert interp.update_from_dict(changed) is False
 
+    rebuilt = interp.coefficients
+    assert interp.compile_settings.values_hash == identity
+    assert rebuilt is not first
+    assert rebuilt.shape == interp.coefficients_shape
+    # Interior segments start on the new samples.
+    np.testing.assert_allclose(
+        rebuilt[1:-1, 0, 0], (times**2 + 1.0)[:-1], rtol=1e-6, atol=1e-6
+    )
+    np.testing.assert_allclose(
+        first[1:-1, 0, 0], (times**2)[:-1], rtol=1e-6, atol=1e-6
+    )
+
+
+def test_equal_sample_values_keep_the_same_table(precision):
+    """Re-supplying identical samples neither rebuilds nor rehashes."""
+    times = np.arange(0.0, 6.0, 1.0, dtype=precision)
+    input_dict = {"values": times**2, "time": times, "order": 2,
+                  "wrap": False}
+    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    first = interp.coefficients
+    identity = interp.compile_settings.values_hash
+
+    assert interp.update_from_dict(dict(input_dict)) is False
     assert interp.coefficients is first
-    assert interp.coefficients.shape == interp.coefficients_shape
+    assert interp.compile_settings.values_hash == identity
 
 
 def test_coefficients_buffer_reallocated_on_shape_change(precision):
