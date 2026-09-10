@@ -710,10 +710,11 @@ def test_set_summary_timing_noop_when_not_dependent(
 ):
     """Explicit timing means set_summary_timing_from_duration is a no-op."""
     run = single_integrator_run_mutable
-    initial = run.sample_summaries_every
-    assert initial == pytest.approx(0.05)
+    assert run.sample_summaries_every == pytest.approx(0.05)
+    before = run.device_function
     run.set_summary_timing_from_duration(duration=1.0)
     assert run.sample_summaries_every == pytest.approx(0.05)
+    assert run.device_function is before
 
 
 @pytest.mark.parametrize(
@@ -724,12 +725,17 @@ def test_set_summary_timing_noop_when_not_dependent(
 def test_set_summary_timing_from_duration_dependent(
     single_integrator_run_mutable,
 ):
-    """Duration-dependent path sets summarise_every = duration."""
+    """The derived schedule follows the duration and summarises regularly."""
     run = single_integrator_run_mutable
     assert run.is_duration_dependent is True
     run.set_summary_timing_from_duration(duration=1.0)
     assert run.summarise_every == pytest.approx(1.0, rel=1e-5)
     assert run.sample_summaries_every == pytest.approx(0.01, rel=1e-5)
+    assert run._loop.compile_settings.summarise_regularly is True
+    assert run.has_summary_outputs is True
+    run.set_summary_timing_from_duration(duration=3.0)
+    assert run.summarise_every == pytest.approx(3.0, rel=1e-5)
+    assert run.sample_summaries_every == pytest.approx(0.03, rel=1e-5)
 
 
 # ── n_error property ───────────────────────────────────────────────────── #

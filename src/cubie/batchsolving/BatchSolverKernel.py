@@ -815,18 +815,14 @@ class BatchSolverKernel(CUDAFactory):
             precision=self.single_integrator.precision,
         )
 
-        # Update the single integrator with requested duration if required
         self.single_integrator.set_summary_timing_from_duration(duration)
 
         # Validate timing parameters to prevent array index errors
         self._validate_timing_parameters(duration)
 
-        # Refresh compile-critical settings before array updates
+        # Capture the integrator's current loop.
         self.update_compile_settings(
-            {
-                "loop_fn": self.single_integrator.device_function,
-                "precision": self.single_integrator.precision,
-            }
+            {"loop_fn": self.single_integrator.device_function}
         )
 
         # Queue allocations

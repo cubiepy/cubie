@@ -106,7 +106,8 @@ loop's `loop_function`.
 `sample_summaries_every`, and the `save_*`/`summarise_regularly` flags from user intent.
 If `summarise_every` is omitted, `is_duration_dependent=True` and
 `set_summary_timing_from_duration()` must be called later (done by `BatchSolverKernel`
-before each solve); this triggers a recompile on first use (warned).
+before each solve). It applies `summarise_every=duration`, `sample_summaries_every=duration/100`
+and `summarise_regularly=True` to the loop and output functions.
 
 ### Hot-swap
 A new `"algorithm"`/`"step_controller"` in `update()` routes through

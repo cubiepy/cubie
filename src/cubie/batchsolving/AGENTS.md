@@ -38,8 +38,8 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ### Data flow
 `Solver.solve()` → `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
-`kernel.run()` sets `RunParams`, refreshes compile settings (`loop_fn` from
-`SingleIntegratorRun.device_function`), queues allocations via `InputArrays.update`/
+`kernel.run()` sets `RunParams`, applies any duration-derived summary schedule, refreshes
+`loop_fn` from `SingleIntegratorRun.device_function`, queues allocations via `InputArrays.update`/
 `OutputArrays.update`, calls `memory_manager.allocate_queue(self)` (which may split into
 chunks), then loops chunks launching the compiled kernel. Results flow back through
 `OutputArrays` → `SolveResult.from_solver`.

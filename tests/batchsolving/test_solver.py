@@ -6,6 +6,7 @@ import numpy as np
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
     FLOAT64_PRECISION,
+    SUMMARY_ONLY_NO_TIMING,
     _build_solver_instance,
 )
 from tests.system_fixtures import (
@@ -271,6 +272,43 @@ def test_solve_basic(
     assert isinstance(result, SolveResult)
     assert hasattr(result, "time_domain_array")
     assert hasattr(result, "summaries_array")
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [SUMMARY_ONLY_NO_TIMING],
+    indirect=True,
+)
+def test_duration_derived_summary_schedule_matches_the_explicit_one(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+    precision,
+):
+    """A derived summary schedule summarises like the same one given."""
+    solver = solver_mutable
+    kernel = solver.kernel
+    integrator = kernel.single_integrator
+    derived = solver.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=1.0,
+        grid_type="combinatorial",
+    )
+    assert kernel.compile_settings.loop_fn is integrator.device_function
+    assert integrator.summarise_every == precision(1.0)
+    assert integrator.sample_summaries_every == precision(0.01)
+    solver.update({"summarise_every": 1.0, "sample_summaries_every": 0.01})
+    explicit = solver.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=1.0,
+        grid_type="combinatorial",
+    )
+    assert np.array_equal(derived.summaries_array, explicit.summaries_array)
 
 
 def test_compile_then_solve(

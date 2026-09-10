@@ -91,6 +91,10 @@ updating a PR; targeted subsets miss cross-cutting tests.
 
 ## Cross-cutting code rules (details in `src/cubie/AGENTS.md`)
 - Never call a `CUDAFactory.build()` directly — access compiled functions via the cached properties.
+- Never call `_invalidate_cache` manually. If your implementation calls it, you have failed to
+  use the `CUDAFactory` subclass and machinery: review the whole implementation for how it
+  follows the repo patterns (settings snapshots, `update_compile_settings`, child device
+  functions captured by identity).
 - Never set/modify env vars in source (esp. `NUMBA_ENABLE_CUDASIM`); set them externally.
 - Module-scoped imports belong in the file header only; deliberate lazy imports of optional deps
   (Qt) stay function-local. cupy/cupyx are required on a real GPU and imported

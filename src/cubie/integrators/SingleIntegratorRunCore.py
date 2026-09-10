@@ -158,6 +158,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         }
     )
     _TIMING_KEYS = ("save_every", "summarise_every", "sample_summaries_every")
+    # Summary samples per window when the schedule derives from duration.
+    _DERIVED_SAMPLES_PER_SUMMARY = 100
 
     def __init__(
         self,
@@ -320,12 +322,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
     def _process_loop_timing(self, settings_dict: Dict[str, Any]):
-        """Derive and apply timing parameters from *settings_dict*.
-
-        Resolves ``save_every``, ``summarise_every``, and
-        ``sample_summaries_every`` from user intent and output
-        configuration, then forwards the derived values to the loop
-        and output functions.
+        """Record timing intent from *settings_dict* and apply the schedule.
 
         Parameters
         ----------
@@ -334,53 +331,54 @@ class SingleIntegratorRunCore(CUDAFactory):
             ``save_every``, ``summarise_every``, and
             ``sample_summaries_every``.
         """
-        # 1. Overwrite "user intent" with incoming values
-        for p in self._TIMING_KEYS:
-            if p in settings_dict:
-                self._user_timing[p] = settings_dict[p]
+        for key in self._TIMING_KEYS:
+            if key in settings_dict:
+                self._user_timing[key] = settings_dict[key]
+        self._apply_loop_timing()
+        self._warn_if_summary_timing_derived()
 
+    def _apply_loop_timing(self, duration: Optional[float] = None) -> None:
+        """Push the save and summary schedule to the loop and outputs.
+
+        Parameters
+        ----------
+        duration
+            With no ``summarise_every``, the summary schedule derives
+            from it: ``summarise_every=duration`` and
+            ``sample_summaries_every=duration / 100``.
+        """
         has_time_domain_outputs = self.time_domain_outputs_requested
         has_summary_outputs = self.summary_outputs_requested
-
-        # 2. Get provided values from user intent
         save_every = self._user_timing["save_every"]
         summarise_every = self._user_timing["summarise_every"]
         sample_summaries_every = self._user_timing["sample_summaries_every"]
 
-        save_last = False
+        save_last = has_time_domain_outputs and save_every is None
         self.is_duration_dependent = False
-
-        # 3. Time-domain outputs
-        if has_time_domain_outputs and save_every is None:
-            save_last = True
-
-        # 4. Summary outputs
         if has_summary_outputs:
             if summarise_every is None:
-                # There is no `summarise_last`, we simulate
-                # summarise_regularly once we get a duration.
                 self.is_duration_dependent = True
-            else:
-                if sample_summaries_every is None:
-                    sample_summaries_every = summarise_every / 10.0
+                if duration is not None:
+                    summarise_every = duration
+                    sample_summaries_every = (
+                        duration / self._DERIVED_SAMPLES_PER_SUMMARY
+                    )
+            elif sample_summaries_every is None:
+                sample_summaries_every = summarise_every / 10.0
         else:
             summarise_every = None
             sample_summaries_every = None
 
-        save_regularly = save_every is not None and has_time_domain_outputs
-        summarise_regularly = (summarise_every is not None and
-                               has_summary_outputs)
         values = dict(
             save_every=save_every,
             summarise_every=summarise_every,
             sample_summaries_every=sample_summaries_every,
             save_last=save_last,
-            save_regularly=save_regularly,
-            summarise_regularly=summarise_regularly,
+            save_regularly=save_every is not None and has_time_domain_outputs,
+            summarise_regularly=(
+                summarise_every is not None and has_summary_outputs
+            ),
         )
-
-        # Update loop and output functions with derived timing values.
-        self._warn_if_summary_timing_derived()
         self._loop.update(values)
         self._output_functions.update(values, silent=True)
 
@@ -398,29 +396,16 @@ class SingleIntegratorRunCore(CUDAFactory):
                 stacklevel=3,
             )
 
-    def set_summary_timing_from_duration(self,
-                                         duration: float):
-        """Set summary timing from *duration* when no explicit timing
-        was provided.
+    def set_summary_timing_from_duration(self, duration: float) -> None:
+        """Derive the summary schedule from *duration* when none was given.
 
         Parameters
         ----------
         duration
-            Total integration duration used to derive
-            ``sample_summaries_every`` and ``summarise_every``.
+            Integration duration the summary schedule derives from.
         """
-
         if self.is_duration_dependent:
-            samples_per_summary = 100
-            sample_summaries_every = duration / samples_per_summary
-
-            self._loop.update(
-                summarise_every=duration,
-                sample_summaries_every=sample_summaries_every,
-            )
-            self._output_functions.update(
-                sample_summaries_every=sample_summaries_every,
-            )
+            self._apply_loop_timing(duration)
 
     def _apply_inner_tolerance_defaults(self) -> set:
         """Derive unset inner-solver tolerances from the controller.

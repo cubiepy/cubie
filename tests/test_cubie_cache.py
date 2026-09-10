@@ -256,7 +256,6 @@ def test_equal_cache_settings_leave_the_build_valid(system, tmp_path):
         cache_mode=str(config.cache_mode),
         max_cache_entries=int(config.max_cache_entries),
     )
-    # Prime loop_fn as run() would.
     kernel.update(resupplied)
     kernel.kernel
     assert kernel._cache_valid
