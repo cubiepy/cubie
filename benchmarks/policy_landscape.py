@@ -402,6 +402,7 @@ class Arm:
     cubin_sha: str = ""
     regs: int = 0
     frame: int = 0
+    sass_bytes: int = 0
     shared_per_run: int = 0
     resolved: Dict[str, Any] = field(default_factory=dict)
     cells: Dict[str, Cell] = field(default_factory=dict)
@@ -778,6 +779,7 @@ def _arm_facts(arm, blocksizes, started):
     resources = kernel_resources(kernel.kernel)
     arm.regs = resources.registers_per_thread
     arm.frame = resources.local_bytes_per_thread
+    arm.sass_bytes = resources.sass_bytes
     pad = 4 if kernel.shared_memory_needs_padding else 0
     arm.shared_per_run = int(kernel.shared_memory_bytes + pad)
     arm.resolved = resolved_settings(arm.solver)
@@ -831,7 +833,8 @@ def run_config(
             else:
                 seen[arm.cubin_sha] = spec.label
                 log(f"  {spec.label:32s} regs {arm.regs:3d} frame "
-                    f"{arm.frame:5d} shared/run {arm.shared_per_run:4d} "
+                    f"{arm.frame:5d} sass {arm.sass_bytes // 1024:5d} KiB "
+                    f"shared/run {arm.shared_per_run:4d} "
                     f"cells {' '.join(arm.cells)} ({arm.compile_s:.1f} s)")
         except Exception as exc:  # noqa: BLE001
             arm.error = repr(exc)[:300]
@@ -941,6 +944,7 @@ def run_config(
             cubin_sha=arm.cubin_sha,
             regs=arm.regs,
             frame=arm.frame,
+            sass_bytes=arm.sass_bytes,
             shared_per_run=arm.shared_per_run,
             compile_s=round(arm.compile_s, 2),
             resolved=arm.resolved,
