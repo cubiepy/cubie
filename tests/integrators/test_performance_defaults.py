@@ -11,6 +11,7 @@ from cubie.backend.utils import (
     register_limited_threads,
     shared_limited_threads,
 )
+from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import UnrollChoice
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
@@ -31,14 +32,33 @@ KRYLOV_FIRK = {
 }
 LARGE_KRYLOV_FIRK = {**LARGE_STATE_ONLY, **KRYLOV_FIRK}
 
+KRYLOV_DIRK = {
+    "algorithm": "dirk",
+    "linear_correction_type": "bicgstab",
+    "preconditioner_type": "jacobi",
+    "step_controller": "fixed",
+}
+MEDIUM_STATE_ONLY = {**LARGE_STATE_ONLY, "system_type": "medium"}
+MEDIUM_KRYLOV_DIRK = {**MEDIUM_STATE_ONLY, **KRYLOV_DIRK}
+LARGE_KRYLOV_DIRK = {**LARGE_STATE_ONLY, **KRYLOV_DIRK}
 
-def shared_keeps_occupancy(step_object, elements_per_run):
-    """Whether a shared footprint admits the register-limited threads."""
+
+def shared_keeps_occupancy(step_object, elements_per_run, fraction=1):
+    """Whether a shared footprint admits the register-limited threads.
+
+    ``fraction`` is the denominator of the occupancy the footprint must
+    keep: 1 for full, 2 for half.
+    """
     hardware = device_hardware()
     itemsize = np_dtype(step_object.precision).itemsize
-    return shared_limited_threads(
+    return fraction * shared_limited_threads(
         hardware, (elements_per_run + 1) * itemsize
     ) >= register_limited_threads(hardware, MAX_REGISTERS_PER_THREAD)
+
+
+def dirk_accumulator_elements(step_object):
+    """Elements of the DIRK explicit-stage accumulator."""
+    return max(step_object.tableau.stage_count - 1, 0) * step_object.n
 
 
 @pytest.mark.parametrize(
@@ -168,6 +188,88 @@ def test_large_krylov_firk_stage_increment_stays_local(
     elements = step_object.stage_count * step_object.n
     assert not shared_keeps_occupancy(step_object, elements)
     assert step_object.compile_settings.stage_increment_location == "local"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [LARGE_DIRK, ALGORITHM_CHAIN_SETS["dirk"]],
+    indirect=True,
+)
+def test_direct_dirk_accumulator_stays_local(
+    single_integrator_run, step_object
+):
+    """A direct-solve DIRK keeps ``accumulator`` local at any size."""
+    single_integrator_run.device_function
+    assert step_object.uses_direct_solver
+    assert step_object.compile_settings.accumulator_location == "local"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [KRYLOV_DIRK], indirect=True
+)
+def test_register_resident_krylov_dirk_accumulator_stays_local(
+    single_integrator_run, step_object
+):
+    """A Krylov DIRK within the register file keeps ``accumulator`` local."""
+    single_integrator_run.device_function
+    declared = buffer_registry.declared_local_elements(step_object)
+    assert declared <= MAX_REGISTERS_PER_THREAD
+    assert step_object.compile_settings.accumulator_location == "local"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [MEDIUM_KRYLOV_DIRK], indirect=True
+)
+def test_spilling_krylov_dirk_accumulator_moves_to_shared(
+    single_integrator_run, step_object
+):
+    """A spilling Krylov DIRK shares ``accumulator`` at half occupancy."""
+    single_integrator_run.device_function
+    declared = buffer_registry.declared_local_elements(step_object)
+    assert declared > MAX_REGISTERS_PER_THREAD
+    elements = dirk_accumulator_elements(step_object)
+    assert shared_keeps_occupancy(step_object, elements, fraction=2)
+    assert step_object.compile_settings.accumulator_location == "shared"
+    assert single_integrator_run.shared_memory_elements > 0
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [LARGE_KRYLOV_DIRK], indirect=True
+)
+def test_large_krylov_dirk_accumulator_stays_local(
+    single_integrator_run, step_object
+):
+    """A Krylov DIRK whose shared accumulator halves occupancy stays local."""
+    single_integrator_run.device_function
+    declared = buffer_registry.declared_local_elements(step_object)
+    assert declared > MAX_REGISTERS_PER_THREAD
+    elements = dirk_accumulator_elements(step_object)
+    assert not shared_keeps_occupancy(step_object, elements, fraction=2)
+    assert step_object.compile_settings.accumulator_location == "local"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [MEDIUM_KRYLOV_DIRK], indirect=True
+)
+def test_shared_accumulator_survives_a_rebuild(solver_mutable):
+    """The accumulator rule reads the same footprint once it is shared."""
+    run = solver_mutable.kernel.single_integrator
+    run.device_function
+    step = run._algo_step
+    assert step.compile_settings.accumulator_location == "shared"
+    solver_mutable.update(krylov_max_iters=step.solver.krylov_max_iters + 1)
+    run.device_function
+    assert run._algo_step.compile_settings.accumulator_location == "shared"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{**MEDIUM_KRYLOV_DIRK, "accumulator_location": "local"}],
+    indirect=True,
+)
+def test_user_accumulator_location_wins(single_integrator_run, step_object):
+    """An explicit ``accumulator_location`` is never overridden."""
+    single_integrator_run.device_function
+    assert step_object.compile_settings.accumulator_location == "local"
 
 
 @pytest.mark.parametrize(

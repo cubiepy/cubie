@@ -163,9 +163,13 @@ snapshot. Each `build_implicit_helpers` pushes an `OperationCounts` into
 `newton_solves_per_step` and `performance_defaults` feed the core's
 `_apply_performance_defaults` (FIRK: `stage_increment` shared for a Krylov solve
 at full occupancy; ERK: `state` shared when `n * stage_count > 255` at full
-occupancy; occupancy via `shared_limited_threads >= register_limited_threads`).
-`optimisation_candidates` lists the setting
-combinations `Solver.optimize` times (base `({},)`).
+occupancy; DIRK: `accumulator` shared for a Krylov solve whose
+`buffer_registry.declared_local_elements(step) > 255` at half occupancy;
+occupancy via `shared_limited_threads >= register_limited_threads`, halved
+for DIRK). `optimisation_candidates` lists the setting combinations
+`Solver.optimize` times (base `({},)`; ERK `other_small` x `state`; FIRK
+`newton_exits` x `stage_increment`; DIRK `newton_exits` x `accumulator`;
+Rosenbrock `other_small`).
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
 the `lu_solve` role instead of the operator + preconditioner pair;

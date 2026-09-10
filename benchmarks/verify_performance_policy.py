@@ -75,10 +75,7 @@ def extra_arms(family, solver_kind):
         ))
     elif family == "DIRK" and solver_kind == "lu":
         arms.append(ArmSpec("n1o0", {newton: FULL, other: ROLLED}))
-        arms.append(ArmSpec(
-            "n0+accumulator=shared",
-            {newton: ROLLED, "accumulator_location": "shared"},
-        ))
+        arms.append(ArmSpec("n0o0", {newton: ROLLED, other: ROLLED}))
     elif family == "DIRK":
         arms.append(ArmSpec("n1k1o1", {newton: FULL, krylov: FULL}))
         arms.append(ArmSpec("n0k1o1", {newton: ROLLED, krylov: FULL}))
@@ -104,9 +101,7 @@ def extra_arms(family, solver_kind):
             "n0k0o0", {newton: ROLLED, krylov: ROLLED, other: ROLLED}
         ))
         arms.append(ArmSpec("allrolled", dict(ALL_ROLLED)))
-    elif family == "ROS" and solver_kind == "lu":
-        arms.append(ArmSpec("o0", {other: ROLLED}))
-    elif family == "ROS":
+    elif family == "ROS" and solver_kind == "bicgstab":
         arms.append(ArmSpec("k1", {krylov: FULL}))
         arms.append(ArmSpec("k0o0", {krylov: ROLLED, other: ROLLED}))
     return arms

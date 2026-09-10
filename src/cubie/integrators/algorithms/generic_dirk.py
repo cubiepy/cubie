@@ -39,7 +39,7 @@ See Also
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import evolve, field, validators, frozen
-from numpy import int32 as np_int32
+from numpy import dtype as np_dtype, int32 as np_int32
 from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
@@ -47,6 +47,12 @@ from cubie._utils import (
     PrecisionDType,
     build_config,
     is_device_validator,
+)
+from cubie.backend.utils import (
+    MAX_REGISTERS_PER_THREAD,
+    device_hardware,
+    register_limited_threads,
+    shared_limited_threads,
 )
 from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -1103,17 +1109,37 @@ class DIRKStep(ODEImplicitStep):
         return len(self.tableau.implicit_stages)
 
     @property
+    def performance_defaults(self) -> Dict[str, Any]:
+        """Share ``accumulator`` when a Krylov step spills to local memory.
+
+        The step's declared local elements over the register file mark
+        a spilling kernel; the shared accumulator must keep at least
+        half the register-limited occupancy.
+        """
+        shared = False
+        accumulator = max(self.tableau.stage_count - 1, 0) * self.n
+        declared = buffer_registry.declared_local_elements(self)
+        if self.compile_settings.accumulator_location == "shared":
+            # Count the accumulator, and the stage_base that aliases
+            # it, as local so the test is independent of its outcome.
+            declared += accumulator + self.n
+        if not self.uses_direct_solver and declared > MAX_REGISTERS_PER_THREAD:
+            hardware = device_hardware()
+            itemsize = np_dtype(self.precision).itemsize
+            # One element of slack covers the launch's alignment pad.
+            bytes_per_run = (accumulator + 1) * itemsize
+            shared = 2 * shared_limited_threads(
+                hardware, bytes_per_run
+            ) >= register_limited_threads(hardware, MAX_REGISTERS_PER_THREAD)
+        return {"accumulator_location": "shared" if shared else "local"}
+
+    @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """Newton unrolling, plus one rolled-Newton arm per solver kind."""
-        rolled = UnrollChoice.ROLLED
-        if self.uses_direct_solver:
-            extra = {"unroll_newton_exits": rolled, "unroll_other_small": rolled}
-        else:
-            extra = {"unroll_newton_exits": rolled, "accumulator_location": "shared"}
-        return (
-            {"unroll_newton_exits": UnrollChoice.FULL},
-            {"unroll_newton_exits": rolled},
-            extra,
+        """Newton unrolling crossed with ``accumulator`` placement."""
+        return tuple(
+            {"unroll_newton_exits": unroll, "accumulator_location": location}
+            for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
+            for location in ("local", "shared")
         )
 
     @property
