@@ -1110,18 +1110,13 @@ class DIRKStep(ODEImplicitStep):
 
     @property
     def performance_defaults(self) -> Dict[str, Any]:
-        """Share ``accumulator`` when a Krylov step spills to local memory.
-
-        The step's declared local elements over the register file mark
-        a spilling kernel; the shared accumulator must keep at least
-        half the register-limited occupancy.
-        """
+        """Share ``accumulator`` for a Krylov step whose declared local
+        elements exceed the register file at half occupancy."""
         shared = False
         accumulator = max(self.tableau.stage_count - 1, 0) * self.n
         declared = buffer_registry.declared_local_elements(self)
         if self.compile_settings.accumulator_location == "shared":
-            # Count the accumulator, and the stage_base that aliases
-            # it, as local so the test is independent of its outcome.
+            # Count the accumulator and its stage_base alias as local.
             declared += accumulator + self.n
         if not self.uses_direct_solver and declared > MAX_REGISTERS_PER_THREAD:
             hardware = device_hardware()

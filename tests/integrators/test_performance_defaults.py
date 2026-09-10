@@ -44,11 +44,8 @@ LARGE_KRYLOV_DIRK = {**LARGE_STATE_ONLY, **KRYLOV_DIRK}
 
 
 def shared_keeps_occupancy(step_object, elements_per_run, fraction=1):
-    """Whether a shared footprint admits the register-limited threads.
-
-    ``fraction`` is the denominator of the occupancy the footprint must
-    keep: 1 for full, 2 for half.
-    """
+    """Whether a shared footprint keeps 1/``fraction`` of the register-limited
+    threads."""
     hardware = device_hardware()
     itemsize = np_dtype(step_object.precision).itemsize
     return fraction * shared_limited_threads(
