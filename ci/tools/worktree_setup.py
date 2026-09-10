@@ -75,7 +75,7 @@ def venv_config(venv):
     parser = configparser.ConfigParser()
     try:
         parser.read_string("[venv]\n" + config.read_text(encoding="utf-8"))
-    except configparser.Error as error:
+    except (configparser.Error, UnicodeDecodeError, OSError) as error:
         print(f"unreadable {config}: {error}")
         return None
     return parser["venv"]
@@ -114,7 +114,7 @@ def uv_target():
 
 
 def install_uv(uv):
-    """Download the pinned uv release, verify its SHA256, unpack ``uv``."""
+    """Fetch the pinned uv, check its SHA256, rename it into ``uv``."""
     target = uv_target()
     archive = f"uv-{target}" + (".zip" if os.name == "nt" else ".tar.gz")
     url = UV_RELEASE + archive
@@ -126,14 +126,23 @@ def install_uv(uv):
         raise SystemExit(
             f"{archive} sha256 {digest} != pinned {UV_SHA256[target]}")
     uv.parent.mkdir(parents=True, exist_ok=True)
+    staged = uv.with_name(f"{uv.name}.{os.getpid()}.tmp")
     if os.name == "nt":
         with zipfile.ZipFile(io.BytesIO(data)) as bundle:
-            uv.write_bytes(bundle.read("uv.exe"))
+            staged.write_bytes(bundle.read("uv.exe"))
     else:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as bundle:
             member = bundle.extractfile(f"uv-{target}/uv")
-            uv.write_bytes(member.read())
-        uv.chmod(0o755)
+            staged.write_bytes(member.read())
+        staged.chmod(0o755)
+    try:
+        os.replace(staged, uv)
+    except PermissionError:
+        staged.unlink()
+        if not uv.is_file():
+            raise
+        print(f"using uv already installed at {uv}")
+        return
     print(f"installed uv {UV_VERSION} to {uv}")
 
 
