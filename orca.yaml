@@ -1,0 +1,4 @@
+# Orca runs setup from the new worktree; `||` covers python3-only hosts.
+scripts:
+  setup: python ci/tools/worktree_setup.py || python3 ci/tools/worktree_setup.py
+setupAgentStartupPolicy: wait-for-setup
