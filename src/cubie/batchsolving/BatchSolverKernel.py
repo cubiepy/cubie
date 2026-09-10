@@ -660,13 +660,21 @@ class BatchSolverKernel(CUDAFactory):
         RuntimeError
             If the kernel has been closed.
         ValueError
-            If the batch is chunked while ``transfer_outputs`` is
-            ``False`` or while inputs were supplied as device arrays.
+            Drivers declared but no evaluator wired; chunked batch with
+            ``transfer_outputs=False`` or device inputs.
         """
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "
                 "released; build a new Solver to run again."
+            )
+        if self.system.sizes.drivers and (
+            self.single_integrator._loop.evaluate_driver_at_t is None
+        ):
+            raise ValueError(
+                f"System declares {self.system.sizes.drivers} driver(s) "
+                "but no driver evaluator is configured; pass drivers= "
+                "to solve."
             )
         stream = self.stream
         self._memory_manager.begin_work(self)

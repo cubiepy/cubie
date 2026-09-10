@@ -1491,7 +1491,9 @@ def test_solve_array_path_matches_dict_path(
     )
 
 
-def test_solve_ivp_positional_argument_order(system, solver_settings):
+def test_solve_ivp_positional_argument_order(
+    system, solver_settings, driver_settings
+):
     """Verify positional args to solve_ivp route correctly.
 
     Regression test: y0 (states) must go to states bucket,
@@ -1510,6 +1512,7 @@ def test_solve_ivp_positional_argument_order(system, solver_settings):
         system,
         states,  # positional: y0
         params,  # positional: parameters
+        drivers=driver_settings,
         duration=0.02,
         dt=0.01,
         save_every=0.01,
@@ -1710,7 +1713,7 @@ def test_array_only_fast_path(solver):
     assert fast_time < 1.0
 
 
-def test_solve_ivp_with_save_variables(system):
+def test_solve_ivp_with_save_variables(system, driver_settings):
     """Test solve_ivp accepts save_variables and produces correct output."""
     state_names = list(system.initial_values.names)[:2]
 
@@ -1718,6 +1721,7 @@ def test_solve_ivp_with_save_variables(system):
         system,
         y0={state_names[0]: [1.0, 2.0]},
         parameters={list(system.parameters.names)[0]: [0.1, 0.2]},
+        drivers=driver_settings,
         save_variables=state_names,
         save_every=0.01,
         duration=0.02,
@@ -2096,13 +2100,14 @@ def test_solve_ivp_raw_equations_precision_override():
     assert result.solve_settings.precision == np.float64
 
 
-def test_solve_ivp_forwards_summarise_variables(system):
+def test_solve_ivp_forwards_summarise_variables(system, driver_settings):
     """solve_ivp threads summarise_variables through to Solver kwargs."""
     state_names = list(system.initial_values.names)[:1]
     result = solve_ivp(
         system,
         y0={state_names[0]: [1.0, 2.0]},
         parameters={list(system.parameters.names)[0]: [0.1, 0.2]},
+        drivers=driver_settings,
         summarise_variables=state_names,
         save_every=0.01,
         summarise_every=0.02,
@@ -2797,5 +2802,25 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
         assert twin.driver_coefficients_shape == (
             interpolator.coefficients_shape
         )
+    finally:
+        twin.close()
+
+
+def test_run_rejects_a_driver_system_without_driver_inputs(
+    solver, simple_initial_values, simple_parameters
+):
+    """A driver system with no configured samples fails at solve."""
+    twin = solver.copy()
+    try:
+        assert twin.system.num_drivers > 0
+        assert twin.driver_interpolator.num_inputs == 0
+        with pytest.raises(ValueError, match="no driver evaluator"):
+            twin.solve(
+                initial_values=simple_initial_values,
+                parameters=simple_parameters,
+                duration=0.05,
+                settling_time=0.0,
+                blocksize=32,
+            )
     finally:
         twin.close()

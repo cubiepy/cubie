@@ -157,6 +157,8 @@ def test_all_lower_plumbing(
     }
     freshsolver = BatchSolverKernel(
         system,
+        evaluate_driver_at_t=driver_array.evaluation_function,
+        driver_del_t=driver_array.driver_del_t,
         step_control_settings=updated_controller_settings,
         algorithm_settings=algorithm_settings,
         output_settings=output_settings,
