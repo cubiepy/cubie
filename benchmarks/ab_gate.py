@@ -105,7 +105,7 @@ BLOCK_SOLVES = 15
 
 # label -> (importable spec, CUBIE_CUDA_BACKEND value)
 BACKENDS = {
-    "numba-cuda": ("numba.cuda", "numba-cuda"),
+    "numba-cuda": ("numba_cuda", "numba-cuda"),
     "mlir": ("numba_cuda_mlir", "mlir"),
 }
 

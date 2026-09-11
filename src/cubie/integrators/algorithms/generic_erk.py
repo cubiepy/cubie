@@ -55,16 +55,24 @@ See Also
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
+from numpy import dtype as np_dtype
+
 from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import PrecisionDType, build_config
+from cubie.backend.utils import (
+    MAX_REGISTERS_PER_THREAD,
+    device_hardware,
+    shared_keeps_occupancy,
+)
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import all_sync, activemask
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     AlgorithmDefaults,
+    PerformanceSettings,
 )
 from cubie.integrators.algorithms.ode_explicitstep import (
     ExplicitStepConfig,
@@ -587,13 +595,38 @@ class ERKStep(ODEExplicitStep):
         return self.tableau.stage_count > 1
 
     @property
+    def performance_defaults(self) -> PerformanceSettings:
+        """Share ``state`` for an accumulating tableau that spills registers
+        and keeps occupancy."""
+        shared = False
+        n_states = self.n_states
+        if (
+            self.tableau.accumulates_output
+            and n_states * self.stage_count > MAX_REGISTERS_PER_THREAD
+        ):
+            itemsize = np_dtype(self.precision).itemsize
+            # One element of slack covers the launch's alignment pad.
+            bytes_per_run = (n_states + 1) * itemsize
+            shared = shared_keeps_occupancy(device_hardware(), bytes_per_run)
+        return PerformanceSettings(
+            state_location="shared" if shared else "local"
+        )
+
+    @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """``other_small`` unrolling crossed with ``state`` placement."""
-        return tuple(
+        """``other_small`` unrolling crossed with ``state`` placement,
+        plus a shared ``stage_rhs`` at full unrolling."""
+        cross = [
             {"unroll_other_small": unroll, "state_location": location}
             for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
             for location in ("local", "shared")
-        )
+        ]
+        cross.append({
+            "unroll_other_small": UnrollChoice.FULL,
+            "state_location": "local",
+            "stage_rhs_location": "shared",
+        })
+        return tuple(cross)
 
     @property
     def has_error_estimate(self) -> bool:

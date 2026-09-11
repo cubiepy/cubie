@@ -26,12 +26,21 @@ def test_erk_candidates_cross_other_small_and_state(solver):
         {"unroll_other_small": FULL, "state_location": "shared"},
         {"unroll_other_small": ROLLED, "state_location": "local"},
         {"unroll_other_small": ROLLED, "state_location": "shared"},
+        {
+            "unroll_other_small": FULL,
+            "state_location": "local",
+            "stage_rhs_location": "shared",
+        },
     )
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "radau_iia_3", "unroll_newton_exits": None}],
+    [{
+        "algorithm": "radau_iia_3",
+        "unroll_newton_exits": None,
+        "unroll_other_small": None,
+    }],
     indirect=True,
 )
 def test_firk_candidates_cross_newton_and_stage_increment(solver):
@@ -41,6 +50,16 @@ def test_firk_candidates_cross_newton_and_stage_increment(solver):
         {"unroll_newton_exits": FULL, "stage_increment_location": "shared"},
         {"unroll_newton_exits": ROLLED, "stage_increment_location": "local"},
         {"unroll_newton_exits": ROLLED, "stage_increment_location": "shared"},
+        {
+            "unroll_newton_exits": ROLLED,
+            "unroll_other_small": ROLLED,
+            "stage_increment_location": "local",
+        },
+        {
+            "unroll_newton_exits": ROLLED,
+            "unroll_other_small": ROLLED,
+            "stage_increment_location": "shared",
+        },
     )
 
 
@@ -57,11 +76,17 @@ def test_firk_candidates_cross_newton_and_stage_increment(solver):
     indirect=True,
 )
 def test_dirk_direct_candidates(solver):
-    """A direct-solve DIRK adds the rolled ``other_small`` arm."""
+    """A direct-solve DIRK crosses Newton unrolling and ``accumulator``."""
     assert _candidates(solver) == (
-        {"unroll_newton_exits": FULL},
-        {"unroll_newton_exits": ROLLED},
-        {"unroll_newton_exits": ROLLED, "unroll_other_small": ROLLED},
+        {"unroll_newton_exits": FULL, "accumulator_location": "local"},
+        {"unroll_newton_exits": FULL, "accumulator_location": "shared"},
+        {"unroll_newton_exits": ROLLED, "accumulator_location": "local"},
+        {"unroll_newton_exits": ROLLED, "accumulator_location": "shared"},
+        {
+            "unroll_newton_exits": ROLLED,
+            "unroll_other_small": ROLLED,
+            "accumulator_location": "local",
+        },
     )
 
 
@@ -72,26 +97,44 @@ def test_dirk_direct_candidates(solver):
             "algorithm": "kvaerno3",
             "linear_correction_type": "bicgstab",
             "unroll_newton_exits": None,
+            "unroll_other_small": None,
         }
     ],
     indirect=True,
 )
 def test_dirk_iterative_candidates(solver):
-    """An iterative-solve DIRK adds the shared ``accumulator`` arm."""
+    """An iterative-solve DIRK crosses Newton unrolling and ``accumulator``."""
     assert _candidates(solver) == (
-        {"unroll_newton_exits": FULL},
-        {"unroll_newton_exits": ROLLED},
+        {"unroll_newton_exits": FULL, "accumulator_location": "local"},
+        {"unroll_newton_exits": FULL, "accumulator_location": "shared"},
+        {"unroll_newton_exits": ROLLED, "accumulator_location": "local"},
         {"unroll_newton_exits": ROLLED, "accumulator_location": "shared"},
+        {
+            "unroll_newton_exits": ROLLED,
+            "unroll_other_small": ROLLED,
+            "accumulator_location": "local",
+        },
     )
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "rosenbrock23"}, {"algorithm": "euler"}],
+    [{"algorithm": "rosenbrock23", "unroll_other_small": None}],
     indirect=True,
 )
+def test_rosenbrock_candidates_vary_other_small(solver):
+    """A Rosenbrock-W step varies ``other_small`` unrolling."""
+    assert _candidates(solver) == (
+        {"unroll_other_small": FULL},
+        {"unroll_other_small": ROLLED},
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [{"algorithm": "euler"}], indirect=True
+)
 def test_other_steps_keep_current_settings(solver):
-    """Rosenbrock-W and Euler steps have a single current candidate."""
+    """An Euler step has a single current candidate."""
     assert _candidates(solver) == ({},)
 
 
@@ -120,6 +163,16 @@ def test_force_varies_user_fixed_axes(solver):
         {"unroll_newton_exits": FULL, "stage_increment_location": "shared"},
         {"unroll_newton_exits": ROLLED, "stage_increment_location": "local"},
         {"unroll_newton_exits": ROLLED, "stage_increment_location": "shared"},
+        {
+            "unroll_newton_exits": ROLLED,
+            "unroll_other_small": ROLLED,
+            "stage_increment_location": "local",
+        },
+        {
+            "unroll_newton_exits": ROLLED,
+            "unroll_other_small": ROLLED,
+            "stage_increment_location": "shared",
+        },
     )
 
 
@@ -133,8 +186,9 @@ def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
     run = solver.kernel.single_integrator
     run.device_function
     step = run._algo_step.compile_settings
-    assert step.stage_increment_location == "shared"
+    assert step.stage_increment_location == "local"
     assert step.unroll.unroll_newton_exits == ROLLED.value
+    # The shared fixture fixes unroll_other_small, so its arms fold in.
     expected = (
         {"unroll_newton_exits": FULL, "stage_increment_location": "local"},
         {"unroll_newton_exits": FULL, "stage_increment_location": "shared"},

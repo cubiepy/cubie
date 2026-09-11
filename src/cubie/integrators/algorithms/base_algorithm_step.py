@@ -739,6 +739,14 @@ class PerformanceSettings:
         default=None,
         validator=validators.optional(validators.in_(("local", "shared"))),
     )
+    accumulator_location: Optional[str] = field(
+        default=None,
+        validator=validators.optional(validators.in_(("local", "shared"))),
+    )
+    state_location: Optional[str] = field(
+        default=None,
+        validator=validators.optional(validators.in_(("local", "shared"))),
+    )
 
     def as_updates(self) -> Dict[str, Any]:
         """Return the set fields as ``update`` keywords."""

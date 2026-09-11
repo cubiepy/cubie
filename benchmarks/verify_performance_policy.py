@@ -18,10 +18,12 @@ Usage::
 
     python benchmarks/verify_performance_policy.py --out records.jsonl
         [--preset quick|full] [--systems a,b] [--algos x,y]
-        [--n-runs N] [--workers 4] [--icache-kib 64] [--score]
+        [--n-runs N] [--workers 4] [--icache-kib 64] [--arms a,b]
+        [--score]
 
 ``--preset quick`` runs the large-frame configurations with the ``tierA``
-and ``plain`` arms only.
+and ``plain`` arms only; ``--arms`` keeps only the named arms of any
+grid (``tierA,plain`` re-times the defaults after a rule change).
 """
 
 import argparse
@@ -69,16 +71,8 @@ def extra_arms(family, solver_kind):
             "o1+stage_accumulator=shared",
             {other: FULL, "stage_accumulator_location": "shared"},
         ))
-        arms.append(ArmSpec(
-            "o1+stage_rhs=shared",
-            {other: FULL, "stage_rhs_location": "shared"},
-        ))
     elif family == "DIRK" and solver_kind == "lu":
         arms.append(ArmSpec("n1o0", {newton: FULL, other: ROLLED}))
-        arms.append(ArmSpec(
-            "n0+accumulator=shared",
-            {newton: ROLLED, "accumulator_location": "shared"},
-        ))
     elif family == "DIRK":
         arms.append(ArmSpec("n1k1o1", {newton: FULL, krylov: FULL}))
         arms.append(ArmSpec("n0k1o1", {newton: ROLLED, krylov: FULL}))
@@ -89,13 +83,7 @@ def extra_arms(family, solver_kind):
             "n1k0o0", {newton: FULL, krylov: ROLLED, other: ROLLED}
         ))
     elif family == "FIRK" and solver_kind == "lu":
-        arms.append(ArmSpec("n0o0", {newton: ROLLED, other: ROLLED}))
         arms.append(ArmSpec("n1o0", {newton: FULL, other: ROLLED}))
-        arms.append(ArmSpec(
-            "n0o0+stage_increment=shared",
-            {newton: ROLLED, other: ROLLED,
-             "stage_increment_location": "shared"},
-        ))
         arms.append(ArmSpec("allrolled", dict(ALL_ROLLED)))
     elif family == "FIRK":
         arms.append(ArmSpec("n1k1", {newton: FULL, krylov: FULL}))
@@ -104,9 +92,7 @@ def extra_arms(family, solver_kind):
             "n0k0o0", {newton: ROLLED, krylov: ROLLED, other: ROLLED}
         ))
         arms.append(ArmSpec("allrolled", dict(ALL_ROLLED)))
-    elif family == "ROS" and solver_kind == "lu":
-        arms.append(ArmSpec("o0", {other: ROLLED}))
-    elif family == "ROS":
+    elif family == "ROS" and solver_kind == "bicgstab":
         arms.append(ArmSpec("k1", {krylov: FULL}))
         arms.append(ArmSpec("k0o0", {krylov: ROLLED, other: ROLLED}))
     return arms
@@ -131,18 +117,22 @@ def optimize_candidate_arms(system_name, algo_name, duration):
     ]
 
 
-def make_arms_for(preset):
+def make_arms_for(preset, labels=None):
+    """Arm factory; ``labels`` keeps only the named arms."""
     def arms_for(system_name, algo_name):
         family, solver_kind, _ = pl.ALGOS[algo_name]
         arms = [
             ArmSpec("tierA", {}, auto_performance=True),
             ArmSpec("plain", {}, auto_performance=False),
         ]
-        if preset == "quick":
-            return arms
-        duration = pl.duration_for(system_name, algo_name)
-        arms.extend(optimize_candidate_arms(system_name, algo_name, duration))
-        arms.extend(extra_arms(family, solver_kind))
+        if preset != "quick":
+            duration = pl.duration_for(system_name, algo_name)
+            arms.extend(
+                optimize_candidate_arms(system_name, algo_name, duration)
+            )
+            arms.extend(extra_arms(family, solver_kind))
+        if labels is not None:
+            arms = [arm for arm in arms if arm.label in labels]
         return arms
 
     return arms_for
@@ -182,7 +172,9 @@ def score(rows):
             print(f"{key:30s} no timed cells")
             continue
         plain_ms, _ = pl.policy_time(row, "plain", [("natural", 64)])
-        tier_ms, _ = pl.policy_time(row, "tierA", [("rule", 64)])
+        tier_ms, _ = pl.policy_time(
+            row, "tierA", [("auto", None), ("rule", 64)]
+        )
         nat_ms, _ = pl.policy_time(row, "tierA", [("natural", 64)])
         opt_ms, opt_label = pl.optimize_choice(row)
         if opt_ms == float("inf"):
@@ -276,6 +268,9 @@ def main():
     parser.add_argument("--algos", default=None,
                         help="comma-separated algorithm names")
     parser.add_argument("--n-runs", type=int, default=1 << 18)
+    parser.add_argument("--arms", default=None,
+                        help="comma-separated arm labels to keep (e.g. "
+                        "tierA,plain for a defaults-only re-timing)")
     args = parser.parse_args()
     if args.score:
         score(pl.load_rows(args.out))
@@ -303,9 +298,10 @@ def main():
             if (systems is None or s in systems)
             and (algos is None or a in algos)
         ]
+    labels = None if args.arms is None else set(args.arms.split(","))
     pl.run_jobs(
         [(s, a, args.n_runs) for s, a in configs],
-        make_arms_for(args.preset), args, log,
+        make_arms_for(args.preset, labels), args, log,
     )
 
 

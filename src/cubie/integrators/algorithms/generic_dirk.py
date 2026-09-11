@@ -39,7 +39,7 @@ See Also
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import evolve, field, validators, frozen
-from numpy import int32 as np_int32
+from numpy import dtype as np_dtype, int32 as np_int32
 from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
@@ -48,11 +48,17 @@ from cubie._utils import (
     device_function_field,
     PrecisionDType,
 )
+from cubie.backend.utils import (
+    MAX_REGISTERS_PER_THREAD,
+    device_hardware,
+    shared_keeps_occupancy,
+)
 from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     AlgorithmDefaults,
+    PerformanceSettings,
 )
 from cubie.integrators.algorithms.generic_dirk_tableaus import (
     DEFAULT_DIRK_TABLEAU,
@@ -1091,18 +1097,43 @@ class DIRKStep(ODEImplicitStep):
         return len(self.tableau.implicit_stages)
 
     @property
-    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """Newton unrolling, plus one rolled-Newton arm per solver kind."""
-        rolled = UnrollChoice.ROLLED
-        if self.uses_direct_solver:
-            extra = {"unroll_newton_exits": rolled, "unroll_other_small": rolled}
-        else:
-            extra = {"unroll_newton_exits": rolled, "accumulator_location": "shared"}
-        return (
-            {"unroll_newton_exits": UnrollChoice.FULL},
-            {"unroll_newton_exits": rolled},
-            extra,
+    def performance_defaults(self) -> PerformanceSettings:
+        """Share ``accumulator`` for a Krylov step that spills registers and
+        keeps half the occupancy."""
+        shared = False
+        n_states = self.n_states
+        accumulator = max(self.tableau.stage_count - 1, 0) * n_states
+        declared = buffer_registry.declared_local_elements(self)
+        if self.compile_settings.accumulator_location == "shared":
+            # Count the accumulator and its stage_base alias as local.
+            declared += accumulator + n_states
+        if not self.uses_direct_solver and declared > MAX_REGISTERS_PER_THREAD:
+            itemsize = np_dtype(self.precision).itemsize
+            # One element of slack covers the launch's alignment pad.
+            bytes_per_run = (accumulator + 1) * itemsize
+            shared = shared_keeps_occupancy(
+                device_hardware(), bytes_per_run, fraction=2
+            )
+        return PerformanceSettings(
+            accumulator_location="shared" if shared else "local"
         )
+
+    @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """Newton unrolling crossed with ``accumulator`` placement, plus
+        rolled ``other_small`` at rolled Newton with a local accumulator."""
+        rolled = UnrollChoice.ROLLED
+        cross = [
+            {"unroll_newton_exits": unroll, "accumulator_location": location}
+            for unroll in (UnrollChoice.FULL, rolled)
+            for location in ("local", "shared")
+        ]
+        cross.append({
+            "unroll_newton_exits": rolled,
+            "unroll_other_small": rolled,
+            "accumulator_location": "local",
+        })
+        return tuple(cross)
 
     @property
     def has_error_estimate(self) -> bool:
