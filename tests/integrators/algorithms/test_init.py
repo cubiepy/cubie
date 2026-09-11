@@ -195,11 +195,11 @@ def test_get_algorithm_step_kwargs_override_settings():
     # If kwargs override works, algorithm from kwargs wins
     step = get_algorithm_step(
         np.float32,
-        settings={"algorithm": "euler", "n": 3, "n_drivers": 0},
+        settings={"algorithm": "euler", "n_states": 3, "n_drivers": 0},
         algorithm="euler",
-        n=5,
+        n_states=5,
     )
-    assert step.compile_settings.n == 5
+    assert step.compile_settings.n_states == 5
 
 
 def test_get_algorithm_step_string_returns_instance(step_object):
@@ -215,7 +215,7 @@ def test_get_algorithm_step_tableau_injects_tableau():
         np.float32,
         settings={
             "algorithm": tab,
-            "n": 3,
+            "n_states": 3,
             "n_drivers": 0,
         },
     )
@@ -228,7 +228,7 @@ def test_get_algorithm_step_no_tableau_for_base():
         np.float32,
         settings={
             "algorithm": "euler",
-            "n": 3,
+            "n_states": 3,
             "n_drivers": 0,
         },
     )
@@ -241,7 +241,7 @@ def test_get_algorithm_step_injects_precision():
         np.float64,
         settings={
             "algorithm": "euler",
-            "n": 3,
+            "n_states": 3,
             "n_drivers": 0,
         },
     )

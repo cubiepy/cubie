@@ -126,7 +126,7 @@ warns (doesn't raise) on an unknown label.
 `_sizes` is a `BatchInputSizes`/`BatchOutputSizes` (`ArraySizingClass`); `update_sizes` raises
 `TypeError` if the replacement isn't the same subtype. `.nonzero` (floor empty/disabled dims to
 1) is applied to `_sizes` before allocation, in `update_from_solver`. All dims are concrete:
-`BatchInputSizes.driver_coefficients` comes from `kernel.driver_coefficients_shape` — a
+`BatchInputSizes.driver_coefficients` comes from `kernel.coefficients_shape` — a
 `BatchSolverConfig` compile setting the Solver keeps aligned with
 `ArrayInterpolator.coefficients_shape` — so no `None` wildcards exist in the sizing scheme. See root for the `ArraySizingClass`/`.nonzero` pattern.
 

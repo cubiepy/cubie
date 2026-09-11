@@ -72,7 +72,7 @@ from cubie.CUDAFactory import (
 ALL_ALGORITHM_STEP_PARAMETERS = {
     "algorithm",
     "precision",
-    "n",
+    "n_states",
     "attempt_dense_prediction",
     "dxdt_fn",
     "observables_fn",
@@ -88,6 +88,11 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "krylov_max_iters",
     "krylov_residual_reduction",
     "krylov_residual_floor",
+    "error_atol",
+    "error_rtol",
+    "error_max_iters",
+    "error_residual_reduction",
+    "error_residual_floor",
     "linear_correction_type",
     "newton_atol",
     "newton_rtol",
@@ -640,7 +645,7 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
     precision
         Numerical precision to apply to device buffers. Supported values are
         ``float16``, ``float32``, and ``float64``.
-    n
+    n_states
         Number of state entries advanced by each step call.
     n_drivers
         Number of external driver signals consumed by the step (>= 0).
@@ -659,7 +664,7 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Butcher tableau of the method; None on tableau-less steps.
     """
 
-    n: int = field(default=1, validator=getype_validator(int, 1))
+    n_states: int = field(default=1, validator=getype_validator(int, 1))
     n_drivers: int = field(default=0, validator=getype_validator(int, 0))
     is_adaptive: bool = field(
         default=True, validator=validators.instance_of(bool)
@@ -845,10 +850,10 @@ class BaseAlgorithmStep(CUDAFactory):
         return int(self.compile_settings.n_drivers)
 
     @property
-    def n(self) -> int:
+    def n_states(self) -> int:
         """Return the number of state variables advanced per step."""
 
-        return self.compile_settings.n
+        return self.compile_settings.n_states
 
     @property
     def algorithm_defaults(self) -> Dict[str, Any]:
@@ -968,7 +973,7 @@ class BaseAlgorithmStep(CUDAFactory):
         raise NotImplementedError
 
     @property
-    def controller_order(self) -> int:
+    def algorithm_order(self) -> int:
         """Return the order of accuracy used for step-size control."""
         tableau = self.compile_settings.tableau
         if tableau is None or tableau.embedded_order is None:

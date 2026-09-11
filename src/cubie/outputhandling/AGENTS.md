@@ -59,7 +59,7 @@ Building the summary functions is also where `summary_metrics` receives the conf
   nothing is enabled) to refresh them. `update_compile_settings` does not —
   `OutputFunctions.update()` calls `validation_passes()` immediately after it.
 - `ALL_OUTPUT_FUNCTION_PARAMETERS` is the accepted-kwarg filter for `update()`.
-  `max_states`/`max_observables` are **not** in it: they are the total system
+  `n_states`/`n_observables` are **not** in it: they are the total system
   dimensions (`system_sizes.states`/`.observables`), set at construction and
   refreshed only by `SingleIntegratorRunCore.update()` when a system
   re-specialisation changes the layout.

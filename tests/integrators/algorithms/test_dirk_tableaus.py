@@ -128,7 +128,7 @@ def test_dirk_step_accepts_tableau_instance(precision):
 
     custom_name = "sdirk_2_2"
     custom_tableau = DIRK_TABLEAU_REGISTRY[custom_name]
-    step = DIRKStep(precision=precision, n=2, tableau=custom_tableau)
+    step = DIRKStep(precision=precision, n_states=2, tableau=custom_tableau)
     assert step.compile_settings.tableau is custom_tableau
 
 

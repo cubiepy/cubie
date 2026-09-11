@@ -19,14 +19,14 @@ from cubie.integrators.step_control.base_step_controller import (
 
 def test_config_dt_default():
     """Default _dt is 1e-3, returned through precision casting."""
-    cfg = FixedStepControlConfig(precision=np.float32, n=3)
+    cfg = FixedStepControlConfig(precision=np.float32, n_states=3)
     assert cfg.dt == pytest.approx(np.float32(1e-3))
 
 
 def test_config_dt_custom():
     """Custom dt value is stored and returned through precision."""
     cfg = FixedStepControlConfig(
-        precision=np.float64, n=2, dt=0.005,
+        precision=np.float64, n_states=2, dt=0.005,
     )
     assert cfg.dt == pytest.approx(np.float64(0.005))
 
@@ -34,7 +34,7 @@ def test_config_dt_custom():
 def test_config_dt_invalid_raises():
     """Negative dt is rejected by the getype_validator."""
     with pytest.raises((ValueError, TypeError)):
-        FixedStepControlConfig(precision=np.float32, n=1, dt=-0.01)
+        FixedStepControlConfig(precision=np.float32, n_states=1, dt=-0.01)
 
 
 def test_config_dt_min_equals_dt():
@@ -57,10 +57,10 @@ def test_config_is_adaptive_false():
 
 def test_settings_dict_contains_dt_and_n():
     """settings_dict carries the given dt and n."""
-    controller = FixedStepController(precision=np.float32, n=5, dt=0.003)
+    controller = FixedStepController(precision=np.float32, n_states=5, dt=0.003)
     sd = controller.settings_dict
     assert sd["dt"] == pytest.approx(np.float32(0.003))
-    assert sd["n"] == 5
+    assert sd["n_states"] == 5
     assert controller.copy().compile_settings == controller.compile_settings
 
 
@@ -83,7 +83,7 @@ def test_controller_init_creates_config(step_controller):
         ("dt_min", "dt_min"),
         ("dt_max", "dt_max"),
         ("is_adaptive", "is_adaptive"),
-        ("n", "n"),
+        ("n_states", "n_states"),
     ],
 )
 def test_forwarding_to_compile_settings(

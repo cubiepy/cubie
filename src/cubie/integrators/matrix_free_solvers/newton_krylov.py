@@ -84,7 +84,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         Compiled correction norm for convergence checks.
     residual_fn : Optional[Callable]
         Device function evaluating residuals.
-    linear_solver_fn : Optional[Callable]
+    krylov_linear_solver_fn : Optional[Callable]
         Device function for solving linear systems.
     delta_location : str
         Memory location for delta buffer.
@@ -111,7 +111,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
     )
     use_cached_auxiliaries: bool = field(default=False)
     residual_fn: Optional[Callable] = device_function_field()
-    linear_solver_fn: Optional[Callable] = device_function_field()
+    krylov_linear_solver_fn: Optional[Callable] = device_function_field()
     delta_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -209,7 +209,7 @@ class NewtonKrylov(MatrixFreeSolver):
             norm = DIRKCorrectionNorm(
                 precision=precision,
                 solver_width=solver_width,
-                n=solver_width,
+                n_states=solver_width,
                 instance_label="newton",
                 **kwargs,
             )
@@ -226,7 +226,7 @@ class NewtonKrylov(MatrixFreeSolver):
             required={
                 "precision": precision,
                 "solver_width": solver_width,
-                "norm_fn": self.norm.device_function,
+                "newton_norm_fn": self.norm.device_function,
             },
             instance_label="newton",
             **kwargs,
@@ -288,7 +288,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
         # Extract parameters from config
         residual_fn = config.residual_fn
-        linear_solver_fn = config.linear_solver_fn
+        linear_solver_fn = config.krylov_linear_solver_fn
         correction_norm_fn = config.norm_fn
 
         n = config.solver_width
@@ -565,8 +565,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
         # Forward krylov-prefixed params to linear solver
         recognized |= self.linear_solver.update(all_updates, silent=True)
-        # Add linear_solver_fn to updates for compile settings
-        all_updates["linear_solver_fn"] = (
+        all_updates["krylov_linear_solver_fn"] = (
             self.linear_solver.device_function
         )
         recognized |= super().update(all_updates, silent=True)

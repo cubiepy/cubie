@@ -218,7 +218,7 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
     def settings_dict(self) -> Dict[str, Any]:
         """Return the shared settings plus the raw iteration cap."""
         settings = super().settings_dict
-        settings["krylov_max_iters"] = self._max_iters
+        settings[f"{self.prefix}_max_iters"] = self._max_iters
         return settings
 
 
@@ -288,7 +288,7 @@ class LinearSolverBase(MatrixFreeSolver):
 
         super().__init__(
             precision=precision,
-            solver_type="krylov",
+            solver_type=instance_label,
             solver_width=solver_width,
             norm=norm,
             **kwargs,
@@ -367,8 +367,8 @@ class LinearSolverBase(MatrixFreeSolver):
     def settings_dict(self) -> Dict[str, Any]:
         """Return the solver configuration plus its norm's tolerances."""
         settings = dict(self.compile_settings.settings_dict)
-        settings["krylov_atol"] = self.atol
-        settings["krylov_rtol"] = self.rtol
+        settings[self.prefixed("atol")] = self.atol
+        settings[self.prefixed("rtol")] = self.rtol
         return settings
 
 
@@ -404,6 +404,8 @@ class IterativeLinearSolverBase(LinearSolverBase):
     def settings_dict(self) -> Dict[str, Any]:
         """Return the solver configuration plus the stopping settings."""
         result = super().settings_dict
-        result["krylov_residual_reduction"] = self.krylov_residual_reduction
-        result["krylov_residual_floor"] = self.krylov_residual_floor
+        result[self.prefixed("residual_reduction")] = (
+            self.krylov_residual_reduction
+        )
+        result[self.prefixed("residual_floor")] = self.krylov_residual_floor
         return result

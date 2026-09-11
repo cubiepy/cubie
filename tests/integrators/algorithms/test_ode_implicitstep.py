@@ -41,7 +41,7 @@ def test_implicit_step_accepts_tolerance_arrays(precision):
 
     step = BackwardsEulerStep(
         precision=precision,
-        n=n,
+        n_states=n,
         krylov_atol=krylov_atol,
         krylov_rtol=krylov_rtol,
         newton_atol=newton_atol,
@@ -64,7 +64,7 @@ def test_implicit_step_exposes_tolerance_properties(precision):
 
     step = BackwardsEulerStep(
         precision=precision,
-        n=n,
+        n_states=n,
         krylov_atol=krylov_atol_scalar,
         krylov_rtol=krylov_rtol_scalar,
         newton_atol=newton_atol_scalar,
@@ -93,7 +93,7 @@ def test_direct_construction_matches_hot_swap_products(precision, system):
     """
     kwargs = {
         "precision": precision,
-        "n": system.sizes.states,
+        "n_states": system.sizes.states,
         "dxdt_fn": system.dxdt_fn,
         "observables_fn": system.observables_fn,
         "get_solver_helper_fn": system.get_solver_helper,
@@ -124,20 +124,20 @@ def test_direct_construction_matches_hot_swap_products(precision, system):
 
 def test_newton_wrapped_solver_assumes_zero_guess(precision):
     """Newton-wrapped linear solvers get zero_initial_guess."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     config = step.solver.linear_solver.compile_settings
     assert config.zero_initial_guess is True
 
 
 def test_linearly_implicit_solver_keeps_initial_guess(precision):
     """Warm-started linearly-implicit solves keep the initial A @ x."""
-    step = GenericRosenbrockWStep(precision=precision, n=3)
+    step = GenericRosenbrockWStep(precision=precision, n_states=3)
     assert step.solver.compile_settings.zero_initial_guess is False
 
 
 def test_implicit_step_linear_solver_newton_atol_returns_none(precision):
     """Verify newton_atol/rtol return None for a linearly-implicit step."""
-    step = GenericRosenbrockWStep(precision=precision, n=3)
+    step = GenericRosenbrockWStep(precision=precision, n_states=3)
 
     # MRLinearSolver doesn't have newton_atol/rtol, so properties return None
     assert step.newton_atol is None
@@ -152,17 +152,17 @@ def test_is_linear_marks_direct_linear_solver_ownership(precision):
     """is_linear is True only for linearly-implicit step classes."""
     assert GenericRosenbrockWStep.is_linear
     assert not BackwardsEulerStep.is_linear
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     assert not step.is_linear
 
 
 def test_implicit_step_settings_dict_includes_implicit_fields(precision):
     """settings_dict carries the base and implicit step fields."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     settings = step.settings_dict
     assert settings['beta'] == step.compile_settings.beta
     assert settings['gamma'] == step.compile_settings.gamma
-    assert settings['n'] == 3
+    assert settings['n_states'] == 3
     assert 'M' not in settings
     assert (
         settings['preconditioner_order']
@@ -189,15 +189,16 @@ def test_implicit_step_device_function_fields_are_tagged():
         "dxdt_fn",
         "observables_fn",
         "drivers_fn",
-        "solver_function",
+        "newton_nonlinear_solver_fn",
+        "krylov_linear_solver_fn",
         "prepare_jacobian_fn",
-        "error_solver_fn",
+        "error_linear_solver_fn",
     } <= tagged
 
 
 def test_implicit_step_beta_gamma_properties(precision):
     """beta and gamma forward to compile_settings."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     assert step.beta == step.compile_settings.beta
     assert step.gamma == step.compile_settings.gamma
 
@@ -205,7 +206,7 @@ def test_implicit_step_beta_gamma_properties(precision):
 def test_implicit_step_preconditioner_type_property(precision):
     """preconditioner_type forwards to compile_settings."""
     step = BackwardsEulerStep(
-        precision=precision, n=3, preconditioner_type='jacobi',
+        precision=precision, n_states=3, preconditioner_type='jacobi',
     )
     assert step.preconditioner_type == 'jacobi'
 
@@ -225,7 +226,7 @@ def test_unset_preconditioner_order_follows_the_type(
     """An unset order takes the selected type's default."""
     step = BackwardsEulerStep(
         precision=precision,
-        n=3,
+        n_states=3,
         preconditioner_type=preconditioner_type,
     )
     assert step.preconditioner_order == expected
@@ -235,7 +236,7 @@ def test_none_preconditioner_builds_identity_solver(precision, system):
     """preconditioner_type='none' wires the identity preconditioner."""
     step = BackwardsEulerStep(
         precision=precision,
-        n=system.sizes.states,
+        n_states=system.sizes.states,
         preconditioner_type="none",
         dxdt_fn=system.dxdt_fn,
         observables_fn=system.observables_fn,
@@ -251,7 +252,7 @@ def test_set_preconditioner_order_survives_a_type_change(precision):
     """An explicit order survives a type change; an unset one re-resolves."""
     explicit = BackwardsEulerStep(
         precision=precision,
-        n=3,
+        n_states=3,
         preconditioner_type='jacobi',
         preconditioner_order=2,
     )
@@ -259,7 +260,7 @@ def test_set_preconditioner_order_survives_a_type_change(precision):
     assert explicit.preconditioner_order == 2
 
     unset = BackwardsEulerStep(
-        precision=precision, n=3, preconditioner_type='jacobi',
+        precision=precision, n_states=3, preconditioner_type='jacobi',
     )
     assert unset.preconditioner_order == 0
     unset.update(preconditioner_type='neumann')
@@ -269,19 +270,19 @@ def test_set_preconditioner_order_survives_a_type_change(precision):
 def test_preconditioner_order_rejects_values_above_two(precision):
     """Implicit-step config rejects unsupported series orders."""
     with pytest.raises(ValueError):
-        BackwardsEulerStep(precision=precision, n=3, preconditioner_order=3)
+        BackwardsEulerStep(precision=precision, n_states=3, preconditioner_order=3)
 
 
 def test_implicit_step_update_invokes_register_buffers_override(precision):
     """update() dispatches to ODEImplicitStep's no-op register_buffers."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     recognised = step.update(newton_atol=1e-5)
     assert 'newton_atol' in recognised
 
 
 def test_implicit_step_settings_dict_merges_solver_settings(precision):
     """ODEImplicitStep.settings_dict merges the solver's step-level keys."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     settings = step.settings_dict
     solver_settings = step.solver.settings_dict
     for key, value in solver_settings.items():
@@ -393,7 +394,7 @@ def test_update_swaps_linear_solver_back_to_mr(step_object_mutable):
 
 def test_update_within_mr_class_switches_correction(precision):
     """MR/SD switches stay inside MRLinearSolver's own update."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     solver_before = step.linear_solver
 
     recognized = step.update(
@@ -407,7 +408,7 @@ def test_update_within_mr_class_switches_correction(precision):
 
 def test_rosenbrock_zero_guess_update_unrecognized(precision):
     """Rosenbrock updates never recognise zero_initial_guess."""
-    step = GenericRosenbrockWStep(precision=precision, n=3)
+    step = GenericRosenbrockWStep(precision=precision, n_states=3)
     recognized = step.solver.update(
         zero_initial_guess=True, silent=True
     )
@@ -420,7 +421,7 @@ def test_rosenbrock_zero_guess_update_unrecognized(precision):
 
 def test_newton_zero_guess_update_unrecognized(precision):
     """Newton-path updates never recognise zero_initial_guess."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     recognized = step.update(zero_initial_guess=False, silent=True)
     assert "zero_initial_guess" not in recognized
     config = step.solver.linear_solver.compile_settings
@@ -429,7 +430,7 @@ def test_newton_zero_guess_update_unrecognized(precision):
 
 def test_hot_swap_preserves_zero_guess_newton(precision):
     """MR <-> BiCGSTAB swaps keep the Newton-derived True flag."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     step.update(linear_correction_type="bicgstab")
     config = step.solver.linear_solver.compile_settings
     assert config.zero_initial_guess is True
@@ -440,7 +441,7 @@ def test_hot_swap_preserves_zero_guess_newton(precision):
 
 def test_hot_swap_preserves_zero_guess_rosenbrock(precision):
     """MR <-> BiCGSTAB swaps keep the warm-start-derived False."""
-    step = GenericRosenbrockWStep(precision=precision, n=3)
+    step = GenericRosenbrockWStep(precision=precision, n_states=3)
     step.update(linear_correction_type="bicgstab")
     assert step.solver.compile_settings.zero_initial_guess is False
     step.update(linear_correction_type="minimal_residual")
@@ -449,30 +450,30 @@ def test_hot_swap_preserves_zero_guess_rosenbrock(precision):
 
 def test_combined_update_ignores_zero_guess_rosenbrock(precision):
     """Valid keys apply while zero_initial_guess is ignored."""
-    step = GenericRosenbrockWStep(precision=precision, n=3)
+    step = GenericRosenbrockWStep(precision=precision, n_states=3)
     recognized = step.update(
-        n=4,
+        n_states=4,
         linear_correction_type="bicgstab",
         zero_initial_guess=True,
         silent=True,
     )
     assert "zero_initial_guess" not in recognized
-    assert step.compile_settings.n == 4
+    assert step.compile_settings.n_states == 4
     assert step.solver.linear_correction_type == "bicgstab"
     assert step.solver.compile_settings.zero_initial_guess is False
 
 
 def test_combined_update_ignores_zero_guess_newton(precision):
     """The Newton child keeps True through a combined update."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     recognized = step.update(
-        n=4,
+        n_states=4,
         linear_correction_type="bicgstab",
         zero_initial_guess=False,
         silent=True,
     )
     assert "zero_initial_guess" not in recognized
-    assert step.compile_settings.n == 4
+    assert step.compile_settings.n_states == 4
     child = step.solver.linear_solver
     assert child.linear_correction_type == "bicgstab"
     assert child.compile_settings.zero_initial_guess is True
@@ -538,7 +539,7 @@ def test_update_swaps_lu_back_to_mr(step_object_mutable):
 
 def test_hot_swap_lu_keeps_zero_guess_newton(precision):
     """MR <-> LU swaps keep the Newton-derived True flag."""
-    step = BackwardsEulerStep(precision=precision, n=3)
+    step = BackwardsEulerStep(precision=precision, n_states=3)
     step.update(linear_correction_type="lu")
     assert isinstance(step.solver.linear_solver, LUSolver)
     config = step.solver.linear_solver.compile_settings
@@ -551,7 +552,7 @@ def test_hot_swap_lu_keeps_zero_guess_newton(precision):
 def test_lu_forces_zero_guess_rosenbrock(precision):
     """Rosenbrock's direct solver declares a zero guess."""
     step = GenericRosenbrockWStep(
-        precision=precision, n=3, linear_correction_type="lu"
+        precision=precision, n_states=3, linear_correction_type="lu"
     )
     assert isinstance(step.solver, LUSolver)
     assert step.solver.compile_settings.zero_initial_guess is True
@@ -560,7 +561,7 @@ def test_lu_forces_zero_guess_rosenbrock(precision):
 def test_firk_accepts_lu(precision):
     """FIRK wraps a coupled-width direct solver in its Newton chain."""
     step = FIRKStep(
-        precision=precision, n=3, linear_correction_type="lu"
+        precision=precision, n_states=3, linear_correction_type="lu"
     )
     assert isinstance(step.linear_solver, LUSolver)
     assert step.uses_direct_solver

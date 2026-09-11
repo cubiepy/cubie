@@ -70,7 +70,7 @@ class CrankNicolsonStep(ODEImplicitStep):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         dxdt_fn: Optional[Callable] = None,
         observables_fn: Optional[Callable] = None,
         drivers_fn: Optional[Callable] = None,
@@ -83,7 +83,7 @@ class CrankNicolsonStep(ODEImplicitStep):
         ----------
         precision
             Precision applied to device buffers.
-        n
+        n_states
             Number of state entries advanced per step.
         dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
@@ -105,7 +105,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             CrankNicolsonStepConfig,
             required={
                 'precision': precision,
-                'n': n,
+                'n_states': n_states,
                 'get_solver_helper_fn': get_solver_helper_fn,
                 'beta': beta,
                 'gamma': gamma,
@@ -132,7 +132,7 @@ class CrankNicolsonStep(ODEImplicitStep):
         buffer_registry.register(
             'cn_dxdt',
             self,
-            config.n,
+            config.n_states,
             config.dxdt_location,
             aliases='solver_shared',
         )
