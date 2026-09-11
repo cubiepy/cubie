@@ -390,23 +390,13 @@ class _OptimizeRunner:
     def _compile(self, twin: Any) -> None:
         """Compile ``twin`` for the staged batch."""
         twin.kernel.compile(
-            self._inits,
-            self._params,
-            twin.driver_interpolator.coefficients,
-            self.duration,
-            self.settling,
-            self._t0,
+            self._inits, self._params, self.duration, self.settling, self._t0
         )
 
     def _is_cached(self, twin: Any) -> bool:
         """Whether the disk cache holds ``twin``'s kernel."""
         return twin.kernel.kernel_is_cached(
-            self._inits,
-            self._params,
-            twin.driver_interpolator.coefficients,
-            self.duration,
-            self.settling,
-            self._t0,
+            self._inits, self._params, self.duration, self.settling, self._t0
         )
 
     def prewarm(self) -> None:

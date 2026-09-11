@@ -221,13 +221,12 @@ def test_kernel_is_cached_reports_the_disk_cache(
         inits, params, drivers=driver_settings, duration=0.1
     )
     kernel = solver_mutable.kernel
-    coefficients = solver_mutable.driver_interpolator.coefficients
     kernel.set_cache_dir(tmp_path / "fresh")
-    assert not kernel.kernel_is_cached(inits, params, coefficients, 0.1)
+    assert not kernel.kernel_is_cached(inits, params, 0.1)
     solver_mutable.compile(
         inits, params, drivers=driver_settings, duration=0.1
     )
-    assert kernel.kernel_is_cached(inits, params, coefficients, 0.1)
+    assert kernel.kernel_is_cached(inits, params, 0.1)
 
 
 def test_copy_registers_memory_like_its_parent(solver_mutable):

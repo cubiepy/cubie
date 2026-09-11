@@ -712,15 +712,12 @@ class BatchSolverKernel(CUDAFactory):
         self,
         inits: NDArray[floating],
         params: NDArray[floating],
-        driver_coefficients: Optional[NDArray[floating]],
         duration: float,
         warmup: float = 0.0,
         t0: float = 0.0,
     ) -> bool:
-        """Prepare the batch as :meth:`compile` does; report a cache hit.
-
-        Returns ``False`` when caching is off.
-        """
+        """Prepare the batch as :meth:`compile` does and report whether
+        the disk cache holds its kernel; ``False`` when caching is off."""
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "
@@ -730,13 +727,7 @@ class BatchSolverKernel(CUDAFactory):
         self._memory_manager.begin_work(self)
         try:
             self._prepare_batch(
-                inits,
-                params,
-                driver_coefficients,
-                duration,
-                warmup,
-                t0,
-                stream,
+                inits, params, duration, warmup, t0, stream
             )
             # Building the dispatcher attaches the disk cache.
             self.kernel
