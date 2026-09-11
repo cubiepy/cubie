@@ -55,50 +55,35 @@ Iteration counts are returned separately via the
 `Solver.status_messages`).
 
 ### Component assembly (`SingleIntegratorRunCore.__init__`)
-The constructor reads the system's `products` (sizes, `mass_flags`, `precision`,
-`dxdt_fn`, `observables_fn`, `get_solver_helper_fn`) and builds each child with its
-static settings: `OutputFunctions`; the step via `get_algorithm_step`
-(`_apply_algorithm_step_defaults` and `_apply_dae_linear_solve_defaults` fill unset
-keys; `neumann` is rejected on mass-matrix systems); the controller via
-`get_controller` from the family defaults, the user's settings and the resolved name
-(a given name, else gains promote the family default within `i`/`pi`/`pid`; an
-errorless algorithm forces `fixed` with a `UserWarning`); `IVPLoop` from the
-children's products; `DAEInitialiser` from the step's `settings_dict` plus
-`dae_initialisation`, `mass_flags` and the helper getter. It then runs
-`_distribute({})` once so every child holds the others' products.
+The constructor builds each child from the system's `products` and its own static
+settings (output functions, step, controller, loop, DAE initialiser), resolving the
+controller name (a given name, else the family default promoted to carry any gains;
+an errorless algorithm forces `fixed` with a `UserWarning`) and filling unset step
+keys from the family and DAE defaults. It then runs `_distribute({})` once.
 
 ### update() distributes products
-`update()` records givenness (inner tolerances, performance keys, timing), then
-`_distribute(updates)` updates the children in a fixed order, merging each child's
-`products` into the dict before the next: system; output functions (twice, around
-`_loop_timing`); `_switch_algos` and `_switch_controllers` (swap on a new
-`algorithm`/`step_controller`, primed from the predecessor's `settings_dict`); the
-controller (delivers `is_adaptive`, `dt`, `dt_min`, `dt_max`, `atol`, `rtol`); the
-step, then the family, DAE, inner-tolerance and performance defaults; the controller
-again with the step's `algorithm_order`; the initialiser; `_register_loop_children`;
-the loop; then `update_compile_settings` on the run, whose `loop_fn` field captures
-the loop's product. Unrecognised user keys raise unless `silent`.
+`update()` records which tolerance, performance and timing keys the user gave, then
+`_distribute` updates the children in a fixed order (system, output functions, step,
+controller, initialiser, loop), merging each child's `products` into the dict before
+the next child, and finishes with `update_compile_settings` on the run, whose
+`loop_fn` field captures the loop's product. A new `algorithm` or `step_controller`
+swaps that child first, primed from its predecessor's `settings_dict`. Unrecognised
+user keys raise unless `silent`.
 
-`settings_dict` merges the children's `settings_dict`s minus the keys the core injects
-(`_INJECTED_KEYS`, the loop's `dt` and schedule); timing comes from `_user_timing`, inner
-tolerances only when in `_user_given_inner_tols`, performance defaults and unroll flags only
-when in `_user_given_keys` (all of them when `auto_performance` is off). `grouped_settings()`
-splits it by the children's `settings_keys`; `copy()` rebuilds on `system.copy()` from those
-groups. A controller swap drops `CONTROLLER_GAIN_PARAMETERS`.
+`settings_dict` merges the children's `settings_dict`s minus the keys the run injects;
+derived values (timing, inner tolerances, performance defaults) appear only when the
+user gave them. `grouped_settings()` splits it into the constructor's groups; `copy()`
+rebuilds from those groups on `system.copy()`.
 
 ### build() reads the captured loop
-`build()` returns `SingleIntegratorRunCache(loop_fn=compile_settings.loop_fn, ...)` with
-the sizes, flags, counts and `performance_defaults` from the children's products. The
-cache invalidates when `update` captures a different `loop_fn`.
+`build()` returns the captured `loop_fn` with the children's sizes, flags and
+`performance_defaults`; the cache invalidates when `update` captures a different loop.
 
 ### Timing
-`_loop_timing(updates)` derives `save_every`, `summarise_every`,
-`sample_summaries_every` and the `save_*`/`summarise_regularly` flags from
-`_user_timing` and the output types. With summaries requested and no
-`summarise_every`, `is_duration_dependent=True` and a `duration` key in `update`
-(routed by `set_summary_timing_from_duration`, called by `BatchSolverKernel` before
-each solve) sets `summarise_every=duration` and
-`sample_summaries_every=duration / 100`; the last duration holds until the next.
+`_loop_timing` derives the save and summary schedule from the user's timing keys and
+the output types. Summaries without `summarise_every` make the run
+`is_duration_dependent`; a `duration` key in `update` then sets
+`summarise_every=duration` and `sample_summaries_every=duration / 100`.
 
 ### Testing
 Top-level files are exercised via `tests/integrators/` integration tests and
