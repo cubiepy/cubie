@@ -531,12 +531,12 @@ def test_blocksize_setting_follows_updates(solverkernel_mutable):
         solverkernel_mutable.update(blocksize=0)
 
 
-def test_auto_performance_reaches_the_integrator(solverkernel_mutable):
-    """``auto_performance`` lands on the integrator's compile settings."""
-    assert solverkernel_mutable.single_integrator.auto_performance is True
+def test_auto_performance_is_a_kernel_setting(solverkernel_mutable):
+    """``auto_performance`` lands on the kernel's compile settings."""
+    assert solverkernel_mutable.compile_settings.auto_performance is True
     recognised = solverkernel_mutable.update(auto_performance=False)
     assert "auto_performance" in recognised
-    assert solverkernel_mutable.single_integrator.auto_performance is False
+    assert solverkernel_mutable.compile_settings.auto_performance is False
 
 
 def test_persistent_array_sized_from_persistent_layout(solverkernel):

@@ -187,11 +187,18 @@ def test_batch_input_driver_coefficients(solverkernel):
     )
 
 
-def test_batch_input_driver_coefficients_follow_pin(solverkernel_mutable):
-    """An updated coefficient layout flows into the sizes."""
-    solverkernel_mutable.update(coefficients_shape=(7, 2, 4))
-    sizes = BatchInputSizes.from_solver(solverkernel_mutable)
-    assert sizes.driver_coefficients == (7, 2, 4)
+def test_batch_input_driver_coefficients_follow_the_interpolator(
+    solverkernel_mutable,
+):
+    """A new interpolation order reaches the sizes through the kernel."""
+    kernel = solverkernel_mutable
+    before = kernel.coefficients_shape
+    kernel.update(order=before[2])
+    sizes = BatchInputSizes.from_solver(kernel)
+    assert kernel.coefficients_shape[2] == before[2] + 1
+    assert sizes.driver_coefficients == (
+        kernel.driver_interpolator.coefficients_shape
+    )
 
 
 # ── BatchOutputSizes.from_solver ─────────────────────── #

@@ -23,7 +23,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
 | `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's `SystemValues`; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
 | `calibration.py` | `Solver.calibrate` backend: `run_calibration` races candidate configurations (`CandidateSpec`) on one representative batch and returns a `CalibrationResult` (winner, ranking, per-candidate `CandidateResult` measurements). The race covers a few adaptive orders per family and, for implicit families, the preconditioner, linear-solver, Newton-variant, smoothed-error, and dense-predictor settings. |
-| `optimize.py` | `Solver.optimize` backend: `run_optimization` times the core's `optimisation_candidates(force)` at `launch_candidates(kernel)` on `parent.copy()` and applies the best `LaunchResult` through `apply_launch`. Spawn workers pre-warm the kernel cache; timing uses kernel events under the `"silent"` logger level. |
+| `optimize.py` | `Solver.optimize` backend: `run_optimization` times the kernel's `optimisation_candidates(force)` at `launch_candidates(kernel)` on `parent.copy()` and applies the best `LaunchResult` through `apply_launch`. Spawn workers pre-warm the kernel cache; timing uses kernel events under the `"silent"` logger level. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
 | `writeback_watcher.py` | `WritebackWatcher` (daemon thread) + `WritebackTask` — polls CUDA events via `event.query()`, copies completed pinned-buffer data into host arrays (D2H writeback) or just releases H2D staging buffers. |
 | `_utils.py` | Docstring only — no exports (dead validators removed). |
@@ -38,8 +38,8 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ### Data flow
 `Solver.solve()` → `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
-`kernel.run()` sets `RunParams`, refreshes compile settings (`loop_fn` from
-`SingleIntegratorRun.device_function`), queues allocations via `InputArrays.update`/
+`kernel.run()` sets `RunParams`, routes `duration` through `kernel.update` when the
+summary schedule derives from it, queues allocations via `InputArrays.update`/
 `OutputArrays.update`, calls `memory_manager.allocate_queue(self)` (which may split into
 chunks), then loops chunks launching the compiled kernel. Results flow back through
 `OutputArrays` → `SolveResult.from_solver`.
@@ -160,6 +160,19 @@ A driverless kernel's layout has a zero first dimension. The kernel hands `Input
 its interpolator's `coefficients` only when the slot does not already hold that table.
 Driver dicts name their sample spacing `driver_sample_period` — `dt` is the integrator
 timestep and never reaches the interpolator.
+
+### Kernel update and performance defaults
+`kernel.update` records the performance keys given, then `_distribute` updates the
+interpolator (its products join the dict for a driver system), the run (its products,
+`loop_fn` and `compile_flags` among them, join the dict), derives the unroll and
+placement keys (`_performance_defaults`: the step's `performance_defaults` plus
+`unroll_newton_exits` from the operation counts against the instruction cache, minus
+keys the user fixed) and pushes them to the run, then runs `update_compile_settings`
+on itself. Construction seeds `loop_fn` from the run's products and runs one
+distribution with `lineinfo`, `unroll_settings` and `kernel_settings`.
+`auto_performance` is a `BatchSolverConfig` field; `optimisation_candidates(force)`
+filters the run's `algorithm_candidates` by the fixed keys. `build_kernel` reads
+`config.loop_fn`.
 
 ### Calibration (`Solver.calibrate`)
 - One sibling `Solver` per candidate on the parent's system, memory manager, and stream group; trial solves gate candidates before full-length timing; full-length measurements are recorded per configuration and reused.

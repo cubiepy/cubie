@@ -772,6 +772,11 @@ class StepCache(CUDADispatcherCache):
     performance_defaults: PerformanceSettings = field(
         factory=PerformanceSettings
     )
+    newton_solves_per_step: int = field(default=0)
+    step_operation_count: int = field(default=0)
+    unroll_newton_exits: UnrollFlag = field(
+        default=(True, None), converter=unroll_flag_converter
+    )
 
 
 class BaseAlgorithmStep(CUDAFactory):
@@ -884,7 +889,18 @@ class BaseAlgorithmStep(CUDAFactory):
         return recognised
 
     def _stamp_products(self, cache: StepCache) -> StepCache:
-        """Return ``cache`` with the step's sizes, order and flags."""
+        """Return ``cache`` with the step's sizes, order, flags and counts."""
+        solves = 0
+        operations = 0
+        if self.is_implicit:
+            solves = self.newton_solves_per_step
+            operations = self.per_step_operation_count
+            if solves > 0:
+                operations += (
+                    self.newton_max_iters
+                    * solves
+                    * self.newton_body_operation_count
+                )
         return evolve(
             cache,
             threads_per_step=self.threads_per_step,
@@ -893,6 +909,9 @@ class BaseAlgorithmStep(CUDAFactory):
             has_error_estimate=self.has_error_estimate,
             is_implicit=self.is_implicit,
             performance_defaults=self.performance_defaults,
+            newton_solves_per_step=solves,
+            step_operation_count=operations,
+            unroll_newton_exits=self.compile_settings.unroll.unroll_newton_exits,
         )
 
     @property

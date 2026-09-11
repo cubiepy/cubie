@@ -42,8 +42,6 @@ class IntegratorRunSettings(CUDAFactoryConfig):
         Name of the integration step algorithm.
     step_controller
         Name of the step-size controller.
-    auto_performance
-        Fill unset unroll and placement settings at build; hash-excluded.
     loop_fn
         The loop's compiled device function, captured by ``update``.
     """
@@ -55,11 +53,6 @@ class IntegratorRunSettings(CUDAFactoryConfig):
     step_controller: str = attrs.field(
         default="fixed",
         validator=attrs.validators.instance_of(str),
-    )
-    auto_performance: bool = attrs.field(
-        default=True,
-        validator=attrs.validators.instance_of(bool),
-        eq=False,
     )
     loop_fn: Optional[Callable] = device_function_field()
 

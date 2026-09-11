@@ -930,7 +930,8 @@ def run_device_loop(
     t0 = solver_config["t0"]
     save_samples = max(singleintegratorrun.output_length(duration), 1)
     summary_samples = max(singleintegratorrun.summaries_length(duration), 1)
-    singleintegratorrun.set_summary_timing_from_duration(duration)
+    if singleintegratorrun.is_duration_dependent:
+        singleintegratorrun.update({"duration": duration}, silent=True)
     heights = singleintegratorrun.output_array_heights
 
     state_width = max(heights.state, 1)

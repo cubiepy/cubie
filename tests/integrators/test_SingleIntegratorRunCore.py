@@ -629,7 +629,7 @@ def test_copy_keeps_the_schedule_duration_dependent(
 ):
     """A copy re-derives the summary schedule instead of pinning it."""
     run = single_integrator_run_mutable
-    run.set_summary_timing_from_duration(2.0)
+    run.update({"duration": 2.0})
     settings = run.settings_dict
     assert "summarise_every" not in settings
     assert "sample_summaries_every" not in settings
@@ -698,7 +698,7 @@ def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
     assert loop_cfg._sample_summaries_every is None
 
 
-# ── set_summary_timing_from_duration ────────────────────────────────────── #
+# ── duration updates ────────────────────────────────────── #
 
 @pytest.mark.parametrize(
     "solver_settings_override",
@@ -708,12 +708,14 @@ def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
 def test_set_summary_timing_noop_when_not_dependent(
     single_integrator_run_mutable,
 ):
-    """Explicit timing means set_summary_timing_from_duration is a no-op."""
+    """Explicit timing means a duration update changes nothing."""
     run = single_integrator_run_mutable
     initial = run.sample_summaries_every
     assert initial == pytest.approx(0.05)
-    run.set_summary_timing_from_duration(duration=1.0)
+    run.device_function
+    run.update({"duration": 1.0})
     assert run.sample_summaries_every == pytest.approx(0.05)
+    assert run.cache_valid
 
 
 @pytest.mark.parametrize(
@@ -727,7 +729,7 @@ def test_set_summary_timing_from_duration_dependent(
     """Duration-dependent path sets summarise_every = duration."""
     run = single_integrator_run_mutable
     assert run.is_duration_dependent is True
-    run.set_summary_timing_from_duration(duration=1.0)
+    run.update({"duration": 1.0})
     assert run.summarise_every == pytest.approx(1.0, rel=1e-5)
     assert run.sample_summaries_every == pytest.approx(0.01, rel=1e-5)
 

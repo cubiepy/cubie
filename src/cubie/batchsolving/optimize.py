@@ -497,9 +497,7 @@ def run_optimization(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    candidates = parent.kernel.single_integrator.optimisation_candidates(
-        force=force
-    )
+    candidates = parent.kernel.optimisation_candidates(force=force)
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
         if parent.kernel.blocksize_given and not force

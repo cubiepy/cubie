@@ -60,7 +60,7 @@ name is the given one, else the family default (promoted to carry gains; `fixed`
 `UserWarning` for an errorless algorithm); then runs `_distribute({})` once.
 
 ### update() distributes products
-`update()` records the tolerance, performance and timing keys the user gave, then
+`update()` records the tolerance, step and timing keys the user gave, then
 `_distribute` updates the children in a fixed order (system, output functions, step,
 controller, initialiser, loop), merging each child's `products` into the dict before the
 next, and ends with `update_compile_settings` on the run, whose `loop_fn` field captures
@@ -72,7 +72,7 @@ appear only when the user gave them. `copy()` rebuilds from `grouped_settings()`
 `build()` returns the captured `loop_fn` with the children's sizes and flags.
 `_loop_timing` derives the save and summary schedule from the timing keys and output
 types; summaries without `summarise_every` make the run `is_duration_dependent`, and a
-`duration` key in `update` sets `summarise_every=duration`,
+`duration` key in `update` (pushed by `BatchSolverKernel`) sets `summarise_every=duration`,
 `sample_summaries_every=duration / 100`.
 
 ### Testing

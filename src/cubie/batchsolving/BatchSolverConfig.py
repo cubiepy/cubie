@@ -161,6 +161,7 @@ ALL_KERNEL_PARAMETERS = (
             "kernel_name",
             "cache",
             "blocksize",
+            "auto_performance",
         }
     )
     | ALL_CACHE_PARAMETERS
@@ -230,6 +231,9 @@ class BatchSolverConfig(CUDAFactoryConfig):
         loose ``cache_*`` keys through ``update``.
     blocksize
         Threads per block for every launch.
+    auto_performance
+        Fill unset unroll and placement settings from size and hardware;
+        hash-excluded.
     """
 
     loop_fn: Optional[Callable] = device_function_field()
@@ -265,6 +269,9 @@ class BatchSolverConfig(CUDAFactoryConfig):
     )
     blocksize: int = attrs.field(
         default=64, validator=getype_validator(int, 1), eq=False
+    )
+    auto_performance: bool = attrs.field(
+        default=True, validator=val.instance_of(bool), eq=False
     )
 
     def __attrs_post_init__(self):

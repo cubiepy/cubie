@@ -166,9 +166,9 @@ products (`newton_nonlinear_solver_fn` or `krylov_linear_solver_fn`,
 `prepare_jacobian_fn`, `predictor_fn`, `error_linear_solver_fn`, ...) into the
 step's config; `build()` reads that config only and raises without a solver
 function. Each wiring pushes an `OperationCounts` into
-`helper_operation_counts`; `newton_body_operation_count`, `per_step_operation_count`,
-`newton_solves_per_step` and `performance_defaults` feed the core's
-`_apply_performance_defaults`. `optimisation_candidates` lists the setting
+`helper_operation_counts`; the cache's `step_operation_count`,
+`newton_solves_per_step` and `performance_defaults` feed the kernel's
+`_performance_defaults`. `optimisation_candidates` lists the setting
 combinations `Solver.optimize` times (base `({},)`).
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
