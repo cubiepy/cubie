@@ -33,8 +33,9 @@ from attrs import field, frozen
 from numpy import ndarray
 
 from cubie._utils import (
-    PrecisionDType,
+    device_function_field,
     getype_validator,
+    PrecisionDType,
 )
 from cubie.CUDAFactory import (
     MultipleInstanceCUDAFactory,
@@ -65,10 +66,7 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
     solver_width: int = field(
         default=0, validator=getype_validator(int, 1)
     )
-    norm_device_function: Optional[Callable] = field(
-        default=None,
-        eq=False,
-    )
+    norm_device_function: Optional[Callable] = device_function_field()
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()

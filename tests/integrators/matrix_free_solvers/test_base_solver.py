@@ -1,4 +1,6 @@
 import numpy as np
+
+from cubie.cuda_simsafe import cuda
 import pytest
 
 from cubie.integrators.matrix_free_solvers.base_solver import (
@@ -87,15 +89,13 @@ def test_iterative_config_max_iters_validation():
 
 
 def test_matrix_free_solver_config_norm_device_function_field():
-    """Verify norm_device_function field exists and accepts None or Callable.
-    """
-    # Test default is None
+    """norm_device_function defaults to None and takes a device function."""
     config = MatrixFreeSolverConfig(precision=np.float64, solver_width=3)
     assert config.norm_device_function is None
 
-    # Test accepts a callable
-    def dummy_norm():
-        pass
+    @cuda.jit(device=True)
+    def dummy_norm(values, reference):
+        return values[0]
 
     config_with_fn = MatrixFreeSolverConfig(
         precision=np.float64, solver_width=3, norm_device_function=dummy_norm
@@ -104,8 +104,9 @@ def test_matrix_free_solver_config_norm_device_function_field():
 
     # Verify eq=False behavior: configs with different functions are still
     # equal (since norm_device_function is excluded from equality)
-    def another_norm():
-        pass
+    @cuda.jit(device=True)
+    def another_norm(values, reference):
+        return values[1]
 
     config_other = MatrixFreeSolverConfig(
         precision=np.float64, solver_width=3, norm_device_function=another_norm

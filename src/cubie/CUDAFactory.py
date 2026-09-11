@@ -152,7 +152,10 @@ def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
 
 
 def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:
-    """Compare callables by identity, arrays elementwise, else ``!=``."""
+    """Compare device functions by identity, arrays elementwise, else
+    ``!=``."""
+    if fld.metadata.get("device_function"):
+        return old is not new
     if fld.eq is False and (callable(old) or callable(new)):
         return old is not new
     if isinstance(old, ndarray) or isinstance(new, ndarray):
@@ -635,6 +638,17 @@ class CUDAFactory(ABC):
                 f"Output '{output_name}' not found in cached outputs."
             )
         return getattr(self._cache, output_name)
+
+    @property
+    def products(self) -> Dict[str, Any]:
+        """Return the build's outputs by cache field name."""
+        if not self.cache_valid:
+            self._build()
+        cache = self._cache
+        return {
+            fld.name: getattr(cache, fld.name)
+            for fld in fields(type(cache))
+        }
 
     @property
     def config_hash(self):

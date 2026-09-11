@@ -49,7 +49,7 @@ from cubie.cuda_simsafe import unroll_if
 from cubie.result_codes import CUBIE_RESULT_CODES
 from numpy import int32 as np_int32
 
-from cubie._utils import PrecisionDType, build_config, is_device_validator
+from cubie._utils import build_config, device_function_field, PrecisionDType
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     AlgorithmDefaults,
@@ -96,16 +96,8 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     """Configuration describing the Rosenbrock-W integrator."""
 
     tableau: RosenbrockTableau = field(default=DEFAULT_ROSENBROCK_TABLEAU)
-    time_derivative_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    driver_del_t: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    time_derivative_function: Optional[Callable] = device_function_field()
+    driver_del_t: Optional[Callable] = device_function_field()
     stage_rhs_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -118,11 +110,7 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     krylov_iters_out_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    apply_mass_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    apply_mass_function: Optional[Callable] = device_function_field()
 
 
 class GenericRosenbrockWStep(ODEImplicitStep):

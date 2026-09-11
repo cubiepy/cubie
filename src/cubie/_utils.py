@@ -78,7 +78,7 @@ from numpy import (
 )
 from numpy.typing import ArrayLike
 from cubie.cuda_simsafe import cuda
-from attrs import fields, has, validators, Attribute
+from attrs import field, fields, has, validators, Attribute
 from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
 
 PrecisionDType = Union[
@@ -349,6 +349,17 @@ def is_device_validator(instance, attribute, value):
             f"{attribute} must be a Numba CUDA device function,"
             f"got {type(value)}."
         )
+
+
+def device_function_field(**kwargs):
+    """Config field for a device function: identity-compared, unhashed."""
+    return field(
+        default=None,
+        eq=False,
+        validator=validators.optional(is_device_validator),
+        metadata={"device_function": True},
+        **kwargs,
+    )
 
 
 def float_array_validator(instance, attribute, value):

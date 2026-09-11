@@ -17,11 +17,12 @@ from numpy import finfo as np_finfo
 from numpy import ndarray
 
 from cubie._utils import (
-    PrecisionDType,
     build_config,
+    device_function_field,
     inrangetype_validator,
     is_device_validator,
     opt_getype_validator,
+    PrecisionDType,
 )
 from cubie.integrators.matrix_free_solvers.base_solver import (
     MatrixFreeSolverConfig,
@@ -174,16 +175,8 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
         ),
         metadata={"prefixed": True},
     )
-    operator_apply: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    preconditioner: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    operator_apply: Optional[Callable] = device_function_field()
+    preconditioner: Optional[Callable] = device_function_field()
     _residual_reduction: Optional[float] = field(
         default=None,
         converter=Converter(_default_residual_reduction, takes_self=True),

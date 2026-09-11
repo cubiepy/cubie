@@ -37,10 +37,11 @@ from cubie.CUDAFactory import (
     CUDADispatcherCache,
 )
 from cubie._utils import (
-    PrecisionDType,
     build_config,
+    device_function_field,
     getype_validator,
     is_device_validator,
+    PrecisionDType,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import (
@@ -119,21 +120,9 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         validator=validators.optional(validators.is_callable()),
         eq=False,
     )
-    residual_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    linear_solver_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    norm_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    residual_function: Optional[Callable] = device_function_field()
+    linear_solver_function: Optional[Callable] = device_function_field()
+    norm_function: Optional[Callable] = device_function_field()
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
