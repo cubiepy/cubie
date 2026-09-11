@@ -118,7 +118,11 @@ back here. CUDA-authoring **optimisation** conventions are in
   excluded factories deliberately contribute nothing to semantic identity.
 - **`MultipleInstanceCUDAFactory`** maps prefixed external keys (e.g. `krylov_atol`)
   to unprefixed internal fields via `instance_label`; build configs with
-  `build_config(...)`.
+  `build_config(...)`. Its `products` carry the label too (`krylov_linear_solver_fn`),
+  and `prefixed(name)` returns the labelled key. A consumer field a labelled child
+  fills is named with that label (`newton_nonlinear_solver_fn`,
+  `error_linear_solver_fn`); a labelled consumer's own device slot is declared
+  `device_function_field(prefixed=True)` and keyed `{label}_norm_fn`.
 
 ### Config classes (attrs convention)
 - Compile settings are **frozen** attrs classes (`@attrs.frozen`) subclassing
@@ -134,7 +138,7 @@ back here. CUDA-authoring **optimisation** conventions are in
   (tuples, not lists).
 - A system runs at **one precision** (`ALLOWED_PRECISIONS` = float16/32/64); float
   members are returned cast to it via `self.precision(...)`.
-- **Device functions are named `<full words>_fn`** on both sides: the producer's cache field and every consumer's config field carry the same name (`dxdt_fn`, `step_fn`, `loop_fn`).
+- **Device functions are named `<full words>_fn`** on both sides: the producer's cache field and every consumer's config field carry the same name (`dxdt_fn`, `step_fn`, `loop_fn`). State counts are `n_states` everywhere (`n_observables`, `n_parameters`, `n_drivers` alongside); `solver_width` is a solver's vector length.
 - **Device-function fields are declared with `device_function_field()`** (`_utils`):
   `metadata={"device_function": True}`, compared by identity for invalidation,
   excluded from hashing. `CUDAFactory.products` returns a build's cache fields by

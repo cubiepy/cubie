@@ -921,7 +921,7 @@ class TestPreconditionerTypeValidation:
                 precision=precision,
                 settings={
                     "algorithm": "backwards_euler",
-                    "n": system.sizes.states,
+                    "n_states": system.sizes.states,
                     "preconditioner_type": "bogus",
                     "get_solver_helper_fn": system.get_solver_helper,
                 },

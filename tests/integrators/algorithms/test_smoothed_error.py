@@ -133,11 +133,11 @@ def test_unsupported_request_warns_and_stays_off():
 
     with pytest.warns(UserWarning, match="use_smoothed_error"):
         step = CrankNicolsonStep(
-            precision=np.float64, n=2, use_smoothed_error=True
+            precision=np.float64, n_states=2, use_smoothed_error=True
         )
     assert not step.smooth_error
 
-    step = CrankNicolsonStep(precision=np.float64, n=2)
+    step = CrankNicolsonStep(precision=np.float64, n_states=2)
     with pytest.warns(UserWarning, match="use_smoothed_error"):
         step.update(use_smoothed_error=True)
     assert not step.smooth_error
@@ -148,22 +148,22 @@ def test_smoothing_default_follows_tableau_capability():
     """Radau defaults smoothing on; DIRK and gauss-legendre stay off."""
 
     assert FIRKStep(
-        precision=np.float64, n=2, tableau=RADAU_IIA_5_TABLEAU
+        precision=np.float64, n_states=2, tableau=RADAU_IIA_5_TABLEAU
     ).smooth_error
     assert FIRKStep(
-        precision=np.float64, n=2, tableau=RADAU_IIA_9_TABLEAU
+        precision=np.float64, n_states=2, tableau=RADAU_IIA_9_TABLEAU
     ).smooth_error
     assert not FIRKStep(
-        precision=np.float64, n=2, tableau=RADAU_IIA_3_TABLEAU
+        precision=np.float64, n_states=2, tableau=RADAU_IIA_3_TABLEAU
     ).smooth_error
     assert not FIRKStep(
-        precision=np.float64, n=2, tableau=GAUSS_LEGENDRE_2_TABLEAU
+        precision=np.float64, n_states=2, tableau=GAUSS_LEGENDRE_2_TABLEAU
     ).smooth_error
     assert not FIRKStep(
-        precision=np.float64, n=2, tableau=GAUSS_LEGENDRE_4_TABLEAU
+        precision=np.float64, n_states=2, tableau=GAUSS_LEGENDRE_4_TABLEAU
     ).smooth_error
     assert not DIRKStep(
-        precision=np.float64, n=2, tableau=KVAERNO3_TABLEAU
+        precision=np.float64, n_states=2, tableau=KVAERNO3_TABLEAU
     ).smooth_error
 
 
@@ -173,7 +173,7 @@ def test_request_survives_tableau_swap():
     with pytest.warns(UserWarning, match="use_smoothed_error"):
         step = FIRKStep(
             precision=np.float64,
-            n=2,
+            n_states=2,
             tableau=GAUSS_LEGENDRE_2_TABLEAU,
             use_smoothed_error=True,
         )
@@ -189,7 +189,7 @@ def test_firk_error_solver_costs_nothing_when_disabled(enabled):
 
     step = FIRKStep(
         precision=np.float64,
-        n=3,
+        n_states=3,
         tableau=RADAU_IIA_5_TABLEAU,
         use_smoothed_error=enabled,
         stage_state_location="shared",
@@ -198,6 +198,13 @@ def test_firk_error_solver_costs_nothing_when_disabled(enabled):
     assert ("error_solver_shared" in registered) is enabled
     assert (step.error_solver is not None) is enabled
     assert step.smooth_error is enabled
+    if enabled:
+        assert step.error_solver.instance_label == "error"
+        assert step.error_solver.norm.instance_label == "error"
+        assert "error_linear_solver_fn" in step.error_solver.products
+        assert step.update({"error_atol": 1e-4}) >= {"error_atol"}
+        assert float(step.error_solver.norm.atol[0]) == 1e-4
+        assert (step.settings_dict["error_atol"] == 1e-4).all()
 
 
 def test_dirk_error_solver_and_rhs_alias_the_newton_window():
@@ -211,13 +218,13 @@ def test_dirk_error_solver_and_rhs_alias_the_newton_window():
     }
     baseline = DIRKStep(
         precision=np.float64,
-        n=3,
+        n_states=3,
         tableau=KVAERNO3_TABLEAU,
         **shared_locations,
     )
     smoothed = DIRKStep(
         precision=np.float64,
-        n=3,
+        n_states=3,
         tableau=KVAERNO3_TABLEAU,
         use_smoothed_error=True,
         **shared_locations,
@@ -240,14 +247,14 @@ def test_firk_error_solver_aliases_the_coupled_solver_window():
     }
     baseline = FIRKStep(
         precision=np.float64,
-        n=3,
+        n_states=3,
         tableau=RADAU_IIA_5_TABLEAU,
         use_smoothed_error=False,
         **shared_locations,
     )
     smoothed = FIRKStep(
         precision=np.float64,
-        n=3,
+        n_states=3,
         tableau=RADAU_IIA_5_TABLEAU,
         use_smoothed_error=True,
         **shared_locations,
@@ -266,7 +273,7 @@ def test_toggle_survives_update(step_class, tableau):
 
     step = step_class(
         precision=np.float64,
-        n=2,
+        n_states=2,
         tableau=tableau,
         use_smoothed_error=False,
     )

@@ -10,7 +10,7 @@ Published Classes
     Forward Euler integration step.
 
     >>> from numpy import float32
-    >>> step = ExplicitEulerStep(precision=float32, n=4)
+    >>> step = ExplicitEulerStep(precision=float32, n_states=4)
     >>> step.order
     1
     >>> step.has_error_estimate
@@ -52,7 +52,7 @@ class ExplicitEulerStep(ODEExplicitStep):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         dxdt_fn: Optional[Callable] = None,
         observables_fn: Optional[Callable] = None,
         drivers_fn: Optional[Callable] = None,
@@ -65,7 +65,7 @@ class ExplicitEulerStep(ODEExplicitStep):
         ----------
         precision
             Precision applied to device buffers.
-        n
+        n_states
             Number of state entries advanced per step.
         dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
@@ -84,7 +84,7 @@ class ExplicitEulerStep(ODEExplicitStep):
             ExplicitStepConfig,
             required={
                 'precision': precision,
-                'n': n,
+                'n_states': n_states,
                 'dxdt_fn': dxdt_fn,
                 'observables_fn': observables_fn,
                 'drivers_fn': drivers_fn,

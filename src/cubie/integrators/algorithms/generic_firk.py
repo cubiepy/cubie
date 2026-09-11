@@ -165,7 +165,7 @@ class FIRKStepConfig(ImplicitStepConfig):
     def solver_width(self) -> int:
         """Return the coupled solver width across all stages."""
 
-        return self.stage_count * self.n
+        return self.stage_count * self.n_states
 
 
 class FIRKStep(ODEImplicitStep):
@@ -174,7 +174,7 @@ class FIRKStep(ODEImplicitStep):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         dxdt_fn: Optional[Callable] = None,
         observables_fn: Optional[Callable] = None,
         drivers_fn: Optional[Callable] = None,
@@ -196,7 +196,7 @@ class FIRKStep(ODEImplicitStep):
         ----------
         precision
             Floating-point precision for CUDA computations.
-        n
+        n_states
             Number of state variables in the ODE system.
         dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
@@ -248,7 +248,7 @@ class FIRKStep(ODEImplicitStep):
             FIRKStepConfig,
             required={
                 "precision": precision,
-                "n": n,
+                "n_states": n_states,
                 "n_drivers": n_drivers,
                 "dxdt_fn": dxdt_fn,
                 "observables_fn": observables_fn,
@@ -271,7 +271,7 @@ class FIRKStep(ODEImplicitStep):
         newton_norm = FIRKCorrectionNorm(
             precision=precision,
             solver_width=config.solver_width,
-            n=n,
+            n_states=n_states,
             stage_coefficients=tableau.a_flat(precision),
             instance_label="newton",
             **kwargs,
@@ -281,7 +281,7 @@ class FIRKStep(ODEImplicitStep):
         krylov_norm = TiledScaledNorm(
             precision=precision,
             solver_width=config.solver_width,
-            n=n,
+            n_states=n_states,
             instance_label="krylov",
             **kwargs,
         )
@@ -294,7 +294,7 @@ class FIRKStep(ODEImplicitStep):
         )
         self.dense_predictor = DenseStagePredictor(
             precision=self.compile_settings.precision,
-            n=n,
+            n_states=n_states,
             tableau=self.compile_settings.tableau,
             **kwargs,
         )
@@ -306,33 +306,34 @@ class FIRKStep(ODEImplicitStep):
         # Build a second, n-wide solver for the smoothed error
         # estimation.
         carried = {
-            key: value
+            key.replace("krylov_", "error_", 1): value
             for key, value in self.linear_solver.settings_dict.items()
             if key in self._LINEAR_SOLVER_PARAMS and value is not None
         }
         norm_kwargs = {
             key: carried[key]
-            for key in ("krylov_atol", "krylov_rtol")
+            for key in ("error_atol", "error_rtol")
             if key in carried
         }
         self.error_solver = self._construct_linear_solver(
             precision=config.precision,
-            solver_width=config.n,
+            solver_width=config.n_states,
             norm=ScaledNorm(
                 precision=config.precision,
-                solver_width=config.n,
-                n=config.n,
-                instance_label="krylov",
+                solver_width=config.n_states,
+                n_states=config.n_states,
+                instance_label="error",
                 **norm_kwargs,
             ),
             norm_reference="base_state",
+            instance_label="error",
             **carried,
         )
 
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
-        n = config.n
+        n = config.n_states
         tableau = config.tableau
 
         if self.smooth_error and self.error_solver is None:
@@ -537,7 +538,7 @@ class FIRKStep(ODEImplicitStep):
                     self.error_solver.update(
                         lu_solve_fn=smoothing.device_function,
                         lu_nnz=smoothing.lu_nnz,
-                        solver_width=config.n,
+                        solver_width=config.n_states,
                     )
                     counts["error_solve"] = smoothing.operation_count
                 else:
@@ -549,7 +550,7 @@ class FIRKStep(ODEImplicitStep):
                     self.error_solver.update(
                         lu_solve_fn=lu_at_state.device_function,
                         lu_nnz=lu_at_state.lu_nnz,
-                        solver_width=config.n,
+                        solver_width=config.n_states,
                     )
                     counts["error_solve"] = lu_at_state.operation_count
             else:
@@ -566,7 +567,7 @@ class FIRKStep(ODEImplicitStep):
                 self.error_solver.update(
                     operator_apply_fn=operator_at_state.device_function,
                     preconditioner_fn=preconditioner_at_state.device_function,
-                    solver_width=config.n,
+                    solver_width=config.n_states,
                 )
                 counts["error_solve"] = (
                     operator_at_state.operation_count
@@ -578,14 +579,14 @@ class FIRKStep(ODEImplicitStep):
 
         self.update_compile_settings(
             {
-                "solver_function": self.solver.device_function,
+                self.solver_fn_key: self.solver.device_function,
                 "prepare_jacobian_fn": prepare_function,
                 "predictor_fn": (
                     self.dense_predictor.device_function
                     if self.dense_prediction
                     else None
                 ),
-                "error_solver_fn": (
+                "error_linear_solver_fn": (
                     self.error_solver.device_function
                     if self.smooth_error
                     else None
@@ -613,7 +614,7 @@ class FIRKStep(ODEImplicitStep):
         use_dense_prediction = self.dense_prediction
         predict_stages = config.predictor_fn
         use_smoothed_error = self.smooth_error
-        error_solver = config.error_solver_fn
+        error_solver = config.error_linear_solver_fn
         apply_mass = config.apply_mass_fn
         use_cached_solve = self.uses_cached_solve
         prepare_jacobian = config.prepare_jacobian_fn
@@ -992,7 +993,7 @@ class FIRKStep(ODEImplicitStep):
     @property
     def performance_defaults(self) -> Dict[str, Any]:
         """Share ``stage_increment`` above the measured state-count cut."""
-        shared = self.n > SHARED_STAGE_INCREMENT_MIN_STATES
+        shared = self.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
         return {"stage_increment_location": "shared" if shared else "local"}
 
     @property
@@ -1026,12 +1027,12 @@ class FIRKStep(ODEImplicitStep):
         return self.tableau.order
 
     @property
-    def controller_order(self) -> int:
+    def algorithm_order(self) -> int:
         """Return the order of accuracy used for step-size control."""
         if self.smooth_error:
             tableau = self.compile_settings.tableau
             return min(self.order, tableau.smoothed_embedded_order)
-        return super().controller_order
+        return super().algorithm_order
 
     @property
     def threads_per_step(self) -> int:

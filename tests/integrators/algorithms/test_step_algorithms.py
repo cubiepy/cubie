@@ -454,7 +454,7 @@ def test_algorithm_factory_resolves_tableau_alias(
 
     step = get_algorithm_step(
         np.float64,
-        settings={"algorithm": alias_key, "n": 2, "dt": 1e-3},
+        settings={"algorithm": alias_key, "n_states": 2, "dt": 1e-3},
         warn_on_unused=False,
     )
     assert isinstance(step, expected_step_type)
@@ -588,7 +588,7 @@ def test_algorithm(
             step_object.threads_per_step == properties["threads_per_step"]
         ), "threads_per_step getter"
     config = step_object.compile_settings
-    assert config.n == system.sizes.states, "compile_settings.n getter"
+    assert config.n_states == system.sizes.states, "compile_settings.n_states getter"
     assert config.precision == precision, "compile_settings.precision getter"
 
     tableau = getattr(step_object, "tableau", None)
@@ -759,7 +759,7 @@ def test_algorithm(
 def test_firk_step_is_multistage_matches_tableau():
     """FIRKStep.is_multistage forwards stage_count > 1 from the tableau."""
     step = FIRKStep(
-        precision=np.float32, n=3, tableau=DEFAULT_FIRK_TABLEAU,
+        precision=np.float32, n_states=3, tableau=DEFAULT_FIRK_TABLEAU,
     )
     assert step.is_multistage == (DEFAULT_FIRK_TABLEAU.stage_count > 1)
 
@@ -777,7 +777,7 @@ def test_implicit_algorithm_selects_correction_norm(
     step_class, tableau, norm_type
 ):
     """Each implicit family selects its correction norm."""
-    kwargs = {"precision": np.float32, "n": 3}
+    kwargs = {"precision": np.float32, "n_states": 3}
     if tableau is not None:
         kwargs["tableau"] = tableau
     step = step_class(**kwargs)
@@ -800,7 +800,7 @@ def test_errorless_tableau_selects_fixed_controller(
     """Errorless tableaus select the fixed-step controller defaults."""
     step = step_class(
         precision=np.float32,
-        n=3,
+        n_states=3,
         tableau=tableau,
     )
 

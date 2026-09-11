@@ -642,7 +642,7 @@ class CUDAFactory(ABC):
     @property
     def products(self) -> Dict[str, Any]:
         """Return the build's outputs by cache field name."""
-        if not self.cache_valid:
+        if not self.cache_valid or self._cache is None:
             self._build()
         cache = self._cache
         return {
@@ -923,3 +923,16 @@ class MultipleInstanceCUDAFactory(CUDAFactory):
     def instance_label(self) -> str:
         """Return the instance label for this factory."""
         return self._instance_label
+
+    def prefixed(self, name: str) -> str:
+        """Return ``name`` keyed by this instance's label."""
+        label = self._instance_label
+        return f"{label}_{name}" if label else name
+
+    @property
+    def products(self) -> Dict[str, Any]:
+        """Return the build's outputs keyed by the instance label."""
+        return {
+            self.prefixed(name): value
+            for name, value in super().products.items()
+        }

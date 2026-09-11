@@ -317,7 +317,7 @@ class DenseStagePredictorConfig(CUDAFactoryConfig):
         Memory location of the stage sample buffer.
     """
 
-    n: int = field(default=1, validator=getype_validator(int, 1))
+    n_states: int = field(default=1, validator=getype_validator(int, 1))
     tableau: ButcherTableau = field(
         default=None,
         validator=validators.instance_of(ButcherTableau),
@@ -412,7 +412,7 @@ class DenseStagePredictor(CUDAFactory):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         tableau: ButcherTableau,
         **kwargs,
     ) -> None:
@@ -422,7 +422,7 @@ class DenseStagePredictor(CUDAFactory):
         ----------
         precision
             Floating-point precision for the transform.
-        n
+        n_states
             Number of state variables per stage.
         tableau
             Tableau the prediction matrix derives from.
@@ -436,7 +436,7 @@ class DenseStagePredictor(CUDAFactory):
             DenseStagePredictorConfig,
             required={
                 "precision": precision,
-                "n": n,
+                "n_states": n_states,
                 "tableau": tableau,
             },
             **kwargs,
@@ -496,7 +496,7 @@ class DenseStagePredictor(CUDAFactory):
         config = self.compile_settings
         numba_precision = config.numba_precision
         typed_zero = numba_precision(0.0)
-        n = int32(config.n)
+        n = int32(config.n_states)
         stage_count = int32(config.stage_count)
         transform_size = int32(config.transform_size)
         first_predicted = int32(config.first_predicted_row)

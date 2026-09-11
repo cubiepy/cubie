@@ -424,7 +424,7 @@ class InputArrays(BaseArrayManager):
             sysz.states,
             sysz.parameters,
             sysz.drivers,
-            solver_instance.driver_coefficients_shape,
+            solver_instance.coefficients_shape,
         )
         if sig == self._size_sig:
             return

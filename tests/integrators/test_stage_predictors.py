@@ -68,7 +68,7 @@ ZERO_NODE_SINGULAR_TABLEAU = ButcherTableau(
 def test_predictor_config_ratio_coefficients_in_precision(tableau):
     """The config's flat coefficient stack is in the run precision."""
     predictor = DenseStagePredictor(
-        precision=np.float32, n=2, tableau=tableau
+        precision=np.float32, n_states=2, tableau=tableau
     )
     coefficients = predictor.compile_settings.ratio_coefficients
     assert coefficients.dtype == np.float32
@@ -298,10 +298,10 @@ def test_predictor_locations_forwarded_at_construction(
     step_class, tableau
 ):
     """Predictor locations passed to the step constructor take effect."""
-    local = step_class(precision=np.float64, n=3, tableau=tableau)
+    local = step_class(precision=np.float64, n_states=3, tableau=tableau)
     shared = step_class(
         precision=np.float64,
-        n=3,
+        n_states=3,
         tableau=tableau,
         **SHARED_PREDICTOR_LOCATIONS,
     )
@@ -385,7 +385,7 @@ def test_uncalibrated_tableau_disables_prediction():
     )
     step = DIRKStep(
         precision=np.float64,
-        n=2,
+        n_states=2,
         tableau=custom,
         attempt_dense_prediction=True,
     )
@@ -413,7 +413,7 @@ def test_device_predictor_commit_flag(precision, apply_flag):
     stage_count = tableau.stage_count
     predictor = DenseStagePredictor(
         precision=precision,
-        n=n,
+        n_states=n,
         tableau=tableau,
     )
     predict = predictor.device_function

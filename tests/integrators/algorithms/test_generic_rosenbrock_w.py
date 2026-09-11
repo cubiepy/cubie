@@ -24,7 +24,7 @@ def test_errorless_tableau_selects_fixed_controller_defaults():
     assert errorless_tableau.has_error_estimate is False
 
     step = GenericRosenbrockWStep(
-        precision=np.float32, n=3, tableau=errorless_tableau,
+        precision=np.float32, n_states=3, tableau=errorless_tableau,
     )
     defaults = step.controller_default_settings
     assert defaults["step_controller"] == "fixed"
@@ -34,7 +34,7 @@ def test_shared_stage_increment_gets_its_own_window():
     """Shared stage_increment gets a window disjoint from stage_store."""
     step = GenericRosenbrockWStep(
         precision=np.float32,
-        n=3,
+        n_states=3,
         tableau=ROS3P_TABLEAU,
         stage_rhs_location="shared",
         stage_store_location="shared",
@@ -56,7 +56,7 @@ def test_cached_auxiliaries_sized_after_helper_refresh(precision, system):
     """
     step = GenericRosenbrockWStep(
         precision=precision,
-        n=system.sizes.states,
+        n_states=system.sizes.states,
         dxdt_fn=system.dxdt_fn,
         observables_fn=system.observables_fn,
         get_solver_helper_fn=system.get_solver_helper,

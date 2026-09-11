@@ -28,7 +28,7 @@ from cubie.integrators.norms import (
 
 
 def test_config_defaults():
-    """Default solver_width=1, n=1, atol=[1e-6], rtol=[1e-6]."""
+    """Default solver_width=1, n_states=1, atol=[1e-6], rtol=[1e-6]."""
     cfg = ScaledNormConfig(precision=np.float64)
     assert cfg.solver_width == 1
     assert cfg.atol.shape == (1,)
@@ -40,7 +40,7 @@ def test_config_defaults():
 def test_config_n_validated_minimum():
     """n must be >= 1."""
     with pytest.raises((ValueError, TypeError)):
-        ScaledNormConfig(precision=np.float64, solver_width=0, n=0)
+        ScaledNormConfig(precision=np.float64, solver_width=0, n_states=0)
 
 
 def test_config_custom_tolerances():
@@ -48,7 +48,7 @@ def test_config_custom_tolerances():
     atol = np.array([1e-4, 1e-5, 1e-6], dtype=np.float64)
     rtol = np.array([1e-3, 1e-4, 1e-5], dtype=np.float64)
     cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=3, n=3, atol=atol, rtol=rtol
+        precision=np.float64, solver_width=3, n_states=3, atol=atol, rtol=rtol
     )
     assert_allclose(cfg.atol, atol)
     assert_allclose(cfg.rtol, rtol)
@@ -59,7 +59,7 @@ def test_config_tolerance_arrays_sealed_after_hashing():
     """Stored tolerances cannot change under a memoized hash."""
     caller_atol = np.array([1e-4, 1e-5, 1e-6], dtype=np.float32)
     cfg = ScaledNormConfig(
-        precision=np.float32, solver_width=3, n=3, atol=caller_atol,
+        precision=np.float32, solver_width=3, n_states=3, atol=caller_atol,
         rtol=1e-4,
     )
     hash_before = cfg.values_hash
@@ -78,7 +78,7 @@ def test_config_tolerance_arrays_sealed_after_hashing():
 def test_config_scalar_tolerance_broadcast():
     """Scalar tolerance is broadcast to array of length n."""
     cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=4, n=4, atol=1e-5, rtol=1e-4
+        precision=np.float64, solver_width=4, n_states=4, atol=1e-5, rtol=1e-4
     )
     assert cfg.atol.shape == (4,)
     assert cfg.rtol.shape == (4,)
@@ -90,7 +90,7 @@ def test_config_negative_atol_rejected():
     """atol rejects arrays containing negative values."""
     with pytest.raises(ValueError):
         ScaledNormConfig(
-            precision=np.float64, solver_width=2, n=2, atol=-1e-6
+            precision=np.float64, solver_width=2, n_states=2, atol=-1e-6
         )
 
 
@@ -99,7 +99,7 @@ def test_config_negative_rtol_rejected():
     rtol = np.array([1e-4, -1e-4], dtype=np.float64)
     with pytest.raises(ValueError):
         ScaledNormConfig(
-            precision=np.float64, solver_width=2, n=2, rtol=rtol
+            precision=np.float64, solver_width=2, n_states=2, rtol=rtol
         )
 
 
@@ -107,7 +107,7 @@ def test_config_zero_tolerances_accepted():
     """Zero tolerances are valid; atol floors at ATOL_FLOOR, warning."""
     with pytest.warns(UserWarning, match="raised to that floor"):
         cfg = ScaledNormConfig(
-            precision=np.float64, solver_width=2, n=2, atol=0.0, rtol=0.0
+            precision=np.float64, solver_width=2, n_states=2, atol=0.0, rtol=0.0
         )
     assert_array_equal(cfg.atol, np.full(2, ATOL_FLOOR))
     assert_array_equal(cfg.rtol, np.zeros(2))
@@ -115,7 +115,7 @@ def test_config_zero_tolerances_accepted():
 
 def test_config_inv_n():
     """inv_n returns precision(1.0/n)."""
-    cfg = ScaledNormConfig(precision=np.float32, solver_width=5, n=5)
+    cfg = ScaledNormConfig(precision=np.float32, solver_width=5, n_states=5)
     expected = np.float32(1.0 / 5)
     assert cfg.inv_n == pytest.approx(float(expected), rel=1e-6)
 
@@ -125,7 +125,7 @@ def test_config_atol_floors_each_entry_on_host():
     atol = np.array([0.0, 1e-20, 1e-3], dtype=np.float64)
     with pytest.warns(UserWarning, match=r"\[0\.0, 1e-20\]"):
         cfg = ScaledNormConfig(
-            precision=np.float64, solver_width=3, n=3, atol=atol
+            precision=np.float64, solver_width=3, n_states=3, atol=atol
         )
     assert_array_equal(cfg.atol, np.array([ATOL_FLOOR, ATOL_FLOOR, 1e-3]))
     assert not cfg.atol.flags.writeable
@@ -136,7 +136,7 @@ def test_config_atol_above_floor_does_not_warn():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         cfg = ScaledNormConfig(
-            precision=np.float64, solver_width=2, n=2, atol=1e-12
+            precision=np.float64, solver_width=2, n_states=2, atol=1e-12
         )
     assert_array_equal(cfg.atol, np.full(2, 1e-12))
 
@@ -163,10 +163,10 @@ def test_config_rtol_prefixed_metadata():
 def test_resize_uniform_tolerances_on_n_change():
     """Uniform tolerance arrays expand when n changes."""
     cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=2, n=2, atol=1e-5, rtol=1e-4
+        precision=np.float64, solver_width=2, n_states=2, atol=1e-5, rtol=1e-4
     )
     assert cfg.atol.shape == (2,)
-    replacement, _, changed = cfg.update({"solver_width": 5, "n": 5})
+    replacement, _, changed = cfg.update({"solver_width": 5, "n_states": 5})
     assert "solver_width" in changed
     assert replacement.atol.shape == (5,)
     assert replacement.rtol.shape == (5,)
@@ -180,7 +180,7 @@ def test_resize_skips_matching_length():
     """Tolerances already matching n are not modified."""
     atol = np.array([1e-4, 1e-5, 1e-6], dtype=np.float64)
     cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=3, n=3, atol=atol, rtol=1e-3
+        precision=np.float64, solver_width=3, n_states=3, atol=atol, rtol=1e-3
     )
     replacement, _, changed = cfg.update({"solver_width": 3})  # same size
     assert changed == set()
@@ -195,14 +195,14 @@ def test_resize_nonuniform_wrong_length_raises():
     """
     atol = np.array([1e-4, 1e-5], dtype=np.float64)
     cfg = ScaledNormConfig(
-        precision=np.float64, solver_width=2, n=2, atol=atol, rtol=1e-3
+        precision=np.float64, solver_width=2, n_states=2, atol=atol, rtol=1e-3
     )
     with pytest.raises(ValueError, match="shape"):
-        cfg.update({"solver_width": 5, "n": 5})
+        cfg.update({"solver_width": 5, "n_states": 5})
     # A combined update supplies consistent values in one snapshot.
     new_atol = np.array([1e-4, 1e-5, 1e-6, 1e-7, 1e-8], dtype=np.float64)
     replacement, _, changed = cfg.update(
-        {"solver_width": 5, "n": 5, "atol": new_atol}
+        {"solver_width": 5, "n_states": 5, "atol": new_atol}
     )
     assert replacement.atol.shape == (5,)
     assert_allclose(replacement.atol, new_atol)
@@ -214,7 +214,7 @@ def test_resize_nonuniform_wrong_length_raises():
 def test_whole_vector_config_rejects_smaller_n():
     """A whole-vector norm cannot hold fewer tolerances than values."""
     with pytest.raises(ValueError, match="whole-vector"):
-        ScaledNormConfig(precision=np.float64, solver_width=6, n=3)
+        ScaledNormConfig(precision=np.float64, solver_width=6, n_states=3)
 
 
 @pytest.mark.parametrize(
@@ -233,7 +233,7 @@ def test_tiled_config_tolerances_are_per_state(config_class, extra):
     cfg = config_class(
         precision=np.float64,
         solver_width=4,
-        n=2,
+        n_states=2,
         atol=atol,
         rtol=1e-4,
         **extra,
@@ -249,7 +249,7 @@ def test_tiled_config_rejects_solver_width_length_tolerance():
     atol = np.array([1e-7, 1e-6, 1e-5, 1e-4], dtype=np.float64)
     with pytest.raises(ValueError, match="shape"):
         TiledScaledNormConfig(
-            precision=np.float64, solver_width=4, n=2, atol=atol
+            precision=np.float64, solver_width=4, n_states=2, atol=atol
         )
 
 
@@ -261,7 +261,7 @@ def test_tiled_norm_tiles_tolerances_across_stages():
     atol = np.array([1e-3, 1e-5], dtype=np.float64)
     rtol = np.array([1e-2, 1e-4], dtype=np.float64)
     factory = TiledScaledNorm(
-        precision=np.float64, solver_width=width, n=n, atol=atol, rtol=rtol
+        precision=np.float64, solver_width=width, n_states=n, atol=atol, rtol=rtol
     )
     fn = factory.device_function
 
@@ -299,7 +299,7 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
     factory = FIRKCorrectionNorm(
         precision=np.float64,
         solver_width=width,
-        n=n,
+        n_states=n,
         stage_coefficients=tuple(a.ravel().tolist()),
         atol=atol,
         rtol=rtol,
@@ -349,7 +349,7 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
 
 def test_cache_from_build():
     """Build returns ScaledNormCache with norm_fn field."""
-    factory = ScaledNorm(precision=np.float64, solver_width=3, n=3)
+    factory = ScaledNorm(precision=np.float64, solver_width=3, n_states=3)
     _ = factory.device_function
     cache = factory._cache
     # Cache holds the same function as device_function property
@@ -364,7 +364,7 @@ def test_init_sets_compile_settings():
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=4,
-        n=4,
+        n_states=4,
         atol=1e-5,
         rtol=1e-4,
     )
@@ -381,7 +381,7 @@ def test_init_with_instance_label():
     rtol = np.array([1e-5, 1e-4, 1e-3], dtype=np.float64)
     factory = ScaledNorm(
         precision=np.float64,
-        solver_width=3, n=3,
+        solver_width=3, n_states=3,
         instance_label="krylov",
         krylov_atol=atol,
         krylov_rtol=rtol,
@@ -394,7 +394,7 @@ def test_init_empty_instance_label():
     """Empty instance_label uses unprefixed kwargs."""
     atol = np.array([1e-8, 1e-7], dtype=np.float64)
     factory = ScaledNorm(
-        precision=np.float64, solver_width=2, n=2, instance_label="", atol=atol
+        precision=np.float64, solver_width=2, n_states=2, instance_label="", atol=atol
     )
     assert_allclose(factory.atol, atol)
 
@@ -407,7 +407,7 @@ def test_build_converged_norm():
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=3,
-        n=3,
+        n_states=3,
         atol=1e-3,
         rtol=1e-3,
     )
@@ -436,7 +436,7 @@ def test_build_exceeds_tolerance():
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=3,
-        n=3,
+        n_states=3,
         atol=1e-6,
         rtol=1e-6,
     )
@@ -464,7 +464,7 @@ def test_build_atol_floor_prevents_division_by_zero():
     """With atol and rtol*ref both zero the host atol floor divides."""
     with pytest.warns(UserWarning, match="raised to that floor"):
         factory = ScaledNorm(
-            precision=np.float64, solver_width=1, n=1, atol=0.0, rtol=0.0
+            precision=np.float64, solver_width=1, n_states=1, atol=0.0, rtol=0.0
         )
     fn = factory.device_function
 
@@ -494,7 +494,7 @@ def test_build_mean_squared_norm():
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=2,
-        n=2,
+        n_states=2,
         atol=atol,
         rtol=rtol,
     )
@@ -524,7 +524,7 @@ def test_build_mean_squared_norm():
 def test_two_ref_config_defaults_every_row_flagged():
     """mass_flags defaults to one True per state."""
     cfg = TwoRefMaskedScaledNormConfig(
-        precision=np.float32, solver_width=3, n=3
+        precision=np.float32, solver_width=3, n_states=3
     )
     assert cfg.mass_flags == (True, True, True)
     assert cfg.flagged_indices == (0, 1, 2)
@@ -536,7 +536,7 @@ def test_two_ref_config_masked_rows_shape_the_mean():
     cfg = TwoRefMaskedScaledNormConfig(
         precision=np.float64,
         solver_width=4,
-        n=4,
+        n_states=4,
         mass_flags=[True, False, False, True],
     )
     assert cfg.mass_flags == (True, False, False, True)
@@ -547,7 +547,7 @@ def test_two_ref_config_masked_rows_shape_the_mean():
 def test_two_ref_config_mass_flags_length_must_match_n():
     with pytest.raises(ValueError, match="one flag per state"):
         TwoRefMaskedScaledNormConfig(
-            precision=np.float64, solver_width=3, n=3,
+            precision=np.float64, solver_width=3, n_states=3,
             mass_flags=(True, False),
         )
 
@@ -573,7 +573,7 @@ def _run_two_ref_norm(factory, values, reference_a, reference_b):
 def test_two_ref_build_scales_by_larger_reference():
     """Each row's rtol term uses the larger of the two references."""
     factory = TwoRefMaskedScaledNorm(
-        precision=np.float64, solver_width=2, n=2, atol=1e-3, rtol=1e-3
+        precision=np.float64, solver_width=2, n_states=2, atol=1e-3, rtol=1e-3
     )
     result = _run_two_ref_norm(
         factory, [2e-3, 3e-3], [1.0, 9.0], [4.0, 2.0]
@@ -588,7 +588,7 @@ def test_two_ref_build_unflagged_rows_leave_the_norm():
     factory = TwoRefMaskedScaledNorm(
         precision=np.float64,
         solver_width=3,
-        n=3,
+        n_states=3,
         atol=1e-3,
         rtol=0.0,
         mass_flags=(True, False, True),
@@ -603,7 +603,7 @@ def test_two_ref_build_unflagged_rows_leave_the_norm():
 def test_two_ref_build_zero_error_gives_zero_norm():
     """No numerator floor: an exactly zero error norm is zero."""
     factory = TwoRefMaskedScaledNorm(
-        precision=np.float32, solver_width=2, n=2, atol=1e-6, rtol=1e-6
+        precision=np.float32, solver_width=2, n_states=2, atol=1e-6, rtol=1e-6
     )
     result = _run_two_ref_norm(factory, [0.0, 0.0], [1.0, 1.0], [1.0, 1.0])
     assert result == 0.0
@@ -612,7 +612,7 @@ def test_two_ref_build_zero_error_gives_zero_norm():
 def test_two_ref_update_mass_flags_rebuilds():
     """Changing mass_flags through update changes the compiled norm."""
     factory = TwoRefMaskedScaledNorm(
-        precision=np.float64, solver_width=2, n=2, atol=1e-3, rtol=0.0
+        precision=np.float64, solver_width=2, n_states=2, atol=1e-3, rtol=0.0
     )
     before = _run_two_ref_norm(factory, [1e-3, 3e-3], [0.0, 0.0], [0.0, 0.0])
     assert_allclose(before, (1.0 + 9.0) / 2, rtol=1e-12)
@@ -628,7 +628,7 @@ def test_two_ref_update_mass_flags_rebuilds():
 _CORRECTION_NORM_CASES = {
     "dirk": dict(
         factory=DIRKCorrectionNorm,
-        factory_kwargs=dict(solver_width=2, n=2),
+        factory_kwargs=dict(solver_width=2, n_states=2),
         a_ij=0.5,
         delta=(0.21, 0.3),
         increment=(2.0, -1.0),
@@ -640,7 +640,7 @@ _CORRECTION_NORM_CASES = {
         factory=FIRKCorrectionNorm,
         factory_kwargs=dict(
             solver_width=4,
-            n=2,
+            n_states=2,
             stage_coefficients=(0.5, 0.0, 0.5, 0.5),
         ),
         a_ij=0.0,
@@ -725,7 +725,7 @@ def test_update_invalidates_cache():
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=3,
-        n=3,
+        n_states=3,
         atol=1e-6,
         rtol=1e-6,
     )
@@ -739,7 +739,7 @@ def test_update_invalidates_cache():
 
 def test_update_empty_returns_empty_set():
     """Empty update returns empty set without cache invalidation."""
-    factory = ScaledNorm(precision=np.float64, solver_width=2, n=2)
+    factory = ScaledNorm(precision=np.float64, solver_width=2, n_states=2)
     _ = factory.device_function
     result = factory.update()
     assert result == set()
@@ -751,7 +751,7 @@ def test_update_merges_dict_and_kwargs():
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=2,
-        n=2,
+        n_states=2,
         atol=1e-6,
         rtol=1e-6,
     )
@@ -779,7 +779,7 @@ def test_forwarding_scalar_properties(prop, child_attr):
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=4,
-        n=4,
+        n_states=4,
         atol=1e-5,
         rtol=1e-4,
     )
@@ -800,7 +800,7 @@ def test_forwarding_array_properties(prop, child_attr):
     factory = ScaledNorm(
         precision=np.float64,
         solver_width=3,
-        n=3,
+        n_states=3,
         atol=1e-5,
         rtol=1e-4,
     )
@@ -811,7 +811,7 @@ def test_forwarding_array_properties(prop, child_attr):
 
 def test_device_function_forwards_cache():
     """device_function returns get_cached_output('norm_fn')."""
-    factory = ScaledNorm(precision=np.float64, solver_width=2, n=2)
+    factory = ScaledNorm(precision=np.float64, solver_width=2, n_states=2)
     fn = factory.device_function
     assert fn is factory.get_cached_output("norm_fn")
 
@@ -830,7 +830,7 @@ def test_correction_rtol_below_noise_floor_raised_silently():
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error")
         cfg = CorrectionNormConfig(
-            precision=np.float32, solver_width=3, n=3, rtol=rtol
+            precision=np.float32, solver_width=3, n_states=3, rtol=rtol
         )
     assert_allclose(
         cfg.rtol, np.array([floor32, 0.0, 1e-3], dtype=np.float32)
@@ -846,7 +846,7 @@ def test_correction_rtol_at_or_above_floor_unchanged():
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error")
         cfg = CorrectionNormConfig(
-            precision=np.float64, solver_width=2, n=2, rtol=1e-9
+            precision=np.float64, solver_width=2, n_states=2, rtol=1e-9
         )
     assert_allclose(cfg.rtol, [1e-9, 1e-9])
 
@@ -858,6 +858,6 @@ def test_residual_norm_rtol_not_floored():
     with warnings_module.catch_warnings():
         warnings_module.simplefilter("error")
         cfg = ScaledNormConfig(
-            precision=np.float32, solver_width=2, n=2, rtol=1e-15
+            precision=np.float32, solver_width=2, n_states=2, rtol=1e-15
         )
     assert_allclose(cfg.rtol, np.array([1e-15, 1e-15], np.float32))

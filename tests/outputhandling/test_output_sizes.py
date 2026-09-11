@@ -183,13 +183,13 @@ def test_batch_input_driver_coefficients(solverkernel):
     sizes = BatchInputSizes.from_solver(solverkernel)
     assert (
         sizes.driver_coefficients
-        == solverkernel.driver_coefficients_shape
+        == solverkernel.coefficients_shape
     )
 
 
 def test_batch_input_driver_coefficients_follow_pin(solverkernel_mutable):
     """An updated coefficient layout flows into the sizes."""
-    solverkernel_mutable.update(driver_coefficients_shape=(7, 2, 4))
+    solverkernel_mutable.update(coefficients_shape=(7, 2, 4))
     sizes = BatchInputSizes.from_solver(solverkernel_mutable)
     assert sizes.driver_coefficients == (7, 2, 4)
 
