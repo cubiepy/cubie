@@ -449,7 +449,7 @@ def solved_solver_simple(solver, ...):
 ```python
 # BAD — test_norms.py constructs everything from scratch
 def test_norm_computation():
-    config = ScaledNormConfig(n=3, ...)
+    config = ScaledNormConfig(n_states=3, ...)
     norm = ScaledNorm(config)
     ...
 

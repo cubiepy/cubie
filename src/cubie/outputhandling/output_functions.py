@@ -11,7 +11,7 @@ Published Classes
 
     >>> from numpy import float32
     >>> of = OutputFunctions(
-    ...     max_states=3, max_observables=2, precision=float32,
+    ...     n_states=3, n_observables=2, precision=float32,
     ... )
     >>> of.n_saved_states
     3
@@ -127,9 +127,9 @@ class OutputFunctions(CUDAFactory):
 
     Parameters
     ----------
-    max_states
+    n_states
         Maximum number of state variables in the system.
-    max_observables
+    n_observables
         Maximum number of observable variables in the system.
     output_types
         Types of output to generate. Defaults to ["state"].
@@ -159,8 +159,8 @@ class OutputFunctions(CUDAFactory):
 
     def __init__(
         self,
-        max_states: int,
-        max_observables: int,
+        n_states: int,
+        n_observables: int,
         precision: PrecisionDType,
         output_types: list[str] = None,
         saved_state_indices: Union[Sequence[int], ArrayLike] = None,
@@ -177,8 +177,8 @@ class OutputFunctions(CUDAFactory):
         # Create and setup output configuration as compile settings
         config = OutputConfig.from_loop_settings(
             output_types=output_types,
-            max_states=max_states,
-            max_observables=max_observables,
+            n_states=n_states,
+            n_observables=n_observables,
             saved_state_indices=saved_state_indices,
             saved_observable_indices=saved_observable_indices,
             summarised_state_indices=summarised_state_indices,
@@ -234,18 +234,18 @@ class OutputFunctions(CUDAFactory):
         # Trim stored indices to shrinking maxima; explicit indices
         # in the same update win.
         config = self.compile_settings
-        new_max_states = updates_dict.get(
-            "max_states", config.max_states
+        new_n_states = updates_dict.get(
+            "n_states", config.n_states
         )
-        new_max_observables = updates_dict.get(
-            "max_observables", config.max_observables
+        new_n_observables = updates_dict.get(
+            "n_observables", config.n_observables
         )
         if (
-            new_max_states != config.max_states
-            or new_max_observables != config.max_observables
+            new_n_states != config.n_states
+            or new_n_observables != config.n_observables
         ):
             trimmed = config.trimmed_index_updates(
-                new_max_states, new_max_observables
+                new_n_states, new_n_observables
             )
             for key, indices in trimmed.items():
                 updates_dict.setdefault(key, indices)

@@ -41,7 +41,7 @@ MATRIXFREE_FLOAT_KEYS = frozenset(
 NEWTON_CONVERGENCE_EDGE_CASES = {
     "small-first-step": dict(
         kind="zero",
-        n=1,
+        n_states=1,
         newton_atol=1e-6,
         newton_rtol=0.0,
         newton_max_iters=4,
@@ -58,7 +58,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     ),
     "warm-start": dict(
         kind="linear",
-        n=1,
+        n_states=1,
         newton_atol=1e-2,
         newton_rtol=0.0,
         newton_max_iters=8,
@@ -76,7 +76,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     # Constant residual: the stagnant solve runs to the cap.
     "stagnation-max-iters": dict(
         kind="constant",
-        n=1,
+        n_states=1,
         newton_atol=1e-2,
         newton_rtol=0.0,
         newton_max_iters=4,
@@ -94,7 +94,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     # A growing update under tolerance accepts the iterate.
     "growth-under-tolerance-accepts": dict(
         kind="floor-bounce",
-        n=1,
+        n_states=1,
         newton_atol=1.0,
         newton_rtol=0.0,
         newton_max_iters=8,
@@ -112,7 +112,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     # A contracting update under tolerance after a 4x growth commits.
     "growth-then-contraction-commits": dict(
         kind="growth-contract",
-        n=1,
+        n_states=1,
         newton_atol=1.0,
         newton_rtol=0.0,
         newton_max_iters=8,
@@ -130,7 +130,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     # Tripling updates run to the cap and flag divergence.
     "theta-growth-divergence": dict(
         kind="root",
-        n=1,
+        n_states=1,
         newton_atol=1e-2,
         newton_rtol=0.0,
         newton_max_iters=4,
@@ -149,7 +149,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     ),
     "linear-failure-gates-commit": dict(
         kind="mixed-diag",
-        n=2,
+        n_states=2,
         newton_atol=1e-3,
         newton_rtol=0.0,
         newton_max_iters=32,
@@ -168,7 +168,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     ),
     "max-iters-exceeded": dict(
         kind="cubic",
-        n=1,
+        n_states=1,
         newton_atol=1e-20,
         newton_rtol=0.0,
         newton_max_iters=1,
@@ -185,7 +185,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     ),
     "linear-failure-blocks-accept": dict(
         kind="zero-operator",
-        n=1,
+        n_states=1,
         newton_atol=1e-8,
         newton_rtol=0.0,
         newton_max_iters=4,
@@ -205,7 +205,7 @@ NEWTON_CONVERGENCE_EDGE_CASES = {
     # rtol floors at 4 ULP: the repeated 2-ULP update is under tolerance.
     "tolerance-floor-accept": dict(
         kind="noise",
-        n=1,
+        n_states=1,
         newton_atol=1e-30,
         newton_rtol=1e-30,
         newton_max_iters=4,
@@ -312,7 +312,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
     case = newton_edge_case
     linear_solver = MRLinearSolver(
         precision=precision,
-        solver_width=case["n"],
+        solver_width=case["n_states"],
         krylov_atol=case["krylov_atol"],
         krylov_rtol=0.0,
         krylov_max_iters=case["krylov_max_iters"],
@@ -321,7 +321,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
     linear_solver.update(operator_apply_fn=newton_edge_system["operator"])
     newton = NewtonKrylov(
         precision=precision,
-        solver_width=case["n"],
+        solver_width=case["n_states"],
         linear_solver=linear_solver,
         newton_atol=case["newton_atol"],
         newton_rtol=case["newton_rtol"],
@@ -335,7 +335,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
 def newton_edge_kernel(newton_edge_case, newton_edge_solver, precision):
     """Compile the two-solve kernel once per parameter set."""
     solver = newton_edge_solver.device_function
-    n_states = newton_edge_case["n"]
+    n_states = newton_edge_case["n_states"]
     shared_size = max(newton_edge_solver.shared_buffer_size, 1)
     persistent_size = max(
         newton_edge_solver.persistent_local_buffer_size, 1
@@ -386,7 +386,7 @@ def newton_edge_outcome(newton_edge_case, newton_edge_kernel, precision):
     case = newton_edge_case
     states = cuda.to_device(
         np.array(case["initials"], dtype=precision).reshape(
-            2, case["n"]
+            2, case["n_states"]
         )
     )
     statuses = cuda.to_device(np.zeros(2, dtype=np.int32))

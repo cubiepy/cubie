@@ -212,7 +212,7 @@ class BatchSolverConfig(CUDAFactoryConfig):
         allocation to ptxas (currently 255 for large systems, limiting
         occupancy to one block per SM); capping trades spill traffic
         for more resident warps.
-    driver_coefficients_shape
+    coefficients_shape
         Driver-coefficient layout ``(num_segments, num_drivers,
         order + 1)`` baked into the compiled driver evaluators as
         closure constants. The Solver keeps it aligned with
@@ -243,7 +243,7 @@ class BatchSolverConfig(CUDAFactoryConfig):
         default=None,
         validator=attrs.validators.optional(getype_validator(int, 1)),
     )
-    driver_coefficients_shape: Tuple[int, int, int] = attrs.field(
+    coefficients_shape: Tuple[int, int, int] = attrs.field(
         default=(0, 0, 0),
         converter=_as_int_tuple,
         validator=[

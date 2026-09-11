@@ -190,15 +190,15 @@ class BaseAdaptiveStepController(BaseStepController):
         self,
         precision: PrecisionDType,
         dt: float = None,
-        n: int = 1,
+        n_states: int = 1,
         **kwargs,
     ) -> None:
-        super().__init__(precision=precision, dt=dt, n=n, **kwargs)
+        super().__init__(precision=precision, dt=dt, n_states=n_states, **kwargs)
         config = self.compile_settings
         self.norm = TwoRefMaskedScaledNorm(
             precision=config.precision,
-            solver_width=config.n,
-            n=config.n,
+            solver_width=config.n_states,
+            n_states=config.n_states,
             atol=config.atol,
             rtol=config.rtol,
             mass_flags=config.mass_flags,
@@ -221,8 +221,8 @@ class BaseAdaptiveStepController(BaseStepController):
         updates_dict = updates_dict.copy()
         updates_dict.update(kwargs)
         norm_updates = dict(updates_dict)
-        if "n" in norm_updates:
-            norm_updates["solver_width"] = norm_updates["n"]
+        if "n_states" in norm_updates:
+            norm_updates["solver_width"] = norm_updates["n_states"]
         self.norm.update(norm_updates, silent=True)
         updates_dict["norm_fn"] = self.norm.device_function
         return super().update(updates_dict, silent=silent)

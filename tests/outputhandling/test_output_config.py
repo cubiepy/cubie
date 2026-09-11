@@ -100,7 +100,7 @@ def test_compile_flags_hash_stable():
 def test_init_calls_validation_passes():
     """Construction calls validation_passes which sets flags."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["time"], precision=np.float32,
     )
     assert cfg._save_state is False
@@ -110,7 +110,7 @@ def test_init_calls_validation_passes():
 def test_check_saved_indices_converts_to_numpy():
     """_check_saved_indices converts lists to numpy int arrays."""
     cfg = OutputConfig(
-        max_states=5, max_observables=3,
+        n_states=5, n_observables=3,
         saved_state_indices=[0, 1],
         saved_observable_indices=[0, 2],
         output_types=["state", "observables"],
@@ -123,7 +123,7 @@ def test_check_saved_indices_converts_to_numpy():
 def test_check_summarised_indices_converts_to_numpy():
     """_check_summarised_indices converts lists to numpy int arrays."""
     cfg = OutputConfig(
-        max_states=5, max_observables=3,
+        n_states=5, n_observables=3,
         summarised_state_indices=[0, 1],
         summarised_observable_indices=[0],
         output_types=["mean"], precision=np.float32,
@@ -133,20 +133,20 @@ def test_check_summarised_indices_converts_to_numpy():
 
 
 def test_validate_index_arrays_state_bounds():
-    """State indices validated against _max_states."""
+    """State indices validated against _n_states."""
     with pytest.raises(ValueError, match="Indices must be in the range"):
         OutputConfig(
-            max_states=3, max_observables=2,
+            n_states=3, n_observables=2,
             saved_state_indices=[0, 3],
             output_types=["state"], precision=np.float32,
         )
 
 
 def test_validate_index_arrays_observable_bounds():
-    """Observable indices validated against _max_observables."""
+    """Observable indices validated against _n_observables."""
     with pytest.raises(ValueError, match="Indices must be in the range"):
         OutputConfig(
-            max_states=5, max_observables=2,
+            n_states=5, n_observables=2,
             saved_observable_indices=[0, 2],
             output_types=["observables"], precision=np.float32,
         )
@@ -156,7 +156,7 @@ def test_check_for_no_outputs_raises():
     """Raises ValueError when no output types enabled."""
     with pytest.raises(ValueError, match="At least one output type"):
         OutputConfig(
-            max_states=3, max_observables=2,
+            n_states=3, n_observables=2,
             output_types=[], precision=np.float32,
         )
 
@@ -174,7 +174,7 @@ def test_check_for_no_outputs_raises():
 def test_check_for_no_outputs_passes_each_branch(output_types):
     """At least one output path active passes validation."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_state_indices=[0, 1],
         saved_observable_indices=[0],
         summarised_state_indices=[0],
@@ -185,29 +185,29 @@ def test_check_for_no_outputs_passes_each_branch(output_types):
     assert cfg.output_types == tuple(output_types)
 
 
-# -- max_states / max_observables properties + setters -------------------- #
+# -- n_states / n_observables properties + setters -------------------- #
 
 
-def test_max_states_getter():
-    """Getter returns _max_states."""
+def test_n_states_getter():
+    """Getter returns _n_states."""
     cfg = OutputConfig(
-        max_states=7, max_observables=2,
+        n_states=7, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0, 1],
         precision=np.float32,
     )
-    assert cfg.max_states == 7
+    assert cfg.n_states == 7
 
 
-def test_max_states_assignment_raises():
+def test_n_states_assignment_raises():
     """Snapshots are immutable: direct assignment raises."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_state_indices=np.arange(3, dtype=np.int32),
         output_types=["state"], precision=np.float32,
     )
     with pytest.raises(AttributeError):
-        cfg.max_states = 5
+        cfg.n_states = 5
 
 
 def test_index_arrays_are_sealed_owned_copies():
@@ -220,7 +220,7 @@ def test_index_arrays_are_sealed_owned_copies():
     """
     caller_indices = np.array([0, 1], dtype=np.int32)
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_state_indices=caller_indices,
         output_types=["state"], precision=np.float32,
     )
@@ -239,39 +239,39 @@ def test_index_arrays_are_sealed_owned_copies():
     # The memoized digest still matches an equal fresh snapshot.
     assert cfg.values_hash == digest
     fresh = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_state_indices=np.array([0, 1], dtype=np.int32),
         output_types=["state"], precision=np.float32,
     )
     assert fresh.values_hash == digest
     different = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_state_indices=np.array([2, 1], dtype=np.int32),
         output_types=["state"], precision=np.float32,
     )
     assert different.values_hash != digest
 
 
-def test_max_observables_getter():
-    """Getter returns _max_observables."""
+def test_n_observables_getter():
+    """Getter returns _n_observables."""
     cfg = OutputConfig(
-        max_states=3, max_observables=7,
+        n_states=3, n_observables=7,
         output_types=["time"], precision=np.float32,
     )
-    assert cfg.max_observables == 7
+    assert cfg.n_observables == 7
 
 
-def test_max_observables_update_derives_replacement():
-    """max_observables changes through the pure update path."""
+def test_n_observables_update_derives_replacement():
+    """n_observables changes through the pure update path."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         saved_observable_indices=[0, 2],
         output_types=["observables"], precision=np.float32,
     )
-    replacement, _, changed = cfg.update({"max_observables": 10})
-    assert "max_observables" in changed
-    assert replacement.max_observables == 10
-    assert cfg.max_observables == 5
+    replacement, _, changed = cfg.update({"n_observables": 10})
+    assert "n_observables" in changed
+    assert replacement.n_observables == 10
+    assert cfg.n_observables == 5
     assert_array_equal(
         replacement.saved_observable_indices,
         np.array([0, 2], dtype=np.int32),
@@ -295,7 +295,7 @@ def test_max_observables_update_derives_replacement():
 def test_save_state(output_types, indices, expected):
     """save_state depends on _save_state flag AND non-empty indices."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         saved_state_indices=indices,
         output_types=output_types, precision=np.float32,
     )
@@ -305,7 +305,7 @@ def test_save_state(output_types, indices, expected):
 def test_save_state_true_but_empty_indices():
     """save_state False when _save_state True but indices empty."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_state_indices=[],
         output_types=["state", "time"], precision=np.float32,
     )
@@ -329,7 +329,7 @@ def test_save_state_true_but_empty_indices():
 def test_save_observables(output_types, indices, expected):
     """save_observables depends on flag AND non-empty indices."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         saved_observable_indices=indices,
         output_types=output_types, precision=np.float32,
     )
@@ -339,7 +339,7 @@ def test_save_observables(output_types, indices, expected):
 def test_save_observables_true_but_empty_indices():
     """save_observables False when flag True but indices empty."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_observable_indices=[],
         output_types=["observables", "time"], precision=np.float32,
     )
@@ -352,7 +352,7 @@ def test_save_observables_true_but_empty_indices():
 def test_save_time():
     """save_time True when 'time' in output_types."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["time"], precision=np.float32,
     )
     assert cfg.save_time is True
@@ -361,7 +361,7 @@ def test_save_time():
 def test_save_counters():
     """save_counters True when 'iteration_counters' in output_types."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["iteration_counters"], precision=np.float32,
     )
     assert cfg.save_counters is True
@@ -373,7 +373,7 @@ def test_save_counters():
 def test_save_summaries_true():
     """save_summaries True when summary types non-empty."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["mean"], precision=np.float32,
     )
     assert cfg.save_summaries is True
@@ -382,7 +382,7 @@ def test_save_summaries_true():
 def test_save_summaries_false():
     """save_summaries False when no summary types."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -396,7 +396,7 @@ def test_save_summaries_false():
 def test_summarise_state_true():
     """True when summaries active AND summarised state indices > 0."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         summarised_state_indices=[0, 1],
         output_types=["mean"], precision=np.float32,
     )
@@ -406,7 +406,7 @@ def test_summarise_state_true():
 def test_summarise_state_false_no_summaries():
     """False when summaries not active."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         summarised_state_indices=[0, 1],
         output_types=["state"],
         saved_state_indices=[0],
@@ -418,7 +418,7 @@ def test_summarise_state_false_no_summaries():
 def test_summarise_state_false_no_indices():
     """False when n_summarised_states == 0."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         summarised_state_indices=[],
         output_types=["mean"], precision=np.float32,
     )
@@ -428,7 +428,7 @@ def test_summarise_state_false_no_indices():
 def test_summarise_observables_true():
     """True when summaries active AND obs indices > 0."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         summarised_observable_indices=[0, 1],
         output_types=["mean"], precision=np.float32,
     )
@@ -438,7 +438,7 @@ def test_summarise_observables_true():
 def test_summarise_observables_false_no_summaries():
     """False when summaries not active."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         summarised_observable_indices=[0, 1],
         output_types=["state"],
         saved_state_indices=[0],
@@ -450,7 +450,7 @@ def test_summarise_observables_false_no_summaries():
 def test_summarise_observables_false_no_indices():
     """False when n_summarised_observables == 0."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         summarised_observable_indices=[],
         output_types=["mean"], precision=np.float32,
     )
@@ -463,7 +463,7 @@ def test_summarise_observables_false_no_indices():
 def test_compile_flags_matches_config():
     """compile_flags fields derived from current config properties."""
     cfg = OutputConfig(
-        max_states=5, max_observables=3,
+        n_states=5, n_observables=3,
         saved_state_indices=[0, 1],
         saved_observable_indices=[0],
         summarised_state_indices=[0],
@@ -488,7 +488,7 @@ def test_compile_flags_matches_config():
 def test_saved_state_indices_empty_when_disabled():
     """Getter returns empty array when _save_state is False."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         saved_state_indices=[0, 1],
         output_types=["time"], precision=np.float32,
     )
@@ -498,7 +498,7 @@ def test_saved_state_indices_empty_when_disabled():
 def test_saved_state_indices_returns_array_when_enabled():
     """Getter returns _saved_state_indices when enabled."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         saved_state_indices=[0, 2, 4],
         output_types=["state"], precision=np.float32,
     )
@@ -511,7 +511,7 @@ def test_saved_state_indices_returns_array_when_enabled():
 def test_saved_state_indices_setter():
     """Setter converts to numpy int array and validates."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         saved_state_indices=[0, 1],
         output_types=["state"], precision=np.float32,
     )
@@ -526,7 +526,7 @@ def test_saved_state_indices_setter():
 def test_saved_observable_indices_empty_when_disabled():
     """Getter returns empty when _save_observables is False."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         saved_observable_indices=[0, 1],
         output_types=["time"], precision=np.float32,
     )
@@ -536,7 +536,7 @@ def test_saved_observable_indices_empty_when_disabled():
 def test_saved_observable_indices_returns_when_enabled():
     """Getter returns indices when _save_observables is True."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         saved_observable_indices=[1, 3],
         output_types=["observables"], precision=np.float32,
     )
@@ -549,7 +549,7 @@ def test_saved_observable_indices_returns_when_enabled():
 def test_saved_observable_indices_setter():
     """Setter converts, validates, checks no-outputs."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         saved_observable_indices=[0],
         output_types=["observables"], precision=np.float32,
     )
@@ -566,7 +566,7 @@ def test_saved_observable_indices_setter():
 def test_summarised_state_indices_empty_no_summaries():
     """Getter returns empty when save_summaries is False."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         summarised_state_indices=[0, 1],
         output_types=["state"],
         saved_state_indices=[0],
@@ -578,7 +578,7 @@ def test_summarised_state_indices_empty_no_summaries():
 def test_summarised_state_indices_returns_when_summaries():
     """Getter returns indices when save_summaries is True."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         summarised_state_indices=[0, 2],
         output_types=["mean"], precision=np.float32,
     )
@@ -591,7 +591,7 @@ def test_summarised_state_indices_returns_when_summaries():
 def test_summarised_state_indices_setter():
     """Setter converts, validates, checks no-outputs."""
     cfg = OutputConfig(
-        max_states=5, max_observables=2,
+        n_states=5, n_observables=2,
         summarised_state_indices=[0],
         output_types=["mean"], precision=np.float32,
     )
@@ -608,7 +608,7 @@ def test_summarised_state_indices_setter():
 def test_summarised_obs_indices_empty_no_summaries():
     """Getter returns empty when save_summaries is False."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         summarised_observable_indices=[0, 1],
         output_types=["state"],
         saved_state_indices=[0],
@@ -620,7 +620,7 @@ def test_summarised_obs_indices_empty_no_summaries():
 def test_summarised_obs_indices_returns_when_summaries():
     """Getter returns indices when save_summaries is True."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         summarised_observable_indices=[1, 4],
         output_types=["mean"], precision=np.float32,
     )
@@ -633,7 +633,7 @@ def test_summarised_obs_indices_returns_when_summaries():
 def test_summarised_observable_indices_setter():
     """Setter converts, validates, checks no-outputs."""
     cfg = OutputConfig(
-        max_states=3, max_observables=5,
+        n_states=3, n_observables=5,
         summarised_observable_indices=[0],
         output_types=["mean"], precision=np.float32,
     )
@@ -653,7 +653,7 @@ def test_summarised_observable_indices_setter():
 def test_n_saved_states_when_enabled():
     """Returns length of indices when _save_state True."""
     cfg = OutputConfig(
-        max_states=10, max_observables=2,
+        n_states=10, n_observables=2,
         saved_state_indices=[0, 3, 7],
         output_types=["state"], precision=np.float32,
     )
@@ -663,7 +663,7 @@ def test_n_saved_states_when_enabled():
 def test_n_saved_states_when_disabled():
     """Returns 0 when _save_state False."""
     cfg = OutputConfig(
-        max_states=10, max_observables=2,
+        n_states=10, n_observables=2,
         saved_state_indices=[0, 3],
         output_types=["time"], precision=np.float32,
     )
@@ -673,7 +673,7 @@ def test_n_saved_states_when_disabled():
 def test_n_saved_observables_when_enabled():
     """Returns length of indices when _save_observables True."""
     cfg = OutputConfig(
-        max_states=3, max_observables=10,
+        n_states=3, n_observables=10,
         saved_observable_indices=[0, 5, 9],
         output_types=["observables"], precision=np.float32,
     )
@@ -683,7 +683,7 @@ def test_n_saved_observables_when_enabled():
 def test_n_saved_observables_when_disabled():
     """Returns 0 when _save_observables False."""
     cfg = OutputConfig(
-        max_states=3, max_observables=10,
+        n_states=3, n_observables=10,
         saved_observable_indices=[0, 5],
         output_types=["time"], precision=np.float32,
     )
@@ -693,7 +693,7 @@ def test_n_saved_observables_when_disabled():
 def test_n_summarised_states_when_summaries():
     """Returns length of indices when summaries active."""
     cfg = OutputConfig(
-        max_states=10, max_observables=2,
+        n_states=10, n_observables=2,
         summarised_state_indices=[0, 1, 2],
         output_types=["mean"], precision=np.float32,
     )
@@ -703,7 +703,7 @@ def test_n_summarised_states_when_summaries():
 def test_n_summarised_states_no_summaries():
     """Returns 0 when summaries not active."""
     cfg = OutputConfig(
-        max_states=10, max_observables=2,
+        n_states=10, n_observables=2,
         summarised_state_indices=[0, 1],
         output_types=["state"],
         saved_state_indices=[0],
@@ -715,7 +715,7 @@ def test_n_summarised_states_no_summaries():
 def test_n_summarised_observables_when_summaries():
     """Returns length of indices when summaries active."""
     cfg = OutputConfig(
-        max_states=3, max_observables=10,
+        n_states=3, n_observables=10,
         summarised_observable_indices=[0, 2, 4],
         output_types=["mean"], precision=np.float32,
     )
@@ -725,7 +725,7 @@ def test_n_summarised_observables_when_summaries():
 def test_n_summarised_observables_no_summaries():
     """Returns 0 when summaries not active."""
     cfg = OutputConfig(
-        max_states=3, max_observables=10,
+        n_states=3, n_observables=10,
         summarised_observable_indices=[0, 2],
         output_types=["state"],
         saved_state_indices=[0],
@@ -740,7 +740,7 @@ def test_n_summarised_observables_no_summaries():
 def test_summary_types_returns_tuple():
     """Returns _summary_types tuple."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["mean", "max", "state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -754,7 +754,7 @@ def test_summary_types_returns_tuple():
 def test_summary_legend_empty_when_no_types():
     """Returns empty dict when _summary_types is empty."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -765,7 +765,7 @@ def test_summary_legend_empty_when_no_types():
 def test_summary_legend_maps_indices():
     """Returns dict mapping indices to metric legend strings."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["mean", "max"], precision=np.float32,
     )
     legend = cfg.summary_legend_per_variable
@@ -779,7 +779,7 @@ def test_summary_legend_maps_indices():
 def test_summary_legend_maps_indices_fused_extrema():
     """Fused max/min legend reports the requested metric names."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["max", "min"], precision=np.float32,
     )
     legend = cfg.summary_legend_per_variable
@@ -789,7 +789,7 @@ def test_summary_legend_maps_indices_fused_extrema():
 def test_summary_legend_maps_indices_fused_mean_std_rms():
     """Fused mean/std/rms legend reports the requested metric names."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["mean", "std", "rms"], precision=np.float32,
     )
     legend = cfg.summary_legend_per_variable
@@ -802,7 +802,7 @@ def test_summary_legend_maps_indices_fused_mean_std_rms():
 def test_summary_unit_modifications_empty():
     """Returns empty dict when _summary_types is empty."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -813,7 +813,7 @@ def test_summary_unit_modifications_empty():
 def test_summary_unit_modifications_maps_indices():
     """Returns dict mapping indices to unit modification strings."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["mean", "max"], precision=np.float32,
     )
     unit_mods = cfg.summary_unit_modifications
@@ -832,7 +832,7 @@ def test_summary_unit_modifications_maps_indices():
 def test_sample_summaries_every_forwarding():
     """Returns _sample_summaries_every."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         sample_summaries_every=0.05,
@@ -844,7 +844,7 @@ def test_sample_summaries_every_forwarding():
 def test_sample_summaries_every_default_none():
     """Default is None."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -858,7 +858,7 @@ def test_sample_summaries_every_default_none():
 def test_summaries_buf_height_per_var_zero_no_types():
     """Returns 0 when summary_types is empty."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -869,7 +869,7 @@ def test_summaries_buf_height_per_var_zero_no_types():
 def test_summaries_buf_height_per_var_delegates():
     """Delegates to summary_metrics.summaries_buffer_height."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["mean", "max"], precision=np.float32,
     )
     expected = summary_metrics.summaries_buffer_height(
@@ -884,7 +884,7 @@ def test_summaries_buf_height_per_var_delegates():
 def test_summaries_out_height_per_var_zero():
     """Returns 0 when _summary_types is empty."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -895,7 +895,7 @@ def test_summaries_out_height_per_var_zero():
 def test_summaries_out_height_per_var_delegates():
     """Delegates to summary_metrics.summaries_output_height."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["mean", "max"], precision=np.float32,
     )
     expected = summary_metrics.summaries_output_height(
@@ -910,7 +910,7 @@ def test_summaries_out_height_per_var_delegates():
 def test_state_summaries_buffer_height():
     """Returns buffer_per_var * n_summarised_states."""
     cfg = OutputConfig(
-        max_states=10, max_observables=2,
+        n_states=10, n_observables=2,
         summarised_state_indices=[0, 1, 2],
         output_types=["mean"], precision=np.float32,
     )
@@ -924,7 +924,7 @@ def test_state_summaries_buffer_height():
 def test_observable_summaries_buffer_height():
     """Returns buffer_per_var * n_summarised_observables."""
     cfg = OutputConfig(
-        max_states=3, max_observables=10,
+        n_states=3, n_observables=10,
         summarised_observable_indices=[0, 2],
         output_types=["mean"], precision=np.float32,
     )
@@ -938,7 +938,7 @@ def test_observable_summaries_buffer_height():
 def test_total_summary_buffer_size():
     """Returns sum of state and observable buffer heights."""
     cfg = OutputConfig(
-        max_states=10, max_observables=5,
+        n_states=10, n_observables=5,
         summarised_state_indices=[0, 1],
         summarised_observable_indices=[0],
         output_types=["mean"], precision=np.float32,
@@ -953,7 +953,7 @@ def test_total_summary_buffer_size():
 def test_state_summaries_output_height():
     """Returns output_per_var * n_summarised_states."""
     cfg = OutputConfig(
-        max_states=10, max_observables=2,
+        n_states=10, n_observables=2,
         summarised_state_indices=[0, 1, 2],
         output_types=["mean"], precision=np.float32,
     )
@@ -967,7 +967,7 @@ def test_state_summaries_output_height():
 def test_observable_summaries_output_height():
     """Returns output_per_var * n_summarised_observables."""
     cfg = OutputConfig(
-        max_states=3, max_observables=10,
+        n_states=3, n_observables=10,
         summarised_observable_indices=[0, 2, 4],
         output_types=["mean"], precision=np.float32,
     )
@@ -984,7 +984,7 @@ def test_observable_summaries_output_height():
 def test_buffer_sizes_dict():
     """Returns dict with expected keys matching property values."""
     cfg = OutputConfig(
-        max_states=5, max_observables=3,
+        n_states=5, n_observables=3,
         saved_state_indices=[0, 1],
         saved_observable_indices=[0],
         summarised_state_indices=[0],
@@ -1028,7 +1028,7 @@ def test_buffer_sizes_dict():
 def test_output_types_getter():
     """Getter returns the normalised output-types tuple."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state", "time"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -1039,7 +1039,7 @@ def test_output_types_getter():
 def test_output_types_update_tuple():
     """Update accepts a tuple and derives the flags."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -1055,7 +1055,7 @@ def test_output_types_update_tuple():
 def test_output_types_update_string():
     """A bare string normalises to a one-entry tuple."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -1068,7 +1068,7 @@ def test_output_types_update_string():
 def test_output_types_bad_type_raises():
     """The converter raises TypeError for unsupported input."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -1083,7 +1083,7 @@ def test_output_types_bad_type_raises():
 def test_output_types_update_empty_raises():
     """An empty output-types update leaves no active output path."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state", "mean"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -1095,7 +1095,7 @@ def test_output_types_update_empty_raises():
 def test_output_types_update_sets_state():
     """The replacement derives _save_state from the new list."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["time"], precision=np.float32,
     )
     replacement, _, _ = cfg.update({"output_types": ["state", "time"]})
@@ -1106,7 +1106,7 @@ def test_output_types_update_sets_state():
 def test_output_types_update_sets_observables():
     """The replacement derives _save_observables from the new list."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["time"], precision=np.float32,
     )
     replacement, _, _ = cfg.update(
@@ -1118,7 +1118,7 @@ def test_output_types_update_sets_observables():
 def test_output_types_update_sets_time():
     """The replacement derives _save_time from the new list."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["state"],
         saved_state_indices=[0],
         precision=np.float32,
@@ -1130,7 +1130,7 @@ def test_output_types_update_sets_time():
 def test_output_types_update_sets_counters():
     """The replacement derives _save_counters for iteration counters."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["time"], precision=np.float32,
     )
     replacement, _, _ = cfg.update(
@@ -1142,7 +1142,7 @@ def test_output_types_update_sets_counters():
 def test_output_types_update_collects_summaries():
     """Summary types matching implemented metrics are collected."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["time"], precision=np.float32,
     )
     replacement, _, _ = cfg.update(
@@ -1154,7 +1154,7 @@ def test_output_types_update_collects_summaries():
 def test_output_types_update_warns_unknown():
     """Warns for unrecognised output types."""
     cfg = OutputConfig(
-        max_states=3, max_observables=2,
+        n_states=3, n_observables=2,
         output_types=["time"], precision=np.float32,
     )
     with warnings.catch_warnings(record=True) as caught:
@@ -1173,7 +1173,7 @@ def test_from_loop_settings_none_indices():
     """Converts None indices to empty numpy arrays."""
     cfg = OutputConfig.from_loop_settings(
         output_types=["time"],
-        max_states=5, max_observables=3,
+        n_states=5, n_observables=3,
         precision=np.float32,
     )
     assert_array_equal(
@@ -1199,7 +1199,7 @@ def test_from_loop_settings_copies_output_types():
     original = ["state", "time"]
     OutputConfig.from_loop_settings(
         output_types=original,
-        max_states=5, max_observables=3,
+        n_states=5, n_observables=3,
         saved_state_indices=[0],
         precision=np.float32,
     )
@@ -1210,7 +1210,7 @@ def test_from_loop_settings_passes_all_params():
     """Passes all parameters through to constructor."""
     cfg = OutputConfig.from_loop_settings(
         output_types=["state", "mean"],
-        max_states=10, max_observables=5,
+        n_states=10, n_observables=5,
         saved_state_indices=[0, 1],
         saved_observable_indices=[0],
         summarised_state_indices=[0],
@@ -1218,8 +1218,8 @@ def test_from_loop_settings_passes_all_params():
         sample_summaries_every=0.1,
         precision=np.float64,
     )
-    assert cfg.max_states == 10
-    assert cfg.max_observables == 5
+    assert cfg.n_states == 10
+    assert cfg.n_observables == 5
     assert_array_equal(
         cfg.saved_state_indices,
         np.array([0, 1], dtype=np.int32),

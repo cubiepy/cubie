@@ -14,7 +14,7 @@ Published Classes
     Proportional--integral step-size controller.
 
     >>> from numpy import float64
-    >>> ctrl = AdaptivePIController(precision=float64, n=4)
+    >>> ctrl = AdaptivePIController(precision=float64, n_states=4)
     >>> ctrl.is_adaptive
     True
 

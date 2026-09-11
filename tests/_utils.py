@@ -1462,7 +1462,7 @@ def _build_cpu_step_controller(
 def _get_algorithm_order(
     algorithm_name_or_tableau, use_smoothed_error=False
 ):
-    """Return the step-control order, mirroring ``controller_order``."""
+    """Return the step-control order, mirroring ``algorithm_order``."""
     from cubie.integrators.algorithms import (
         resolve_alias,
         resolve_supplied_tableau,

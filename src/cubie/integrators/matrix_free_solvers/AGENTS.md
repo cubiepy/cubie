@@ -55,7 +55,7 @@ compiled callable from `.device_function`.
   preconditioned_vec, jvp)`.
 - `residual_fn` (Newton); sig `(stage_increment, parameters, drivers, t, h,
   a_ij, base_state, residual_out)`.
-- `linear_solver_fn` (Newton) — the inner linear solver's
+- `krylov_linear_solver_fn` (Newton) — the inner linear solver's
   `device_function`. `NewtonKrylov` owns a child linear solver: its `update`
   forwards `krylov_`-prefixed params to the child and re-injects the
   recompiled device function.
@@ -82,9 +82,9 @@ compiled callable from `.device_function`.
   `FIRKCorrectionNorm`, whose whole-vector function scales the update
   by `atol + rtol * max(|stage_value|, |step_start|)` (DIRK: one
   diagonal coefficient; FIRK: the full tableau row).
-- **Norm tolerances are per physical state** (`n` entries, the length
-  the step controller takes); stage-tiled norms read entry `i mod n`.
-  `n` is a required norm-constructor argument.
+- **Norm tolerances are per physical state** (`n_states` entries, the length
+  the step controller takes); stage-tiled norms read entry `i mod n_states`.
+  `n_states` is a required norm-constructor argument.
 - **Every linear solve (MR, SD, BiCGSTAB; Newton-owned or direct)
   stops on** `||r|| <= krylov_residual_floor +
   krylov_residual_reduction * ||b||`. `||.||` = the solver's

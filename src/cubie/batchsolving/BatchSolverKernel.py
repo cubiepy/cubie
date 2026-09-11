@@ -397,15 +397,15 @@ class BatchSolverKernel(CUDAFactory):
         kernel_settings = kernel_settings.copy()
         self.blocksize_given = "blocksize" in kernel_settings
         # Seed the baked coefficient layout from the interpolator.
-        driver_coefficients_shape = kernel_settings.pop(
-            "driver_coefficients_shape",
+        coefficients_shape = kernel_settings.pop(
+            "coefficients_shape",
             self.driver_interpolator.coefficients_shape,
         )
         initial_config = BatchSolverConfig(
             precision=precision,
             loop_fn=None,
             compile_flags=self.single_integrator.output_compile_flags,
-            driver_coefficients_shape=driver_coefficients_shape,
+            coefficients_shape=coefficients_shape,
             cache=kernel_settings.pop("cache", cache),
         )
         self.setup_compile_settings(initial_config)
@@ -1318,7 +1318,7 @@ class BatchSolverKernel(CUDAFactory):
         return {
             "drivers_fn": interpolator.drivers_fn,
             "driver_derivative_fn": interpolator.driver_derivative_fn,
-            "driver_coefficients_shape": interpolator.coefficients_shape,
+            "coefficients_shape": interpolator.coefficients_shape,
         }
 
     def wait_for_writeback(
@@ -1865,7 +1865,7 @@ class BatchSolverKernel(CUDAFactory):
         return self.input_arrays.driver_coefficients
 
     @property
-    def driver_coefficients_shape(self) -> tuple[int, int, int]:
+    def coefficients_shape(self) -> tuple[int, int, int]:
         """Expected driver-coefficient layout for input validation.
 
         A :class:`BatchSolverConfig` compile setting the owning
@@ -1874,9 +1874,9 @@ class BatchSolverKernel(CUDAFactory):
         ``(num_segments, num_drivers, order + 1)`` layout baked into
         the compiled driver evaluators — so supplied coefficient
         arrays are checked against the shape the kernel was compiled
-        for. Update via ``update(driver_coefficients_shape=...)``.
+        for. Update via ``update(coefficients_shape=...)``.
         """
-        return self.compile_settings.driver_coefficients_shape
+        return self.compile_settings.coefficients_shape
 
     @property
     def device_driver_coefficients(self) -> Optional[NDArray[floating]]:

@@ -66,7 +66,7 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
     solver_width: int = field(
         default=0, validator=getype_validator(int, 1)
     )
-    norm_fn: Optional[Callable] = device_function_field()
+    norm_fn: Optional[Callable] = device_function_field(prefixed=True)
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
@@ -118,7 +118,7 @@ class MatrixFreeSolver(MultipleInstanceCUDAFactory):
             norm = ScaledNorm(
                 precision=precision,
                 solver_width=solver_width,
-                n=solver_width,
+                n_states=solver_width,
                 instance_label=solver_type,
                 **kwargs,
             )
@@ -164,7 +164,7 @@ class MatrixFreeSolver(MultipleInstanceCUDAFactory):
         recognized = set()
 
         recognized |= self.norm.update(all_updates, silent=True)
-        all_updates.update({"norm_fn": self.norm.device_function})
+        all_updates[self.prefixed("norm_fn")] = self.norm.device_function
         recognized |= self.update_compile_settings(all_updates, silent=True)
 
         return recognized

@@ -499,10 +499,10 @@ class TestBuildConfig:
         )
         config = build_config(
             FixedStepControlConfig,
-            required={'precision': np.float32, 'n': 3, 'dt': 0.01},
+            required={'precision': np.float32, 'n_states': 3, 'dt': 0.01},
         )
         assert config.precision == np.float32
-        assert config.n == 3
+        assert config.n_states == 3
 
     def test_build_config_required_in_optional_overrides(self):
         """Verify required fields can also be in optional kwargs."""

@@ -14,7 +14,7 @@ Published Classes
 
     >>> from numpy import float32, array, int_
     >>> config = OutputConfig(
-    ...     max_states=3, max_observables=2,
+    ...     n_states=3, n_observables=2,
     ...     output_types=["state"], precision=float32,
     ... )
     >>> config.save_state
@@ -201,9 +201,9 @@ class OutputConfig(CUDAFactoryConfig):
 
     Parameters
     ----------
-    max_states
+    n_states
         Maximum number of state variables.
-    max_observables
+    n_observables
         Maximum number of observable variables.
     saved_state_indices
         Indices of state variables to save. Defaults to an empty collection
@@ -234,8 +234,8 @@ class OutputConfig(CUDAFactoryConfig):
     """
 
     # System dimensions, used to validate indices
-    _max_states: int = field(validator=attrsval_instance_of(int))
-    _max_observables: int = field(validator=attrsval_instance_of(int))
+    _n_states: int = field(validator=attrsval_instance_of(int))
+    _n_observables: int = field(validator=attrsval_instance_of(int))
 
     _saved_state_indices: Optional[
         Union[List[int], NDArray[np_int32]]
@@ -332,10 +332,10 @@ class OutputConfig(CUDAFactoryConfig):
             self._summarised_observable_indices,
         ]
         maxima = [
-            self._max_states,
-            self._max_observables,
-            self._max_states,
-            self._max_observables,
+            self._n_states,
+            self._n_observables,
+            self._n_states,
+            self._n_observables,
         ]
         for i, array in enumerate(index_arrays):
             _indices_validator(array, maxima[i])
@@ -362,7 +362,7 @@ class OutputConfig(CUDAFactoryConfig):
             )
 
     def trimmed_index_updates(
-        self, max_states: int, max_observables: int
+        self, n_states: int, n_observables: int
     ) -> dict:
         """Return stored index arrays trimmed to new maxima.
 
@@ -370,16 +370,16 @@ class OutputConfig(CUDAFactoryConfig):
         """
         stored = {
             "saved_state_indices": (
-                self._saved_state_indices, max_states,
+                self._saved_state_indices, n_states,
             ),
             "summarised_state_indices": (
-                self._summarised_state_indices, max_states,
+                self._summarised_state_indices, n_states,
             ),
             "saved_observable_indices": (
-                self._saved_observable_indices, max_observables,
+                self._saved_observable_indices, n_observables,
             ),
             "summarised_observable_indices": (
-                self._summarised_observable_indices, max_observables,
+                self._summarised_observable_indices, n_observables,
             ),
         }
         updates = {}
@@ -391,14 +391,14 @@ class OutputConfig(CUDAFactoryConfig):
         return updates
 
     @property
-    def max_states(self) -> int:
+    def n_states(self) -> int:
         """Maximum number of states."""
-        return self._max_states
+        return self._n_states
 
     @property
-    def max_observables(self) -> int:
+    def n_observables(self) -> int:
         """Maximum number of observables."""
-        return self._max_observables
+        return self._n_observables
 
     @property
     def save_state(self) -> bool:
@@ -756,8 +756,8 @@ class OutputConfig(CUDAFactoryConfig):
         summarised_observable_indices: Union[
             Sequence[int], NDArray[np_int32], None
         ] = None,
-        max_states: int = 0,
-        max_observables: int = 0,
+        n_states: int = 0,
+        n_observables: int = 0,
         sample_summaries_every: Optional[float] = 0.01,
     ) -> "OutputConfig":
         """
@@ -778,9 +778,9 @@ class OutputConfig(CUDAFactoryConfig):
         summarised_observable_indices
             Indices of observables for summary calculations. Defaults to
             *saved_observable_indices*.
-        max_states
+        n_states
             Total number of state variables in the system.
-        max_observables
+        n_observables
             Total number of observable variables in the system.
         sample_summaries_every
             Time interval between summary metric samples. Used by derivative
@@ -815,8 +815,8 @@ class OutputConfig(CUDAFactoryConfig):
             summarised_observable_indices = np_asarray([], dtype=np_int32)
 
         return cls(
-            max_states=max_states,
-            max_observables=max_observables,
+            n_states=n_states,
+            n_observables=n_observables,
             saved_state_indices=saved_state_indices,
             saved_observable_indices=saved_observable_indices,
             summarised_state_indices=summarised_state_indices,

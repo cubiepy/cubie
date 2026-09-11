@@ -15,7 +15,7 @@ def test_init_creates_explicit_step_config(step_object):
     # isinstance justified: verifying correct config subclass is the
     # functionality, combined with value check below
     assert isinstance(cs, ExplicitStepConfig)
-    assert cs.n == step_object.compile_settings.n
+    assert cs.n_states == step_object.compile_settings.n_states
 
 # ── build_step ─────────────────────────────────────────── #
 

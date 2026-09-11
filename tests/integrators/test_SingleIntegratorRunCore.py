@@ -248,7 +248,7 @@ def test_default_controller_settings_from_algorithm(
     assert run.step_controller == defaults["step_controller"]
     controller_settings = run._step_controller.settings_dict
     defaults.pop("step_controller")
-    order = run._algo_step.controller_order
+    order = run._algo_step.algorithm_order
     for key, expected in defaults.items():
         if callable(expected):
             expected = expected(order)
@@ -261,10 +261,10 @@ def test_default_controller_settings_from_algorithm(
             assert actual == pytest.approx(expected)
         else:
             assert actual == expected
-    assert run._step_controller.n == system.sizes.states
+    assert run._step_controller.n_states == system.sizes.states
     if hasattr(run._step_controller, "algorithm_order"):
         assert (run._step_controller.algorithm_order
-                == run._algo_step.controller_order)
+                == run._algo_step.algorithm_order)
 
 
 def test_controller_override_reverts_family_gains(
@@ -417,7 +417,7 @@ def test_unpromoted_controller_keeps_family_gains(
         algorithm_settings, "kvaerno3", {"integral_gain": 0.5},
     )
     defaults = run._algo_step.controller_default_settings
-    order = run._algo_step.controller_order
+    order = run._algo_step.algorithm_order
     assert run._step_controller.integral_gain == pytest.approx(0.5)
     assert run._step_controller.proportional_gain == pytest.approx(
         defaults["proportional_gain"](order)
@@ -493,7 +493,7 @@ def test_none_filter_coefficients_keeps_family_gains(
         output_settings=dict(output_settings),
     )
     defaults = run._algo_step.controller_default_settings
-    order = run._algo_step.controller_order
+    order = run._algo_step.algorithm_order
     assert run.step_controller == "pi"
     assert run._step_controller.integral_gain == pytest.approx(
         defaults["integral_gain"](order)
@@ -594,7 +594,7 @@ def test_user_step_control_overrides_algorithm_defaults(
         override_settings["min_step_shrink"]
     )
     assert (controller_settings["algorithm_order"]
-            == run._algo_step.controller_order)
+            == run._algo_step.algorithm_order)
 
 
 # ── _process_loop_timing ────────────────────────────────────────────────── #
@@ -1133,9 +1133,9 @@ def test_update_switch_algorithm_carries_old_settings(
     """Switching algorithm preserves settings from the old algo step."""
     run = single_integrator_run_mutable
     # Get original n from algo_step
-    original_n = run._algo_step.n
+    original_n = run._algo_step.n_states
     run.update({"algorithm": "rk4"})
-    assert run._algo_step.n == original_n
+    assert run._algo_step.n_states == original_n
 
 
 def test_update_switch_controller_carries_old_settings(
@@ -1146,9 +1146,9 @@ def test_update_switch_controller_carries_old_settings(
     run = single_integrator_run_mutable
     # Switch to adaptive algo so PID is valid
     run.update({"algorithm": "bogacki-shampine-32"})
-    original_n = run._step_controller.n
+    original_n = run._step_controller.n_states
     run.update({"step_controller": "pid"})
-    assert run._step_controller.n == original_n
+    assert run._step_controller.n_states == original_n
 
 
 def test_update_switch_controller_reverts_gains(
@@ -1511,7 +1511,7 @@ def test_per_state_tolerances_reach_coupled_firk_norms(
     krylov_norm = algo.solver.linear_solver.norm
     assert krylov_norm.solver_width > n
     for norm in (newton_norm, krylov_norm):
-        assert norm.compile_settings.n == n
+        assert norm.compile_settings.n_states == n
         assert norm.compile_settings.tol_length == n
         assert norm.atol.shape == (n,)
         assert norm.rtol.shape == (n,)
