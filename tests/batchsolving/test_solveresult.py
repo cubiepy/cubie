@@ -86,7 +86,6 @@ def solver_with_arrays(
     batch_input_arrays,
     solver_settings,
     precision,
-    driver_array,
 ):
     """Solver with actual arrays computed - ready for SolveResult instantiation
     """
@@ -95,7 +94,6 @@ def solver_with_arrays(
         duration=solver_settings["duration"],
         params=params,
         inits=inits,
-        driver_coefficients=driver_array.coefficients,
         blocksize=solver_settings["blocksize"],
         warmup=solver_settings["warmup"],
     )

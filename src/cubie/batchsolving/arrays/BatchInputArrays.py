@@ -30,7 +30,6 @@ from numpy import (
     float32 as np_float32,
     floating as np_floating,
     issubdtype as np_issubdtype,
-    zeros as np_zeros,
 )
 
 from numpy.typing import NDArray
@@ -174,14 +173,6 @@ class InputArrays(BaseArrayManager):
         factory=WritebackWatcher, init=False
     )
     _device_inputs: Dict[str, object] = field(factory=dict, init=False)
-    # Table the current device buffer holds; same object queues nothing.
-    _uploaded_driver_coefficients: Optional[NDArray] = field(
-        default=None, init=False, eq=False, repr=False
-    )
-    # Stable unit stand-in attached for a zero-sized table.
-    _empty_driver_coefficients: Optional[NDArray] = field(
-        default=None, init=False, eq=False, repr=False
-    )
 
     def __attrs_post_init__(self) -> None:
         """Ensure host and device containers use explicit memory types.
@@ -213,7 +204,7 @@ class InputArrays(BaseArrayManager):
         parameters
             Parameter values for each integration run.
         driver_coefficients
-            Horner-ordered driver interpolation coefficients.
+            Driver coefficient table; ``None`` keeps the attached one.
 
         Notes
         -----
@@ -222,27 +213,12 @@ class InputArrays(BaseArrayManager):
         transfer occurs, and no managed device buffer is allocated for
         them. They must already match the expected shape and dtype.
         A slot's own device buffer supplied back is not re-uploaded.
-        A coefficient table uploads once per object per device buffer;
-        a zero-sized table is held as an unread unit stand-in.
         """
         self.update_from_solver(solver_instance)
-        if driver_coefficients is not None and driver_coefficients.size == 0:
-            driver_coefficients = self._empty_driver_slot()
-        if not self._fast_path_update(
+        if self._fast_path_update(
             initial_values, parameters, driver_coefficients
         ):
-            self._full_update(
-                initial_values, parameters, driver_coefficients
-            )
-        self._skip_uploaded_driver_coefficients()
-
-    def _full_update(
-        self,
-        initial_values: NDArray,
-        parameters: NDArray,
-        driver_coefficients: Optional[NDArray],
-    ) -> None:
-        """Attach new host or device inputs and queue allocations."""
+            return
         updates_dict = {
             "initial_values": initial_values,
             "parameters": parameters,
@@ -349,32 +325,6 @@ class InputArrays(BaseArrayManager):
         """Return whether ``array`` is the attached, dtype-current slot."""
         slot = self.host.get_managed_array(name)
         return array is slot.array and array.dtype == slot.dtype
-
-    def _empty_driver_slot(self) -> NDArray:
-        """Return the unit stand-in for a zero-sized coefficient table."""
-        dtype = self.host.driver_coefficients.dtype
-        placeholder = self._empty_driver_coefficients
-        if placeholder is None or placeholder.dtype != dtype:
-            placeholder = np_zeros((1, 1, 1), dtype=dtype)
-            self._empty_driver_coefficients = placeholder
-        return placeholder
-
-    def _skip_uploaded_driver_coefficients(self) -> None:
-        """Drop the coefficient upload the device buffer already holds."""
-        label = "driver_coefficients"
-        if (
-            label in self._needs_overwrite
-            and label not in self._needs_reallocation
-            and self.host.driver_coefficients.array
-            is self._uploaded_driver_coefficients
-        ):
-            self._needs_overwrite.remove(label)
-
-    def allocate(self) -> None:
-        """Queue allocations; a new coefficient buffer starts empty."""
-        if "driver_coefficients" in self._needs_reallocation:
-            self._uploaded_driver_coefficients = None
-        super().allocate()
 
     @property
     def has_device_inputs(self) -> bool:
@@ -539,8 +489,8 @@ class InputArrays(BaseArrayManager):
         for array_name in arrays_to_copy:
             device_obj = self.device.get_managed_array(array_name)
             host_obj = self.host.get_managed_array(array_name)
-            if array_name == "driver_coefficients":
-                self._uploaded_driver_coefficients = host_obj.array
+            if host_obj.array.size == 0:
+                continue
             host_slice = (
                 host_obj.chunk_slice(chunk_index)
                 if host_obj.needs_chunked_transfer
@@ -617,10 +567,10 @@ class InputArrays(BaseArrayManager):
         self._transfer_watcher.wait_all(timeout=timeout)
 
     def _invalidate_hook(self) -> None:
-        """Drop device-input references alongside managed arrays."""
+        """Drop device inputs; attached host data refills new buffers."""
         super()._invalidate_hook()
         self._device_inputs.clear()
-        self._uploaded_driver_coefficients = None
+        self._needs_overwrite.extend(self.host.array_names())
 
     def reset(self) -> None:
         """Clear all cached arrays and reset allocation tracking."""
@@ -628,7 +578,6 @@ class InputArrays(BaseArrayManager):
         self._transfer_watcher.shutdown()
         self._buffer_pool.clear()
         self._device_inputs.clear()
-        self._uploaded_driver_coefficients = None
 
     def _teardown_cleanups(self):
         """Return transfer cleanup calls."""

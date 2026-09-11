@@ -92,8 +92,7 @@ class InterpolatorCache(CUDADispatcherCache):
     driver_del_t
         Device function evaluating every input's time derivative.
     coefficients
-        Host ``(num_segments, num_inputs, order + 1)`` table; pinned,
-        or zero-sized with no inputs.
+        Host ``(num_segments, num_inputs, order + 1)`` table.
     """
 
     evaluation_function: Optional[Callable] = field(default=None)
@@ -129,8 +128,7 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
     driver_sample_period : float
         Temporal spacing between consecutive driver samples.
     input_array : numpy.ndarray
-        Samples as ``(num_samples, num_inputs)`` columns; not hashed,
-        a value change invalidates the build only.
+        Sample columns ``(num_samples, num_inputs)``; not hashed.
     num_inputs : int
         Column count of ``input_array``.
     num_segments : int
@@ -167,7 +165,14 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
+        if self.input_array.ndim != 2:
+            raise ValueError("input_array must be two-dimensional.")
         num_samples, num_inputs = self.input_array.shape
+        if num_inputs and num_samples < self.order + 1:
+            raise ValueError(
+                "At least order + 1 samples are required to construct"
+                " splines.",
+            )
         self._check_periodic(num_samples)
         object.__setattr__(self, "num_inputs", int(num_inputs))
         object.__setattr__(
@@ -239,7 +244,7 @@ class ArrayInterpolator(CUDAFactory):
         self._memory_manager = memory_manager
         self.update_from_dict(input_dict)
 
-    def update_from_dict(self, input_dict: Dict[str, Any]) -> bool:
+    def update_from_dict(self, input_dict: Dict[str, Any]) -> Set[str]:
         """Update the factory configuration from a user-supplied dictionary.
 
         Parameters
@@ -250,9 +255,8 @@ class ArrayInterpolator(CUDAFactory):
 
         Returns
         -------
-        bool
-            ``True`` when the compiled evaluator configuration changed
-            and consumers must refresh their device-function handles.
+        set
+            Recognised keys.
 
         Notes
         -----
@@ -314,9 +318,7 @@ class ArrayInterpolator(CUDAFactory):
         }
         time = {k: v for k, v in input_dict.items() if k in self.time_info}
 
-        input_array = self._normalise_input_array(
-            inputs, config.get("order", self.order)
-        )
+        input_array = self._normalise_input_array(inputs)
         sample_period, t0 = self._validate_time_inputs(
             time, input_array.shape[0]
         )
@@ -328,11 +330,7 @@ class ArrayInterpolator(CUDAFactory):
             }
         )
         self._default_boundary_condition(config)
-
-        # Any change invalidates the build; only hashed keys move the hash.
-        initial_hash = self.compile_settings.values_hash
-        self.update_compile_settings(config)
-        return self.compile_settings.values_hash != initial_hash
+        return self.update_compile_settings(config)
 
     def _default_boundary_condition(self, config: Dict[str, Any]) -> None:
         """Default an absent boundary condition from the wrap setting.
@@ -351,7 +349,7 @@ class ArrayInterpolator(CUDAFactory):
         )
 
     def _normalise_input_array(
-        self, input_dict: Dict[str, FloatArray], order: int
+        self, input_dict: Dict[str, FloatArray]
     ) -> FloatArray:
         """Construct inputs array and check sizes.
 
@@ -359,8 +357,6 @@ class ArrayInterpolator(CUDAFactory):
         ----------
         input_dict
             Input names to 1d sample arrays; empty gives ``(0, 0)``.
-        order
-            Polynomial order the samples must support.
 
         Returns
         -------
@@ -398,13 +394,7 @@ class ArrayInterpolator(CUDAFactory):
                 "All forcing vectors must have the same length / be sampled "
                 "on the same grid",
             )
-        input_array = column_stack(input_vectors)
-        if input_array.shape[0] < order + 1:
-            raise ValueError(
-                "At least order + 1 samples are required to construct"
-                " splines.",
-            )
-        return input_array
+        return column_stack(input_vectors)
 
     def _validate_time_inputs(
         self, time_dict: Dict[str, Any], num_samples: int
@@ -486,9 +476,11 @@ class ArrayInterpolator(CUDAFactory):
         Returns
         -------
         InterpolatorCache
-            Host coefficients and the device functions that read them.
+            Coefficients and evaluators; evaluators ``None`` without inputs.
         """
         coefficients = self._compute_coefficients()
+        if self.num_inputs == 0:
+            return InterpolatorCache(coefficients=coefficients)
         precision = self.precision
 
         order = self.order
@@ -668,15 +660,13 @@ class ArrayInterpolator(CUDAFactory):
         return recognised
 
     @property
-    def evaluation_function(self) -> Callable:
-        """Device function for evaluating all inputs."""
+    def evaluation_function(self) -> Optional[Callable]:
+        """Device function evaluating all inputs; ``None`` without inputs."""
         return self.get_cached_output("evaluation_function")
 
     @property
-    def driver_del_t(self) -> Callable:
-        """Device function returning the interpolated driver time derivative.
-        """
-
+    def driver_del_t(self) -> Optional[Callable]:
+        """Driver time-derivative device function; ``None`` without inputs."""
         return self.get_cached_output("driver_del_t")
 
     @property

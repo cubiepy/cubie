@@ -94,7 +94,7 @@ def test_all_lower_plumbing(
     algorithm_settings,
     unroll_settings,
     precision,
-    driver_array,
+    driver_settings,
 ):
     """Big plumbing integration check - check that config classes match exactly
     between an updated solver and one instantiated with the update settings."""
@@ -157,8 +157,6 @@ def test_all_lower_plumbing(
     }
     freshsolver = BatchSolverKernel(
         system,
-        evaluate_driver_at_t=driver_array.evaluation_function,
-        driver_del_t=driver_array.driver_del_t,
         step_control_settings=updated_controller_settings,
         algorithm_settings=algorithm_settings,
         output_settings=output_settings,
@@ -169,21 +167,11 @@ def test_all_lower_plumbing(
         },
         unroll_settings=unroll_settings,
     )
+    freshsolver.configure_drivers(driver_settings)
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.ones((system.sizes.parameters, 1), dtype=precision)
-    driver_coefficients = driver_array.coefficients
-    freshsolver.run(
-        inits=inits,
-        params=params,
-        driver_coefficients=driver_coefficients,
-        duration=0.1,
-    )
-    solverkernel.run(
-        inits=inits,
-        params=params,
-        driver_coefficients=driver_coefficients,
-        duration=0.1,
-    )
+    freshsolver.run(inits=inits, params=params, duration=0.1)
+    solverkernel.run(inits=inits, params=params, duration=0.1)
     assert (
         freshsolver.single_integrator.compile_settings
         == solverkernel.single_integrator.compile_settings

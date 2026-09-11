@@ -17,7 +17,7 @@ Allocation, streams, and chunk math live in `cubie.memory`.
 | File | Description |
 |------|-------------|
 | `BaseArrayManager.py` | `ManagedArray` (per-array metadata: dtype, `stride_order`, shapes, chunk axis/length, backing array), `ArrayContainer` (ABC), `BaseArrayManager` (ABC: registration, size/dtype checks, host updates, allocation, chunk-aware transfer, pinned↔numpy conversion). |
-| `BatchInputArrays.py` | `InputArrayContainer` (`initial_values`, `parameters`, `driver_coefficients`) + `InputArrays` — sizes from `BatchInputSizes`; `initialise` stages H2D and records the coefficient table it copied; `update` re-supplying that object to a surviving device buffer queues no coefficient transfer. A zero-sized table is held as a stable unread `(1, 1, 1)` stand-in. |
+| `BatchInputArrays.py` | `InputArrayContainer` (`initial_values`, `parameters`, `driver_coefficients`) + `InputArrays` — sizes from `BatchInputSizes`; `initialise` stages H2D for the queued slots, skipping zero-size host data; `update` with `driver_coefficients=None` leaves the attached table in place. |
 | `BatchOutputArrays.py` | `OutputArrayContainer` (`state`, `observables`, `state_summaries`, `observable_summaries`, `status_codes`, `iteration_counters`) + `OutputArrays` — sizes from `BatchOutputSizes`; `finalise` does D2H + async writeback. |
 | `__init__.py` | Empty — managers are imported from their modules. |
 
@@ -72,7 +72,7 @@ device registrations. Failures leave resources attached so close can be
 retried. Finalizers use cleanup calls that do not capture the manager.
 
 ### Per-chunk hooks (called by `BatchSolverKernel.run` around each launch)
-- `initialise(chunk_index)` — pre-launch. `InputArrays`: H2D for the queued slots. Pinned contiguous sources
+- `initialise(chunk_index)` — pre-launch. `InputArrays`: H2D for the queued slots (zero-size sources skipped). Pinned contiguous sources
   transfer directly; everything else (pageable, memmap, or any chunk slice) stages
   block-by-block through `ChunkBufferPool` pinned buffers, each handed to the transfer
   watcher with its own event. `OutputArrays`: no-op.

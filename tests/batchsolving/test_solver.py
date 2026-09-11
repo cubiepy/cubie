@@ -965,6 +965,9 @@ def test_driver_evaluator_wired_on_configure(precision):
     system = build_three_state_nonlinear_system(precision)
     solver = Solver(system, algorithm="radau")
     assert solver.driver_interpolator.num_inputs == 0
+    assert solver.driver_interpolator.evaluation_function is None
+    integrator = solver.kernel.single_integrator
+    assert integrator._loop.compile_settings.evaluate_driver_at_t is None
 
     samples = np.linspace(0.0, 1.0, 6, dtype=precision)
     drivers = {
@@ -2678,6 +2681,18 @@ def test_auto_residency_keeps_local_footprint_in_l2(
 # ── Driver coefficient uploads ───────────────────────────── #
 
 
+def _compile_batch(solver, inits, params):
+    """Prepare and compile a batch without launching it."""
+    solver.compile(inits, params, duration=0.05)
+    return solver.kernel.input_arrays
+
+
+def _upload_queued(arrays):
+    """Run the queued host-to-device copies and wait for them."""
+    arrays.initialise(0)
+    arrays._memory_manager.sync_stream(arrays)
+
+
 @pytest.mark.parametrize(
     "solver_settings_override",
     [{"system_type": "constant_deriv"}],
@@ -2687,6 +2702,7 @@ def test_driverless_solver_has_an_empty_coefficient_layout(solver):
     """A driverless kernel owns an empty interpolator and no table."""
     assert solver.system.num_drivers == 0
     assert solver.driver_interpolator.num_inputs == 0
+    assert solver.driver_interpolator.evaluation_function is None
     assert solver.kernel.driver_coefficients_shape[0] == 0
     assert solver.kernel.driver_coefficients_shape == (
         solver.driver_interpolator.coefficients_shape
@@ -2701,29 +2717,20 @@ def test_driverless_solver_has_an_empty_coefficient_layout(solver):
     [{"system_type": "constant_deriv"}],
     indirect=True,
 )
-def test_driverless_repeat_solve_queues_only_the_run_inputs(
+def test_driverless_batch_queues_only_the_run_inputs(
     solver_mutable, simple_initial_values, simple_parameters
 ):
-    """After a solve, re-supplying the inputs queues two uploads."""
+    """A driverless kernel attaches its empty table and never uploads it."""
     solver = solver_mutable
-    solver.solve(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        duration=0.05,
-        settling_time=0.0,
-        blocksize=32,
-    )
-    kernel = solver.kernel
-    arrays = kernel.input_arrays
-    assert arrays._needs_overwrite == []
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    table = solver.driver_interpolator.coefficients
+    assert arrays.host.driver_coefficients.array is table
+    assert table.size == 0
+    assert tuple(arrays.device_driver_coefficients.shape) == (1, 1, 1)
+    _upload_queued(arrays)
 
-    arrays.update(
-        kernel,
-        arrays.host.initial_values.array,
-        arrays.host.parameters.array,
-        solver.driver_interpolator.coefficients,
-    )
-
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    assert arrays.host.driver_coefficients.array is table
     assert arrays._needs_overwrite == ["initial_values", "parameters"]
 
 
@@ -2735,28 +2742,18 @@ def test_unchanged_drivers_upload_once(
     system,
     precision,
 ):
-    """The table uploads after configure_drivers, not on a repeat."""
+    """The table is queued after configure_drivers, not on a repeat."""
     solver = solver_mutable
-    solver.solve(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        drivers=driver_settings,
-        duration=0.05,
-        settling_time=0.0,
-        blocksize=32,
-    )
-    kernel = solver.kernel
-    arrays = kernel.input_arrays
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
     uploaded = solver.driver_interpolator.coefficients
     assert arrays.host.driver_coefficients.array is uploaded
+    assert "driver_coefficients" in arrays._needs_overwrite
+    _upload_queued(arrays)
 
-    arrays.update(
-        kernel,
-        arrays.host.initial_values.array,
-        arrays.host.parameters.array,
-        uploaded,
-    )
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    assert arrays.host.driver_coefficients.array is uploaded
     assert arrays._needs_overwrite == ["initial_values", "parameters"]
+    _upload_queued(arrays)
 
     changed = dict(driver_settings)
     first_driver = list(system.indices.driver_names)[0]
@@ -2767,29 +2764,54 @@ def test_unchanged_drivers_upload_once(
     replacement = solver.driver_interpolator.coefficients
     assert replacement is not uploaded
 
-    arrays.update(
-        kernel,
-        arrays.host.initial_values.array,
-        arrays.host.parameters.array,
-        replacement,
-    )
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    assert arrays.host.driver_coefficients.array is replacement
     assert set(arrays._needs_overwrite) == {
         "initial_values", "parameters", "driver_coefficients"
     }
-    assert arrays.host.driver_coefficients.array is replacement
+
+
+def test_driver_value_change_keeps_the_kernel_build(
+    solver_mutable, driver_settings, system, precision
+):
+    """New sample values rebuild the table, not the kernel."""
+    solver = solver_mutable
+    kernel = solver.kernel
+    evaluator = solver.driver_interpolator.evaluation_function
+    kernel_hash = kernel.config_hash
+    dispatcher = kernel.kernel
+
+    changed = dict(driver_settings)
+    first_driver = list(system.indices.driver_names)[0]
+    changed[first_driver] = np.asarray(
+        changed[first_driver], dtype=precision
+    ) * precision(2.0)
+    solver._configure_drivers(changed)
+
+    assert solver.driver_interpolator.evaluation_function is not evaluator
+    assert kernel.config_hash == kernel_hash
+    assert kernel.cache_valid
+    assert kernel.kernel is dispatcher
+    integrator = kernel.single_integrator
+    assert (
+        integrator._loop.compile_settings.evaluate_driver_at_t
+        is evaluator
+    )
 
 
 def test_driver_evaluators_wire_when_drivers_are_configured(
     solver, driver_settings
 ):
-    """A kernel with an empty interpolator gains its evaluators on configure."""
+    """An empty kernel interpolator gains its evaluators on configure."""
     twin = solver.kernel.copy()
     try:
-        assert twin.driver_interpolator.num_inputs == 0
+        interpolator = twin.driver_interpolator
+        integrator = twin.single_integrator
+        assert interpolator.num_inputs == 0
+        assert interpolator.evaluation_function is None
+        assert integrator._loop.compile_settings.evaluate_driver_at_t is None
         assert twin.driver_coefficients_shape[0] == 0
         twin.configure_drivers(driver_settings)
-        integrator = twin.single_integrator
-        interpolator = twin.driver_interpolator
         assert interpolator.num_inputs == twin.system.num_drivers
         assert (
             integrator._loop.compile_settings.evaluate_driver_at_t

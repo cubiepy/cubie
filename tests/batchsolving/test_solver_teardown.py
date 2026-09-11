@@ -262,12 +262,7 @@ def test_close_does_not_wait_for_unrelated_stream(
     ids = _instance_ids(target_solver)
     assert _registered_bytes(manager, ids) == 0
 
-    target_solver.kernel.run(
-        y0,
-        params,
-        target_solver.driver_interpolator.coefficients,
-        duration=0.1,
-    )
+    target_solver.kernel.run(y0, params, duration=0.1)
     closed_state_view = target_solver.kernel.state
     assert _registered_bytes(manager, ids) > 0
     (
@@ -294,12 +289,7 @@ def test_close_does_not_wait_for_unrelated_stream(
 
     # The session solver differs from the closed one only in
     # registration settings, so it reproduces the same state.
-    solver.kernel.run(
-        y0,
-        params,
-        solver.driver_interpolator.coefficients,
-        duration=0.1,
-    )
+    solver.kernel.run(y0, params, duration=0.1)
     solver.kernel.synchronize()
     solver.kernel.wait_for_writeback()
     expected_state = solver.kernel.state.copy()

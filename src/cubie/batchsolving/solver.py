@@ -787,7 +787,6 @@ class Solver:
         self.kernel.run(
             inits=inits,
             params=params,
-            driver_coefficients=self.driver_interpolator.coefficients,
             duration=duration,
             warmup=settling_time,
             t0=t0,
@@ -844,7 +843,6 @@ class Solver:
         self.kernel.compile(
             inits=inits,
             params=params,
-            driver_coefficients=self.driver_interpolator.coefficients,
             duration=duration,
             warmup=settling_time,
             t0=t0,

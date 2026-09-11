@@ -1249,8 +1249,8 @@ def test_empty_input_dict_configures_empty_interpolator(precision):
     assert interp.coefficients_shape == (0, 0, interp.order + 1)
     assert interp.coefficients.shape == interp.coefficients_shape
     assert interp.coefficients.dtype == precision
-    assert callable(interp.evaluation_function)
-    assert callable(interp.driver_del_t)
+    assert interp.evaluation_function is None
+    assert interp.driver_del_t is None
 
 
 def test_empty_interpolator_keeps_its_identity_across_empty_updates(
@@ -1260,7 +1260,7 @@ def test_empty_interpolator_keeps_its_identity_across_empty_updates(
     interp = ArrayInterpolator(precision=precision, input_dict={})
     identity = interp.compile_settings.values_hash
     coefficients = interp.coefficients
-    assert interp.update_from_dict({}) is False
+    interp.update_from_dict({})
     assert interp.compile_settings.values_hash == identity
     assert interp.coefficients is coefficients
 
@@ -1270,11 +1270,13 @@ def test_empty_interpolator_populates_from_samples(precision):
     interp = ArrayInterpolator(precision=precision, input_dict={})
     identity = interp.compile_settings.values_hash
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    changed = interp.update_from_dict(
+    recognised = interp.update_from_dict(
         {"values": times**2, "time": times, "order": 2, "wrap": False}
     )
-    assert changed is True
+    assert {"input_array", "order", "wrap"} <= recognised
     assert interp.compile_settings.values_hash != identity
+    assert callable(interp.evaluation_function)
+    assert callable(interp.driver_del_t)
     assert interp.num_inputs == 1
     assert interp.num_samples == 6
     assert interp.coefficients_shape == (7, 1, 3)
@@ -1433,11 +1435,14 @@ def test_update_from_dict_applies_config_change_with_equal_arrays(
         "boundary_condition": "clamped",
     }
     interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
-    assert interp.update_from_dict(dict(input_dict)) is False
+    identity = interp.compile_settings.values_hash
+    interp.update_from_dict(dict(input_dict))
+    assert interp.compile_settings.values_hash == identity
 
     changed_dict = dict(input_dict)
     changed_dict["order"] = 3
-    assert interp.update_from_dict(changed_dict) is True
+    interp.update_from_dict(changed_dict)
+    assert interp.compile_settings.values_hash != identity
     assert interp.order == 3
     assert interp.coefficients_shape[2] == 4
     assert interp.coefficients.shape == interp.coefficients_shape
@@ -1478,7 +1483,7 @@ def test_value_update_rebuilds_the_table_without_changing_identity(
 
     changed = dict(input_dict)
     changed["values"] = times**2 + 1.0
-    assert interp.update_from_dict(changed) is False
+    interp.update_from_dict(changed)
 
     rebuilt = interp.coefficients
     assert interp.compile_settings.values_hash == identity
@@ -1502,9 +1507,22 @@ def test_equal_sample_values_keep_the_same_table(precision):
     first = interp.coefficients
     identity = interp.compile_settings.values_hash
 
-    assert interp.update_from_dict(dict(input_dict)) is False
+    interp.update_from_dict(dict(input_dict))
     assert interp.coefficients is first
     assert interp.compile_settings.values_hash == identity
+
+
+def test_update_rejects_an_undersized_input_array(precision):
+    """A raw table with fewer than order + 1 samples is refused."""
+    times = np.arange(0.0, 6.0, 1.0, dtype=precision)
+    input_dict = {"values": times**2, "time": times, "order": 2,
+                  "wrap": False}
+    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    with pytest.raises(ValueError, match=r"order \+ 1 samples"):
+        interp.update(input_array=np.ones((2, 1), dtype=precision))
+    with pytest.raises(ValueError, match="two-dimensional"):
+        interp.update(input_array=np.ones(6, dtype=precision))
+    assert interp.input_array.shape == (6, 1)
 
 
 def test_coefficients_buffer_reallocated_on_shape_change(precision):
