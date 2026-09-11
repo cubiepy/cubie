@@ -859,34 +859,12 @@ class SolveResult:
 
     @staticmethod
     def summary_legend_from_solver(solver: "Solver") -> dict[int, str]:
-        """Return a copy of the kernel build's summaries legend.
-
-        Parameters
-        ----------
-        solver
-            Solver whose kernel built the legend.
-
-        Returns
-        -------
-        dict[int, str]
-            Dictionary mapping summary array indices to labels with units.
-        """
+        """Return a copy of the kernel build's summaries legend."""
         return dict(solver.kernel.summaries_legend)
 
     @staticmethod
     def time_domain_legend_from_solver(solver: "Solver") -> dict[int, str]:
-        """Return a copy of the kernel build's time-domain legend.
-
-        Parameters
-        ----------
-        solver
-            Solver whose kernel built the legend.
-
-        Returns
-        -------
-        dict[int, str]
-            Dictionary mapping time-domain indices to labels with units.
-        """
+        """Return a copy of the kernel build's time-domain legend."""
         return dict(solver.kernel.time_domain_legend)
 
 
