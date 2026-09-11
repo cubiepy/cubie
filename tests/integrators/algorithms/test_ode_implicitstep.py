@@ -2,6 +2,7 @@
 
 import math
 
+import attrs
 import numpy as np
 import pytest
 
@@ -10,6 +11,9 @@ from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
 )
 from cubie.integrators.algorithms.generic_firk import FIRKStep
+from cubie.integrators.algorithms.ode_implicitstep import (
+    ImplicitStepConfig,
+)
 from cubie.integrators.algorithms.generic_rosenbrock_w import (
     GenericRosenbrockWStep,
 )
@@ -172,6 +176,23 @@ def test_implicit_step_settings_dict_includes_implicit_fields(precision):
     twin = step.copy()
     assert twin.compile_settings == step.compile_settings
     assert twin.solver.compile_settings == step.solver.compile_settings
+
+
+def test_implicit_step_device_function_fields_are_tagged():
+    """Every device-function slot on the implicit config carries the tag."""
+    tagged = {
+        fld.name
+        for fld in attrs.fields(ImplicitStepConfig)
+        if fld.metadata.get("device_function")
+    }
+    assert {
+        "evaluate_f",
+        "evaluate_observables",
+        "evaluate_driver_at_t",
+        "solver_function",
+        "prepare_jacobian_function",
+        "error_solver_function",
+    } <= tagged
 
 
 def test_implicit_step_beta_gamma_properties(precision):
