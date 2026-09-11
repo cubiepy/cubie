@@ -1,0 +1,19 @@
+config                                                       best        ms |   plain   tierA   optim | rule/nat | frame regs
+-----------------------------------------------------------------------------------------------------------------------------
+fabbri/radau_iia_5                                    n0o0@bs32x8   279.901 |    8.8%    1.1%    0.9% |    1.002 |  2632  255
+
+plain     within 5%:   0  losses:   1  worst:    8.8% fabbri/radau_iia_5
+tierA     within 5%:   1  losses:   0  worst:    1.1% fabbri/radau_iia_5
+optimize  within 5%:   1  losses:   0  worst:    0.9% fabbri/radau_iia_5
+
+candidate gaps (measured best beats the optimize set by > 5%): 0
+residency-rule failures (rule launch > 5% slower than the natural launch, tierA kernel): 0
+arms whose failed-run count or NaN pattern differs from the reference arm, or that failed to build: 6
+  fabbri/radau_iia_5             opt:newton_exits=1 stage_increment=shared failed=12 runs=32768 max_abs_diff=45.05517578125 runs_differing=26714 nan_match=True
+  fabbri/radau_iia_5             opt:newton_exits=0 stage_increment=shared failed=12 runs=32768 max_abs_diff=45.05517578125 runs_differing=26714 nan_match=True
+  fabbri/radau_iia_5             n0o0                             failed=6 runs=32768 max_abs_diff=45.18403244018555 runs_differing=32768 nan_match=True
+  fabbri/radau_iia_5             n1o0                             failed=12 runs=32768 max_abs_diff=45.05517578125 runs_differing=26714 nan_match=True
+  fabbri/radau_iia_5             n0o0+stage_increment=shared      failed=6 runs=32768 max_abs_diff=45.18403244018555 runs_differing=32768 nan_match=True
+  fabbri/radau_iia_5             allrolled                        failed=17 runs=32768 max_abs_diff=45.184043884277344 runs_differing=32768 nan_match=True
+largest final-state difference from the reference arm per configuration (chaotic systems diverge under any rounding change):
+  fabbri/radau_iia_5              45.2

@@ -1,0 +1,138 @@
+config                                                       best        ms |   plain   tierA   optim | rule/nat | frame regs
+-----------------------------------------------------------------------------------------------------------------------------
+chain20/kvaerno3                                    tierA@bs256x1    71.438 |  122.0%    0.0%    0.0% |    0.829 |    48  255
+chain20/kvaerno5                                     n0o0@bs256x1    84.393 |   89.0%    1.2%    1.2% |    0.849 |   136  255
+chain20/radau_iia_3                                 plain@bs256x1    97.459 |    4.1%    2.7%    0.0% |    0.984 |   200  255
+chain20/radau_iia_5                                 tierA@bs128x1   137.075 |   24.9%    4.8%    4.7% |    1.014 |   936  255
+chain20/kvaerno3_bicgstab                           tierA@bs256x1   153.913 |   42.6%   42.0%    0.0% |    1.188 |   344  255
+chain20/radau_iia_5_bicgstab                         tierA@bs32x7   115.857 |   14.5%    1.6%    0.0% |    0.971 |  1824  255
+chain20/bogacki-shampine-32                         tierA@bs32x16    19.604 |   11.4%   11.4%    3.5% |    1.000 |     0  128
+chain20/vern7                          o1+stage_rhs=shared@bs32x8    79.356 |    4.5%    4.6%    0.1% |    1.001 |     0  255
+chain20/tsit5                                       tierA@bs128x3    33.809 |    6.7%    1.3%    1.3% |    0.949 |     0  168
+chain20/rosenbrock23                                tierA@bs128x2     8.102 |    5.6%    8.9%    5.6% |    1.032 |     0  232
+chain64/kvaerno3                                     tierA@bs64x4   156.268 |    3.2%    0.9%    0.0% |    1.009 |  2680  255
+chain64/kvaerno5                                    tierA@bs256x1   208.543 |    9.5%    0.0%    0.0% |    0.997 |  2912  255
+chain64/radau_iia_3                                 tierA@bs256x1   471.385 |    5.6%    0.0%    0.0% |    0.998 |  3856  255
+chain64/radau_iia_5                                  tierA@bs64x4   231.635 |    4.6%    1.5%    0.0% |    1.015 |  6984  255
+chain64/kvaerno3_bicgstab                           tierA@bs256x1   488.209 |   32.1%    0.0%    0.0% |    0.995 |  3968  255
+chain64/radau_iia_5_bicgstab                         tierA@bs32x8   469.805 |    2.0%    2.6%    2.0% |    1.005 |  9608  255
+chain64/bogacki-shampine-32                         tierA@bs256x1    82.972 |    8.8%    0.0%    0.0% |    0.919 |   232  255
+chain64/vern7                  opt:other_small=0 state=shared@bs32x7  2473.763 |   21.1%   21.7%    0.0% |    1.004 |  3200  255
+chain64/tsit5                                       tierA@bs128x1   454.687 |   61.3%   27.6%    6.7% |    0.791 |  1056  255
+chain64/rosenbrock23                                 tierA@bs32x8   339.380 |    1.5%    0.5%    0.5% |    0.990 |  2568  255
+chain32_c8/kvaerno3                                 plain@bs256x1   219.597 |    4.7%    4.6%    0.0% |    0.983 |   840  255
+chain32_c8/kvaerno5                                 tierA@bs256x1    93.433 |   66.9%    0.0%    0.0% |    0.882 |   992  255
+chain32_c8/radau_iia_3                              tierA@bs128x1   167.914 |   39.9%   36.1%    0.8% |    1.030 |  1184  255
+chain32_c8/radau_iia_5                               tierA@bs32x7   113.643 |    6.2%    5.4%    3.9% |    0.999 |  2376  255
+chain32_c8/kvaerno3_bicgstab   opt:newton_exits=1 accumulator=shared@bs128x1   271.200 |   25.4%    4.2%    0.0% |    0.921 |  1152  255
+chain32_c8/radau_iia_5_bicgstab                       plain@bs64x4   240.887 |    0.0%    6.6%    0.0% |    1.053 |  3848  255
+chain32_c8/bogacki-shampine-32 opt:other_small=0 state=shared@bs128x3    45.413 |    4.2%    3.3%    3.3% |    0.992 |     0  166
+chain32_c8/vern7                                    tierA@bs128x2   199.435 |  155.6%    0.4%    0.0% |    1.001 |   296  255
+chain32_c8/tsit5                                    tierA@bs128x2    77.585 |    6.2%    0.6%    0.6% |    0.947 |     0  255
+chain32_c8/rosenbrock23                             tierA@bs256x1    26.797 |    7.7%    0.0%    0.0% |    0.929 |   264  255
+lorenz96_10/kvaerno3                                plain@bs128x3   155.339 |    4.2%   10.6%    4.2% |    1.000 |     0  168
+lorenz96_10/kvaerno5                                 n0o0@bs256x1   156.166 |  158.3%    4.4%    4.4% |    0.946 |     0  185
+lorenz96_10/radau_iia_3                             plain@bs128x2   519.129 |    6.8%    5.8%    1.9% |    1.000 |     0  202
+lorenz96_10/radau_iia_5                              tierA@bs32x8   132.884 |    9.0%    3.7%    3.7% |    0.981 |    56  255
+lorenz96_10/kvaerno3_bicgstab                       tierA@bs256x1   478.283 |   24.8%    0.0%    0.0% |    0.931 |     0  247
+lorenz96_10/radau_iia_5_bicgstab                      tierA@bs256x1   173.116 |  133.8%    4.2%    0.0% |    0.996 |   176  255
+lorenz96_10/bogacki-shampine-32                      tierA@bs128x7   236.188 |    2.2%    2.2%    2.2% |    1.000 |     0   71
+lorenz96_10/vern7                      o1+stage_rhs=shared@bs64x8    58.958 |    1.8%    1.8%    1.5% |    1.000 |     0  128
+lorenz96_10/tsit5                     o1+stage_rhs=shared@bs32x16    63.493 |    4.9%    4.9%    0.9% |    1.000 |     0   95
+lorenz96_10/rosenbrock23                            tierA@bs32x16    29.109 |    1.2%    1.2%    1.2% |    1.000 |     0  127
+lorenz/kvaerno3                                     tierA@bs128x8    60.249 |    7.4%    4.6%    4.6% |    0.974 |     0   64
+lorenz/kvaerno5                opt:newton_exits=0 accumulator=local@bs128x7     5.491 |   63.4%   64.0%    0.4% |    1.003 |     0   72
+lorenz/radau_iia_3                                  tierA@bs256x3    94.395 |    5.3%    5.3%    0.0% |    1.000 |     0   72
+lorenz/radau_iia_5             opt:newton_exits=0 stage_increment=local@bs32x16    51.865 |    6.5%    2.6%    1.3% |    0.963 |     0   93
+lorenz/kvaerno3_bicgstab       opt:newton_exits=0 accumulator=local@bs64x10   110.935 |    7.1%    0.8%    0.0% |    0.941 |     0   95
+lorenz/radau_iia_5_bicgstab    opt:newton_exits=0 stage_increment=shared@bs32x16    93.556 |   41.6%   39.2%    0.0% |    0.974 |     0  146
+lorenz/bogacki-shampine-32                          tierA@bs128x8    38.720 |    2.4%    2.4%    0.3% |    1.000 |     0   48
+lorenz/vern7                          o1+stage_rhs=shared@bs32x16   116.983 |    3.3%    3.3%    2.7% |    1.000 |     0   64
+lorenz/tsit5                   opt:other_small=0 state=local@bs64x16    40.332 |    4.7%    4.7%    0.0% |    1.000 |     0   56
+lorenz/rosenbrock23                     opt:other_small=0@bs32x16    25.727 |    7.4%    7.4%    4.9% |    1.000 |     0   59
+lorenz96_40/kvaerno3           opt:newton_exits=0 accumulator=shared@bs32x3  2837.834 |   19.6%   10.4%    0.0% |    1.001 |  1512  255
+lorenz96_40/kvaerno5           opt:newton_exits=0 accumulator=shared@bs64x1  1097.406 |   14.8%    0.8%    0.0% |    0.984 |  1736  255
+lorenz96_40/radau_iia_3        n0o0+stage_increment=shared@bs64x3   647.535 |   11.4%   13.5%    9.2% |    1.018 |  2536  255
+lorenz96_40/radau_iia_5                              tierA@bs64x4    96.156 |    9.9%    4.2%    0.0% |    1.042 |  4392  255
+lorenz96_40/kvaerno3_bicgstab                       tierA@bs128x1   300.319 |    7.5%    9.3%    0.0% |    1.058 |  1344  255
+lorenz96_40/radau_iia_5_bicgstab                       plain@bs32x8   207.617 |    0.7%    9.5%    0.7% |    1.026 |  5192  255
+lorenz96_40/bogacki-shampine-32                       tierA@bs32x8    67.785 |   10.3%   10.3%    7.5% |    1.000 |     0  211
+lorenz96_40/vern7              opt:other_small=0 state=shared@bs32x6    40.760 |  106.1%   44.8%    0.0% |    0.961 |   664  255
+lorenz96_40/tsit5                                    plain@bs32x8    19.024 |   11.6%    3.7%    3.7% |    0.880 |     8  255
+lorenz96_40/rosenbrock23                 opt:other_small=0@bs64x2    23.486 |   20.0%   22.2%    0.0% |    1.019 |  1152  255
+
+plain     within 5%:  18  losses:  42  worst:  158.3% lorenz96_10/kvaerno5
+tierA     within 5%:  39  losses:  21  worst:   64.0% lorenz/kvaerno5
+optimize  within 5%:  56  losses:   4  worst:    9.2% lorenz96_40/radau_iia_3
+
+candidate gaps (measured best beats the optimize set by > 5%): 4
+  chain20/rosenbrock23           best tierA@bs128x2 8.102 ms; optimize opt:other_small=1@rule@bs64 8.553 ms
+  chain64/tsit5                  best tierA@bs128x1 454.687 ms; optimize opt:other_small=0 state=local@cut2@bs64 485.354 ms
+  lorenz96_40/radau_iia_3        best n0o0+stage_increment=shared@bs64x3 647.535 ms; optimize opt:newton_exits=1 stage_increment=shared@rule@bs32 706.989 ms
+  lorenz96_40/bogacki-shampine-32 best tierA@bs32x8 67.785 ms; optimize opt:other_small=1 state=local@rule@bs256 72.878 ms
+residency-rule failures (rule launch > 5% slower than the natural launch, tierA kernel): 3
+  chain20/kvaerno3_bicgstab      rule/natural 1.188
+  chain32_c8/radau_iia_5_bicgstab rule/natural 1.053
+  lorenz96_40/kvaerno3_bicgstab  rule/natural 1.058
+arms whose failed-run count or NaN pattern differs from the reference arm, or that failed to build: 0
+largest final-state difference from the reference arm per configuration (chaotic systems diverge under any rounding change):
+  chain20/kvaerno3                 9.54e-07
+  chain20/kvaerno5                 6.44e-06
+  chain20/radau_iia_3              2.62e-06
+  chain20/radau_iia_5              9.54e-07
+  chain20/kvaerno3_bicgstab        1.07e-06
+  chain20/radau_iia_5_bicgstab     4.77e-07
+  chain20/bogacki-shampine-32      0
+  chain20/vern7                    0
+  chain20/tsit5                    0
+  chain20/rosenbrock23             0
+  chain64/kvaerno3                 5.36e-07
+  chain64/kvaerno5                 4.77e-07
+  chain64/radau_iia_3              8.34e-07
+  chain64/radau_iia_5              3.58e-07
+  chain64/kvaerno3_bicgstab        5.96e-07
+  chain64/radau_iia_5_bicgstab     3.58e-07
+  chain64/bogacki-shampine-32      0
+  chain64/vern7                    0
+  chain64/tsit5                    0
+  chain64/rosenbrock23             0
+  chain32_c8/kvaerno3                 5.72e-06
+  chain32_c8/kvaerno5                 1.32e-05
+  chain32_c8/radau_iia_3              1.19e-06
+  chain32_c8/radau_iia_5              8.34e-07
+  chain32_c8/kvaerno3_bicgstab        7.15e-07
+  chain32_c8/radau_iia_5_bicgstab     4.77e-07
+  chain32_c8/bogacki-shampine-32      0
+  chain32_c8/vern7                    0
+  chain32_c8/tsit5                    0
+  chain32_c8/rosenbrock23             0
+  lorenz96_10/kvaerno3                 1.14
+  lorenz96_10/kvaerno5                 36.8
+  lorenz96_10/radau_iia_3              0.0151
+  lorenz96_10/radau_iia_5              34.7
+  lorenz96_10/kvaerno3_bicgstab        0.00753
+  lorenz96_10/radau_iia_5_bicgstab     0.00547
+  lorenz96_10/bogacki-shampine-32      0
+  lorenz96_10/vern7                    0
+  lorenz96_10/tsit5                    0
+  lorenz96_10/rosenbrock23             0
+  lorenz/kvaerno3                 11.7
+  lorenz/kvaerno5                 4.96e-05
+  lorenz/radau_iia_3              0.0142
+  lorenz/radau_iia_5              5.72e-06
+  lorenz/kvaerno3_bicgstab        0.00813
+  lorenz/radau_iia_5_bicgstab     0.535
+  lorenz/bogacki-shampine-32      0
+  lorenz/vern7                    0
+  lorenz/tsit5                    0
+  lorenz/rosenbrock23             0
+  lorenz96_40/kvaerno3                 0.0254
+  lorenz96_40/kvaerno5                 0.067
+  lorenz96_40/radau_iia_3              0.000622
+  lorenz96_40/radau_iia_5              0.000251
+  lorenz96_40/kvaerno3_bicgstab        0.000335
+  lorenz96_40/radau_iia_5_bicgstab     0.000277
+  lorenz96_40/bogacki-shampine-32      0
+  lorenz96_40/vern7                    0
+  lorenz96_40/tsit5                    0
+  lorenz96_40/rosenbrock23             0
