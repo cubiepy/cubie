@@ -111,9 +111,8 @@ def _failure_remedies(diagnostics: Dict[str, Any]) -> List[str]:
 def _failed_run_message(
     status_codes: NDArray,
     diagnostics: Dict[str, Any],
-    masked: bool,
 ) -> str:
-    """Describe failed runs, the solver settings, and what to change."""
+    """Describe masked failed runs, the solver settings, and remedies."""
     failures = decode_status_codes(status_codes)
     counts = {}
     for flags in failures.values():
@@ -121,17 +120,10 @@ def _failed_run_message(
             counts[flag] = counts.get(flag, 0) + 1
     ranked = sorted(counts.items(), key=lambda item: -item[1])
     flag_text = ", ".join(f"{name} ({count})" for name, count in ranked)
-    outcome = " and were set to NaN" if masked else ""
-    lines = [
-        f"{len(failures)} of {len(status_codes)} runs failed{outcome}.",
-    ]
+    failed = f"{len(failures)} of {len(status_codes)} runs failed"
+    lines = [f"{failed} and were set to NaN."]
     if flag_text:
         lines.append(f"Result codes: {flag_text}.")
-    if not masked:
-        lines.append(
-            "Check status_codes for the failing runs, or pass "
-            "nan_error_trajectories=True to mask them with NaN."
-        )
     if diagnostics:
         settings = ", ".join(
             f"{key}={value!r}" for key, value in diagnostics.items()
@@ -402,9 +394,9 @@ class SolveResult:
             Object providing access to output arrays and metadata.
         nan_error_trajectories
             When ``True`` (default), trajectories with nonzero status
-            codes are overwritten with NaN in place, making failed
-            runs easy to identify and exclude from analysis. Failed
-            runs raise a warning whether or not they are masked.
+            codes are overwritten with NaN in place and a warning
+            lists the failures. When ``False`` all trajectories are
+            returned unchanged.
 
         Returns
         -------
@@ -434,17 +426,16 @@ class SolveResult:
             memory_manager=solver.kernel.memory_manager,
         )
         outputs.loan_host_arrays(result)
-        error_runs = result._error_run_indices()
-        if error_runs.size > 0:
-            if nan_error_trajectories:
+        if nan_error_trajectories:
+            error_runs = result._error_run_indices()
+            if error_runs.size > 0:
                 result._mask_error_runs(error_runs)
-            warn(
-                _failed_run_message(
-                    result.status_codes,
-                    solver.kernel.single_integrator.solver_diagnostics,
-                    masked=nan_error_trajectories,
+                warn(
+                    _failed_run_message(
+                        result.status_codes,
+                        solver.kernel.single_integrator.solver_diagnostics,
+                    )
                 )
-            )
         return result
 
     def _error_run_indices(self) -> NDArray:
