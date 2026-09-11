@@ -57,23 +57,18 @@ Consumer renames, one mechanical PR stacked on 939:
   one its family uses.
 - `driver_coefficients_shape` (kernel) becomes `coefficients_shape`.
 
-Open: `error_solver_fn` (the step's second `krylov` linear solver). Either:
+`MultipleInstanceCUDAFactory.products` prefixes its cache fields with
+`instance_label` (`prefixed(name)` returns the key); the error solver takes
+`instance_label="error"` and reads `error_*` settings. Consumer fields:
+`newton_nonlinear_solver_fn` (step), `krylov_linear_solver_fn` (Newton, linear
+step, initialiser), `error_linear_solver_fn` (step), `newton_norm_fn`
+(initialiser); a labelled consumer's own norm slot is
+`device_function_field(prefixed=True)`; the controller's unlabelled norm stays
+`norm_fn`.
 
-1. `MultipleInstanceCUDAFactory.products` prefixes its cache fields with
-   `instance_label`; the error solver takes `instance_label="error"` and
-   reads `error_*` settings. Consumer fields: `newton_nonlinear_solver_fn`
-   (step), `krylov_linear_solver_fn` (Newton, linear step),
-   `error_linear_solver_fn` (step), `newton_norm_fn`, `krylov_norm_fn`;
-   the controller's unlabelled norm stays `norm_fn`.
-2. Products unprefixed; the step's `update` writes
-   `{"error_solver_fn": self.error_solver.products["linear_solver_fn"]}`.
-
-### Field helpers
-
-`product_field(**kwargs)` declares a hashed config field a sibling's product
-fills (`n_states`, `mass_flags`, `is_adaptive`, `algorithm_order`,
-`compile_flags`, buffer heights, `dt`, ...): `metadata={"product": True}`;
-`_CubieConfigBase.init_kwargs` skips it. `_INJECTED_KEYS` on the run goes.
+Products that echo user settings (`dt`, `atol`, ...) stay in `settings_dict`,
+so `_INJECTED_KEYS` keeps naming the parent-filled keys the run's
+`settings_dict` drops.
 
 ## 3. The run's `update`
 
@@ -127,8 +122,10 @@ Units:
   default; `fixed` with a warning when the step has no error estimate),
   construct it when it changed, dropping the gains on a family change.
   `check_compatibility` and `_promote_controller` fold into this unit.
-- The controller updates twice: first so the step reads `is_adaptive` (a
-  class constant), then with the step's `algorithm_order`.
+- The step updates twice (user keys, then the controller's `is_adaptive`) and
+  the controller twice (user keys, then the step's `algorithm_order`).
+- `update(..., given=False)` distributes a parent's derived keys without
+  recording them as user-given.
 - The three `_apply_*_defaults` derivations push to the step through its
   `update`.
 - `_register_loop_children` runs once per `update`, after the step's products.
@@ -214,12 +211,12 @@ recognised |= self.update_compile_settings(updates, silent=True)
 
 ## 7. PR split
 
-0. `chore`: the consumer renames (§2), stacked on 939.
-1. `chore(integrators)`: products on every child (§2), `product_field`, and
-   the step and initialiser helper wiring in `update` (§4).
-2. `fix(integrators)`: the run's `update` (§3); closes #932 with PR 3.
+0. PR 942 `chore`: the consumer renames and prefixed products (§2).
+1. PR 943 `chore(integrators)`: products on every child (§2) and the step and
+   initialiser helper wiring in `update` (§4).
+2. PR 944 `fix(integrators)`: the run's `update` (§3).
 3. `fix(batchsolving)`: the kernel's `update`, `loop_fn` seeding, the
-   duration push and the performance defaults (§5).
+   duration push and the performance defaults (§5); closes #932.
 
 Full simulator and GPU suites per PR; the gate on each (kernel rows and the
 `host_overhead` wall row).
