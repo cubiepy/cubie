@@ -552,6 +552,17 @@ class CUBIECache(CUDACache):
             key += (("launch_config", self._launch_config_key),)
         return key
 
+    def holds_kernel(self) -> bool:
+        """Whether the index holds this system, config and source hash."""
+        identity = (
+            self._system_hash,
+            self._compile_settings_hash,
+            package_source_hash(),
+        )
+        with _CacheFileLock(self._write_lock_path):
+            overloads = self._cache_file._load_index()
+        return any(tuple(key[2:5]) == identity for key in overloads)
+
     def load_overload(self, sig, target_context):
         """Load cached kernel, starting compile timer on cache miss.
 
