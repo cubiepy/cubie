@@ -2703,12 +2703,12 @@ def test_driverless_solver_has_an_empty_coefficient_layout(solver):
     assert solver.system.num_drivers == 0
     assert solver.driver_interpolator.num_inputs == 0
     assert solver.driver_interpolator.drivers_fn is None
-    assert solver.kernel.driver_coefficients_shape[0] == 0
-    assert solver.kernel.driver_coefficients_shape == (
+    assert solver.kernel.coefficients_shape[0] == 0
+    assert solver.kernel.coefficients_shape == (
         solver.driver_interpolator.coefficients_shape
     )
     assert solver.driver_interpolator.coefficients.shape == (
-        solver.kernel.driver_coefficients_shape
+        solver.kernel.coefficients_shape
     )
 
 
@@ -2810,7 +2810,7 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
         assert interpolator.num_inputs == 0
         assert interpolator.drivers_fn is None
         assert integrator._loop.compile_settings.drivers_fn is None
-        assert twin.driver_coefficients_shape[0] == 0
+        assert twin.coefficients_shape[0] == 0
         twin.configure_drivers(driver_settings)
         assert interpolator.num_inputs == twin.system.num_drivers
         assert (
@@ -2821,7 +2821,7 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
             integrator._algo_step.compile_settings.drivers_fn
             is interpolator.drivers_fn
         )
-        assert twin.driver_coefficients_shape == (
+        assert twin.coefficients_shape == (
             interpolator.coefficients_shape
         )
     finally:
