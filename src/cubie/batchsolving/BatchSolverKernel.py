@@ -1264,18 +1264,7 @@ class BatchSolverKernel(CUDAFactory):
         return recognised | unpacked_keys
 
     def _distribute(self, updates: Dict[str, Any]) -> set[str]:
-        """Update the interpolator, the run and this kernel in order.
-
-        Parameters
-        ----------
-        updates
-            Pending updates; each child's products are merged in place.
-
-        Returns
-        -------
-        set[str]
-            Keys recognised by a child or by this kernel's settings.
-        """
+        """Update the interpolator, the run and this kernel in order."""
         recognised = self.driver_interpolator.update(updates, silent=True)
         updates.update(self.driver_interpolator.products)
         recognised |= self.single_integrator.update(updates, silent=True)
@@ -1307,19 +1296,7 @@ class BatchSolverKernel(CUDAFactory):
         return fixed
 
     def _performance_defaults(self, products: Dict[str, Any]) -> Dict:
-        """Return the unroll and placement keys size and hardware set.
-
-        Parameters
-        ----------
-        products
-            The run's products, with ``operation_counts``,
-            ``step_operation_count`` and ``performance_defaults``.
-
-        Returns
-        -------
-        dict
-            The keys the user did not fix.
-        """
+        """Return the unroll and placement keys the user did not fix."""
         if (
             not self.compile_settings.auto_performance
             or not products["is_implicit"]
@@ -1348,13 +1325,7 @@ class BatchSolverKernel(CUDAFactory):
     def optimisation_candidates(
         self, force: bool = False
     ) -> Tuple[Dict[str, Any], ...]:
-        """Return the step's candidate settings minus keys the user fixed.
-
-        Parameters
-        ----------
-        force
-            Vary the user-fixed keys too.
-        """
+        """Return the step's candidates minus fixed keys; ``force`` keeps them."""
         fixed = set() if force else self._performance_fixed
         candidates = []
         for combo in self.single_integrator.algorithm_candidates:
