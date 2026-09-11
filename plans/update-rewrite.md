@@ -9,9 +9,9 @@ Base: PRs 938 and 939 merged, then the rename PR (§2). Supersedes PR 934.
   `update_compile_settings` on itself with the same dict. No key picking,
   renaming or size arithmetic.
 - `products` is the child's cache by field name (`CUDAFactory.products`);
-  reading it builds an invalid cache, so children build inside the parent's
-  `update`. `build()` reads its own `compile_settings` only; nothing calls
-  `update_compile_settings` from a build, `_invalidate_cache`, or `build`.
+  reading it builds an invalid cache. `build()` reads its own
+  `compile_settings` only; nothing calls `update_compile_settings` from a
+  build, `_invalidate_cache`, or `build`.
 - A consumer field and the product that fills it share one name.
 - Everything a child delivers upward is a cache field: device functions,
   derived sizes and flags, and resolved settings other components read
@@ -57,18 +57,14 @@ Consumer renames, one mechanical PR stacked on 939:
   one its family uses.
 - `driver_coefficients_shape` (kernel) becomes `coefficients_shape`.
 
-Open: `error_solver_fn`. The step's `error_solver` is a second linear
-solver (product `linear_solver_fn`, label `krylov` like the Newton's inner
-solver). Two options:
+Open: `error_solver_fn` (the step's second `krylov` linear solver). Either:
 
 1. `MultipleInstanceCUDAFactory.products` prefixes its cache fields with
-   `instance_label`, as its settings keys are prefixed; the error solver is
-   constructed with `instance_label="error"`. Consumers then name
-   `newton_nonlinear_solver_fn` (step), `krylov_linear_solver_fn` (Newton and
-   the linear step), `error_linear_solver_fn` (step), `newton_norm_fn` and
-   `krylov_norm_fn` (Newton, solvers, initialiser); the controller's norm has
-   no label and stays `norm_fn`. The error solve then reads `error_*`
-   settings; today it shares `krylov_*`.
+   `instance_label`; the error solver takes `instance_label="error"` and
+   reads `error_*` settings. Consumer fields: `newton_nonlinear_solver_fn`
+   (step), `krylov_linear_solver_fn` (Newton, linear step),
+   `error_linear_solver_fn` (step), `newton_norm_fn`, `krylov_norm_fn`;
+   the controller's unlabelled norm stays `norm_fn`.
 2. Products unprefixed; the step's `update` writes
    `{"error_solver_fn": self.error_solver.products["linear_solver_fn"]}`.
 
@@ -139,13 +135,11 @@ Units:
 - `__init__` constructs the children with their static settings, then runs
   the same routine once.
 - `build()` returns `SingleIntegratorRunCache(loop_fn=config.loop_fn, ...)`
-  with the sizes from `_loop.products` and `_output_functions.products` and
-  the counts from `_system.products` and `_algo_step.products`.
-  Removed: `_step_device_functions`, the `compiled_functions` dict and
-  system-function comparisons in `build()`, `instantiate_loop`'s kwargs, the
-  duplicated `register_child` calls, `_INJECTED_KEYS`, the manual
-  `_invalidate_cache`, `_apply_performance_defaults`, `auto_performance`,
-  `_user_given_keys`, `optimisation_candidates`.
+  with the sizes and counts from the children's products.
+- Delete: `_step_device_functions`, `compiled_functions`,
+  `instantiate_loop`'s kwargs, the extra `register_child` calls,
+  `_INJECTED_KEYS`, `_invalidate_cache` calls, `_apply_performance_defaults`,
+  `auto_performance`, `_user_given_keys`, `optimisation_candidates`.
 
 ## 4. Step and initialiser: helper wiring is an update
 
@@ -189,38 +183,17 @@ recognised |= self.update_compile_settings(updates, silent=True)
   the kernel's record of user-given performance keys, and returns the unroll
   and placement keys. `optimisation_candidates` and the performance filter
   in `settings_dict` move with it.
-- `_prepare_batch` pushes nothing per solve. With a duration-dependent
-  summary schedule (summaries requested, no `summarise_every` given) it
-  calls `self.update({"duration": duration}, silent=True)`: the run's
+- `_prepare_batch` pushes nothing per solve. With summaries requested and
+  no `summarise_every` given it calls
+  `self.update({"duration": duration}, silent=True)`; the run's
   `_loop_timing` derives `summarise_every=duration`,
-  `sample_summaries_every=duration / 100`, `summarise_regularly=True` and
-  pushes them to the loop. A duration equal to the last solve's changes
-  nothing and no cache moves. A new duration changes the loop's config, so
-  `_loop.products` rebuilds the loop, the run's `loop_fn` changes, the
-  run's cache rebuilds, the kernel's `loop_fn` changes and the kernel
-  rebuilds at its next `kernel` access (through the disk cache, keyed by
-  the loop's new `summarise_every`). `duration` is a routed key, never a
-  config field. Closes #932.
+  `sample_summaries_every=duration / 100`, `summarise_regularly=True` for
+  the loop. `duration` is a routed key, never a config field. Closes #932.
 - `configure_drivers` keeps `update_from_dict` for the arrays, then calls
   `self.update(self.driver_interpolator.products, silent=True)`. PR 935
   reshapes this method; whichever lands second adapts.
 
-## 6. Measured costs (main, RTX 4070, mlir backend)
-
-What an update pays when `products` builds a child.
-
-| Factory | Cold build | Rebuild after `update(dt=...)` |
-|---|---|---|
-| system (`dxdt_fn`, codegen) | 31-35 ms; 0.01 ms when the generated file is cached | 34 ms on a constant change (euler); 0.03 ms cached |
-| output functions | 0.8-1.5 ms | not invalidated |
-| explicit step | 0.5-0.7 ms | not invalidated |
-| controller | 0.3-1.0 ms | 0.2-1.0 ms |
-| initialiser (no-op) | 0.1-0.3 ms | not invalidated |
-| loop | 2.6-7 ms | 2.6-6.7 ms |
-| implicit run (step helpers + loop), cold | 54 (backwards_euler), 71 (kvaerno3), 65 (rosenbrock23), 160 (radau) ms | 3.6-6.6 ms |
-| kernel object (`build_kernel`, no launch) | 1.3-16 ms | |
-
-## 7. Tests
+## 6. Tests
 
 - `test_CUDAFactory.py`: producer/consumer pair; the parent's `update` fills a
   tagged field from `products` by name, invalidates on identity change, stays
@@ -239,7 +212,7 @@ What an update pays when `products` builds a child.
   `array_equal` to the explicit schedule; the repeat-solve reuse test
   unchanged; `host_overhead` gate row within threshold.
 
-## 8. PR split
+## 7. PR split
 
 0. `chore`: the consumer renames (§2), stacked on 939.
 1. `chore(integrators)`: products on every child (§2), `product_field`, and
