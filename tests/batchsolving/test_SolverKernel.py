@@ -275,7 +275,7 @@ def test_shared_memory_needs_padding_matches_precision_and_parity(
 # NOTE: BatchSolverKernel._validate_timing_parameters lines 450-457
 # (the sample_summaries_every-is-None and summarise_every-is-None
 # ValueError branches) appear unreachable through the public update()
-# API. SingleIntegratorRunCore._process_loop_timing re-derives
+# API. SingleIntegratorRunCore._loop_timing re-derives
 # sample_summaries_every from summarise_every whenever
 # has_summary_outputs is True and summarise_every is not None, and
 # flips has_summary_outputs to False (deferring to "duration

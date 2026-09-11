@@ -55,66 +55,50 @@ Iteration counts are returned separately via the
 `Solver.status_messages`).
 
 ### Component assembly (`SingleIntegratorRunCore.__init__`)
-Order matters — each component seeds the next:
-1. `OutputFunctions` first (its compile flags + summary buffer heights feed `IVPLoop`).
-2. `_algo_step = get_algorithm_step(precision, settings)` — supplies
-   `controller_defaults.step_controller`, seeding the controller settings before user
-   overrides merge in. `_apply_dae_linear_solve_defaults()` overlays
-   `ode_implicitstep.DAE_SOLVER_DEFAULTS` on unset keys for mass-matrix systems;
-   user-set keys survive hot-swaps; `neumann` is rejected.
-3. `_step_controller = get_controller(precision, controller_settings)` with the
-   system's `mass_diagonal_flags` injected as `mass_flags` (re-injected in `update()`).
-4. `check_compatibility()` — if the algorithm is errorless but the controller is
-   adaptive, the controller is **silently replaced with `FixedStepController`** and a
-   `UserWarning` is issued (an errorless algorithm gives no error signal to adapt on).
-   Happens before the loop is created.
-5. `instantiate_loop()` — creates `IVPLoop` from the finalised sizes/flags/timing.
-6. `get_child_allocators(self._loop, self._algo_step, name='algorithm')` (and the
-   controller equivalent) — registers algo/controller buffers as children of the loop's
-   group. **Must be re-run after every algo/controller swap** (in `update()`,
-   `_switch_algos()`, `_switch_controllers()`, `build()`).
-7. `DAEInitialiser` — always constructed from the algorithm step's `settings_dict`
-   and registered as loop child `initialiser` with `aliases="algorithm_shared"`
-   (re-registered wherever the algo/controller children are). `update()` receives
-   the shared updates dict with the system's `mass_diagonal_flags` injected; no-op
-   configurations register zero-size buffers.
+The constructor reads the system's `products` (sizes, `mass_flags`, `precision`,
+`dxdt_fn`, `observables_fn`, `get_solver_helper_fn`) and builds each child with its
+static settings: `OutputFunctions`; the step via `get_algorithm_step`
+(`_apply_algorithm_step_defaults` and `_apply_dae_linear_solve_defaults` fill unset
+keys; `neumann` is rejected on mass-matrix systems); the controller via
+`get_controller` from the family defaults, the user's settings and the resolved name
+(a given name, else gains promote the family default within `i`/`pi`/`pid`; an
+errorless algorithm forces `fixed` with a `UserWarning`); `IVPLoop` from the
+children's products; `DAEInitialiser` from the step's `settings_dict` plus
+`dae_initialisation`, `mass_flags` and the helper getter. It then runs
+`_distribute({})` once so every child holds the others' products.
+
+### update() distributes products
+`update()` records givenness (inner tolerances, performance keys, timing), then
+`_distribute(updates)` updates the children in a fixed order, merging each child's
+`products` into the dict before the next: system; output functions (twice, around
+`_loop_timing`); `_switch_algos` and `_switch_controllers` (swap on a new
+`algorithm`/`step_controller`, primed from the predecessor's `settings_dict`); the
+controller (delivers `is_adaptive`, `dt`, `dt_min`, `dt_max`, `atol`, `rtol`); the
+step, then the family, DAE, inner-tolerance and performance defaults; the controller
+again with the step's `algorithm_order`; the initialiser; `_register_loop_children`;
+the loop; then `update_compile_settings` on the run, whose `loop_fn` field captures
+the loop's product. Unrecognised user keys raise unless `silent`.
 
 `settings_dict` merges the children's `settings_dict`s minus the keys the core injects
 (`_INJECTED_KEYS`, the loop's `dt` and schedule); timing comes from `_user_timing`, inner
 tolerances only when in `_user_given_inner_tols`, performance defaults and unroll flags only
 when in `_user_given_keys` (all of them when `auto_performance` is off). `grouped_settings()`
 splits it by the children's `settings_keys`; `copy()` rebuilds on `system.copy()` from those
-groups. Hot swaps carry `settings_dict` plus the step's device functions; a controller swap
-drops `CONTROLLER_GAIN_PARAMETERS`.
+groups. A controller swap drops `CONTROLLER_GAIN_PARAMETERS`.
 
-### build() delegates to IVPLoop
-`SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates
-`_algo_step` if the system's `dxdt_fn`/`observables_fn`/`get_solver_helper_fn`
-changed; (2) applies `_apply_performance_defaults` (skips user-given keys, as
-`optimisation_candidates` does); (3)
-re-registers child allocators; (4) calls `self._loop.update(...)` with the latest compiled
-device-function references; (5) accesses `self._loop.device_function` (triggering the
-loop's build if invalid); (6) returns
-`SingleIntegratorRunCache(loop_fn=loop_fn)` — the same object as the
-loop's `loop_fn`.
+### build() reads the captured loop
+`build()` returns `SingleIntegratorRunCache(loop_fn=compile_settings.loop_fn, ...)` with
+the sizes, flags, counts and `performance_defaults` from the children's products. The
+cache invalidates when `update` captures a different `loop_fn`.
 
-### update() follows the system layout
-`update()` passes all size parameters after a system update.
-
-### Two-phase timing
-`_process_loop_timing()` derives `save_every`, `summarise_every`,
-`sample_summaries_every`, and the `save_*`/`summarise_regularly` flags from user intent.
-If `summarise_every` is omitted, `is_duration_dependent=True` and
-`set_summary_timing_from_duration()` must be called later (done by `BatchSolverKernel`
-before each solve); this triggers a recompile on first use (warned).
-
-### Hot-swap
-A new `"algorithm"`/`"step_controller"` in `update()` routes through
-`_switch_algos()`/`_switch_controllers()`, which call `buffer_registry.reset()`, rebuild
-the sub-component from the old settings as a base, and propagate defaults into
-`updates_dict`. Controller gains (`CONTROLLER_GAIN_PARAMETERS`) do not carry across a controller change; the new controller uses its own gain defaults unless the update supplies them. Gains or `filter_coefficients` without a `step_controller` (at construction or in `update()`) promote the controller in effect to the smallest `i`/`pi`/`pid` carrying them via `_resolve_controller_name`/`_promote_controller`; a named controller drops gains it lacks.
-Never call these directly — go through `update()`. Because the swap calls
-`buffer_registry.reset()`, any cached allocator references become stale.
+### Timing
+`_loop_timing(updates)` derives `save_every`, `summarise_every`,
+`sample_summaries_every` and the `save_*`/`summarise_regularly` flags from
+`_user_timing` and the output types. With summaries requested and no
+`summarise_every`, `is_duration_dependent=True` and a `duration` key in `update`
+(routed by `set_summary_timing_from_duration`, called by `BatchSolverKernel` before
+each solve) sets `summarise_every=duration` and
+`sample_summaries_every=duration / 100`; the last duration holds until the next.
 
 ### Testing
 Top-level files are exercised via `tests/integrators/` integration tests and

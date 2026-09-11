@@ -597,7 +597,7 @@ def test_user_step_control_overrides_algorithm_defaults(
             == run._algo_step.algorithm_order)
 
 
-# ── _process_loop_timing ────────────────────────────────────────────────── #
+# ── _loop_timing ────────────────────────────────────────────────── #
 
 @pytest.mark.parametrize(
     "solver_settings_override",
@@ -824,7 +824,7 @@ def test_errorless_swap_resets_step_is_adaptive(
     assert run._loop.compile_settings.n_error == 0
 
 
-# ── check_compatibility ─────────────────────────────────────────────────── #
+# ── controller compatibility ─────────────────────────────────────────────────── #
 
 def test_errorless_euler_with_adaptive_warns_and_replaces(system):
     """Errorless Euler + adaptive PID warns and replaces with fixed."""
@@ -1204,8 +1204,7 @@ def test_update_algo_swap_with_controller_override_skips_family_gains(
 def test_update_check_compatibility_after_switch(
     single_integrator_run_mutable,
 ):
-    """Switching to incompatible combo auto-corrects via check_compatibility.
-    """
+    """Switching to an incompatible combo forces a fixed controller."""
     run = single_integrator_run_mutable
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
@@ -1221,7 +1220,7 @@ def test_update_check_compatibility_after_switch(
 def test_update_process_loop_timing_called(
     single_integrator_run_mutable,
 ):
-    """Update with timing params routes through _process_loop_timing."""
+    """Update with timing params re-derives the loop schedule."""
     run = single_integrator_run_mutable
     run.update({
         "output_types": ["state"],
@@ -1321,28 +1320,28 @@ def test_has_summary_outputs_false_no_types(single_integrator_run):
     assert single_integrator_run.has_summary_outputs is False
 
 
-# ── instantiate_loop ───────────────────────────────────────────────────── #
+# ── loop sizes ───────────────────────────────────────────────────── #
 
 def test_loop_n_states_matches_system(single_integrator_run, system):
-    """Loop receives n_states from system via instantiate_loop."""
+    """Loop receives n_states from system."""
     loop_cfg = single_integrator_run._loop.compile_settings
     assert loop_cfg.n_states == system.sizes.states
 
 
 def test_loop_n_observables_matches_system(single_integrator_run, system):
-    """Loop receives n_observables from system via instantiate_loop."""
+    """Loop receives n_observables from system."""
     loop_cfg = single_integrator_run._loop.compile_settings
     assert loop_cfg.n_observables == system.sizes.observables
 
 
 def test_loop_n_parameters_matches_system(single_integrator_run, system):
-    """Loop receives n_parameters from system via instantiate_loop."""
+    """Loop receives n_parameters from system."""
     loop_cfg = single_integrator_run._loop.compile_settings
     assert loop_cfg.n_parameters == system.sizes.parameters
 
 
 def test_loop_n_error_matches_core(single_integrator_run):
-    """Loop receives n_error from core.n_error via instantiate_loop."""
+    """Loop receives n_error from core.n_error."""
     run = single_integrator_run
     assert run._loop.compile_settings.n_error == run.n_error
 
@@ -1478,7 +1477,7 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
     """A genuine controller swap reconstructs and builds."""
     run = single_integrator_run_mutable
     target = "i" if run.compile_settings.step_controller != "i" else "pi"
-    run.update({"step_controller": target})
+    run.update({"algorithm": "bogacki-shampine-32", "step_controller": target})
     assert run.compile_settings.step_controller == target
     assert run.device_function is not None
 
@@ -1646,3 +1645,55 @@ def test_controller_mass_flags_follow_system(
     assert run._step_controller.mass_flags == (True, False)
     run.update({"step_controller": "fixed"})
     assert run._step_controller.mass_flags == (True, False)
+
+
+# ── update distributes products ─────────────────────────────────────── #
+
+def test_update_captures_the_loop_function(single_integrator_run_mutable):
+    """update stores the loop's product on the run and invalidates it."""
+    run = single_integrator_run_mutable
+    run.device_function
+    assert run.cache_valid
+    run.update({"dt": 0.5 * run.dt})
+    assert run.compile_settings.loop_fn is run._loop.device_function
+    assert not run.cache_valid
+    assert run.device_function is run._loop.device_function
+    run.update({"dt": run.dt})
+    assert run.cache_valid
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [SUMMARY_ONLY_NO_TIMING],
+    indirect=True,
+)
+def test_duration_update_rebuilds_the_derived_schedule(
+    single_integrator_run_mutable,
+):
+    """A new duration reaches the loop; the same duration changes nothing."""
+    run = single_integrator_run_mutable
+    assert run.update({"duration": 2.0}) >= {"duration"}
+    assert run.summarise_every == pytest.approx(2.0)
+    assert run.sample_summaries_every == pytest.approx(0.02)
+    assert run._loop.compile_settings.summarise_regularly is True
+    run.device_function
+    run.update({"duration": 2.0})
+    assert run.cache_valid
+    run.update({"duration": 4.0})
+    assert not run.cache_valid
+    assert run.summarise_every == pytest.approx(4.0)
+
+
+def test_errorless_algorithm_named_with_adaptive_controller_fixes_the_loop(
+    single_integrator_run_mutable,
+):
+    """One update naming both leaves the loop and step non-adaptive."""
+    run = single_integrator_run_mutable
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        run.update({"algorithm": "euler", "step_controller": "pid"})
+    assert any("cannot be used with" in str(x.message) for x in w)
+    assert run.compile_settings.step_controller == "fixed"
+    assert run._loop.compile_settings.is_adaptive is False
+    assert run._algo_step.is_adaptive is False
+    assert run._loop.compile_settings.n_error == 0

@@ -51,7 +51,7 @@ from cubie.cuda_simsafe import (
     selp,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES
-from cubie._utils import PrecisionDType, unpack_dict_values, build_config
+from cubie._utils import PrecisionDType, build_config
 from cubie.integrators.loops.ode_loop_config import ODELoopConfig
 from cubie.outputhandling import OutputCompileFlags
 
@@ -1214,13 +1214,6 @@ class IVPLoop(CUDAFactory):
         if updates_dict == {}:
             return set()
 
-        # Flatten nested dict values (e.g., loop_settings={'save_every': 0.01})
-        # into top-level parameters before distributing to compile settings.
-        # This ensures all configuration options are recognized and updated.
-        # Example: {'loop_settings': {'save_every': 0.01}, 'other': 5}
-        #       -> {'save_every': 0.01, 'other': 5}
-        updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
-
         recognised = self.update_compile_settings(updates_dict, silent=True)
 
         # Update buffer locations in registry
@@ -1233,5 +1226,4 @@ class IVPLoop(CUDAFactory):
                 f"Unrecognized parameters in update: {unrecognised}. "
                 "These parameters were not updated.",
             )
-        # Include unpacked dict keys in recognized set
-        return recognised | unpacked_keys
+        return recognised

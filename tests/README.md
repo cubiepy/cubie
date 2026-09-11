@@ -296,7 +296,7 @@ A functionality item is covered if an existing test **will fail when
 that functionality is removed or broken**, even if the test does not
 name the functionality directly. For example:
 
-- `instantiate_loop` forwarding `n_states` to the loop is implicitly
+- The constructor forwarding `n_states` to the loop is implicitly
   covered by any test that asserts `loop.compile_settings.n_states ==
   system.sizes.states` after construction.
 - `build` assembling compiled functions is implicitly covered by
