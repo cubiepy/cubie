@@ -317,19 +317,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._user_timing[key] = updates[key]
 
     def _loop_timing(self, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """Derive the save and summary schedule for the loop and outputs.
-
-        Parameters
-        ----------
-        updates
-            Pending updates; a ``duration`` key sets the summary window
-            when no ``summarise_every`` was given.
-
-        Returns
-        -------
-        dict
-            The six schedule keys.
-        """
+        """Return the loop schedule; ``duration`` sets a derived window."""
         has_time_domain_outputs = self.time_domain_outputs_requested
         has_summary_outputs = self.summary_outputs_requested
         save_every = self._user_timing["save_every"]
@@ -501,12 +489,9 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         Notes
         -----
-        Children update in a fixed order, each receiving the dict plus
-        the products of the children before it: system, output
-        functions, controller (for ``is_adaptive``), step, controller
-        (for ``algorithm_order``), initialiser, loop, then this run's
-        own settings. A new ``algorithm`` or ``step_controller`` swaps
-        the child first, primed with its predecessor's settings.
+        Children update in order, each receiving the dict plus the
+        earlier children's products; a new ``algorithm`` or
+        ``step_controller`` swaps the child first.
         """
         if updates_dict is None:
             updates_dict = {}
@@ -530,18 +515,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return recognized | unpacked_keys
 
     def _distribute(self, updates: Dict[str, Any]) -> set[str]:
-        """Update every child in order, merging each child's products.
-
-        Parameters
-        ----------
-        updates
-            Pending updates; children's products are merged in place.
-
-        Returns
-        -------
-        set[str]
-            Keys recognised by any child or by this run's settings.
-        """
+        """Update every child in order, merging each child's products."""
         user_keys = set(updates)
 
         recognized = {"duration"} if "duration" in updates else set()
@@ -593,20 +567,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
     def _switch_algos(self, updates_dict):
-        """Replace the algorithm step when ``updates_dict`` names a new
-        ``"algorithm"`` and merge the family's defaults.
-
-        Parameters
-        ----------
-        updates_dict
-            Mutable mapping of pending updates.  Gains the family's step
-            and controller defaults where the key is absent.
-
-        Returns
-        -------
-        set of str
-            ``{"algorithm"}`` if the key was given, otherwise empty.
-        """
+        """Swap the step on a new ``algorithm``; merge the family defaults."""
         if "algorithm" not in updates_dict:
             return set()
         precision = updates_dict.get("precision", self.precision)
@@ -649,10 +610,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _family_controller_defaults(
         self, controller_name: str, settings: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Return the family's controller defaults for ``controller_name``.
-
-        Gains drop for another controller or a user filter.
-        """
+        """Return the family's controller defaults minus dropped gains."""
         defaults = self._algo_step.controller_default_settings
         skip_gains = (
             controller_name != defaults["step_controller"]
@@ -666,22 +624,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _requested_controller_name(
         self, settings: Dict[str, Any], given_algorithm: bool = False
     ) -> str:
-        """Return the controller ``settings`` selects.
-
-        Parameters
-        ----------
-        settings
-            Mapping that may name ``step_controller`` or carry gains.
-        given_algorithm
-            Base an unnamed controller on the algorithm family's
-            default instead of the controller in effect.
-
-        Returns
-        -------
-        str
-            The named controller, else the base promoted within
-            ``i``/``pi``/``pid`` to carry any given gains.
-        """
+        """Return the named controller, else the base promoted to carry gains."""
         requested = settings.get("step_controller")
         if requested is not None:
             return requested.lower()
@@ -796,20 +739,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return self._algo_step.update(updates)
 
     def _switch_controllers(self, updates_dict):
-        """Resolve the effective controller and replace it when it changed.
-
-        Parameters
-        ----------
-        updates_dict
-            Mutable mapping of pending updates; ``step_controller`` is
-            set to the effective name.
-
-        Returns
-        -------
-        set of str
-            ``{"step_controller"}`` if the key was given or the
-            controller was replaced, otherwise empty.
-        """
+        """Resolve the controller name and swap the controller on change."""
         given = "step_controller" in updates_dict
         precision = updates_dict.get("precision", self.precision)
         new_controller = self._compatible_controller_name(
@@ -837,13 +767,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return {"step_controller"} if given else set()
 
     def build(self) -> SingleIntegratorRunCache:
-        """Return the loop function and sizes the last update delivered.
-
-        Returns
-        -------
-        SingleIntegratorRunCache
-            Cache containing the compiled loop device function.
-        """
+        """Return the captured loop function with the children's sizes."""
         loop = self._loop.products
         step = self._algo_step.products
         outputs = self._output_functions.products
