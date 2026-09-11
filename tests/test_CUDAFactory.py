@@ -992,3 +992,55 @@ def test_products_returns_the_cache_fields(system):
     assert set(products) == {
         fld.name for fld in attrs.fields(type(system._cache))
     }
+
+
+def test_child_products_carry_their_declared_fields(
+    system, single_integrator_run, solverkernel
+):
+    """Every child delivers its device functions, sizes and flags."""
+    run = single_integrator_run
+    run.device_function
+    assert {
+        "dxdt_fn", "observables_fn", "get_solver_helper_fn", "n_states",
+        "n_parameters", "n_observables", "n_drivers", "mass_flags",
+        "precision", "operation_counts",
+    } <= set(system.products)
+    assert system.products["n_states"] == system.sizes.states
+    assert system.products["get_solver_helper_fn"] == system.get_solver_helper
+    outputs = run._output_functions.products
+    assert {
+        "save_state_fn", "update_summaries_fn", "save_summaries_fn",
+        "compile_flags", "n_counters", "state_summaries_buffer_height",
+        "observable_summaries_buffer_height", "output_array_heights",
+        "summary_legend_per_variable", "summary_unit_modifications",
+    } <= set(outputs)
+    assert outputs["compile_flags"] == run._output_functions.compile_flags
+    step = run._algo_step.products
+    assert {
+        "step_fn", "nonlinear_solver_fn", "threads_per_step", "n_error",
+        "algorithm_order", "has_error_estimate", "is_implicit",
+        "helper_operation_counts", "performance_defaults",
+    } <= set(step)
+    assert step["algorithm_order"] == run._algo_step.algorithm_order
+    assert step["n_error"] == run.n_error
+    controller = run._step_controller.products
+    assert {
+        "step_controller_fn", "is_adaptive", "dt", "dt_min", "dt_max",
+        "atol", "rtol",
+    } <= set(controller)
+    assert controller["is_adaptive"] == run._step_controller.is_adaptive
+    assert controller["dt"] == run._step_controller.dt
+    assert set(run._dae_initialiser.products) == {"initialise_state_fn"}
+    loop = run._loop.products
+    assert loop["shared_memory_elements"] == run._loop.shared_buffer_size
+    assert loop["persistent_local_elements"] == (
+        run._loop.persistent_local_buffer_size
+    )
+    products = run.products
+    assert products["loop_fn"] is loop["loop_fn"]
+    assert products["threads_per_step"] == step["threads_per_step"]
+    assert products["compile_flags"] == outputs["compile_flags"]
+    interpolator = solverkernel.driver_interpolator.products
+    assert interpolator["coefficients_shape"] == (
+        solverkernel.driver_interpolator.coefficients_shape
+    )

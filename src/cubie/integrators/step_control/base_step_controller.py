@@ -33,7 +33,7 @@ See Also
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 import warnings
 
 from attrs import (
@@ -308,6 +308,12 @@ class ControllerCache(CUDADispatcherCache):
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)
+    is_adaptive: bool = field(default=False)
+    dt: float = field(default=0.0)
+    dt_min: float = field(default=0.0)
+    dt_max: float = field(default=0.0)
+    atol: Any = field(default=None)
+    rtol: Any = field(default=None)
 
 
 @frozen
@@ -556,6 +562,17 @@ class BaseStepController(CUDAFactory):
     def device_function(self) -> Callable:
         """Return the compiled step-controller device function."""
         return self.get_cached_output("step_controller_fn")
+
+    def _cache_products(self) -> Dict[str, Any]:
+        """Return the resolved settings the cache delivers upward."""
+        return {
+            "is_adaptive": self.is_adaptive,
+            "dt": self.dt,
+            "dt_min": self.dt_min,
+            "dt_max": self.dt_max,
+            "atol": self.atol,
+            "rtol": self.rtol,
+        }
 
     @abstractmethod
     def build(self) -> ControllerCache:

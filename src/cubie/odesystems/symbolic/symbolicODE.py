@@ -643,6 +643,7 @@ class SymbolicODE(BaseODE):
                     observables_fn
                 ),
             ),
+            **self._cache_products(),
         )
 
     def _specialise(

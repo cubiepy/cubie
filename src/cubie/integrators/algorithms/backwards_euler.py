@@ -120,6 +120,7 @@ class BackwardsEulerStep(ODEImplicitStep):
         super().__init__(config, BE_DEFAULTS.copy(), **kwargs)
 
         self.register_buffers()
+        self.wire_helpers()
 
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
@@ -139,7 +140,7 @@ class BackwardsEulerStep(ODEImplicitStep):
             persistent=True,
         )
 
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by wire_helpers.
         buffer_registry.register(
             'cached_auxiliaries',
             self,

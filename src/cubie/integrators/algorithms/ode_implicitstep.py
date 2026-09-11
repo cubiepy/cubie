@@ -397,7 +397,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         the linear solver from the outgoing instance's
         ``settings_dict`` and shared norm; the operator and
         preconditioner device functions are re-injected by the next
-        ``build_implicit_helpers`` run. Same-type values and
+        ``wire_helpers`` run. Same-type values and
         within-class MR/SD switches change no class and are left to
         the owned solver's own update.
 
@@ -532,6 +532,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
 
         recognized |= super().update(compiled_functions, silent=True)
+        if recognized:
+            self.wire_helpers()
 
         return recognized
 
@@ -574,9 +576,12 @@ class ODEImplicitStep(BaseAlgorithmStep):
         StepCache
             Container with the compiled step and nonlinear solver.
         """
-        # The helper refresh replaces the settings snapshot; read after.
-        self.build_implicit_helpers()
         config = self.compile_settings
+        if getattr(config, self.solver_fn_key) is None:
+            raise RuntimeError(
+                "The step has no solver device function: update it with "
+                "the system's get_solver_helper_fn before building."
+            )
 
         dxdt_fn = config.dxdt_fn
         numba_precision = config.numba_precision
@@ -586,7 +591,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         n_drivers = config.n_drivers
         solver_function = getattr(config, self.solver_fn_key)
 
-        return self.build_step(
+        cache = self.build_step(
             dxdt_fn,
             observables_fn,
             drivers_fn,
@@ -595,6 +600,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             n,
             n_drivers,
         )
+        return self._stamp_products(cache)
 
     @abstractmethod
     def build_step(
@@ -739,8 +745,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
         return prepare_function, cached_count, counts
 
-    def build_implicit_helpers(self) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+    def wire_helpers(self) -> None:
+        """Wire the system's solver helpers into the solver chain."""
+        if self.compile_settings.get_solver_helper_fn is None:
+            return
+        self._wire_helpers()
+
+    def _wire_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()

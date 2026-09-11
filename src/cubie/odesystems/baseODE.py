@@ -77,6 +77,13 @@ class ODECache(CUDADispatcherCache):
     observables_fn: Optional[Callable] = field(default=None)
     helpers: SolverHelperCache = field(factory=SolverHelperCache)
     operation_counts: OperationCounts = field(factory=OperationCounts)
+    get_solver_helper_fn: Optional[Callable] = field(default=None)
+    n_states: int = field(default=0)
+    n_parameters: int = field(default=0)
+    n_observables: int = field(default=0)
+    n_drivers: int = field(default=0)
+    mass_flags: tuple = field(default=())
+    precision: Any = field(default=None)
 
 
 class BaseODE(CUDAFactory):
@@ -159,6 +166,19 @@ class BaseODE(CUDAFactory):
         )
         self.setup_compile_settings(system_data)
         self.name = name
+
+    def _cache_products(self) -> Dict[str, Any]:
+        """Return the sizes, flags and helper getter the cache delivers."""
+        sizes = self.sizes
+        return {
+            "get_solver_helper_fn": self.get_solver_helper,
+            "n_states": int(sizes.states),
+            "n_parameters": int(sizes.parameters),
+            "n_observables": int(sizes.observables),
+            "n_drivers": int(sizes.drivers),
+            "mass_flags": tuple(self.mass_diagonal_flags),
+            "precision": self.precision,
+        }
 
     @property
     def mass(self) -> Any:

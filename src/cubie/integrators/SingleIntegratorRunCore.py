@@ -81,6 +81,15 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
         Compiled CUDA loop callable ready for execution on device.
     """
     loop_fn: Callable = field(eq=False)
+    compile_flags: Optional[OutputCompileFlags] = field(default=None)
+    threads_per_step: int = field(default=1)
+    shared_memory_elements: int = field(default=0)
+    persistent_local_elements: int = field(default=0)
+    output_array_heights: Any = field(default=None)
+    operation_counts: Any = field(default=None)
+    helper_operation_counts: Any = field(default=None)
+    performance_defaults: dict = field(factory=dict)
+    is_implicit: bool = field(default=False)
 
 
 class SingleIntegratorRunCore(CUDAFactory):
@@ -1120,9 +1129,22 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         self._loop.update(compiled_functions)
-        loop_fn = self._loop.device_function
+        loop = self._loop.products
+        step = self._algo_step.products
+        outputs = self._output_functions.products
 
-        return SingleIntegratorRunCache(loop_fn=loop_fn)
+        return SingleIntegratorRunCache(
+            loop_fn=loop["loop_fn"],
+            compile_flags=outputs["compile_flags"],
+            threads_per_step=step["threads_per_step"],
+            shared_memory_elements=loop["shared_memory_elements"],
+            persistent_local_elements=loop["persistent_local_elements"],
+            output_array_heights=outputs["output_array_heights"],
+            operation_counts=self._system.products["operation_counts"],
+            helper_operation_counts=step["helper_operation_counts"],
+            performance_defaults=step["performance_defaults"],
+            is_implicit=step["is_implicit"],
+        )
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -1232,7 +1254,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         step = self._algo_step
         if not self.compile_settings.auto_performance or not step.is_implicit:
             return set()
-        step.build_implicit_helpers()
         updates = dict(step.performance_defaults)
         if step.newton_solves_per_step > 0:
             unrolled = (

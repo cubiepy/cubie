@@ -299,6 +299,7 @@ class FIRKStep(ODEImplicitStep):
             **kwargs,
         )
         self.register_buffers()
+        self.wire_helpers()
 
     def _build_error_solver(self) -> None:
         """Construct the width-n smoothing solver from live settings."""
@@ -380,7 +381,7 @@ class FIRKStep(ODEImplicitStep):
             n,
             config.stage_state_location,
         )
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by wire_helpers.
         buffer_registry.register(
             "cached_auxiliaries",
             self,
@@ -403,10 +404,8 @@ class FIRKStep(ODEImplicitStep):
                 aliases="solver_shared",
             )
 
-    def build_implicit_helpers(
-        self,
-    ) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+    def _wire_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
         config = self.compile_settings
         tableau = config.tableau

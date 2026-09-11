@@ -105,7 +105,7 @@ resolves a name or `ButcherTableau` to the right factory.
   Implicit steps additionally pull **child allocators** for their owned solver via
   `get_child_allocators(self, self.solver, ...)`.
 - **Rosenbrock auxiliary-cache sizing:** `register_buffers` registers
-  `cached_auxiliaries` at size 0; `build_implicit_helpers()` resizes it via
+  `cached_auxiliaries` at size 0; `wire_helpers()` resizes it via
   `update_buffer` from `prepare_jac`'s `HelperResult.cached_auxiliary_count`.
 
 ### Dense stage prediction (FIRK and DIRK)
@@ -159,9 +159,13 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=..., **kwargs).device_function` with plain strings and bools: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus the request axes (`jacobian_at="step"` for frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing, `prefactored=True` for step-start LU factors). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
 `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
-for FIRK; `n_states` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
-**before** reading `compile_settings` — the helper refresh replaces the
-snapshot. Each `build_implicit_helpers` pushes an `OperationCounts` into
+for FIRK; `n_states` elsewhere) for the solver subtree, then runs
+`wire_helpers()` (constructors run it too): with `get_solver_helper_fn` set it
+requests the helpers, pushes them into the solver children and writes their
+products (`newton_nonlinear_solver_fn` or `krylov_linear_solver_fn`,
+`prepare_jacobian_fn`, `predictor_fn`, `error_linear_solver_fn`, ...) into the
+step's config; `build()` reads that config only and raises without a solver
+function. Each wiring pushes an `OperationCounts` into
 `helper_operation_counts`; `newton_body_operation_count`, `per_step_operation_count`,
 `newton_solves_per_step` and `performance_defaults` feed the core's
 `_apply_performance_defaults`. `optimisation_candidates` lists the setting

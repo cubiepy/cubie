@@ -93,11 +93,14 @@ class InterpolatorCache(CUDADispatcherCache):
         Device function evaluating every input's time derivative.
     coefficients
         Host ``(num_segments, num_inputs, order + 1)`` table.
+    coefficients_shape
+        That table's layout.
     """
 
     drivers_fn: Optional[Callable] = field(default=None)
     driver_derivative_fn: Optional[Callable] = field(default=None)
     coefficients: Optional[FloatArray] = field(default=None)
+    coefficients_shape: tuple = field(default=(0, 0, 0))
 
 
 def _input_array_converter(value: Any) -> FloatArray:
@@ -604,6 +607,7 @@ class ArrayInterpolator(CUDAFactory):
             drivers_fn=evaluate_all,
             driver_derivative_fn=evaluate_time_derivative,
             coefficients=coefficients,
+            coefficients_shape=self.coefficients_shape,
         )
         return cache
 

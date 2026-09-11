@@ -105,9 +105,6 @@ def test_direct_construction_matches_hot_swap_products(precision, system):
     assert direct.compile_settings == swapped.compile_settings
     assert direct.config_hash == swapped.config_hash
 
-    direct.build_implicit_helpers()
-    swapped.build_implicit_helpers()
-
     assert direct.config_hash == swapped.config_hash
     assert direct.solver.config_hash == swapped.solver.config_hash
 
@@ -242,7 +239,6 @@ def test_none_preconditioner_builds_identity_solver(precision, system):
         observables_fn=system.observables_fn,
         get_solver_helper_fn=system.get_solver_helper,
     )
-    step.build_implicit_helpers()
     linear = step.solver.linear_solver
     assert linear.compile_settings.preconditioner_fn is not None
     assert linear.device_function is not None
@@ -604,3 +600,27 @@ def test_linear_kwargs_survive_correction_swaps(step_object_mutable):
     linear = step.solver.linear_solver
     assert isinstance(linear, LUSolver)
     assert linear.compile_settings.lu_factor_location == "shared"
+
+
+def test_helper_wiring_follows_the_getter(system, precision):
+    """A step wires its solver chain when the helper getter arrives."""
+    step = BackwardsEulerStep(
+        precision=precision,
+        n_states=system.sizes.states,
+        dxdt_fn=system.dxdt_fn,
+        observables_fn=system.observables_fn,
+    )
+    assert step.compile_settings.newton_nonlinear_solver_fn is None
+    with pytest.raises(RuntimeError, match="get_solver_helper_fn"):
+        step.device_function
+    recognised = step.update(get_solver_helper_fn=system.get_solver_helper)
+    assert "get_solver_helper_fn" in recognised
+    config = step.compile_settings
+    assert config.newton_nonlinear_solver_fn is step.solver.device_function
+    assert config.helper_operation_counts.residual > 0
+    assert step.products["nonlinear_solver_fn"] is (
+        step.solver.device_function
+    )
+    assert step.products["helper_operation_counts"] is (
+        config.helper_operation_counts
+    )

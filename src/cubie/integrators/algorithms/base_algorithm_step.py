@@ -62,6 +62,7 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.buffer_registry import buffer_registry
+from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
@@ -732,6 +733,15 @@ class StepCache(CUDADispatcherCache):
         default=None,
         validator=validators.optional(is_device_validator),
     )
+    threads_per_step: int = field(default=1)
+    n_error: int = field(default=0)
+    algorithm_order: int = field(default=1)
+    has_error_estimate: bool = field(default=False)
+    is_implicit: bool = field(default=False)
+    helper_operation_counts: OperationCounts = field(
+        factory=OperationCounts
+    )
+    performance_defaults: dict = field(factory=dict)
 
 
 class BaseAlgorithmStep(CUDAFactory):
@@ -842,6 +852,21 @@ class BaseAlgorithmStep(CUDAFactory):
             )
 
         return recognised
+
+    def _stamp_products(self, cache: StepCache) -> StepCache:
+        """Write the step's sizes, order and flags onto its cache."""
+        cache.threads_per_step = self.threads_per_step
+        cache.n_error = self.n_states if self.uses_error else 0
+        cache.algorithm_order = self.algorithm_order
+        cache.has_error_estimate = self.has_error_estimate
+        cache.is_implicit = self.is_implicit
+        cache.performance_defaults = dict(self.performance_defaults)
+        counts = getattr(
+            self.compile_settings, "helper_operation_counts", None
+        )
+        if counts is not None:
+            cache.helper_operation_counts = counts
+        return cache
 
     @property
     def n_drivers(self) -> int:
