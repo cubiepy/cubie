@@ -162,17 +162,12 @@ Driver dicts name their sample spacing `driver_sample_period` — `dt` is the in
 timestep and never reaches the interpolator.
 
 ### Kernel update and performance defaults
-`kernel.update` records the performance keys given, then `_distribute` updates the
-interpolator (its products join the dict for a driver system), the run (its products,
-`loop_fn` and `compile_flags` among them, join the dict), derives the unroll and
-placement keys (`_performance_defaults`: the step's `performance_defaults` plus
-`unroll_newton_exits` from the operation counts against the instruction cache, minus
-keys the user fixed) and pushes them to the run, then runs `update_compile_settings`
-on itself. Construction seeds `loop_fn` from the run's products and runs one
-distribution with `lineinfo`, `unroll_settings` and `kernel_settings`.
-`auto_performance` is a `BatchSolverConfig` field; `optimisation_candidates(force)`
-filters the run's `algorithm_candidates` by the fixed keys. `build_kernel` reads
-`config.loop_fn`.
+`kernel.update` updates the interpolator, then the run, merging each one's `products`
+into the dict, and finishes with `update_compile_settings` on itself (`loop_fn` is a
+config field). Performance defaults are the kernel's: with `auto_performance` on it
+derives a `PerformanceSettings` from the run's products, minus the keys the user set,
+and pushes it to the run as `performance_settings`; `optimisation_candidates` and
+`settings_dict` leave those derived keys out.
 
 ### Calibration (`Solver.calibrate`)
 - One sibling `Solver` per candidate on the parent's system, memory manager, and stream group; trial solves gate candidates before full-length timing; full-length measurements are recorded per configuration and reused.

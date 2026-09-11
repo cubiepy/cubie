@@ -94,6 +94,7 @@ from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
+    PerformanceSettings,
 )
 from cubie._utils import (
     getype_validator,
@@ -1270,9 +1271,9 @@ class BatchSolverKernel(CUDAFactory):
         recognised |= self.single_integrator.update(updates, silent=True)
         updates.update(self.single_integrator.products)
         derived = self._performance_defaults(updates)
-        if derived:
+        if derived.as_updates():
             recognised |= self.single_integrator.update(
-                derived, silent=True, given=False
+                performance_settings=derived, silent=True
             )
             updates.update(self.single_integrator.products)
         recognised |= self.update_compile_settings(updates, silent=True)
@@ -1295,14 +1296,20 @@ class BatchSolverKernel(CUDAFactory):
             fixed |= ALL_UNROLL_PARAMETERS
         return fixed
 
-    def _performance_defaults(self, products: Dict[str, Any]) -> Dict:
-        """Return the unroll and placement keys the user did not fix."""
+    def _performance_defaults(
+        self, products: Dict[str, Any]
+    ) -> PerformanceSettings:
+        """Return the unroll and placement settings the user did not fix.
+
+        The step's own defaults gain ``unroll_newton_exits``: rolled when
+        the fully unrolled step would overflow the instruction cache.
+        """
         if (
             not self.compile_settings.auto_performance
             or not products["is_implicit"]
         ):
-            return {}
-        defaults = dict(products["performance_defaults"])
+            return PerformanceSettings()
+        defaults = products["performance_defaults"]
         if products["newton_solves_per_step"] > 0:
             unrolled = (
                 products["operation_counts"].total(("dxdt", "observables"))
@@ -1312,20 +1319,23 @@ class BatchSolverKernel(CUDAFactory):
                 device_hardware().instruction_cache_bytes
                 // SASS_INSTRUCTION_BYTES
             )
-            defaults["unroll_newton_exits"] = (
-                UnrollChoice.ROLLED
-                if unrolled > capacity
-                else UnrollChoice.FULL
+            defaults = evolve(
+                defaults,
+                unroll_newton_exits=(
+                    UnrollChoice.ROLLED
+                    if unrolled > capacity
+                    else UnrollChoice.FULL
+                ),
             )
-        fixed = self._performance_fixed
-        return {
-            key: value for key, value in defaults.items() if key not in fixed
-        }
+        return defaults.without(self._performance_fixed)
 
     def optimisation_candidates(
         self, force: bool = False
     ) -> Tuple[Dict[str, Any], ...]:
-        """Return the step's candidates minus fixed keys; ``force`` keeps them."""
+        """Return the step's candidates minus the keys the user fixed.
+
+        ``force`` keeps the fixed keys as candidate axes.
+        """
         fixed = set() if force else self._performance_fixed
         candidates = []
         for combo in self.single_integrator.algorithm_candidates:
@@ -1493,14 +1503,24 @@ class BatchSolverKernel(CUDAFactory):
             settings.pop("blocksize", None)
         settings["lineinfo"] = self.compile_settings.lineinfo
         settings.update(self.single_integrator.settings_dict)
-        # Performance defaults stay derived while auto_performance is on.
-        products = self.single_integrator.products
+        # The run reports the flags it compiled with; this kernel reports
+        # only the unroll and placement keys the user set, so a rebuild
+        # from these settings derives the rest again.
+        settings.pop("unroll", None)
         fixed = self._performance_fixed
-        auto = self.compile_settings.auto_performance
-        for key in products["performance_defaults"]:
-            if auto and key not in fixed:
-                settings.pop(key, None)
-        if not auto and products["is_implicit"]:
+        flags = self.compile_settings.unroll
+        settings.update(
+            {
+                key: getattr(flags, key)
+                for key in ALL_UNROLL_PARAMETERS & fixed
+            }
+        )
+        products = self.single_integrator.products
+        if self.compile_settings.auto_performance:
+            for key in products["performance_defaults"].as_updates():
+                if key not in fixed:
+                    settings.pop(key, None)
+        elif products["is_implicit"]:
             settings["unroll_newton_exits"] = products["unroll_newton_exits"]
         settings.update(
             stream_group=self.stream_group,
@@ -1514,6 +1534,11 @@ class BatchSolverKernel(CUDAFactory):
         """Return a kernel with these settings on a system copy."""
         settings = self.settings_dict
         grouped = self.single_integrator.grouped_settings()
+        grouped["unroll_settings"] = {
+            key: settings[key]
+            for key in ALL_UNROLL_PARAMETERS
+            if key in settings
+        }
         return type(self)(
             self.system.copy(),
             lineinfo=settings["lineinfo"],

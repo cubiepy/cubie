@@ -8,7 +8,11 @@ import numpy as np
 import pytest
 from attrs import evolve, fields_dict
 
+from cubie.cuda_simsafe import UnrollChoice
 from cubie.integrators.algorithms import DIRK_TABLEAU_REGISTRY
+from cubie.integrators.algorithms.base_algorithm_step import (
+    PerformanceSettings,
+)
 from cubie.integrators.algorithms.generic_erk_tableaus import (
     CLASSICAL_RK4_TABLEAU,
     DORMAND_PRINCE_54_TABLEAU,
@@ -826,7 +830,7 @@ def test_errorless_swap_resets_step_is_adaptive(
     assert run._loop.compile_settings.n_error == 0
 
 
-# ── controller compatibility ─────────────────────────────────────────────────── #
+# ── controller compatibility ───────────────────────────────────────── #
 
 def test_errorless_euler_with_adaptive_warns_and_replaces(system):
     """Errorless Euler + adaptive PID warns and replaces with fixed."""
@@ -1699,3 +1703,26 @@ def test_errorless_algorithm_named_with_adaptive_controller_fixes_the_loop(
     assert run._loop.compile_settings.is_adaptive is False
     assert run._algo_step.is_adaptive is False
     assert run._loop.compile_settings.n_error == 0
+
+
+def test_performance_settings_reach_every_child(
+    single_integrator_run_mutable,
+):
+    """A derived PerformanceSettings lands on the step and the loop."""
+    run = single_integrator_run_mutable
+    given_before = set(run._user_given_keys)
+    recognised = run.update(
+        performance_settings=PerformanceSettings(
+            unroll_newton_exits=UnrollChoice.ROLLED
+        )
+    )
+    assert "performance_settings" in recognised
+    assert run._algo_step.compile_settings.unroll.unroll_newton_exits == (
+        True, 1
+    )
+    assert run._loop.compile_settings.unroll.unroll_newton_exits == (
+        True, 1
+    )
+    assert run.compile_settings.unroll.unroll_newton_exits == (True, 1)
+    assert run._user_given_keys == given_before
+    assert run.settings_dict["unroll"] == run.compile_settings.unroll

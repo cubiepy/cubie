@@ -4,6 +4,7 @@ import pytest
 
 from cubie.batchsolving.optimize import LaunchResult, apply_launch
 from cubie.cuda_simsafe import UnrollChoice
+from tests._utils import LARGE_FIRK
 
 FULL = UnrollChoice.FULL
 ROLLED = UnrollChoice.ROLLED
@@ -120,6 +121,35 @@ def test_force_varies_user_fixed_axes(solver):
         {"unroll_newton_exits": ROLLED, "stage_increment_location": "local"},
         {"unroll_newton_exits": ROLLED, "stage_increment_location": "shared"},
     )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{**LARGE_FIRK, "unroll_newton_exits": None}],
+    indirect=True,
+)
+def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
+    """Defaults the kernel derived are varied by the parent and its copy."""
+    run = solver.kernel.single_integrator
+    run.device_function
+    step = run._algo_step.compile_settings
+    assert step.stage_increment_location == "shared"
+    assert step.unroll.unroll_newton_exits == ROLLED.value
+    expected = (
+        {"unroll_newton_exits": FULL, "stage_increment_location": "local"},
+        {"unroll_newton_exits": FULL, "stage_increment_location": "shared"},
+        {"unroll_newton_exits": ROLLED, "stage_increment_location": "local"},
+        {"unroll_newton_exits": ROLLED, "stage_increment_location": "shared"},
+    )
+    assert _candidates(solver) == expected
+    twin = solver.copy()
+    try:
+        if driver_settings is not None:
+            twin._configure_drivers(driver_settings)
+        assert _candidates(twin) == expected
+        assert twin.kernel.config_hash == solver.kernel.config_hash
+    finally:
+        twin.close()
 
 
 def test_apply_launch_sets_settings_blocksize_and_residency(solver_mutable):

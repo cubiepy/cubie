@@ -30,7 +30,11 @@ from numpy import asarray, finfo as np_finfo
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import unpack_dict_values
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS
+from cubie.cuda_simsafe import (
+    ALL_UNROLL_PARAMETERS,
+    UnrollFlag,
+    unroll_flag_converter,
+)
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -86,6 +90,8 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
         The loop's buffer sizes.
     operation_counts, performance_defaults
         The system's operator counts and the step's defaults.
+    newton_solves_per_step, step_operation_count, unroll_newton_exits
+        The step's Newton solves, unrolled operation count and loop flag.
     """
     loop_fn: Callable = field(eq=False)
     compile_flags: Optional[OutputCompileFlags] = field(default=None)
@@ -100,7 +106,9 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
     is_implicit: bool = field(default=False)
     newton_solves_per_step: int = field(default=0)
     step_operation_count: int = field(default=0)
-    unroll_newton_exits: Any = field(default=None)
+    unroll_newton_exits: UnrollFlag = field(
+        default=(True, None), converter=unroll_flag_converter
+    )
 
 
 class SingleIntegratorRunCore(CUDAFactory):
@@ -145,11 +153,6 @@ class SingleIntegratorRunCore(CUDAFactory):
     """
 
     settings_keys = frozenset({"algorithm", "step_controller"})
-
-    # Keys the user may fix that the performance defaults never touch.
-    _USER_PERF_OVERRIDES = (
-        ALL_ALGORITHM_STEP_PARAMETERS | ALL_UNROLL_PARAMETERS | {"unroll"}
-    )
 
     _INNER_TOLERANCE_KEYS = (
         "krylov_atol",
@@ -299,13 +302,18 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._warn_if_summary_timing_derived()
 
     def _record_givenness(self, updates: Dict[str, Any]) -> None:
-        """Record the tolerance, performance and timing keys given."""
+        """Record the tolerance, step and timing keys the user gave.
+
+        The family and DAE defaults never overwrite a step key the user
+        gave; a parent's derived settings arrive as a
+        ``performance_settings`` object and are never recorded.
+        """
         for key in self._INNER_TOLERANCE_KEYS:
             if updates.get(key) is not None:
                 self._user_given_inner_tols.add(key)
         self._user_given_keys |= {
             key
-            for key in set(updates) & self._USER_PERF_OVERRIDES
+            for key in set(updates) & ALL_ALGORITHM_STEP_PARAMETERS
             if updates[key] is not None
         }
         for key in self._TIMING_KEYS:
@@ -454,7 +462,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         self,
         updates_dict: Optional[Dict[str, Any]] = None,
         silent: bool = False,
-        given: bool = True,
         **kwargs: Any,
     ) -> set[str]:
         """Update parameters across all components.
@@ -462,12 +469,12 @@ class SingleIntegratorRunCore(CUDAFactory):
         Parameters
         ----------
         updates_dict
-            Dictionary of parameters to update.
+            Dictionary of parameters to update. A ``performance_settings``
+            entry carries a :class:`PerformanceSettings` a parent derived;
+            its fields reach the children without being recorded as
+            user-given.
         silent
             If ``True``, suppress errors about unrecognised parameters.
-        given
-            Record the keys as user-given; ``False`` for values a parent
-            derived.
         **kwargs
             Additional updates provided as keyword arguments.
 
@@ -498,8 +505,7 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
         user_keys = set(updates_dict)
-        if given:
-            self._record_givenness(updates_dict)
+        self._record_givenness(updates_dict)
 
         recognized = self._distribute(updates_dict)
         if user_keys & (set(self._TIMING_KEYS) | {"output_types", "duration"}):
@@ -512,9 +518,15 @@ class SingleIntegratorRunCore(CUDAFactory):
 
     def _distribute(self, updates: Dict[str, Any]) -> set[str]:
         """Update every child in order, merging each child's products."""
+        recognized = set()
+        derived = updates.pop("performance_settings", None)
+        if derived is not None:
+            updates.update(derived.as_updates())
+            recognized.add("performance_settings")
+        if "duration" in updates:
+            recognized.add("duration")
         user_keys = set(updates)
 
-        recognized = {"duration"} if "duration" in updates else set()
         recognized |= self._system.update(updates, silent=True)
         updates.update(self._system.products)
         recognized |= self._output_functions.update(updates, silent=True)
@@ -619,7 +631,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _requested_controller_name(
         self, settings: Dict[str, Any], given_algorithm: bool = False
     ) -> str:
-        """Return the named controller, else the base promoted to carry gains."""
+        """Return the named controller, else the base promoted for gains."""
         requested = settings.get("step_controller")
         if requested is not None:
             return requested.lower()
@@ -807,18 +819,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         for key in self._INNER_TOLERANCE_KEYS:
             if key not in self._user_given_inner_tols:
                 settings.pop(key, None)
-
-        # Unroll flags the user fixed travel with the run.
-        user_given = self._user_given_keys
-        if "unroll" in user_given:
-            user_given = user_given | ALL_UNROLL_PARAMETERS
-        flags = self.compile_settings.unroll
-        settings.update(
-            {
-                key: getattr(flags, key)
-                for key in ALL_UNROLL_PARAMETERS & user_given
-            }
-        )
+        # The flags every child compiled with, as one object.
+        settings["unroll"] = self.compile_settings.unroll
         return settings
 
     def grouped_settings(self) -> Dict[str, Dict[str, Any]]:
@@ -829,7 +831,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             "output_settings": self._output_functions.settings_keys,
             "step_control_settings": self._step_controller.settings_keys,
             "algorithm_settings": self._algo_step.settings_keys,
-            "unroll_settings": ALL_UNROLL_PARAMETERS,
+            "unroll_settings": ALL_UNROLL_PARAMETERS | {"unroll"},
         }
         grouped = {
             name: {
