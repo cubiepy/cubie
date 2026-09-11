@@ -125,8 +125,6 @@ class OutputFunctionCache(CUDADispatcherCache):
     state_summaries_buffer_height: int = field(default=0)
     observable_summaries_buffer_height: int = field(default=0)
     output_array_heights: Optional[OutputArrayHeights] = field(default=None)
-    summary_legend_per_variable: dict = field(factory=dict)
-    summary_unit_modifications: dict = field(factory=dict)
 
 
 class OutputFunctions(CUDAFactory):
@@ -336,8 +334,6 @@ class OutputFunctions(CUDAFactory):
                 config.observable_summaries_buffer_height
             ),
             output_array_heights=OutputArrayHeights.from_output_fns(self),
-            summary_legend_per_variable=config.summary_legend_per_variable,
-            summary_unit_modifications=config.summary_unit_modifications,
         )
 
     @property

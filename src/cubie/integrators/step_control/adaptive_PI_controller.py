@@ -227,6 +227,4 @@ class AdaptivePIController(BaseAdaptiveStepController):
             return ret
 
         # no cover: end
-        return ControllerCache(
-            step_controller_fn=controller_PI, **self._cache_products()
-        )
+        return self._controller_cache(controller_PI)

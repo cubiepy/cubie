@@ -37,13 +37,15 @@ from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
+    PerformanceSettings,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
     DAE_SOLVER_DEFAULTS,
 )
 from cubie.integrators.dae_initialiser import DAEInitialiser
 from cubie.integrators.loops.ode_loop import IVPLoop
-from cubie.outputhandling import OutputCompileFlags
+from cubie.odesystems.solver_helpers import OperationCounts
+from cubie.outputhandling import OutputArrayHeights, OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
 from cubie.integrators.step_control import (
     CONTROLLER_GAIN_PARAMETERS,
@@ -79,16 +81,31 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
     ----------
     loop_fn
         Compiled CUDA loop callable ready for execution on device.
+    compile_flags
+        The output functions' compile flags.
+    threads_per_step
+        Threads one run of the step occupies.
+    shared_memory_elements, persistent_local_elements
+        The loop's shared and persistent local buffer sizes.
+    output_array_heights
+        Heights of the host output arrays.
+    operation_counts
+        The system's binary-operator counts.
+    performance_defaults
+        The settings ``auto_performance`` applies to the step.
+    is_implicit
+        Whether the step owns nonlinear or linear solvers.
     """
     loop_fn: Callable = field(eq=False)
     compile_flags: Optional[OutputCompileFlags] = field(default=None)
     threads_per_step: int = field(default=1)
     shared_memory_elements: int = field(default=0)
     persistent_local_elements: int = field(default=0)
-    output_array_heights: Any = field(default=None)
-    operation_counts: Any = field(default=None)
-    helper_operation_counts: Any = field(default=None)
-    performance_defaults: dict = field(factory=dict)
+    output_array_heights: Optional[OutputArrayHeights] = field(default=None)
+    operation_counts: OperationCounts = field(factory=OperationCounts)
+    performance_defaults: PerformanceSettings = field(
+        factory=PerformanceSettings
+    )
     is_implicit: bool = field(default=False)
 
 
@@ -1141,7 +1158,6 @@ class SingleIntegratorRunCore(CUDAFactory):
             persistent_local_elements=loop["persistent_local_elements"],
             output_array_heights=outputs["output_array_heights"],
             operation_counts=self._system.products["operation_counts"],
-            helper_operation_counts=step["helper_operation_counts"],
             performance_defaults=step["performance_defaults"],
             is_implicit=step["is_implicit"],
         )
@@ -1177,7 +1193,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "unroll" in user_given:
             user_given = user_given | ALL_UNROLL_PARAMETERS
         auto = self.compile_settings.auto_performance
-        for key in step.performance_defaults:
+        for key in step.performance_defaults.as_updates():
             if auto and key not in user_given:
                 settings.pop(key, None)
         flags = self.compile_settings.unroll
@@ -1254,7 +1270,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         step = self._algo_step
         if not self.compile_settings.auto_performance or not step.is_implicit:
             return set()
-        updates = dict(step.performance_defaults)
+        updates = step.performance_defaults.as_updates()
         if step.newton_solves_per_step > 0:
             unrolled = (
                 self._system.operation_count

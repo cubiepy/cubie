@@ -50,8 +50,9 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
-    StepCache,
     AlgorithmDefaults,
+    PerformanceSettings,
+    StepCache,
 )
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     DEFAULT_FIRK_TABLEAU,
@@ -990,10 +991,12 @@ class FIRKStep(ODEImplicitStep):
         return self.stage_count > 1
 
     @property
-    def performance_defaults(self) -> Dict[str, Any]:
+    def performance_defaults(self) -> PerformanceSettings:
         """Share ``stage_increment`` above the measured state-count cut."""
         shared = self.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
-        return {"stage_increment_location": "shared" if shared else "local"}
+        return PerformanceSettings(
+            stage_increment_location="shared" if shared else "local"
+        )
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:

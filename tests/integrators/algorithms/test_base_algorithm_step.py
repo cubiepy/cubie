@@ -3,9 +3,11 @@
 import pytest
 from numpy.testing import assert_array_equal
 
+from cubie.cuda_simsafe import UnrollChoice
 from cubie.integrators.algorithms import algorithm_is_adaptive
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
+    PerformanceSettings,
 )
 from cubie.integrators.algorithms.explicit_euler import ExplicitEulerStep
 from cubie.integrators.algorithms.generic_erk_tableaus import ERKTableau
@@ -129,3 +131,21 @@ def test_algorithm_is_adaptive_unknown_alias_raises():
     """An unregistered alias raises KeyError."""
     with pytest.raises(KeyError):
         algorithm_is_adaptive("not_an_algorithm")
+
+
+def test_performance_settings_carry_only_set_fields():
+    """Set fields become update keywords; ``without`` clears them."""
+    settings = PerformanceSettings(
+        unroll_newton_exits=UnrollChoice.ROLLED,
+        stage_increment_location="shared",
+    )
+    assert settings.unroll_newton_exits == (True, 1)
+    assert settings.as_updates() == {
+        "unroll_newton_exits": (True, 1),
+        "stage_increment_location": "shared",
+    }
+    cleared = settings.without({"unroll_newton_exits", "unroll"})
+    assert cleared.as_updates() == {"stage_increment_location": "shared"}
+    assert PerformanceSettings().as_updates() == {}
+    with pytest.raises(ValueError):
+        PerformanceSettings(stage_increment_location="register")

@@ -100,7 +100,7 @@ class InterpolatorCache(CUDADispatcherCache):
     drivers_fn: Optional[Callable] = field(default=None)
     driver_derivative_fn: Optional[Callable] = field(default=None)
     coefficients: Optional[FloatArray] = field(default=None)
-    coefficients_shape: tuple = field(default=(0, 0, 0))
+    coefficients_shape: Tuple[int, int, int] = field(default=(0, 0, 0))
 
 
 def _input_array_converter(value: Any) -> FloatArray:

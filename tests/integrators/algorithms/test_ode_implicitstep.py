@@ -621,6 +621,3 @@ def test_helper_wiring_follows_the_getter(system, precision):
     assert step.products["nonlinear_solver_fn"] is (
         step.solver.device_function
     )
-    assert step.products["helper_operation_counts"] is (
-        config.helper_operation_counts
-    )

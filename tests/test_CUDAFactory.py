@@ -20,6 +20,9 @@ from cubie.CUDAFactory import (
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
+from cubie.integrators.algorithms.base_algorithm_step import (
+    PerformanceSettings,
+)
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 from numpy import dtype as np_dtype
 
@@ -1012,17 +1015,20 @@ def test_child_products_carry_their_declared_fields(
         "save_state_fn", "update_summaries_fn", "save_summaries_fn",
         "compile_flags", "n_counters", "state_summaries_buffer_height",
         "observable_summaries_buffer_height", "output_array_heights",
-        "summary_legend_per_variable", "summary_unit_modifications",
     } <= set(outputs)
     assert outputs["compile_flags"] == run._output_functions.compile_flags
     step = run._algo_step.products
     assert {
         "step_fn", "nonlinear_solver_fn", "threads_per_step", "n_error",
         "algorithm_order", "has_error_estimate", "is_implicit",
-        "helper_operation_counts", "performance_defaults",
+        "performance_defaults",
     } <= set(step)
     assert step["algorithm_order"] == run._algo_step.algorithm_order
     assert step["n_error"] == run.n_error
+    assert isinstance(step["performance_defaults"], PerformanceSettings)
+    assert step["performance_defaults"] == (
+        run._algo_step.performance_defaults
+    )
     controller = run._step_controller.products
     assert {
         "step_controller_fn", "is_adaptive", "dt", "dt_min", "dt_max",

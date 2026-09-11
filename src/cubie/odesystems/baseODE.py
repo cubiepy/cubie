@@ -36,7 +36,7 @@ See Also
 
 from abc import abstractmethod
 from copy import deepcopy
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 from attrs import define, field
 from numpy import float32
@@ -71,6 +71,14 @@ class ODECache(CUDADispatcherCache):
         ``ODECache`` and therefore a fresh member map.
     operation_counts
         Binary-operator counts of the ``dxdt`` and observables sources.
+    get_solver_helper_fn
+        The system's solver-helper getter.
+    n_states, n_parameters, n_observables, n_drivers
+        The system's sizes.
+    mass_flags
+        Per-state mass-diagonal flags.
+    precision
+        The system's floating-point type.
     """
 
     dxdt_fn: Callable = field()
@@ -82,8 +90,8 @@ class ODECache(CUDADispatcherCache):
     n_parameters: int = field(default=0)
     n_observables: int = field(default=0)
     n_drivers: int = field(default=0)
-    mass_flags: tuple = field(default=())
-    precision: Any = field(default=None)
+    mass_flags: Tuple[bool, ...] = field(default=())
+    precision: PrecisionDType = field(default=float32)
 
 
 class BaseODE(CUDAFactory):
@@ -166,19 +174,6 @@ class BaseODE(CUDAFactory):
         )
         self.setup_compile_settings(system_data)
         self.name = name
-
-    def _cache_products(self) -> Dict[str, Any]:
-        """Return the sizes, flags and helper getter the cache delivers."""
-        sizes = self.sizes
-        return {
-            "get_solver_helper_fn": self.get_solver_helper,
-            "n_states": int(sizes.states),
-            "n_parameters": int(sizes.parameters),
-            "n_observables": int(sizes.observables),
-            "n_drivers": int(sizes.drivers),
-            "mass_flags": tuple(self.mass_diagonal_flags),
-            "precision": self.precision,
-        }
 
     @property
     def mass(self) -> Any:

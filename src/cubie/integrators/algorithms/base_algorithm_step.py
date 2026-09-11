@@ -12,9 +12,12 @@ Published Classes
 :class:`BaseStepConfig`
     Abstract attrs configuration shared by explicit and implicit steps.
 
+:class:`PerformanceSettings`
+    Unroll and placement settings ``auto_performance`` chooses.
+
 :class:`StepCache`
     Cache container for compiled step and optional nonlinear solver
-    device functions.
+    device functions, the step's sizes, order and flags.
 
 :class:`BaseAlgorithmStep`
     Abstract CUDAFactory base for all integration step implementations.
@@ -40,7 +43,16 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict, Optional, Set, Any, Tuple, Sequence
 import warnings
 
-from attrs import define, field, validators, frozen
+from attrs import (
+    asdict,
+    converters,
+    define,
+    evolve,
+    field,
+    fields,
+    validators,
+    frozen,
+)
 from numpy import (
     array as np_array,
     ascontiguousarray as np_ascontiguousarray,
@@ -62,7 +74,7 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.odesystems.solver_helpers import OperationCounts
+from cubie.cuda_simsafe import UnrollFlag, unroll_flag_converter
 from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
@@ -715,17 +727,65 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         return self.tableau.stage_count
 
 
+@frozen
+class PerformanceSettings:
+    """Unroll and placement settings ``auto_performance`` chooses.
+
+    A ``None`` field leaves that setting as it is.
+
+    Attributes
+    ----------
+    unroll_newton_exits
+        Newton iteration loop flag.
+    stage_increment_location
+        Memory the FIRK stage increments live in.
+    """
+
+    unroll_newton_exits: Optional[UnrollFlag] = field(
+        default=None, converter=converters.optional(unroll_flag_converter)
+    )
+    stage_increment_location: Optional[str] = field(
+        default=None,
+        validator=validators.optional(validators.in_(("local", "shared"))),
+    )
+
+    def as_updates(self) -> Dict[str, Any]:
+        """Return the set fields as ``update`` keywords."""
+        return asdict(self, filter=lambda _, value: value is not None)
+
+    def without(self, keys: Set[str]) -> "PerformanceSettings":
+        """Return a copy with the named fields unset."""
+        cleared = {
+            fld.name: None
+            for fld in fields(PerformanceSettings)
+            if fld.name in keys
+        }
+        return evolve(self, **cleared) if cleared else self
+
+
 @define
 class StepCache(CUDADispatcherCache):
-    """Container for compiled device helpers used by an algorithm step.
+    """Build products of an algorithm step.
 
-    Parameters
+    Attributes
     ----------
     step_fn
         Device function that advances the integration state.
     nonlinear_solver_fn
         Optional device function used by implicit methods to perform
         nonlinear solves.
+    threads_per_step
+        Threads one run of the step occupies.
+    n_error
+        Length of the error buffer the step writes.
+    algorithm_order
+        Order the step controller scales its gains by.
+    has_error_estimate
+        Whether the step produces an embedded error estimate.
+    is_implicit
+        Whether the step owns nonlinear or linear solvers.
+    performance_defaults
+        The settings ``auto_performance`` applies to this step.
     """
 
     step_fn: Callable = field(validator=is_device_validator)
@@ -738,10 +798,9 @@ class StepCache(CUDADispatcherCache):
     algorithm_order: int = field(default=1)
     has_error_estimate: bool = field(default=False)
     is_implicit: bool = field(default=False)
-    helper_operation_counts: OperationCounts = field(
-        factory=OperationCounts
+    performance_defaults: PerformanceSettings = field(
+        factory=PerformanceSettings
     )
-    performance_defaults: dict = field(factory=dict)
 
 
 class BaseAlgorithmStep(CUDAFactory):
@@ -854,19 +913,16 @@ class BaseAlgorithmStep(CUDAFactory):
         return recognised
 
     def _stamp_products(self, cache: StepCache) -> StepCache:
-        """Write the step's sizes, order and flags onto its cache."""
-        cache.threads_per_step = self.threads_per_step
-        cache.n_error = self.n_states if self.uses_error else 0
-        cache.algorithm_order = self.algorithm_order
-        cache.has_error_estimate = self.has_error_estimate
-        cache.is_implicit = self.is_implicit
-        cache.performance_defaults = dict(self.performance_defaults)
-        counts = getattr(
-            self.compile_settings, "helper_operation_counts", None
+        """Return ``cache`` with the step's sizes, order and flags."""
+        return evolve(
+            cache,
+            threads_per_step=self.threads_per_step,
+            n_error=self.n_states if self.uses_error else 0,
+            algorithm_order=self.algorithm_order,
+            has_error_estimate=self.has_error_estimate,
+            is_implicit=self.is_implicit,
+            performance_defaults=self.performance_defaults,
         )
-        if counts is not None:
-            cache.helper_operation_counts = counts
-        return cache
 
     @property
     def n_drivers(self) -> int:
@@ -908,9 +964,9 @@ class BaseAlgorithmStep(CUDAFactory):
         }
 
     @property
-    def performance_defaults(self) -> Dict[str, Any]:
+    def performance_defaults(self) -> PerformanceSettings:
         """Return size-dependent settings ``auto_performance`` applies."""
-        return {}
+        return PerformanceSettings()
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
