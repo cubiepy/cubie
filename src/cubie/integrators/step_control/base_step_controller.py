@@ -305,12 +305,8 @@ class ControllerCache(CUDADispatcherCache):
     ----------
     step_controller_fn
         Compiled CUDA device function, or ``-1`` before compilation.
-    is_adaptive
-        Whether the controller adapts the step size.
-    dt, dt_min, dt_max
-        The step size and its bounds, in the controller's precision.
-    atol, rtol
-        Per-state tolerances, in the controller's precision.
+    is_adaptive, dt, dt_min, dt_max, atol, rtol
+        The controller's resolved settings.
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)

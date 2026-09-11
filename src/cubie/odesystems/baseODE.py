@@ -71,14 +71,10 @@ class ODECache(CUDADispatcherCache):
         ``ODECache`` and therefore a fresh member map.
     operation_counts
         Binary-operator counts of the ``dxdt`` and observables sources.
-    get_solver_helper_fn
-        The system's solver-helper getter.
+    get_solver_helper_fn, mass_flags, precision
+        The helper getter, mass-diagonal flags and float type.
     n_states, n_parameters, n_observables, n_drivers
         The system's sizes.
-    mass_flags
-        Per-state mass-diagonal flags.
-    precision
-        The system's floating-point type.
     """
 
     dxdt_fn: Callable = field()

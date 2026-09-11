@@ -729,17 +729,8 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
 
 @frozen
 class PerformanceSettings:
-    """Unroll and placement settings ``auto_performance`` chooses.
-
-    A ``None`` field leaves that setting as it is.
-
-    Attributes
-    ----------
-    unroll_newton_exits
-        Newton iteration loop flag.
-    stage_increment_location
-        Memory the FIRK stage increments live in.
-    """
+    """Unroll and placement settings ``auto_performance`` applies; ``None``
+    leaves a setting alone."""
 
     unroll_newton_exits: Optional[UnrollFlag] = field(
         default=None, converter=converters.optional(unroll_flag_converter)
@@ -765,28 +756,8 @@ class PerformanceSettings:
 
 @define
 class StepCache(CUDADispatcherCache):
-    """Build products of an algorithm step.
-
-    Attributes
-    ----------
-    step_fn
-        Device function that advances the integration state.
-    nonlinear_solver_fn
-        Optional device function used by implicit methods to perform
-        nonlinear solves.
-    threads_per_step
-        Threads one run of the step occupies.
-    n_error
-        Length of the error buffer the step writes.
-    algorithm_order
-        Order the step controller scales its gains by.
-    has_error_estimate
-        Whether the step produces an embedded error estimate.
-    is_implicit
-        Whether the step owns nonlinear or linear solvers.
-    performance_defaults
-        The settings ``auto_performance`` applies to this step.
-    """
+    """Build products of an algorithm step: its device functions, sizes,
+    order, flags and ``auto_performance`` defaults."""
 
     step_fn: Callable = field(validator=is_device_validator)
     nonlinear_solver_fn: Optional[Callable] = field(

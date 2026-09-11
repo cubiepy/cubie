@@ -81,20 +81,12 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
     ----------
     loop_fn
         Compiled CUDA loop callable ready for execution on device.
-    compile_flags
-        The output functions' compile flags.
-    threads_per_step
-        Threads one run of the step occupies.
+    compile_flags, threads_per_step, output_array_heights, is_implicit
+        The children's flags and sizes.
     shared_memory_elements, persistent_local_elements
-        The loop's shared and persistent local buffer sizes.
-    output_array_heights
-        Heights of the host output arrays.
-    operation_counts
-        The system's binary-operator counts.
-    performance_defaults
-        The settings ``auto_performance`` applies to the step.
-    is_implicit
-        Whether the step owns nonlinear or linear solvers.
+        The loop's buffer sizes.
+    operation_counts, performance_defaults
+        The system's operator counts and the step's defaults.
     """
     loop_fn: Callable = field(eq=False)
     compile_flags: Optional[OutputCompileFlags] = field(default=None)
