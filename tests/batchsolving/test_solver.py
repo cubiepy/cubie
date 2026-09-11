@@ -2681,6 +2681,7 @@ def test_repeat_solve_reuses_the_build_state(
     snapshot = kernel.compile_settings
     compiled = kernel.kernel
     geometry = kernel.launch_geometry()
+    legend = kernel.time_domain_legend
     partition = kernel.run_params
     assert not kernel.system_config_stale
     solver.solve(
@@ -2693,6 +2694,7 @@ def test_repeat_solve_reuses_the_build_state(
     assert kernel.compile_settings is snapshot
     assert kernel.kernel is compiled
     assert kernel.launch_geometry() is geometry
+    assert kernel.time_domain_legend is legend
     assert kernel.run_params.num_chunks == partition.num_chunks
     assert kernel.run_params.chunk_length == partition.chunk_length
 
@@ -2712,6 +2714,9 @@ def test_repeat_solve_reuses_the_build_state(
     rebuilt = kernel.launch_geometry()
     assert rebuilt is not geometry
     assert rebuilt == geometry
+    rebuilt_legend = kernel.time_domain_legend
+    assert rebuilt_legend is not legend
+    assert rebuilt_legend == legend
     assert float(kernel.system.constants.values_dict[name]) == (
         pytest.approx(2.0 * value + 1.0)
     )

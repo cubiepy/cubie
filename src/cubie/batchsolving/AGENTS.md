@@ -110,7 +110,9 @@ summarised defaults to saved when all summarise inputs are `None`.
   64); `run(blocksize=None)` uses it; `blocksize_given` records an explicit setting. `shared_memory_needs_padding` adds a 4-byte skew only
   for single precision with an even element count (float64 never pads — it would misalign).
   Memoised per `(blocksize, runs, resident_blocks, auto_performance)` on the build's
-  `BatchSolverCache`, alongside its `duration_counts` and `output_array_heights`.
+  `BatchSolverCache`, alongside its `duration_counts`, `output_array_heights`,
+  `time_domain_legend` and `summaries_legend` (built from the system's labels and
+  units and the output selection; `SolveResult.from_solver` copies them).
 - **Kept across solves:** the system snapshot identity (`system_config_stale`), the chunk
   partition until an allocation replaces it, and the timing `CUDAEvent`s while timing is
   on (rebuilt on a chunk-count or verbosity change).

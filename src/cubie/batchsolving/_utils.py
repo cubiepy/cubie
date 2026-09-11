@@ -45,3 +45,10 @@ def name_and_compile_kernel(
     kernel_function.__name__ = kernel_name
     kernel_function.__qualname__ = ".".join(qualname_parts)
     return cuda.jit(**jit_kwargs)(kernel_function)
+
+
+def format_time_domain_label(label: str, unit: str) -> str:
+    """Return ``label [unit]``, or the bare label when dimensionless."""
+    if unit != "dimensionless":
+        return f"{label} [{unit}]"
+    return label

@@ -84,7 +84,10 @@ from cubie.batchsolving.BatchSolverConfig import (
     ActiveOutputs,
     BatchSolverConfig,
 )
-from cubie.batchsolving._utils import name_and_compile_kernel
+from cubie.batchsolving._utils import (
+    format_time_domain_label,
+    name_and_compile_kernel,
+)
 from cubie.odesystems.baseODE import BaseODE
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.outputhandling.output_sizes import OutputArrayHeights
@@ -258,6 +261,8 @@ class BatchSolverCache(CUDADispatcherCache):
     output_array_heights: Optional[OutputArrayHeights] = field(default=None)
     duration_counts: Dict[float, DurationCounts] = field(factory=dict)
     launch_geometries: Dict[Tuple, Tuple[int, int]] = field(factory=dict)
+    time_domain_legend: Dict[int, str] = field(factory=dict)
+    summaries_legend: Dict[int, str] = field(factory=dict)
 
 
 RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
@@ -1515,7 +1520,67 @@ class BatchSolverKernel(CUDAFactory):
         return BatchSolverCache(
             solver_kernel=self.build_kernel(),
             output_array_heights=self.single_integrator.output_array_heights,
+            time_domain_legend=self._time_domain_legend(),
+            summaries_legend=self._summaries_legend(),
         )
+
+    def _variable_units(self) -> Tuple[Dict[str, str], Dict[str, str]]:
+        """Return the system's state and observable units by label."""
+        system = self.system
+        return (
+            getattr(system, "state_units", {}),
+            getattr(system, "observable_units", {}),
+        )
+
+    def _time_domain_legend(self) -> Dict[int, str]:
+        """Map time-domain output rows to labels with units."""
+        system = self.system
+        state_units, obs_units = self._variable_units()
+        state_labels = system.states.get_labels(self.saved_state_indices)
+        obs_labels = system.observables.get_labels(
+            self.saved_observable_indices
+        )
+        legend = {}
+        for i, label in enumerate(state_labels):
+            unit = state_units.get(label, "dimensionless")
+            legend[i] = format_time_domain_label(label, unit)
+        offset = len(state_labels)
+        for i, label in enumerate(obs_labels):
+            unit = obs_units.get(label, "dimensionless")
+            legend[offset + i] = format_time_domain_label(label, unit)
+        return legend
+
+    def _summaries_legend(self) -> Dict[int, str]:
+        """Map summary output rows to labels with units and metric."""
+        system = self.system
+        state_units, obs_units = self._variable_units()
+        singlevar_legend = self.summary_legend_per_variable
+        unit_modifications = self.summary_unit_modifications
+        per_variable = len(singlevar_legend)
+        state_labels = system.states.get_labels(
+            self.summarised_state_indices
+        )
+        obs_labels = system.observables.get_labels(
+            self.summarised_observable_indices
+        )
+        legend = {}
+        blocks = (
+            (state_labels, state_units, 0),
+            (obs_labels, obs_units, len(state_labels) * per_variable),
+        )
+        for labels, units, offset in blocks:
+            for i, label in enumerate(labels):
+                unit = units.get(label, "dimensionless")
+                for j, summary_type in enumerate(singlevar_legend.values()):
+                    index = offset + i * per_variable + j
+                    if unit == "dimensionless":
+                        legend[index] = f"{label} {summary_type}"
+                        continue
+                    # The modification keeps its brackets around the unit.
+                    unit_mod = unit_modifications.get(j, "[unit]")
+                    modified_unit = unit_mod.replace("unit", unit)
+                    legend[index] = f"{label} {modified_unit} {summary_type}"
+        return legend
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -1762,6 +1827,18 @@ class BatchSolverKernel(CUDAFactory):
         """Height metadata for the batched output arrays."""
 
         return self.get_cached_output("output_array_heights")
+
+    @property
+    def time_domain_legend(self) -> Dict[int, str]:
+        """Labels of the time-domain output rows, from the build."""
+
+        return self.get_cached_output("time_domain_legend")
+
+    @property
+    def summaries_legend(self) -> Dict[int, str]:
+        """Labels of the summary output rows, from the build."""
+
+        return self.get_cached_output("summaries_legend")
 
     @property
     def summary_legend_per_variable(self) -> Any:
