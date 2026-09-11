@@ -55,35 +55,25 @@ Iteration counts are returned separately via the
 `Solver.status_messages`).
 
 ### Component assembly (`SingleIntegratorRunCore.__init__`)
-The constructor builds each child from the system's `products` and its own static
-settings (output functions, step, controller, loop, DAE initialiser), resolving the
-controller name (a given name, else the family default promoted to carry any gains;
-an errorless algorithm forces `fixed` with a `UserWarning`) and filling unset step
-keys from the family and DAE defaults. It then runs `_distribute({})` once.
+Builds each child from the system's `products` and its static settings; the controller
+name is the given one, else the family default (promoted to carry gains; `fixed` with a
+`UserWarning` for an errorless algorithm); then runs `_distribute({})` once.
 
 ### update() distributes products
-`update()` records which tolerance, performance and timing keys the user gave, then
+`update()` records the tolerance, performance and timing keys the user gave, then
 `_distribute` updates the children in a fixed order (system, output functions, step,
-controller, initialiser, loop), merging each child's `products` into the dict before
-the next child, and finishes with `update_compile_settings` on the run, whose
-`loop_fn` field captures the loop's product. A new `algorithm` or `step_controller`
-swaps that child first, primed from its predecessor's `settings_dict`. Unrecognised
-user keys raise unless `silent`.
+controller, initialiser, loop), merging each child's `products` into the dict before the
+next, and ends with `update_compile_settings` on the run, whose `loop_fn` field captures
+the loop's product. A new `algorithm`/`step_controller` swaps that child first.
+`settings_dict` merges the children's settings minus injected keys; derived values
+appear only when the user gave them. `copy()` rebuilds from `grouped_settings()`.
 
-`settings_dict` merges the children's `settings_dict`s minus the keys the run injects;
-derived values (timing, inner tolerances, performance defaults) appear only when the
-user gave them. `grouped_settings()` splits it into the constructor's groups; `copy()`
-rebuilds from those groups on `system.copy()`.
-
-### build() reads the captured loop
-`build()` returns the captured `loop_fn` with the children's sizes, flags and
-`performance_defaults`; the cache invalidates when `update` captures a different loop.
-
-### Timing
-`_loop_timing` derives the save and summary schedule from the user's timing keys and
-the output types. Summaries without `summarise_every` make the run
-`is_duration_dependent`; a `duration` key in `update` then sets
-`summarise_every=duration` and `sample_summaries_every=duration / 100`.
+### build() and timing
+`build()` returns the captured `loop_fn` with the children's sizes and flags.
+`_loop_timing` derives the save and summary schedule from the timing keys and output
+types; summaries without `summarise_every` make the run `is_duration_dependent`, and a
+`duration` key in `update` sets `summarise_every=duration`,
+`sample_summaries_every=duration / 100`.
 
 ### Testing
 Top-level files are exercised via `tests/integrators/` integration tests and
