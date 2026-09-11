@@ -50,9 +50,10 @@ def test_loop_forwarding(single_integrator_run):
     assert run.save_last == loop.compile_settings.save_last
 
     assert run.compile_flags is loop.compile_flags
-    assert run.save_state_fn is loop.save_state_fn
-    assert run.update_summaries_fn is loop.update_summaries_fn
-    assert run.save_summaries_fn is loop.save_summaries_fn
+    outputs = run._output_functions
+    assert run.save_state_fn is outputs.save_state_fn
+    assert run.update_summaries_fn is outputs.update_summaries_fn
+    assert run.save_summaries_fn is outputs.save_summaries_fn
 
 
 # -- _step_controller forwarding ---------------------------------------- #

@@ -27,7 +27,7 @@ def test_build_delegates_to_build_step(step_object):
     # Access step_fn triggers build; the result is cached.
     sf = step_object.step_fn
     cache = step_object._cache
-    assert cache.step is sf
+    assert cache.step_fn is sf
 
 
 def test_build_unpacks_config_fields(step_object, system):

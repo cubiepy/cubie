@@ -409,7 +409,7 @@ class BaseODE(CUDAFactory):
     def operation_count(self) -> int:
         """Binary-operator count of the ``dxdt`` and observables sources."""
         return self.get_cached_output("operation_counts").total(
-            ("dxdt_fn", "observables_fn")
+            ("dxdt", "observables")
         )
 
     @property

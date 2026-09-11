@@ -87,8 +87,8 @@ def _make_registry_with_callable(precision):
 def test_metric_func_cache_defaults():
     """MetricFuncCache stores update and save with None defaults."""
     cache = MetricFuncCache()
-    assert cache.update is None
-    assert cache.save is None
+    assert cache.update_fn is None
+    assert cache.save_fn is None
 
 
 def test_metric_func_cache_stores_callables():
@@ -100,8 +100,8 @@ def test_metric_func_cache_stores_callables():
         return "s"
 
     cache = MetricFuncCache(update_fn=fn_u, save_fn=fn_s)
-    assert cache.update is fn_u
-    assert cache.save is fn_s
+    assert cache.update_fn is fn_u
+    assert cache.save_fn is fn_s
 
 
 def test_metric_func_cache_is_cuda_dispatcher_cache():

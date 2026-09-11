@@ -303,7 +303,7 @@ def test_controller_build_produces_callable(step_controller):
     df = step_controller.device_function  # triggers build
     assert callable(df)
     # After build, cache holds the same object
-    assert step_controller._cache.device_function is df
+    assert step_controller._cache.step_controller_fn is df
 
 
 # ── Forwarding properties (items 71-78) ─────────────────────────── #

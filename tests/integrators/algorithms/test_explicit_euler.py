@@ -27,8 +27,7 @@ def test_build_returns_step_cache(single_integrator_run):
     _ = single_integrator_run.device_function
     cache = algo._cache
     assert cache.nonlinear_solver_fn is None
-    # Cache step is the same object as device_function.step
-    assert cache.step is algo._cache.step
+    assert cache.step_fn is algo.step_fn
 
 
 # ── Properties ─────────────────────────────────────────── #
