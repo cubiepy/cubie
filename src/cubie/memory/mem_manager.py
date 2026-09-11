@@ -996,6 +996,24 @@ class MemoryManager:
         instance_id = id(instance)
         return self.registry[instance_id].proportion
 
+    def manual_proportion(self, instance: object) -> Optional[float]:
+        """Return an instance's reserved proportion; ``None`` if auto.
+
+        Parameters
+        ----------
+        instance
+            Instance to query.
+
+        Returns
+        -------
+        float or None
+            Manual proportion, or ``None`` for auto-pool instances.
+        """
+        instance_id = id(instance)
+        if instance_id in self._auto_pool:
+            return None
+        return self.registry[instance_id].proportion
+
     def cap(self, instance: object) -> Optional[int]:
         """
         Get the maximum allocatable bytes for an instance.

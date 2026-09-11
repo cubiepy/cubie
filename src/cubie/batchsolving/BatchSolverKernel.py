@@ -708,6 +708,34 @@ class BatchSolverKernel(CUDAFactory):
         finally:
             self._memory_manager.end_work(self, stream)
 
+    def kernel_is_cached(
+        self,
+        inits: NDArray[floating],
+        params: NDArray[floating],
+        duration: float,
+        warmup: float = 0.0,
+        t0: float = 0.0,
+    ) -> bool:
+        """Prepare the batch as :meth:`compile` does and report whether
+        the disk cache holds its kernel; ``False`` when caching is off."""
+        if self._closed:
+            raise RuntimeError(
+                "This solver has been closed and its GPU resources "
+                "released; build a new Solver to run again."
+            )
+        stream = self.stream
+        self._memory_manager.begin_work(self)
+        try:
+            self._prepare_batch(
+                inits, params, duration, warmup, t0, stream
+            )
+            # Building the dispatcher attaches the disk cache.
+            self.kernel
+        finally:
+            self._memory_manager.end_work(self, stream)
+        disk_cache = self._disk_cache
+        return disk_cache is not None and disk_cache.holds_kernel()
+
     def _kernel_launch_args(self, chunk_run_params: RunParams) -> Tuple:
         """Return the kernel's positional arguments for one chunk."""
         duration, warmup, t0 = chunk_run_params.time_scalars
@@ -1463,7 +1491,7 @@ class BatchSolverKernel(CUDAFactory):
         settings.update(self.single_integrator.settings_dict)
         settings.update(
             stream_group=self.stream_group,
-            mem_proportion=self.mem_proportion,
+            mem_proportion=self.memory_manager.manual_proportion(self),
             host_spill_threshold=self.host_spill_threshold,
             spill_directory=self.spill_directory,
         )
@@ -1479,7 +1507,9 @@ class BatchSolverKernel(CUDAFactory):
             memory_settings={
                 "memory_manager": self.memory_manager,
                 "stream_group": self.stream_group,
-                "mem_proportion": self.mem_proportion,
+                "mem_proportion": self.memory_manager.manual_proportion(
+                    self
+                ),
                 "host_spill_threshold": self.host_spill_threshold,
                 "spill_directory": self.spill_directory,
             },
