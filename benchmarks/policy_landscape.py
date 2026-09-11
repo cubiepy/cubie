@@ -118,6 +118,28 @@ def build_lorenz96(n):
     )
 
 
+FABBRI_CELLML = (
+    Path(__file__).resolve().parent.parent
+    / "tests" / "fixtures" / "cellml" / "Fabbri_Linder.cellml"
+)
+FABBRI_PARAMETERS = (
+    "Rate_modulation_experiments_ACh",
+    "Rate_modulation_experiments_Iso_cas",
+)
+
+
+def build_fabbri():
+    """The Fabbri-Linder sinoatrial model with autonomic modulation on."""
+    system = cubie.load_cellml_model(
+        str(FABBRI_CELLML),
+        precision=PRECISION,
+        parameters=list(FABBRI_PARAMETERS),
+        voltage_variable="Membrane$V_ode",
+    )
+    system.set_constants({"Rate_modulation_experiments_ANS": 1.0})
+    return system
+
+
 def build_chain(n, consts_per_eq, n_params=2):
     """Nonlinear nearest-neighbour ring chain of the placement bank."""
     rng = np.random.default_rng(1234)
@@ -156,6 +178,20 @@ def grid_param(name, low, high):
     return grid
 
 
+def grid_fabbri(solver, n_runs):
+    """ACh by Iso mesh, truncated to ``n_runs`` trajectories."""
+    side = int(np.ceil(np.sqrt(n_runs)))
+    ach, iso = np.meshgrid(
+        np.linspace(0.0, 2e-8, side), np.linspace(0.0, 1.0, side)
+    )
+    return solver.build_grid(
+        parameters={
+            FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
+            FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
+        }
+    )
+
+
 def grid_chain(solver, n_runs):
     return solver.build_grid(
         parameters={
@@ -166,6 +202,7 @@ def grid_chain(solver, n_runs):
 
 
 TIGHT = {"atol": 1e-6, "rtol": 1e-6, "dt_min": 1e-12, "dt_max": 1e3}
+FABBRI_TOLS = {"atol": 1e-6, "rtol": 1e-4, "dt_min": 1e-12, "dt_max": 1e-2}
 
 SYSTEMS = {
     "lorenz": dict(
@@ -200,6 +237,10 @@ SYSTEMS = {
         build=lambda: build_chain(64, 3), grid=grid_chain,
         n_states=64, kwargs=TIGHT, erk_duration=51.2,
     ),
+    "fabbri": dict(
+        build=build_fabbri, grid=grid_fabbri,
+        n_states=35, kwargs=FABBRI_TOLS, erk_duration=1.0,
+    ),
 }
 
 # --- algorithms --------------------------------------------------------
@@ -218,6 +259,11 @@ ALGOS = {
         "ERK", "none", dict(algorithm="bogacki-shampine-32")
     ),
     "vern7": ("ERK", "none", dict(algorithm="vern7")),
+    "cash-karp-54": ("ERK", "none", dict(algorithm="cash-karp-54")),
+    "dormand-prince-54": (
+        "ERK", "none", dict(algorithm="dormand-prince-54")
+    ),
+    "dop853": ("ERK", "none", dict(algorithm="dop853")),
     "kvaerno3": ("DIRK", "lu", dict(algorithm="kvaerno3", **LU)),
     "kvaerno5": ("DIRK", "lu", dict(algorithm="kvaerno5", **LU)),
     "kvaerno3_bicgstab": (
@@ -289,6 +335,7 @@ DURATIONS = {
     ("chain32", "radau_iia_3"): 0.2,
     ("chain32", "radau_iia_5"): 0.4,
     ("chain32", "rosenbrock23"): 25.6,
+    ("fabbri", "radau_iia_5"): 1.0,
 }
 
 
@@ -336,6 +383,7 @@ class Cell:
     warm_ms: List[float] = field(default_factory=list)
     times_ms: List[float] = field(default_factory=list)
     capped: bool = False
+    auto: bool = False
 
     @property
     def key(self):
@@ -360,6 +408,7 @@ class Arm:
     cubin_sha: str = ""
     regs: int = 0
     frame: int = 0
+    sass_bytes: int = 0
     shared_per_run: int = 0
     resolved: Dict[str, Any] = field(default_factory=dict)
     cells: Dict[str, Cell] = field(default_factory=dict)
@@ -448,12 +497,13 @@ def buffer_tree(root):
 
 def resolved_settings(solver):
     """Unroll flags and buffer locations the built kernel uses."""
-    flags = solver.kernel.compile_settings.unroll
+    run = solver.kernel.single_integrator
+    # The step carries the auto_performance Newton-exit choice.
+    flags = run._algo_step.compile_settings.unroll
     out = {
         name: "1" if getattr(flags, name) == FULL.value else "0"
         for name in UNROLL_GROUPS
     }
-    run = solver.kernel.single_integrator
     for parent, group in buffer_tree(run._loop):
         for name in group.relocatable_names():
             entry = group.entries[name]
@@ -561,6 +611,14 @@ def cells_for(arm, blocksizes):
         )
     cells = {}
     keys = {}
+    # The launch the kernel chooses for itself.
+    kernel.resident_blocks = None
+    actual, dynamic = kernel.launch_geometry(None)
+    blocks = active_blocks_per_multiprocessor(kernel.kernel, actual, dynamic)
+    keys["auto"] = (actual, blocks, dynamic)
+    cells[f"bs{actual}x{blocks}"] = Cell(
+        f"bs{actual}x{blocks}", actual, None, blocks, dynamic, auto=True
+    )
     for blocksize in blocksizes:
         kernel.resident_blocks = NATURAL
         actual, dynamic = kernel.launch_geometry(blocksize)
@@ -616,9 +674,10 @@ def kernel_ms(solver):
 def solve_ms(arm, cell, d_inits, d_params, duration):
     kernel = arm.solver.kernel
     kernel.resident_blocks = cell.resident
+    # The auto cell launches as a solve without a block size does.
     arm.solver.solve(
-        d_inits, d_params, duration=duration, blocksize=cell.blocksize,
-        on_device=True,
+        d_inits, d_params, duration=duration,
+        blocksize=None if cell.auto else cell.blocksize, on_device=True,
     )
     kernel.synchronize()
     return kernel_ms(arm.solver)
@@ -654,7 +713,8 @@ def output_check(arm, reference, inits, params, duration):
     return check, state_last
 
 
-def time_arms(arms, d_inits, d_params, duration, log, cap=CAP):
+def time_arms(arms, d_inits, d_params, duration, log, cap=CAP,
+              rounds=ROUNDS):
     """Fill the cell timings of every timed (non-alias) arm."""
     timed = [arm for arm in arms if arm.alias_of is None and arm.error is None]
     units = [(arm, cell) for arm in timed for cell in arm.cells.values()]
@@ -665,7 +725,7 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP):
         solve_ms(first_arm, first_cell, d_inits, d_params, duration)
     floor = float("inf")
     current = None
-    for round_index in range(ROUNDS):
+    for round_index in range(rounds):
         ordered = units if round_index == 0 else units[::-1]
         for arm, cell in ordered:
             if cell.capped:
@@ -691,6 +751,10 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP):
                     solve_ms(arm, cell, d_inits, d_params, duration)
                 )
             floor = min(floor, cell.best_ms)
+            log(f"  round {round_index + 1} {arm.spec.label:32s} "
+                f"{cell.name:9s} warm {warm:9.2f} timed "
+                + " ".join(f"{t:9.2f}" for t in cell.times_ms[-TIMED_SOLVES:])
+                + " ms")
 
 
 # --- per-configuration driver -------------------------------------------
@@ -723,6 +787,7 @@ def _arm_facts(arm, blocksizes, started):
     resources = kernel_resources(kernel.kernel)
     arm.regs = resources.registers_per_thread
     arm.frame = resources.local_bytes_per_thread
+    arm.sass_bytes = resources.sass_bytes
     pad = 4 if kernel.shared_memory_needs_padding else 0
     arm.shared_per_run = int(kernel.shared_memory_bytes + pad)
     arm.resolved = resolved_settings(arm.solver)
@@ -741,6 +806,7 @@ def run_config(
     blocksizes=None,
     cap=CAP,
     block_arms=BLOCK_ARMS,
+    rounds=ROUNDS,
 ):
     """Build, check and time every arm; return the record row.
 
@@ -776,7 +842,8 @@ def run_config(
             else:
                 seen[arm.cubin_sha] = spec.label
                 log(f"  {spec.label:32s} regs {arm.regs:3d} frame "
-                    f"{arm.frame:5d} shared/run {arm.shared_per_run:4d} "
+                    f"{arm.frame:5d} sass {arm.sass_bytes // 1024:5d} KiB "
+                    f"shared/run {arm.shared_per_run:4d} "
                     f"cells {' '.join(arm.cells)} ({arm.compile_s:.1f} s)")
         except Exception as exc:  # noqa: BLE001
             arm.error = repr(exc)[:300]
@@ -831,7 +898,8 @@ def run_config(
         reference = blocks[0][0]
         before = {name: len(cell.times_ms)
                   for name, cell in reference.cells.items()}
-        time_arms(alive, d_inits, d_params, duration, log, cap=cap)
+        time_arms(alive, d_inits, d_params, duration, log, cap=cap,
+                  rounds=rounds)
         reference_by_block.append({
             name: min(cell.times_ms[before[name]:])
             for name, cell in reference.cells.items()
@@ -867,7 +935,7 @@ def run_config(
             name=str(cuda.get_current_device().name),
         ),
         protocol=dict(
-            rounds=ROUNDS, timed_solves=TIMED_SOLVES, cap=cap,
+            rounds=rounds, timed_solves=TIMED_SOLVES, cap=cap,
             block_arms=block_arms,
         ),
         reference_by_block=reference_by_block,
@@ -886,6 +954,7 @@ def run_config(
             cubin_sha=arm.cubin_sha,
             regs=arm.regs,
             frame=arm.frame,
+            sass_bytes=arm.sass_bytes,
             shared_per_run=arm.shared_per_run,
             compile_s=round(arm.compile_s, 2),
             resolved=arm.resolved,
@@ -996,12 +1065,14 @@ def policy_time(row, label, role_blocksizes):
     if target.get("error"):
         return None, None
     for role, blocksize in role_blocksizes:
-        key = arm["cell_keys"].get(f"{role}@bs{blocksize}")
+        # ``blocksize`` None names the launch the kernel chose itself.
+        name = role if blocksize is None else f"{role}@bs{blocksize}"
+        key = arm["cell_keys"].get(name)
         if key is None:
             continue
         ms = cell_time(target, key)
         if ms is not None:
-            return ms, f"{label}@{role}@bs{blocksize}"
+            return ms, f"{label}@{name}"
     return None, None
 
 
@@ -1221,6 +1292,11 @@ def add_common_arguments(parser: argparse.ArgumentParser):
         "every block)",
     )
     parser.add_argument(
+        "--rounds", type=int, default=ROUNDS,
+        help="timing rounds per configuration; alternate rounds visit "
+        "the cells in reverse order",
+    )
+    parser.add_argument(
         "--blocksizes", default=None,
         help="comma-separated block sizes for every arm (default: the "
         "launch_candidates sets)",
@@ -1332,7 +1408,7 @@ def run_jobs(configs, arms_for, args, log, duration_override=None):
         row = run_config(
             system_name, algo_name, specs, n_runs, duration, log,
             blocksizes=blocksizes, cap=args.cap,
-            block_arms=args.block_arms,
+            block_arms=args.block_arms, rounds=args.rounds,
         )
         row["run_signature"] = signature
         row["wall_s"] = round(time.perf_counter() - started, 1)

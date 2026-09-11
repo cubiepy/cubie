@@ -8,13 +8,16 @@ Published Objects
 :class:`DeviceHardware` / :func:`device_hardware`
     Driver-reported quantities of the current device.
 :class:`KernelResources` / :func:`kernel_resources`
-    Register and local-memory use of a compiled kernel.
+    Register, local-memory and SASS size of a compiled kernel.
 :func:`active_blocks_per_multiprocessor`
     Resident blocks per SM at a launch geometry.
+:func:`register_limited_threads` / :func:`shared_limited_threads`
+    Resident threads per SM under the register or shared-memory limit.
 :func:`max_shared_memory_per_block`
     Opt-in dynamic shared-memory limit per block.
 """
 
+from struct import unpack_from
 from typing import Any, Tuple
 
 from attrs import frozen
@@ -30,6 +33,15 @@ INSTRUCTION_CACHE_BYTES = {(7, 5): 65536, (8, 9): 131072}
 
 DEFAULT_INSTRUCTION_CACHE_BYTES = 131072
 """Capacity assumed for an unmeasured compute capability."""
+
+MAX_REGISTERS_PER_THREAD = 255
+"""Registers a thread can address; register-capped kernels sit here."""
+
+REGISTER_ALLOCATION_UNIT = 8
+"""Registers per thread allocate in units of this size."""
+
+LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
+"""Block sizes the automatic launch chooses between."""
 
 
 @frozen
@@ -52,6 +64,14 @@ class DeviceHardware:
         Opt-in dynamic shared limit per block in bytes.
     instruction_cache_bytes
         Instruction-cache capacity from :data:`INSTRUCTION_CACHE_BYTES`.
+    registers_per_multiprocessor
+        32-bit registers per SM.
+    max_threads_per_multiprocessor
+        Resident thread limit per SM.
+    max_blocks_per_multiprocessor
+        Resident block limit per SM.
+    warp_size
+        Threads per warp.
     """
 
     compute_capability: Tuple[int, int]
@@ -61,6 +81,10 @@ class DeviceHardware:
     reserved_shared_memory_per_block: int
     max_dynamic_shared_memory_per_block: int
     instruction_cache_bytes: int
+    registers_per_multiprocessor: int
+    max_threads_per_multiprocessor: int
+    max_blocks_per_multiprocessor: int
+    warp_size: int
 
 
 @frozen
@@ -73,10 +97,13 @@ class KernelResources:
         Registers allocated per thread.
     local_bytes_per_thread
         Local-memory frame per thread in bytes.
+    sass_bytes
+        Machine-code size of the kernel's ``.text`` sections.
     """
 
     registers_per_thread: int
     local_bytes_per_thread: int
+    sass_bytes: int
 
 
 def device_hardware() -> DeviceHardware:
@@ -90,6 +117,10 @@ def device_hardware() -> DeviceHardware:
             reserved_shared_memory_per_block=0,
             max_dynamic_shared_memory_per_block=49152,
             instruction_cache_bytes=DEFAULT_INSTRUCTION_CACHE_BYTES,
+            registers_per_multiprocessor=65536,
+            max_threads_per_multiprocessor=1024,
+            max_blocks_per_multiprocessor=16,
+            warp_size=32,
         )
     device = cuda.get_current_device()
     major, minor = device.compute_capability
@@ -110,7 +141,49 @@ def device_hardware() -> DeviceHardware:
         instruction_cache_bytes=INSTRUCTION_CACHE_BYTES.get(
             capability, DEFAULT_INSTRUCTION_CACHE_BYTES
         ),
+        registers_per_multiprocessor=int(
+            device.MAX_REGISTERS_PER_MULTIPROCESSOR
+        ),
+        max_threads_per_multiprocessor=int(
+            device.MAX_THREADS_PER_MULTIPROCESSOR
+        ),
+        max_blocks_per_multiprocessor=int(
+            device.MAX_BLOCKS_PER_MULTIPROCESSOR
+        ),
+        warp_size=int(device.WARP_SIZE),
     )
+
+
+def register_limited_threads(
+    hardware: DeviceHardware, registers_per_thread: int
+) -> int:
+    """Return the resident threads per SM the register file allows."""
+    allocated = -(-registers_per_thread // REGISTER_ALLOCATION_UNIT)
+    allocated *= REGISTER_ALLOCATION_UNIT
+    threads = hardware.registers_per_multiprocessor // allocated
+    threads -= threads % hardware.warp_size
+    return min(threads, hardware.max_threads_per_multiprocessor)
+
+
+def shared_limited_threads(
+    hardware: DeviceHardware, bytes_per_run: int
+) -> int:
+    """Return the most resident threads per SM ``bytes_per_run`` allows."""
+    best = 0
+    for blocksize in LAUNCH_BLOCKSIZES:
+        block_bytes = (
+            bytes_per_run * blocksize
+            + hardware.reserved_shared_memory_per_block
+        )
+        if block_bytes > hardware.max_dynamic_shared_memory_per_block:
+            continue
+        blocks = min(
+            hardware.shared_memory_per_multiprocessor // block_bytes,
+            hardware.max_threads_per_multiprocessor // blocksize,
+            hardware.max_blocks_per_multiprocessor,
+        )
+        best = max(best, blocks * blocksize)
+    return best
 
 
 def max_shared_memory_per_block() -> int:
@@ -124,13 +197,54 @@ def _compiled_kernel_function(dispatcher: Any) -> Any:
     return kernel._codelibrary.get_cufunc()
 
 
+def _compiled_cubin(dispatcher: Any) -> bytes:
+    """Return the cubin of a dispatcher's one compiled kernel."""
+    (definition,) = dispatcher.overloads.values()
+    library = definition._codelibrary
+    if hasattr(library, "get_cubin"):
+        return bytes(library.get_cubin().code)
+    return bytes(library._cubin)
+
+
+def sass_bytes_from_cubin(cubin: bytes) -> int:
+    """Return the summed size of the ``.text`` sections of an ELF cubin."""
+    if cubin[:4] != b"\x7fELF":
+        raise ValueError("cubin is not an ELF image")
+    if cubin[4] == 2:
+        (section_offset,) = unpack_from("<Q", cubin, 0x28)
+        entry_size, count, names_index = unpack_from("<HHH", cubin, 0x3A)
+        header = "<IIQQQQ"
+    else:
+        (section_offset,) = unpack_from("<I", cubin, 0x20)
+        entry_size, count, names_index = unpack_from("<HHH", cubin, 0x2E)
+        header = "<IIIIII"
+
+    def section(index):
+        fields = unpack_from(
+            header, cubin, section_offset + index * entry_size
+        )
+        name, _, _, _, offset, size = fields
+        return name, offset, size
+
+    _, names_offset, _ = section(names_index)
+    total = 0
+    for index in range(count):
+        name, _, size = section(index)
+        start = names_offset + name
+        end = cubin.index(b"\0", start)
+        if cubin[start:end].startswith(b".text."):
+            total += size
+    return total
+
+
 def kernel_resources(dispatcher: Any) -> KernelResources:
-    """Return the register and local-memory use of a compiled kernel."""
+    """Return the register, local-memory and SASS size of a compiled kernel."""
     if CUDA_SIMULATION:  # pragma: no cover - simulated
-        return KernelResources(0, 0)
+        return KernelResources(0, 0, 0)
     (registers,) = dispatcher.get_regs_per_thread().values()
     (local_bytes,) = dispatcher.get_local_mem_per_thread().values()
-    return KernelResources(int(registers), int(local_bytes))
+    sass_bytes = sass_bytes_from_cubin(_compiled_cubin(dispatcher))
+    return KernelResources(int(registers), int(local_bytes), sass_bytes)
 
 
 def active_blocks_per_multiprocessor(
@@ -204,6 +318,8 @@ else:  # pragma: no cover - exercised in GPU environments
 __all__ = [
     "DEFAULT_INSTRUCTION_CACHE_BYTES",
     "INSTRUCTION_CACHE_BYTES",
+    "LAUNCH_BLOCKSIZES",
+    "MAX_REGISTERS_PER_THREAD",
     "SASS_INSTRUCTION_BYTES",
     "DeviceHardware",
     "KernelResources",
@@ -212,4 +328,7 @@ __all__ = [
     "device_hardware",
     "kernel_resources",
     "max_shared_memory_per_block",
+    "register_limited_threads",
+    "sass_bytes_from_cubin",
+    "shared_limited_threads",
 ]

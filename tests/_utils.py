@@ -2056,6 +2056,8 @@ LARGE_STATE_ONLY = {
 
 LARGE_TSIT5 = {**LARGE_STATE_ONLY, "algorithm": "tsit5"}
 
+LARGE_VERN7 = {**LARGE_STATE_ONLY, "algorithm": "vern7"}
+
 LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
 
 LARGE_FIRK = {**LARGE_STATE_ONLY, "algorithm": "radau_iia_3"}

@@ -40,10 +40,10 @@ Designed for Parabolic Problems. *BIT Numerical Mathematics* 41,
 731–738 (2001).
 """
 
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
+from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -778,6 +778,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
     def is_multistage(self) -> bool:
         """Return ``True`` as the method has multiple stages."""
         return self.tableau.stage_count > 1
+
+    @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """``other_small`` unrolling, full and rolled."""
+        return (
+            {"unroll_other_small": UnrollChoice.FULL},
+            {"unroll_other_small": UnrollChoice.ROLLED},
+        )
 
     @property
     def has_error_estimate(self) -> bool:
