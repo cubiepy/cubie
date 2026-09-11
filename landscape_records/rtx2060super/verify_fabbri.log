@@ -1,0 +1,242 @@
+[12:25:13] device NVIDIA GeForce RTX 2060 SUPER cc (7, 5) SMs 34 L2 4 MiB shared/SM 64 KiB opt-in 64 KiB icache 64 KiB
+[12:25:13] backend mlir cubie 0.12.0 cache /home/cca79/orca/workspaces/cubie/landscape-2060/generated
+[12:25:16] 1 configurations, 10 kernels to compile
+[12:25:19]   compile FAILED fabbri/radau_iia_5 plain: SyntaxError("'(' was never closed", ('/home/cca79/orca/workspaces/cubie/landscape-2060/generated/Fabbri_Linder/Fabbri_Linder_e18424a54c.py', 1212, 91, '        _cubie_codegen_s0_Ca_intracellular_fluxes_F_PLBp = selp(_cse45 > precision(0.23), (precision(3.3931)*_cse46)/(_cse46 + precision(0.005667125
+[12:25:40]   compiled fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=local   21.5 s a1253e27317a
+[12:25:41]   compiled fabbri/radau_iia_5 tierA                              22.3 s 2a200d332196
+[12:25:53]   compiled fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=local   35.0 s 0b929a830971
+[12:25:56]   compiled fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared   37.0 s 8a9292734f1d
+[12:26:03]   compiled fabbri/radau_iia_5 n0o0                               22.2 s f802e2f01225
+[12:26:03]   compiled fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared   22.9 s ab9efa96580c
+[12:26:16]   compiled fabbri/radau_iia_5 n0o0+stage_increment=shared        20.6 s bf3465a8ebd3
+[12:26:22]   compiled fabbri/radau_iia_5 allrolled                          18.6 s d639daf58774
+[12:26:24]   compiled fabbri/radau_iia_5 n1o0                               30.1 s 11ebc2370e08
+[12:26:24] compiles done in 67 s
+[12:26:24] === fabbri/radau_iia_5 n_runs 32768 duration 1.0 arms 10
+[12:26:24]   tierA                            regs 255 frame  2632 sass   193 KiB shared/run    0 cells bs256x1 bs32x8 bs32x7 bs32x6 bs32x1 bs64x4 bs64x3 bs64x2 bs64x1 bs128x2 bs128x1 (0.3 s)
+[12:26:25]   plain                            regs 255 frame  2848 sass   847 KiB shared/run    0 cells bs64x4 bs32x8 bs32x7 bs32x6 bs32x1 bs64x3 bs64x2 bs64x1 bs128x2 bs128x1 bs256x1 (0.2 s)
+[12:26:25]   opt:newton_exits=1 stage_increment=local alias of plain
+[12:26:25]   opt:newton_exits=1 stage_increment=shared regs 255 frame  2672 sass   856 KiB shared/run  420 cells bs32x4 bs32x3 bs32x2 bs32x1 bs64x2 bs64x1 bs128x1 (0.2 s)
+[12:26:25]   opt:newton_exits=0 stage_increment=local alias of tierA
+[12:26:26]   opt:newton_exits=0 stage_increment=shared regs 255 frame  2264 sass   191 KiB shared/run  420 cells bs32x4 bs32x3 bs32x2 bs32x1 bs64x2 bs64x1 bs128x1 (0.2 s)
+[12:26:26]   n0o0                             regs 255 frame  3704 sass   181 KiB shared/run    0 cells bs256x1 bs32x8 bs32x7 bs32x6 bs32x1 bs64x4 bs64x3 bs64x2 bs64x1 bs128x2 bs128x1 (0.2 s)
+[12:26:26]   n1o0                             regs 255 frame  3560 sass   831 KiB shared/run    0 cells bs256x1 bs32x8 bs32x7 bs32x6 bs32x1 bs64x4 bs64x3 bs64x2 bs64x1 bs128x2 bs128x1 (0.2 s)
+[12:26:26]   n0o0+stage_increment=shared      regs 255 frame  2960 sass   182 KiB shared/run  420 cells bs32x4 bs32x3 bs32x2 bs32x1 bs64x2 bs64x1 bs128x1 (0.2 s)
+[12:26:27]   allrolled                        regs 255 frame  3320 sass   142 KiB shared/run    0 cells bs256x1 bs32x8 bs32x7 bs32x6 bs32x1 bs64x4 bs64x3 bs64x2 bs64x1 bs128x2 bs128x1 (0.3 s)
+[12:26:34]   round 1 tierA                            bs256x1   warm    296.79 timed    294.99    292.92    286.88 ms
+[12:26:35]   round 1 tierA                            bs32x8    warm    283.78 timed    288.23    288.68    288.65 ms
+[12:26:36]   round 1 tierA                            bs32x7    warm    298.15 timed    303.21    305.35    298.57 ms
+[12:26:38]   round 1 tierA                            bs32x6    warm    309.45 timed    303.86    312.30    304.79 ms
+[12:26:40]   round 1 tierA                            bs32x1    warm    519.93 timed    500.81    506.37    494.98 ms
+[12:26:41]   round 1 tierA                            bs64x4    warm    281.78 timed    283.69    286.53    284.96 ms
+[12:26:42]   round 1 tierA                            bs64x3    warm    311.51 timed    309.35    314.55    310.16 ms
+[12:26:43]   round 1 tierA                            bs64x2    warm    360.82 timed    356.30    351.70    353.75 ms
+[12:26:45]   round 1 tierA                            bs64x1    warm    418.89 timed    416.91    426.19    421.84 ms
+[12:26:46]   round 1 tierA                            bs128x2   warm    287.61 timed    284.03    291.86    292.07 ms
+[12:26:48]   round 1 tierA                            bs128x1   warm    356.58 timed    361.59    375.77    359.14 ms
+[12:26:49]   round 1 plain                            bs64x4    warm    304.97 timed    304.39    313.41    310.11 ms
+[12:26:51]   round 1 plain                            bs32x8    warm    314.62 timed    314.00    310.81    312.53 ms
+[12:26:52]   round 1 plain                            bs32x7    warm    332.95 timed    331.82    333.89    340.36 ms
+[12:26:53]   round 1 plain                            bs32x6    warm    345.83 timed    335.58    332.20    328.21 ms
+[12:26:56]   round 1 plain                            bs32x1    warm    563.37 timed    559.99    552.16    558.43 ms
+[12:26:57]   round 1 plain                            bs64x3    warm    328.29 timed    330.32    330.61    340.34 ms
+[12:26:58]   round 1 plain                            bs64x2    warm    380.74 timed    383.08    375.21    377.00 ms
+[12:27:00]   round 1 plain                            bs64x1    warm    483.24 timed    476.84    495.33    492.12 ms
+[12:27:02]   round 1 plain                            bs128x2   warm    308.46 timed    307.25    323.15    312.11 ms
+[12:27:03]   round 1 plain                            bs128x1   warm    369.44 timed    373.39    368.00    358.42 ms
+[12:27:04]   round 1 plain                            bs256x1   warm    302.69 timed    306.20    309.23    307.84 ms
+[12:27:06]   round 1 opt:newton_exits=1 stage_increment=shared bs32x4    warm    382.85 timed    375.11    387.57    393.21 ms
+[12:27:08]   round 1 opt:newton_exits=1 stage_increment=shared bs32x3    warm    439.29 timed    435.97    433.91    426.18 ms
+[12:27:10]   round 1 opt:newton_exits=1 stage_increment=shared bs32x2    warm    471.45 timed    471.16    469.55    475.97 ms
+[12:27:12]   round 1 opt:newton_exits=1 stage_increment=shared bs32x1    warm    561.73 timed    569.03    566.12    572.47 ms
+[12:27:14]   round 1 opt:newton_exits=1 stage_increment=shared bs64x2    warm    380.82 timed    376.40    374.06    380.07 ms
+[12:27:16]   round 1 opt:newton_exits=1 stage_increment=shared bs64x1    warm    460.03 timed    461.18    461.93    473.24 ms
+[12:27:17]   round 1 opt:newton_exits=1 stage_increment=shared bs128x1   warm    358.65 timed    355.81    356.53    364.33 ms
+[12:27:19]   round 1 opt:newton_exits=0 stage_increment=shared bs32x4    warm    312.20 timed    310.55    310.48    311.13 ms
+[12:27:20]   round 1 opt:newton_exits=0 stage_increment=shared bs32x3    warm    352.17 timed    349.15    354.29    355.97 ms
+[12:27:22]   round 1 opt:newton_exits=0 stage_increment=shared bs32x2    warm    398.91 timed    391.53    394.86    392.12 ms
+[12:27:23]   round 1 opt:newton_exits=0 stage_increment=shared bs32x1    warm    488.65 timed    476.61    487.14    478.67 ms
+[12:27:25]   round 1 opt:newton_exits=0 stage_increment=shared bs64x2    warm    314.13 timed    313.53    313.76    318.74 ms
+[12:27:26]   round 1 opt:newton_exits=0 stage_increment=shared bs64x1    warm    387.59 timed    386.48    378.00    385.78 ms
+[12:27:28]   round 1 opt:newton_exits=0 stage_increment=shared bs128x1   warm    318.28 timed    314.43    312.61    313.03 ms
+[12:27:29]   round 1 n0o0                             bs256x1   warm    280.94 timed    282.67    283.28    286.67 ms
+[12:27:30]   round 1 n0o0                             bs32x8    warm    292.41 timed    292.53    284.21    286.75 ms
+[12:27:31]   round 1 n0o0                             bs32x7    warm    303.62 timed    296.92    300.97    301.83 ms
+[12:27:33]   round 1 n0o0                             bs32x6    warm    301.53 timed    299.37    297.02    298.97 ms
+[12:27:34]   round 1 n0o0                             bs32x1    warm    480.63 timed    485.66    500.54    493.98 ms
+[12:27:36]   round 1 n0o0                             bs64x4    warm    287.41 timed    286.20    287.36    283.07 ms
+[12:27:37]   round 1 n0o0                             bs64x3    warm    296.35 timed    303.41    300.97    303.22 ms
+[12:27:38]   round 1 n0o0                             bs64x2    warm    342.19 timed    338.58    339.33    330.45 ms
+[12:27:40]   round 1 n0o0                             bs64x1    warm    420.87 timed    417.74    418.22    411.40 ms
+[12:27:41]   round 1 n0o0                             bs128x2   warm    284.84 timed    287.78    281.79    284.32 ms
+[12:27:42]   round 1 n0o0                             bs128x1   warm    335.92 timed    341.74    339.06    340.45 ms
+[12:27:44]   round 1 n1o0                             bs256x1   warm    313.04 timed    324.06    310.08    309.58 ms
+[12:27:45]   round 1 n1o0                             bs32x8    warm    315.22 timed    313.76    320.59    312.58 ms
+[12:27:47]   round 1 n1o0                             bs32x7    warm    337.81 timed    336.86    340.60    342.03 ms
+[12:27:48]   round 1 n1o0                             bs32x6    warm    345.95 timed    345.72    342.19    358.88 ms
+[12:27:49]   capped n1o0 bs32x1 warm 568.56 ms > 2.0x floor 281.79
+[12:27:50]   round 1 n1o0                             bs64x4    warm    316.79 timed    315.67    316.24    315.15 ms
+[12:27:52]   round 1 n1o0                             bs64x3    warm    347.45 timed    350.38    342.57    348.75 ms
+[12:27:53]   round 1 n1o0                             bs64x2    warm    399.88 timed    397.94    403.73    394.92 ms
+[12:27:55]   round 1 n1o0                             bs64x1    warm    493.46 timed    490.50    503.18    493.83 ms
+[12:27:57]   round 1 n1o0                             bs128x2   warm    312.90 timed    317.34    312.73    313.07 ms
+[12:27:58]   round 1 n1o0                             bs128x1   warm    377.52 timed    394.88    378.99    377.77 ms
+[12:28:00]   round 1 n0o0+stage_increment=shared      bs32x4    warm    308.28 timed    304.58    304.87    313.39 ms
+[12:28:01]   round 1 n0o0+stage_increment=shared      bs32x3    warm    361.30 timed    361.06    357.48    355.60 ms
+[12:28:03]   round 1 n0o0+stage_increment=shared      bs32x2    warm    395.45 timed    405.31    408.89    401.40 ms
+[12:28:05]   round 1 n0o0+stage_increment=shared      bs32x1    warm    471.19 timed    471.37    479.51    465.42 ms
+[12:28:06]   round 1 n0o0+stage_increment=shared      bs64x2    warm    309.65 timed    314.51    314.90    317.93 ms
+[12:28:08]   round 1 n0o0+stage_increment=shared      bs64x1    warm    388.69 timed    393.38    396.40    383.49 ms
+[12:28:09]   round 1 n0o0+stage_increment=shared      bs128x1   warm    307.56 timed    304.73    307.22    310.59 ms
+[12:28:12]   capped allrolled bs256x1 warm 1030.06 ms > 2.0x floor 281.79
+[12:28:14]   capped allrolled bs32x8 warm 1016.14 ms > 2.0x floor 281.79
+[12:28:16]   capped allrolled bs32x7 warm 1153.21 ms > 2.0x floor 281.79
+[12:28:19]   capped allrolled bs32x6 warm 1259.95 ms > 2.0x floor 281.79
+[12:28:24]   capped allrolled bs32x1 warm 2639.98 ms > 2.0x floor 281.79
+[12:28:26]   capped allrolled bs64x4 warm 1006.15 ms > 2.0x floor 281.79
+[12:28:29]   capped allrolled bs64x3 warm 1269.53 ms > 2.0x floor 281.79
+[12:28:32]   capped allrolled bs64x2 warm 1549.39 ms > 2.0x floor 281.79
+[12:28:36]   capped allrolled bs64x1 warm 1910.41 ms > 2.0x floor 281.79
+[12:28:38]   capped allrolled bs128x2 warm 1003.27 ms > 2.0x floor 281.79
+[12:28:41]   capped allrolled bs128x1 warm 1565.86 ms > 2.0x floor 281.79
+[12:28:42]   round 2 n0o0+stage_increment=shared      bs128x1   warm    309.30 timed    310.14    308.64    315.47 ms
+[12:28:44]   round 2 n0o0+stage_increment=shared      bs64x1    warm    382.52 timed    392.95    389.08    394.10 ms
+[12:28:45]   round 2 n0o0+stage_increment=shared      bs64x2    warm    325.90 timed    314.55    311.09    308.54 ms
+[12:28:47]   round 2 n0o0+stage_increment=shared      bs32x1    warm    474.32 timed    464.11    463.57    475.32 ms
+[12:28:49]   round 2 n0o0+stage_increment=shared      bs32x2    warm    401.06 timed    395.53    392.94    405.70 ms
+[12:28:50]   round 2 n0o0+stage_increment=shared      bs32x3    warm    365.25 timed    365.90    368.72    357.26 ms
+[12:28:51]   round 2 n0o0+stage_increment=shared      bs32x4    warm    309.63 timed    305.25    310.73    307.38 ms
+[12:28:53]   round 2 n1o0                             bs128x1   warm    375.19 timed    376.80    376.15    388.42 ms
+[12:28:54]   round 2 n1o0                             bs128x2   warm    320.65 timed    311.68    309.73    310.17 ms
+[12:28:56]   round 2 n1o0                             bs64x1    warm    496.86 timed    499.39    499.46    489.79 ms
+[12:28:58]   round 2 n1o0                             bs64x2    warm    391.30 timed    389.52    399.35    410.48 ms
+[12:28:59]   round 2 n1o0                             bs64x3    warm    355.60 timed    350.84    353.30    354.23 ms
+[12:29:01]   round 2 n1o0                             bs64x4    warm    317.58 timed    315.80    313.49    315.81 ms
+[12:29:02]   round 2 n1o0                             bs32x6    warm    346.81 timed    345.60    351.89    345.68 ms
+[12:29:04]   round 2 n1o0                             bs32x7    warm    339.67 timed    341.01    335.21    342.57 ms
+[12:29:05]   round 2 n1o0                             bs32x8    warm    310.34 timed    310.38    311.60    313.92 ms
+[12:29:06]   round 2 n1o0                             bs256x1   warm    314.60 timed    309.56    307.42    302.54 ms
+[12:29:08]   round 2 n0o0                             bs128x1   warm    333.43 timed    336.11    348.30    342.81 ms
+[12:29:09]   round 2 n0o0                             bs128x2   warm    286.34 timed    282.75    289.35    281.41 ms
+[12:29:11]   round 2 n0o0                             bs64x1    warm    407.82 timed    408.52    411.43    416.16 ms
+[12:29:12]   round 2 n0o0                             bs64x2    warm    337.35 timed    340.50    332.49    335.13 ms
+[12:29:13]   round 2 n0o0                             bs64x3    warm    323.26 timed    302.29    297.43    300.00 ms
+[12:29:14]   round 2 n0o0                             bs64x4    warm    282.36 timed    282.02    283.91    286.60 ms
+[12:29:16]   round 2 n0o0                             bs32x1    warm    485.86 timed    484.89    491.33    486.58 ms
+[12:29:17]   round 2 n0o0                             bs32x6    warm    299.15 timed    303.12    299.06    295.64 ms
+[12:29:19]   round 2 n0o0                             bs32x7    warm    296.56 timed    307.85    300.34    303.85 ms
+[12:29:20]   round 2 n0o0                             bs32x8    warm    284.47 timed    279.90    279.91    280.86 ms
+[12:29:21]   round 2 n0o0                             bs256x1   warm    285.59 timed    283.50    285.95    287.10 ms
+[12:29:22]   round 2 opt:newton_exits=0 stage_increment=shared bs128x1   warm    331.64 timed    311.17    310.12    316.09 ms
+[12:29:24]   round 2 opt:newton_exits=0 stage_increment=shared bs64x1    warm    386.50 timed    381.91    390.38    384.84 ms
+[12:29:25]   round 2 opt:newton_exits=0 stage_increment=shared bs64x2    warm    318.44 timed    315.89    307.84    311.93 ms
+[12:29:27]   round 2 opt:newton_exits=0 stage_increment=shared bs32x1    warm    471.52 timed    488.53    477.90    484.21 ms
+[12:29:29]   round 2 opt:newton_exits=0 stage_increment=shared bs32x2    warm    395.37 timed    397.60    390.72    395.92 ms
+[12:29:30]   round 2 opt:newton_exits=0 stage_increment=shared bs32x3    warm    344.66 timed    347.81    345.37    353.56 ms
+[12:29:31]   round 2 opt:newton_exits=0 stage_increment=shared bs32x4    warm    316.16 timed    313.34    316.08    310.23 ms
+[12:29:33]   round 2 opt:newton_exits=1 stage_increment=shared bs128x1   warm    353.96 timed    355.58    356.72    358.98 ms
+[12:29:35]   round 2 opt:newton_exits=1 stage_increment=shared bs64x1    warm    460.71 timed    451.46    460.49    458.09 ms
+[12:29:37]   round 2 opt:newton_exits=1 stage_increment=shared bs64x2    warm    387.70 timed    378.83    375.73    374.13 ms
+[12:29:39]   round 2 opt:newton_exits=1 stage_increment=shared bs32x1    warm    562.04 timed    564.93    568.54    562.24 ms
+[12:29:41]   round 2 opt:newton_exits=1 stage_increment=shared bs32x2    warm    472.82 timed    477.52    489.90    471.13 ms
+[12:29:43]   round 2 opt:newton_exits=1 stage_increment=shared bs32x3    warm    427.52 timed    434.17    445.19    437.87 ms
+[12:29:44]   round 2 opt:newton_exits=1 stage_increment=shared bs32x4    warm    380.76 timed    383.66    382.26    383.13 ms
+[12:29:46]   round 2 plain                            bs256x1   warm    310.29 timed    304.15    308.04    308.89 ms
+[12:29:47]   round 2 plain                            bs128x1   warm    370.97 timed    369.25    364.87    364.37 ms
+[12:29:48]   round 2 plain                            bs128x2   warm    307.08 timed    303.06    308.40    315.04 ms
+[12:29:50]   round 2 plain                            bs64x1    warm    488.77 timed    489.49    488.38    484.07 ms
+[12:29:52]   round 2 plain                            bs64x2    warm    367.94 timed    367.32    370.02    369.05 ms
+[12:29:53]   round 2 plain                            bs64x3    warm    326.35 timed    330.62    329.24    323.64 ms
+[12:29:55]   round 2 plain                            bs32x1    warm    549.34 timed    580.75    565.83    566.68 ms
+[12:29:57]   round 2 plain                            bs32x6    warm    335.21 timed    333.36    328.95    332.14 ms
+[12:29:58]   round 2 plain                            bs32x7    warm    323.03 timed    325.72    330.15    333.91 ms
+[12:29:59]   round 2 plain                            bs32x8    warm    313.65 timed    314.14    311.23    313.36 ms
+[12:30:01]   round 2 plain                            bs64x4    warm    312.31 timed    312.71    313.70    308.69 ms
+[12:30:02]   round 2 tierA                            bs128x1   warm    354.36 timed    354.28    359.79    357.33 ms
+[12:30:03]   round 2 tierA                            bs128x2   warm    280.13 timed    283.49    290.84    299.69 ms
+[12:30:05]   round 2 tierA                            bs64x1    warm    432.35 timed    427.30    429.19    414.66 ms
+[12:30:07]   round 2 tierA                            bs64x2    warm    356.04 timed    356.80    356.96    353.24 ms
+[12:30:08]   round 2 tierA                            bs64x3    warm    312.79 timed    310.82    314.15    312.49 ms
+[12:30:09]   round 2 tierA                            bs64x4    warm    298.60 timed    289.95    282.42    287.37 ms
+[12:30:11]   round 2 tierA                            bs32x1    warm    497.79 timed    509.10    496.10    492.37 ms
+[12:30:12]   round 2 tierA                            bs32x6    warm    305.38 timed    300.62    305.27    318.65 ms
+[12:30:13]   round 2 tierA                            bs32x7    warm    303.76 timed    298.02    306.57    298.15 ms
+[12:30:15]   round 2 tierA                            bs32x8    warm    283.73 timed    282.12    289.46    290.03 ms
+[12:30:16]   round 2 tierA                            bs256x1   warm    292.27 timed    286.83    282.96    284.04 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs256x1    blk/SM  1 best   282.965 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs32x8     blk/SM  8 best   282.125 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs32x7     blk/SM  7 best   298.018 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs32x6     blk/SM  6 best   300.622 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs32x1     blk/SM  1 best   492.374 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs64x4     blk/SM  4 best   282.417 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs64x3     blk/SM  3 best   309.350 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs64x2     blk/SM  2 best   351.702 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs64x1     blk/SM  1 best   414.661 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs128x2    blk/SM  2 best   283.494 ms
+[12:30:16] fabbri/radau_iia_5 tierA                            bs128x1    blk/SM  1 best   354.281 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs64x4     blk/SM  4 best   304.394 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs32x8     blk/SM  8 best   310.807 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs32x7     blk/SM  7 best   325.724 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs32x6     blk/SM  6 best   328.212 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs32x1     blk/SM  1 best   552.156 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs64x3     blk/SM  3 best   323.643 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs64x2     blk/SM  2 best   367.322 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs64x1     blk/SM  1 best   476.839 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs128x2    blk/SM  2 best   303.064 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs128x1    blk/SM  1 best   358.419 ms
+[12:30:16] fabbri/radau_iia_5 plain                            bs256x1    blk/SM  1 best   304.153 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared bs32x4     blk/SM  4 best   375.107 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared bs32x3     blk/SM  3 best   426.178 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared bs32x2     blk/SM  2 best   469.549 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared bs32x1     blk/SM  1 best   562.242 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared bs64x2     blk/SM  2 best   374.055 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared bs64x1     blk/SM  1 best   451.458 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=1 stage_increment=shared bs128x1    blk/SM  1 best   355.583 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared bs32x4     blk/SM  4 best   310.232 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared bs32x3     blk/SM  3 best   345.371 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared bs32x2     blk/SM  2 best   390.718 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared bs32x1     blk/SM  1 best   476.612 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared bs64x2     blk/SM  2 best   307.843 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared bs64x1     blk/SM  1 best   378.003 ms
+[12:30:16] fabbri/radau_iia_5 opt:newton_exits=0 stage_increment=shared bs128x1    blk/SM  1 best   310.122 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs256x1    blk/SM  1 best   282.669 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs32x8     blk/SM  8 best   279.901 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs32x7     blk/SM  7 best   296.922 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs32x6     blk/SM  6 best   295.638 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs32x1     blk/SM  1 best   484.886 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs64x4     blk/SM  4 best   282.023 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs64x3     blk/SM  3 best   297.431 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs64x2     blk/SM  2 best   330.450 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs64x1     blk/SM  1 best   408.523 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs128x2    blk/SM  2 best   281.410 ms
+[12:30:16] fabbri/radau_iia_5 n0o0                             bs128x1    blk/SM  1 best   336.106 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs256x1    blk/SM  1 best   302.538 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs32x8     blk/SM  8 best   310.383 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs32x7     blk/SM  7 best   335.208 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs32x6     blk/SM  6 best   342.187 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs32x1     blk/SM  1 best   568.558 ms capped
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs64x4     blk/SM  4 best   313.489 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs64x3     blk/SM  3 best   342.567 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs64x2     blk/SM  2 best   389.523 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs64x1     blk/SM  1 best   489.791 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs128x2    blk/SM  2 best   309.730 ms
+[12:30:16] fabbri/radau_iia_5 n1o0                             bs128x1    blk/SM  1 best   376.146 ms
+[12:30:16] fabbri/radau_iia_5 n0o0+stage_increment=shared      bs32x4     blk/SM  4 best   304.577 ms
+[12:30:16] fabbri/radau_iia_5 n0o0+stage_increment=shared      bs32x3     blk/SM  3 best   355.602 ms
+[12:30:16] fabbri/radau_iia_5 n0o0+stage_increment=shared      bs32x2     blk/SM  2 best   392.940 ms
+[12:30:16] fabbri/radau_iia_5 n0o0+stage_increment=shared      bs32x1     blk/SM  1 best   463.573 ms
+[12:30:16] fabbri/radau_iia_5 n0o0+stage_increment=shared      bs64x2     blk/SM  2 best   308.542 ms
+[12:30:16] fabbri/radau_iia_5 n0o0+stage_increment=shared      bs64x1     blk/SM  1 best   383.487 ms
+[12:30:16] fabbri/radau_iia_5 n0o0+stage_increment=shared      bs128x1    blk/SM  1 best   304.727 ms
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs256x1    blk/SM  1 best  1030.059 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs32x8     blk/SM  8 best  1016.137 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs32x7     blk/SM  7 best  1153.210 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs32x6     blk/SM  6 best  1259.951 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs32x1     blk/SM  1 best  2639.984 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs64x4     blk/SM  4 best  1006.148 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs64x3     blk/SM  3 best  1269.527 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs64x2     blk/SM  2 best  1549.394 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs64x1     blk/SM  1 best  1910.408 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs128x2    blk/SM  2 best  1003.266 ms capped
+[12:30:16] fabbri/radau_iia_5 allrolled                        bs128x1    blk/SM  1 best  1565.860 ms capped
+[12:30:16] === fabbri/radau_iia_5 done in 231.9 s
