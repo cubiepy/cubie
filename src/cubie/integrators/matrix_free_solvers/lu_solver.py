@@ -25,12 +25,12 @@ See Also
 
 from typing import Any, Callable, Dict, Optional
 
-from attrs import field, frozen, validators
+from attrs import field, frozen
 
 from cubie._utils import (
-    PrecisionDType,
+    device_function_field,
     getype_validator,
-    is_device_validator,
+    PrecisionDType,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import cuda, int32
@@ -53,11 +53,7 @@ class LUSolverConfig(LinearSolverBaseConfig):
         Factor buffer length; zero for substitution-only variants.
     """
 
-    lu_solve_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    lu_solve_function: Optional[Callable] = device_function_field()
     lu_nnz: int = field(
         default=0, validator=getype_validator(int, 0)
     )

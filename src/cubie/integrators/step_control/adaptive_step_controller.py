@@ -29,10 +29,11 @@ from numpy import sqrt
 from attrs import field, frozen
 
 from cubie._utils import (
-    PrecisionDType,
     clamp_factory,
+    device_function_field,
     getype_validator,
     inrangetype_validator,
+    PrecisionDType,
 )
 from cubie.integrators.norms import TwoRefMaskedScaledNorm
 from cubie.integrators.step_control.base_step_controller import (
@@ -117,10 +118,7 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         default=1.0,
         validator=getype_validator(float, 1.0),
     )
-    norm_device_function: Optional[Callable] = field(
-        default=None,
-        eq=False,
-    )
+    norm_device_function: Optional[Callable] = device_function_field()
 
     def _resolve_gain(self, gain) -> float:
         """Return a gain as a precision float at the algorithm order."""

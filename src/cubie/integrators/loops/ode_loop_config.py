@@ -33,8 +33,8 @@ from cubie.CUDAFactory import CUDAFactoryConfig
 from warnings import warn
 
 from cubie._utils import (
+    device_function_field,
     getype_validator,
-    is_device_validator,
     opt_gttype_validator,
 )
 from cubie.outputhandling.output_config import OutputCompileFlags
@@ -199,46 +199,14 @@ class ODELoopConfig(CUDAFactoryConfig):
         default=False, validator=validators.instance_of(bool)
     )
 
-    save_state_fn: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    update_summaries_fn: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    save_summaries_fn: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    step_controller_fn: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    step_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    evaluate_driver_at_t: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    evaluate_observables: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    initialise_state_fn: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    save_state_fn: Optional[Callable] = device_function_field()
+    update_summaries_fn: Optional[Callable] = device_function_field()
+    save_summaries_fn: Optional[Callable] = device_function_field()
+    step_controller_fn: Optional[Callable] = device_function_field()
+    step_function: Optional[Callable] = device_function_field()
+    evaluate_driver_at_t: Optional[Callable] = device_function_field()
+    evaluate_observables: Optional[Callable] = device_function_field()
+    initialise_state_fn: Optional[Callable] = device_function_field()
     _dt: Optional[float] = field(
         default=0.01,
         validator=opt_gttype_validator(float, 0),

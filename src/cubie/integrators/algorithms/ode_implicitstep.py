@@ -31,8 +31,8 @@ from attrs import field, frozen, validators
 from numpy import ndarray
 
 from cubie._utils import (
+    device_function_field,
     inrangetype_validator,
-    is_device_validator,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.odesystems.solver_helpers import OperationCounts
@@ -171,21 +171,9 @@ class ImplicitStepConfig(BaseStepConfig):
     cached_auxiliaries_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    solver_function = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    prepare_jacobian_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    error_solver_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    solver_function: Optional[Callable] = device_function_field()
+    prepare_jacobian_function: Optional[Callable] = device_function_field()
+    error_solver_function: Optional[Callable] = device_function_field()
     helper_operation_counts: OperationCounts = field(
         factory=OperationCounts,
         validator=validators.instance_of(OperationCounts),

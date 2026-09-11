@@ -44,9 +44,9 @@ from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import (
-    PrecisionDType,
     build_config,
-    is_device_validator,
+    device_function_field,
+    PrecisionDType,
 )
 from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -151,11 +151,7 @@ class DIRKStepConfig(ImplicitStepConfig):
     attempt_dense_prediction: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
-    predictor_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    predictor_function: Optional[Callable] = device_function_field()
     stage_increment_location: str = field(
         default='local',
         validator=validators.in_(['local', 'shared'])
@@ -180,16 +176,8 @@ class DIRKStepConfig(ImplicitStepConfig):
         default='local',
         validator=validators.in_(['local', 'shared'])
     )
-    apply_mass_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    evaluate_inv_mass_f_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    apply_mass_function: Optional[Callable] = device_function_field()
+    evaluate_inv_mass_f_function: Optional[Callable] = device_function_field()
 
 
 class DIRKStep(ODEImplicitStep):

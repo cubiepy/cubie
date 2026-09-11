@@ -42,10 +42,11 @@ from numpy import int32 as np_int32
 from numpy import ndarray
 
 from cubie._utils import (
-    PrecisionDType,
     build_config,
+    device_function_field,
     inrangetype_validator,
     is_device_validator,
+    PrecisionDType,
 )
 from cubie.integrators.matrix_free_solvers.base_solver import (
     MatrixFreeSolverConfig,
@@ -109,16 +110,8 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         metadata={"prefixed": True},
     )
     use_cached_auxiliaries: bool = field(default=False)
-    residual_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    linear_solver_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    residual_function: Optional[Callable] = device_function_field()
+    linear_solver_function: Optional[Callable] = device_function_field()
     delta_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )

@@ -45,9 +45,9 @@ from cubie.cuda_simsafe import unroll_if
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 from cubie._utils import (
-    PrecisionDType,
     build_config,
-    is_device_validator,
+    device_function_field,
+    PrecisionDType,
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
@@ -135,11 +135,7 @@ class FIRKStepConfig(ImplicitStepConfig):
     attempt_dense_prediction: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
-    predictor_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    predictor_function: Optional[Callable] = device_function_field()
     stage_increment_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -152,11 +148,7 @@ class FIRKStepConfig(ImplicitStepConfig):
     stage_state_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    apply_mass_function: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    apply_mass_function: Optional[Callable] = device_function_field()
 
     @property
     def stage_count(self) -> int:

@@ -54,11 +54,12 @@ from numpy import (
 )
 
 from cubie._utils import (
-    PrecisionDType,
+    device_function_field,
     getype_validator,
     is_device_validator,
     opt_getype_validator,
     precision_converter,
+    PrecisionDType,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import (
@@ -663,21 +664,9 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
     is_adaptive: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
-    evaluate_f: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    evaluate_observables: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
-    evaluate_driver_at_t: Optional[Callable] = field(
-        default=None,
-        validator=validators.optional(is_device_validator),
-        eq=False,
-    )
+    evaluate_f: Optional[Callable] = device_function_field()
+    evaluate_observables: Optional[Callable] = device_function_field()
+    evaluate_driver_at_t: Optional[Callable] = device_function_field()
     get_solver_helper_fn: Optional[Callable] = field(
         default=None,
         validator=validators.optional(validators.is_callable()),

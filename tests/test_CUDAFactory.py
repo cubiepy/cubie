@@ -5,6 +5,7 @@ import pytest
 import attrs
 from attrs.exceptions import FrozenInstanceError
 
+from cubie._utils import device_function_field
 from cubie.CUDAFactory import (
     CUDAFactory,
     CUDADispatcherCache,
@@ -17,6 +18,7 @@ from cubie.CUDAFactory import (
     attribute_is_hashable,
 )
 from cubie.buffer_registry import buffer_registry
+from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 from numpy import dtype as np_dtype
@@ -939,3 +941,39 @@ def test_mi_factory_instance_label_property():
 
     f = _F(instance_label="krylov")
     assert f.instance_label == "krylov"
+
+
+def test_device_function_field_compares_by_identity_and_is_unhashed():
+    """A device_function_field changes only by identity and never hashes."""
+
+    @attrs.frozen
+    class _Config(_CubieConfigBase):
+        value: int = attrs.field(default=1)
+        handle: object = device_function_field()
+
+    @cuda.jit(device=True)
+    def first(x):
+        return x
+
+    @cuda.jit(device=True)
+    def second(x):
+        return x
+
+    config = _Config(value=3, handle=first)
+    replacement, _, changed = config.update(handle=first)
+    assert replacement is config
+    assert changed == set()
+    replacement, _, changed = config.update(handle=second)
+    assert changed == {"handle"}
+    assert replacement.handle is second
+    assert replacement.values_hash == config.values_hash
+    assert attrs.fields(_Config).handle.metadata["device_function"] is True
+
+
+def test_products_returns_the_cache_fields(system):
+    """products maps every cache field to the build's value."""
+    products = system.products
+    assert products["dxdt"] is system.evaluate_f
+    assert set(products) == {
+        fld.name for fld in attrs.fields(type(system._cache))
+    }

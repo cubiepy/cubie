@@ -26,8 +26,8 @@ from attrs import validators as val
 
 from cubie._env import kernel_cache_dir_default, max_cache_entries_default
 from cubie._utils import (
+    device_function_field,
     getype_validator,
-    is_device_validator,
 )
 from cubie.CUDAFactory import CUDAFactoryConfig, _CubieConfigBase
 from cubie.outputhandling.output_config import OutputCompileFlags
@@ -232,11 +232,7 @@ class BatchSolverConfig(CUDAFactoryConfig):
         Threads per block for every launch.
     """
 
-    loop_fn: Optional[Callable] = attrs.field(
-        default=None,
-        validator=attrs.validators.optional(is_device_validator),
-        eq=False,
-    )
+    loop_fn: Optional[Callable] = device_function_field()
     compile_flags: Optional[OutputCompileFlags] = attrs.field(
         factory=OutputCompileFlags,
         validator=attrs.validators.optional(

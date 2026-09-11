@@ -134,8 +134,12 @@ back here. CUDA-authoring **optimisation** conventions are in
   (tuples, not lists).
 - A system runs at **one precision** (`ALLOWED_PRECISIONS` = float16/32/64); float
   members are returned cast to it via `self.precision(...)`.
-- **`eq=False`** marks fields excluded from config equality/hashing (device-fn
-  handles, callables; array fields use a custom `eq`) — a replaced value is still
+- **Device-function fields are declared with `device_function_field()`** (`_utils`):
+  `metadata={"device_function": True}`, compared by identity for invalidation,
+  excluded from hashing. `CUDAFactory.products` returns a build's cache fields by
+  name, building first if needed.
+- **`eq=False`** marks fields excluded from config equality/hashing (other
+  callables; array fields use a custom `eq`) — a replaced value is still
   a change for invalidation. Plain `dict`-typed fields are rejected at
   construction — wrap compile-critical data in its own attrs class. Every
   eq-participating value must be canonically serializable (see `_serialize.py`);
