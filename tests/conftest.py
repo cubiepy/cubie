@@ -1046,7 +1046,7 @@ def output_functions_mutable(output_settings, system, precision):
 def solverkernel(
     solver_settings,
     system,
-    driver_array,
+    driver_settings,
     step_controller_settings,
     algorithm_settings,
     output_settings,
@@ -1054,22 +1054,13 @@ def solverkernel(
     loop_settings,
     unroll_settings,
 ):
-    """Top-level composite fixture for BatchSolverKernel.
-
-    Exception to single-fixture rule: Requests both system and driver_array
-    as these are the two fundamental base CUDAFactory fixtures. All other
-    dependencies are settings fixtures.
-    """
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
-    driver_del_t = _get_driver_del_t(driver_array)
+    """Top-level composite fixture for BatchSolverKernel."""
     # Add system functions to algorithm_settings for BatchSolverKernel
     enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
-        algorithm_settings, system, driver_array
+        algorithm_settings, system, None
     )
-    return BatchSolverKernel(
+    kernel = BatchSolverKernel(
         system,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
         unroll_settings=dict(unroll_settings),
         step_control_settings=dict(step_controller_settings),
@@ -1078,13 +1069,16 @@ def solverkernel(
         memory_settings=dict(memory_settings),
         loop_settings=dict(loop_settings),
     )
+    if driver_settings is not None:
+        kernel.configure_drivers(driver_settings)
+    return kernel
 
 
 @pytest.fixture(scope="function")
 def solverkernel_mutable(
     solver_settings,
     system,
-    driver_array,
+    driver_settings,
     step_controller_settings,
     algorithm_settings,
     output_settings,
@@ -1092,23 +1086,14 @@ def solverkernel_mutable(
     loop_settings,
     unroll_settings,
 ):
-    """Function-scoped composite fixture for BatchSolverKernel.
-
-    Exception to single-fixture rule: Requests both system and driver_array
-    as these are the two fundamental base CUDAFactory fixtures. All other
-    dependencies are settings fixtures.
-    """
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
-    driver_del_t = _get_driver_del_t(driver_array)
+    """Function-scoped composite fixture for BatchSolverKernel."""
     # Add system functions to algorithm_settings for BatchSolverKernel
     enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
-        algorithm_settings, system, driver_array
+        algorithm_settings, system, None
     )
     snapshot = system.compile_settings
-    yield BatchSolverKernel(
+    kernel = BatchSolverKernel(
         system,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        driver_del_t=driver_del_t,
         lineinfo=solver_settings["lineinfo"],
         unroll_settings=dict(unroll_settings),
         step_control_settings=dict(step_controller_settings),
@@ -1117,6 +1102,9 @@ def solverkernel_mutable(
         memory_settings=dict(memory_settings),
         loop_settings=dict(loop_settings),
     )
+    if driver_settings is not None:
+        kernel.configure_drivers(driver_settings)
+    yield kernel
     _restore_system_flags(system, snapshot)
 
 

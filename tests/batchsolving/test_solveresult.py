@@ -86,7 +86,6 @@ def solver_with_arrays(
     batch_input_arrays,
     solver_settings,
     precision,
-    driver_array,
 ):
     """Solver with actual arrays computed - ready for SolveResult instantiation
     """
@@ -95,7 +94,6 @@ def solver_with_arrays(
         duration=solver_settings["duration"],
         params=params,
         inits=inits,
-        driver_coefficients=driver_array.coefficients,
         blocksize=solver_settings["blocksize"],
         warmup=solver_settings["warmup"],
     )
@@ -486,15 +484,8 @@ def error_injection_solver(system):
 
 
 @pytest.fixture()
-def solved_batch_solver_errorcode(error_injection_solver):
-    """Provide a freshly solved 3-run solver with run 1 marked failed.
-
-    The solve is repeated per test because NaN masking mutates the
-    owned buffers in place: each test needs an unmasked solve. The
-    solve's loan is reclaimed so the error code can be injected into
-    the recovered status-codes slot before the test builds its
-    result.
-    """
+def solved_batch_solver_errorcode(error_injection_solver, driver_settings):
+    """Fresh 3-run solve per test, with run 1 marked failed in its slot."""
     solver = error_injection_solver
 
     solver.solve(
@@ -508,6 +499,7 @@ def solved_batch_solver_errorcode(error_injection_solver):
             "p1": [0.1, 0.2, 0.3],
             "p2": [0.1, 0.2, 0.3],
         },
+        drivers=driver_settings,
         duration=0.1,
     )
     outputs = solver.kernel.output_arrays
@@ -668,7 +660,7 @@ class TestNaNProcessing:
 
 
 @pytest.fixture(scope="session")
-def solved_summary_only_solver(system):
+def solved_summary_only_solver(system, driver_settings):
     """Solver run with a summary-only, fusing output configuration.
 
     No state or observable output is requested, and the requested
@@ -696,6 +688,7 @@ def solved_summary_only_solver(system):
             "p1": [0.1, 0.2, 0.3],
             "p2": [0.1, 0.2, 0.3],
         },
+        drivers=driver_settings,
         duration=0.1,
     )
     return solver

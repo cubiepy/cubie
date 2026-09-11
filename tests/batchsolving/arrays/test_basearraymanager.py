@@ -584,13 +584,26 @@ class TestBaseArrayManager:
         np.testing.assert_array_equal(attached, [4, 5, 6])
 
     def test_update_host_array_zero_shape(self, test_arrmgr):
-        """Test update_host_array when new array has zero in shape"""
+        """A zero-size input is attached as given and queued."""
         current = np.array([[[1, 2], [3, 4]], [[1, 2], [3, 4]]])
-        new = np.zeros((3, 5, 0))
+        new = np.zeros((3, 5, 0), dtype=test_arrmgr.host.arr1.dtype)
 
         test_arrmgr._update_host_array(new, current, "arr1")
 
-        # Should attach a minimal (1,1,1) array when zero in shape
+        assert test_arrmgr.host.arr1.array is new
+        assert test_arrmgr.host.arr1.shape == (3, 5, 0)
+        assert "arr1" in test_arrmgr._needs_reallocation
+        assert "arr1" in test_arrmgr._needs_overwrite
+
+    def test_update_host_array_zero_shape_output_placeholder(
+        self, test_arrmgr
+    ):
+        """A zero-size output slot keeps a unit placeholder buffer."""
+        current = np.array([[[1, 2], [3, 4]], [[1, 2], [3, 4]]])
+        new = np.zeros((3, 5, 0))
+
+        test_arrmgr._update_host_array(new, current, "arr1", shape_only=True)
+
         assert test_arrmgr.host.arr1.shape == (1, 1, 1)
         assert test_arrmgr.host.arr1.dtype == test_arrmgr._precision
         assert "arr1" in test_arrmgr._needs_reallocation
