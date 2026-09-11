@@ -185,5 +185,68 @@ def test_optimize_applies_the_fastest_launch(
     for launch in result.launches:
         assert len(launch.times_ms) >= 1
         if launch.excluded:
-            assert len(launch.times_ms) == 1
+            assert 1 <= len(launch.times_ms) <= 2
+    assert result.runs > 0
+    assert 0.0 < result.duration <= 0.1
     assert "best" in result.summary()
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"mode": "fastest"}, "mode"),
+        ({"waves": 0}, "waves"),
+        ({"target_ms": 5.0}, "target_ms"),
+    ],
+)
+def test_invalid_arguments_are_rejected(solver, kwargs, message):
+    """Bad mode, waves or target_ms raise before anything is built."""
+    with pytest.raises(ValueError, match=message):
+        solver.optimize({}, {}, **kwargs)
+
+
+@pytest.mark.nocudasim
+def test_kernel_is_cached_reports_the_disk_cache(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+    tmp_path,
+):
+    """A fresh cache directory holds nothing until the kernel compiles."""
+    inits, params = solver_mutable.build_grid(
+        simple_initial_values, simple_parameters, grid_type="combinatorial"
+    )
+    solver_mutable.compile(
+        inits, params, drivers=driver_settings, duration=0.1
+    )
+    kernel = solver_mutable.kernel
+    coefficients = solver_mutable.driver_interpolator.coefficients
+    kernel.set_cache_dir(tmp_path / "fresh")
+    assert not kernel.kernel_is_cached(inits, params, coefficients, 0.1)
+    solver_mutable.compile(
+        inits, params, drivers=driver_settings, duration=0.1
+    )
+    assert kernel.kernel_is_cached(inits, params, coefficients, 0.1)
+
+
+def test_copy_registers_memory_like_its_parent(solver_mutable):
+    """A copy joins the auto pool, or reserves what its parent reserved."""
+    assert solver_mutable.settings_dict["mem_proportion"] is None
+    twin = solver_mutable.copy()
+    try:
+        manager = twin.kernel.memory_manager
+        assert manager.manual_proportion(twin.kernel) is None
+    finally:
+        twin.close()
+    solver_mutable.update(mem_proportion=0.2)
+    try:
+        assert solver_mutable.settings_dict["mem_proportion"] == 0.2
+        twin = solver_mutable.copy()
+        try:
+            manager = twin.kernel.memory_manager
+            assert manager.manual_proportion(twin.kernel) == 0.2
+        finally:
+            twin.close()
+    finally:
+        solver_mutable.update(mem_proportion=None)

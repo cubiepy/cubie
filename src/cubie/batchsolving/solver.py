@@ -609,8 +609,12 @@ class Solver:
         return settings
 
     def copy(self) -> "Solver":
-        """Return a solver with these settings on a system copy; no drivers."""
-        return type(self)(self.system.copy(), **self.settings_dict)
+        """Copy: same settings and memory manager, system copy, no drivers."""
+        return type(self)(
+            self.system.copy(),
+            memory_settings={"memory_manager": self.kernel.memory_manager},
+            **self.settings_dict,
+        )
 
     def __enter__(self) -> "Solver":
         """Return self so the solver can be used as a context manager."""
@@ -983,27 +987,25 @@ class Solver:
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
+        mode: str = "auto",
+        waves: int = 5,
+        target_ms: float = 20.0,
     ) -> OptimizeResult:
-        """Find the fastest buffer placement, unrolling and launch.
+        """Time placement, unrolling and launch options; keep the fastest.
 
-        Tries a few configurations of where buffers sit in memory,
-        which loops get unrolled, and how many threads run at once on
-        the GPU, on a copy of this solver, and keeps the fastest.
         Settings you gave, or an earlier ``optimize`` applied, stay
-        fixed unless ``force=True``. Takes a few minutes.
+        fixed unless ``force=True``.
 
         Parameters
         ----------
         initial_values
-            Initial state values per run: a dict of state names to
-            values, or an (n_states, n_runs) array.
+            Dict of state names to values, or an (n_states, n_runs) array.
         parameters
-            Parameter values per run: a dict or an (n_params, n_runs)
-            array.
+            Dict of parameter names to values, or an (n_params, n_runs) array.
         drivers
             Time-domain sampled driver values.
         duration
-            Integration time of each timed solve. Default ``1.0``.
+            Integration time of your solves. Default ``1.0``.
         settling_time
             Warm-up period before outputs are recorded. Default ``0.0``.
         t0
@@ -1016,6 +1018,13 @@ class Solver:
             Print per-launch progress lines. Default ``True``.
         force
             Vary the settings you gave or applied earlier too.
+        mode
+            ``"auto"`` times a sized batch and duration; ``"given"``
+            times your grid at ``duration``.
+        waves
+            Occupancy waves the ``"auto"`` batch fills. Default ``5``.
+        target_ms
+            Kernel milliseconds per ``"auto"`` solve. Default ``20.0``.
 
         Returns
         -------
@@ -1025,12 +1034,7 @@ class Solver:
         Raises
         ------
         ValueError
-            If the system declares drivers but none are supplied.
-
-        Notes
-        -----
-        Use a batch of the size you will run in practice; a warning
-        says how much larger it must be to fill the GPU.
+            Unknown ``mode``, ``waves`` under 1, or ``target_ms`` under 10.
         """
         return run_optimization(
             self,
@@ -1044,6 +1048,9 @@ class Solver:
             apply=apply,
             verbose=verbose,
             force=force,
+            mode=mode,
+            waves=waves,
+            target_ms=target_ms,
         )
 
     def update(
