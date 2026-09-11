@@ -13,6 +13,8 @@ Published Objects
     Resident blocks per SM at a launch geometry.
 :func:`register_limited_threads` / :func:`shared_limited_threads`
     Resident threads per SM under the register or shared-memory limit.
+:func:`shared_keeps_occupancy`
+    Whether a shared buffer keeps the register-limited thread count.
 :func:`max_shared_memory_per_block`
     Opt-in dynamic shared-memory limit per block.
 """
@@ -37,8 +39,8 @@ DEFAULT_INSTRUCTION_CACHE_BYTES = 131072
 MAX_REGISTERS_PER_THREAD = 255
 """Registers a thread can address; register-capped kernels sit here."""
 
-REGISTER_ALLOCATION_UNIT = 8
-"""Registers per thread allocate in units of this size."""
+REGISTER_ALLOCATION_GRANULARITY = 256
+"""Registers are allocated to a warp in units of this size."""
 
 LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes the automatic launch chooses between."""
@@ -154,15 +156,45 @@ def device_hardware() -> DeviceHardware:
     )
 
 
+def register_sub_partitions(hardware: DeviceHardware) -> int:
+    """Return the sub-partitions an SM's register file is split into."""
+    if hardware.compute_capability == (6, 0):
+        return 2
+    return 4
+
+
 def register_limited_threads(
     hardware: DeviceHardware, registers_per_thread: int
 ) -> int:
-    """Return the resident threads per SM the register file allows."""
-    allocated = -(-registers_per_thread // REGISTER_ALLOCATION_UNIT)
-    allocated *= REGISTER_ALLOCATION_UNIT
-    threads = hardware.registers_per_multiprocessor // allocated
-    threads -= threads % hardware.warp_size
+    """Return the resident threads per SM the register file allows.
+
+    Registers are allocated per warp, rounded up to
+    ``REGISTER_ALLOCATION_GRANULARITY``, out of each sub-partition's
+    equal share of the file, as the CUDA occupancy calculator counts
+    them.
+    """
+    unit = REGISTER_ALLOCATION_GRANULARITY
+    warp_registers = registers_per_thread * hardware.warp_size
+    warp_registers = -(-warp_registers // unit) * unit
+    partitions = register_sub_partitions(hardware)
+    warps_per_partition = (
+        hardware.registers_per_multiprocessor // partitions
+    ) // warp_registers
+    threads = warps_per_partition * partitions * hardware.warp_size
     return min(threads, hardware.max_threads_per_multiprocessor)
+
+
+def shared_keeps_occupancy(
+    hardware: DeviceHardware, bytes_per_run: int, fraction: int = 1
+) -> bool:
+    """Return whether a shared buffer of ``bytes_per_run`` per thread
+    still lets at least ``1 / fraction`` of the register-limited threads
+    run at once."""
+    shared_threads = shared_limited_threads(hardware, bytes_per_run)
+    register_threads = register_limited_threads(
+        hardware, MAX_REGISTERS_PER_THREAD
+    )
+    return fraction * shared_threads >= register_threads
 
 
 def shared_limited_threads(
@@ -320,6 +352,7 @@ __all__ = [
     "INSTRUCTION_CACHE_BYTES",
     "LAUNCH_BLOCKSIZES",
     "MAX_REGISTERS_PER_THREAD",
+    "REGISTER_ALLOCATION_GRANULARITY",
     "SASS_INSTRUCTION_BYTES",
     "DeviceHardware",
     "KernelResources",
@@ -329,6 +362,8 @@ __all__ = [
     "kernel_resources",
     "max_shared_memory_per_block",
     "register_limited_threads",
+    "register_sub_partitions",
     "sass_bytes_from_cubin",
+    "shared_keeps_occupancy",
     "shared_limited_threads",
 ]

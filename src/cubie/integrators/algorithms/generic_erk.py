@@ -64,8 +64,7 @@ from cubie._utils import PrecisionDType, build_config
 from cubie.backend.utils import (
     MAX_REGISTERS_PER_THREAD,
     device_hardware,
-    register_limited_threads,
-    shared_limited_threads,
+    shared_keeps_occupancy,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import all_sync, activemask
@@ -607,13 +606,10 @@ class ERKStep(ODEExplicitStep):
             self.tableau.accumulates_output
             and n_states * self.stage_count > MAX_REGISTERS_PER_THREAD
         ):
-            hardware = device_hardware()
             itemsize = np_dtype(self.precision).itemsize
             # One element of slack covers the launch's alignment pad.
             bytes_per_run = (n_states + 1) * itemsize
-            shared = shared_limited_threads(
-                hardware, bytes_per_run
-            ) >= register_limited_threads(hardware, MAX_REGISTERS_PER_THREAD)
+            shared = shared_keeps_occupancy(device_hardware(), bytes_per_run)
         return PerformanceSettings(
             state_location="shared" if shared else "local"
         )

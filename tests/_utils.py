@@ -2062,6 +2062,30 @@ LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
 
 LARGE_FIRK = {**LARGE_STATE_ONLY, "algorithm": "radau_iia_3"}
 
+# Matrix-free (Krylov) implicit sets: the shared-memory placement rules
+# apply to iterative solves only.
+KRYLOV_FIRK = {
+    "algorithm": "radau_iia_3",
+    "linear_correction_type": "bicgstab",
+    "preconditioner_type": "jacobi",
+    "step_controller": "fixed",
+}
+
+KRYLOV_DIRK = {
+    "algorithm": "dirk",
+    "linear_correction_type": "bicgstab",
+    "preconditioner_type": "jacobi",
+    "step_controller": "fixed",
+}
+
+LARGE_KRYLOV_FIRK = {**LARGE_STATE_ONLY, **KRYLOV_FIRK}
+
+LARGE_KRYLOV_DIRK = {**LARGE_STATE_ONLY, **KRYLOV_DIRK}
+
+MEDIUM_KRYLOV_DIRK = {
+    **LARGE_STATE_ONLY, "system_type": "medium", **KRYLOV_DIRK,
+}
+
 # Unique sets: the final-save schedule is a function of exact
 # dt/save_every/duration ratios, so each case pins its own timing.
 # The base pins a fixed euler step with time-domain output only.

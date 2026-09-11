@@ -47,6 +47,7 @@ from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
 from tests._utils import (
     DEVICE_SOLVE_SETTINGS,
     FIXED_EULER_TIMED_STATE,
+    KRYLOV_FIRK,
     LARGE_DIRK,
     LARGE_STATE_ONLY,
     MOVABLE_LOCATION_KEYS,
@@ -2685,23 +2686,6 @@ def test_auto_residency_keeps_local_footprint_in_l2(
     assert blocks == expected
 
 
-@pytest.mark.nocudasim
-@pytest.mark.parametrize(
-    "solver_settings_override", [LARGE_DIRK], indirect=True
-)
-def test_auto_launch_follows_residency_budget(
-    solver_mutable, simple_initial_values, simple_parameters, driver_settings
-):
-    """The automatic launch picks its block size after the L2 residency."""
-    solver_mutable.solve(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        drivers=driver_settings,
-        duration=0.02,
-        grid_type="combinatorial",
-    )
-
-
 # ── Driver coefficient uploads ───────────────────────────── #
 
 
@@ -2870,18 +2854,38 @@ def test_run_rejects_a_driver_system_without_driver_inputs(
             )
     finally:
         twin.close()
-    kernel = solver_mutable.kernel
-    assert kernel.shared_memory_bytes == 0
-    assert not kernel.blocksize_given
+
+
+def _launch_shapes(kernel):
+    """Return the blocks per SM each launchable block size fits on its own."""
+    runs = kernel.run_params[0].runs
     natural = {}
     for candidate in LAUNCH_BLOCKSIZES:
-        kernel.resident_blocks = 99
-        actual, dynamic = kernel.launch_geometry(candidate)
+        actual, dynamic = kernel._launch_shape(candidate, runs)
         if actual == candidate:
-            natural[candidate] = active_blocks_per_multiprocessor(
-                kernel.kernel, candidate, dynamic
-            )
-    kernel.resident_blocks = None
+            natural[candidate] = kernel._natural_blocks(candidate, dynamic)
+    return natural
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [LARGE_DIRK], indirect=True
+)
+def test_auto_launch_follows_residency_budget(
+    solver, simple_initial_values, simple_parameters
+):
+    """A local-only kernel picks its block size after the L2 residency
+    budget; a block size given to the launch is kept."""
+    solver.compile(
+        simple_initial_values,
+        simple_parameters,
+        duration=0.02,
+        grid_type="combinatorial",
+    )
+    kernel = solver.kernel
+    assert kernel.shared_memory_bytes == 0
+    assert not kernel.blocksize_given
+    natural = _launch_shapes(kernel)
     budget = None
     blocks = kernel._resident_blocks_within_l2(
         kernel.kernel, BUDGET_BLOCKSIZE, natural[BUDGET_BLOCKSIZE]
@@ -2917,15 +2921,14 @@ def test_run_rejects_a_driver_system_without_driver_inputs(
 @pytest.mark.parametrize(
     "solver_settings_override", [LARGE_DIRK], indirect=True
 )
-def test_given_blocksize_is_kept(
-    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+def test_given_blocksize_setting_is_launched_as_given(
+    solver_mutable, simple_initial_values, simple_parameters
 ):
-    """An explicit ``blocksize`` setting is launched as given."""
+    """A ``blocksize`` setting launches as given."""
     solver_mutable.update(blocksize=64)
-    solver_mutable.solve(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        drivers=driver_settings,
+    solver_mutable.compile(
+        simple_initial_values,
+        simple_parameters,
         duration=0.02,
         grid_type="combinatorial",
     )
@@ -2936,40 +2939,26 @@ def test_given_blocksize_is_kept(
 
 @pytest.mark.nocudasim
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{
-        "algorithm": "radau_iia_3",
-        "linear_correction_type": "bicgstab",
-        "preconditioner_type": "jacobi",
-        "step_controller": "fixed",
-    }],
-    indirect=True,
+    "solver_settings_override", [KRYLOV_FIRK], indirect=True
 )
 def test_auto_blocksize_of_shared_kernel_maximises_threads(
-    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+    solver, simple_initial_values, simple_parameters
 ):
     """A shared-memory kernel launches the block size with most threads."""
-    solver_mutable.solve(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        drivers=driver_settings,
+    solver.compile(
+        simple_initial_values,
+        simple_parameters,
         duration=0.1,
         grid_type="combinatorial",
     )
-    kernel = solver_mutable.kernel
+    kernel = solver.kernel
     assert kernel.shared_memory_bytes > 0
     blocksize, dynamic = kernel.launch_geometry()
     chosen = blocksize * active_blocks_per_multiprocessor(
         kernel.kernel, blocksize, dynamic
     )
-    for candidate in LAUNCH_BLOCKSIZES:
-        kernel.resident_blocks = None
-        actual, candidate_dynamic = kernel.launch_geometry(candidate)
-        if actual != candidate:
-            continue
-        threads = candidate * active_blocks_per_multiprocessor(
-            kernel.kernel, candidate, candidate_dynamic
-        )
+    for candidate, count in _launch_shapes(kernel).items():
+        threads = candidate * count
         assert threads <= chosen
         if threads == chosen:
             assert blocksize <= candidate

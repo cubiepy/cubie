@@ -104,15 +104,13 @@ summarised defaults to saved when all summarise inputs are `None`.
   loop iterates chunks, calling `input_arrays.initialise(i)` (H2D) and
   `output_arrays.finalise(i)` (D2H/writeback).
 - **Launch geometry:** `launch_geometry(blocksize=None)` returns a launch's block size and
-  dynamic shared bytes: `limit_blocksize` halves the block size until dynamic shared memory
-  fits the opt-in per-block limit, then a pad holds `resident_blocks` per SM (`None` = the
-  L2 rule under `auto_performance`: frames under `RESIDENCY_CUT_MIN_FRAME_BYTES` and
-  frames no count fits stay natural). `blocksize` is a `BatchSolverConfig` field (default 64); `run(blocksize=None)` uses
-  `_default_launch`: the setting unless `auto_performance` picks (L2 rule at
-  `BUDGET_BLOCKSIZE` = thread budget; SASS over the icache = largest `LAUNCH_BLOCKSIZES`
-  entry keeping `LAUNCH_OCCUPANCY_TIE` of the most threads, else most threads, smaller on a
-  tie). `shared_memory_needs_padding` adds a 4-byte skew only
-  for single precision with an even element count (float64 never pads — it would misalign).
+  dynamic shared bytes: the block size halves until the shared footprint fits a block, then
+  a pad holds `resident_blocks` per SM. With no block size given and `auto_performance` on,
+  `_default_launch` chooses the block size and residency for the compiled kernel (an L2
+  budget for the threads' local memory, then the block shape); otherwise the `blocksize`
+  setting launches with residency by the L2 rule. `shared_memory_needs_padding` adds a
+  4-byte skew only for single precision with an even element count (float64 never pads —
+  it would misalign).
 
 ### Results
 Every solve returns one `SolveResult` that **owns the solve's host buffers** — nothing is

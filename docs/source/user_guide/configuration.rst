@@ -123,8 +123,8 @@ loose keyword arguments (see "Kwarg routing" below).
    * - ``blocksize``
      - ``None``
      - CUDA threads per block for this launch; ``None`` uses the
-       solver's ``blocksize`` setting, or the automatic choice under
-       ``auto_performance`` when that setting was not given.
+       solver's ``blocksize`` setting, or lets the solver pick when
+       that setting was not given.
    * - ``grid_type``
      - ``"verbatim"``
      - **Differs from** ``solve_ivp``'s default of
@@ -217,9 +217,7 @@ Notes on selected parameters
 
 **blocksize**
     Threads per block for every launch; ``solve(blocksize=...)``
-    overrides one launch. Unset under ``auto_performance``, the solver
-    picks 256, the most-resident-threads size for a shared-memory
-    kernel, or 64.
+    overrides one launch. Unset, the solver picks a block size itself.
 
 **mem_proportion**
     Proportion of VRAM (0.0–1.0) reserved for this solver's

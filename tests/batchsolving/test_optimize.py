@@ -186,8 +186,9 @@ def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
     run = solver.kernel.single_integrator
     run.device_function
     step = run._algo_step.compile_settings
-    assert step.stage_increment_location == "shared"
+    assert step.stage_increment_location == "local"
     assert step.unroll.unroll_newton_exits == ROLLED.value
+    # The shared fixture fixes unroll_other_small, so its arms fold in.
     expected = (
         {"unroll_newton_exits": FULL, "stage_increment_location": "local"},
         {"unroll_newton_exits": FULL, "stage_increment_location": "shared"},

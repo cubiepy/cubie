@@ -716,6 +716,8 @@ def output_check(arm, reference, inits, params, duration):
 def time_arms(arms, d_inits, d_params, duration, log, cap=CAP,
               rounds=ROUNDS):
     """Fill the cell timings of every timed (non-alias) arm."""
+    if rounds < 1:
+        raise ValueError("rounds must be at least 1")
     timed = [arm for arm in arms if arm.alias_of is None and arm.error is None]
     units = [(arm, cell) for arm in timed for cell in arm.cells.values()]
     if not units:

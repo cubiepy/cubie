@@ -40,12 +40,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from attrs import field, validators, frozen
 from numpy import dtype as np_dtype, int32 as np_int32
 
-from cubie.backend.utils import (
-    MAX_REGISTERS_PER_THREAD,
-    device_hardware,
-    register_limited_threads,
-    shared_limited_threads,
-)
+from cubie.backend.utils import device_hardware, shared_keeps_occupancy
 from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
@@ -1000,13 +995,10 @@ class FIRKStep(ODEImplicitStep):
         """
         shared = False
         if not self.uses_direct_solver:
-            hardware = device_hardware()
             itemsize = np_dtype(self.precision).itemsize
             # One element of slack covers the launch's alignment pad.
             bytes_per_run = (self.stage_count * self.n_states + 1) * itemsize
-            shared = shared_limited_threads(
-                hardware, bytes_per_run
-            ) >= register_limited_threads(hardware, MAX_REGISTERS_PER_THREAD)
+            shared = shared_keeps_occupancy(device_hardware(), bytes_per_run)
         return PerformanceSettings(
             stage_increment_location="shared" if shared else "local"
         )
