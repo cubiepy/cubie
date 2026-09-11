@@ -1,6 +1,6 @@
 # Implementation plan: `update` distributes, consumers pull products
 
-Base: PRs 938 and 939 merged. Supersedes PR 934.
+Base: PRs 938 and 939 merged, then the rename PR (§2). Supersedes PR 934.
 
 ## 1. Invariants
 
@@ -9,18 +9,18 @@ Base: PRs 938 and 939 merged. Supersedes PR 934.
   `update_compile_settings` on itself with the same dict. No key picking,
   renaming or size arithmetic.
 - `products` is the child's cache by field name (`CUDAFactory.products`);
-  reading it builds an invalid cache. `build()` reads its own
-  `compile_settings` only; nothing calls `update_compile_settings` from a
-  build, `_invalidate_cache`, or `build`.
+  reading it builds an invalid cache, so children build inside the parent's
+  `update`. `build()` reads its own `compile_settings` only; nothing calls
+  `update_compile_settings` from a build, `_invalidate_cache`, or `build`.
 - A consumer field and the product that fills it share one name.
 - Everything a child delivers upward is a cache field: device functions,
   derived sizes and flags, and resolved settings other components read
   (`dt`, `is_adaptive`, `mass_flags`, ...).
 - A parent's config captures its last child's product with a
   `device_function_field` (`loop_fn` on the run and the kernel).
-- Givenness records (inner tolerances, performance keys, timing) are written
-  from the dict as it enters the user-facing `update`, before any product is
-  merged; derived defaults stay in the run, between child updates.
+- Givenness records are written from the dict as it enters the user-facing
+  `update`, before any product is merged. Family, DAE and inner-tolerance
+  defaults are the run's; performance defaults are the kernel's (§5).
 - The unrecognised-key check uses the user's keys only.
 
 ## 2. Products and consumers
@@ -31,25 +31,25 @@ Cache fields per factory. "Consumers" lists who reads the product by name.
 |---|---|---|
 | system (`ODECache`) | `dxdt_fn`, `observables_fn`, `helpers`, `operation_counts`, `get_solver_helper_fn`, `n_states`, `n_parameters`, `n_observables`, `n_drivers`, `mass_flags`, `precision` | step (`dxdt_fn`, `observables_fn`, `get_solver_helper_fn`, `n_states`, `n_drivers`, `precision`); controller (`n_states`, `mass_flags`, `precision`); initialiser (`get_solver_helper_fn`, `n_states`, `mass_flags`, `precision`); output functions (`n_states`, `n_observables`, `precision`); loop (`observables_fn`, `n_*`, `precision`) |
 | output functions | `save_state_fn`, `update_summaries_fn`, `save_summaries_fn`, `compile_flags`, `n_counters`, `state_summaries_buffer_height`, `observable_summaries_buffer_height`, `output_array_heights`, `summary_legend_per_variable`, `summary_unit_modifications` | loop (`*_fn`, `compile_flags`, `n_counters`, heights); run cache (`compile_flags`, `output_array_heights`, legends) |
-| step | `step_fn`, `nonlinear_solver_fn`, `threads_per_step`, `n_error`, `algorithm_order`, `has_error_estimate`, `is_implicit`, `helper_operation_counts`, `performance_defaults` | controller (`algorithm_order`); loop (`step_fn`, `n_error`); run cache (`threads_per_step`) |
+| step | `step_fn`, `nonlinear_solver_fn`, `threads_per_step`, `n_error`, `algorithm_order`, `has_error_estimate`, `is_implicit`, `helper_operation_counts`, `performance_defaults` | controller (`algorithm_order`); loop (`step_fn`, `n_error`); run cache (`threads_per_step`, counts and `performance_defaults` for the kernel) |
 | controller | `step_controller_fn`, `is_adaptive`, `dt`, `dt_min`, `dt_max`, `atol`, `rtol` | step (`is_adaptive`); loop (`step_controller_fn`, `is_adaptive`, `dt`, `dt_min`, `dt_max`); run derivations (`atol`, `rtol`) |
 | initialiser | `initialise_state_fn` | loop |
 | loop | `loop_fn`, `shared_memory_elements`, `persistent_local_elements` | run config (`loop_fn`); run cache (sizes) |
-| run | `loop_fn`, `compile_flags`, `threads_per_step`, `shared_memory_elements`, `persistent_local_elements`, `output_array_heights` | kernel config (`loop_fn`, `compile_flags`); kernel build (sizes) |
-| interpolator | `drivers_fn`, `driver_derivative_fn`, `coefficients_shape` (`coefficients` once PR 935 lands) | step and loop (`drivers_fn`, `driver_derivative_fn`); kernel config (`driver_coefficients_shape`, renamed `coefficients_shape`) |
+| run | `loop_fn`, `compile_flags`, `threads_per_step`, `shared_memory_elements`, `persistent_local_elements`, `output_array_heights`, `operation_counts`, `helper_operation_counts`, `performance_defaults`, `is_implicit` | kernel config (`loop_fn`, `compile_flags`); kernel build (sizes); kernel performance defaults (counts, `performance_defaults`) |
+| interpolator | `drivers_fn`, `driver_derivative_fn`, `coefficients_shape` (`coefficients` once PR 935 lands) | step and loop (`drivers_fn`, `driver_derivative_fn`); kernel config (`coefficients_shape`) |
 | linear solvers | `linear_solver_fn` | Newton (`linear_solver_fn`); initialiser (`linear_solver_fn`); linearly-implicit step (`linear_solver_fn`) |
 | Newton | `nonlinear_solver_fn` | step (`nonlinear_solver_fn`) |
 | norms | `norm_fn` | Newton, initialiser, adaptive controller |
 | predictor | `predictor_fn` | DIRK and FIRK steps |
 | kernel (`BatchSolverCache`) | `solver_kernel`, `launch_geometries`, `duration_counts`, `output_array_heights`, `time_domain_legend`, `summaries_legend` (PR 931) | Solver |
 
-Consumer renames the table needs (mechanical, one PR, same shape as 939):
+Consumer renames, one mechanical PR stacked on 939:
 
-- `n` becomes `n_states` on the step, controller and initialiser configs and
-  in `ALL_ALGORITHM_STEP_PARAMETERS`; `max_states`/`max_observables` on
-  `OutputConfig` become `n_states`/`n_observables`. `solver_width` is a
-  different quantity and keeps its name; the step and controller keep
-  deriving it for their solver and norm children.
+- `n` becomes `n_states` on the step, controller, initialiser and norm
+  configs and in `ALL_ALGORITHM_STEP_PARAMETERS`; `max_states` and
+  `max_observables` on `OutputConfig` become `n_states` and
+  `n_observables`. `solver_width` keeps its name; the step and controller
+  keep deriving it for their solver and norm children.
 - `mass_diagonal_flags` (system property) is delivered as `mass_flags`.
 - `controller_order` (step) becomes `algorithm_order`.
 - `solver_function` (step) splits into `nonlinear_solver_fn` (Newton child)
@@ -57,10 +57,20 @@ Consumer renames the table needs (mechanical, one PR, same shape as 939):
   one its family uses.
 - `driver_coefficients_shape` (kernel) becomes `coefficients_shape`.
 
-The step's `error_solver` is a second linear solver (product
-`linear_solver_fn`, label `krylov` like the Newton's inner solver), so its
-product does not route by name; the step's `update` writes
-`{"error_solver_fn": self.error_solver.products["linear_solver_fn"]}`.
+Open: `error_solver_fn`. The step's `error_solver` is a second linear
+solver (product `linear_solver_fn`, label `krylov` like the Newton's inner
+solver). Two options:
+
+1. `MultipleInstanceCUDAFactory.products` prefixes its cache fields with
+   `instance_label`, as its settings keys are prefixed; the error solver is
+   constructed with `instance_label="error"`. Consumers then name
+   `newton_nonlinear_solver_fn` (step), `krylov_linear_solver_fn` (Newton and
+   the linear step), `error_linear_solver_fn` (step), `newton_norm_fn` and
+   `krylov_norm_fn` (Newton, solvers, initialiser); the controller's norm has
+   no label and stays `norm_fn`. The error solve then reads `error_*`
+   settings; today it shares `krylov_*`.
+2. Products unprefixed; the step's `update` writes
+   `{"error_solver_fn": self.error_solver.products["linear_solver_fn"]}`.
 
 ### Field helpers
 
@@ -84,9 +94,8 @@ def update(self, updates_dict=None, silent=False, **kwargs):
     recognised |= self._output_functions.update(updates, silent=True)
     updates |= self._output_functions.products
 
-    recognised |= self._switch_algos(updates)          # constructs the step
-    recognised |= self._switch_controllers(updates)    # constructs the controller
-    self.check_compatibility()                         # may swap in "fixed"
+    recognised |= self._switch_algos(updates)
+    recognised |= self._switch_controllers(updates)
 
     recognised |= self._step_controller.update(updates, silent=True)
     updates |= self._step_controller.products          # is_adaptive, dt, atol, rtol
@@ -94,7 +103,6 @@ def update(self, updates_dict=None, silent=False, **kwargs):
     recognised |= self._apply_algorithm_step_defaults()
     recognised |= self._apply_dae_linear_solve_defaults()
     recognised |= self._apply_inner_tolerance_defaults()
-    recognised |= self._apply_performance_defaults()
     updates |= self._algo_step.products                # step_fn, n_error, algorithm_order
     recognised |= self._step_controller.update(updates, silent=True)
     updates |= self._step_controller.products          # step_controller_fn at the final order
@@ -113,22 +121,31 @@ def update(self, updates_dict=None, silent=False, **kwargs):
     return recognised | unpacked
 ```
 
+Units:
+
+- `_switch_algos(updates)`: construct a new step when `algorithm` changed;
+  merge the family's step and controller defaults into the dict where the
+  key is absent.
+- `_switch_controllers(updates)`: resolve the effective controller name
+  (given name, else gain promotion within `i`/`pi`/`pid`, else the family
+  default; `fixed` with a warning when the step has no error estimate),
+  construct it when it changed, dropping the gains on a family change.
+  `check_compatibility` and `_promote_controller` fold into this unit.
 - The controller updates twice: first so the step reads `is_adaptive` (a
   class constant), then with the step's `algorithm_order`.
-- `check_compatibility` runs after both swaps, before any child update, on
-  the constructed objects.
-- The four `_apply_*_defaults` derivations stay in the run and push to the
-  step through its `update`; `_apply_performance_defaults` runs in `update`,
-  after the step's helper counts exist (§4).
+- The three `_apply_*_defaults` derivations push to the step through its
+  `update`.
 - `_register_loop_children` runs once per `update`, after the step's products.
 - `__init__` constructs the children with their static settings, then runs
   the same routine once.
 - `build()` returns `SingleIntegratorRunCache(loop_fn=config.loop_fn, ...)`
-  with the sizes from `_loop.products` and `_output_functions.products`.
+  with the sizes from `_loop.products` and `_output_functions.products` and
+  the counts from `_system.products` and `_algo_step.products`.
   Removed: `_step_device_functions`, the `compiled_functions` dict and
   system-function comparisons in `build()`, `instantiate_loop`'s kwargs, the
   duplicated `register_child` calls, `_INJECTED_KEYS`, the manual
-  `_invalidate_cache`.
+  `_invalidate_cache`, `_apply_performance_defaults`, `auto_performance`,
+  `_user_given_keys`, `optimisation_candidates`.
 
 ## 4. Step and initialiser: helper wiring is an update
 
@@ -148,34 +165,47 @@ written by the wiring.
 ## 5. The kernel's `update`
 
 ```python
+user_keys = set(updates)
+self._record_performance_givenness(updates)
 recognised = self.driver_interpolator.update(updates, silent=True)
 updates |= self.driver_interpolator.products
 recognised |= self.single_integrator.update(updates, silent=True)
 updates |= self.single_integrator.products
+derived = self._performance_defaults(updates)         # unroll and placement keys
+if derived:
+    recognised |= self.single_integrator.update(derived, silent=True)
+    updates |= self.single_integrator.products
 recognised |= buffer_registry.update(self.single_integrator._loop, updates, silent=True)
 recognised |= self.update_compile_settings(updates, silent=True)
 ```
 
 - `BatchSolverConfig.loop_fn` is a `device_function_field`; `build_kernel`
-  reads `config.loop_fn`. Construction seeds it through the same routine.
+  reads `config.loop_fn`. Construction seeds it through the same routine,
+  with `lineinfo`, `unroll_settings` and `kernel_settings` in that one pass.
+- Performance defaults are the kernel's: `auto_performance` moves to
+  `BatchSolverConfig` (`eq=False`); `_performance_defaults(updates)` reads
+  the run's products (`operation_counts`, `helper_operation_counts`,
+  `performance_defaults`, `is_implicit`) and `device_hardware()`, filters by
+  the kernel's record of user-given performance keys, and returns the unroll
+  and placement keys. `optimisation_candidates` and the performance filter
+  in `settings_dict` move with it.
 - `_prepare_batch` pushes nothing per solve. With a duration-dependent
-  summary schedule it calls `self.update({"duration": duration}, silent=True)`;
-  `duration` is a routed key the run's `_loop_timing` consumes, never a config
-  field. Closes #932.
+  summary schedule (summaries requested, no `summarise_every` given) it
+  calls `self.update({"duration": duration}, silent=True)`: the run's
+  `_loop_timing` derives `summarise_every=duration`,
+  `sample_summaries_every=duration / 100`, `summarise_regularly=True` and
+  pushes them to the loop. A duration equal to the last solve's changes
+  nothing and no cache moves. A new duration changes the loop's config, so
+  `_loop.products` rebuilds the loop, the run's `loop_fn` changes, the
+  run's cache rebuilds, the kernel's `loop_fn` changes and the kernel
+  rebuilds at its next `kernel` access (through the disk cache, keyed by
+  the loop's new `summarise_every`). `duration` is a routed key, never a
+  config field. Closes #932.
 - `configure_drivers` keeps `update_from_dict` for the arrays, then calls
   `self.update(self.driver_interpolator.products, silent=True)`. PR 935
   reshapes this method; whichever lands second adapts.
 
-## 6. Duration-derived summary schedule
-
-- `_loop_timing(updates)` derives the six timing keys from `_user_timing`, the
-  output types and a `duration` key in `updates` (`summarise_every =
-  duration`, `sample_summaries_every = duration / 100`,
-  `summarise_regularly = True`).
-- `is_duration_dependent = summary_outputs_requested and
-  _user_timing["summarise_every"] is None`.
-
-## 7. Measured costs (main, RTX 4070, mlir backend)
+## 6. Measured costs (main, RTX 4070, mlir backend)
 
 What an update pays when `products` builds a child.
 
@@ -190,11 +220,7 @@ What an update pays when `products` builds a child.
 | implicit run (step helpers + loop), cold | 54 (backwards_euler), 71 (kvaerno3), 65 (rosenbrock23), 160 (radau) ms | 3.6-6.6 ms |
 | kernel object (`build_kernel`, no launch) | 1.3-16 ms | |
 
-Cold costs land at construction; a settings change costs one loop rebuild
-at the update. The kernel's constructor passes `lineinfo`, `unroll_settings`
-and `kernel_settings` in its single wiring pass.
-
-## 8. Tests
+## 7. Tests
 
 - `test_CUDAFactory.py`: producer/consumer pair; the parent's `update` fills a
   tagged field from `products` by name, invalidates on identity change, stays
@@ -203,21 +229,24 @@ and `kernel_settings` in its single wiring pass.
   `compile_settings.loop_fn is _loop.device_function` and `cache_valid`
   False; equal values keep it valid; `update({"duration": 2.0})` on
   `SUMMARY_ONLY_NO_TIMING` rebuilds, the same duration keeps it valid; an
-  errorless algorithm with an adaptive controller leaves the loop's
-  `is_adaptive` False after `update`.
+  errorless algorithm named with an adaptive controller in one `update`
+  leaves the loop's `is_adaptive` False.
 - `test_ode_implicitstep.py`: `update` with a new `get_solver_helper_fn`
   fills `nonlinear_solver_fn`; `build` without one raises.
+- `test_SolverKernel.py`: the performance-default tests from
+  `test_performance_defaults.py`, driven through the kernel.
 - `test_solver.py`: `SUMMARY_ONLY_NO_TIMING` at two durations, each
   `array_equal` to the explicit schedule; the repeat-solve reuse test
   unchanged; `host_overhead` gate row within threshold.
 
-## 9. PR split
+## 8. PR split
 
-1. `chore(integrators)`: products on every child (§2), `product_field`,
-   consumer renames, and the step and initialiser helper wiring in `update`
-   (§4).
-2. `fix(integrators)`: the run's `update` (§3, §6); closes #932.
-3. `fix(batchsolving)`: the kernel's `update` and `loop_fn` seeding (§5).
+0. `chore`: the consumer renames (§2), stacked on 939.
+1. `chore(integrators)`: products on every child (§2), `product_field`, and
+   the step and initialiser helper wiring in `update` (§4).
+2. `fix(integrators)`: the run's `update` (§3); closes #932 with PR 3.
+3. `fix(batchsolving)`: the kernel's `update`, `loop_fn` seeding, the
+   duration push and the performance defaults (§5).
 
 Full simulator and GPU suites per PR; the gate on each (kernel rows and the
 `host_overhead` wall row).
