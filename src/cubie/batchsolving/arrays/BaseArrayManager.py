@@ -52,7 +52,11 @@ from numpy import (
 )
 from numpy.typing import NDArray
 
-from cubie._utils import opt_gttype_validator, getype_validator
+from cubie._utils import (
+    ensure_nonzero_size,
+    getype_validator,
+    opt_gttype_validator,
+)
 from cubie.cuda_simsafe import (
     CUDA_SIMULATION,
     DeviceNDArrayBase,
@@ -921,18 +925,14 @@ class BaseArrayManager(ABC):
                 self._needs_reallocation.append(label)
             if not shape_only and label not in self._needs_overwrite:
                 self._needs_overwrite.append(label)
-            if 0 in new_array.shape:
-                # Zero-size updates keep a unit placeholder buffer.
-                newshape = (1,) * len(current_array.shape)
-                if shape_only:
-                    new_array = self._memory_manager.create_host_array(
-                        newshape,
-                        managed.dtype,
-                        self._base_memory_type(managed.memory_type),
-                        spill_directory=self.spill_directory,
-                    )
-                else:
-                    new_array = np_zeros(newshape, dtype=managed.dtype)
+            if shape_only and 0 in new_array.shape:
+                # Zero-size output slots keep a unit placeholder buffer.
+                new_array = self._memory_manager.create_host_array(
+                    (1,) * len(current_array.shape),
+                    managed.dtype,
+                    self._base_memory_type(managed.memory_type),
+                    spill_directory=self.spill_directory,
+                )
 
         if current_array is not new_array:
             self._memory_manager.release_host_array(current_array)
@@ -1083,8 +1083,9 @@ class BaseArrayManager(ABC):
                 continue
             device_array_object = self.device.get_managed_array(array_label)
             total_runs = self.num_runs
+            # Zero-size host data keeps a unit device slot.
             request = ArrayRequest(
-                shape=host_array.shape,
+                shape=ensure_nonzero_size(tuple(host_array.shape)),
                 dtype=device_array_object.dtype,
                 memory=device_array_object.memory_type,
                 chunk_axis_index=host_array_object._chunk_axis_index,

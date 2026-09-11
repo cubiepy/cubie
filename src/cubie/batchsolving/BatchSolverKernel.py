@@ -49,7 +49,6 @@ from numpy import (
     float64 as np_float64,
     floating,
     int32 as np_int32,
-    zeros as np_zeros,
 )
 from cubie.cuda_simsafe import cuda, float64
 from cubie.cuda_simsafe import int32
@@ -283,8 +282,6 @@ class BatchSolverKernel(CUDAFactory):
         Mapping of loop configuration forwarded to
         :class:`cubie.integrators.SingleIntegratorRun`. Recognised keys include
         ``"save_every"`` and ``"summarise_every"``.
-    evaluate_driver_at_t
-        Optional evaluation function for an interpolated forcing term.
     lineinfo
         Compile the kernel and all device functions with source-line
         correlation data for profilers. ``None`` defers to the
@@ -341,8 +338,6 @@ class BatchSolverKernel(CUDAFactory):
         self,
         system: "SymbolicODE",
         loop_settings: Optional[Dict[str, Any]] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
-        driver_del_t: Optional[Callable] = None,
         lineinfo: Optional[bool] = None,
         unroll_settings: Optional[Dict[str, Any]] = None,
         step_control_settings: Optional[Dict[str, Any]] = None,
@@ -385,14 +380,10 @@ class BatchSolverKernel(CUDAFactory):
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
 
-        # Child factory: driver settings join config_hash; the
-        # placeholder input covers zero-driver operation.
+        # Child factory; empty until configure_drivers.
         self.driver_interpolator = ArrayInterpolator(
             precision=precision,
-            input_dict={
-                "placeholder": np_zeros(6, dtype=precision),
-                "driver_sample_period": 0.1,
-            },
+            input_dict={},
             memory_manager=self._memory_manager,
         )
 
@@ -402,21 +393,12 @@ class BatchSolverKernel(CUDAFactory):
             system_name = f"unnamed_{system_hash[:8]}"
         self._system_name = system_name
 
-        # Seed driver evaluation from the owned interpolator unless
-        # the caller supplied an evaluator.
-        if evaluate_driver_at_t is None and system.sizes.drivers > 0:
-            evaluate_driver_at_t = (
-                self.driver_interpolator.evaluation_function
-            )
-            if driver_del_t is None:
-                driver_del_t = self.driver_interpolator.driver_del_t
-
         # Build the single integrator to derive compile-critical metadata
         self.single_integrator = SingleIntegratorRun(
             system,
             loop_settings=loop_settings,
-            evaluate_driver_at_t=evaluate_driver_at_t,
-            driver_del_t=driver_del_t,
+            evaluate_driver_at_t=self.driver_interpolator.evaluation_function,
+            driver_del_t=self.driver_interpolator.driver_del_t,
             step_control_settings=step_control_settings,
             algorithm_settings=algorithm_settings,
             output_settings=output_settings,
@@ -645,7 +627,6 @@ class BatchSolverKernel(CUDAFactory):
         self,
         inits: NDArray[floating],
         params: NDArray[floating],
-        driver_coefficients: Optional[NDArray[floating]],
         duration: float,
         blocksize: Optional[int] = None,
         warmup: float = 0.0,
@@ -666,9 +647,6 @@ class BatchSolverKernel(CUDAFactory):
         params
             Parameter table with shape ``(n_params, n_runs)``. Host or
             device arrays are accepted, as for ``inits``.
-        driver_coefficients
-            Optional Horner-ordered driver interpolation coefficients with
-            shape ``(num_segments, num_drivers, order + 1)``.
         duration
             Duration of the simulation window.
         blocksize
@@ -698,13 +676,21 @@ class BatchSolverKernel(CUDAFactory):
         RuntimeError
             If the kernel has been closed.
         ValueError
-            If the batch is chunked while ``transfer_outputs`` is
-            ``False`` or while inputs were supplied as device arrays.
+            Drivers declared but no evaluator wired; chunked batch with
+            ``transfer_outputs=False`` or device inputs.
         """
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "
                 "released; build a new Solver to run again."
+            )
+        if self.system.sizes.drivers and (
+            self.single_integrator._loop.evaluate_driver_at_t is None
+        ):
+            raise ValueError(
+                f"System declares {self.system.sizes.drivers} driver(s) "
+                "but no driver evaluator is configured; pass drivers= "
+                "to solve."
             )
         stream = self.stream
         self._memory_manager.begin_work(self)
@@ -712,7 +698,6 @@ class BatchSolverKernel(CUDAFactory):
             self._execute_run(
                 inits,
                 params,
-                driver_coefficients,
                 duration,
                 blocksize,
                 stream,
@@ -727,7 +712,6 @@ class BatchSolverKernel(CUDAFactory):
         self,
         inits: NDArray[floating],
         params: NDArray[floating],
-        driver_coefficients: Optional[NDArray[floating]],
         duration: float,
         warmup: float = 0.0,
         t0: float = 0.0,
@@ -742,13 +726,7 @@ class BatchSolverKernel(CUDAFactory):
         self._memory_manager.begin_work(self)
         try:
             self._prepare_batch(
-                inits,
-                params,
-                driver_coefficients,
-                duration,
-                warmup,
-                t0,
-                stream,
+                inits, params, duration, warmup, t0, stream
             )
             dispatcher = self.kernel
             args = self._kernel_launch_args(self.run_params[0])
@@ -800,7 +778,6 @@ class BatchSolverKernel(CUDAFactory):
         self,
         inits: NDArray[floating],
         params: NDArray[floating],
-        driver_coefficients: Optional[NDArray[floating]],
         duration: float,
         warmup: float,
         t0: float,
@@ -834,7 +811,11 @@ class BatchSolverKernel(CUDAFactory):
             }
         )
 
-        # Queue allocations
+        # An attached table is a cached build output: nothing to upload.
+        driver_coefficients = self.driver_interpolator.coefficients
+        attached = self.input_arrays.host.driver_coefficients.array
+        if driver_coefficients is attached:
+            driver_coefficients = None
         self.input_arrays.update(self, inits, params, driver_coefficients)
         self.output_arrays.update(self)
 
@@ -845,7 +826,6 @@ class BatchSolverKernel(CUDAFactory):
         self,
         inits: NDArray[floating],
         params: NDArray[floating],
-        driver_coefficients: Optional[NDArray[floating]],
         duration: float,
         blocksize: Optional[int],
         stream: Optional[Any],
@@ -857,9 +837,7 @@ class BatchSolverKernel(CUDAFactory):
         self._last_stream = stream
         self._work_complete = False
 
-        self._prepare_batch(
-            inits, params, driver_coefficients, duration, warmup, t0, stream
-        )
+        self._prepare_batch(inits, params, duration, warmup, t0, stream)
 
         # ------------ from here on dimensions are "chunked" -----------------
         # self.run_params is updated in the on_allocation callback.
@@ -1324,16 +1302,8 @@ class BatchSolverKernel(CUDAFactory):
         driver_recognised = self.driver_interpolator.update(
             updates_dict, silent=True
         )
-        if driver_recognised and self.n_drivers > 0:
-            updates_dict["evaluate_driver_at_t"] = (
-                self.driver_interpolator.evaluation_function
-            )
-            updates_dict["driver_del_t"] = (
-                self.driver_interpolator.driver_del_t
-            )
-            updates_dict["driver_coefficients_shape"] = (
-                self.driver_interpolator.coefficients_shape
-            )
+        if driver_recognised:
+            updates_dict.update(self._driver_settings())
         all_unrecognized -= driver_recognised
 
         all_unrecognized -= self.single_integrator.update(
@@ -1377,21 +1347,19 @@ class BatchSolverKernel(CUDAFactory):
         drivers = ArrayInterpolator.check_against_system_drivers(
             drivers, self.system
         )
-        fn_changed = self.driver_interpolator.update_from_dict(drivers)
-        if fn_changed:
-            self.update(
-                {
-                    "evaluate_driver_at_t": (
-                        self.driver_interpolator.evaluation_function
-                    ),
-                    "driver_del_t": (
-                        self.driver_interpolator.driver_del_t
-                    ),
-                    "driver_coefficients_shape": (
-                        self.driver_interpolator.coefficients_shape
-                    ),
-                }
-            )
+        known_hash = self.driver_interpolator.config_hash
+        self.driver_interpolator.update_from_dict(drivers)
+        if self.driver_interpolator.config_hash != known_hash:
+            self.update(self._driver_settings())
+
+    def _driver_settings(self) -> Dict[str, Any]:
+        """Return the interpolator's evaluators and coefficient layout."""
+        interpolator = self.driver_interpolator
+        return {
+            "evaluate_driver_at_t": interpolator.evaluation_function,
+            "driver_del_t": interpolator.driver_del_t,
+            "driver_coefficients_shape": interpolator.coefficients_shape,
+        }
 
     def wait_for_writeback(
         self, timeout: Optional[float] = None

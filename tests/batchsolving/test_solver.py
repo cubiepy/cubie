@@ -960,13 +960,26 @@ def test_lineinfo_constructor_propagates_to_children(precision):
     assert integrator._system.compile_settings.lineinfo is True
 
 
-def test_driver_evaluator_wired_at_construction(precision):
-    """A fresh solver wires the interpolator's evaluator in."""
+def test_driver_evaluator_wired_on_configure(precision):
+    """Configuring drivers wires the interpolator's evaluator in."""
     system = build_three_state_nonlinear_system(precision)
     solver = Solver(system, algorithm="radau")
+    assert solver.driver_interpolator.num_inputs == 0
+    assert solver.driver_interpolator.evaluation_function is None
+    integrator = solver.kernel.single_integrator
+    assert integrator._loop.compile_settings.evaluate_driver_at_t is None
+
+    samples = np.linspace(0.0, 1.0, 6, dtype=precision)
+    drivers = {
+        name: samples for name in system.indices.driver_names
+    }
+    drivers["driver_sample_period"] = precision(0.1)
+    drivers["wrap"] = False
+    solver._configure_drivers(drivers)
 
     integrator = solver.kernel.single_integrator
     evaluator = solver.kernel.driver_interpolator.evaluation_function
+    assert solver.driver_interpolator.num_inputs == system.num_drivers
     assert (
         integrator._loop.compile_settings.evaluate_driver_at_t
         is evaluator
@@ -1481,7 +1494,9 @@ def test_solve_array_path_matches_dict_path(
     )
 
 
-def test_solve_ivp_positional_argument_order(system, solver_settings):
+def test_solve_ivp_positional_argument_order(
+    system, solver_settings, driver_settings
+):
     """Verify positional args to solve_ivp route correctly.
 
     Regression test: y0 (states) must go to states bucket,
@@ -1500,6 +1515,7 @@ def test_solve_ivp_positional_argument_order(system, solver_settings):
         system,
         states,  # positional: y0
         params,  # positional: parameters
+        drivers=driver_settings,
         duration=0.02,
         dt=0.01,
         save_every=0.01,
@@ -1700,7 +1716,7 @@ def test_array_only_fast_path(solver):
     assert fast_time < 1.0
 
 
-def test_solve_ivp_with_save_variables(system):
+def test_solve_ivp_with_save_variables(system, driver_settings):
     """Test solve_ivp accepts save_variables and produces correct output."""
     state_names = list(system.initial_values.names)[:2]
 
@@ -1708,6 +1724,7 @@ def test_solve_ivp_with_save_variables(system):
         system,
         y0={state_names[0]: [1.0, 2.0]},
         parameters={list(system.parameters.names)[0]: [0.1, 0.2]},
+        drivers=driver_settings,
         save_variables=state_names,
         save_every=0.01,
         duration=0.02,
@@ -2086,13 +2103,14 @@ def test_solve_ivp_raw_equations_precision_override():
     assert result.solve_settings.precision == np.float64
 
 
-def test_solve_ivp_forwards_summarise_variables(system):
+def test_solve_ivp_forwards_summarise_variables(system, driver_settings):
     """solve_ivp threads summarise_variables through to Solver kwargs."""
     state_names = list(system.initial_values.names)[:1]
     result = solve_ivp(
         system,
         y0={state_names[0]: [1.0, 2.0]},
         parameters={list(system.parameters.names)[0]: [0.1, 0.2]},
+        drivers=driver_settings,
         summarise_variables=state_names,
         save_every=0.01,
         summarise_every=0.02,
@@ -2760,3 +2778,173 @@ def test_timing_events_kept_while_timing_is_on(
         assert kernel._cuda_events[1].elapsed_time_ms() > 0.0
     finally:
         solver.set_verbosity(None)
+
+
+# ── Driver coefficient uploads ───────────────────────────── #
+
+
+def _compile_batch(solver, inits, params):
+    """Prepare and compile a batch without launching it."""
+    solver.compile(inits, params, duration=0.05)
+    return solver.kernel.input_arrays
+
+
+def _upload_queued(arrays):
+    """Run the queued host-to-device copies and wait for them."""
+    arrays.initialise(0)
+    arrays._memory_manager.sync_stream(arrays)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"system_type": "constant_deriv"}],
+    indirect=True,
+)
+def test_driverless_solver_has_an_empty_coefficient_layout(solver):
+    """A driverless kernel owns an empty interpolator and no table."""
+    assert solver.system.num_drivers == 0
+    assert solver.driver_interpolator.num_inputs == 0
+    assert solver.driver_interpolator.evaluation_function is None
+    assert solver.kernel.driver_coefficients_shape[0] == 0
+    assert solver.kernel.driver_coefficients_shape == (
+        solver.driver_interpolator.coefficients_shape
+    )
+    assert solver.driver_interpolator.coefficients.shape == (
+        solver.kernel.driver_coefficients_shape
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"system_type": "constant_deriv"}],
+    indirect=True,
+)
+def test_driverless_batch_queues_only_the_run_inputs(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """A driverless kernel attaches its empty table and never uploads it."""
+    solver = solver_mutable
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    table = solver.driver_interpolator.coefficients
+    assert arrays.host.driver_coefficients.array is table
+    assert table.size == 0
+    assert tuple(arrays.device_driver_coefficients.shape) == (1, 1, 1)
+    _upload_queued(arrays)
+
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    assert arrays.host.driver_coefficients.array is table
+    assert arrays._needs_overwrite == ["initial_values", "parameters"]
+
+
+def test_unchanged_drivers_upload_once(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+    system,
+    precision,
+):
+    """The table is queued after configure_drivers, not on a repeat."""
+    solver = solver_mutable
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    uploaded = solver.driver_interpolator.coefficients
+    assert arrays.host.driver_coefficients.array is uploaded
+    assert "driver_coefficients" in arrays._needs_overwrite
+    _upload_queued(arrays)
+
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    assert arrays.host.driver_coefficients.array is uploaded
+    assert arrays._needs_overwrite == ["initial_values", "parameters"]
+    _upload_queued(arrays)
+
+    changed = dict(driver_settings)
+    first_driver = list(system.indices.driver_names)[0]
+    changed[first_driver] = np.asarray(
+        changed[first_driver], dtype=precision
+    ) * precision(2.0)
+    solver._configure_drivers(changed)
+    replacement = solver.driver_interpolator.coefficients
+    assert replacement is not uploaded
+
+    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    assert arrays.host.driver_coefficients.array is replacement
+    assert set(arrays._needs_overwrite) == {
+        "initial_values", "parameters", "driver_coefficients"
+    }
+
+
+def test_driver_value_change_keeps_the_kernel_build(
+    solver_mutable, driver_settings, system, precision
+):
+    """New sample values rebuild the table, not the kernel."""
+    solver = solver_mutable
+    kernel = solver.kernel
+    evaluator = solver.driver_interpolator.evaluation_function
+    kernel_hash = kernel.config_hash
+    dispatcher = kernel.kernel
+
+    changed = dict(driver_settings)
+    first_driver = list(system.indices.driver_names)[0]
+    changed[first_driver] = np.asarray(
+        changed[first_driver], dtype=precision
+    ) * precision(2.0)
+    solver._configure_drivers(changed)
+
+    assert solver.driver_interpolator.evaluation_function is not evaluator
+    assert kernel.config_hash == kernel_hash
+    assert kernel.cache_valid
+    assert kernel.kernel is dispatcher
+    integrator = kernel.single_integrator
+    assert (
+        integrator._loop.compile_settings.evaluate_driver_at_t
+        is evaluator
+    )
+
+
+def test_driver_evaluators_wire_when_drivers_are_configured(
+    solver, driver_settings
+):
+    """An empty kernel interpolator gains its evaluators on configure."""
+    twin = solver.kernel.copy()
+    try:
+        interpolator = twin.driver_interpolator
+        integrator = twin.single_integrator
+        assert interpolator.num_inputs == 0
+        assert interpolator.evaluation_function is None
+        assert integrator._loop.compile_settings.evaluate_driver_at_t is None
+        assert twin.driver_coefficients_shape[0] == 0
+        twin.configure_drivers(driver_settings)
+        assert interpolator.num_inputs == twin.system.num_drivers
+        assert (
+            integrator._loop.compile_settings.evaluate_driver_at_t
+            is interpolator.evaluation_function
+        )
+        assert (
+            integrator._algo_step.compile_settings.evaluate_driver_at_t
+            is interpolator.evaluation_function
+        )
+        assert twin.driver_coefficients_shape == (
+            interpolator.coefficients_shape
+        )
+    finally:
+        twin.close()
+
+
+def test_run_rejects_a_driver_system_without_driver_inputs(
+    solver, simple_initial_values, simple_parameters
+):
+    """A driver system with no configured samples fails at solve."""
+    twin = solver.copy()
+    try:
+        assert twin.system.num_drivers > 0
+        assert twin.driver_interpolator.num_inputs == 0
+        with pytest.raises(ValueError, match="no driver evaluator"):
+            twin.solve(
+                initial_values=simple_initial_values,
+                parameters=simple_parameters,
+                duration=0.05,
+                settling_time=0.0,
+                blocksize=32,
+            )
+    finally:
+        twin.close()

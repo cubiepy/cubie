@@ -185,13 +185,11 @@ def test_close_timeout_is_retryable(
 
 
 def test_solve_ivp_releases_temporary_solver(
-    system, batch_input_arrays, thread_mem_manager
+    system, batch_input_arrays, thread_mem_manager, driver_settings
 ):
     """solve_ivp releases its temporary solver."""
     manager = thread_mem_manager
-    # Reclaim earlier tests' dead registrants first: the baseline
-    # must not contain entries whose deferred teardown would drain
-    # during solve_ivp's own manager calls.
+    # Purge dead registrants so the baseline holds only live entries.
     gc.collect()
     manager._purge_dead_instances()
     baseline = set(manager.registry)
@@ -201,6 +199,7 @@ def test_solve_ivp_releases_temporary_solver(
         system,
         y0,
         params,
+        drivers=driver_settings,
         duration=0.1,
         grid_type="verbatim",
         dt=0.01,
@@ -211,7 +210,7 @@ def test_solve_ivp_releases_temporary_solver(
 
 
 def test_solve_ivp_spill_survives_solver_close(
-    system, batch_input_arrays, tmp_path
+    system, batch_input_arrays, tmp_path, driver_settings
 ):
     """Spilled results remain readable after temporary solver cleanup."""
     y0, params = batch_input_arrays
@@ -219,6 +218,7 @@ def test_solve_ivp_spill_survives_solver_close(
         system,
         y0,
         params,
+        drivers=driver_settings,
         duration=0.1,
         grid_type="verbatim",
         dt=0.01,
@@ -262,12 +262,7 @@ def test_close_does_not_wait_for_unrelated_stream(
     ids = _instance_ids(target_solver)
     assert _registered_bytes(manager, ids) == 0
 
-    target_solver.kernel.run(
-        y0,
-        params,
-        target_solver.driver_interpolator.coefficients,
-        duration=0.1,
-    )
+    target_solver.kernel.run(y0, params, duration=0.1)
     closed_state_view = target_solver.kernel.state
     assert _registered_bytes(manager, ids) > 0
     (
@@ -294,12 +289,7 @@ def test_close_does_not_wait_for_unrelated_stream(
 
     # The session solver differs from the closed one only in
     # registration settings, so it reproduces the same state.
-    solver.kernel.run(
-        y0,
-        params,
-        solver.driver_interpolator.coefficients,
-        duration=0.1,
-    )
+    solver.kernel.run(y0, params, duration=0.1)
     solver.kernel.synchronize()
     solver.kernel.wait_for_writeback()
     expected_state = solver.kernel.state.copy()

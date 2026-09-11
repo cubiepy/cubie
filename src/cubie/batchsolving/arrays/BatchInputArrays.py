@@ -204,7 +204,7 @@ class InputArrays(BaseArrayManager):
         parameters
             Parameter values for each integration run.
         driver_coefficients
-            Horner-ordered driver interpolation coefficients.
+            Driver coefficient table; ``None`` keeps the attached one.
 
         Notes
         -----
@@ -489,6 +489,8 @@ class InputArrays(BaseArrayManager):
         for array_name in arrays_to_copy:
             device_obj = self.device.get_managed_array(array_name)
             host_obj = self.host.get_managed_array(array_name)
+            if host_obj.array.size == 0:
+                continue
             host_slice = (
                 host_obj.chunk_slice(chunk_index)
                 if host_obj.needs_chunked_transfer
@@ -565,9 +567,10 @@ class InputArrays(BaseArrayManager):
         self._transfer_watcher.wait_all(timeout=timeout)
 
     def _invalidate_hook(self) -> None:
-        """Drop device-input references alongside managed arrays."""
+        """Drop device inputs; attached host data refills new buffers."""
         super()._invalidate_hook()
         self._device_inputs.clear()
+        self._needs_overwrite.extend(self.host.array_names())
 
     def reset(self) -> None:
         """Clear all cached arrays and reset allocation tracking."""
