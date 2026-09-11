@@ -153,7 +153,7 @@ def test_driver_del_t_matches_cubic_reference(cubic_inputs,
                                               precision):
     """Driver time derivatives should match the cubic analytic derivative."""
 
-    derivative_fn = cubic_inputs.driver_del_t
+    derivative_fn = cubic_inputs.driver_derivative_fn
     coefficients = cubic_inputs.coefficients
     query_times = np.linspace(
         cubic_inputs.t0,
@@ -178,7 +178,7 @@ def test_driver_del_t_matches_cubic_reference(cubic_inputs,
         rtol=tolerance.rel_loose,
         atol=tolerance.abs_loose,
         err_msg=(
-            "driver_del_t evaluation diverged from analytic derivative\n"
+            "driver_derivative_fn evaluation diverged from analytic derivative\n"
             f"evaluated:\n{np.array2string(evaluated)}\n"
             f"expected:\n{np.array2string(expected)}"
         ),
@@ -190,7 +190,7 @@ def test_cpu_driver_derivative_matches_gpu_reference(
 ) -> None:
     """Driver derivatives from the CPU reference should match the GPU."""
 
-    derivative_fn = cubic_inputs.driver_del_t
+    derivative_fn = cubic_inputs.driver_derivative_fn
     coefficients = cubic_inputs.coefficients
     query_times = np.linspace(
         cubic_inputs.t0,
@@ -318,7 +318,7 @@ def test_symbolic_time_derivative_matches_interpolated(
 
     symbolic = _run_time_derivative(helper, system, query_times)[:, 0]
 
-    derivative_fn = cubic_inputs.driver_del_t
+    derivative_fn = cubic_inputs.driver_derivative_fn
     coefficients = cubic_inputs.coefficients
     interpolated = run_driver_device_eval(
         derivative_fn, coefficients, query_times
@@ -403,7 +403,7 @@ def test_device_interpolation_matches_cpu(
     )
 
     coefficients = input.coefficients
-    device_fn = input.evaluation_function
+    device_fn = input.drivers_fn
 
     gpu = run_driver_device_eval(device_fn, coefficients, query_times)
 
@@ -448,7 +448,7 @@ def test_get_interpolated_matches_kernel_output(cubic_inputs):
     )
 
     expected = run_driver_device_eval(
-        cubic_inputs.evaluation_function,
+        cubic_inputs.drivers_fn,
         cubic_inputs.coefficients,
         query_times,
     )
@@ -487,10 +487,10 @@ def test_wrap_vs_clamp_evaluation(
     )
 
     clamp_gpu = run_driver_device_eval(
-        clamp_input.evaluation_function, clamp_input.coefficients, query_times
+        clamp_input.drivers_fn, clamp_input.coefficients, query_times
     )
     wrap_gpu = run_driver_device_eval(
-        wrap_input.evaluation_function, wrap_input.coefficients, query_times
+        wrap_input.drivers_fn, wrap_input.coefficients, query_times
     )
 
     clamp_cpu = np.vstack(
@@ -563,7 +563,7 @@ def test_non_wrap_returns_zero_outside_range(
 
     input = quadratic_input
     coefficients = input.coefficients
-    device_fn = input.evaluation_function
+    device_fn = input.drivers_fn
     dtype = input.precision
     end_time = input.t0 + (input.num_samples - 1) * input.driver_sample_period
     query_times = np.array(
@@ -615,7 +615,7 @@ def test_wrap_repeats_periodically(wrapping_inputs, tolerance) -> None:
 
     _, wrap_input = wrapping_inputs
     coefficients = wrap_input.coefficients
-    device_fn = wrap_input.evaluation_function
+    device_fn = wrap_input.drivers_fn
     period = wrap_input.num_segments * wrap_input.driver_sample_period
     dtype = wrap_input.precision
     query_times = np.array(
@@ -671,7 +671,7 @@ def test_polynomial_samples_are_reproduced(
         input_dict=input_dict,
     )
     gpu_samples = run_driver_device_eval(
-        input.evaluation_function,
+        input.drivers_fn,
         input.coefficients,
         times,
     )
@@ -715,7 +715,7 @@ def test_order_three_matches_scipy_reference(precision, bc, tolerance) -> None:
     )
     query = np.linspace(times[0], times[-1], 257, dtype=precision)
     gpu = run_driver_device_eval(
-        input.evaluation_function, input.coefficients, query
+        input.drivers_fn, input.coefficients, query
     )
     scipy_samples = samples.copy()
     scipy_times = times.copy()
@@ -823,7 +823,7 @@ def test_natural_boundary_supports_higher_orders(precision, tolerance) -> None:
         )
 
     gpu = run_driver_device_eval(
-        input.evaluation_function, input.coefficients, times
+        input.drivers_fn, input.coefficients, times
     )
     reference = samples
     np.testing.assert_allclose(
@@ -914,7 +914,7 @@ def test_periodic_boundary_respects_general_order(
     # rounding. As the value is so close to zero, the relative error is large.
     # Rather than soften relative tolerance for all, we just fetch all but the
     # exactly 2*pi sample.
-    gpu = run_driver_device_eval(input.evaluation_function,
+    gpu = run_driver_device_eval(input.drivers_fn,
                                  input.coefficients,
                                  times[:-1])
     reference = values[:-1, :]

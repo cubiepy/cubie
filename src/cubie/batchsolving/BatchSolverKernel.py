@@ -376,8 +376,8 @@ class BatchSolverKernel(CUDAFactory):
         self.single_integrator = SingleIntegratorRun(
             system,
             loop_settings=loop_settings,
-            evaluate_driver_at_t=self.driver_interpolator.evaluation_function,
-            driver_del_t=self.driver_interpolator.driver_del_t,
+            drivers_fn=self.driver_interpolator.drivers_fn,
+            driver_derivative_fn=self.driver_interpolator.driver_derivative_fn,
             step_control_settings=step_control_settings,
             algorithm_settings=algorithm_settings,
             output_settings=output_settings,
@@ -659,7 +659,7 @@ class BatchSolverKernel(CUDAFactory):
                 "released; build a new Solver to run again."
             )
         if self.system.sizes.drivers and (
-            self.single_integrator._loop.evaluate_driver_at_t is None
+            self.single_integrator._loop.drivers_fn is None
         ):
             raise ValueError(
                 f"System declares {self.system.sizes.drivers} driver(s) "
@@ -1316,8 +1316,8 @@ class BatchSolverKernel(CUDAFactory):
         """Return the interpolator's evaluators and coefficient layout."""
         interpolator = self.driver_interpolator
         return {
-            "evaluate_driver_at_t": interpolator.evaluation_function,
-            "driver_del_t": interpolator.driver_del_t,
+            "drivers_fn": interpolator.drivers_fn,
+            "driver_derivative_fn": interpolator.driver_derivative_fn,
             "driver_coefficients_shape": interpolator.coefficients_shape,
         }
 

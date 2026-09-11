@@ -92,11 +92,11 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
     get_solver_helper_fn
         Callable with the ``get_solver_helper`` contract serving
         helper device functions.
-    residual_function
+    residual_fn
         Mode's residual device function, injected at build time.
-    linear_solver_function
+    linear_solver_fn
         Direct-LU solve device function, injected at build time.
-    norm_function
+    norm_fn
         Correction-norm device function, injected at build time.
     """
 
@@ -120,9 +120,9 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         validator=validators.optional(validators.is_callable()),
         eq=False,
     )
-    residual_function: Optional[Callable] = device_function_field()
-    linear_solver_function: Optional[Callable] = device_function_field()
-    norm_function: Optional[Callable] = device_function_field()
+    residual_fn: Optional[Callable] = device_function_field()
+    linear_solver_fn: Optional[Callable] = device_function_field()
+    norm_fn: Optional[Callable] = device_function_field()
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -146,11 +146,11 @@ class DAEInitialiserCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    initialise_state
+    initialise_state_fn
         Compiled CUDA device function correcting the state in place.
     """
 
-    initialise_state: Callable = field(validator=is_device_validator)
+    initialise_state_fn: Callable = field(validator=is_device_validator)
 
 
 class DAEInitialiser(CUDAFactory):
@@ -271,16 +271,16 @@ class DAEInitialiser(CUDAFactory):
             lu_result = get_fn("lu_solve", **request_kwargs)
 
         self.linear_solver.update(
-            lu_solve_function=lu_result.device_function,
+            lu_solve_fn=lu_result.device_function,
             lu_nnz=lu_result.lu_nnz,
         )
         self.update_compile_settings(
             {
-                "residual_function": residual,
-                "linear_solver_function": (
+                "residual_fn": residual,
+                "linear_solver_fn": (
                     self.linear_solver.device_function
                 ),
-                "norm_function": self.norm.device_function,
+                "norm_fn": self.norm.device_function,
             }
         )
 
@@ -295,7 +295,7 @@ class DAEInitialiser(CUDAFactory):
         if self.compile_settings.is_noop:
             # no cover: start
             @cuda.jit(device=True, inline=True, **self.jit_kwargs)
-            def initialise_state(
+            def initialise_state_fn(
                 state,
                 parameters,
                 drivers,
@@ -310,16 +310,16 @@ class DAEInitialiser(CUDAFactory):
 
             # no cover: end
             return DAEInitialiserCache(
-                initialise_state=initialise_state
+                initialise_state_fn=initialise_state_fn
             )
 
         # The helper refresh replaces the settings snapshot; read after.
         self.build_solver_helpers()
         config = self.compile_settings
 
-        residual_function = config.residual_function
-        linear_solver_fn = config.linear_solver_function
-        norm_function = config.norm_function
+        residual_fn = config.residual_fn
+        linear_solver_fn = config.linear_solver_fn
+        norm_fn = config.norm_fn
         numba_precision = config.numba_precision
         n = int32(config.n)
         unroll_solver_element = config.unroll.unroll_solver_element
@@ -353,7 +353,7 @@ class DAEInitialiser(CUDAFactory):
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)
-        def initialise_state(
+        def initialise_state_fn(
             state,
             parameters,
             drivers,
@@ -382,7 +382,7 @@ class DAEInitialiser(CUDAFactory):
                 shared_scratch, persistent_scratch
             )
 
-            residual_function(
+            residual_fn(
                 increment,
                 parameters,
                 drivers,
@@ -437,7 +437,7 @@ class DAEInitialiser(CUDAFactory):
                     active, lin_iters[0], int32(0)
                 )
 
-                norm2_dz = norm_function(
+                norm2_dz = norm_fn(
                     delta, increment, state, state, typed_one
                 )
                 nonfinite = not (norm2_dz <= typed_huge)
@@ -471,7 +471,7 @@ class DAEInitialiser(CUDAFactory):
                             increment[i] = (
                                 base[i] + alpha * delta[i]
                             )
-                        residual_function(
+                        residual_fn(
                             increment,
                             parameters,
                             drivers,
@@ -543,7 +543,7 @@ class DAEInitialiser(CUDAFactory):
             )
 
         # no cover: end
-        return DAEInitialiserCache(initialise_state=initialise_state)
+        return DAEInitialiserCache(initialise_state_fn=initialise_state_fn)
 
     def update(
         self,
@@ -600,7 +600,7 @@ class DAEInitialiser(CUDAFactory):
     @property
     def device_function(self) -> Callable:
         """Return the compiled initialisation device function."""
-        return self.get_cached_output("initialise_state")
+        return self.get_cached_output("initialise_state_fn")
 
     @property
     def dae_initialisation(self) -> str:

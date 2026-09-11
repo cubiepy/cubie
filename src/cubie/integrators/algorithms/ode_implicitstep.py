@@ -172,8 +172,8 @@ class ImplicitStepConfig(BaseStepConfig):
         default="local", validator=validators.in_(["local", "shared"])
     )
     solver_function: Optional[Callable] = device_function_field()
-    prepare_jacobian_function: Optional[Callable] = device_function_field()
-    error_solver_function: Optional[Callable] = device_function_field()
+    prepare_jacobian_fn: Optional[Callable] = device_function_field()
+    error_solver_fn: Optional[Callable] = device_function_field()
     helper_operation_counts: OperationCounts = field(
         factory=OperationCounts,
         validator=validators.instance_of(OperationCounts),
@@ -508,7 +508,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             recognized |= self.dense_predictor.update(
                 all_updates, silent=True
             )
-            compiled_functions["predictor_function"] = (
+            compiled_functions["predictor_fn"] = (
                 self.dense_predictor.device_function
                 if self.dense_prediction
                 else None
@@ -569,18 +569,18 @@ class ODEImplicitStep(BaseAlgorithmStep):
         self.build_implicit_helpers()
         config = self.compile_settings
 
-        evaluate_f = config.evaluate_f
+        dxdt_fn = config.dxdt_fn
         numba_precision = config.numba_precision
         n = config.n
-        evaluate_observables = config.evaluate_observables
-        evaluate_driver_at_t = config.evaluate_driver_at_t
+        observables_fn = config.observables_fn
+        drivers_fn = config.drivers_fn
         n_drivers = config.n_drivers
         solver_function = config.solver_function
 
         return self.build_step(
-            evaluate_f,
-            evaluate_observables,
-            evaluate_driver_at_t,
+            dxdt_fn,
+            observables_fn,
+            drivers_fn,
             solver_function,
             numba_precision,
             n,
@@ -590,9 +590,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
     @abstractmethod
     def build_step(
         self,
-        evaluate_f: Callable,
-        evaluate_observables: Callable,
-        evaluate_driver_at_t: Optional[Callable],
+        dxdt_fn: Callable,
+        observables_fn: Callable,
+        drivers_fn: Optional[Callable],
         solver_function: Callable,
         numba_precision: type,
         n: int,
@@ -602,11 +602,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         Parameters
         ----------
-        evaluate_f
+        dxdt_fn
             Device function for evaluating the ODE right-hand side f(t, y).
-        evaluate_observables
+        observables_fn
             Device function for evaluating observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function evaluating drivers at arbitrary times.
         solver_function
             Device function for running internal solver.
@@ -695,9 +695,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
             prepare_function = lu_result.prepare_jac
             cached_count = lu_result.cached_auxiliary_count
             self.solver.update(
-                lu_solve_function=lu_result.device_function,
+                lu_solve_fn=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
-                residual_function=residual,
+                residual_fn=residual,
                 use_cached_auxiliaries=True,
                 solver_width=config.solver_width,
             )
@@ -717,9 +717,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
             prepare_function = operator_result.prepare_jac
             cached_count = operator_result.cached_auxiliary_count
             self.solver.update(
-                operator_apply=operator_result.device_function,
-                preconditioner=preconditioner_result.device_function,
-                residual_function=residual,
+                operator_apply_fn=operator_result.device_function,
+                preconditioner_fn=preconditioner_result.device_function,
+                residual_fn=residual,
                 use_cached_auxiliaries=True,
                 solver_width=config.solver_width,
             )
@@ -756,9 +756,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 **request_kwargs,
             )
             self.solver.update(
-                lu_solve_function=lu_result.device_function,
+                lu_solve_fn=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
-                residual_function=residual,
+                residual_fn=residual,
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
@@ -770,9 +770,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
             operator_result = get_fn("linear_operator", **request_kwargs)
 
             self.solver.update(
-                operator_apply=operator_result.device_function,
-                preconditioner=preconditioner_result.device_function,
-                residual_function=residual,
+                operator_apply_fn=operator_result.device_function,
+                preconditioner_fn=preconditioner_result.device_function,
+                residual_fn=residual,
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
@@ -785,7 +785,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         self.update_compile_settings(
             {
                 "solver_function": self.solver.device_function,
-                "prepare_jacobian_function": prepare_function,
+                "prepare_jacobian_fn": prepare_function,
                 "helper_operation_counts": OperationCounts(**counts),
             }
         )

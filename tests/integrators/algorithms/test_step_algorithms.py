@@ -570,7 +570,7 @@ def test_algorithm(
     """Ensure the step function is compiled and callable."""
     step_object = step_object_mutable
     # Test that it builds
-    assert callable(step_object.step_function), "step_function_builds"
+    assert callable(step_object.step_fn), "step_function_builds"
 
     # test getters
     algorithm = solver_settings[("algorithm")]

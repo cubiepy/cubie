@@ -73,8 +73,8 @@ class ODECache(CUDADispatcherCache):
         Binary-operator counts of the ``dxdt`` and observables sources.
     """
 
-    dxdt: Callable = field()
-    observables: Optional[Callable] = field(default=None)
+    dxdt_fn: Callable = field()
+    observables_fn: Optional[Callable] = field(default=None)
     helpers: SolverHelperCache = field(factory=SolverHelperCache)
     operation_counts: OperationCounts = field(factory=OperationCounts)
 
@@ -392,24 +392,24 @@ class BaseODE(CUDAFactory):
         return deepcopy(self)
 
     @property
-    def evaluate_f(self):
+    def dxdt_fn(self):
         """Compiled ``dxdt(state, parameters, drivers, observables, out, t)``
         device function.
         """
-        return self.get_cached_output("dxdt")
+        return self.get_cached_output("dxdt_fn")
 
     @property
-    def evaluate_observables(self) -> Callable:
+    def observables_fn(self) -> Callable:
         """Compiled ``get_observables(state, parameters, drivers, observables,
         t)`` device function.
         """
-        return self.get_cached_output("observables")
+        return self.get_cached_output("observables_fn")
 
     @property
     def operation_count(self) -> int:
         """Binary-operator count of the ``dxdt`` and observables sources."""
         return self.get_cached_output("operation_counts").total(
-            ("dxdt", "observables")
+            ("dxdt_fn", "observables_fn")
         )
 
     @property

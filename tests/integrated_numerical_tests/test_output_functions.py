@@ -209,12 +209,12 @@ def output_functions_test_kernel(
     )
     test_shared_mem = output_test_settings["test_shared_mem"]
 
-    save_state_func = output_functions.save_state_func
+    save_state_fn = output_functions.save_state_fn
     update_summary_metrics_func = (
-        output_functions.update_summaries_func
+        output_functions.update_summaries_fn
     )
-    save_summary_metrics_func = (
-        output_functions.save_summary_metrics_func
+    save_summaries_fn = (
+        output_functions.save_summaries_fn
     )
 
     num_states = output_test_settings["num_states"]
@@ -336,7 +336,7 @@ def output_functions_test_kernel(
         dummy_obs_summary_out = cuda.local.array(
             obs_summary_output_height, dtype=numba_precision
         )
-        save_summary_metrics_func(
+        save_summaries_fn(
             state_summaries,
             observable_summaries,
             dummy_state_summary_out,
@@ -350,7 +350,7 @@ def output_functions_test_kernel(
             for j in range(num_observables):
                 current_observable[j] = _observable_input[i, j]
 
-            save_state_func(
+            save_state_fn(
                 current_state,
                 current_observable,
                 counters,
@@ -370,7 +370,7 @@ def output_functions_test_kernel(
 
             if (i + 1) % summarise_every == 0:
                 sample_index = int(i / summarise_every)
-                save_summary_metrics_func(
+                save_summaries_fn(
                     state_summaries,
                     observable_summaries,
                     _state_summaries_output[sample_index, :],

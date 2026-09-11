@@ -94,8 +94,8 @@ def test_direct_construction_matches_hot_swap_products(precision, system):
     kwargs = {
         "precision": precision,
         "n": system.sizes.states,
-        "evaluate_f": system.evaluate_f,
-        "evaluate_observables": system.evaluate_observables,
+        "dxdt_fn": system.dxdt_fn,
+        "observables_fn": system.observables_fn,
         "get_solver_helper_fn": system.get_solver_helper,
     }
     direct = BackwardsEulerStep(preconditioner_order=2, **kwargs)
@@ -186,12 +186,12 @@ def test_implicit_step_device_function_fields_are_tagged():
         if fld.metadata.get("device_function")
     }
     assert {
-        "evaluate_f",
-        "evaluate_observables",
-        "evaluate_driver_at_t",
+        "dxdt_fn",
+        "observables_fn",
+        "drivers_fn",
         "solver_function",
-        "prepare_jacobian_function",
-        "error_solver_function",
+        "prepare_jacobian_fn",
+        "error_solver_fn",
     } <= tagged
 
 
@@ -237,13 +237,13 @@ def test_none_preconditioner_builds_identity_solver(precision, system):
         precision=precision,
         n=system.sizes.states,
         preconditioner_type="none",
-        evaluate_f=system.evaluate_f,
-        evaluate_observables=system.evaluate_observables,
+        dxdt_fn=system.dxdt_fn,
+        observables_fn=system.observables_fn,
         get_solver_helper_fn=system.get_solver_helper,
     )
     step.build_implicit_helpers()
     linear = step.solver.linear_solver
-    assert linear.compile_settings.preconditioner is not None
+    assert linear.compile_settings.preconditioner_fn is not None
     assert linear.device_function is not None
 
 
@@ -357,7 +357,7 @@ def test_update_swaps_linear_solver_to_bicgstab(step_object_mutable):
     assert step.krylov_residual_floor == floor_before
     assert np.allclose(step.krylov_atol, atol_before)
     assert np.allclose(step.krylov_rtol, rtol_before)
-    assert step.step_function is not None
+    assert step.step_fn is not None
 
 
 @pytest.mark.parametrize(
@@ -388,7 +388,7 @@ def test_update_swaps_linear_solver_back_to_mr(step_object_mutable):
     assert step.linear_correction_type == "minimal_residual"
     assert step.krylov_residual_reduction == reduction_before
     assert step.krylov_residual_floor == floor_before
-    assert step.step_function is not None
+    assert step.step_fn is not None
 
 
 def test_update_within_mr_class_switches_correction(precision):
@@ -502,7 +502,7 @@ def test_update_swaps_linear_solver_to_lu(step_object_mutable):
     assert settings["zero_initial_guess"] is True
     assert settings["lu_factor_location"] == "local"
     assert (step.linear_solver.atol == atol_before).all()
-    assert step.step_function is not None
+    assert step.step_fn is not None
 
 
 @pytest.mark.parametrize(
@@ -533,7 +533,7 @@ def test_update_swaps_lu_back_to_mr(step_object_mutable):
     # The rebuilt iterative solver resolves its unset cap from width.
     width = step.linear_solver.solver_width
     assert step.krylov_max_iters == math.ceil(1.5 * width)
-    assert step.step_function is not None
+    assert step.step_fn is not None
 
 
 def test_hot_swap_lu_keeps_zero_guess_newton(precision):

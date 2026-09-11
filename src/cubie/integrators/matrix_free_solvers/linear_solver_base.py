@@ -149,9 +149,9 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
     _max_iters : Optional[int]
         Maximum linear iterations permitted. ``None`` resolves to
         ``ceil(1.5 * solver_width)``.
-    operator_apply : Optional[Callable]
+    operator_apply_fn : Optional[Callable]
         Device function applying operator F @ v.
-    preconditioner : Optional[Callable]
+    preconditioner_fn : Optional[Callable]
         Device function for approximate inverse preconditioner.
     _residual_reduction : Optional[float]
         Factor the weighted residual must fall below, relative to the
@@ -175,8 +175,8 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
         ),
         metadata={"prefixed": True},
     )
-    operator_apply: Optional[Callable] = device_function_field()
-    preconditioner: Optional[Callable] = device_function_field()
+    operator_apply_fn: Optional[Callable] = device_function_field()
+    preconditioner_fn: Optional[Callable] = device_function_field()
     _residual_reduction: Optional[float] = field(
         default=None,
         converter=Converter(_default_residual_reduction, takes_self=True),
@@ -228,11 +228,11 @@ class LinearSolverCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    linear_solver : Callable
+    linear_solver_fn : Callable
         Compiled CUDA device function for linear solving.
     """
 
-    linear_solver: Callable = field(validator=is_device_validator)
+    linear_solver_fn: Callable = field(validator=is_device_validator)
 
 
 class LinearSolverBase(MatrixFreeSolver):
@@ -361,7 +361,7 @@ class LinearSolverBase(MatrixFreeSolver):
     @property
     def device_function(self) -> Callable:
         """Return cached linear solver device function."""
-        return self.get_cached_output("linear_solver")
+        return self.get_cached_output("linear_solver_fn")
 
     @property
     def settings_dict(self) -> Dict[str, Any]:

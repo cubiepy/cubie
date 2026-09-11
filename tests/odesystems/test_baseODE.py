@@ -24,7 +24,7 @@ def tiny_system():
 
 def test_copy_is_an_independent_unbuilt_system(tiny_system):
     """A copy hashes the same, owns its values and holds no build."""
-    tiny_system.evaluate_f
+    tiny_system.dxdt_fn
     twin = tiny_system.copy()
     assert twin is not tiny_system
     assert twin.config_hash == tiny_system.config_hash

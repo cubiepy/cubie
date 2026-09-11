@@ -371,7 +371,7 @@ def assert_ivploop_config(loop, settings, tolerance):
     # - shared_buffer_indices, local_indices: computed from sizes
     # - loop_shared_elements, loop_local_elements: computed
     # - saves_per_summary: computed
-    # - evaluate_driver_at_t, evaluate_observables: function references
+    # - drivers_fn, observables_fn: function references
     # - precision, numba_precision, simsafe_precision: derived
 
 
@@ -416,7 +416,7 @@ def assert_output_functions_config(output_functions, settings, tolerance):
     assert output_functions.save_time == settings["save_time"]
 
     # Not tested (computed/function references):
-    # - save_state_func, update_summaries_func, save_summary_metrics_func:
+    # - save_state_fn, update_summaries_fn, save_summaries_fn:
     # compiled functions
     # - n_saved_states, n_saved_observables: computed from indices
     # - summaries_buffer_sizes, output_array_heights: computed
@@ -429,7 +429,7 @@ def assert_symbolic_ode_config(system, settings, tolerance):
     # Not tested (system structure, not settings):
     # - equations, observables, states, parameters, etc: system definition
     # - num_*, sizes: computed from system
-    # - evaluate_f, evaluate_observables: compiled functions
+    # - dxdt_fn, observables_fn: compiled functions
 
 
 def assert_step_algorithm_config(step_algorithm, settings, tolerance):
@@ -485,7 +485,7 @@ def assert_step_algorithm_config(step_algorithm, settings, tolerance):
     # - n: system parameter, not a setting
     # - stage_count, can_reuse_accepted_start, first_same_as_last: algorithm
     # structure
-    # - evaluate_driver_at_t: function reference
+    # - drivers_fn: function reference
     # - n_drivers: system property
     # - simsafe_precision: derived
     # - settings_dict: internal storage

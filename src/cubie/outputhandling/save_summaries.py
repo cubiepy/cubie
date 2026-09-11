@@ -272,7 +272,7 @@ def save_summary_factory(
         inline=True,
         **get_jit_kwargs(lineinfo),
     )
-    def save_summary_metrics_func(
+    def save_summaries_fn(
         buffer_state_summaries,
         buffer_observable_summaries,
         output_state_summaries_window,
@@ -344,4 +344,4 @@ def save_summary_factory(
                 )
 
     # no cover: stop
-    return save_summary_metrics_func
+    return save_summaries_fn

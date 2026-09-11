@@ -41,21 +41,21 @@ compiled callable from `.device_function`.
   `krylov_iters_out` is a length-1 int32 array.
 - `LUSolver` shares the signature: exact per call, `rhs` read-only, the
   guess in `x` ignored, status always `SUCCESS`.
-- `NewtonKrylov`: `newton_krylov_solver(stage_increment, parameters, drivers,
+- `NewtonKrylov`: `nonlinear_solver_fn(stage_increment, parameters, drivers,
   cached_aux, t, h, a_ij, base_state, step_start, shared_scratch,
   persistent_scratch, counters) -> int32`. `stage_increment` updates in
   place; `use_cached_auxiliaries=True` solves at `step_start`. `counters` is
   a length-2 int32 array: `[0]` = Newton iters, `[1]` = total Krylov iters.
 
 ### Caller-supplied callbacks (set via config/`update`)
-- `operator_apply` — applies `F @ v`; sig `(state, parameters, drivers,
+- `operator_apply_fn` — applies `F @ v`; sig `(state, parameters, drivers,
   cached_aux, base_state, t, h, a_ij, v, out)`.
 - `preconditioner` (optional; `None` → search direction is `rhs`); sig
   `(state, parameters, drivers, cached_aux, base_state, t, h, a_ij, rhs,
   preconditioned_vec, jvp)`.
-- `residual_function` (Newton); sig `(stage_increment, parameters, drivers, t, h,
+- `residual_fn` (Newton); sig `(stage_increment, parameters, drivers, t, h,
   a_ij, base_state, residual_out)`.
-- `linear_solver_function` (Newton) — the inner linear solver's
+- `linear_solver_fn` (Newton) — the inner linear solver's
   `device_function`. `NewtonKrylov` owns a child linear solver: its `update`
   forwards `krylov_`-prefixed params to the child and re-injects the
   recompiled device function.
@@ -73,7 +73,7 @@ compiled callable from `.device_function`.
 - Status codes come from the package-central `CUBIE_RESULT_CODES` (`cubie/result_codes.py`,
   re-exported from this package): `SUCCESS=0`,
   `MAX_NEWTON_ITERATIONS_EXCEEDED=2`, `MAX_LINEAR_ITERATIONS_EXCEEDED=4`
-  (captured as device closure constants). `newton_krylov_solver` OR-combines these into a **low-bits** status
+  (captured as device closure constants). `nonlinear_solver_fn` OR-combines these into a **low-bits** status
   word — it does NOT pack the iteration count into high bits (counts go to `counters`).
   Callers OR this word into their own step status.
 - Linear norms use `ScaledNorm` (`TiledScaledNorm` for coupled FIRK

@@ -965,9 +965,9 @@ def test_driver_evaluator_wired_on_configure(precision):
     system = build_three_state_nonlinear_system(precision)
     solver = Solver(system, algorithm="radau")
     assert solver.driver_interpolator.num_inputs == 0
-    assert solver.driver_interpolator.evaluation_function is None
+    assert solver.driver_interpolator.drivers_fn is None
     integrator = solver.kernel.single_integrator
-    assert integrator._loop.compile_settings.evaluate_driver_at_t is None
+    assert integrator._loop.compile_settings.drivers_fn is None
 
     samples = np.linspace(0.0, 1.0, 6, dtype=precision)
     drivers = {
@@ -978,29 +978,29 @@ def test_driver_evaluator_wired_on_configure(precision):
     solver._configure_drivers(drivers)
 
     integrator = solver.kernel.single_integrator
-    evaluator = solver.kernel.driver_interpolator.evaluation_function
+    evaluator = solver.kernel.driver_interpolator.drivers_fn
     assert solver.driver_interpolator.num_inputs == system.num_drivers
     assert (
-        integrator._loop.compile_settings.evaluate_driver_at_t
+        integrator._loop.compile_settings.drivers_fn
         is evaluator
     )
     assert (
-        integrator._algo_step.compile_settings.evaluate_driver_at_t
+        integrator._algo_step.compile_settings.drivers_fn
         is evaluator
     )
 
 
 def test_driverless_system_has_no_driver_evaluator(precision):
-    """A driverless system leaves ``evaluate_driver_at_t`` unset."""
+    """A driverless system leaves ``drivers_fn`` unset."""
     system = build_diagonally_dominant_system(precision)
     solver = Solver(system, algorithm="radau")
 
     integrator = solver.kernel.single_integrator
     assert (
-        integrator._loop.compile_settings.evaluate_driver_at_t is None
+        integrator._loop.compile_settings.drivers_fn is None
     )
     assert (
-        integrator._algo_step.compile_settings.evaluate_driver_at_t
+        integrator._algo_step.compile_settings.drivers_fn
         is None
     )
 
@@ -2702,7 +2702,7 @@ def test_driverless_solver_has_an_empty_coefficient_layout(solver):
     """A driverless kernel owns an empty interpolator and no table."""
     assert solver.system.num_drivers == 0
     assert solver.driver_interpolator.num_inputs == 0
-    assert solver.driver_interpolator.evaluation_function is None
+    assert solver.driver_interpolator.drivers_fn is None
     assert solver.kernel.driver_coefficients_shape[0] == 0
     assert solver.kernel.driver_coefficients_shape == (
         solver.driver_interpolator.coefficients_shape
@@ -2777,7 +2777,7 @@ def test_driver_value_change_keeps_the_kernel_build(
     """New sample values rebuild the table, not the kernel."""
     solver = solver_mutable
     kernel = solver.kernel
-    evaluator = solver.driver_interpolator.evaluation_function
+    evaluator = solver.driver_interpolator.drivers_fn
     kernel_hash = kernel.config_hash
     dispatcher = kernel.kernel
 
@@ -2788,13 +2788,13 @@ def test_driver_value_change_keeps_the_kernel_build(
     ) * precision(2.0)
     solver._configure_drivers(changed)
 
-    assert solver.driver_interpolator.evaluation_function is not evaluator
+    assert solver.driver_interpolator.drivers_fn is not evaluator
     assert kernel.config_hash == kernel_hash
     assert kernel.cache_valid
     assert kernel.kernel is dispatcher
     integrator = kernel.single_integrator
     assert (
-        integrator._loop.compile_settings.evaluate_driver_at_t
+        integrator._loop.compile_settings.drivers_fn
         is evaluator
     )
 
@@ -2808,18 +2808,18 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
         interpolator = twin.driver_interpolator
         integrator = twin.single_integrator
         assert interpolator.num_inputs == 0
-        assert interpolator.evaluation_function is None
-        assert integrator._loop.compile_settings.evaluate_driver_at_t is None
+        assert interpolator.drivers_fn is None
+        assert integrator._loop.compile_settings.drivers_fn is None
         assert twin.driver_coefficients_shape[0] == 0
         twin.configure_drivers(driver_settings)
         assert interpolator.num_inputs == twin.system.num_drivers
         assert (
-            integrator._loop.compile_settings.evaluate_driver_at_t
-            is interpolator.evaluation_function
+            integrator._loop.compile_settings.drivers_fn
+            is interpolator.drivers_fn
         )
         assert (
-            integrator._algo_step.compile_settings.evaluate_driver_at_t
-            is interpolator.evaluation_function
+            integrator._algo_step.compile_settings.drivers_fn
+            is interpolator.drivers_fn
         )
         assert twin.driver_coefficients_shape == (
             interpolator.coefficients_shape

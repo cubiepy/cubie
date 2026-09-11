@@ -39,7 +39,7 @@ class _ConcreteMetric(SummaryMetric):
 
     def build(self):
         return MetricFuncCache(
-            update=self._update_fn, save=self._save_fn
+            update_fn=self._update_fn, save_fn=self._save_fn
         )
 
 
@@ -99,7 +99,7 @@ def test_metric_func_cache_stores_callables():
     def fn_s():
         return "s"
 
-    cache = MetricFuncCache(update=fn_u, save=fn_s)
+    cache = MetricFuncCache(update_fn=fn_u, save_fn=fn_s)
     assert cache.update is fn_u
     assert cache.save is fn_s
 
@@ -219,16 +219,16 @@ def test_summary_metric_init_sets_up_compile_settings():
 
 
 def test_summary_metric_update_device_func():
-    """update_device_func returns the cached 'update' function."""
+    """update_fn returns the cached 'update' function."""
     m = _ConcreteMetric(precision=np.float32)
-    # Accessing update_device_func triggers build via get_cached_output
-    assert m.update_device_func is m._update_fn
+    # Accessing update_fn triggers build via get_cached_output
+    assert m.update_fn is m._update_fn
 
 
 def test_summary_metric_save_device_func():
-    """save_device_func returns the cached 'save' function."""
+    """save_fn returns the cached 'save' function."""
     m = _ConcreteMetric(precision=np.float32)
-    assert m.save_device_func is m._save_fn
+    assert m.save_fn is m._save_fn
 
 
 # ── SummaryMetric.update ──────────────────────────────────────────── #
@@ -619,9 +619,9 @@ def test_save_functions():
     reg = _make_registry(np.float32)
     fns = reg.save_functions(["alpha", "beta"])
     assert len(fns) == 2
-    # save_device_func triggers build; verify identity with metric objects
-    assert fns[0] is reg._metric_objects["alpha"].save_device_func
-    assert fns[1] is reg._metric_objects["beta"].save_device_func
+    # save_fn triggers build; verify identity with metric objects
+    assert fns[0] is reg._metric_objects["alpha"].save_fn
+    assert fns[1] is reg._metric_objects["beta"].save_fn
 
 
 def test_update_functions():
@@ -631,8 +631,8 @@ def test_update_functions():
     reg = _make_registry(np.float32)
     fns = reg.update_functions(["alpha", "beta"])
     assert len(fns) == 2
-    assert fns[0] is reg._metric_objects["alpha"].update_device_func
-    assert fns[1] is reg._metric_objects["beta"].update_device_func
+    assert fns[0] is reg._metric_objects["alpha"].update_fn
+    assert fns[1] is reg._metric_objects["beta"].update_fn
 
 
 # ── SummaryMetrics.params ──────────────────────────────────────────── #
@@ -907,5 +907,5 @@ def test_every_registered_metric_builds():
     return lines that a single parametrised algorithm test would not.
     """
     for name, metric in global_registry._metric_objects.items():
-        assert callable(metric.update_device_func), name
-        assert callable(metric.save_device_func), name
+        assert callable(metric.update_fn), name
+        assert callable(metric.save_fn), name

@@ -66,7 +66,7 @@ back here. CUDA-authoring **optimisation** conventions are in
 ### CUDAFactory (cached compilation)
 - **Subclasses override `build()`** to return a `CUDADispatcherCache` subclass
   instance (a bare callable raises `TypeError`). They **expose compiled device
-  functions as named properties** (e.g. `device_function`, `evaluate_f`); callers use
+  functions as named properties** (e.g. `device_function`, `dxdt_fn`); callers use
   those properties. `get_cached_output(name)` is the internal plumbing the properties
   use, not the external interface. Never call `build()` directly — storing a
   device-function reference and then updating settings yields a stale reference
@@ -134,6 +134,7 @@ back here. CUDA-authoring **optimisation** conventions are in
   (tuples, not lists).
 - A system runs at **one precision** (`ALLOWED_PRECISIONS` = float16/32/64); float
   members are returned cast to it via `self.precision(...)`.
+- **Device functions are named `<full words>_fn`** on both sides: the producer's cache field and every consumer's config field carry the same name (`dxdt_fn`, `step_fn`, `loop_fn`).
 - **Device-function fields are declared with `device_function_field()`** (`_utils`):
   `metadata={"device_function": True}`, compared by identity for invalidation,
   excluded from hashing. `CUDAFactory.products` returns a build's cache fields by

@@ -158,4 +158,4 @@ class DxdtExtrema(SummaryMetric):
             buffer[2] = precision(1.0e30)
 
         # no cover: end
-        return MetricFuncCache(update=update, save=save)
+        return MetricFuncCache(update_fn=update, save_fn=save)

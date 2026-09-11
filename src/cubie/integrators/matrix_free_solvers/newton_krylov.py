@@ -80,11 +80,11 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         Solver vector length.
     max_iters : int
         Maximum Newton iterations permitted, defaulting to eight.
-    norm_device_function : Optional[Callable]
+    norm_fn : Optional[Callable]
         Compiled correction norm for convergence checks.
-    residual_function : Optional[Callable]
+    residual_fn : Optional[Callable]
         Device function evaluating residuals.
-    linear_solver_function : Optional[Callable]
+    linear_solver_fn : Optional[Callable]
         Device function for solving linear systems.
     delta_location : str
         Memory location for delta buffer.
@@ -110,8 +110,8 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         metadata={"prefixed": True},
     )
     use_cached_auxiliaries: bool = field(default=False)
-    residual_function: Optional[Callable] = device_function_field()
-    linear_solver_function: Optional[Callable] = device_function_field()
+    residual_fn: Optional[Callable] = device_function_field()
+    linear_solver_fn: Optional[Callable] = device_function_field()
     delta_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -152,11 +152,11 @@ class NewtonKrylovCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    newton_krylov_solver : Callable
+    nonlinear_solver_fn : Callable
         Compiled CUDA device function for Newton-Krylov solving.
     """
 
-    newton_krylov_solver: Callable = field(validator=is_device_validator)
+    nonlinear_solver_fn: Callable = field(validator=is_device_validator)
 
 
 class NewtonKrylov(MatrixFreeSolver):
@@ -226,7 +226,7 @@ class NewtonKrylov(MatrixFreeSolver):
             required={
                 "precision": precision,
                 "solver_width": solver_width,
-                "norm_device_function": self.norm.device_function,
+                "norm_fn": self.norm.device_function,
             },
             instance_label="newton",
             **kwargs,
@@ -287,9 +287,9 @@ class NewtonKrylov(MatrixFreeSolver):
         config = self.compile_settings
 
         # Extract parameters from config
-        residual_function = config.residual_function
-        linear_solver_fn = config.linear_solver_function
-        correction_norm_fn = config.norm_device_function
+        residual_fn = config.residual_fn
+        linear_solver_fn = config.linear_solver_fn
+        correction_norm_fn = config.norm_fn
 
         n = config.solver_width
         max_iters = int32(config.max_iters)
@@ -337,7 +337,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)
-        def newton_krylov_solver(
+        def nonlinear_solver_fn(
             stage_increment,
             parameters,
             drivers,
@@ -396,7 +396,7 @@ class NewtonKrylov(MatrixFreeSolver):
                 iteration += int32(1)
                 active = (not converged) & (not failed)
 
-                residual_function(
+                residual_fn(
                     stage_increment,
                     parameters,
                     drivers,
@@ -526,7 +526,7 @@ class NewtonKrylov(MatrixFreeSolver):
             return final_status
 
         # no cover: end
-        return NewtonKrylovCache(newton_krylov_solver=newton_krylov_solver)
+        return NewtonKrylovCache(nonlinear_solver_fn=nonlinear_solver_fn)
 
     def update(
         self,
@@ -565,8 +565,8 @@ class NewtonKrylov(MatrixFreeSolver):
 
         # Forward krylov-prefixed params to linear solver
         recognized |= self.linear_solver.update(all_updates, silent=True)
-        # Add linear_solver_function to updates for compile settings
-        all_updates["linear_solver_function"] = (
+        # Add linear_solver_fn to updates for compile settings
+        all_updates["linear_solver_fn"] = (
             self.linear_solver.device_function
         )
         recognized |= super().update(all_updates, silent=True)
@@ -582,7 +582,7 @@ class NewtonKrylov(MatrixFreeSolver):
     @property
     def device_function(self) -> Callable:
         """Return cached Newton-Krylov solver device function."""
-        return self.get_cached_output("newton_krylov_solver")
+        return self.get_cached_output("nonlinear_solver_fn")
 
     @property
     def newton_atol(self) -> ndarray:

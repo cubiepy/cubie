@@ -77,10 +77,10 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    single_integrator_function
+    loop_fn
         Compiled CUDA loop callable ready for execution on device.
     """
-    single_integrator_function: Callable = field(eq=False)
+    loop_fn: Callable = field(eq=False)
 
 
 class SingleIntegratorRunCore(CUDAFactory):
@@ -102,10 +102,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         ``"saved_state_indices"``, ``"saved_observable_indices"``,
         ``"summarised_state_indices"``, and
         ``"summarised_observable_indices"``.
-    evaluate_driver_at_t
+    drivers_fn
         Optional device function that interpolates driver inputs for use
         by step algorithms.
-    driver_del_t
+    driver_derivative_fn
         Optional device function providing the time derivative of the
         driver signal, used by Rosenbrock-W methods.
     algorithm_settings
@@ -164,8 +164,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         system: "BaseODE",
         loop_settings: Optional[Dict[str, Any]] = None,
         output_settings: Optional[Dict[str, Any]] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
-        driver_del_t: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
+        driver_derivative_fn: Optional[Callable] = None,
         algorithm_settings: Optional[Dict[str, Any]] = None,
         step_control_settings: Optional[Dict[str, Any]] = None,
         auto_performance: bool = True,
@@ -216,9 +216,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         algorithm_settings["n_drivers"] = system_sizes.drivers
         if dt is not None:
             algorithm_settings["dt"] = dt
-        algorithm_settings["evaluate_driver_at_t"] = evaluate_driver_at_t
+        algorithm_settings["drivers_fn"] = drivers_fn
         # Thread the driver time-derivative through to algorithm factories
-        algorithm_settings["driver_del_t"] = driver_del_t
+        algorithm_settings["driver_derivative_fn"] = driver_derivative_fn
         self._algo_step = get_algorithm_step(
                 precision=precision,
                 settings=algorithm_settings,
@@ -289,7 +289,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self._output_functions.observable_summaries_buffer_height
             ),
             loop_settings=loop_settings,
-            evaluate_driver_at_t=evaluate_driver_at_t,
+            drivers_fn=drivers_fn,
         )
 
         # Timing keys as the user gave them.
@@ -507,7 +507,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         callable
             Compiled CUDA device function.
         """
-        return self.get_cached_output("single_integrator_function")
+        return self.get_cached_output("loop_fn")
 
     def check_compatibility(
         self,
@@ -603,7 +603,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         observable_summaries_buffer_height: int,
         compile_flags: OutputCompileFlags,
         loop_settings: Dict[str, Any],
-        evaluate_driver_at_t: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
     ) -> IVPLoop:
         """Instantiate the integrator loop.
 
@@ -629,7 +629,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         loop_settings
             Mapping of loop configuration overrides forwarded directly to the
             :class:`~cubie.integrators.loops.ode_loop.IVPLoop` constructor.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function that evaluates drivers for proposed times.
 
         Returns
@@ -656,8 +656,8 @@ class SingleIntegratorRunCore(CUDAFactory):
                 observable_summaries_buffer_height
             ),
         )
-        if "evaluate_driver_at_t" not in loop_kwargs:
-            loop_kwargs["evaluate_driver_at_t"] = evaluate_driver_at_t
+        if "drivers_fn" not in loop_kwargs:
+            loop_kwargs["drivers_fn"] = drivers_fn
 
         loop = IVPLoop(**loop_kwargs)
         return loop
@@ -1060,15 +1060,15 @@ class SingleIntegratorRunCore(CUDAFactory):
             Cache containing the compiled loop device function.
         """
 
-        # Lowest level - check for changes in evaluate_f, get_solver_helper_fn
-        evaluate_f = self._system.evaluate_f
-        evaluate_observables = self._system.evaluate_observables
+        # Lowest level - check for changes in dxdt_fn, get_solver_helper_fn
+        dxdt_fn = self._system.dxdt_fn
+        observables_fn = self._system.observables_fn
         get_solver_helper_fn = self._system.get_solver_helper
         compiled_fns_dict = {}
-        if evaluate_f != self._algo_step.evaluate_f:
-            compiled_fns_dict["evaluate_f"] = evaluate_f
-        if evaluate_observables != self._algo_step.evaluate_observables:
-            compiled_fns_dict["evaluate_observables"] = evaluate_observables
+        if dxdt_fn != self._algo_step.dxdt_fn:
+            compiled_fns_dict["dxdt_fn"] = dxdt_fn
+        if observables_fn != self._algo_step.observables_fn:
+            compiled_fns_dict["observables_fn"] = observables_fn
         if get_solver_helper_fn != self._algo_step.get_solver_helper_fn:
             compiled_fns_dict['get_solver_helper_fn'] = get_solver_helper_fn
 
@@ -1081,16 +1081,16 @@ class SingleIntegratorRunCore(CUDAFactory):
         # its nested solver buffer sizes during build_step, so a size
         # snapshot taken before the build undersizes the loop's pool.
         compiled_functions = {
-            'save_state_fn': self._output_functions.save_state_func,
+            'save_state_fn': self._output_functions.save_state_fn,
             'update_summaries_fn': (
-                self._output_functions.update_summaries_func
+                self._output_functions.update_summaries_fn
             ),
             'save_summaries_fn': (
-                self._output_functions.save_summary_metrics_func
+                self._output_functions.save_summaries_fn
             ),
             'step_controller_fn': self._step_controller.device_function,
-            'step_function': self._algo_step.step_function,
-            'evaluate_observables': evaluate_observables}
+            'step_fn': self._algo_step.step_fn,
+            'observables_fn': observables_fn}
 
         # Re-register algo and controller buffers to refresh sizing in loop
         buffer_registry.register_child(
@@ -1122,7 +1122,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._loop.update(compiled_functions)
         loop_fn = self._loop.device_function
 
-        return SingleIntegratorRunCache(single_integrator_function=loop_fn)
+        return SingleIntegratorRunCache(loop_fn=loop_fn)
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -1198,10 +1198,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         return {
             key: getattr(config, key, None)
             for key in (
-                "evaluate_f",
-                "evaluate_observables",
-                "evaluate_driver_at_t",
-                "driver_del_t",
+                "dxdt_fn",
+                "observables_fn",
+                "drivers_fn",
+                "driver_derivative_fn",
                 "get_solver_helper_fn",
             )
         }
@@ -1213,8 +1213,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         unroll_settings = grouped.pop("unroll_settings")
         twin = type(self)(
             self._system.copy(),
-            evaluate_driver_at_t=drivers["evaluate_driver_at_t"],
-            driver_del_t=drivers["driver_del_t"],
+            drivers_fn=drivers["drivers_fn"],
+            driver_derivative_fn=drivers["driver_derivative_fn"],
             **grouped,
         )
         if unroll_settings:
