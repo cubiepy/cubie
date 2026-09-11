@@ -352,11 +352,8 @@ def is_device_validator(instance, attribute, value):
 
 
 def device_function_field(prefixed: bool = False, **kwargs):
-    """Config field for a device function: identity-compared, unhashed.
-
-    ``prefixed`` keys the field by the owner's instance label, like a
-    prefixed setting.
-    """
+    """Config field for a device function, keyed by the owner's label
+    when ``prefixed``: identity-compared, unhashed."""
     return field(
         default=None,
         eq=False,
