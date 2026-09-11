@@ -1249,8 +1249,8 @@ def test_empty_input_dict_configures_empty_interpolator(precision):
     assert interp.coefficients_shape == (0, 0, interp.order + 1)
     assert interp.coefficients.shape == interp.coefficients_shape
     assert interp.coefficients.dtype == precision
-    assert interp.evaluation_function is None
-    assert interp.driver_del_t is None
+    assert interp.drivers_fn is None
+    assert interp.driver_derivative_fn is None
 
 
 def test_empty_interpolator_keeps_its_identity_across_empty_updates(
@@ -1275,8 +1275,8 @@ def test_empty_interpolator_populates_from_samples(precision):
     )
     assert {"input_array", "order", "wrap"} <= recognised
     assert interp.compile_settings.values_hash != identity
-    assert callable(interp.evaluation_function)
-    assert callable(interp.driver_del_t)
+    assert callable(interp.drivers_fn)
+    assert callable(interp.driver_derivative_fn)
     assert interp.num_inputs == 1
     assert interp.num_samples == 6
     assert interp.coefficients_shape == (7, 1, 3)
