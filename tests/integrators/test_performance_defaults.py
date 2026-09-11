@@ -46,8 +46,7 @@ def instruction_cache_capacity():
 
 
 def shared_buffer_keeps_occupancy(step, elements_per_run, fraction=1):
-    """Whether a shared buffer of this many elements per run keeps
-    ``1 / fraction`` of the register-limited threads resident."""
+    """Whether this many shared elements per run keep the occupancy."""
     itemsize = np_dtype(step.precision).itemsize
     return shared_keeps_occupancy(
         device_hardware(), (elements_per_run + 1) * itemsize, fraction
@@ -89,8 +88,7 @@ def test_newton_solves_per_step(step_object, solves):
     "solver_settings_override", [ALGORITHM_CHAIN_SETS["dirk"]], indirect=True
 )
 def test_small_direct_dirk_defaults(solver, system):
-    """A small direct-solve DIRK records its operator counts, keeps its
-    Newton loop unrolled and its accumulator local."""
+    """A small direct DIRK counts operators, unrolls Newton, stays local."""
     step = solver.kernel.single_integrator._algo_step
     counts = step.compile_settings.helper_operation_counts
     assert counts.residual > 0
@@ -119,8 +117,7 @@ def test_small_direct_firk_keeps_stage_increment_local(solver):
     "solver_settings_override", [LARGE_DIRK, LARGE_FIRK], indirect=True
 )
 def test_large_direct_step_rolls_newton_and_stays_local(solver, system):
-    """A direct-solve step over the instruction cache rolls its Newton
-    loop and keeps its stage buffer local at any size."""
+    """A direct step over the instruction cache rolls Newton, stays local."""
     step = solver.kernel.single_integrator._algo_step
     assert unrolled_operations(step, system) > instruction_cache_capacity()
     assert step.compile_settings.unroll.unroll_newton_exits == ROLLED
@@ -146,8 +143,7 @@ def test_user_newton_flag_wins(solver):
     "solver_settings_override", [KRYLOV_FIRK], indirect=True
 )
 def test_small_krylov_firk_shares_stage_increment(solver):
-    """A Krylov FIRK shares ``stage_increment`` while the shared buffer
-    keeps the register-limited thread count."""
+    """A Krylov FIRK shares ``stage_increment`` while occupancy holds."""
     run = solver.kernel.single_integrator
     step = run._algo_step
     assert not step.uses_direct_solver
@@ -175,8 +171,7 @@ def test_large_krylov_firk_keeps_stage_increment_local(solver):
     "solver_settings_override", [KRYLOV_DIRK], indirect=True
 )
 def test_register_resident_krylov_dirk_keeps_accumulator_local(solver):
-    """A Krylov DIRK whose buffers fit the registers keeps its
-    accumulator local."""
+    """A Krylov DIRK within the registers keeps its accumulator local."""
     step = solver.kernel.single_integrator._algo_step
     assert not step.uses_direct_solver
     declared = buffer_registry.declared_local_elements(step)
@@ -188,9 +183,7 @@ def test_register_resident_krylov_dirk_keeps_accumulator_local(solver):
     "solver_settings_override", [MEDIUM_KRYLOV_DIRK], indirect=True
 )
 def test_spilling_krylov_dirk_shares_accumulator(solver_mutable):
-    """A Krylov DIRK whose buffers exceed the registers shares its
-    accumulator when that keeps half the threads, and keeps it shared
-    across a rebuild."""
+    """A spilling Krylov DIRK shares its accumulator, also after a rebuild."""
     run = solver_mutable.kernel.single_integrator
     step = run._algo_step
     assert not step.uses_direct_solver
@@ -210,8 +203,7 @@ def test_spilling_krylov_dirk_shares_accumulator(solver_mutable):
     "solver_settings_override", [LARGE_KRYLOV_DIRK], indirect=True
 )
 def test_large_krylov_dirk_keeps_accumulator_local(solver):
-    """A Krylov DIRK whose shared accumulator would halve the threads
-    stays local."""
+    """A Krylov DIRK whose shared accumulator costs occupancy stays local."""
     step = solver.kernel.single_integrator._algo_step
     declared = buffer_registry.declared_local_elements(step)
     assert declared > MAX_REGISTERS_PER_THREAD
@@ -236,8 +228,7 @@ def test_user_accumulator_location_wins(solver):
     "solver_settings_override", [LARGE_VERN7], indirect=True
 )
 def test_large_accumulating_erk_state_follows_occupancy(solver):
-    """An ERK that accumulates its output over more stage vectors than the
-    registers hold shares ``state`` while that keeps the thread count."""
+    """A spilling accumulating ERK shares ``state`` while occupancy holds."""
     run = solver.kernel.single_integrator
     step = run._algo_step
     assert step.tableau.accumulates_output

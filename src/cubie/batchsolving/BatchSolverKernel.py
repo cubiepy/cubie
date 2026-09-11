@@ -977,10 +977,8 @@ class BatchSolverKernel(CUDAFactory):
         return geometry
 
     def _launch_shape(self, blocksize: int, runs: int) -> tuple[int, int]:
-        """Return the block size and dynamic shared bytes of a launch.
-
-        The block size halves until the shared footprint fits a block.
-        """
+        """Return the block size (halved until its shared footprint fits)
+        and dynamic shared bytes of a launch."""
         pad = 4 if self.shared_memory_needs_padding else 0
         padded_bytes = self.shared_memory_bytes + pad
         blocksize, dynamic_sharedmem = self.limit_blocksize(
@@ -1009,10 +1007,8 @@ class BatchSolverKernel(CUDAFactory):
         Returns
         -------
         tuple[int, int or None]
-            The ``blocksize`` setting and ``None`` (residency by the L2
-            rule) when that setting was given or ``auto_performance`` is
-            off; otherwise the block size and residency chosen for this
-            kernel and batch.
+            The automatic choice, or the ``blocksize`` setting and
+            ``None`` when it was given or ``auto_performance`` is off.
         """
         configured = self.compile_settings.blocksize
         # A given block size, or auto_performance off, launches as set.
@@ -1096,13 +1092,8 @@ class BatchSolverKernel(CUDAFactory):
     def _resident_blocks_within_l2(
         dispatcher: Any, blocksize: int, natural: int
     ) -> int:
-        """Return the most blocks per SM that let every resident thread's
-        local memory fit in the L2 cache.
-
-        The driver's own count (``natural``) stands when the local memory
-        per thread is under ``RESIDENCY_CUT_MIN_FRAME_BYTES`` or when no
-        count fits.
-        """
+        """Return the most blocks per SM whose threads' local memory fits in
+        L2; ``natural`` for small local memory or when no count fits."""
         frame = kernel_resources(dispatcher).local_bytes_per_thread
         if frame < RESIDENCY_CUT_MIN_FRAME_BYTES:
             return natural

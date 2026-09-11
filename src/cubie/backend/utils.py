@@ -166,13 +166,8 @@ def register_sub_partitions(hardware: DeviceHardware) -> int:
 def register_limited_threads(
     hardware: DeviceHardware, registers_per_thread: int
 ) -> int:
-    """Return the resident threads per SM the register file allows.
-
-    Registers are allocated per warp, rounded up to
-    ``REGISTER_ALLOCATION_GRANULARITY``, out of each sub-partition's
-    equal share of the file, as the CUDA occupancy calculator counts
-    them.
-    """
+    """Return the resident threads per SM the register file allows, with
+    registers allocated per warp from each sub-partition's share."""
     unit = REGISTER_ALLOCATION_GRANULARITY
     warp_registers = registers_per_thread * hardware.warp_size
     warp_registers = -(-warp_registers // unit) * unit
@@ -187,9 +182,8 @@ def register_limited_threads(
 def shared_keeps_occupancy(
     hardware: DeviceHardware, bytes_per_run: int, fraction: int = 1
 ) -> bool:
-    """Return whether a shared buffer of ``bytes_per_run`` per thread
-    still lets at least ``1 / fraction`` of the register-limited threads
-    run at once."""
+    """Whether ``bytes_per_run`` of shared memory per thread keeps at
+    least ``1 / fraction`` of the register-limited threads resident."""
     shared_threads = shared_limited_threads(hardware, bytes_per_run)
     register_threads = register_limited_threads(
         hardware, MAX_REGISTERS_PER_THREAD

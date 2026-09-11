@@ -596,10 +596,8 @@ class ERKStep(ODEExplicitStep):
 
     @property
     def performance_defaults(self) -> PerformanceSettings:
-        """Share ``state`` for a tableau that accumulates its output when
-        the stage vectors exceed the registers a thread can hold and the
-        shared buffer still lets as many threads run at once.
-        """
+        """Share ``state`` for an accumulating tableau that spills registers
+        and keeps occupancy."""
         shared = False
         n_states = self.n_states
         if (

@@ -104,13 +104,12 @@ summarised defaults to saved when all summarise inputs are `None`.
   loop iterates chunks, calling `input_arrays.initialise(i)` (H2D) and
   `output_arrays.finalise(i)` (D2H/writeback).
 - **Launch geometry:** `launch_geometry(blocksize=None)` returns a launch's block size and
-  dynamic shared bytes: the block size halves until the shared footprint fits a block, then
-  a pad holds `resident_blocks` per SM. With no block size given and `auto_performance` on,
-  `_default_launch` chooses the block size and residency for the compiled kernel (an L2
-  budget for the threads' local memory, then the block shape); otherwise the `blocksize`
-  setting launches with residency by the L2 rule. `shared_memory_needs_padding` adds a
-  4-byte skew only for single precision with an even element count (float64 never pads —
-  it would misalign).
+  dynamic shared bytes (block size halved until its shared footprint fits, then a pad
+  holding `resident_blocks` per SM). With no block size given and `auto_performance` on,
+  `_default_launch` picks the block size and residency for the compiled kernel; otherwise
+  the `blocksize` setting launches with residency by the L2 rule.
+  `shared_memory_needs_padding` adds a 4-byte skew only for single precision with an even
+  element count (float64 never pads — it would misalign).
 
 ### Results
 Every solve returns one `SolveResult` that **owns the solve's host buffers** — nothing is

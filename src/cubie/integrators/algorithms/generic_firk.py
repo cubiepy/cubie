@@ -990,9 +990,7 @@ class FIRKStep(ODEImplicitStep):
 
     @property
     def performance_defaults(self) -> PerformanceSettings:
-        """Share ``stage_increment`` for a Krylov solve when the shared
-        buffer still lets as many threads run at once as the registers do.
-        """
+        """Share ``stage_increment`` for a Krylov solve keeping occupancy."""
         shared = False
         if not self.uses_direct_solver:
             itemsize = np_dtype(self.precision).itemsize

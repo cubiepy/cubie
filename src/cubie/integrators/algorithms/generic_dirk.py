@@ -1098,10 +1098,8 @@ class DIRKStep(ODEImplicitStep):
 
     @property
     def performance_defaults(self) -> PerformanceSettings:
-        """Share ``accumulator`` for a Krylov step whose local buffers
-        exceed the registers a thread can hold, when the shared buffer
-        still lets half as many threads run at once as the registers do.
-        """
+        """Share ``accumulator`` for a Krylov step that spills registers and
+        keeps half the occupancy."""
         shared = False
         n_states = self.n_states
         accumulator = max(self.tableau.stage_count - 1, 0) * n_states
