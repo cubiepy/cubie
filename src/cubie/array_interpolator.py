@@ -483,7 +483,10 @@ class ArrayInterpolator(CUDAFactory):
         """
         coefficients = self._compute_coefficients()
         if self.num_inputs == 0:
-            return InterpolatorCache(coefficients=coefficients)
+            return InterpolatorCache(
+                coefficients=coefficients,
+                coefficients_shape=self.coefficients_shape,
+            )
         precision = self.precision
 
         order = self.order
