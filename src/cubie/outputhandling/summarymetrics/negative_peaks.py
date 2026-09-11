@@ -167,4 +167,4 @@ class NegativePeaks(SummaryMetric):
             int_slots[0] = int32(0)
 
         # no cover: end
-        return MetricFuncCache(update=update, save=save)
+        return MetricFuncCache(update_fn=update, save_fn=save)

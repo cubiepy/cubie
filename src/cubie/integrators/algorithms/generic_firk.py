@@ -115,7 +115,7 @@ class FIRKStepConfig(ImplicitStepConfig):
         Newton by reading the previous step's stage curve ahead over
         the next step. Ignored when the tableau does not meet the
         transform's preconditions.
-    predictor_function : Callable or None
+    predictor_fn : Callable or None
         Compiled dense-prediction device function, piped through
         compile settings so predictor rebuilds invalidate the step.
     stage_increment_location : str
@@ -135,7 +135,7 @@ class FIRKStepConfig(ImplicitStepConfig):
     attempt_dense_prediction: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
-    predictor_function: Optional[Callable] = device_function_field()
+    predictor_fn: Optional[Callable] = device_function_field()
     stage_increment_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -148,7 +148,7 @@ class FIRKStepConfig(ImplicitStepConfig):
     stage_state_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    apply_mass_function: Optional[Callable] = device_function_field()
+    apply_mass_fn: Optional[Callable] = device_function_field()
 
     @property
     def stage_count(self) -> int:
@@ -175,9 +175,9 @@ class FIRKStep(ODEImplicitStep):
         self,
         precision: PrecisionDType,
         n: int,
-        evaluate_f: Optional[Callable] = None,
-        evaluate_observables: Optional[Callable] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
+        dxdt_fn: Optional[Callable] = None,
+        observables_fn: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
         get_solver_helper_fn: Optional[Callable] = None,
         tableau: FIRKTableau = DEFAULT_FIRK_TABLEAU,
         n_drivers: int = 0,
@@ -198,11 +198,11 @@ class FIRKStep(ODEImplicitStep):
             Floating-point precision for CUDA computations.
         n
             Number of state variables in the ODE system.
-        evaluate_f
+        dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
-        evaluate_observables
+        observables_fn
             Device function computing system observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function evaluating drivers at arbitrary times.
         get_solver_helper_fn
             Factory function returning solver helper for Jacobian operations.
@@ -250,9 +250,9 @@ class FIRKStep(ODEImplicitStep):
                 "precision": precision,
                 "n": n,
                 "n_drivers": n_drivers,
-                "evaluate_f": evaluate_f,
-                "evaluate_observables": evaluate_observables,
-                "evaluate_driver_at_t": evaluate_driver_at_t,
+                "dxdt_fn": dxdt_fn,
+                "observables_fn": observables_fn,
+                "drivers_fn": drivers_fn,
                 "get_solver_helper_fn": get_solver_helper_fn,
                 "tableau": tableau,
                 "attempt_dense_prediction": attempt_dense_prediction,
@@ -442,9 +442,9 @@ class FIRKStep(ODEImplicitStep):
                 prepare_function = lu_result.prepare_jac
                 cached_count = lu_result.cached_auxiliary_count
                 self.solver.update(
-                    lu_solve_function=lu_result.device_function,
+                    lu_solve_fn=lu_result.device_function,
                     lu_nnz=lu_result.lu_nnz,
-                    residual_function=residual,
+                    residual_fn=residual,
                     use_cached_auxiliaries=True,
                     solver_width=config.solver_width,
                 )
@@ -466,9 +466,9 @@ class FIRKStep(ODEImplicitStep):
                 prepare_function = operator_result.prepare_jac
                 cached_count = operator_result.cached_auxiliary_count
                 self.solver.update(
-                    operator_apply=operator_result.device_function,
-                    preconditioner=preconditioner_result.device_function,
-                    residual_function=residual,
+                    operator_apply_fn=operator_result.device_function,
+                    preconditioner_fn=preconditioner_result.device_function,
+                    residual_fn=residual,
                     use_cached_auxiliaries=True,
                     solver_width=config.solver_width,
                 )
@@ -486,9 +486,9 @@ class FIRKStep(ODEImplicitStep):
                 **stage_kwargs,
             )
             self.solver.update(
-                lu_solve_function=lu_result.device_function,
+                lu_solve_fn=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
-                residual_function=residual,
+                residual_fn=residual,
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
@@ -508,9 +508,9 @@ class FIRKStep(ODEImplicitStep):
             )
 
             self.solver.update(
-                operator_apply=operator_result.device_function,
-                preconditioner=preconditioner_result.device_function,
-                residual_function=residual,
+                operator_apply_fn=operator_result.device_function,
+                preconditioner_fn=preconditioner_result.device_function,
+                residual_fn=residual,
                 use_cached_auxiliaries=False,
                 solver_width=config.solver_width,
             )
@@ -521,7 +521,7 @@ class FIRKStep(ODEImplicitStep):
             "cached_auxiliaries", self, size=cached_count
         )
 
-        apply_mass_function = None
+        apply_mass_fn = None
         if self.smooth_error:
             if self.uses_direct_solver:
                 if self.uses_cached_solve:
@@ -535,7 +535,7 @@ class FIRKStep(ODEImplicitStep):
                         **stage_kwargs,
                     )
                     self.error_solver.update(
-                        lu_solve_function=smoothing.device_function,
+                        lu_solve_fn=smoothing.device_function,
                         lu_nnz=smoothing.lu_nnz,
                         solver_width=config.n,
                     )
@@ -547,7 +547,7 @@ class FIRKStep(ODEImplicitStep):
                         **stage_kwargs,
                     )
                     self.error_solver.update(
-                        lu_solve_function=lu_at_state.device_function,
+                        lu_solve_fn=lu_at_state.device_function,
                         lu_nnz=lu_at_state.lu_nnz,
                         solver_width=config.n,
                     )
@@ -564,8 +564,8 @@ class FIRKStep(ODEImplicitStep):
                     **stage_kwargs,
                 )
                 self.error_solver.update(
-                    operator_apply=operator_at_state.device_function,
-                    preconditioner=preconditioner_at_state.device_function,
+                    operator_apply_fn=operator_at_state.device_function,
+                    preconditioner_fn=preconditioner_at_state.device_function,
                     solver_width=config.n,
                 )
                 counts["error_solve"] = (
@@ -573,33 +573,33 @@ class FIRKStep(ODEImplicitStep):
                     + preconditioner_at_state.operation_count
                 )
             apply_mass = get_fn("apply_mass")
-            apply_mass_function = apply_mass.device_function
+            apply_mass_fn = apply_mass.device_function
             counts["apply_mass"] = apply_mass.operation_count
 
         self.update_compile_settings(
             {
                 "solver_function": self.solver.device_function,
-                "prepare_jacobian_function": prepare_function,
-                "predictor_function": (
+                "prepare_jacobian_fn": prepare_function,
+                "predictor_fn": (
                     self.dense_predictor.device_function
                     if self.dense_prediction
                     else None
                 ),
-                "error_solver_function": (
+                "error_solver_fn": (
                     self.error_solver.device_function
                     if self.smooth_error
                     else None
                 ),
-                "apply_mass_function": apply_mass_function,
+                "apply_mass_fn": apply_mass_fn,
                 "helper_operation_counts": OperationCounts(**counts),
             }
         )
 
     def build_step(
         self,
-        evaluate_f: Callable,
-        evaluate_observables: Callable,
-        evaluate_driver_at_t: Optional[Callable],
+        dxdt_fn: Callable,
+        observables_fn: Callable,
+        drivers_fn: Optional[Callable],
         solver_function: Callable,
         numba_precision: type,
         n: int,
@@ -611,14 +611,14 @@ class FIRKStep(ODEImplicitStep):
         tableau = config.tableau
 
         use_dense_prediction = self.dense_prediction
-        predict_stages = config.predictor_function
+        predict_stages = config.predictor_fn
         use_smoothed_error = self.smooth_error
-        error_solver = config.error_solver_function
-        apply_mass = config.apply_mass_function
+        error_solver = config.error_solver_fn
+        apply_mass = config.apply_mass_fn
         use_cached_solve = self.uses_cached_solve
-        prepare_jacobian = config.prepare_jacobian_function
+        prepare_jacobian = config.prepare_jacobian_fn
 
-        nonlinear_solver = solver_function
+        nonlinear_solver_fn = solver_function
 
         n = int32(n)
         unroll_stage = self.compile_settings.unroll.unroll_stage
@@ -626,7 +626,7 @@ class FIRKStep(ODEImplicitStep):
         n_drivers = int32(n_drivers)
         stage_count = int32(self.stage_count)
 
-        has_evaluate_driver_at_t = evaluate_driver_at_t is not None
+        has_evaluate_driver_at_t = drivers_fn is not None
         has_error = self.uses_error
 
         precision = config.precision
@@ -818,7 +818,7 @@ class FIRKStep(ODEImplicitStep):
                     driver_slice = stage_driver_stack[
                         driver_offset : driver_offset + n_drivers
                     ]
-                    evaluate_driver_at_t(
+                    drivers_fn(
                         stage_time, driver_coeffs, driver_slice
                     )
 
@@ -833,7 +833,7 @@ class FIRKStep(ODEImplicitStep):
                     cached_aux,
                 )
             # Solve n-stage nonlinear problem for all stages
-            solver_status = nonlinear_solver(
+            solver_status = nonlinear_solver_fn(
                 stage_increment,
                 parameters,
                 stage_driver_stack,
@@ -919,7 +919,7 @@ class FIRKStep(ODEImplicitStep):
                 # rhs = M @ (weighted stage sum) - gamma*h*f(y_n),
                 # stored in the unused stage_state buffer.
                 apply_mass(error, stage_state)
-                evaluate_f(
+                dxdt_fn(
                     state,
                     parameters,
                     drivers_buffer,
@@ -955,13 +955,13 @@ class FIRKStep(ODEImplicitStep):
 
             if not ends_at_one:
                 if has_evaluate_driver_at_t:
-                    evaluate_driver_at_t(
+                    drivers_fn(
                         end_time,
                         driver_coeffs,
                         proposed_drivers,
                     )
 
-            evaluate_observables(
+            observables_fn(
                 proposed_state,
                 parameters,
                 proposed_drivers,
@@ -976,7 +976,7 @@ class FIRKStep(ODEImplicitStep):
             return status_code
 
         # no cover: end
-        return StepCache(step=step, nonlinear_solver=nonlinear_solver)
+        return StepCache(step_fn=step, nonlinear_solver_fn=nonlinear_solver_fn)
 
     @property
     def baked_stage_diagonal(self) -> None:

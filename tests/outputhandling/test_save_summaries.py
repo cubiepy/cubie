@@ -110,15 +110,15 @@ def test_save_summary_factory_branch_isolation(
 def test_save_summary_func_cache_identity(output_functions):
     """save_summary_factory result is stored in the cache and forwarded."""
     # Accessing the property triggers build, populating the cache
-    fn = output_functions.save_summary_metrics_func
+    fn = output_functions.save_summaries_fn
     cache = output_functions._cache
-    assert cache.save_summaries_function is fn
+    assert cache.save_summaries_fn is fn
 
 
 def test_save_and_update_summary_funcs_are_distinct(output_functions):
     """Save and update summary functions are separate compiled functions."""
-    save_fn = output_functions.save_summary_metrics_func
-    update_fn = output_functions.update_summaries_func
+    save_fn = output_functions.save_summaries_fn
+    update_fn = output_functions.update_summaries_fn
     assert save_fn is not update_fn
 
 
@@ -156,9 +156,9 @@ def test_save_summary_factory_empty_indices_builds(
         **settings,
     )
     # Accessing the property triggers build; no exception raised
-    fn = empty_summaries.save_summary_metrics_func
+    fn = empty_summaries.save_summaries_fn
     cache = empty_summaries._cache
-    assert cache.save_summaries_function is fn
+    assert cache.save_summaries_fn is fn
 
 
 def test_summary_types_forwarded_to_compile_settings(

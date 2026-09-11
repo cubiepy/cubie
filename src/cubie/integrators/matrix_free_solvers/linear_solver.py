@@ -137,9 +137,9 @@ class MRLinearSolver(IterativeLinearSolverBase):
         config = self.compile_settings
 
         # Device Functions
-        operator_apply = config.operator_apply
-        preconditioner = config.preconditioner
-        scaled_norm_fn = config.norm_device_function
+        operator_apply_fn = config.operator_apply_fn
+        preconditioner = config.preconditioner_fn
+        scaled_norm_fn = config.norm_fn
 
         # Config parameters
         n = config.solver_width
@@ -223,7 +223,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
             if zero_initial_guess:
                 acc = rhs_norm2
             else:
-                operator_apply(
+                operator_apply_fn(
                     state,
                     parameters,
                     drivers,
@@ -266,7 +266,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                     for i in unroll_if(range(n_val), unroll_solver_element):
                         preconditioned_vec[i] = rhs[i]
 
-                operator_apply(
+                operator_apply_fn(
                     state,
                     parameters,
                     drivers,
@@ -312,4 +312,4 @@ class MRLinearSolver(IterativeLinearSolverBase):
             return final_status
 
         # no cover: end
-        return LinearSolverCache(linear_solver=linear_solver)
+        return LinearSolverCache(linear_solver_fn=linear_solver)

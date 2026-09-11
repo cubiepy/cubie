@@ -71,9 +71,9 @@ class CrankNicolsonStep(ODEImplicitStep):
         self,
         precision: PrecisionDType,
         n: int,
-        evaluate_f: Optional[Callable] = None,
-        evaluate_observables: Optional[Callable] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
+        dxdt_fn: Optional[Callable] = None,
+        observables_fn: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
         get_solver_helper_fn: Optional[Callable] = None,
         **kwargs,
     ) -> None:
@@ -85,11 +85,11 @@ class CrankNicolsonStep(ODEImplicitStep):
             Precision applied to device buffers.
         n
             Number of state entries advanced per step.
-        evaluate_f
+        dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
-        evaluate_observables
+        observables_fn
             Device function computing system observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function evaluating drivers at arbitrary times.
         get_solver_helper_fn
             Callable returning device helpers used by the nonlinear solver.
@@ -109,9 +109,9 @@ class CrankNicolsonStep(ODEImplicitStep):
                 'get_solver_helper_fn': get_solver_helper_fn,
                 'beta': beta,
                 'gamma': gamma,
-                'evaluate_f': evaluate_f,
-                'evaluate_observables': evaluate_observables,
-                'evaluate_driver_at_t': evaluate_driver_at_t,
+                'dxdt_fn': dxdt_fn,
+                'observables_fn': observables_fn,
+                'drivers_fn': drivers_fn,
             },
             **kwargs
         )
@@ -147,9 +147,9 @@ class CrankNicolsonStep(ODEImplicitStep):
 
     def build_step(
         self,
-        evaluate_f: Callable,
-        evaluate_observables: Callable,
-        evaluate_driver_at_t: Optional[Callable],
+        dxdt_fn: Callable,
+        observables_fn: Callable,
+        drivers_fn: Optional[Callable],
         solver_function: Callable,
         numba_precision: type,
         n: int,
@@ -159,11 +159,11 @@ class CrankNicolsonStep(ODEImplicitStep):
 
         Parameters
         ----------
-        evaluate_f
+        dxdt_fn
             Device function for evaluating f(t, y).
-        evaluate_observables
+        observables_fn
             Device function for computing observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function for evaluating drivers at time t.
         solver_function
             Device function for the Newton-Krylov nonlinear solver.
@@ -181,13 +181,13 @@ class CrankNicolsonStep(ODEImplicitStep):
         """
         stage_coefficient = numba_precision(0.5)
         be_coefficient = numba_precision(1.0)
-        has_evaluate_driver_at_t = evaluate_driver_at_t is not None
+        has_evaluate_driver_at_t = drivers_fn is not None
         n = int32(n)
         unroll_step_element = self.compile_settings.unroll.unroll_step_element
 
         use_cached_solve = self.uses_cached_solve
         prepare_jacobian = (
-            self.compile_settings.prepare_jacobian_function
+            self.compile_settings.prepare_jacobian_fn
         )
 
         # Get child allocators for Newton solver
@@ -298,7 +298,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             base_state = error
 
             # Evaluate f(state)
-            evaluate_f(
+            dxdt_fn(
                 state,
                 parameters,
                 drivers_buffer,
@@ -317,7 +317,7 @@ class CrankNicolsonStep(ODEImplicitStep):
 
             # Solve Crank-Nicolson step (main solution)
             if has_evaluate_driver_at_t:
-                evaluate_driver_at_t(
+                drivers_fn(
                     end_time,
                     driver_coefficients,
                     proposed_drivers,
@@ -376,7 +376,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             for i in unroll_if(range(n), unroll_step_element):
                 error[i] = proposed_state[i] - (state[i] + base_state[i])
 
-            evaluate_observables(
+            observables_fn(
                 proposed_state,
                 parameters,
                 proposed_drivers,
@@ -387,7 +387,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             return status
 
         # no cover: end
-        return StepCache(step=step, nonlinear_solver=solver_function)
+        return StepCache(step_fn=step, nonlinear_solver_fn=solver_function)
 
     @property
     def is_multistage(self) -> bool:

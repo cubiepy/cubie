@@ -15,13 +15,13 @@ from cubie._utils import is_devfunc
 def test_load_simple_cellml_model(basic_model):
     """Load a simple CellML model successfully."""
     assert basic_model.num_states == 1
-    assert is_devfunc(basic_model.evaluate_f)
+    assert is_devfunc(basic_model.dxdt_fn)
 
 
 def test_load_complex_cellml_model(beeler_reuter_model):
     """Load Beeler-Reuter cardiac model successfully."""
     assert beeler_reuter_model.num_states == 8
-    assert is_devfunc(beeler_reuter_model.evaluate_f)
+    assert is_devfunc(beeler_reuter_model.dxdt_fn)
 
 
 def test_algebraic_equations_as_observables(beeler_reuter_model):
@@ -82,7 +82,7 @@ def test_integration_with_solve_ivp(basic_model):
     """Test that loaded model builds and is ready for solve_ivp."""
 
     # Verify the model has the necessary components
-    assert is_devfunc(basic_model.evaluate_f)
+    assert is_devfunc(basic_model.dxdt_fn)
     assert basic_model.num_states == 1
     # Verify initial values are accessible
     assert basic_model.indices.states.defaults is not None
@@ -134,7 +134,7 @@ def test_default_units_for_symbolic_ode():
 def test_cellml_uses_sympy_pathway(basic_model):
     """Verify CellML adapter uses SymPy pathway internally."""
     assert basic_model.num_states == 1
-    assert is_devfunc(basic_model.evaluate_f)
+    assert is_devfunc(basic_model.dxdt_fn)
 
     initial_vals = basic_model.indices.states.default_values
     assert len(initial_vals) > 0

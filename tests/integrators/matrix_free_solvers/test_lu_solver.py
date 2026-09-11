@@ -167,7 +167,7 @@ def test_lu_solver_config_lu_nnz_sizes_factor_buffer(precision):
 def test_lu_solver_config_defaults(precision):
     """Config exposes the direct-solve fields with inert defaults."""
     config = LUSolverConfig(precision=precision, solver_width=3)
-    assert config.lu_solve_function is None
+    assert config.lu_solve_fn is None
     assert config.lu_nnz == 0
     settings = config.settings_dict
     assert settings["linear_correction_type"] == "lu"

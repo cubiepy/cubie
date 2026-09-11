@@ -171,4 +171,4 @@ class FixedStepController(BaseStepController):
             return success
 
         # no cover: end
-        return ControllerCache(device_function=controller_fixed_step)
+        return ControllerCache(step_controller_fn=controller_fixed_step)

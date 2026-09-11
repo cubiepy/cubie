@@ -144,7 +144,7 @@ def correction_norm_reference(
     return _scaled_norm_impl(update, reference, atol, rtol)
 
 
-def scaled_norm(
+def norm_fn(
     values: Union[Sequence[float], Array],
     reference: Union[Sequence[float], Array],
     atol: np.floating,

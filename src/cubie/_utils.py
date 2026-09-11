@@ -712,7 +712,7 @@ def build_config(
         Attrs class to instantiate (e.g., DIRKStepConfig).
     required : dict
         Required parameters that must be provided. These are typically
-        function parameters like precision, n, evaluate_f.
+        function parameters like precision, n, dxdt_fn.
     instance_label : str, optional
         Instance label for MultipleInstanceCUDAFactoryConfig classes.
         When provided, prefixed keys (e.g., 'krylov_atol') are

@@ -89,27 +89,27 @@ def test_iterative_config_max_iters_validation():
 
 
 def test_matrix_free_solver_config_norm_device_function_field():
-    """norm_device_function defaults to None and takes a device function."""
+    """norm_fn defaults to None and takes a device function."""
     config = MatrixFreeSolverConfig(precision=np.float64, solver_width=3)
-    assert config.norm_device_function is None
+    assert config.norm_fn is None
 
     @cuda.jit(device=True)
     def dummy_norm(values, reference):
         return values[0]
 
     config_with_fn = MatrixFreeSolverConfig(
-        precision=np.float64, solver_width=3, norm_device_function=dummy_norm
+        precision=np.float64, solver_width=3, norm_fn=dummy_norm
     )
-    assert config_with_fn.norm_device_function is dummy_norm
+    assert config_with_fn.norm_fn is dummy_norm
 
     # Verify eq=False behavior: configs with different functions are still
-    # equal (since norm_device_function is excluded from equality)
+    # equal (since norm_fn is excluded from equality)
     @cuda.jit(device=True)
     def another_norm(values, reference):
         return values[1]
 
     config_other = MatrixFreeSolverConfig(
-        precision=np.float64, solver_width=3, norm_device_function=another_norm
+        precision=np.float64, solver_width=3, norm_fn=another_norm
     )
     assert config_with_fn == config_other
 

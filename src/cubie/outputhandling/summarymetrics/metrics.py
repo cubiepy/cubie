@@ -66,8 +66,8 @@ class MetricFuncCache(CUDADispatcherCache):
         Callable save device function.
     """
 
-    update: Callable = field(default=None)
-    save: Callable = field(default=None)
+    update_fn: Callable = field(default=None)
+    save_fn: Callable = field(default=None)
 
 
 @frozen
@@ -141,9 +141,9 @@ class SummaryMetric(CUDAFactory):
         element, in output order. ``None`` falls back to the registry's
         default naming (the metric name for a single output, or
         ``{name}_{i+1}`` for each element of a multi-output metric).
-    update_device_func
+    update_fn
         Callable. Compiled CUDA device update function for the metric.
-    save_device_func
+    save_fn
         Callable. Compiled CUDA device save function for the metric.
     sample_summaries_every
         Time interval between summary metric samples. Defaults to 0.01.
@@ -243,16 +243,16 @@ class SummaryMetric(CUDAFactory):
         pass
 
     @property
-    def update_device_func(self) -> Callable:
+    def update_fn(self) -> Callable:
         """CUDA device update function for the metric."""
 
-        return self.get_cached_output("update")
+        return self.get_cached_output("update_fn")
 
     @property
-    def save_device_func(self) -> Callable:
+    def save_fn(self) -> Callable:
         """CUDA device save function for the metric."""
 
-        return self.get_cached_output("save")
+        return self.get_cached_output("save_fn")
 
     def update(self, **kwargs) -> None:
         """Update metric compile settings.
@@ -781,7 +781,7 @@ class SummaryMetrics:
         parsed_request = self.preprocess_request(output_types_requested)
         # Retrieve device functions from metric objects at call time
         return tuple(
-            self._metric_objects[metric].save_device_func
+            self._metric_objects[metric].save_fn
             for metric in parsed_request
         )
 
@@ -804,7 +804,7 @@ class SummaryMetrics:
         parsed_request = self.preprocess_request(output_types_requested)
         # Retrieve device functions from metric objects at call time
         return tuple(
-            self._metric_objects[metric].update_device_func
+            self._metric_objects[metric].update_fn
             for metric in parsed_request
         )
 

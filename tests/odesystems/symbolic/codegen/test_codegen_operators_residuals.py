@@ -34,7 +34,7 @@ def test_cached_operator_reads_cache_buffer(
     )
     ast.parse(code)
     assert "cached_aux[" in code
-    assert "def operator_apply(" in code
+    assert "def operator_apply_fn(" in code
 
 
 def test_prepare_jac_populates_cache_slots(
@@ -218,7 +218,7 @@ def test_n_stage_operator_skips_zero_stage_coupling(
         stage_nodes=stage_nodes,
     )
     ast.parse(code)
-    assert "def operator_apply(" in code
+    assert "def operator_apply_fn(" in code
 
 
 def test_n_stage_operator_without_cse(

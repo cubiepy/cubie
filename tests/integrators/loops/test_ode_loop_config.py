@@ -127,8 +127,8 @@ def test_device_function_defaults_none():
     cfg = ODELoopConfig(precision=np.float32)
     for attr in (
         "save_state_fn", "update_summaries_fn", "save_summaries_fn",
-        "step_controller_fn", "step_function",
-        "evaluate_driver_at_t", "evaluate_observables",
+        "step_controller_fn", "step_fn",
+        "drivers_fn", "observables_fn",
     ):
         assert getattr(cfg, attr) is None
 

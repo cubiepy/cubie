@@ -74,11 +74,11 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "precision",
     "n",
     "attempt_dense_prediction",
-    "evaluate_f",
-    "evaluate_observables",
-    "evaluate_driver_at_t",
+    "dxdt_fn",
+    "observables_fn",
+    "drivers_fn",
     "get_solver_helper_fn",
-    "driver_del_t",
+    "driver_derivative_fn",
     "beta",
     "gamma",
     "preconditioner_order",
@@ -164,19 +164,19 @@ components use this set to filter kwargs before forwarding.
    * - ``n_drivers``
      - :class:`BaseStepConfig`
      - Number of external driver signals.
-   * - ``evaluate_f``
+   * - ``dxdt_fn``
      - :class:`BaseStepConfig`
      - Device function evaluating the ODE RHS.
-   * - ``evaluate_observables``
+   * - ``observables_fn``
      - :class:`BaseStepConfig`
      - Device function evaluating observables.
-   * - ``evaluate_driver_at_t``
+   * - ``drivers_fn``
      - :class:`BaseStepConfig`
      - Device function evaluating drivers at a given time.
    * - ``get_solver_helper_fn``
      - :class:`BaseStepConfig`
      - Callable returning device helpers for solver construction.
-   * - ``driver_del_t``
+   * - ``driver_derivative_fn``
      - Rosenbrock algorithms
      - Device function for driver time derivative.
    * - ``beta``
@@ -646,11 +646,11 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Number of external driver signals consumed by the step (>= 0).
     is_adaptive
         Whether the step controller is adaptive.
-    evaluate_f
+    dxdt_fn
         Device function that evaluates the system right-hand side f(t, y).
-    evaluate_observables
+    observables_fn
         Device function that evaluates the system observables.
-    evaluate_driver_at_t
+    drivers_fn
         Device function that evaluates driver arrays for a given time t.
     get_solver_helper_fn
         Optional callable that returns device helpers required by the
@@ -664,9 +664,9 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
     is_adaptive: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
-    evaluate_f: Optional[Callable] = device_function_field()
-    evaluate_observables: Optional[Callable] = device_function_field()
-    evaluate_driver_at_t: Optional[Callable] = device_function_field()
+    dxdt_fn: Optional[Callable] = device_function_field()
+    observables_fn: Optional[Callable] = device_function_field()
+    drivers_fn: Optional[Callable] = device_function_field()
     get_solver_helper_fn: Optional[Callable] = field(
         default=None,
         validator=validators.optional(validators.is_callable()),
@@ -715,15 +715,15 @@ class StepCache(CUDADispatcherCache):
 
     Parameters
     ----------
-    step
+    step_fn
         Device function that advances the integration state.
-    nonlinear_solver
+    nonlinear_solver_fn
         Optional device function used by implicit methods to perform
         nonlinear solves.
     """
 
-    step: Callable = field(validator=is_device_validator)
-    nonlinear_solver: Optional[Callable] = field(
+    step_fn: Callable = field(validator=is_device_validator)
+    nonlinear_solver_fn: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
     )
@@ -976,9 +976,9 @@ class BaseAlgorithmStep(CUDAFactory):
         return min(self.order, tableau.embedded_order)
 
     @property
-    def step_function(self) -> Callable:
+    def step_fn(self) -> Callable:
         """Return the cached device function that advances the solution."""
-        return self.get_cached_output("step")
+        return self.get_cached_output("step_fn")
 
     def copy(self) -> "BaseAlgorithmStep":
         """Return a new step of this family with these settings."""
@@ -987,14 +987,14 @@ class BaseAlgorithmStep(CUDAFactory):
         )
 
     @property
-    def evaluate_f(self) -> Optional[Callable]:
+    def dxdt_fn(self) -> Optional[Callable]:
         """Return the compiled device derivative function."""
-        return self.compile_settings.evaluate_f
+        return self.compile_settings.dxdt_fn
 
     @property
-    def evaluate_observables(self) -> Optional[Callable]:
+    def observables_fn(self) -> Optional[Callable]:
         """Return the compiled device observables function."""
-        return self.compile_settings.evaluate_observables
+        return self.compile_settings.observables_fn
 
     @property
     def get_solver_helper_fn(self) -> Optional[Callable]:

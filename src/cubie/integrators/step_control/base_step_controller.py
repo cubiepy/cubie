@@ -303,11 +303,11 @@ class ControllerCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    device_function
+    step_controller_fn
         Compiled CUDA device function, or ``-1`` before compilation.
     """
 
-    device_function: Union[Callable, int] = field(default=-1)
+    step_controller_fn: Union[Callable, int] = field(default=-1)
 
 
 @frozen
@@ -551,6 +551,11 @@ class BaseStepController(CUDAFactory):
             config.timestep_memory_location,
             persistent=True,
         )
+
+    @property
+    def device_function(self) -> Callable:
+        """Return the compiled step-controller device function."""
+        return self.get_cached_output("step_controller_fn")
 
     @abstractmethod
     def build(self) -> ControllerCache:

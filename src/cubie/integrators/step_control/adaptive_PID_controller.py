@@ -250,4 +250,4 @@ class AdaptivePIDController(BaseAdaptiveStepController):
             return ret
 
         # no cover: end
-        return ControllerCache(device_function=controller_PID)
+        return ControllerCache(step_controller_fn=controller_PID)

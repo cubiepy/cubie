@@ -58,7 +58,7 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
         Numerical precision for computations.
     solver_width : int
         Solver vector length (must be >= 1).
-    norm_device_function : Optional[Callable]
+    norm_fn : Optional[Callable]
         Compiled norm function for convergence checks. Updated when
         norm factory rebuilds; changes invalidate solver cache.
     """
@@ -66,7 +66,7 @@ class MatrixFreeSolverConfig(MultipleInstanceCUDAFactoryConfig):
     solver_width: int = field(
         default=0, validator=getype_validator(int, 1)
     )
-    norm_device_function: Optional[Callable] = device_function_field()
+    norm_fn: Optional[Callable] = device_function_field()
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
@@ -164,7 +164,7 @@ class MatrixFreeSolver(MultipleInstanceCUDAFactory):
         recognized = set()
 
         recognized |= self.norm.update(all_updates, silent=True)
-        all_updates.update({"norm_device_function": self.norm.device_function})
+        all_updates.update({"norm_fn": self.norm.device_function})
         recognized |= self.update_compile_settings(all_updates, silent=True)
 
         return recognized

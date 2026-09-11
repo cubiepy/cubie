@@ -197,7 +197,7 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
         name="ordering_update",
         operation_ordering="kahn",
     )
-    first_function = ode.evaluate_f
+    first_function = ode.dxdt_fn
     first_source_hash = ode.gen_file.fn_hash
     first_fn_hash = ode.fn_hash
     first_jvp = ode._get_jvp_exprs()
@@ -208,7 +208,7 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     assert ode.operation_ordering == "liveness_auto"
     assert ode.fn_hash == first_fn_hash
 
-    second_function = ode.evaluate_f
+    second_function = ode.dxdt_fn
     assert second_function is not first_function
     assert ode.gen_file.fn_hash != first_source_hash
     assert ode.fn_hash == first_fn_hash
@@ -247,9 +247,9 @@ def test_solver_helper_cached(system):
 def test_observables_helper_available(system):
     """Symbolic systems should expose an observables-only helper."""
 
-    func = system.evaluate_observables
+    func = system.observables_fn
     assert callable(func)
-    cached = system.evaluate_observables
+    cached = system.observables_fn
     assert func is cached
 
 
@@ -295,8 +295,8 @@ class TestSympyStringEquivalence:
         """Verify SymPy and string inputs generate identical code."""
         ode_sympy, ode_string = sympy_string_pair
 
-        assert is_devfunc(ode_sympy.evaluate_f)
-        assert is_devfunc(ode_string.evaluate_f)
+        assert is_devfunc(ode_sympy.dxdt_fn)
+        assert is_devfunc(ode_string.dxdt_fn)
 
         assert ode_sympy.num_states == ode_string.num_states
         assert ode_sympy.num_states == 2
@@ -485,7 +485,7 @@ class TestCacheSkipsCodegen:
             parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
-        _ = first.evaluate_f
+        _ = first.dxdt_fn
         first_source = first.gen_file.file_path.read_text()
 
         second = SymbolicODE.create(
@@ -496,7 +496,7 @@ class TestCacheSkipsCodegen:
             constants={"b": 4.0},
             name=name,
         )
-        _ = second.evaluate_f
+        _ = second.dxdt_fn
         second_source = second.gen_file.file_path.read_text()
 
         assert first.fn_hash != second.fn_hash
@@ -518,7 +518,7 @@ class TestCacheSkipsCodegen:
             parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
-        _ = first.evaluate_f
+        _ = first.dxdt_fn
         first_source = first.gen_file.file_path.read_text()
 
         second = SymbolicODE.create(
@@ -528,7 +528,7 @@ class TestCacheSkipsCodegen:
             parameters={"b": 4.0, "a": 3.0},
             name=name,
         )
-        _ = second.evaluate_f
+        _ = second.dxdt_fn
         second_source = second.gen_file.file_path.read_text()
 
         assert first.fn_hash == second.fn_hash
@@ -717,10 +717,10 @@ class TestConstantParameterConversion:
             constants={"c": 0.5},
             name="constant_to_parameter_source",
         )
-        _ = ode.evaluate_f
+        _ = ode.dxdt_fn
 
         ode.make_parameter("c")
-        _ = ode.evaluate_f
+        _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 
         assert "parameters[1]" in source
@@ -735,10 +735,10 @@ class TestConstantParameterConversion:
             parameters={"k": 0.1, "c": 0.5},
             name="parameter_to_constant_source",
         )
-        _ = ode.evaluate_f
+        _ = ode.dxdt_fn
 
         ode.make_constant("c")
-        _ = ode.evaluate_f
+        _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 
         # The parameter's value folds into the source as a literal.
@@ -794,7 +794,7 @@ class TestValueSetters:
             constants={"c": 0.5},
             name="test_sealed_constants",
         )
-        _ = ode.evaluate_f
+        _ = ode.dxdt_fn
         hash_before = ode.config_hash
 
         with pytest.raises(ValueError):

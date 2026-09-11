@@ -15,7 +15,7 @@ intervals, boolean control-flow constants, and device-function references).
 ## Key Files
 | File | Description |
 |------|-------------|
-| `ode_loop.py` | `IVPLoop(CUDAFactory)` — registers the loop's buffers and compiles the integration-loop closure in `build()`; `IVPLoopCache(CUDADispatcherCache)` holds `loop_function`; exports `ALL_LOOP_SETTINGS`. |
+| `ode_loop.py` | `IVPLoop(CUDAFactory)` — registers the loop's buffers and compiles the integration-loop closure in `build()`; `IVPLoopCache(CUDADispatcherCache)` holds `loop_fn`; exports `ALL_LOOP_SETTINGS`. |
 | `ode_loop_config.py` | `ODELoopConfig(CUDAFactoryConfig)` — system sizes, 14 buffer-location fields (default `'local'`), `OutputCompileFlags`, timing fields, mode flags (`save_last`, `save_regularly`, `summarise_regularly`, `is_adaptive`), and device-function references; `samples_per_summary` property with integer-multiple validation. |
 | `__init__.py` | Re-exports `IVPLoop`. |
 
@@ -42,7 +42,7 @@ If the parent hasn't registered the children before `build()`, the child
 allocators are absent and `build()` fails.
 
 ### Consistent initialisation at loop entry
-The loop calls `initialise_state` once at entry — after the state/parameter seed
+The loop calls `initialise_state_fn` once at entry — after the state/parameter seed
 and the t0 driver evaluation, before the t0 observables evaluation and save. The
 `DAEInitialiser` supplies the function, a compiled no-op returning 0 for non-DAE
 configurations. Its Newton/linear iteration counts land in the t0 save's counter row. A nonzero return carries the solver bits plus

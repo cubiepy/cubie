@@ -53,9 +53,9 @@ class ExplicitEulerStep(ODEExplicitStep):
         self,
         precision: PrecisionDType,
         n: int,
-        evaluate_f: Optional[Callable] = None,
-        evaluate_observables: Optional[Callable] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
+        dxdt_fn: Optional[Callable] = None,
+        observables_fn: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
         get_solver_helper_fn: Optional[Callable] = None,
         **kwargs,
     ) -> None:
@@ -67,11 +67,11 @@ class ExplicitEulerStep(ODEExplicitStep):
             Precision applied to device buffers.
         n
             Number of state entries advanced per step.
-        evaluate_f
+        dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
-        evaluate_observables
+        observables_fn
             Device function computing system observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function evaluating drivers at arbitrary times.
         get_solver_helper_fn
             Present for interface parity with implicit steps and ignored here.
@@ -85,9 +85,9 @@ class ExplicitEulerStep(ODEExplicitStep):
             required={
                 'precision': precision,
                 'n': n,
-                'evaluate_f': evaluate_f,
-                'evaluate_observables': evaluate_observables,
-                'evaluate_driver_at_t': evaluate_driver_at_t,
+                'dxdt_fn': dxdt_fn,
+                'observables_fn': observables_fn,
+                'drivers_fn': drivers_fn,
             },
             **kwargs
         )
@@ -96,9 +96,9 @@ class ExplicitEulerStep(ODEExplicitStep):
 
     def build_step(
         self,
-        evaluate_f: Callable,
-        evaluate_observables: Callable,
-        evaluate_driver_at_t: Optional[Callable],
+        dxdt_fn: Callable,
+        observables_fn: Callable,
+        drivers_fn: Optional[Callable],
         numba_precision: type,
         n: int,
         n_drivers: int,
@@ -107,11 +107,11 @@ class ExplicitEulerStep(ODEExplicitStep):
 
         Parameters
         ----------
-        evaluate_f
+        dxdt_fn
             Device function for evaluating f(t, y).
-        evaluate_observables
+        observables_fn
             Device function for computing observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function for evaluating drivers at time t.
         numba_precision
             Numba type for device buffers.
@@ -126,7 +126,7 @@ class ExplicitEulerStep(ODEExplicitStep):
             Compiled step function.
         """
 
-        has_evaluate_driver_at_t = evaluate_driver_at_t is not None
+        has_evaluate_driver_at_t = drivers_fn is not None
         n = int32(n)
         unroll_step_element = self.compile_settings.unroll.unroll_step_element
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
@@ -220,7 +220,7 @@ class ExplicitEulerStep(ODEExplicitStep):
 
             # error buffer unused; stage dx/dt in proposed_state instead.
             dxdt_buffer = proposed_state
-            evaluate_f(
+            dxdt_fn(
                 state,
                 parameters,
                 drivers_buffer,
@@ -233,12 +233,12 @@ class ExplicitEulerStep(ODEExplicitStep):
 
             next_time = time_scalar + dt_scalar
             if has_evaluate_driver_at_t:
-                evaluate_driver_at_t(
+                drivers_fn(
                     next_time,
                     driver_coefficients,
                     proposed_drivers,
                 )
-            evaluate_observables(
+            observables_fn(
                 proposed_state,
                 parameters,
                 proposed_drivers,
@@ -248,7 +248,7 @@ class ExplicitEulerStep(ODEExplicitStep):
             return success
         # no cover: end
 
-        return StepCache(step=step, nonlinear_solver=None)
+        return StepCache(step_fn=step, nonlinear_solver_fn=None)
 
     @property
     def threads_per_step(self) -> int:

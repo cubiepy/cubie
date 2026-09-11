@@ -21,7 +21,7 @@ each have their own `AGENTS.md`.
 | File | Description |
 |------|-------------|
 | `SingleIntegratorRun.py` | `SingleIntegratorRun(SingleIntegratorRunCore)`: read-only properties exposing compiled loop artifacts, memory sizing, controller bounds, and output metadata to `BatchSolverKernel`. No `build()` override. |
-| `SingleIntegratorRunCore.py` | `SingleIntegratorRunCore(CUDAFactory)`: owns `_output_functions`, `_algo_step`, `_step_controller`, `_loop`; wires them and delegates compilation to `IVPLoop` in `build()`. Defines `SingleIntegratorRunCache` (holds `single_integrator_function`). |
+| `SingleIntegratorRunCore.py` | `SingleIntegratorRunCore(CUDAFactory)`: owns `_output_functions`, `_algo_step`, `_step_controller`, `_loop`; wires them and delegates compilation to `IVPLoop` in `build()`. Defines `SingleIntegratorRunCache` (holds `loop_fn`). |
 | `IntegratorRunSettings.py` | `IntegratorRunSettings(CUDAFactoryConfig)`: thin compile-settings holding only `algorithm` and `step_controller` names (plus inherited `precision`) — the core's own cache key. |
 | `norms.py` | CUDA factories for scaled vector norms (`ScaledNorm`, `TiledScaledNorm`, `TwoRefMaskedScaledNorm`) and DIRK/FIRK Newton correction terms; every config floors `atol` at `ATOL_FLOOR` per entry on the host with a `UserWarning`. |
 | `stage_predictors.py` | `DenseStagePredictor(CUDAFactory)`: in-place read-ahead of a persistent stage-increment vector that warm-starts the next step's Newton solves; step-size-ratio polynomials precomputed from the tableau. FIRK and DIRK own one as a buffer-registry child. |
@@ -89,14 +89,14 @@ drops `CONTROLLER_GAIN_PARAMETERS`.
 
 ### build() delegates to IVPLoop
 `SingleIntegratorRunCore.build()` defines no device function of its own. It (1) updates
-`_algo_step` if the system's `evaluate_f`/`evaluate_observables`/`get_solver_helper_fn`
+`_algo_step` if the system's `dxdt_fn`/`observables_fn`/`get_solver_helper_fn`
 changed; (2) applies `_apply_performance_defaults` (skips user-given keys, as
 `optimisation_candidates` does); (3)
 re-registers child allocators; (4) calls `self._loop.update(...)` with the latest compiled
 device-function references; (5) accesses `self._loop.device_function` (triggering the
 loop's build if invalid); (6) returns
-`SingleIntegratorRunCache(single_integrator_function=loop_fn)` — the same object as the
-loop's `loop_function`.
+`SingleIntegratorRunCache(loop_fn=loop_fn)` — the same object as the
+loop's `loop_fn`.
 
 ### update() follows the system layout
 `update()` passes all size parameters after a system update.

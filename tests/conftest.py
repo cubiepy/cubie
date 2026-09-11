@@ -945,8 +945,8 @@ def cpu_driver_evaluator(
 def algorithm_settings(solver_settings):
     """Filter algorithm configuration from solver_settings dict.
 
-    Note: Functions (evaluate_f, evaluate_observables,
-    get_solver_helper_fn, evaluate_driver_at_t, driver_del_t) are NOT
+    Note: Functions (dxdt_fn, observables_fn,
+    get_solver_helper_fn, drivers_fn, driver_derivative_fn) are NOT
     included in settings. These are passed directly when building
     step objects, not stored in settings dict.
     """
@@ -1226,16 +1226,16 @@ def single_integrator_run(
     as these are the two fundamental base CUDAFactory fixtures. All other
     dependencies are settings fixtures.
     """
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
-    driver_del_t = _get_driver_del_t(driver_array)
+    drivers_fn = _get_evaluate_driver_at_t(driver_array)
+    driver_derivative_fn = _get_driver_del_t(driver_array)
     # Add system functions to algorithm_settings for SingleIntegratorRun
     enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
         algorithm_settings, system, driver_array
     )
     return SingleIntegratorRun(
         system=system,
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        driver_del_t=driver_del_t,
+        drivers_fn=drivers_fn,
+        driver_derivative_fn=driver_derivative_fn,
         step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
         output_settings=dict(output_settings),
@@ -1259,8 +1259,8 @@ def single_integrator_run_mutable(
     as these are the two fundamental base CUDAFactory fixtures. All other
     dependencies are settings fixtures.
     """
-    evaluate_driver_at_t = _get_evaluate_driver_at_t(driver_array)
-    driver_del_t = _get_driver_del_t(driver_array)
+    drivers_fn = _get_evaluate_driver_at_t(driver_array)
+    driver_derivative_fn = _get_driver_del_t(driver_array)
     # Add system functions to algorithm_settings for SingleIntegratorRun
     enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
         algorithm_settings, system, driver_array
@@ -1269,8 +1269,8 @@ def single_integrator_run_mutable(
     yield SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=evaluate_driver_at_t,
-        driver_del_t=driver_del_t,
+        drivers_fn=drivers_fn,
+        driver_derivative_fn=driver_derivative_fn,
         step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
         output_settings=dict(output_settings),
@@ -1298,8 +1298,8 @@ def time_function_driver_run(
     )
     return SingleIntegratorRun(
         system=time_function_driver_system,
-        evaluate_driver_at_t=None,
-        driver_del_t=None,
+        drivers_fn=None,
+        driver_derivative_fn=None,
         step_control_settings=dict(step_controller_settings),
         algorithm_settings=enhanced_algorithm_settings,
         output_settings=dict(output_settings),

@@ -168,8 +168,8 @@ class ProbeContext:
         common = dict(
             precision=precision,
             n=n,
-            evaluate_f=system.evaluate_f,
-            evaluate_observables=system.evaluate_observables,
+            dxdt_fn=system.dxdt_fn,
+            observables_fn=system.observables_fn,
             get_solver_helper_fn=system.get_solver_helper,
             tableau=opened,
             n_drivers=int(system.sizes.drivers),
@@ -209,7 +209,7 @@ class ProbeContext:
 
         precision = self.precision
         numba_precision = from_dtype(precision)
-        step_fn = step_object.step_function
+        step_fn = step_object.step_fn
         shared_elems = int(step_object.shared_buffer_size)
         shared_bytes = precision(0).itemsize * max(shared_elems, 1)
         persistent_len = max(
