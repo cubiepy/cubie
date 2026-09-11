@@ -163,11 +163,10 @@ timestep and never reaches the interpolator.
 
 ### Kernel update and performance defaults
 `kernel.update` updates the interpolator, then the run, merging each one's `products`
-into the dict, and finishes with `update_compile_settings` on itself (`loop_fn` is a
-config field). Performance defaults are the kernel's: with `auto_performance` on it
-derives a `PerformanceSettings` from the run's products, minus the keys the user set,
-and pushes it to the run as `performance_settings`; `optimisation_candidates` and
-`settings_dict` leave those derived keys out.
+into the dict, then `update_compile_settings` on itself (`loop_fn` is a config field).
+With `auto_performance` on it derives a `PerformanceSettings` from the run's products,
+minus the keys the user set, and pushes it to the run as `performance_settings`;
+`optimisation_candidates` and `settings_dict` leave those derived keys out.
 
 ### Calibration (`Solver.calibrate`)
 - One sibling `Solver` per candidate on the parent's system, memory manager, and stream group; trial solves gate candidates before full-length timing; full-length measurements are recorded per configuration and reused.

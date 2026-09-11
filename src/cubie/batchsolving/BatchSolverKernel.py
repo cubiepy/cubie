@@ -1299,11 +1299,9 @@ class BatchSolverKernel(CUDAFactory):
     def _performance_defaults(
         self, products: Dict[str, Any]
     ) -> PerformanceSettings:
-        """Return the unroll and placement settings the user did not fix.
-
-        The step's own defaults gain ``unroll_newton_exits``: rolled when
-        the fully unrolled step would overflow the instruction cache.
-        """
+        """Return the step's defaults plus ``unroll_newton_exits`` (rolled
+        when the unrolled step overflows the instruction cache), minus the
+        keys the user fixed."""
         if (
             not self.compile_settings.auto_performance
             or not products["is_implicit"]

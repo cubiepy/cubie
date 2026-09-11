@@ -757,7 +757,7 @@ class PerformanceSettings:
 @define
 class StepCache(CUDADispatcherCache):
     """Build products of an algorithm step: its device functions, sizes,
-    order, flags and ``auto_performance`` defaults."""
+    order, flags, operation counts and ``auto_performance`` defaults."""
 
     step_fn: Callable = field(validator=is_device_validator)
     nonlinear_solver_fn: Optional[Callable] = field(

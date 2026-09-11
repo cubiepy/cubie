@@ -302,12 +302,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._warn_if_summary_timing_derived()
 
     def _record_givenness(self, updates: Dict[str, Any]) -> None:
-        """Record the tolerance, step and timing keys the user gave.
-
-        The family and DAE defaults never overwrite a step key the user
-        gave; a parent's derived settings arrive as a
-        ``performance_settings`` object and are never recorded.
-        """
+        """Record the tolerance, step and timing keys the user gave."""
         for key in self._INNER_TOLERANCE_KEYS:
             if updates.get(key) is not None:
                 self._user_given_inner_tols.add(key)
