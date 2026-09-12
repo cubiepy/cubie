@@ -132,11 +132,8 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
 
 @cache
 def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields whose declared type is an attrs class.
-
-    ``Optional``/``Union`` annotations are unwrapped so an optional
-    nested config still participates in recursive updates.
-    """
+    """Return fields typed as attrs classes with ``update``; unwraps
+    ``Optional``."""
     from typing import Union, get_args, get_origin
 
     nested = []
@@ -145,7 +142,11 @@ def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
         if get_origin(fld.type) is Union:
             candidates = get_args(fld.type)
         for candidate in candidates:
-            if isinstance(candidate, type) and has(candidate):
+            if (
+                isinstance(candidate, type)
+                and has(candidate)
+                and callable(getattr(candidate, "update", None))
+            ):
                 nested.append(fld)
                 break
     return tuple(nested)
@@ -607,6 +608,10 @@ class CUDAFactory(ABC):
                 "build() must return an attrs class (CUDADispatcherCache "
                 "subclass)"
             )
+        # Product fields mirror the factory's same-named properties.
+        for fld in fields(type(build_result)):
+            if fld.metadata.get("product"):
+                setattr(build_result, fld.name, getattr(self, fld.name))
 
         self._cache = build_result
         self._cache_valid = True

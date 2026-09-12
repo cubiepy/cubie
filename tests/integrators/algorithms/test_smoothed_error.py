@@ -128,50 +128,62 @@ def test_dirk_smoothing_gamma_is_the_last_diagonal():
     )
 
 
-def test_unsupported_request_warns_and_stays_off():
+def test_unsupported_request_warns_and_stays_off(system):
     """A step without tableau support warns and leaves smoothing off."""
 
     with pytest.warns(UserWarning, match="use_smoothed_error"):
         step = CrankNicolsonStep(
+            get_solver_helper_fn=system.get_solver_helper,
             precision=np.float64, n_states=2, use_smoothed_error=True
         )
     assert not step.smooth_error
 
-    step = CrankNicolsonStep(precision=np.float64, n_states=2)
+    step = CrankNicolsonStep(
+        get_solver_helper_fn=system.get_solver_helper,
+        precision=np.float64,
+        n_states=2,
+    )
     with pytest.warns(UserWarning, match="use_smoothed_error"):
         step.update(use_smoothed_error=True)
     assert not step.smooth_error
     assert step.compile_settings.use_smoothed_error
 
 
-def test_smoothing_default_follows_tableau_capability():
+def test_smoothing_default_follows_tableau_capability(system):
     """Radau defaults smoothing on; DIRK and gauss-legendre stay off."""
 
     assert FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64, n_states=2, tableau=RADAU_IIA_5_TABLEAU
     ).smooth_error
     assert FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64, n_states=2, tableau=RADAU_IIA_9_TABLEAU
     ).smooth_error
     assert not FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64, n_states=2, tableau=RADAU_IIA_3_TABLEAU
     ).smooth_error
     assert not FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64, n_states=2, tableau=GAUSS_LEGENDRE_2_TABLEAU
     ).smooth_error
     assert not FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64, n_states=2, tableau=GAUSS_LEGENDRE_4_TABLEAU
     ).smooth_error
     assert not DIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64, n_states=2, tableau=KVAERNO3_TABLEAU
     ).smooth_error
 
 
-def test_request_survives_tableau_swap():
+def test_request_survives_tableau_swap(system):
     """A stored request enables smoothing once the tableau can."""
 
     with pytest.warns(UserWarning, match="use_smoothed_error"):
         step = FIRKStep(
+            get_solver_helper_fn=system.get_solver_helper,
             precision=np.float64,
             n_states=2,
             tableau=GAUSS_LEGENDRE_2_TABLEAU,
@@ -183,11 +195,12 @@ def test_request_survives_tableau_swap():
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-def test_firk_error_solver_costs_nothing_when_disabled(enabled):
+def test_firk_error_solver_costs_nothing_when_disabled(system, enabled):
     """The smoothing solver is built and registered only when the
     toggle is on."""
 
     step = FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=3,
         tableau=RADAU_IIA_5_TABLEAU,
@@ -207,7 +220,7 @@ def test_firk_error_solver_costs_nothing_when_disabled(enabled):
         assert (step.settings_dict["error_atol"] == 1e-4).all()
 
 
-def test_dirk_error_solver_and_rhs_alias_the_newton_window():
+def test_dirk_error_solver_and_rhs_alias_the_newton_window(system):
     """Smoothing scratch and rhs pack into the Newton window."""
 
     shared_locations = {
@@ -217,12 +230,14 @@ def test_dirk_error_solver_and_rhs_alias_the_newton_window():
         "residual_location": "shared",
     }
     baseline = DIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=3,
         tableau=KVAERNO3_TABLEAU,
         **shared_locations,
     )
     smoothed = DIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=3,
         tableau=KVAERNO3_TABLEAU,
@@ -234,7 +249,7 @@ def test_dirk_error_solver_and_rhs_alias_the_newton_window():
     ) == buffer_registry.shared_buffer_size(baseline)
 
 
-def test_firk_error_solver_aliases_the_coupled_solver_window():
+def test_firk_error_solver_aliases_the_coupled_solver_window(system):
     """The smoothing scratch overlaps the coupled solve's shared
     window rather than adding to it."""
 
@@ -246,6 +261,7 @@ def test_firk_error_solver_aliases_the_coupled_solver_window():
         "residual_location": "shared",
     }
     baseline = FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=3,
         tableau=RADAU_IIA_5_TABLEAU,
@@ -253,6 +269,7 @@ def test_firk_error_solver_aliases_the_coupled_solver_window():
         **shared_locations,
     )
     smoothed = FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=3,
         tableau=RADAU_IIA_5_TABLEAU,
@@ -268,10 +285,11 @@ def test_firk_error_solver_aliases_the_coupled_solver_window():
     "step_class, tableau",
     [(FIRKStep, RADAU_IIA_5_TABLEAU), (DIRKStep, KVAERNO3_TABLEAU)],
 )
-def test_toggle_survives_update(step_class, tableau):
+def test_toggle_survives_update(system, step_class, tableau):
     """``update`` builds the gated solver and registers its buffers."""
 
     step = step_class(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=2,
         tableau=tableau,

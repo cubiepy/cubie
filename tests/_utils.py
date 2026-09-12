@@ -20,6 +20,7 @@ from cubie.integrators.step_control import (
 )
 from cubie.odesystems.symbolic import SymbolicODE
 from cubie.batchsolving.solver import Solver
+from cubie.batchsolving.solver_settings import resolve_loop_timing
 from cubie.outputhandling import OutputFunctions
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.baseODE import BaseODE
@@ -930,7 +931,20 @@ def run_device_loop(
     t0 = solver_config["t0"]
     save_samples = max(singleintegratorrun.output_length(duration), 1)
     summary_samples = max(singleintegratorrun.summaries_length(duration), 1)
-    singleintegratorrun.set_summary_timing_from_duration(duration)
+    if (
+        singleintegratorrun.summary_outputs_requested
+        and solver_config.get("summarise_every") is None
+    ):
+        singleintegratorrun.update(
+            resolve_loop_timing(
+                solver_config.get("save_every"),
+                None,
+                solver_config.get("sample_summaries_every"),
+                singleintegratorrun.time_domain_outputs_requested,
+                True,
+                duration,
+            )
+        )
     heights = singleintegratorrun.output_array_heights
 
     state_width = max(heights.state, 1)

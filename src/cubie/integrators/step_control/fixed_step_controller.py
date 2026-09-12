@@ -37,6 +37,9 @@ from cubie.integrators.step_control.base_step_controller import (
     ControllerCache,
 )
 
+DEFAULT_FIXED_DT = 1e-3
+"""Fixed step when none is given."""
+
 
 @frozen
 class FixedStepControlConfig(BaseStepControllerConfig):
@@ -56,15 +59,9 @@ class FixedStepControlConfig(BaseStepControllerConfig):
         Relative tolerance vector, on the same terms as ``atol``.
     """
 
-    _dt: float = field(default=1e-3, validator=getype_validator(float, 0))
-
-    def __attrs_post_init__(self) -> None:
-        """Validate configuration after initialisation."""
-        super().__attrs_post_init__()
-        self._validate_config()
-
-    def _validate_config(self) -> None:
-        """Confirm that the configuration is internally consistent."""
+    _dt: float = field(
+        default=DEFAULT_FIXED_DT, validator=getype_validator(float, 0)
+    )
 
     @property
     def dt(self) -> float:
@@ -92,24 +89,6 @@ class FixedStepController(BaseStepController):
     """Controller that enforces a constant time step."""
 
     _config_class = FixedStepControlConfig
-
-    def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
-        """Collapse dt_min/dt_max to dt for fixed-step control.
-
-        Parameters
-        ----------
-        dt
-            Fixed step size, or None if not provided.
-        kwargs
-            Mutable dict of keyword arguments. Modified in place.
-        """
-        dt_min = kwargs.pop("dt_min", None)
-        dt_max = kwargs.pop("dt_max", None)
-
-        resolved = dt or dt_min or dt_max
-        if resolved is not None:
-            self._user_step_params["dt"] = resolved
-            kwargs["dt"] = resolved
 
     def build(self) -> ControllerCache:
         """Return a device function that always accepts with fixed step.

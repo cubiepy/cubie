@@ -153,6 +153,20 @@ class DAEInitialiserCache(CUDADispatcherCache):
     initialise_state_fn: Callable = field(validator=is_device_validator)
 
 
+LU_SOLVER_KEYS = frozenset(
+    {
+        "precision",
+        "n_states",
+        "solver_width",
+        "unroll",
+        "jit_flags",
+        "lineinfo",
+        "lu_factor_location",
+    }
+)
+"""Keys the initialiser's LU solve takes."""
+
+
 class DAEInitialiser(CUDAFactory):
     """Factory for the consistent-initialisation device function.
 
@@ -225,8 +239,15 @@ class DAEInitialiser(CUDAFactory):
             },
             **kwargs,
         )
+        if not config.is_noop and config.get_solver_helper_fn is None:
+            raise TypeError(
+                "DAEInitialiser requires get_solver_helper_fn: its "
+                "residual and LU solve are wired from the system's "
+                "helpers at construction."
+            )
         self.setup_compile_settings(config)
         self.register_buffers()
+        self.build_solver_helpers()
 
     def register_buffers(self) -> None:
         """Register solve buffers and the linear-solver footprint."""
@@ -258,6 +279,8 @@ class DAEInitialiser(CUDAFactory):
     def build_solver_helpers(self) -> None:
         """Wire the mode's residual and LU solve into the solve."""
         config = self.compile_settings
+        if config.is_noop:
+            return
 
         get_fn = config.get_solver_helper_fn
         if config.dae_initialisation == "brown":
@@ -313,10 +336,7 @@ class DAEInitialiser(CUDAFactory):
                 initialise_state_fn=initialise_state_fn
             )
 
-        # The helper refresh replaces the settings snapshot; read after.
-        self.build_solver_helpers()
         config = self.compile_settings
-
         residual_fn = config.residual_fn
         linear_solver_fn = config.krylov_linear_solver_fn
         norm_fn = config.newton_norm_fn
@@ -582,9 +602,15 @@ class DAEInitialiser(CUDAFactory):
         }
         if "n_states" in all_updates:
             child_updates["solver_width"] = all_updates["n_states"]
+        # The LU solve takes its placement and compile flags only.
+        linear_updates = {
+            key: value
+            for key, value in child_updates.items()
+            if key in LU_SOLVER_KEYS
+        }
 
         recognized = self.linear_solver.update(
-            child_updates, silent=True
+            linear_updates, silent=True
         )
         recognized |= self.norm.update(child_updates, silent=True)
         recognized |= self.update_compile_settings(
@@ -594,6 +620,8 @@ class DAEInitialiser(CUDAFactory):
             self, updates_dict=all_updates, silent=True
         )
         self.register_buffers()
+        if recognized:
+            self.build_solver_helpers()
 
         return recognized
 

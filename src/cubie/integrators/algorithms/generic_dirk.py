@@ -183,6 +183,17 @@ class DIRKStepConfig(ImplicitStepConfig):
 class DIRKStep(ODEImplicitStep):
     """Diagonally implicit Runge–Kutta step with an embedded error estimate."""
 
+    algorithm_family = "dirk"
+
+    @classmethod
+    def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
+        """Adaptive or fixed defaults by the tableau's error estimate."""
+        if tableau is None:
+            tableau = DEFAULT_DIRK_TABLEAU
+        if tableau.has_error_estimate:
+            return DIRK_ADAPTIVE_DEFAULTS.copy()
+        return DIRK_FIXED_DEFAULTS.copy()
+
     def __init__(
         self,
         precision: PrecisionDType,
@@ -278,6 +289,7 @@ class DIRKStep(ODEImplicitStep):
             **kwargs,
         )
         self.register_buffers()
+        self.build_implicit_helpers()
 
     def _build_error_solver(self) -> None:
         """Construct the width-n smoothing solver from live settings."""
@@ -384,7 +396,7 @@ class DIRKStep(ODEImplicitStep):
             persistent=True,
         )
 
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by build_implicit_helpers.
         buffer_registry.register(
             'cached_auxiliaries',
             self,
@@ -417,10 +429,8 @@ class DIRKStep(ODEImplicitStep):
             aliases='solver_shared' if self.smooth_error else None,
         )
 
-    def build_implicit_helpers(
-        self,
-    ) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+    def build_implicit_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
         super().build_implicit_helpers()
 

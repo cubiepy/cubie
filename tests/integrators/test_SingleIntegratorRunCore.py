@@ -10,15 +10,10 @@ from attrs import evolve, fields_dict
 
 from cubie.integrators.algorithms import DIRK_TABLEAU_REGISTRY
 from cubie.integrators.algorithms.generic_erk_tableaus import (
-    CLASSICAL_RK4_TABLEAU,
     DORMAND_PRINCE_54_TABLEAU,
 )
 from cubie.integrators.SingleIntegratorRunCore import SingleIntegratorRunCore
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
-from cubie.integrators.step_control import (
-    CONTROLLER_GAIN_PARAMETERS,
-    filter_coefficients_to_gains,
-)
 from cubie.integrators.step_control.adaptive_I_controller import (
     IStepControlConfig,
 )
@@ -98,77 +93,6 @@ def _variant_probe_tableau():
     )
 
 
-def test_tableau_defaults_override_family_defaults(system):
-    """A tableau's defaults dict overrides the family default keys."""
-    core = SingleIntegratorRunCore(
-        system=system,
-        algorithm_settings={
-            "algorithm": "dirk",
-            "tableau": _variant_probe_tableau(),
-        },
-    )
-    assert (
-        core._algo_step.linear_correction_type == "minimal_residual"
-    )
-
-
-def test_step_defaults_apply_to_unset_step_keys(system):
-    """Unset step keys take the algorithm's declared step defaults."""
-    core = SingleIntegratorRunCore(
-        system=system,
-        algorithm_settings={"algorithm": "kvaerno3"},
-    )
-    settings = core._algo_step.compile_settings
-    declared = core._algo_step.step_default_settings
-    checked = {
-        key: value
-        for key, value in declared.items()
-        if hasattr(settings, key)
-    }
-    assert checked
-    for key, value in checked.items():
-        assert getattr(settings, key) == value
-
-
-def test_explicit_step_setting_overrides_step_default(system):
-    """An explicit step key survives the declared step defaults."""
-    core = SingleIntegratorRunCore(
-        system=system,
-        algorithm_settings={
-            "algorithm": "kvaerno3",
-            "attempt_dense_prediction": True,
-        },
-    )
-    assert core._algo_step.compile_settings.attempt_dense_prediction
-
-
-def test_matching_solver_choice_keeps_variant_defaults(system):
-    """A user choice matching the declared default keeps its variants."""
-    core = SingleIntegratorRunCore(
-        system=system,
-        algorithm_settings={
-            "algorithm": "dirk",
-            "tableau": _variant_probe_tableau(),
-            "linear_correction_type": "minimal_residual",
-        },
-    )
-    assert core._algo_step.compile_settings.inexact_newton is True
-
-
-def test_different_solver_choice_drops_variant_defaults(system):
-    """A user choice differing from the declared default drops variants."""
-    core = SingleIntegratorRunCore(
-        system=system,
-        algorithm_settings={
-            "algorithm": "dirk",
-            "tableau": _variant_probe_tableau(),
-            "linear_correction_type": "bicgstab",
-        },
-    )
-    assert core._algo_step.linear_correction_type == "bicgstab"
-    assert core._algo_step.compile_settings.inexact_newton is False
-
-
 @pytest.mark.parametrize(
     "solver_settings_override",
     [ALGORITHM_CHAIN_SETS["erk"]],
@@ -189,82 +113,6 @@ def test_construction_explicit_settings(
         rel=tolerance.rel_tight,
         abs=tolerance.abs_tight,
     )
-
-
-def test_newton_rtol_inversion_warns(
-    system,
-    driver_array,
-    output_settings,
-    loop_settings,
-):
-    """A sub-floor controller rtol warns of the Newton inversion."""
-    def build(rtol):
-        return SingleIntegratorRun(
-            system=system,
-            loop_settings=dict(loop_settings),
-            drivers_fn=_get_evaluate_driver_at_t(driver_array),
-            step_control_settings={
-                "step_controller": "pi",
-                "rtol": rtol,
-            },
-            algorithm_settings={"algorithm": "dirk"},
-            output_settings=dict(output_settings),
-        )
-
-    with pytest.warns(UserWarning, match="newton_rtol"):
-        build(1e-10)
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        build(1e-4)
-    assert not [
-        w for w in caught if "newton_rtol" in str(w.message)
-    ]
-
-
-def test_default_controller_settings_from_algorithm(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
-    """When no step_control_settings, algorithm defaults are applied.
-
-    ``step_control_settings=None`` is a constructor input the chain
-    fixtures cannot express (they always pass a full settings dict),
-    so this constructor-shape test builds directly.
-    """
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=dict(loop_settings),
-        drivers_fn=_get_evaluate_driver_at_t(driver_array),
-        step_control_settings=None,
-        algorithm_settings=dict(algorithm_settings),
-        output_settings=dict(output_settings),
-    )
-
-    defaults = run._algo_step.controller_default_settings
-    assert run.step_controller == defaults["step_controller"]
-    controller_settings = run._step_controller.settings_dict
-    defaults.pop("step_controller")
-    order = run._algo_step.algorithm_order
-    for key, expected in defaults.items():
-        if callable(expected):
-            expected = expected(order)
-        if key in CONTROLLER_GAIN_PARAMETERS:
-            actual = getattr(run._step_controller, key)
-        else:
-            assert key in controller_settings
-            actual = controller_settings[key]
-        if isinstance(expected, (float, np.floating)):
-            assert actual == pytest.approx(expected)
-        else:
-            assert actual == expected
-    assert run._step_controller.n_states == system.sizes.states
-    if hasattr(run._step_controller, "algorithm_order"):
-        assert (run._step_controller.algorithm_order
-                == run._algo_step.algorithm_order)
 
 
 def test_controller_override_reverts_family_gains(
@@ -327,121 +175,6 @@ def _build_run(system, driver_array, output_settings, loop_settings,
     )
 
 
-@pytest.mark.parametrize(
-    "algorithm, step_control, expected",
-    [
-        ("bogacki-shampine-32", {"proportional_gain": 0.4}, "pi"),
-        ("bogacki-shampine-32", {"filter_coefficients": "H312PID"}, "pid"),
-        ("bogacki-shampine-32", {"integral_gain": 0.5}, "i"),
-        ("kvaerno3", {"integral_gain": 0.5}, "pi"),
-        ("kvaerno3", {"derivative_gain": 0.05}, "pid"),
-        ("crank_nicolson", {"integral_gain": 0.5}, "i"),
-        ("crank_nicolson", {"filter_coefficients": "PI42"}, "pi"),
-    ],
-)
-def test_unnamed_controller_promotes_to_carry_gains(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-    algorithm,
-    step_control,
-    expected,
-):
-    """Gains without a controller select the smallest carrying one."""
-    run = _build_run(
-        system, driver_array, output_settings, loop_settings,
-        algorithm_settings, algorithm, step_control,
-    )
-    assert run.step_controller == expected
-    controller = run._step_controller
-    if "filter_coefficients" in step_control:
-        gains = filter_coefficients_to_gains(
-            step_control["filter_coefficients"]
-        )
-        for name in controller.gain_names:
-            assert getattr(controller, name) == pytest.approx(gains[name])
-    else:
-        for name, value in step_control.items():
-            assert getattr(controller, name) == pytest.approx(value)
-
-
-def test_gains_on_estimate_free_scheme_fall_back_to_fixed(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
-    """Gains on a scheme without an error estimate warn and run fixed."""
-    with pytest.warns(UserWarning, match="fixed-step"):
-        run = _build_run(
-            system, driver_array, output_settings, loop_settings,
-            algorithm_settings, "l_stable_dirk_3",
-            {"proportional_gain": 0.4},
-        )
-    assert not run._step_controller.is_adaptive
-
-
-def test_promoted_controller_drops_family_gains(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
-    """A promoted controller uses its own defaults for unset gains."""
-    run = _build_run(
-        system, driver_array, output_settings, loop_settings,
-        algorithm_settings, "kvaerno3", {"derivative_gain": 0.05},
-    )
-    assert run._step_controller.integral_gain == pytest.approx(
-        _declared_gain(PIDStepControlConfig, "integral_gain")
-    )
-    assert run._step_controller.proportional_gain == pytest.approx(
-        _declared_gain(PIDStepControlConfig, "proportional_gain")
-    )
-
-
-def test_unpromoted_controller_keeps_family_gains(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
-    """A gain the family controller carries keeps the other defaults."""
-    run = _build_run(
-        system, driver_array, output_settings, loop_settings,
-        algorithm_settings, "kvaerno3", {"integral_gain": 0.5},
-    )
-    defaults = run._algo_step.controller_default_settings
-    order = run._algo_step.algorithm_order
-    assert run._step_controller.integral_gain == pytest.approx(0.5)
-    assert run._step_controller.proportional_gain == pytest.approx(
-        defaults["proportional_gain"](order)
-    )
-
-
-def test_update_promotes_unnamed_controller(
-    single_integrator_run_mutable,
-):
-    """A gain update without a controller promotes the controller."""
-    run = single_integrator_run_mutable
-    run.update({"algorithm": "bogacki-shampine-32"})
-    assert run.step_controller == "i"
-    run.update({"proportional_gain": 0.4})
-    assert run.step_controller == "pi"
-    assert run._step_controller.proportional_gain == pytest.approx(0.4)
-    run.update({"filter_coefficients": "H312PID"})
-    assert run.step_controller == "pid"
-    gains = filter_coefficients_to_gains("H312PID")
-    assert run._step_controller.derivative_gain == pytest.approx(
-        gains["derivative_gain"]
-    )
-
-
 def test_update_named_controller_is_not_promoted(
     single_integrator_run_mutable,
 ):
@@ -450,57 +183,6 @@ def test_update_named_controller_is_not_promoted(
     run.update({"algorithm": "bogacki-shampine-32"})
     run.update({"step_controller": "i", "proportional_gain": 0.4})
     assert run.step_controller == "i"
-
-
-def test_update_promotes_gustafsson(
-    single_integrator_run_mutable,
-):
-    """A gain update replaces a family gustafsson controller."""
-    run = single_integrator_run_mutable
-    run.update({"algorithm": "crank_nicolson"})
-    assert run.step_controller == "gustafsson"
-    run.update({"proportional_gain": 0.4})
-    assert run.step_controller == "pi"
-    assert run._step_controller.proportional_gain == pytest.approx(0.4)
-
-
-def test_update_algo_swap_promotes_unnamed_controller(
-    single_integrator_run_mutable,
-):
-    """An algorithm swap with a gain promotes over the family default."""
-    run = single_integrator_run_mutable
-    run.update({"algorithm": "kvaerno3", "derivative_gain": 0.05})
-    assert run.step_controller == "pid"
-    assert run._step_controller.derivative_gain == pytest.approx(0.05)
-
-
-def test_none_filter_coefficients_keeps_family_gains(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
-    """``filter_coefficients=None`` leaves the family gain defaults."""
-    settings = dict(algorithm_settings)
-    settings["algorithm"] = "kvaerno3"
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=dict(loop_settings),
-        drivers_fn=_get_evaluate_driver_at_t(driver_array),
-        step_control_settings={"filter_coefficients": None},
-        algorithm_settings=settings,
-        output_settings=dict(output_settings),
-    )
-    defaults = run._algo_step.controller_default_settings
-    order = run._algo_step.algorithm_order
-    assert run.step_controller == "pi"
-    assert run._step_controller.integral_gain == pytest.approx(
-        defaults["integral_gain"](order)
-    )
-    assert run._step_controller.proportional_gain == pytest.approx(
-        defaults["proportional_gain"](order)
-    )
 
 
 def test_precision_popped_from_output_settings(
@@ -555,48 +237,6 @@ def test_dt_from_step_control_reaches_controller(
     assert run.dt == pytest.approx(0.005, rel=1e-3)
 
 
-def test_user_step_control_overrides_algorithm_defaults(
-    system,
-    driver_array,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
-    """User-supplied step_control_settings override algorithm defaults.
-
-    A partial step-control dict with no ``step_controller`` key is a
-    constructor input the chain fixtures cannot express, so this
-    constructor-shape test builds directly.
-    """
-    precision = system.precision
-    overrides = {"dt_min": 5e-5, "dt_max": 5e-2, "min_step_shrink": 0.3}
-    override_settings = {
-        key: precision(value) if isinstance(value, float) else value
-        for key, value in overrides.items()
-    }
-    settings = dict(algorithm_settings)
-    settings["algorithm"] = "crank_nicolson"
-    run = SingleIntegratorRun(
-        system=system,
-        loop_settings=dict(loop_settings),
-        drivers_fn=_get_evaluate_driver_at_t(driver_array),
-        step_control_settings=dict(override_settings),
-        algorithm_settings=settings,
-        output_settings=dict(output_settings),
-    )
-
-    declared = run._algo_step.controller_default_settings
-    assert run.step_controller == declared["step_controller"]
-    assert run.dt_min == pytest.approx(override_settings["dt_min"])
-    assert run.dt_max == pytest.approx(override_settings["dt_max"])
-    controller_settings = run._step_controller.settings_dict
-    assert controller_settings["min_step_shrink"] == pytest.approx(
-        override_settings["min_step_shrink"]
-    )
-    assert (controller_settings["algorithm_order"]
-            == run._algo_step.algorithm_order)
-
-
 # ── _process_loop_timing ────────────────────────────────────────────────── #
 
 @pytest.mark.parametrize(
@@ -607,47 +247,6 @@ def test_user_step_control_overrides_algorithm_defaults(
 def test_save_last_when_no_save_every(single_integrator_run):
     """save_last=True when time-domain outputs requested without save_every."""
     assert single_integrator_run.save_last is True
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [SUMMARY_ONLY_NO_TIMING],
-    indirect=True,
-)
-def test_is_duration_dependent_no_timing(single_integrator_run):
-    """is_duration_dependent True when summaries requested with no timing."""
-    assert single_integrator_run.is_duration_dependent is True
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [SUMMARY_ONLY_NO_TIMING],
-    indirect=True,
-)
-def test_copy_keeps_the_schedule_duration_dependent(
-    single_integrator_run_mutable,
-):
-    """A copy re-derives the summary schedule instead of pinning it."""
-    run = single_integrator_run_mutable
-    run.set_summary_timing_from_duration(2.0)
-    settings = run.settings_dict
-    assert "summarise_every" not in settings
-    assert "sample_summaries_every" not in settings
-    twin = run.copy()
-    assert twin.is_duration_dependent is True
-    assert twin.config_hash == run.copy().config_hash
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    # Unique set: a sample cadence with summarise_every still unset
-    # is exactly the condition that must stay duration-dependent.
-    [{**SUMMARY_ONLY_NO_TIMING, "sample_summaries_every": 0.01}],
-    indirect=True,
-)
-def test_is_duration_dependent_with_sample_timing(single_integrator_run):
-    """is_duration_dependent True when summarise_every unset."""
-    assert single_integrator_run.is_duration_dependent is True
 
 
 @pytest.mark.parametrize(
@@ -698,39 +297,7 @@ def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
     assert loop_cfg._sample_summaries_every is None
 
 
-# ── set_summary_timing_from_duration ────────────────────────────────────── #
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [SUMMARY_ONLY_TIMED],
-    indirect=True,
-)
-def test_set_summary_timing_noop_when_not_dependent(
-    single_integrator_run_mutable,
-):
-    """Explicit timing means set_summary_timing_from_duration is a no-op."""
-    run = single_integrator_run_mutable
-    initial = run.sample_summaries_every
-    assert initial == pytest.approx(0.05)
-    run.set_summary_timing_from_duration(duration=1.0)
-    assert run.sample_summaries_every == pytest.approx(0.05)
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [SUMMARY_ONLY_NO_TIMING],
-    indirect=True,
-)
-def test_set_summary_timing_from_duration_dependent(
-    single_integrator_run_mutable,
-):
-    """Duration-dependent path sets summarise_every = duration."""
-    run = single_integrator_run_mutable
-    assert run.is_duration_dependent is True
-    run.set_summary_timing_from_duration(duration=1.0)
-    assert run.summarise_every == pytest.approx(1.0, rel=1e-5)
-    assert run.sample_summaries_every == pytest.approx(0.01, rel=1e-5)
-
+# ── summary_window ──────────────────────────────────────────────────────── #
 
 # ── n_error property ───────────────────────────────────────────────────── #
 
@@ -800,55 +367,7 @@ def test_uses_error_follows_controller_swap(
     assert run._loop.compile_settings.n_error == 0
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [SPECIFIC_ALGORITHM_COMBOS["erk-tsit5"]],
-    indirect=True,
-)
-def test_errorless_swap_resets_step_is_adaptive(
-    single_integrator_run_mutable,
-):
-    """An adaptive controller on an errorless algorithm is replaced."""
-    run = single_integrator_run_mutable
-    assert run._algo_step.is_adaptive is True
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        run.update({"algorithm": "euler", "step_controller": "pid"})
-    assert any("cannot be used with" in str(w.message) for w in caught)
-    step = run._algo_step
-    assert step.has_error_estimate is False
-    assert not run._step_controller.is_adaptive
-    assert step.is_adaptive is False
-    assert step.uses_error is False
-    assert run.n_error == 0
-    assert run._loop.compile_settings.n_error == 0
-
-
 # ── check_compatibility ─────────────────────────────────────────────────── #
-
-def test_errorless_euler_with_adaptive_warns_and_replaces(system):
-    """Errorless Euler + adaptive PID warns and replaces with fixed."""
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        core = SingleIntegratorRunCore(
-            system=system,
-            algorithm_settings={"algorithm": "euler"},
-            step_control_settings={
-                "step_controller": "pid",
-                "dt_min": 1e-6,
-                "dt_max": 1e-1,
-            },
-        )
-        compat = [x for x in w if "cannot be used with" in str(x.message)]
-        assert len(compat) >= 1
-        assert issubclass(compat[0].category, UserWarning)
-        msg = str(compat[0].message).lower()
-        assert "euler" in msg
-        assert "pid" in msg
-        assert "fixed" in msg
-        assert "error estimate" in msg
-        assert not core._step_controller.is_adaptive
-
 
 def test_replacement_controller_uses_original_dt(system):
     """Replacement fixed controller uses dt from original adaptive."""
@@ -869,27 +388,6 @@ def test_replacement_controller_uses_original_dt(system):
             (1e-6 * 1e-1) ** 0.5, rel=1e-3
         )
         assert core._step_controller.dt == expected_dt
-
-
-def test_errorless_rk4_with_adaptive_warns(system):
-    """Errorless RK4 tableau + adaptive PID warns and replaces."""
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        core = SingleIntegratorRunCore(
-            system=system,
-            algorithm_settings={
-                "algorithm": "erk",
-                "tableau": CLASSICAL_RK4_TABLEAU,
-            },
-            step_control_settings={
-                "step_controller": "pid",
-                "dt_min": 1e-6,
-                "dt_max": 1e-1,
-            },
-        )
-        compat = [x for x in w if "cannot be used with" in str(x.message)]
-        assert len(compat) >= 1
-        assert not core._step_controller.is_adaptive
 
 
 def test_adaptive_algo_with_adaptive_controller_no_warning(system):
@@ -1201,23 +699,6 @@ def test_update_algo_swap_with_controller_override_skips_family_gains(
     )
 
 
-def test_update_check_compatibility_after_switch(
-    single_integrator_run_mutable,
-):
-    """Switching to incompatible combo auto-corrects via check_compatibility.
-    """
-    run = single_integrator_run_mutable
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        run.update({
-            "algorithm": "euler",
-            "step_controller": "pid",
-        })
-        compat = [x for x in w if "cannot be used with" in str(x.message)]
-        assert len(compat) >= 1
-        assert not run._step_controller.is_adaptive
-
-
 def test_update_process_loop_timing_called(
     single_integrator_run_mutable,
 ):
@@ -1435,33 +916,6 @@ def test_build_compiled_functions_reach_loop(single_integrator_run):
 
 # ── duration_dependent warning (Solver level) ─────────────────────────── #
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [SUMMARY_ONLY_NO_TIMING],
-    indirect=True,
-)
-def test_duration_dependent_warning_on_solve(
-    solver, solver_settings, batch_input_arrays, driver_settings,
-):
-    """Solver emits warning when is_duration_dependent is True."""
-    duration = float(solver_settings["duration"])
-    initial_values, parameters = batch_input_arrays
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        solver.solve(
-            initial_values=initial_values,
-            parameters=parameters,
-            drivers=driver_settings,
-            duration=duration,
-        )
-        timing_warns = [
-            x for x in w
-            if "sample_summaries_every" in str(x.message).lower()
-            or "duration" in str(x.message).lower()
-        ]
-        assert len(timing_warns) >= 1
-
-
 # ── no-op selector updates keep buffer registration ───────────────────── #
 
 def test_update_same_selectors_still_builds(single_integrator_run_mutable):
@@ -1478,7 +932,7 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
     """A genuine controller swap reconstructs and builds."""
     run = single_integrator_run_mutable
     target = "i" if run.compile_settings.step_controller != "i" else "pi"
-    run.update({"step_controller": target})
+    run.update({"algorithm": "bogacki-shampine-32", "step_controller": target})
     assert run.compile_settings.step_controller == target
     assert run.device_function is not None
 

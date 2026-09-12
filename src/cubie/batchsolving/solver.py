@@ -33,6 +33,7 @@ See Also
 
 from pathlib import Path
 from functools import partial
+from warnings import warn
 from weakref import finalize
 from typing import (
     Any,
@@ -58,7 +59,16 @@ from cubie.batchsolving.calibration import (
     CalibrationResult,
     run_calibration,
 )
-from cubie.batchsolving.optimize import OptimizeResult, run_optimization
+from cubie.batchsolving.optimize import (
+    PERFORMANCE_PARAMETERS,
+    OptimizeResult,
+    performance_defaults,
+    run_optimization,
+)
+from cubie.batchsolving.solver_settings import (
+    SolverSettings,
+    unroll_flags_as_settings,
+)
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -79,7 +89,7 @@ from cubie.integrators.loops.ode_loop import (
 from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
-from cubie._utils import merge_kwargs_into_settings
+from cubie._utils import merge_kwargs_into_settings, unpack_dict_values
 from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollFlags
 from cubie.outputhandling.output_functions import (
     ALL_OUTPUT_FUNCTION_PARAMETERS,
@@ -192,6 +202,58 @@ def _system_from_equations(
         drivers=drivers,
         **create_kwargs,
     )
+
+
+SOLVER_SETTINGS_KEYS = frozenset(
+    {"algorithm", "tableau", "lineinfo", "cache", "auto_performance"}
+    | ALL_UNROLL_PARAMETERS
+    | ALL_ODE_PARAMETERS
+    | ALL_OUTPUT_FUNCTION_PARAMETERS
+    | (ALL_MEMORY_MANAGER_PARAMETERS - {"memory_manager"})
+    | ALL_STEP_CONTROLLER_PARAMETERS
+    | ALL_ALGORITHM_STEP_PARAMETERS
+    | ALL_LOOP_SETTINGS
+    | ALL_KERNEL_PARAMETERS
+)
+"""Keywords the solver records as user-given."""
+
+_GROUPS = (
+    ("unroll_settings", ALL_UNROLL_PARAMETERS),
+    ("step_control_settings", ALL_STEP_CONTROLLER_PARAMETERS),
+    (
+        "algorithm_settings",
+        ALL_ALGORITHM_STEP_PARAMETERS | {"tableau", "is_adaptive"},
+    ),
+    ("loop_settings", ALL_LOOP_SETTINGS),
+    ("output_settings", ALL_OUTPUT_FUNCTION_PARAMETERS),
+    ("kernel_settings", ALL_KERNEL_PARAMETERS),
+)
+"""The kernel's constructor groups and the keys each takes."""
+
+
+def _grouped(effective: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Split ``effective`` into the kernel's constructor groups."""
+    return {
+        name: {
+            key: value for key, value in effective.items() if key in keys
+        }
+        for name, keys in _GROUPS
+    }
+
+
+def _warn_on_newton_rtol_inversion(newton_rtol, controller_rtol) -> None:
+    """Warn when the Newton rtol reaches the step controller's rtol."""
+    controller = asarray(controller_rtol)
+    newton = asarray(newton_rtol).reshape(-1, controller.size)
+    inverted = (controller > 0.0) & (newton >= controller)
+    if inverted.any():
+        warn(
+            "newton_rtol is at or above the step controller rtol: the "
+            "requested rtol is below what the working precision "
+            "resolves in the stage solves.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 def _check_renamed_kwargs(keys: Iterable[str]) -> None:
@@ -475,10 +537,8 @@ class Solver:
         unroll_settings, unroll_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_UNROLL_PARAMETERS,
-            user_settings={},
+            user_settings=unroll_flags_as_settings(unroll),
         )
-        if unroll is not None:
-            unroll_settings["unroll"] = unroll
         system_settings, system_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_ODE_PARAMETERS,
@@ -553,20 +613,41 @@ class Solver:
             | unroll_recognized
         )
 
+        self.settings = SolverSettings()
+        given = {
+            **system_settings,
+            **output_settings,
+            **memory_settings,
+            **step_settings,
+            **algorithm_settings,
+            **loop_settings,
+            **kernel_settings,
+            **unroll_settings,
+            "lineinfo": lineinfo,
+            "cache": cache,
+            "auto_performance": auto_performance,
+        }
+        self.settings.give(
+            {
+                key: value
+                for key, value in given.items()
+                if key in SOLVER_SETTINGS_KEYS
+            }
+        )
+        self._duration = None
+        resolved = self.settings.resolve(system)
+        self._warn_on_resolution(resolved)
+        grouped = _grouped(resolved.effective)
         self.kernel = BatchSolverKernel(
             system,
-            loop_settings=loop_settings,
             lineinfo=lineinfo,
-            unroll_settings=unroll_settings,
-            step_control_settings=step_settings,
-            algorithm_settings=algorithm_settings,
-            output_settings=output_settings,
             memory_settings=memory_settings,
             cache=cache,
-            auto_performance=auto_performance,
-            kernel_settings=kernel_settings,
+            **grouped,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
+        self._push_performance()
+        self._warn_on_newton_inversion()
         # Grids assemble into buffers per the kernel's spill settings.
         self.input_handler = BatchInputHandler(
             interface,
@@ -600,17 +681,101 @@ class Solver:
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the kwargs rebuilding this solver; derived ones as given."""
-        settings = self.kernel.settings_dict
+        """Return the kwargs rebuilding this solver: the user-given ones."""
+        settings = dict(self.settings.user_given)
         for key in _OUTPUT_SELECTION_KEYS:
             settings.pop(key, None)
         settings.update(self._output_selection_intent)
         settings["time_logging_level"] = default_timelogger.verbosity
         return settings
 
+    @property
+    def effective_settings(self) -> Dict[str, Any]:
+        """Return the settings in effect, given and derived."""
+        return dict(self.settings.effective)
+
+    @property
+    def blocksize_given(self) -> bool:
+        """Return whether ``blocksize`` was given."""
+        return "blocksize" in self.settings.user_given
+
+    def optimisation_candidates(
+        self, force: bool = False
+    ) -> Tuple[Dict[str, Any], ...]:
+        """Step candidates minus the given keys; ``force`` keeps them."""
+        fixed = set()
+        if not force:
+            fixed = self.settings.given_keys(PERFORMANCE_PARAMETERS)
+        candidates = []
+        for combo in self.kernel.single_integrator.algorithm_candidates:
+            free = {
+                key: value for key, value in combo.items() if key not in fixed
+            }
+            if free not in candidates:
+                candidates.append(free)
+        return tuple(candidates)
+
     def copy(self) -> "Solver":
         """Return a solver with these settings on a system copy; no drivers."""
         return type(self)(self.system.copy(), **self.settings_dict)
+
+    def _warn_on_resolution(
+        self, resolved, controller: bool = True, window: bool = True
+    ) -> None:
+        """Warn about a replaced controller or a duration-derived window."""
+        if controller and resolved.replaced_controller is not None:
+            warn(
+                f"Adaptive step controller '{resolved.replaced_controller}' "
+                "cannot be used with fixed-step algorithm "
+                f"'{resolved.effective['algorithm']}'. The algorithm does "
+                "not provide an error estimate required for adaptive "
+                "stepping. Replacing with fixed-step controller.",
+                UserWarning,
+                stacklevel=3,
+            )
+        if window and resolved.summary_window_derived:
+            warn(
+                "Summary metrics were requested with no "
+                "summarise_every or sample_summaries_every timing. "
+                "Sample_summaries_every was set to duration / 100 by "
+                "default. If duration changes, the kernel will need "
+                "to recompile, which will cause a slow integration "
+                "(once). Set timing parameters explicitly to avoid "
+                "this.",
+                UserWarning,
+                stacklevel=3,
+            )
+
+    def _warn_on_newton_inversion(self) -> None:
+        """Warn when the step's Newton rtol reaches the controller's."""
+        run = self.kernel.single_integrator
+        step = run._algo_step
+        if step.is_implicit and not step.is_linear and run.is_adaptive:
+            _warn_on_newton_rtol_inversion(step.solver.rtol, run.rtol)
+
+    def _push_performance(self) -> None:
+        """Push the unroll and placement values the built step picks."""
+        run = self.kernel.single_integrator
+        derived = performance_defaults(
+            self.settings.user_given, run._algo_step, self.system
+        )
+        changed = {
+            key: value
+            for key, value in derived.items()
+            if self.settings.effective.get(key) != value
+        }
+        self.settings.effective.update(derived)
+        if changed:
+            self.kernel.update(changed, silent=True)
+
+    def _apply_duration(self, duration: float) -> None:
+        """Re-resolve a duration-derived summary window for ``duration``."""
+        if self._duration == duration:
+            return
+        self._duration = duration
+        resolved = self.settings.resolve(self.system, duration)
+        if resolved.summary_window_derived:
+            self.kernel.update(resolved.effective, silent=True)
 
     def __enter__(self) -> "Solver":
         """Return self so the solver can be used as a context manager."""
@@ -773,6 +938,7 @@ class Solver:
             # Replay a direct system mutation through the update chain.
             self.kernel.resync_system()
             self._refresh_output_selection()
+        self._apply_duration(duration)
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
@@ -832,6 +998,7 @@ class Solver:
             # Replay a direct system mutation through the update chain.
             self.kernel.resync_system()
             self._refresh_output_selection()
+        self._apply_duration(duration)
 
         inits, params = self.input_handler(
             states=initial_values, params=parameters, kind=grid_type
@@ -1083,6 +1250,11 @@ class Solver:
             return set()
 
         _check_renamed_kwargs(updates_dict)
+        updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
+        unroll_given = "unroll" in updates_dict
+        if unroll_given:
+            flags = unroll_flags_as_settings(updates_dict.pop("unroll"))
+            updates_dict = {**flags, **updates_dict}
 
         # Keep the recorded selection current for re-resolution.
         for key in _OUTPUT_SELECTION_KEYS:
@@ -1102,12 +1274,50 @@ class Solver:
         all_unrecognized -= self.system_interface.update(
             updates_dict, silent=True
         )
-        all_unrecognized -= self.kernel.update(updates_dict, silent=True)
+
+        self.settings.give(
+            {
+                key: value
+                for key, value in updates_dict.items()
+                if key in SOLVER_SETTINGS_KEYS
+            }
+        )
+        resolved = self.settings.resolve(self.system, self._duration)
+        keys = set(updates_dict)
+        self._warn_on_resolution(
+            resolved,
+            controller=bool(keys & {"algorithm", "step_controller"}),
+            window=bool(
+                keys
+                & {
+                    "output_types",
+                    "save_every",
+                    "summarise_every",
+                    "sample_summaries_every",
+                }
+            ),
+        )
+        push = {
+            key: value
+            for key, value in updates_dict.items()
+            if value is not None
+        }
+        push.update(resolved.effective)
+        all_unrecognized -= self.kernel.update(push, silent=True)
+        all_unrecognized -= {
+            key for key in updates_dict if key in SOLVER_SETTINGS_KEYS
+        }
+        self._push_performance()
+        if keys & {"algorithm", "step_controller", "rtol", "newton_rtol"}:
+            self._warn_on_newton_inversion()
 
         # Re-resolve the output selection if the layout changed.
         self._refresh_output_selection()
 
         recognised = set(updates_dict.keys()) - all_unrecognized
+        if unroll_given:
+            recognised.add("unroll")
+        recognised |= unpacked_keys
         if recognised:
             self._solve_info_key = None
 

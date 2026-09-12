@@ -64,6 +64,13 @@ class CrankNicolsonStepConfig(ImplicitStepConfig):
 class CrankNicolsonStep(ODEImplicitStep):
     """Crank–Nicolson step with embedded backward Euler error estimation."""
 
+    algorithm_family = "crank_nicolson"
+
+    @classmethod
+    def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
+        """Return the Crank-Nicolson defaults."""
+        return CN_DEFAULTS.copy()
+
     # Diagonals 0.5 (trapezoidal) and 1.0 (backward Euler companion).
     _PREFACTOR_STAGE_DATA = (((0.5, 0.0), (0.0, 1.0)), (1.0, 1.0))
 
@@ -119,6 +126,7 @@ class CrankNicolsonStep(ODEImplicitStep):
         super().__init__(config, CN_DEFAULTS.copy(), **kwargs)
 
         self.register_buffers()
+        self.build_implicit_helpers()
 
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
@@ -137,7 +145,7 @@ class CrankNicolsonStep(ODEImplicitStep):
             aliases='solver_shared',
         )
 
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by build_implicit_helpers.
         buffer_registry.register(
             'cached_auxiliaries',
             self,

@@ -7,6 +7,8 @@ Published Objects
     One candidate's timings at one launch.
 :class:`OptimizeResult`
     Every launch, the best one, and the applied settings.
+:func:`performance_defaults`
+    Unroll and placement values ``auto_performance`` picks for a step.
 :func:`launch_candidates`
     Launches a kernel can time.
 :func:`apply_launch`
@@ -19,20 +21,22 @@ import logging
 import multiprocessing
 import pickle
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from warnings import warn
 
 from attrs import define
 from numpy import zeros as np_zeros
 
 from cubie.backend.utils import (
+    SASS_INSTRUCTION_BYTES,
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
+    device_hardware,
     kernel_resources,
 )
 from cubie.batchsolving.calibration import _achieved_waves
 from cubie.cache_root import get_cache_root_override, set_cache_root
-from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollChoice, cuda
 from cubie.time_logger import default_timelogger
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,56 @@ LOCAL_LAUNCH_BLOCKSIZES = (64, 256)
 
 SHARED_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for shared-memory kernels."""
+
+PLACEMENT_PARAMETERS = frozenset(
+    {"stage_increment_location", "accumulator_location", "state_location"}
+)
+"""Buffer placements ``auto_performance`` and ``optimize`` may set."""
+
+PERFORMANCE_PARAMETERS = (
+    ALL_UNROLL_PARAMETERS | PLACEMENT_PARAMETERS | {"blocksize"}
+)
+"""Keys ``auto_performance`` and ``Solver.optimize`` may set."""
+
+SHARED_STAGE_INCREMENT_MIN_STATES = 20
+"""A FIRK ``stage_increment`` goes to shared memory above this state
+count."""
+
+
+def performance_defaults(
+    user_given: Mapping[str, Any],
+    step: Any,
+    system: Any,
+    instruction_cache_bytes: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Return the unroll and placement values for ``step`` not given.
+
+    ``unroll_newton_exits`` rolls when the fully unrolled step overflows
+    the instruction cache; a FIRK ``stage_increment`` is shared above
+    the state-count cut.
+    """
+    if not user_given.get("auto_performance", True):
+        return {}
+    if instruction_cache_bytes is None:
+        instruction_cache_bytes = device_hardware().instruction_cache_bytes
+    defaults = {}
+    if (
+        "unroll_newton_exits" not in user_given
+        and step.is_implicit
+        and step.newton_solves_per_step > 0
+    ):
+        unrolled = system.operation_count + step.step_operation_count
+        capacity = instruction_cache_bytes // SASS_INSTRUCTION_BYTES
+        defaults["unroll_newton_exits"] = (
+            UnrollChoice.ROLLED if unrolled > capacity else UnrollChoice.FULL
+        )
+    if (
+        "stage_increment_location" not in user_given
+        and step.algorithm_family == "firk"
+    ):
+        shared = step.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
+        defaults["stage_increment_location"] = "shared" if shared else "local"
+    return defaults
 
 
 def _label(settings: Dict[str, Any]) -> str:
@@ -497,12 +551,10 @@ def run_optimization(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    candidates = parent.kernel.single_integrator.optimisation_candidates(
-        force=force
-    )
+    candidates = parent.optimisation_candidates(force=force)
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
-        if parent.kernel.blocksize_given and not force
+        if parent.blocksize_given and not force
         else None
     )
     twin = parent.copy()

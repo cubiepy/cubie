@@ -18,6 +18,8 @@ from tests._utils import (
 import attrs
 
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
+from cubie.batchsolving.solver import SOLVER_SETTINGS_KEYS
+from cubie.batchsolving.solver_settings import resolve_settings
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
@@ -942,8 +944,19 @@ def cpu_driver_evaluator(
 
 
 @pytest.fixture(scope="session")
-def algorithm_settings(solver_settings):
-    """Filter algorithm configuration from solver_settings dict.
+def effective_settings(solver_settings, system):
+    """The settings a Solver would push for ``solver_settings``."""
+    given = {
+        key: value
+        for key, value in solver_settings.items()
+        if key in SOLVER_SETTINGS_KEYS
+    }
+    return resolve_settings(given, system).effective
+
+
+@pytest.fixture(scope="session")
+def algorithm_settings(effective_settings):
+    """Filter algorithm configuration from the effective settings.
 
     Note: Functions (dxdt_fn, observables_fn,
     get_solver_helper_fn, drivers_fn, driver_derivative_fn) are NOT
@@ -951,25 +964,23 @@ def algorithm_settings(solver_settings):
     step objects, not stored in settings dict.
     """
     settings, _ = merge_kwargs_into_settings(
-        kwargs=solver_settings,
-        valid_keys=ALL_ALGORITHM_STEP_PARAMETERS,
+        kwargs=effective_settings,
+        valid_keys=ALL_ALGORITHM_STEP_PARAMETERS | {"tableau"},
     )
-    # n_drivers comes from solver_settings (added in Task Group 1)
-    # Functions are NOT part of algorithm_settings
     return settings
 
 
 @pytest.fixture(scope="session")
-def loop_settings(solver_settings):
+def loop_settings(effective_settings):
     settings, _ = merge_kwargs_into_settings(
-        kwargs=solver_settings,
+        kwargs=effective_settings,
         valid_keys=ALL_LOOP_SETTINGS,
     )
     return settings
 
 
 @pytest.fixture(scope="session")
-def step_controller_settings(solver_settings, system):
+def step_controller_settings(effective_settings, solver_settings, system):
     """Base configuration used to instantiate loop step controllers.
 
     algorithm_order comes from solver_settings which was enriched with
@@ -979,6 +990,14 @@ def step_controller_settings(solver_settings, system):
         kwargs=solver_settings,
         valid_keys=ALL_STEP_CONTROLLER_PARAMETERS,
     )
+    resolved, _ = merge_kwargs_into_settings(
+        kwargs=effective_settings,
+        valid_keys=ALL_STEP_CONTROLLER_PARAMETERS,
+    )
+    # The controller named in the settings is built even when the
+    # solver would replace it for an errorless algorithm.
+    resolved.pop("step_controller", None)
+    settings.update(resolved)
     settings.update(algorithm_order=solver_settings["algorithm_order"])
     settings.update(mass_flags=system.mass_diagonal_flags)
     return settings

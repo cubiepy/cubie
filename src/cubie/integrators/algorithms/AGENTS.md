@@ -71,7 +71,7 @@ resolves a name or `ButcherTableau` to the right factory.
   `"crank_nicolson"` are fixed schemes with no tableau.
 - `AlgorithmDefaults`: one flat settings dict per family (controller and solver keys together); the adaptive/fixed variant is chosen from `tableau.has_error_estimate`, and a tableau's own `defaults` mapping overlays the family dict in `BaseAlgorithmStep.algorithm_defaults`.
 
-- Keys in `ALL_ALGORITHM_STEP_PARAMETERS` are step defaults (`step_default_settings`, applied to user-unset keys by `SingleIntegratorRunCore._apply_algorithm_step_defaults`); every other key is a controller default (`controller_default_settings`).
+- `BaseAlgorithmStep.algorithm_defaults` is the merged table as an `AlgorithmDefaults`; the `family_defaults(tableau)` classmethod and `algorithm_facts(algorithm, tableau)` (`AlgorithmFacts`: step class, tableau, defaults, `has_error_estimate`, `is_implicit`, `is_linear`, `algorithm_family`) give it without a step instance. `ALL_ALGORITHM_STEP_PARAMETERS` keys are step defaults (`step_default_settings`), the rest controller defaults (`controller_default_settings`); the Solver applies them.
 
 - **Errorless tableaus must use a fixed controller** — constructors enforce this; never pair an adaptive controller with an errorless tableau.
 - **`update` additions:** new keywords must be added to `ALL_ALGORITHM_STEP_PARAMETERS`
@@ -157,15 +157,21 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 
 ### Solver helpers arrive by name
 Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=..., **kwargs).device_function` with plain strings and bools: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus the request axes (`jacobian_at="step"` for frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing, `prefactored=True` for step-start LU factors). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
-`ODEImplicitStep.update` refreshes the step settings
-first, then adds the derived `solver_width` (the coupled all-stages length
-for FIRK; `n_states` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
-**before** reading `compile_settings` — the helper refresh replaces the
-snapshot. Each `build_implicit_helpers` pushes an `OperationCounts` into
-`helper_operation_counts`; `newton_body_operation_count`, `per_step_operation_count`,
-`newton_solves_per_step` and `performance_defaults` feed the core's
-`_apply_performance_defaults`. `optimisation_candidates` lists the setting
-combinations `Solver.optimize` times (base `({},)`).
+`get_solver_helper_fn` is required by every implicit step and the
+initialiser. `ODEImplicitStep.update` refreshes the step settings, adds
+`solver_width` (the coupled all-stages length for FIRK; `n_states`
+elsewhere) on an `n_states` or `tableau` change (FIRK also carries the
+tableau's `stage_coefficients` to its norm), then runs `build_implicit_helpers()`
+(constructors too): it requests the helpers, pushes them into the solver
+children and writes their products (`newton_nonlinear_solver_fn` or
+`krylov_linear_solver_fn`, `prepare_jacobian_fn`, `predictor_fn`,
+`error_linear_solver_fn`, ...) and an `OperationCounts` into the step's
+config; `build()` reads that config only. `StepCache` product fields
+(`threads_per_step`, `n_error`, `algorithm_order`, `has_error_estimate`,
+`is_implicit`, `is_linear`, `algorithm_family`, `newton_solves_per_step`,
+`step_operation_count`) fill from the same-named properties.
+`optimisation_candidates` lists the combinations `Solver.optimize` times
+(base `({},)`).
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
 the `lu_solve` role instead of the operator + preconditioner pair;

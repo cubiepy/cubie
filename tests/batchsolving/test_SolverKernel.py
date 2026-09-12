@@ -7,6 +7,7 @@ from cubie.backend.utils import max_shared_memory_per_block
 from cubie.outputhandling.output_sizes import BatchOutputSizes
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
+from cubie.batchsolving.solver_settings import resolve_loop_timing
 
 
 def test_kernel_builds(solverkernel):
@@ -146,6 +147,7 @@ def test_all_lower_plumbing(
         "saved_observable_indices": np.asarray(saved_obs_idx),
         "summarised_state_indices": np.asarray(summarised_state_idx),
         "summarised_observable_indices": np.asarray(summarised_obs_idx),
+        "sample_summaries_every": 0.05,
         "output_types": [
             "state",
             "observables",
@@ -160,11 +162,11 @@ def test_all_lower_plumbing(
         step_control_settings=updated_controller_settings,
         algorithm_settings=algorithm_settings,
         output_settings=output_settings,
-        loop_settings={
-            "save_every": 0.01,
-            "summarise_every": 0.1,
-            "sample_summaries_every": 0.05,
-        },
+        loop_settings=resolve_loop_timing(
+            0.01, 0.1, 0.05,
+            has_time_domain_outputs=True,
+            has_summary_outputs=True,
+        ),
         unroll_settings=unroll_settings,
     )
     freshsolver.configure_drivers(driver_settings)
@@ -531,12 +533,14 @@ def test_blocksize_setting_follows_updates(solverkernel_mutable):
         solverkernel_mutable.update(blocksize=0)
 
 
-def test_auto_performance_reaches_the_integrator(solverkernel_mutable):
-    """``auto_performance`` lands on the integrator's compile settings."""
-    assert solverkernel_mutable.single_integrator.auto_performance is True
-    recognised = solverkernel_mutable.update(auto_performance=False)
+def test_auto_performance_is_a_kernel_setting(solverkernel_mutable):
+    """``auto_performance`` lands on the kernel's compile settings."""
+    kernel = solverkernel_mutable
+    assert kernel.compile_settings.auto_performance is True
+    recognised = kernel.update(auto_performance=False)
     assert "auto_performance" in recognised
-    assert solverkernel_mutable.single_integrator.auto_performance is False
+    assert kernel.compile_settings.auto_performance is False
+    assert kernel.settings_dict["auto_performance"] is False
 
 
 def test_persistent_array_sized_from_persistent_layout(solverkernel):

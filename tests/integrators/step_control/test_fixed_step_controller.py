@@ -129,26 +129,6 @@ def test_resolve_fixed_dt_only():
     assert ctrl.dt == pytest.approx(np.float64(0.01))
 
 
-def test_resolve_fixed_dt_min_only():
-    """dt_min alone is translated to dt."""
-    ctrl = FixedStepController(precision=np.float64, dt_min=0.001)
-    assert ctrl.dt == pytest.approx(np.float64(0.001))
-
-
-def test_resolve_fixed_dt_max_only():
-    """dt_max alone is translated to dt."""
-    ctrl = FixedStepController(precision=np.float64, dt_max=0.5)
-    assert ctrl.dt == pytest.approx(np.float64(0.5))
-
-
-def test_resolve_fixed_both_bounds():
-    """dt_min + dt_max translates to dt = dt_min (first available)."""
-    ctrl = FixedStepController(
-        precision=np.float64, dt_min=0.001, dt_max=0.5,
-    )
-    assert ctrl.dt == pytest.approx(np.float64(0.001))
-
-
 def test_resolve_fixed_dt_plus_bounds():
     """dt + dt_min keeps dt (first available)."""
     ctrl = FixedStepController(
@@ -170,10 +150,3 @@ def test_update_dt_directly():
     assert ctrl.dt == pytest.approx(np.float64(0.005))
 
 
-def test_update_dt_min_warns():
-    """Fixed controller warns when dt_min passed to update."""
-    ctrl = FixedStepController(precision=np.float64, dt=0.01)
-    with pytest.warns(UserWarning, match="dt_min.*not recognized"):
-        ctrl.update({"dt_min": 0.005})
-    # dt unchanged
-    assert ctrl.dt == pytest.approx(np.float64(0.01))

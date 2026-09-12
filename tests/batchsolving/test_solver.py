@@ -2581,7 +2581,7 @@ def test_copy_rederives_what_the_parent_derived(solver, driver_settings):
         assert twin_run._step_controller.compile_settings == (
             run._step_controller.compile_settings
         )
-        assert twin.kernel.blocksize_given == solver.kernel.blocksize_given
+        assert twin.blocksize_given == solver.blocksize_given
         assert twin.kernel.config_hash == solver.kernel.config_hash
     finally:
         twin.close()

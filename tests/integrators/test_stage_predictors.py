@@ -295,11 +295,17 @@ def test_predictor_update_flows_through_solver(solver_mutable):
     ],
 )
 def test_predictor_locations_forwarded_at_construction(
-    step_class, tableau
+    system, step_class, tableau
 ):
     """Predictor locations passed to the step constructor take effect."""
-    local = step_class(precision=np.float64, n_states=3, tableau=tableau)
+    local = step_class(
+        get_solver_helper_fn=system.get_solver_helper,
+        precision=np.float64,
+        n_states=3,
+        tableau=tableau,
+    )
     shared = step_class(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=3,
         tableau=tableau,
@@ -374,7 +380,7 @@ def test_registry_ceilings_match_calibration():
         assert limit_f64 == np.float64(expected[1]), name
 
 
-def test_uncalibrated_tableau_disables_prediction():
+def test_uncalibrated_tableau_disables_prediction(system):
     """A custom tableau without calibrated ceilings compiles without
     dense prediction even when prediction is requested."""
     custom = DIRKTableau(
@@ -384,6 +390,7 @@ def test_uncalibrated_tableau_disables_prediction():
         order=2,
     )
     step = DIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=2,
         tableau=custom,

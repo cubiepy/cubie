@@ -49,6 +49,13 @@ EE_DEFAULTS = AlgorithmDefaults(
 class ExplicitEulerStep(ODEExplicitStep):
     """Forward Euler integration step for explicit ODE updates."""
 
+    algorithm_family = "explicit_euler"
+
+    @classmethod
+    def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
+        """Return the explicit Euler defaults."""
+        return EE_DEFAULTS.copy()
+
     def __init__(
         self,
         precision: PrecisionDType,
