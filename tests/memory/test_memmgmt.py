@@ -786,10 +786,10 @@ class TestMemoryManager:
     @pytest.mark.parametrize(
         "fixed_mem_override", [{"free": 1024}], indirect=True
     )
-    def test_allocate_queue_empty_rebroadcasts_chunk_parameters(
+    def test_allocate_queue_empty_keeps_chunk_parameters(
         self, mgr, memory_client
     ):
-        """Test allocate_queue with nothing queued resends chunk params."""
+        """allocate_queue with nothing queued leaves the partition as is."""
         instance = memory_client
         responses = []
         mgr.register(
@@ -813,14 +813,21 @@ class TestMemoryManager:
         assert len(responses) == 1
         first = responses[0]
         assert first.chunks > 1
+        key = (
+            mgr.get_stream_group(instance),
+            mgr.registry[id(instance)].owner_id,
+        )
+        assert mgr._group_chunk_parameters[key] == (
+            first.chunk_length,
+            first.chunks,
+        )
 
-        # Repeat call with nothing queued: chunk parameters rebroadcast
-        mgr.allocate_queue(instance)
-        assert len(responses) == 2
-        second = responses[1]
-        assert second.arr == {}
-        assert second.chunks == first.chunks
-        assert second.chunk_length == first.chunk_length
+        assert mgr.allocate_queue(instance) is None
+        assert mgr._group_chunk_parameters[key] == (
+            first.chunk_length,
+            first.chunks,
+        )
+        assert len(responses) == 1
 
     @pytest.mark.parametrize("memory_clients", [5], indirect=True)
     def test_is_grouped(self, mgr, memory_clients):
@@ -2079,6 +2086,34 @@ def test_owner_work_state_tracks_submission(mgr, memory_client):
     mgr.end_work(inst, mgr.get_stream(inst))
     assert not settings.submitting
     mgr.get_stream(inst).synchronize()
+    assert settings.work_complete
+
+
+def test_end_work_reuses_the_owner_completion_event(mgr, memory_client):
+    """Each end_work re-records the owner's one completion event."""
+    inst = memory_client
+    mgr.register(inst, stream_group="flags")
+    settings = mgr.registry[id(inst)]
+    stream = mgr.get_stream(inst)
+    mgr.begin_work(inst)
+    mgr.end_work(inst, stream)
+    first = settings.completion_event
+    mgr.begin_work(inst)
+    mgr.end_work(inst, stream)
+    assert settings.completion_event is first
+    stream.synchronize()
+    assert settings.work_complete
+
+
+def test_reinit_streams_clears_completion_events(mgr, memory_client):
+    """Reinitialising the streams drops every completion event."""
+    inst = memory_client
+    mgr.register(inst, stream_group="flags")
+    settings = mgr.registry[id(inst)]
+    mgr.begin_work(inst)
+    mgr.end_work(inst, mgr.get_stream(inst))
+    mgr.reinit_streams()
+    assert settings.completion_event is None
     assert settings.work_complete
 
 

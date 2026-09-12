@@ -2678,6 +2678,108 @@ def test_auto_residency_keeps_local_footprint_in_l2(
     )
 
 
+
+def test_repeat_solve_reuses_the_build_state(
+    solver_mutable,
+    system_restored,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+):
+    """A repeat solve reuses the build's memos; a system edit rebuilds them."""
+    solver = solver_mutable
+    kernel = solver.kernel
+    solver.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+    )
+    snapshot = kernel.compile_settings
+    compiled = kernel.kernel
+    geometry = kernel.launch_geometry()
+    legend = kernel.time_domain_legend
+    partition = kernel.run_params
+    assert not kernel.system_config_stale
+    solver.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+    )
+    assert kernel.compile_settings is snapshot
+    assert kernel.kernel is compiled
+    assert kernel.launch_geometry() is geometry
+    assert kernel.time_domain_legend is legend
+    assert kernel.run_params.num_chunks == partition.num_chunks
+    assert kernel.run_params.chunk_length == partition.chunk_length
+
+    name = list(system_restored.constants.names)[0]
+    value = float(system_restored.constants.values_dict[name])
+    system_restored.update({name: 2.0 * value + 1.0})
+    assert kernel.system_config_stale
+    solver.solve(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+    )
+    assert not kernel.system_config_stale
+    assert kernel.kernel is not compiled
+    rebuilt = kernel.launch_geometry()
+    assert rebuilt is not geometry
+    assert rebuilt == geometry
+    rebuilt_legend = kernel.time_domain_legend
+    assert rebuilt_legend is not legend
+    assert rebuilt_legend == legend
+    assert float(kernel.system.constants.values_dict[name]) == (
+        pytest.approx(2.0 * value + 1.0)
+    )
+
+
+def test_timing_events_kept_while_timing_is_on(
+    solver, simple_initial_values, simple_parameters, driver_settings
+):
+    """Timing on keeps the events between solves; a new level rebuilds them."""
+    kernel = solver.kernel
+    solver.set_verbosity("silent")
+    try:
+        solver.solve(
+            initial_values=simple_initial_values,
+            parameters=simple_parameters,
+            drivers=driver_settings,
+            duration=0.05,
+            grid_type="combinatorial",
+        )
+        events = list(kernel._cuda_events)
+        workload = kernel._gpu_workload_event
+        solver.solve(
+            initial_values=simple_initial_values,
+            parameters=simple_parameters,
+            drivers=driver_settings,
+            duration=0.05,
+            grid_type="combinatorial",
+        )
+        assert kernel._cuda_events == events
+        assert kernel._gpu_workload_event is workload
+        assert events[1].elapsed_time_ms() > 0.0
+        solver.set_verbosity("default")
+        solver.solve(
+            initial_values=simple_initial_values,
+            parameters=simple_parameters,
+            drivers=driver_settings,
+            duration=0.05,
+            grid_type="combinatorial",
+        )
+        assert kernel._gpu_workload_event is not workload
+        assert kernel._cuda_events[1].elapsed_time_ms() > 0.0
+    finally:
+        solver.set_verbosity(None)
+
+
 # ── Driver coefficient uploads ───────────────────────────── #
 
 

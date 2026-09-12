@@ -770,19 +770,19 @@ class TestSolveSpecFields:
 
 
 def test_format_time_domain_label_dimensionless_omits_unit():
-    """_format_time_domain_label returns the bare label for a
+    """format_time_domain_label returns the bare label for a
     dimensionless unit instead of appending '[unit]'."""
-    from cubie.batchsolving.solveresult import _format_time_domain_label
+    from cubie.batchsolving._utils import format_time_domain_label
 
-    assert _format_time_domain_label("x0", "dimensionless") == "x0"
+    assert format_time_domain_label("x0", "dimensionless") == "x0"
 
 
 def test_format_time_domain_label_appends_unit():
-    """_format_time_domain_label appends the unit when not
+    """format_time_domain_label appends the unit when not
     dimensionless."""
-    from cubie.batchsolving.solveresult import _format_time_domain_label
+    from cubie.batchsolving._utils import format_time_domain_label
 
-    assert _format_time_domain_label("v", "mV") == "v [mV]"
+    assert format_time_domain_label("v", "mV") == "v [mV]"
 
 
 def test_status_messages_property(solver_with_arrays):

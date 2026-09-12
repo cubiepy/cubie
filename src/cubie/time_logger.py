@@ -119,6 +119,7 @@ class CUDAEvent:
         # Get TimeLogger instance for registration and verbosity check
         if timelogger is None:
             timelogger = default_timelogger
+        self._timelogger = timelogger
         self._verbosity = timelogger.verbosity
 
         # Skip driver-event allocation when verbosity is None: every record/
@@ -133,8 +134,11 @@ class CUDAEvent:
         self._start_time = None
         self._end_time = None
 
-        # Register with TimeLogger
-        timelogger._register_cuda_event(self)
+        self.register()
+
+    def register(self) -> None:
+        """Register with the logger for the next timing retrieval."""
+        self._timelogger._register_cuda_event(self)
 
     def record_start(self, stream) -> None:
         """Record start timestamp on given stream.
@@ -834,8 +838,8 @@ class TimeLogger:
         if self.verbosity is None:
             return
 
-        # Store event for later retrieval
-        self._cuda_events.append(event)
+        if event not in self._cuda_events:
+            self._cuda_events.append(event)
 
         # Register with standard event registry
         self.register_event(event.name, "runtime", f"GPU event: {event.name}")

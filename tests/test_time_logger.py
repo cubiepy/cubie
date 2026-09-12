@@ -709,6 +709,21 @@ class TestTimeLoggerExtra:
             == "runtime"
         )
 
+    def test_register_readds_a_retrieved_event(self):
+        """register() lists an event the logger already retrieved."""
+        logger = TimeLogger(verbosity="default")
+        event = CUDAEvent(name="gpu_reused", timelogger=logger)
+        logger._cuda_events.clear()
+        event.register()
+        assert logger._cuda_events == [event]
+
+    def test_register_keeps_a_listed_event_once(self):
+        """register() on a listed event leaves a single entry."""
+        logger = TimeLogger(verbosity="default")
+        event = CUDAEvent(name="gpu_listed", timelogger=logger)
+        event.register()
+        assert logger._cuda_events == [event]
+
     def test_register_cuda_event_noop_when_verbosity_none(self):
         """CUDAEvent registration is skipped when verbosity is None."""
         logger = TimeLogger(verbosity=None)
