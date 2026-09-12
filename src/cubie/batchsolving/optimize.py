@@ -49,7 +49,7 @@ ROUNDS = 2
 EXCLUSION_RATIO = 2.0
 """Launches whose first solve exceeds this multiple of the fastest drop."""
 
-LOCAL_LAUNCH_BLOCKSIZES = (64, 256)
+LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
 
 SHARED_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)

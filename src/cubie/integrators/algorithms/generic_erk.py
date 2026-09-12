@@ -590,12 +590,19 @@ class ERKStep(ODEExplicitStep):
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """``other_small`` unrolling crossed with ``state`` placement."""
-        return tuple(
+        """``other_small`` unrolling crossed with ``state`` placement,
+        plus a shared ``stage_rhs`` at full unrolling."""
+        cross = [
             {"unroll_other_small": unroll, "state_location": location}
             for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
             for location in ("local", "shared")
-        )
+        ]
+        cross.append({
+            "unroll_other_small": UnrollChoice.FULL,
+            "state_location": "local",
+            "stage_rhs_location": "shared",
+        })
+        return tuple(cross)
 
     @property
     def has_error_estimate(self) -> bool:

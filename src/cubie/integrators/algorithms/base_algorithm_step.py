@@ -764,6 +764,10 @@ class StepCache(CUDADispatcherCache):
     algorithm_family: str = product_field()
     newton_solves_per_step: int = product_field()
     step_operation_count: int = product_field()
+    uses_direct_solver: bool = product_field()
+    stage_count: int = product_field()
+    accumulates_output: bool = product_field()
+    local_elements: int = product_field()
 
 
 class BaseAlgorithmStep(CUDAFactory):
@@ -902,6 +906,22 @@ class BaseAlgorithmStep(CUDAFactory):
     def step_operation_count(self) -> int:
         """Return the operator count of one fully unrolled step."""
         return 0
+
+    @property
+    def uses_direct_solver(self) -> bool:
+        """Return whether the step solves its stages with a direct LU."""
+        return False
+
+    @property
+    def accumulates_output(self) -> bool:
+        """Whether the tableau accumulates its output over the stages."""
+        tableau = self.compile_settings.tableau
+        return bool(tableau is not None and tableau.accumulates_output)
+
+    @property
+    def local_elements(self) -> int:
+        """Elements the step declares in local memory."""
+        return buffer_registry.declared_local_elements(self)
 
     @property
     def n_drivers(self) -> int:

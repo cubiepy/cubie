@@ -1007,12 +1007,23 @@ class FIRKStep(ODEImplicitStep):
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """Newton unrolling crossed with ``stage_increment`` placement."""
-        return tuple(
+        """Newton unrolling crossed with ``stage_increment`` placement,
+        plus rolled ``other_small`` at rolled Newton per placement."""
+        rolled = UnrollChoice.ROLLED
+        cross = [
             {"unroll_newton_exits": unroll, "stage_increment_location": loc}
-            for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
+            for unroll in (UnrollChoice.FULL, rolled)
             for loc in ("local", "shared")
-        )
+        ]
+        extra = [
+            {
+                "unroll_newton_exits": rolled,
+                "unroll_other_small": rolled,
+                "stage_increment_location": loc,
+            }
+            for loc in ("local", "shared")
+        ]
+        return tuple(cross + extra)
 
     @property
     def has_error_estimate(self) -> bool:

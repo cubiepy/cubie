@@ -30,7 +30,15 @@ from cubie._utils import (
     device_function_field,
     getype_validator,
 )
-from cubie.backend.utils import SASS_INSTRUCTION_BYTES
+from numpy import dtype as np_dtype
+
+from cubie.backend.utils import (
+    MAX_REGISTERS_PER_THREAD,
+    SASS_INSTRUCTION_BYTES,
+    DeviceHardware,
+    device_hardware,
+    shared_keeps_occupancy,
+)
 from cubie.CUDAFactory import CUDAFactoryConfig, _CubieConfigBase
 from cubie.cuda_simsafe import (
     ALL_UNROLL_PARAMETERS,
@@ -188,10 +196,6 @@ KERNEL_PERFORMANCE_PARAMETERS = (
 DEFAULT_BLOCKSIZE = 64
 """Threads per block when ``blocksize`` is not given."""
 
-SHARED_STAGE_INCREMENT_MIN_STATES = 20
-"""A FIRK ``stage_increment`` goes to shared memory above this state
-count."""
-
 
 def _location_field():
     return attrs.field(
@@ -278,10 +282,11 @@ class BatchSolverConfig(CUDAFactoryConfig):
         The unroll flags as given; ``unroll`` holds the flags in effect.
     stage_increment_location, accumulator_location, state_location
         Buffer placements as given.
-    instruction_cache_bytes
-        The GPU's instruction cache size.
+    hardware
+        The GPU's driver-reported quantities.
     n_states, is_implicit, algorithm_family, newton_solves_per_step,
-    step_operation_count, system_operation_count
+    step_operation_count, system_operation_count, uses_direct_solver,
+    stage_count, accumulates_output, local_elements
         The run's sizes, flags and operator counts the performance
         rules read.
     """
@@ -336,8 +341,8 @@ class BatchSolverConfig(CUDAFactoryConfig):
     _stage_increment_location: Optional[str] = _location_field()
     _accumulator_location: Optional[str] = _location_field()
     _state_location: Optional[str] = _location_field()
-    instruction_cache_bytes: int = attrs.field(
-        default=0, validator=getype_validator(int, 0)
+    hardware: DeviceHardware = attrs.field(
+        factory=device_hardware, validator=val.instance_of(DeviceHardware)
     )
     n_states: int = attrs.field(default=1, validator=getype_validator(int, 1))
     is_implicit: bool = attrs.field(
@@ -353,6 +358,18 @@ class BatchSolverConfig(CUDAFactoryConfig):
         default=0, validator=getype_validator(int, 0)
     )
     system_operation_count: int = attrs.field(
+        default=0, validator=getype_validator(int, 0)
+    )
+    uses_direct_solver: bool = attrs.field(
+        default=False, validator=val.instance_of(bool)
+    )
+    stage_count: int = attrs.field(
+        default=1, validator=getype_validator(int, 1)
+    )
+    accumulates_output: bool = attrs.field(
+        default=False, validator=val.instance_of(bool)
+    )
+    local_elements: int = attrs.field(
         default=0, validator=getype_validator(int, 0)
     )
 
@@ -371,7 +388,9 @@ class BatchSolverConfig(CUDAFactoryConfig):
             return given
         if name == "unroll_newton_exits" and self.newton_rule_applies:
             unrolled = self.system_operation_count + self.step_operation_count
-            capacity = self.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
+            capacity = (
+                self.hardware.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
+            )
             if unrolled > capacity:
                 return unroll_flag_converter(UnrollChoice.ROLLED)
             return unroll_flag_converter(UnrollChoice.FULL)
@@ -398,32 +417,60 @@ class BatchSolverConfig(CUDAFactoryConfig):
         """Return whether ``blocksize`` was given."""
         return self._blocksize is not None
 
+    def _shared_keeps_occupancy(self, elements: int, fraction: int) -> bool:
+        """Whether ``elements`` (plus one of pad) of shared memory per
+        run keep ``1 / fraction`` of the register-limited threads."""
+        itemsize = np_dtype(self.precision).itemsize
+        return shared_keeps_occupancy(
+            self.hardware, (elements + 1) * itemsize, fraction
+        )
+
     @property
     def stage_increment_location(self) -> str:
-        """Return the ``stage_increment`` placement: given, else shared
-        for a FIRK step above the state-count cut."""
+        """Given, else shared for a Krylov FIRK step whose coupled stage
+        vector keeps the occupancy in shared memory."""
         if self._stage_increment_location is not None:
             return self._stage_increment_location
         shared = (
             self.auto_performance
             and self.algorithm_family == "firk"
-            and self.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
+            and not self.uses_direct_solver
+            and self._shared_keeps_occupancy(
+                self.stage_count * self.n_states, 1
+            )
         )
         return "shared" if shared else "local"
 
     @property
     def accumulator_location(self) -> str:
-        """Return the ``accumulator`` placement: given, else local."""
+        """Given, else shared for a Krylov DIRK step past the register
+        file whose shared accumulator keeps half the occupancy."""
         if self._accumulator_location is not None:
             return self._accumulator_location
-        return "local"
+        accumulator = max(self.stage_count - 1, 0) * self.n_states
+        shared = (
+            self.auto_performance
+            and self.algorithm_family == "dirk"
+            and not self.uses_direct_solver
+            and self.local_elements > MAX_REGISTERS_PER_THREAD
+            and self._shared_keeps_occupancy(accumulator, 2)
+        )
+        return "shared" if shared else "local"
 
     @property
     def state_location(self) -> str:
-        """Return the loop's ``state`` placement: given, else local."""
+        """Given, else shared for an accumulating ERK step past the
+        register file whose shared state keeps the occupancy."""
         if self._state_location is not None:
             return self._state_location
-        return "local"
+        shared = (
+            self.auto_performance
+            and self.algorithm_family == "erk"
+            and self.accumulates_output
+            and self.n_states * self.stage_count > MAX_REGISTERS_PER_THREAD
+            and self._shared_keeps_occupancy(self.n_states, 1)
+        )
+        return "shared" if shared else "local"
 
     @property
     def performance_settings(self) -> Dict[str, Any]:

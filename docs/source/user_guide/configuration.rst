@@ -89,8 +89,9 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
    * - ``auto_performance``
      - ``True``
      - Whether to use in-built heuristics for buffer locations in
-       memory and loop unrolling. Does not override manual
-       ``unroll_*`` or ``*_location`` arguments.
+       memory, loop unrolling, block size and resident blocks per SM.
+       Does not override manual ``unroll_*``, ``*_location`` or
+       ``blocksize`` arguments.
    * - ``time_logging_level``
      - ``None``
      - Same options as above.
@@ -122,7 +123,8 @@ loose keyword arguments (see "Kwarg routing" below).
    * - ``blocksize``
      - ``None``
      - CUDA threads per block for this launch; ``None`` uses the
-       solver's ``blocksize`` setting (default ``64``).
+       solver's ``blocksize`` setting, or lets the solver pick when
+       that setting was not given.
    * - ``grid_type``
      - ``"verbatim"``
      - **Differs from** ``solve_ivp``'s default of
@@ -214,8 +216,8 @@ Notes on selected parameters
     spill traffic for more resident warps. See :doc:`speed`.
 
 **blocksize**
-    Threads per block for every launch (default ``64``);
-    ``solve(blocksize=...)`` overrides one launch.
+    Threads per block for every launch; ``solve(blocksize=...)``
+    overrides one launch. Unset, the solver picks a block size itself.
 
 **mem_proportion**
     Proportion of VRAM (0.0–1.0) reserved for this solver's

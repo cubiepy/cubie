@@ -1093,18 +1093,35 @@ class DIRKStep(ODEImplicitStep):
         return len(self.tableau.implicit_stages)
 
     @property
+    def local_elements(self) -> int:
+        """Declared local elements, counting the accumulator and its
+        ``stage_base`` alias as local wherever they are placed."""
+        declared = buffer_registry.declared_local_elements(self)
+        if self.compile_settings.accumulator_location == "shared":
+            declared += self.accumulator_elements + self.n_states
+        return declared
+
+    @property
+    def accumulator_elements(self) -> int:
+        """Elements of the explicit-stage accumulator."""
+        return max(self.tableau.stage_count - 1, 0) * self.n_states
+
+    @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """Newton unrolling, plus one rolled-Newton arm per solver kind."""
+        """Newton unrolling crossed with ``accumulator`` placement, plus
+        rolled ``other_small`` at rolled Newton with a local accumulator."""
         rolled = UnrollChoice.ROLLED
-        if self.uses_direct_solver:
-            extra = {"unroll_newton_exits": rolled, "unroll_other_small": rolled}
-        else:
-            extra = {"unroll_newton_exits": rolled, "accumulator_location": "shared"}
-        return (
-            {"unroll_newton_exits": UnrollChoice.FULL},
-            {"unroll_newton_exits": rolled},
-            extra,
-        )
+        cross = [
+            {"unroll_newton_exits": unroll, "accumulator_location": location}
+            for unroll in (UnrollChoice.FULL, rolled)
+            for location in ("local", "shared")
+        ]
+        cross.append({
+            "unroll_newton_exits": rolled,
+            "unroll_other_small": rolled,
+            "accumulator_location": "local",
+        })
+        return tuple(cross)
 
     @property
     def has_error_estimate(self) -> bool:

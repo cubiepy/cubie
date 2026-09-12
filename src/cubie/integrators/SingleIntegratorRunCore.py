@@ -86,7 +86,8 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
     loop_fn
         Compiled CUDA loop callable ready for execution on device.
     compile_flags, n_states, threads_per_step, is_implicit,
-    algorithm_family, newton_solves_per_step, step_operation_count
+    algorithm_family, newton_solves_per_step, step_operation_count,
+    uses_direct_solver, stage_count, accumulates_output, local_elements
         Product fields the batch kernel reads.
     """
 
@@ -98,6 +99,10 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
     algorithm_family: str = product_field()
     newton_solves_per_step: int = product_field()
     step_operation_count: int = product_field()
+    uses_direct_solver: bool = product_field()
+    stage_count: int = product_field()
+    accumulates_output: bool = product_field()
+    local_elements: int = product_field()
 
 
 # Keys every child takes from the parent unchanged.
@@ -692,6 +697,26 @@ class SingleIntegratorRunCore(CUDAFactory):
     def step_operation_count(self) -> int:
         """Return the operator count of one fully unrolled step."""
         return self._algo_step.step_operation_count
+
+    @property
+    def uses_direct_solver(self) -> bool:
+        """Return whether the step solves its stages with a direct LU."""
+        return self._algo_step.uses_direct_solver
+
+    @property
+    def stage_count(self) -> int:
+        """Return the step's stage count."""
+        return self._algo_step.stage_count
+
+    @property
+    def accumulates_output(self) -> bool:
+        """Return whether the step accumulates its output over stages."""
+        return self._algo_step.accumulates_output
+
+    @property
+    def local_elements(self) -> int:
+        """Return the elements the step declares in local memory."""
+        return self._algo_step.local_elements
 
     @property
     def summary_window_derived(self) -> bool:
