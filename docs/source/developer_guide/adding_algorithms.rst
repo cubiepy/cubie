@@ -64,7 +64,7 @@ Implicit Helpers
 ^^^^^^^^^^^^^^^^
 
 Implicit algorithms typically need Jacobian--vector products and solver
-infrastructure.  Use ``build_implicit_helpers()`` to request these from
+infrastructure.  Use ``_wire_helpers()`` to request these from
 the ODE system's code generator with a role name and a variant name:
 
 .. code-block:: python

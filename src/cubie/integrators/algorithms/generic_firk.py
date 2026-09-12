@@ -50,8 +50,9 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
-    StepCache,
     AlgorithmDefaults,
+    PerformanceSettings,
+    StepCache,
 )
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     DEFAULT_FIRK_TABLEAU,
@@ -299,6 +300,7 @@ class FIRKStep(ODEImplicitStep):
             **kwargs,
         )
         self.register_buffers()
+        self.wire_helpers()
 
     def _build_error_solver(self) -> None:
         """Construct the width-n smoothing solver from live settings."""
@@ -380,7 +382,7 @@ class FIRKStep(ODEImplicitStep):
             n,
             config.stage_state_location,
         )
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by wire_helpers.
         buffer_registry.register(
             "cached_auxiliaries",
             self,
@@ -403,10 +405,8 @@ class FIRKStep(ODEImplicitStep):
                 aliases="solver_shared",
             )
 
-    def build_implicit_helpers(
-        self,
-    ) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+    def _wire_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
         config = self.compile_settings
         tableau = config.tableau
@@ -991,10 +991,12 @@ class FIRKStep(ODEImplicitStep):
         return self.stage_count > 1
 
     @property
-    def performance_defaults(self) -> Dict[str, Any]:
+    def performance_defaults(self) -> PerformanceSettings:
         """Share ``stage_increment`` above the measured state-count cut."""
         shared = self.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
-        return {"stage_increment_location": "shared" if shared else "local"}
+        return PerformanceSettings(
+            stage_increment_location="shared" if shared else "local"
+        )
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:

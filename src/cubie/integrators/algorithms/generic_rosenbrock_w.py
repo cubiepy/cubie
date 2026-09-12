@@ -209,6 +209,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         super().__init__(config, defaults, **kwargs)
 
         self.register_buffers()
+        self.wire_helpers()
 
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
@@ -233,7 +234,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             config.stage_store_location,
         )
         # cached_auxiliaries registered with 0 size; updated in
-        # build_implicit_helpers
+        # wire_helpers
         buffer_registry.register(
             "cached_auxiliaries",
             self,
@@ -265,10 +266,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             dtype=np_int32,
         )
 
-    def build_implicit_helpers(
-        self,
-    ) -> None:
-        """Construct the linear solver used by Rosenbrock methods."""
+    def _wire_helpers(self) -> None:
+        """Request the helpers and push the linear solver's product."""
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
 

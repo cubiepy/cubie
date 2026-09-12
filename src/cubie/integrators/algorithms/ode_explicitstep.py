@@ -57,7 +57,7 @@ class ODEExplicitStep(BaseAlgorithmStep):
         observables_fn = config.observables_fn
         drivers_fn = config.drivers_fn
         n_drivers = config.n_drivers
-        return self.build_step(
+        cache = self.build_step(
             dxdt_fn,
             observables_fn,
             drivers_fn,
@@ -65,6 +65,7 @@ class ODEExplicitStep(BaseAlgorithmStep):
             n,
             n_drivers,
         )
+        return self._stamp_products(cache)
 
     @abstractmethod
     def build_step(

@@ -67,6 +67,8 @@ class IVPLoopCache(CUDADispatcherCache):
     """
 
     loop_fn: Callable = field()
+    shared_memory_elements: int = field(default=0)
+    persistent_local_elements: int = field(default=0)
 
 
 ALL_LOOP_SETTINGS = {
@@ -1090,7 +1092,11 @@ class IVPLoop(CUDAFactory):
                                 summary_idx += int32(1)
 
         # no cover: end
-        return IVPLoopCache(loop_fn=loop_fn)
+        return IVPLoopCache(
+            loop_fn=loop_fn,
+            shared_memory_elements=self.shared_buffer_size,
+            persistent_local_elements=self.persistent_local_buffer_size,
+        )
 
     @property
     def save_every(self) -> Optional[float]:

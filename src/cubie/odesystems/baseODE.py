@@ -36,7 +36,7 @@ See Also
 
 from abc import abstractmethod
 from copy import deepcopy
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 from attrs import define, field
 from numpy import float32
@@ -71,12 +71,23 @@ class ODECache(CUDADispatcherCache):
         ``ODECache`` and therefore a fresh member map.
     operation_counts
         Binary-operator counts of the ``dxdt`` and observables sources.
+    get_solver_helper_fn, mass_flags, precision
+        The helper getter, mass-diagonal flags and float type.
+    n_states, n_parameters, n_observables, n_drivers
+        The system's sizes.
     """
 
     dxdt_fn: Callable = field()
     observables_fn: Optional[Callable] = field(default=None)
     helpers: SolverHelperCache = field(factory=SolverHelperCache)
     operation_counts: OperationCounts = field(factory=OperationCounts)
+    get_solver_helper_fn: Optional[Callable] = field(default=None)
+    n_states: int = field(default=0)
+    n_parameters: int = field(default=0)
+    n_observables: int = field(default=0)
+    n_drivers: int = field(default=0)
+    mass_flags: Tuple[bool, ...] = field(default=())
+    precision: PrecisionDType = field(default=float32)
 
 
 class BaseODE(CUDAFactory):

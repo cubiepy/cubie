@@ -59,14 +59,13 @@ def test_cached_auxiliaries_sized_after_helper_refresh(precision, system):
         n_states=system.sizes.states,
         dxdt_fn=system.dxdt_fn,
         observables_fn=system.observables_fn,
-        get_solver_helper_fn=system.get_solver_helper,
         tableau=DEFAULT_ROSENBROCK_TABLEAU,
     )
     entry = buffer_registry._groups[step].entries["cached_auxiliaries"]
     assert entry.size == 0
     assert not hasattr(step, "_cached_auxiliary_count")
 
-    step.build_implicit_helpers()
+    step.update(get_solver_helper_fn=system.get_solver_helper)
 
     expected = system.get_solver_helper(
         role="prepare_jac", jacobian_at="step"

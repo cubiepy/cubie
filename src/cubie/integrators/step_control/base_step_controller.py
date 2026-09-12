@@ -305,9 +305,17 @@ class ControllerCache(CUDADispatcherCache):
     ----------
     step_controller_fn
         Compiled CUDA device function, or ``-1`` before compilation.
+    is_adaptive, dt, dt_min, dt_max, atol, rtol
+        The controller's resolved settings.
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)
+    is_adaptive: bool = field(default=False)
+    dt: float = field(default=0.0)
+    dt_min: float = field(default=0.0)
+    dt_max: float = field(default=0.0)
+    atol: Optional[ndarray] = field(default=None)
+    rtol: Optional[ndarray] = field(default=None)
 
 
 @frozen
@@ -556,6 +564,20 @@ class BaseStepController(CUDAFactory):
     def device_function(self) -> Callable:
         """Return the compiled step-controller device function."""
         return self.get_cached_output("step_controller_fn")
+
+    def _controller_cache(
+        self, step_controller_fn: Callable
+    ) -> ControllerCache:
+        """Return the cache of ``step_controller_fn`` and the settings."""
+        return ControllerCache(
+            step_controller_fn=step_controller_fn,
+            is_adaptive=self.is_adaptive,
+            dt=self.dt,
+            dt_min=self.dt_min,
+            dt_max=self.dt_max,
+            atol=self.atol,
+            rtol=self.rtol,
+        )
 
     @abstractmethod
     def build(self) -> ControllerCache:
