@@ -46,7 +46,7 @@ class FixedStepControlConfig(BaseStepControllerConfig):
     ----------
     precision
         Precision used for numerical operations.
-    n
+    n_states
         Number of state variables controlled per step.
     atol
         Absolute tolerance vector inherited from the base config. The

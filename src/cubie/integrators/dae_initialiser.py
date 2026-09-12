@@ -75,7 +75,7 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
 
     Parameters
     ----------
-    n
+    n_states
         Number of state variables.
     mass_flags
         Per-state mass-diagonal flags as delivered by
@@ -94,13 +94,13 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         helper device functions.
     residual_fn
         Mode's residual device function, injected at build time.
-    linear_solver_fn
+    krylov_linear_solver_fn
         Direct-LU solve device function, injected at build time.
-    norm_fn
+    newton_norm_fn
         Correction-norm device function, injected at build time.
     """
 
-    n: int = field(default=1, validator=getype_validator(int, 1))
+    n_states: int = field(default=1, validator=getype_validator(int, 1))
     mass_flags: Tuple[bool, ...] = field(
         default=(),
         validator=validators.deep_iterable(
@@ -121,15 +121,15 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         eq=False,
     )
     residual_fn: Optional[Callable] = device_function_field()
-    linear_solver_fn: Optional[Callable] = device_function_field()
-    norm_fn: Optional[Callable] = device_function_field()
+    krylov_linear_solver_fn: Optional[Callable] = device_function_field()
+    newton_norm_fn: Optional[Callable] = device_function_field()
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        if len(self.mass_flags) != self.n:
+        if len(self.mass_flags) != self.n_states:
             raise ValueError(
                 "mass_flags must carry one flag per state: got "
-                f"{len(self.mass_flags)} flags for n={self.n}."
+                f"{len(self.mass_flags)} flags for n_states={self.n_states}."
             )
 
     @property
@@ -164,7 +164,7 @@ class DAEInitialiser(CUDAFactory):
     ----------
     precision
         Numerical precision for computations.
-    n
+    n_states
         Number of state variables.
     mass_flags
         Per-state mass-diagonal flags, ``True`` for a differential
@@ -179,7 +179,7 @@ class DAEInitialiser(CUDAFactory):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         mass_flags,
         **kwargs,
     ) -> None:
@@ -202,7 +202,7 @@ class DAEInitialiser(CUDAFactory):
         }
         self.linear_solver = ODEImplicitStep._construct_linear_solver(
             precision=precision,
-            solver_width=n,
+            solver_width=n_states,
             norm=None,
             norm_reference="base_state",
             linear_correction_type="lu",
@@ -210,8 +210,8 @@ class DAEInitialiser(CUDAFactory):
         )
         self.norm = DIRKCorrectionNorm(
             precision=precision,
-            solver_width=n,
-            n=n,
+            solver_width=n_states,
+            n_states=n_states,
             instance_label="newton",
             **tolerance_kwargs,
         )
@@ -220,7 +220,7 @@ class DAEInitialiser(CUDAFactory):
             DAEInitialiserConfig,
             required={
                 "precision": precision,
-                "n": int(n),
+                "n_states": int(n_states),
                 "mass_flags": tuple(mass_flags),
             },
             **kwargs,
@@ -231,7 +231,7 @@ class DAEInitialiser(CUDAFactory):
     def register_buffers(self) -> None:
         """Register solve buffers and the linear-solver footprint."""
         config = self.compile_settings
-        size = 0 if config.is_noop else config.n
+        size = 0 if config.is_noop else config.n_states
         counter_size = 0 if config.is_noop else 1
         buffer_registry.clear_own(self)
         buffer_registry.register(
@@ -277,10 +277,10 @@ class DAEInitialiser(CUDAFactory):
         self.update_compile_settings(
             {
                 "residual_fn": residual,
-                "linear_solver_fn": (
+                "krylov_linear_solver_fn": (
                     self.linear_solver.device_function
                 ),
-                "norm_fn": self.norm.device_function,
+                "newton_norm_fn": self.norm.device_function,
             }
         )
 
@@ -318,10 +318,10 @@ class DAEInitialiser(CUDAFactory):
         config = self.compile_settings
 
         residual_fn = config.residual_fn
-        linear_solver_fn = config.linear_solver_fn
-        norm_fn = config.norm_fn
+        linear_solver_fn = config.krylov_linear_solver_fn
+        norm_fn = config.newton_norm_fn
         numba_precision = config.numba_precision
-        n = int32(config.n)
+        n = int32(config.n_states)
         unroll_solver_element = config.unroll.unroll_solver_element
         unroll_newton_exits = config.unroll.unroll_newton_exits
         max_iters = int32(INIT_NEWTON_MAX_ITERS)
@@ -580,8 +580,8 @@ class DAEInitialiser(CUDAFactory):
             for key, value in all_updates.items()
             if key not in ("newton_max_iters", "linear_correction_type")
         }
-        if "n" in all_updates:
-            child_updates["solver_width"] = all_updates["n"]
+        if "n_states" in all_updates:
+            child_updates["solver_width"] = all_updates["n_states"]
 
         recognized = self.linear_solver.update(
             child_updates, silent=True

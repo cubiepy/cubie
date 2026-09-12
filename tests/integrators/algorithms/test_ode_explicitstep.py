@@ -33,7 +33,7 @@ def test_build_delegates_to_build_step(step_object):
 def test_build_unpacks_config_fields(step_object, system):
     """build() extracts dxdt_fn, n, etc. from compile_settings."""
     cs = step_object.compile_settings
-    assert cs.n == system.sizes.states
+    assert cs.n_states == system.sizes.states
     assert cs.n_drivers == system.num_drivers
     assert cs.numba_precision == from_dtype(np_dtype(cs.precision))
 

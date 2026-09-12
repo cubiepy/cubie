@@ -17,7 +17,7 @@ Published Classes
     ...     CLASSICAL_RK4_TABLEAU,
     ... )
     >>> config = ERKStepConfig(
-    ...     precision=float32, n=3, tableau=CLASSICAL_RK4_TABLEAU,
+    ...     precision=float32, n_states=3, tableau=CLASSICAL_RK4_TABLEAU,
     ... )
     >>> config.stage_count
     4
@@ -26,7 +26,7 @@ Published Classes
     Concrete explicit Runge--Kutta step factory.
 
     >>> from numpy import float32
-    >>> step = ERKStep(precision=float32, n=3)
+    >>> step = ERKStep(precision=float32, n_states=3)
     >>> step.order
     5
     >>> step.has_error_estimate
@@ -142,7 +142,7 @@ class ERKStep(ODEExplicitStep):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         dxdt_fn: Optional[Callable] = None,
         observables_fn: Optional[Callable] = None,
         drivers_fn: Optional[Callable] = None,
@@ -164,7 +164,7 @@ class ERKStep(ODEExplicitStep):
         precision
             Floating-point precision for CUDA computations (np.float32 or
             np.float64).
-        n
+        n_states
             Number of state variables in the ODE system.
         dxdt_fn
             Compiled CUDA device function computing state derivatives. Should
@@ -209,7 +209,7 @@ class ERKStep(ODEExplicitStep):
 
         >>> from cubie.integrators.algorithms.generic_erk import ERKStep
         >>> import numpy as np
-        >>> step = ERKStep(precision=np.float32,n=3)
+        >>> step = ERKStep(precision=np.float32,n_states=3)
         >>> step.algorithm_defaults["step_controller"]
         'i'
 
@@ -219,7 +219,7 @@ class ERKStep(ODEExplicitStep):
         ...     CLASSICAL_RK4_TABLEAU
         ... )
         >>> step = ERKStep(
-        ...     precision=np.float32, n=3, tableau=CLASSICAL_RK4_TABLEAU
+        ...     precision=np.float32, n_states=3, tableau=CLASSICAL_RK4_TABLEAU
         ... )
         >>> step.algorithm_defaults["step_controller"]
         'fixed'
@@ -228,7 +228,7 @@ class ERKStep(ODEExplicitStep):
             ERKStepConfig,
             required={
                 'precision': precision,
-                'n': n,
+                'n_states': n_states,
                 'n_drivers': n_drivers,
                 'dxdt_fn': dxdt_fn,
                 'observables_fn': observables_fn,
@@ -250,7 +250,7 @@ class ERKStep(ODEExplicitStep):
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
         config = self.compile_settings
-        n = config.n
+        n = config.n_states
         tableau = config.tableau
 
         # Calculate buffer sizes

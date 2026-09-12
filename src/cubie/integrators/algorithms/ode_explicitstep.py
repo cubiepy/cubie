@@ -53,7 +53,7 @@ class ODEExplicitStep(BaseAlgorithmStep):
         config = self.compile_settings
         dxdt_fn = config.dxdt_fn
         numba_precision = config.numba_precision
-        n = config.n
+        n = config.n_states
         observables_fn = config.observables_fn
         drivers_fn = config.drivers_fn
         n_drivers = config.n_drivers

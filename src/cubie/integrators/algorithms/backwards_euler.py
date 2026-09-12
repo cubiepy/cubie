@@ -71,7 +71,7 @@ class BackwardsEulerStep(ODEImplicitStep):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         dxdt_fn: Optional[Callable] = None,
         observables_fn: Optional[Callable] = None,
         drivers_fn: Optional[Callable] = None,
@@ -84,7 +84,7 @@ class BackwardsEulerStep(ODEImplicitStep):
         ----------
         precision
             Precision applied to device buffers.
-        n
+        n_states
             Number of state entries advanced per step.
         dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
@@ -106,7 +106,7 @@ class BackwardsEulerStep(ODEImplicitStep):
             BackwardsEulerStepConfig,
             required={
                 'precision': precision,
-                'n': n,
+                'n_states': n_states,
                 'dxdt_fn': dxdt_fn,
                 'observables_fn': observables_fn,
                 'drivers_fn': drivers_fn,
@@ -134,7 +134,7 @@ class BackwardsEulerStep(ODEImplicitStep):
         buffer_registry.register(
             'increment_cache',
             self,
-            config.n,
+            config.n_states,
             config.increment_cache_location,
             persistent=True,
         )

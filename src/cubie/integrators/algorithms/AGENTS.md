@@ -44,7 +44,7 @@ resolves a name or `ButcherTableau` to the right factory.
   `(state, proposed_state, parameters, driver_coefficients, drivers_buffer,
   proposed_drivers, observables, proposed_observables, error, dt_scalar, time_scalar,
   first_step_flag, accepted_flag, shared, persistent_local, counters)`.
-- `error` has length `n` only when the step's `uses_error` (`has_error_estimate and
+- `error` has length `n_states` only when the step's `uses_error` (`has_error_estimate and
   is_adaptive`; `is_adaptive` is set from the controller) is true; otherwise it is
   zero-length, the estimate compiles out and `error_weights` returns zeros.
   Crank–Nicolson overrides `uses_error` to `True`.
@@ -121,10 +121,10 @@ the tableaus: `prediction_sample_stages` (one sample per distinct node),
 `dt*f` sample still enters DIRK's history), and DIRK's
 `prediction_source_stages` (a repeated stage time starts from the earlier
 same-time stage's row). `predictor_fn` pipes through compile settings
-like `solver_function`; `predictor_*_location` keys place the predictor's buffers.
+like `newton_nonlinear_solver_fn`; `predictor_*_location` keys place the predictor's buffers.
 
 ### Step-size control order
-`controller_order` = `min(order, embedded_order)`; tableaus with `b_hat`
+`algorithm_order` = `min(order, embedded_order)`; tableaus with `b_hat`
 declare `embedded_order` (validated together). `SingleIntegratorRunCore`
 feeds it to controllers as `algorithm_order`; `order` stays classical. FIRK
 smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
@@ -139,10 +139,13 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
   eigenvalue of `a` on `RadauIIATableau`, solved exactly and rounded once
   so it is identical on every host. The tableau also derives the
   estimator weights (`smoothed_error_weights`, always accumulated).
-- DIRK and FIRK own width-`n` `error_solver` children on the `AT_STATE`
+- DIRK and FIRK own width-`n_states` `error_solver` children on the `AT_STATE`
   helper family (J at the `state` argument, `a_ij` scales the matrix only),
   aliased into `solver_shared`; Rosenbrock-W reuses its cached-Jacobian
-  solver.
+  solver. The error solver carries `instance_label="error"`: it is seeded from
+  the linear solver's `krylov_*` settings and thereafter reads `error_*` keys
+  (`error_atol`, `error_rtol`, `error_max_iters`, `error_residual_reduction`,
+  `error_residual_floor`); its product is `error_linear_solver_fn`.
 - Rhs via generated `apply_mass`: DIRK and Rosenbrock-W `M @ raw_error`
   (DIRK solves at the final stage state/time/drivers, rhs in `error_rhs`);
   FIRK `M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` at the step-start state.
@@ -156,7 +159,7 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=..., **kwargs).device_function` with plain strings and bools: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus the request axes (`jacobian_at="step"` for frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing, `prefactored=True` for step-start LU factors). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
 `ODEImplicitStep.update` refreshes the step settings
 first, then adds the derived `solver_width` (the coupled all-stages length
-for FIRK; `n` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
+for FIRK; `n_states` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
 **before** reading `compile_settings` — the helper refresh replaces the
 snapshot. Each `build_implicit_helpers` pushes an `OperationCounts` into
 `helper_operation_counts`; `newton_body_operation_count`, `per_step_operation_count`,

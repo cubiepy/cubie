@@ -147,7 +147,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     _INJECTED_KEYS = frozenset(
         {
             "precision",
-            "n",
+            "n_states",
             "n_drivers",
             "mass_flags",
             "algorithm_order",
@@ -205,14 +205,14 @@ class SingleIntegratorRunCore(CUDAFactory):
         # ensure that it gets passed a precision matching system's
         _ = output_settings.pop("precision", None)
         self._output_functions = OutputFunctions(
-            max_states=system_sizes.states,
-            max_observables=system_sizes.observables,
+            n_states=system_sizes.states,
+            n_observables=system_sizes.observables,
             precision=precision,
             **output_settings,
         )
 
         dt = step_control_settings.get("dt", None)
-        algorithm_settings["n"] = n
+        algorithm_settings["n_states"] = n
         algorithm_settings["n_drivers"] = system_sizes.drivers
         if dt is not None:
             algorithm_settings["dt"] = dt
@@ -239,9 +239,9 @@ class SingleIntegratorRunCore(CUDAFactory):
                 controller_settings.pop(gain_key, None)
         controller_settings.update(step_control_settings)
         controller_settings["step_controller"] = effective_controller
-        controller_settings["n"] = system_sizes.states
+        controller_settings["n_states"] = system_sizes.states
         controller_settings["algorithm_order"] = (
-            self._algo_step.controller_order
+            self._algo_step.algorithm_order
         )
         controller_settings["mass_flags"] = system.mass_diagonal_flags
 
@@ -583,7 +583,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 settings={
                     "step_controller": "fixed",
                     "dt": dt,
-                    "n": self._system.sizes.states,
+                    "n_states": self._system.sizes.states,
                     "atol": self._step_controller.atol,
                     "rtol": self._step_controller.rtol,
                     "mass_flags": self._step_controller.mass_flags,
@@ -728,22 +728,22 @@ class SingleIntegratorRunCore(CUDAFactory):
         # Capture n and n_drivers whether or not system updated, in case
         # of an algo/step swap
         sizes = self._system.sizes
-        updates_dict.update({'n': int(sizes.states)})
+        updates_dict.update({'n_states': int(sizes.states)})
         updates_dict.update({'n_drivers': int(sizes.drivers)})
 
         # Push the full layout when the system's shape changed.
         out_config = self._output_functions.compile_settings
         if (
-            int(sizes.states) != out_config.max_states
-            or int(sizes.observables) != out_config.max_observables
+            int(sizes.states) != out_config.n_states
+            or int(sizes.observables) != out_config.n_observables
         ):
             updates_dict.update(
                 {
                     "n_states": int(sizes.states),
                     "n_parameters": int(sizes.parameters),
                     "n_observables": int(sizes.observables),
-                    "max_states": int(sizes.states),
-                    "max_observables": int(sizes.observables),
+                    "n_states": int(sizes.states),
+                    "n_observables": int(sizes.observables),
                 }
             )
 
@@ -760,7 +760,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 {"threads_per_step": self._algo_step.threads_per_step}
             )
 
-        updates_dict["algorithm_order"] = self._algo_step.controller_order
+        updates_dict["algorithm_order"] = self._algo_step.algorithm_order
         updates_dict["mass_flags"] = self._system.mass_diagonal_flags
 
         if not user_named_controller:
@@ -888,7 +888,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             if key not in updates_dict:
                 updates_dict[key] = value
         updates_dict["step_controller"] = effective_controller
-        updates_dict["algorithm_order"] = self._algo_step.controller_order
+        updates_dict["algorithm_order"] = self._algo_step.algorithm_order
         return {"algorithm"}
 
     @staticmethod
@@ -1040,7 +1040,7 @@ class SingleIntegratorRunCore(CUDAFactory):
                 old_settings.pop(key, None)
             old_settings["step_controller"] = new_controller
             old_settings["algorithm_order"] = updates_dict.get(
-                "algorithm_order", self._algo_step.controller_order)
+                "algorithm_order", self._algo_step.algorithm_order)
             self._step_controller = get_controller(
                     precision=precision,
                     settings=old_settings,

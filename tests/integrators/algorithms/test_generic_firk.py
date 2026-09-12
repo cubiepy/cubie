@@ -25,7 +25,7 @@ def test_previous_step_size_owned_by_algorithm():
     predictor has no such setting."""
     step = FIRKStep(
         precision=np.float64,
-        n=2,
+        n_states=2,
         tableau=opened(RADAU_IIA_5_TABLEAU),
     )
     assert (
@@ -46,7 +46,7 @@ def test_update_carries_typed_ceiling():
     matching typed ratio ceiling."""
     step = FIRKStep(
         precision=np.float64,
-        n=2,
+        n_states=2,
         tableau=opened(RADAU_IIA_5_TABLEAU, ceiling=4.0),
     )
     settings = step.compile_settings

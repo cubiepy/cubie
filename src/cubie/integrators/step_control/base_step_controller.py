@@ -65,7 +65,7 @@ from cubie.buffer_registry import buffer_registry
 
 ALL_STEP_CONTROLLER_PARAMETERS = {
     "precision",
-    "n",
+    "n_states",
     "step_controller",
     "dt",
     "dt_min",
@@ -318,7 +318,7 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
     ----------
     precision
         Precision used for controller calculations.
-    n
+    n_states
         Number of state variables controlled per step.
     atol
         Absolute tolerance vector. Adaptive controllers scale their
@@ -332,7 +332,7 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
         row; defaults to all ``True``.
     """
 
-    n: int = field(default=1, validator=getype_validator(int, 0))
+    n_states: int = field(default=1, validator=getype_validator(int, 0))
     _mass_flags: Optional[Tuple[bool, ...]] = field(
         default=None,
         converter=optional_tuple_converter,
@@ -365,13 +365,13 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
     @property
     def tol_length(self) -> int:
         """Return the tolerance-array length for tol_converter."""
-        return self.n
+        return self.n_states
 
     @property
     def mass_flags(self) -> Tuple[bool, ...]:
         """Return the per-state mass flags; every row when unset."""
         if self._mass_flags is None:
-            return (True,) * self.n
+            return (True,) * self.n_states
         return self._mass_flags
 
     @property
@@ -408,7 +408,7 @@ class BaseStepController(CUDAFactory):
         self,
         precision: PrecisionDType,
         dt: float = None,
-        n: int = 1,
+        n_states: int = 1,
         **kwargs,
     ) -> None:
         """Initialise the step controller.
@@ -419,7 +419,7 @@ class BaseStepController(CUDAFactory):
             Precision used for controller calculations.
         dt
             Step size or initial step size.
-        n
+        n_states
             Number of state variables.
         **kwargs
             Additional parameters passed to the config class.
@@ -430,7 +430,7 @@ class BaseStepController(CUDAFactory):
         self._apply_filter_coefficients(kwargs)
         config = build_config(
             self._config_class,
-            required={"precision": precision, "n": n},
+            required={"precision": precision, "n_states": n_states},
             **kwargs,
         )
         self.setup_compile_settings(config)
@@ -568,10 +568,10 @@ class BaseStepController(CUDAFactory):
         """
 
     @property
-    def n(self) -> int:
+    def n_states(self) -> int:
         """Return the number of controlled state variables."""
 
-        return self.compile_settings.n
+        return self.compile_settings.n_states
 
     @property
     def dt_min(self) -> float:

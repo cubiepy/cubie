@@ -73,7 +73,7 @@ def test_config_can_reuse_accepted_start_false_without_tableau(step_object):
 
 def test_update_with_no_changes_returns_empty_set(precision):
     """update() with no arguments returns an empty set without error."""
-    step = ExplicitEulerStep(precision=precision, n=2)
+    step = ExplicitEulerStep(precision=precision, n_states=2)
     assert step.update() == set()
     assert step.update(updates_dict={}) == set()
 
@@ -83,7 +83,7 @@ def test_update_warns_on_valid_but_inapplicable_parameter(precision):
 
     warns instead of raising, and is reported as recognised.
     """
-    step = ExplicitEulerStep(precision=precision, n=2)
+    step = ExplicitEulerStep(precision=precision, n_states=2)
     with pytest.warns(UserWarning, match="not recognized by"):
         recognised = step.update(beta=0.5)
     assert "beta" in recognised
@@ -91,7 +91,7 @@ def test_update_warns_on_valid_but_inapplicable_parameter(precision):
 
 def test_update_raises_on_truly_invalid_parameter(precision):
     """An entirely unknown update key raises KeyError."""
-    step = ExplicitEulerStep(precision=precision, n=2)
+    step = ExplicitEulerStep(precision=precision, n_states=2)
     with pytest.raises(KeyError, match="Unrecognized parameters"):
         step.update(not_a_real_parameter=1)
 

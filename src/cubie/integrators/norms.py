@@ -93,7 +93,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
         default=1,
         validator=getype_validator(int, 1),
     )
-    n: int = field(
+    n_states: int = field(
         default=1,
         validator=getype_validator(int, 1),
     )
@@ -116,7 +116,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
 
     def _check_widths(self) -> None:
         """Require one tolerance per solver-vector entry."""
-        if self.n != self.solver_width:
+        if self.n_states != self.solver_width:
             raise ValueError(
                 "n must equal solver_width for a whole-vector norm; "
                 "use a tiled norm config for stage-blocked tolerances"
@@ -130,7 +130,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
     @property
     def tol_length(self) -> int:
         """Return the tolerance-array length for tol_converter."""
-        return self.n
+        return self.n_states
 
 
 @frozen
@@ -176,7 +176,7 @@ class FIRKCorrectionNormConfig(CorrectionNormConfig):
 
     def _check_widths(self) -> None:
         """Require whole stage blocks of ``n`` physical states."""
-        if self.solver_width % self.n != 0:
+        if self.solver_width % self.n_states != 0:
             raise ValueError(
                 "solver_width must be a multiple of n"
             )
@@ -184,7 +184,7 @@ class FIRKCorrectionNormConfig(CorrectionNormConfig):
     @property
     def stage_count(self) -> int:
         """Return the number of coupled stages."""
-        return self.solver_width // self.n
+        return self.solver_width // self.n_states
 
 
 @define
@@ -203,7 +203,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         self,
         precision: PrecisionDType,
         solver_width: int,
-        n: int,
+        n_states: int,
         instance_label: str = "",
         **kwargs,
     ) -> None:
@@ -215,7 +215,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             Numerical precision for computations.
         solver_width : int
             Length of the solver vectors the norm reduces over.
-        n : int
+        n_states : int
             Number of physical states per stage.
         instance_label : str, optional
             Prefix label for parameter names when used as a nested factory.
@@ -231,7 +231,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             required={
                 "precision": precision,
                 "solver_width": solver_width,
-                "n": n,
+                "n_states": n_states,
             },
             instance_label=instance_label,
             **kwargs,
@@ -340,7 +340,7 @@ class TiledScaledNormConfig(ScaledNormConfig):
 
     def _check_widths(self) -> None:
         """Require whole stage blocks of ``n`` physical states."""
-        if self.solver_width % self.n != 0:
+        if self.solver_width % self.n_states != 0:
             raise ValueError(
                 "solver_width must be a multiple of n"
             )
@@ -367,7 +367,7 @@ class TiledScaledNorm(ScaledNorm):
         inv_n = config.inv_n
         n_val = int32(config.solver_width)
         unroll_norms = config.unroll.unroll_norms
-        state_n = int32(config.n)
+        state_n = int32(config.n_states)
 
         typed_zero = numba_precision(0.0)
 
@@ -461,7 +461,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
         numba_precision = config.numba_precision
         n_val = int32(config.solver_width)
         unroll_norms = config.unroll.unroll_norms
-        state_n = int32(config.n)
+        state_n = int32(config.n_states)
         stage_count = int32(config.stage_count)
         stage_coefficients = config.stage_coefficients
         typed_zero = numba_precision(0.0)
@@ -525,17 +525,17 @@ class TwoRefMaskedScaledNormConfig(ScaledNormConfig):
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-        if len(self.mass_flags) != self.n:
+        if len(self.mass_flags) != self.n_states:
             raise ValueError(
                 "mass_flags must carry one flag per state: got "
-                f"{len(self.mass_flags)} flags for n={self.n}."
+                f"{len(self.mass_flags)} flags for n_states={self.n_states}."
             )
 
     @property
     def mass_flags(self) -> Tuple[bool, ...]:
         """Return the per-row mass flags; every row when unset."""
         if self._mass_flags is None:
-            return (True,) * self.n
+            return (True,) * self.n_states
         return self._mass_flags
 
     @property
@@ -568,7 +568,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
         unroll_norms = config.unroll.unroll_norms
 
         if all(config.mass_flags):
-            n_val = int32(config.n)
+            n_val = int32(config.n_states)
 
             # no cover: start
             @cuda.jit(device=True, inline=True, **jit_kwargs)

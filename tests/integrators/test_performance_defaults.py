@@ -110,7 +110,7 @@ def test_large_firk_stage_increment_moves_to_shared(
 ):
     """FIRK ``stage_increment`` is shared above the size cut."""
     single_integrator_run.device_function
-    assert step_object.n > SHARED_STAGE_INCREMENT_MIN_STATES
+    assert step_object.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
     assert step_object.compile_settings.stage_increment_location == "shared"
     assert single_integrator_run.shared_memory_elements > 0
 
@@ -123,7 +123,7 @@ def test_small_firk_stage_increment_stays_local(
 ):
     """FIRK ``stage_increment`` stays local at or below the size cut."""
     single_integrator_run.device_function
-    assert step_object.n <= SHARED_STAGE_INCREMENT_MIN_STATES
+    assert step_object.n_states <= SHARED_STAGE_INCREMENT_MIN_STATES
     assert step_object.compile_settings.stage_increment_location == "local"
 
 

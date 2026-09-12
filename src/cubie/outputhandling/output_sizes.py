@@ -275,7 +275,7 @@ class BatchInputSizes(ArraySizingClass):
         num_runs = solver_instance.num_runs
         initial_values = (system_sizes.states, num_runs)
         parameters = (system_sizes.parameters, num_runs)
-        driver_coefficients = solver_instance.driver_coefficients_shape
+        driver_coefficients = solver_instance.coefficients_shape
         obj = cls(initial_values, parameters, driver_coefficients)
         return obj
 

@@ -290,7 +290,7 @@ def test_adaptive_controller_uses_tableau_order(
 ):
     """Adaptive controller gains follow the embedded-pair order."""
 
-    expected_order = step_object.controller_order
+    expected_order = step_object.algorithm_order
     assert expected_order > 1
     assert step_controller_settings["algorithm_order"] == (
         expected_order

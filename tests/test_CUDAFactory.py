@@ -943,6 +943,21 @@ def test_mi_factory_instance_label_property():
     assert f.instance_label == "krylov"
 
 
+def test_mi_factory_products_carry_the_label():
+    """products keys a labelled factory's cache fields by its label."""
+    class _F(MultipleInstanceCUDAFactory):
+        def build(self):
+            return _TestCache()
+
+    labelled = _F(instance_label="krylov")
+    plain = _F(instance_label="")
+    fields = {fld.name for fld in attrs.fields(_TestCache)}
+    assert set(labelled.products) == {f"krylov_{name}" for name in fields}
+    assert set(plain.products) == fields
+    assert labelled.prefixed("norm_fn") == "krylov_norm_fn"
+    assert plain.prefixed("norm_fn") == "norm_fn"
+
+
 def test_device_function_field_compares_by_identity_and_is_unhashed():
     """A device_function_field changes only by identity and never hashes."""
 

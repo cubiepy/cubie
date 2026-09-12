@@ -17,7 +17,7 @@ Published Classes
 
     >>> from numpy import float64
     >>> ctrl = AdaptivePIDController(
-    ...     precision=float64, n=4, derivative_gain=0.05
+    ...     precision=float64, n_states=4, derivative_gain=0.05
     ... )
     >>> ctrl.is_adaptive
     True

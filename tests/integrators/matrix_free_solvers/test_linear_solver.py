@@ -477,7 +477,9 @@ def test_linear_solver_config_settings_dict_excludes_tolerance_arrays(
         MRLinearSolverConfig,
     )
 
-    config = MRLinearSolverConfig(precision=precision, solver_width=3)
+    config = MRLinearSolverConfig(
+        precision=precision, solver_width=3, instance_label="krylov"
+    )
     settings = config.settings_dict
 
     # Tolerance arrays should not be in settings_dict
@@ -498,11 +500,11 @@ def test_unset_max_iters_covers_krylov_space(precision):
     """Unset cap resolves to ceil(1.5 * width) and tracks the width."""
     solver = MRLinearSolver(precision=precision, solver_width=3)
     assert solver.max_iters == 5
-    solver.update(solver_width=8, n=8)
+    solver.update(solver_width=8, n_states=8)
     assert solver.max_iters == 12
     solver.update(krylov_max_iters=7)
     assert solver.max_iters == 7
-    solver.update(solver_width=20, n=20)
+    solver.update(solver_width=20, n_states=20)
     assert solver.max_iters == 7
 
 

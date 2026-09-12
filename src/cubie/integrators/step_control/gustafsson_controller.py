@@ -17,7 +17,7 @@ Published Classes
     integrators.
 
     >>> from numpy import float64
-    >>> ctrl = GustafssonController(precision=float64, n=4)
+    >>> ctrl = GustafssonController(precision=float64, n_states=4)
     >>> ctrl.is_adaptive
     True
 
