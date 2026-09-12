@@ -50,9 +50,10 @@ def test_loop_forwarding(single_integrator_run):
     assert run.save_last == loop.compile_settings.save_last
 
     assert run.compile_flags is loop.compile_flags
-    assert run.save_state_fn is loop.save_state_fn
-    assert run.update_summaries_fn is loop.update_summaries_fn
-    assert run.save_summaries_fn is loop.save_summaries_fn
+    outputs = run._output_functions
+    assert run.save_state_fn is outputs.save_state_fn
+    assert run.update_summaries_fn is outputs.update_summaries_fn
+    assert run.save_summaries_fn is outputs.save_summaries_fn
 
 
 # -- _step_controller forwarding ---------------------------------------- #
@@ -100,7 +101,7 @@ def test_algo_step_forwarding(single_integrator_run):
     """Properties that delegate to _algo_step."""
     run = single_integrator_run
     assert run.threads_per_step == run._algo_step.threads_per_step
-    assert run.evaluate_f is run._algo_step.evaluate_f
+    assert run.dxdt_fn is run._algo_step.dxdt_fn
 
 
 # -- _output_functions forwarding --------------------------------------- #
@@ -110,9 +111,9 @@ def test_output_functions_forwarding(single_integrator_run):
     run = single_integrator_run
     of = run._output_functions
 
-    assert run.save_state_func is of.save_state_func
-    assert run.update_summaries_func is of.update_summaries_func
-    assert run.save_summary_metrics_func is of.save_summary_metrics_func
+    assert run.save_state_fn is of.save_state_fn
+    assert run.update_summaries_fn is of.update_summaries_fn
+    assert run.save_summaries_fn is of.save_summaries_fn
     assert run.output_types == of.output_types
     assert run.output_compile_flags == of.compile_flags
     assert run.save_time == of.save_time
@@ -142,9 +143,9 @@ def test_system_forwarding(single_integrator_run, system):
 # -- chained forwarding ------------------------------------------------- #
 
 def test_save_summaries_func_chain(single_integrator_run):
-    """save_summaries_func chains through save_summary_metrics_func."""
+    """save_summaries_fn chains through save_summaries_fn."""
     run = single_integrator_run
-    assert run.save_summaries_func is run.save_summary_metrics_func
+    assert run.save_summaries_fn is run.save_summaries_fn
 
 
 # ── shared_memory_bytes ─────────────────────────────────────────────────── #

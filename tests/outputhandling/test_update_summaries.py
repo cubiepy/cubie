@@ -147,6 +147,6 @@ def test_factory_multiple_metrics_buffer_height():
 def test_update_summaries_wired_through_output_functions(output_functions):
     """update_summary_factory result is stored in output_functions cache."""
     # Access property to trigger lazy build
-    fn = output_functions.update_summaries_func
+    fn = output_functions.update_summaries_fn
     cache = output_functions._cache
-    assert cache.update_summaries_function is fn
+    assert cache.update_summaries_fn is fn

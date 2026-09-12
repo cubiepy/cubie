@@ -193,11 +193,11 @@ class TestSymbolicODEIntegration:
         obs = np.zeros(1, dtype=np.float64)
         out = np.zeros(1, dtype=np.float64)
         run_device_dxdt(
-            ode.evaluate_f, state, params, drivers, obs, out, 0.0
+            ode.dxdt_fn, state, params, drivers, obs, out, 0.0
         )
         assert out[0] == pytest.approx(3.0, abs=1e-13)
         run_device_observables(
-            ode.evaluate_observables, state, params, drivers, obs, 0.0
+            ode.observables_fn, state, params, drivers, obs, 0.0
         )
         assert obs[0] == pytest.approx(4.0, abs=1e-13)
 
@@ -214,7 +214,7 @@ class TestSymbolicODEIntegration:
         obs = np.zeros(1, dtype=np.float64)
         out = np.zeros(2, dtype=np.float64)
         run_device_dxdt(
-            torn_dae_system.evaluate_f,
+            torn_dae_system.dxdt_fn,
             state,
             params,
             drivers,

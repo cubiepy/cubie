@@ -348,12 +348,12 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
 
 
 def test_cache_from_build():
-    """Build returns ScaledNormCache with scaled_norm field."""
+    """Build returns ScaledNormCache with norm_fn field."""
     factory = ScaledNorm(precision=np.float64, solver_width=3, n=3)
     _ = factory.device_function
     cache = factory._cache
     # Cache holds the same function as device_function property
-    assert cache.scaled_norm is factory.device_function
+    assert cache.norm_fn is factory.device_function
 
 
 # ── ScaledNorm __init__ ──────────────────────────────────── #
@@ -810,10 +810,10 @@ def test_forwarding_array_properties(prop, child_attr):
 
 
 def test_device_function_forwards_cache():
-    """device_function returns get_cached_output('scaled_norm')."""
+    """device_function returns get_cached_output('norm_fn')."""
     factory = ScaledNorm(precision=np.float64, solver_width=2, n=2)
     fn = factory.device_function
-    assert fn is factory.get_cached_output("scaled_norm")
+    assert fn is factory.get_cached_output("norm_fn")
 
 
 # ── correction-norm rtol precision floor ─────────────────── #

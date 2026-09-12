@@ -349,7 +349,7 @@ def test_newton_krylov_update_preserves_original_dict(precision):
     original_dict = {
         "newton_atol": 1e-8,
         "newton_rtol": 1e-6,
-        "residual_function": residual,
+        "residual_fn": residual,
     }
     # Make a copy to compare against
     expected_dict = dict(original_dict)
@@ -378,14 +378,14 @@ def test_newton_krylov_no_manual_cache_invalidation(precision):
     newton.update(solver_width=n)
     _ = newton.device_function
     config = newton.compile_settings
-    old_norm_function = config.norm_device_function
+    old_norm_function = config.norm_fn
     assert old_norm_function is not None
 
     newton.update(newton_atol=1e-8)
 
     config = newton.compile_settings
-    assert config.norm_device_function is newton.norm.device_function
-    assert config.norm_device_function is not old_norm_function
+    assert config.norm_fn is newton.norm.device_function
+    assert config.norm_fn is not old_norm_function
     assert newton._cache_valid is False
 
 

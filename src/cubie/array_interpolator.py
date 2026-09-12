@@ -87,16 +87,16 @@ class InterpolatorCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    evaluation_function
+    drivers_fn
         Device function evaluating every input at a time.
-    driver_del_t
+    driver_derivative_fn
         Device function evaluating every input's time derivative.
     coefficients
         Host ``(num_segments, num_inputs, order + 1)`` table.
     """
 
-    evaluation_function: Optional[Callable] = field(default=None)
-    driver_del_t: Optional[Callable] = field(default=None)
+    drivers_fn: Optional[Callable] = field(default=None)
+    driver_derivative_fn: Optional[Callable] = field(default=None)
     coefficients: Optional[FloatArray] = field(default=None)
 
 
@@ -601,8 +601,8 @@ class ArrayInterpolator(CUDAFactory):
 
         # no cover: end
         cache = InterpolatorCache(
-            evaluation_function=evaluate_all,
-            driver_del_t=evaluate_time_derivative,
+            drivers_fn=evaluate_all,
+            driver_derivative_fn=evaluate_time_derivative,
             coefficients=coefficients,
         )
         return cache
@@ -660,14 +660,14 @@ class ArrayInterpolator(CUDAFactory):
         return recognised
 
     @property
-    def evaluation_function(self) -> Optional[Callable]:
+    def drivers_fn(self) -> Optional[Callable]:
         """Device function evaluating all inputs; ``None`` without inputs."""
-        return self.get_cached_output("evaluation_function")
+        return self.get_cached_output("drivers_fn")
 
     @property
-    def driver_del_t(self) -> Optional[Callable]:
+    def driver_derivative_fn(self) -> Optional[Callable]:
         """Driver time-derivative device function; ``None`` without inputs."""
-        return self.get_cached_output("driver_del_t")
+        return self.get_cached_output("driver_derivative_fn")
 
     @property
     def coefficients(self) -> FloatArray:
@@ -718,7 +718,7 @@ class ArrayInterpolator(CUDAFactory):
             return empty((num_points, self.num_inputs), dtype=self.precision)
 
         coefficients = self.coefficients
-        device_eval = self.evaluation_function
+        device_eval = self.drivers_fn
 
         # no cover: start
         @cuda.jit(**self.jit_kwargs)

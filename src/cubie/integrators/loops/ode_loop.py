@@ -62,11 +62,11 @@ class IVPLoopCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    loop_function
+    loop_fn
         Compiled CUDA device function that executes the integration loop.
     """
 
-    loop_function: Callable = field()
+    loop_fn: Callable = field()
 
 
 ALL_LOOP_SETTINGS = {
@@ -169,19 +169,19 @@ class IVPLoop(CUDAFactory):
     sample_summaries_every
         Interval between summary metric updates. Must be an integer divisor
         of ``summarise_every``. Defaults to None (auto-configured).
-    save_state_func
+    save_state_fn
         Device function that writes state and observable snapshots.
-    update_summaries_func
+    update_summaries_fn
         Device function that accumulates summary statistics.
-    save_summaries_func
+    save_summaries_fn
         Device function that commits summary statistics to output buffers.
     step_controller_fn
         Device function that updates the timestep and accept flag.
-    step_function
+    step_fn
         Device function that advances the solution by one tentative step.
-    evaluate_driver_at_t
+    drivers_fn
         Device function that evaluates drivers for a given time.
-    evaluate_observables
+    observables_fn
         Device function that computes observables for proposed states.
     **kwargs
         Optional parameters passed to ODELoopConfig. Available parameters
@@ -211,13 +211,13 @@ class IVPLoop(CUDAFactory):
         save_every: Optional[float] = None,
         summarise_every: Optional[float] = None,
         sample_summaries_every: Optional[float] = None,
-        save_state_func: Optional[Callable] = None,
-        update_summaries_func: Optional[Callable] = None,
-        save_summaries_func: Optional[Callable] = None,
+        save_state_fn: Optional[Callable] = None,
+        update_summaries_fn: Optional[Callable] = None,
+        save_summaries_fn: Optional[Callable] = None,
         step_controller_fn: Optional[Callable] = None,
-        step_function: Optional[Callable] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
-        evaluate_observables: Optional[Callable] = None,
+        step_fn: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
+        observables_fn: Optional[Callable] = None,
         **kwargs,
     ) -> None:
         """Initialise the IVP loop configuration.
@@ -253,19 +253,19 @@ class IVPLoop(CUDAFactory):
         sample_summaries_every
             Interval between summary metric updates. Must be an integer divisor
             of ``summarise_every``. Defaults to None (auto-configured).
-        save_state_func
+        save_state_fn
             Device function that writes state and observable snapshots.
-        update_summaries_func
+        update_summaries_fn
             Device function that accumulates summary statistics.
-        save_summaries_func
+        save_summaries_fn
             Device function that commits summary statistics to output buffers.
         step_controller_fn
             Device function that updates the timestep and accept flag.
-        step_function
+        step_fn
             Device function that advances the solution by one tentative step.
-        evaluate_driver_at_t
+        drivers_fn
             Device function that evaluates drivers for a given time.
-        evaluate_observables
+        observables_fn
             Device function that computes observables for proposed states.
         **kwargs
             Optional parameters passed to ODELoopConfig. See ODELoopConfig
@@ -293,13 +293,13 @@ class IVPLoop(CUDAFactory):
                 "save_every": save_every,
                 "summarise_every": summarise_every,
                 "sample_summaries_every": sample_summaries_every,
-                "save_state_fn": save_state_func,
-                "update_summaries_fn": update_summaries_func,
-                "save_summaries_fn": save_summaries_func,
+                "save_state_fn": save_state_fn,
+                "update_summaries_fn": update_summaries_fn,
+                "save_summaries_fn": save_summaries_fn,
                 "step_controller_fn": step_controller_fn,
-                "step_function": step_function,
-                "evaluate_driver_at_t": evaluate_driver_at_t,
-                "evaluate_observables": evaluate_observables,
+                "step_fn": step_fn,
+                "drivers_fn": drivers_fn,
+                "observables_fn": observables_fn,
             },
             **kwargs,
         )
@@ -423,10 +423,10 @@ class IVPLoop(CUDAFactory):
         update_summaries = config.update_summaries_fn
         save_summaries = config.save_summaries_fn
         step_controller = config.step_controller_fn
-        step_function = config.step_function
-        evaluate_driver_at_t = config.evaluate_driver_at_t
-        evaluate_observables = config.evaluate_observables
-        initialise_state = config.initialise_state_fn
+        step_fn = config.step_fn
+        drivers_fn = config.drivers_fn
+        observables_fn = config.observables_fn
+        initialise_state_fn = config.initialise_state_fn
 
         flags = config.compile_flags
         save_obs_bool = flags.save_observables
@@ -649,8 +649,8 @@ class IVPLoop(CUDAFactory):
                 parameters_buffer[k] = parameters[k]
 
             # Seed initial observables from initial state.
-            if evaluate_driver_at_t is not None and n_drivers > int32(0):
-                evaluate_driver_at_t(
+            if drivers_fn is not None and n_drivers > int32(0):
+                drivers_fn(
                     t_prec,
                     driver_coefficients,
                     drivers_buffer,
@@ -659,7 +659,7 @@ class IVPLoop(CUDAFactory):
             # Solve for a consistent DAE start before the t0 save.
             proposed_counters[0] = int32(0)
             proposed_counters[1] = int32(0)
-            init_status = initialise_state(
+            init_status = initialise_state_fn(
                 state_buffer,
                 parameters_buffer,
                 drivers_buffer,
@@ -678,7 +678,7 @@ class IVPLoop(CUDAFactory):
                         counters_since_save[i] += proposed_counters[i]
 
             if n_observables > int32(0):
-                evaluate_observables(
+                observables_fn(
                     state_buffer,
                     parameters_buffer,
                     drivers_buffer,
@@ -872,7 +872,7 @@ class IVPLoop(CUDAFactory):
                     proposed_counters[0] = int32(0)
                     proposed_counters[1] = int32(0)
                     step_status = int32(
-                        step_function(
+                        step_fn(
                             state_buffer,
                             state_proposal_buffer,
                             parameters_buffer,
@@ -1090,7 +1090,7 @@ class IVPLoop(CUDAFactory):
                                 summary_idx += int32(1)
 
         # no cover: end
-        return IVPLoopCache(loop_function=loop_fn)
+        return IVPLoopCache(loop_fn=loop_fn)
 
     @property
     def save_every(self) -> Optional[float]:
@@ -1122,7 +1122,7 @@ class IVPLoop(CUDAFactory):
         callable
             Compiled CUDA device function.
         """
-        return self.get_cached_output("loop_function")
+        return self.get_cached_output("loop_fn")
 
     @property
     def save_state_fn(self) -> Optional[Callable]:
@@ -1149,22 +1149,22 @@ class IVPLoop(CUDAFactory):
         return self.compile_settings.step_controller_fn
 
     @property
-    def step_function(self) -> Optional[Callable]:
+    def step_fn(self) -> Optional[Callable]:
         """Return the algorithm step device function used by the loop."""
 
-        return self.compile_settings.step_function
+        return self.compile_settings.step_fn
 
     @property
-    def evaluate_driver_at_t(self) -> Optional[Callable]:
+    def drivers_fn(self) -> Optional[Callable]:
         """Return the driver evaluation device function used by the loop."""
 
-        return self.compile_settings.evaluate_driver_at_t
+        return self.compile_settings.drivers_fn
 
     @property
-    def evaluate_observables(self) -> Optional[Callable]:
+    def observables_fn(self) -> Optional[Callable]:
         """Return the observables device function used by the loop."""
 
-        return self.compile_settings.evaluate_observables
+        return self.compile_settings.observables_fn
 
     @property
     def dt(self) -> Optional[float]:

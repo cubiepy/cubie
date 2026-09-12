@@ -47,13 +47,13 @@ class LUSolverConfig(LinearSolverBaseConfig):
 
     Attributes
     ----------
-    lu_solve_function : Optional[Callable]
+    lu_solve_fn : Optional[Callable]
         Injected generated direct-solve device function.
     lu_nnz : int
         Factor buffer length; zero for substitution-only variants.
     """
 
-    lu_solve_function: Optional[Callable] = device_function_field()
+    lu_solve_fn: Optional[Callable] = device_function_field()
     lu_nnz: int = field(
         default=0, validator=getype_validator(int, 0)
     )
@@ -127,7 +127,7 @@ class LUSolver(LinearSolverBase):
             function.
         """
         config = self.compile_settings
-        lu_solve = config.lu_solve_function
+        lu_solve = config.lu_solve_fn
         jit_kwargs = self.jit_kwargs
 
         alloc_factor = buffer_registry.get_allocator(
@@ -173,4 +173,4 @@ class LUSolver(LinearSolverBase):
             )
 
         # no cover: end
-        return LinearSolverCache(linear_solver=linear_solver)
+        return LinearSolverCache(linear_solver_fn=linear_solver)

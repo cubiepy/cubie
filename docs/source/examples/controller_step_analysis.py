@@ -536,11 +536,11 @@ def run_reference_loop_with_history(
     params = inputs["parameters"].astype(precision, copy=True)
     driver_coefficients = inputs.get("driver_coefficients")
     if driver_coefficients is not None:
-        evaluate_driver_at_t = driver_evaluator.with_coefficients(
+        drivers_fn = driver_evaluator.with_coefficients(
             np.asarray(driver_coefficients, dtype=precision)
         )
     else:
-        evaluate_driver_at_t = driver_evaluator
+        drivers_fn = driver_evaluator
 
     duration = precision(solver_settings["duration"])
     warmup = precision(solver_settings["warmup"])
@@ -552,7 +552,7 @@ def run_reference_loop_with_history(
     tableau = implicit_step_settings.get("tableau")
     stepper = get_ref_stepper(
         evaluator,
-        evaluate_driver_at_t,
+        drivers_fn,
         solver_settings["algorithm"],
         newton_tol=implicit_step_settings["newton_atol"],
         newton_max_iters=implicit_step_settings["newton_max_iters"],
@@ -578,7 +578,7 @@ def run_reference_loop_with_history(
     time_history: List[float] = []
     t = precision(0.0)
     controller.dt = controller.dt0
-    drivers_initial = evaluate_driver_at_t(precision(t))
+    drivers_initial = drivers_fn(precision(t))
     observables = evaluator.observables(
         state,
         params,
@@ -607,7 +607,7 @@ def run_reference_loop_with_history(
             do_save = True
 
         try:
-            sampled = evaluate_driver_at_t(precision(t))
+            sampled = drivers_fn(precision(t))
             sampled_tuple: Tuple[float, ...] = tuple(
                 np.asarray(sampled, dtype=float).tolist()
             )

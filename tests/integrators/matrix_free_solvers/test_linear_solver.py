@@ -119,7 +119,7 @@ def placeholder_solver(
         krylov_rtol=1e-12,
         krylov_max_iters=32,
     )
-    solver.update(operator_apply=placeholder_operator)
+    solver.update(operator_apply_fn=placeholder_operator)
     return solver
 
 
@@ -303,8 +303,8 @@ def test_preconditioner_order_reduces_iterations(
             krylov_max_iters=1000,
         )
         solver.update(
-            operator_apply=system_setup["operator"],
-            preconditioner=(
+            operator_apply_fn=system_setup["operator"],
+            preconditioner_fn=(
                 None if order == 0
                 else system_setup["preconditioner"](order)
             ),
@@ -556,13 +556,13 @@ def test_linear_solver_no_manual_cache_invalidation(precision):
     # Access device_function to populate cache
     _ = solver.device_function
 
-    # Update tolerance - should update config's norm_device_function
+    # Update tolerance - should update config's norm_fn
     new_atol = np.array([1e-8, 1e-7, 1e-9], dtype=precision)
     solver.update(krylov_atol=new_atol)
 
     # Verify config was updated with new norm device function
     config2 = solver.compile_settings
-    norm_fn2 = config2.norm_device_function
+    norm_fn2 = config2.norm_fn
 
     # The norm device function should be set (not None)
     assert norm_fn2 is not None
@@ -710,7 +710,7 @@ def residual_reduction_solver(
         solver = MRLinearSolver(
             linear_correction_type=request.param, **common
         )
-    solver.update(operator_apply=identity_operator)
+    solver.update(operator_apply_fn=identity_operator)
     return solver
 
 
@@ -880,7 +880,7 @@ def _build_counting_solver(
         solver = MRLinearSolver(
             linear_correction_type=correction_type, **kwargs
         )
-    solver.update(operator_apply=counting_operator)
+    solver.update(operator_apply_fn=counting_operator)
     return solver
 
 
@@ -977,7 +977,7 @@ def test_zero_guess_nonfinite_operator_policy_matches_cpu(
         krylov_max_iters=8,
         zero_initial_guess=True,
     )
-    solver.update(operator_apply=nonfinite_operator)
+    solver.update(operator_apply_fn=nonfinite_operator)
     kernel = counting_solver_kernel(solver, 3, precision(0.01), precision)
     calls, x, status, iters = _run_counting_solve(
         kernel, precision, [0.0, 0.0, 0.0]
@@ -1036,7 +1036,7 @@ def overflow_norm_solver(request, identity_operator, solver_settings,
         solver = MRLinearSolver(
             linear_correction_type=request.param, **kwargs
         )
-    solver.update(operator_apply=identity_operator)
+    solver.update(operator_apply_fn=identity_operator)
     return solver
 
 
@@ -1157,7 +1157,7 @@ def reducible_overflow_solver(
         solver = MRLinearSolver(
             linear_correction_type=request.param, **kwargs
         )
-    solver.update(operator_apply=near_identity_operator)
+    solver.update(operator_apply_fn=near_identity_operator)
     return solver
 
 

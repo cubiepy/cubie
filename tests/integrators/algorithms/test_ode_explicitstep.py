@@ -24,14 +24,14 @@ def test_explicit_step_config_is_subclass_of_base_step_config():
 
 def test_build_delegates_to_build_step(step_object):
     """build() unpacks config and delegates to build_step."""
-    # Access step_function triggers build; the result is cached.
-    sf = step_object.step_function
+    # Access step_fn triggers build; the result is cached.
+    sf = step_object.step_fn
     cache = step_object._cache
-    assert cache.step is sf
+    assert cache.step_fn is sf
 
 
 def test_build_unpacks_config_fields(step_object, system):
-    """build() extracts evaluate_f, n, etc. from compile_settings."""
+    """build() extracts dxdt_fn, n, etc. from compile_settings."""
     cs = step_object.compile_settings
     assert cs.n == system.sizes.states
     assert cs.n_drivers == system.num_drivers

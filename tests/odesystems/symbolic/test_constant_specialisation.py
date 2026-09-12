@@ -51,7 +51,7 @@ SCALED_CS_LIVE_SETTINGS = {
 
 def _dxdt_source(system):
     """Compile ``dxdt`` and return the generated module source."""
-    _ = system.evaluate_f
+    _ = system.dxdt_fn
     return system.gen_file.file_path.read_text(encoding="utf-8")
 
 

@@ -89,11 +89,11 @@ class ODELoopConfig(CUDAFactoryConfig):
         Device function that writes summary statistics to output buffers.
     step_controller_fn
         Device function that updates the timestep and acceptance flag.
-    step_function
+    step_fn
         Device function that advances the solution by one tentative step.
-    evaluate_driver_at_t
+    drivers_fn
         Device function that evaluates driver signals for a given time.
-    evaluate_observables
+    observables_fn
         Device function that evaluates observables for the current state.
     initialise_state_fn
         Device function correcting the state at ``t0`` to a
@@ -203,9 +203,9 @@ class ODELoopConfig(CUDAFactoryConfig):
     update_summaries_fn: Optional[Callable] = device_function_field()
     save_summaries_fn: Optional[Callable] = device_function_field()
     step_controller_fn: Optional[Callable] = device_function_field()
-    step_function: Optional[Callable] = device_function_field()
-    evaluate_driver_at_t: Optional[Callable] = device_function_field()
-    evaluate_observables: Optional[Callable] = device_function_field()
+    step_fn: Optional[Callable] = device_function_field()
+    drivers_fn: Optional[Callable] = device_function_field()
+    observables_fn: Optional[Callable] = device_function_field()
     initialise_state_fn: Optional[Callable] = device_function_field()
     _dt: Optional[float] = field(
         default=0.01,

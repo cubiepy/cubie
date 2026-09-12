@@ -105,14 +105,14 @@ def _build_operator_factory(system, precision):
 
 @pytest.fixture(scope="session")
 def operator_factory(operator_system, precision):
-    """Return a factory producing operator_apply device functions."""
+    """Return a factory producing operator_apply_fn device functions."""
 
     return _build_operator_factory(operator_system, precision)
 
 
 @pytest.fixture(scope="session")
 def operator_kernel(precision):
-    """Kernel applying operator_apply to a vector."""
+    """Kernel applying operator_apply_fn to a vector."""
 
     n = 2
 
@@ -703,7 +703,7 @@ def test_operator_apply_dense(
     precision,
     tolerance,
 ):
-    """Evaluate operator_apply for scalings and 0/1 mass diagonals."""
+    """Evaluate operator_apply_fn for scalings and 0/1 mass diagonals."""
 
     op = operator_factory(beta, gamma, M)
     kernel = operator_kernel(op)

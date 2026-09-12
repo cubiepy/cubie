@@ -126,16 +126,10 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         return self._system.sizes
 
     @property
-    def save_summaries_func(self) -> Callable:
-        """Return the summary saving function from the output handlers."""
-
-        return self.save_summary_metrics_func
-
-    @property
-    def evaluate_f(self) -> Callable:
+    def dxdt_fn(self) -> Callable:
         """Return the derivative function used by the integration step."""
 
-        return self._algo_step.evaluate_f
+        return self._algo_step.dxdt_fn
 
     # ------------------------------------------------------------------
     # Loop properties
@@ -292,24 +286,6 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
 
         return self._loop.compile_flags
 
-    @property
-    def save_state_fn(self) -> Callable:
-        """Return the loop state-save function."""
-
-        return self._loop.save_state_fn
-
-    @property
-    def update_summaries_fn(self) -> Callable:
-        """Return the loop summary-update function."""
-
-        return self._loop.update_summaries_fn
-
-    @property
-    def save_summaries_fn(self) -> Callable:
-        """Return the loop summary-save function."""
-
-        return self._loop.save_summaries_fn
-
     # ------------------------------------------------------------------
     # Step controller properties
     # ------------------------------------------------------------------
@@ -346,22 +322,22 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
     # Output function properties
     # ------------------------------------------------------------------
     @property
-    def save_state_func(self) -> Callable:
+    def save_state_fn(self) -> Callable:
         """Return the compiled state saving function."""
 
-        return self._output_functions.save_state_func
+        return self._output_functions.save_state_fn
 
     @property
-    def update_summaries_func(self) -> Callable:
+    def update_summaries_fn(self) -> Callable:
         """Return the compiled summary update function."""
 
-        return self._output_functions.update_summaries_func
+        return self._output_functions.update_summaries_fn
 
     @property
-    def save_summary_metrics_func(self) -> Callable:
+    def save_summaries_fn(self) -> Callable:
         """Return the compiled summary saving function."""
 
-        return self._output_functions.save_summary_metrics_func
+        return self._output_functions.save_summaries_fn
 
     @property
     def output_types(self) -> Any:

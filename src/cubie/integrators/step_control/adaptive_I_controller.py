@@ -197,4 +197,4 @@ class AdaptiveIController(BaseAdaptiveStepController):
             return ret
 
         # no cover: end
-        return ControllerCache(device_function=controller_I)
+        return ControllerCache(step_controller_fn=controller_I)

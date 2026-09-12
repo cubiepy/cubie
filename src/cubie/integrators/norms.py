@@ -191,7 +191,7 @@ class FIRKCorrectionNormConfig(CorrectionNormConfig):
 class ScaledNormCache(CUDADispatcherCache):
     """Hold a scaled norm device function."""
 
-    scaled_norm: Callable = field(validator=is_device_validator)
+    norm_fn: Callable = field(validator=is_device_validator)
 
 
 class ScaledNorm(MultipleInstanceCUDAFactory):
@@ -259,7 +259,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             inline=True,
             **self.jit_kwargs,
         )
-        def scaled_norm(values, reference):
+        def norm_fn(values, reference):
             """Return the mean squared scaled norm."""
             nrm2 = typed_zero
             for i in unroll_if(range(n_val), unroll_norms):
@@ -269,7 +269,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
             return nrm2 * inv_n
 
         # no cover: end
-        return ScaledNormCache(scaled_norm=scaled_norm)
+        return ScaledNormCache(norm_fn=norm_fn)
 
     def update(self, updates_dict=None, silent=False, **kwargs):
         """Update compile settings and invalidate cache if changed.
@@ -303,7 +303,7 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
     @property
     def device_function(self) -> Callable:
         """Return cached scaled norm device function."""
-        return self.get_cached_output("scaled_norm")
+        return self.get_cached_output("norm_fn")
 
     @property
     def precision(self) -> PrecisionDType:
@@ -377,7 +377,7 @@ class TiledScaledNorm(ScaledNorm):
             inline=True,
             **self.jit_kwargs,
         )
-        def scaled_norm(values, reference):
+        def norm_fn(values, reference):
             """Return the mean squared scaled norm."""
             nrm2 = typed_zero
             for index in unroll_if(range(n_val), unroll_norms):
@@ -392,7 +392,7 @@ class TiledScaledNorm(ScaledNorm):
             return nrm2 * inv_n
 
         # no cover: end
-        return ScaledNormCache(scaled_norm=scaled_norm)
+        return ScaledNormCache(norm_fn=norm_fn)
 
 
 class CorrectionNorm(ScaledNorm):
@@ -444,7 +444,7 @@ class DIRKCorrectionNorm(CorrectionNorm):
             return nrm2 * inv_n
 
         # no cover: end
-        return ScaledNormCache(scaled_norm=correction_norm)
+        return ScaledNormCache(norm_fn=correction_norm)
 
 
 class FIRKCorrectionNorm(CorrectionNorm):
@@ -504,7 +504,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
             return nrm2 * inv_n
 
         # no cover: end
-        return ScaledNormCache(scaled_norm=correction_norm)
+        return ScaledNormCache(norm_fn=correction_norm)
 
 
 @frozen
@@ -572,7 +572,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
 
             # no cover: start
             @cuda.jit(device=True, inline=True, **jit_kwargs)
-            def scaled_norm(values, reference_a, reference_b):
+            def norm_fn(values, reference_a, reference_b):
                 """Return the mean squared scaled norm."""
                 nrm2 = typed_zero
                 for i in unroll_if(range(n_val), unroll_norms):
@@ -584,14 +584,14 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
                 return nrm2 * inv_n
 
             # no cover: end
-            return ScaledNormCache(scaled_norm=scaled_norm)
+            return ScaledNormCache(norm_fn=norm_fn)
 
         flagged_indices = asarray(config.flagged_indices, dtype=np_int32)
         flagged_count = int32(len(config.flagged_indices))
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **jit_kwargs)
-        def scaled_norm(values, reference_a, reference_b):
+        def norm_fn(values, reference_a, reference_b):
             """Return the mean squared scaled norm over the flagged rows."""
             nrm2 = typed_zero
             for k in unroll_if(range(flagged_count), unroll_norms):
@@ -604,7 +604,7 @@ class TwoRefMaskedScaledNorm(ScaledNorm):
             return nrm2 * inv_n
 
         # no cover: end
-        return ScaledNormCache(scaled_norm=scaled_norm)
+        return ScaledNormCache(norm_fn=norm_fn)
 
     @property
     def mass_flags(self) -> Tuple[bool, ...]:

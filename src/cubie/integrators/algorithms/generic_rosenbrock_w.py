@@ -96,8 +96,8 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     """Configuration describing the Rosenbrock-W integrator."""
 
     tableau: RosenbrockTableau = field(default=DEFAULT_ROSENBROCK_TABLEAU)
-    time_derivative_function: Optional[Callable] = device_function_field()
-    driver_del_t: Optional[Callable] = device_function_field()
+    time_derivative_fn: Optional[Callable] = device_function_field()
+    driver_derivative_fn: Optional[Callable] = device_function_field()
     stage_rhs_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -110,7 +110,7 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     krylov_iters_out_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    apply_mass_function: Optional[Callable] = device_function_field()
+    apply_mass_fn: Optional[Callable] = device_function_field()
 
 
 class GenericRosenbrockWStep(ODEImplicitStep):
@@ -122,10 +122,10 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         self,
         precision: PrecisionDType,
         n: int,
-        evaluate_f: Optional[Callable] = None,
-        evaluate_observables: Optional[Callable] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
-        driver_del_t: Optional[Callable] = None,
+        dxdt_fn: Optional[Callable] = None,
+        observables_fn: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
+        driver_derivative_fn: Optional[Callable] = None,
         get_solver_helper_fn: Optional[Callable] = None,
         tableau: RosenbrockTableau = DEFAULT_ROSENBROCK_TABLEAU,
         **kwargs,
@@ -144,13 +144,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             Floating-point precision for CUDA computations.
         n
             Number of state variables in the ODE system.
-        evaluate_f
+        dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
-        evaluate_observables
+        observables_fn
             Device function computing system observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function evaluating drivers at arbitrary times.
-        driver_del_t
+        driver_derivative_fn
             Optional compiled CUDA device function computing time derivatives
             of drivers (required for some Rosenbrock formulations).
         get_solver_helper_fn
@@ -188,10 +188,10 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             required={
                 "precision": precision,
                 "n": n,
-                "evaluate_f": evaluate_f,
-                "evaluate_observables": evaluate_observables,
-                "evaluate_driver_at_t": evaluate_driver_at_t,
-                "driver_del_t": driver_del_t,
+                "dxdt_fn": dxdt_fn,
+                "observables_fn": observables_fn,
+                "drivers_fn": drivers_fn,
+                "driver_derivative_fn": driver_derivative_fn,
                 "get_solver_helper_fn": get_solver_helper_fn,
                 "tableau": tableau_value,
                 "beta": 1.0,
@@ -282,7 +282,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             prepare_jacobian = lu_result.prepare_jac
             cached_auxiliary_count = lu_result.cached_auxiliary_count
             self.solver.update(
-                lu_solve_function=lu_result.device_function,
+                lu_solve_fn=lu_result.device_function,
                 lu_nnz=lu_result.lu_nnz,
             )
             counts = dict(
@@ -305,8 +305,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 operator_result.cached_auxiliary_count
             )
             self.solver.update(
-                operator_apply=operator_result.device_function,
-                preconditioner=preconditioner_result.device_function,
+                operator_apply_fn=operator_result.device_function,
+                preconditioner_fn=preconditioner_result.device_function,
             )
             counts = dict(
                 operator=operator_result.operation_count,
@@ -324,31 +324,31 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         time_derivative = get_fn("time_derivative_rhs")
         counts["time_derivative"] = time_derivative.operation_count
 
-        apply_mass_function = None
+        apply_mass_fn = None
         if self.smooth_error:
             # The smoothing rhs is M @ raw_error.
             apply_mass = get_fn("apply_mass")
-            apply_mass_function = apply_mass.device_function
+            apply_mass_fn = apply_mass.device_function
             counts["apply_mass"] = apply_mass.operation_count
 
         # Return linear solver device function
         self.update_compile_settings(
             {
                 "solver_function": self.solver.device_function,
-                "time_derivative_function": (
+                "time_derivative_fn": (
                     time_derivative.device_function
                 ),
-                "prepare_jacobian_function": prepare_jacobian,
-                "apply_mass_function": apply_mass_function,
+                "prepare_jacobian_fn": prepare_jacobian,
+                "apply_mass_fn": apply_mass_fn,
                 "helper_operation_counts": OperationCounts(**counts),
             }
         )
 
     def build_step(
         self,
-        evaluate_f: Callable,
-        evaluate_observables: Callable,
-        evaluate_driver_at_t: Optional[Callable],
+        dxdt_fn: Callable,
+        observables_fn: Callable,
+        drivers_fn: Optional[Callable],
         solver_function: Callable,
         numba_precision: type,
         n: int,
@@ -361,19 +361,19 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
         # Access solver from parameter
         linear_solver = solver_function
-        prepare_jacobian = config.prepare_jacobian_function
-        time_derivative_rhs = config.time_derivative_function
-        driver_del_t = config.driver_del_t
+        prepare_jacobian = config.prepare_jacobian_fn
+        time_derivative_rhs = config.time_derivative_fn
+        driver_derivative_fn = config.driver_derivative_fn
 
         n = int32(n)
         unroll_stage = self.compile_settings.unroll.unroll_stage
         unroll_step_element = self.compile_settings.unroll.unroll_step_element
         stage_count = int32(self.stage_count)
         stages_except_first = stage_count - int32(1)
-        has_evaluate_driver_at_t = evaluate_driver_at_t is not None
+        has_evaluate_driver_at_t = drivers_fn is not None
         has_error = self.uses_error
         use_smoothed_error = self.smooth_error
-        apply_mass = config.apply_mass_function
+        apply_mass = config.apply_mass_fn
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
@@ -490,7 +490,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
             # Evaluate del_t term at t_n, y_n
             if has_evaluate_driver_at_t:
-                driver_del_t(
+                driver_derivative_fn(
                     current_time,
                     driver_coeffs,
                     proposed_drivers,
@@ -522,7 +522,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             #            Stage 0: uses starting values                        #
             # --------------------------------------------------------------- #
 
-            evaluate_f(
+            dxdt_fn(
                 state,
                 parameters,
                 drivers_buffer,
@@ -613,13 +613,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
                 # Get t + c_i * dt parts
                 if has_evaluate_driver_at_t:
-                    evaluate_driver_at_t(
+                    drivers_fn(
                         stage_time,
                         driver_coeffs,
                         proposed_drivers,
                     )
 
-                evaluate_observables(
+                observables_fn(
                     stage_increment,
                     parameters,
                     proposed_drivers,
@@ -627,7 +627,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     stage_time,
                 )
 
-                evaluate_f(
+                dxdt_fn(
                     stage_increment,
                     parameters,
                     proposed_drivers,
@@ -647,7 +647,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 # Overwrite the final accumulator slice with time-derivative
                 if stage_idx == stage_count - int32(1):
                     if has_evaluate_driver_at_t:
-                        driver_del_t(
+                        driver_derivative_fn(
                             current_time,
                             driver_coeffs,
                             proposed_drivers,
@@ -751,13 +751,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 counters[1] += krylov_iters_out[0]
 
             if has_evaluate_driver_at_t:
-                evaluate_driver_at_t(
+                drivers_fn(
                     end_time,
                     driver_coeffs,
                     proposed_drivers,
                 )
 
-            evaluate_observables(
+            observables_fn(
                 proposed_state,
                 parameters,
                 proposed_drivers,
@@ -768,7 +768,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             return status_code
 
         # no cover: end
-        return StepCache(step=step)
+        return StepCache(step_fn=step)
 
     @property
     def baked_stage_diagonal(self) -> float:

@@ -973,7 +973,7 @@ def test_device_function_field_compares_by_identity_and_is_unhashed():
 def test_products_returns_the_cache_fields(system):
     """products maps every cache field to the build's value."""
     products = system.products
-    assert products["dxdt"] is system.evaluate_f
+    assert products["dxdt_fn"] is system.dxdt_fn
     assert set(products) == {
         fld.name for fld in attrs.fields(type(system._cache))
     }

@@ -118,7 +118,7 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         default=1.0,
         validator=getype_validator(float, 1.0),
     )
-    norm_device_function: Optional[Callable] = device_function_field()
+    norm_fn: Optional[Callable] = device_function_field()
 
     def _resolve_gain(self, gain) -> float:
         """Return a gain as a precision float at the algorithm order."""
@@ -205,7 +205,7 @@ class BaseAdaptiveStepController(BaseStepController):
             jit_flags=config.jit_flags,
         )
         self.update_compile_settings(
-            {"norm_device_function": self.norm.device_function},
+            {"norm_fn": self.norm.device_function},
             silent=True,
         )
 
@@ -224,7 +224,7 @@ class BaseAdaptiveStepController(BaseStepController):
         if "n" in norm_updates:
             norm_updates["solver_width"] = norm_updates["n"]
         self.norm.update(norm_updates, silent=True)
-        updates_dict["norm_device_function"] = self.norm.device_function
+        updates_dict["norm_fn"] = self.norm.device_function
         return super().update(updates_dict, silent=silent)
 
     def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
@@ -326,7 +326,7 @@ class BaseAdaptiveStepController(BaseStepController):
             dt_max=self.dt_max,
             algorithm_order=self.compile_settings.algorithm_order,
             safety=self.compile_settings.safety,
-            error_norm=self.compile_settings.norm_device_function,
+            error_norm=self.compile_settings.norm_fn,
         )
 
     @abstractmethod

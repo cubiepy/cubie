@@ -36,9 +36,9 @@ def test_device_function_forwarding_getters(loop):
     """compile_settings-forwarding properties return the cached values."""
     cs = loop.compile_settings
     assert loop.step_controller_fn is cs.step_controller_fn
-    assert loop.step_function is cs.step_function
-    assert loop.evaluate_driver_at_t is cs.evaluate_driver_at_t
-    assert loop.evaluate_observables is cs.evaluate_observables
+    assert loop.step_fn is cs.step_fn
+    assert loop.drivers_fn is cs.drivers_fn
+    assert loop.observables_fn is cs.observables_fn
     assert loop.dt == cs.dt
     assert loop.is_adaptive == cs.is_adaptive
 

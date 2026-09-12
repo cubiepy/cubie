@@ -11725,7 +11725,7 @@
       "file": "explicit_euler.py",
       "section": "`build_step`",
       "num": 9,
-      "text": "Returns `StepCache(step=step, nonlinear_solver=None)`",
+      "text": "Returns `StepCache(step_fn=step, nonlinear_solver=None)`",
       "tags": []
     },
     {

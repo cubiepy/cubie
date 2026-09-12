@@ -57,8 +57,8 @@ def test_cached_auxiliaries_sized_after_helper_refresh(precision, system):
     step = GenericRosenbrockWStep(
         precision=precision,
         n=system.sizes.states,
-        evaluate_f=system.evaluate_f,
-        evaluate_observables=system.evaluate_observables,
+        dxdt_fn=system.dxdt_fn,
+        observables_fn=system.observables_fn,
         get_solver_helper_fn=system.get_solver_helper,
         tableau=DEFAULT_ROSENBROCK_TABLEAU,
     )

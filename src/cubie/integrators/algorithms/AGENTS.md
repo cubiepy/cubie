@@ -31,7 +31,7 @@ resolves a name or `ButcherTableau` to the right factory.
 | `generic_dirk_tableaus.py` | `DIRKTableau` (adds `diagonal()`, validates `c[i] == sum(a[i])`) + tableaus (implicit midpoint, trapezoidal/ESDIRK, Kvaerno 3/5, SDIRK_2_2, L-stable DIRK3 default, L-stable SDIRK4). |
 | `generic_firk.py` | `FIRKStep` + `FIRKStepConfig`: fully-implicit RK; all stages as one coupled `n*stages` Newton system; dense-predictor warm starts; Kahan-summed output accumulation. |
 | `generic_firk_tableaus.py` | `FIRKTableau` + `RadauIIATableau` (adds the smoothed estimate, gated on `inv(a)` having a sole real eigenvalue — odd stage counts only); Gauss-Legendre 2 (default, errorless) and 4, Radau IIA 3/5/9; `compute_embedded_weights` (moment conditions over any node set). |
-| `generic_rosenbrock_w.py` | `GenericRosenbrockWStep` + `RosenbrockWStepConfig`: linearly-implicit Rosenbrock-W using a cached Jacobian and a **linear** (not Newton) solve per stage; needs `driver_del_t` and time-derivative helpers. |
+| `generic_rosenbrock_w.py` | `GenericRosenbrockWStep` + `RosenbrockWStepConfig`: linearly-implicit Rosenbrock-W using a cached Jacobian and a **linear** (not Newton) solve per stage; needs `driver_derivative_fn` and time-derivative helpers. |
 | `generic_rosenbrockw_tableaus.py` | `RosenbrockTableau` (adds `C`, `gamma`, `gamma_stages`) + ROS3P (default), RODAS3P, SciML Rosenbrock23. RODAS4P/5P and ode23s 2(3) are commented-out / non-working. |
 | `backwards_euler.py` | `BackwardsEulerStep` + config: single-stage implicit, order 1, fixed-step; persistent `increment_cache` warm-starts Newton. |
 | `backwards_euler_predict_correct.py` | `BackwardsEulerPCStep`: subclass adding an explicit forward-Euler predictor before the Newton corrector. |
@@ -60,8 +60,8 @@ resolves a name or `ButcherTableau` to the right factory.
 
 ### Factory & dispatch
 - Subclasses implement **`build_step(...)`** (not `build()` — the bases provide that),
-  returning a `StepCache(step=..., nonlinear_solver=...)`; the compiled step is exposed
-  via the `step_function` property.
+  returning a `StepCache(step_fn=..., nonlinear_solver_fn=...)`; the compiled step is exposed
+  via the `step_fn` property.
 - `get_algorithm_step(precision, settings, **kwargs)` requires `settings["algorithm"]`
   — a name string or a `ButcherTableau` instance. Names resolve via
   `_TABLEAU_REGISTRY_BY_ALGORITHM` (`resolve_alias`); tableau instances dispatch by
@@ -120,7 +120,7 @@ the tableaus: `prediction_sample_stages` (one sample per distinct node),
 `explicit_first_stage` (an explicit first stage is never predicted; its
 `dt*f` sample still enters DIRK's history), and DIRK's
 `prediction_source_stages` (a repeated stage time starts from the earlier
-same-time stage's row). `predictor_function` pipes through compile settings
+same-time stage's row). `predictor_fn` pipes through compile settings
 like `solver_function`; `predictor_*_location` keys place the predictor's buffers.
 
 ### Step-size control order
@@ -167,14 +167,14 @@ combinations `Solver.optimize` times (base `({},)`).
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
 the `lu_solve` role instead of the operator + preconditioner pair;
 `HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
-`update(lu_solve_function=..., lu_nnz=...)`.
+`update(lu_solve_fn=..., lu_nnz=...)`.
 
 ### Simplified Newton (`inexact_newton`)
 `ImplicitStepConfig.inexact_newton` (default `False`) freezes the Newton
 iteration matrix at the step start; the residual stays exact. The frozen
 chain wires a per-step prepare function
 (`(state, parameters, drivers, t, h, cached_aux) -> int32` status, OR'd
-into the step status) into `compile_settings.prepare_jacobian_function`,
+into the step status) into `compile_settings.prepare_jacobian_fn`,
 resizes the step's `cached_auxiliaries` buffer, and sets
 `use_cached_auxiliaries=True` on the solver. LU pairings follow
 `ImplicitStepConfig.prefactored` (default `True`: finished step-start

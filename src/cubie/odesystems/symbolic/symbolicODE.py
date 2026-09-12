@@ -629,18 +629,18 @@ class SymbolicODE(BaseODE):
             obs_code,
             injections=self._device_function_injections(),
         )
-        evaluate_observables = observables_factory(
+        observables_fn = observables_factory(
             numba_precision,
             lineinfo=lineinfo,
         )
 
         return ODECache(
-            dxdt=dxdt_func,
-            observables=evaluate_observables,
+            dxdt_fn=dxdt_func,
+            observables_fn=observables_fn,
             operation_counts=OperationCounts(
                 dxdt=device_function_operation_count(dxdt_func),
                 observables=device_function_operation_count(
-                    evaluate_observables
+                    observables_fn
                 ),
             ),
         )

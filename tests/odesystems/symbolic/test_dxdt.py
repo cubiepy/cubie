@@ -388,8 +388,8 @@ class TestObservablesDeviceParity:
         """dxdt should consume, not overwrite, the observables buffer."""
 
         system = observables_kernel_system
-        dxdt_dev = system.evaluate_f
-        evaluate_observables = system.evaluate_observables
+        dxdt_dev = system.dxdt_fn
+        observables_fn = system.observables_fn
 
         state = np.array(state_values, dtype=precision)
         parameters = np.array(param_values, dtype=precision)
@@ -405,7 +405,7 @@ class TestObservablesDeviceParity:
         out = np.zeros(system.num_states, dtype=precision)
 
         run_device_observables(
-            evaluate_observables,
+            observables_fn,
             state_kernel,
             parameters_kernel,
             drivers_kernel,
@@ -472,7 +472,7 @@ def test_recompile_updates_constants(precision, tolerance):
     )
 
     def run_dxdt(current_system: SymbolicODE) -> float:
-        dxdt_func = current_system.evaluate_f
+        dxdt_func = current_system.dxdt_fn
 
         state = np.array([precision(1.0)], dtype=precision)
         parameters = np.zeros(current_system.num_parameters, dtype=precision)

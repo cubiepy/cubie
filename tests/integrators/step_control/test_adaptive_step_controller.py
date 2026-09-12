@@ -303,7 +303,7 @@ def test_controller_build_produces_callable(step_controller):
     df = step_controller.device_function  # triggers build
     assert callable(df)
     # After build, cache holds the same object
-    assert step_controller._cache.device_function is df
+    assert step_controller._cache.step_controller_fn is df
 
 
 # ── Forwarding properties (items 71-78) ─────────────────────────── #
@@ -581,7 +581,7 @@ def test_controller_norm_mirrors_config_at_construction():
     )
     assert norm in list(ctrl._iter_child_factories())
     assert (
-        ctrl.compile_settings.norm_device_function is norm.device_function
+        ctrl.compile_settings.norm_fn is norm.device_function
     )
 
 
@@ -595,5 +595,5 @@ def test_controller_update_carries_into_norm():
     assert_array_equal(norm.atol, np.full(3, 1e-2))
     assert ctrl.mass_flags == (True, True, False)
     assert (
-        ctrl.compile_settings.norm_device_function is norm.device_function
+        ctrl.compile_settings.norm_fn is norm.device_function
     )

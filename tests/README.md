@@ -454,7 +454,7 @@ def test_norm_computation():
     ...
 
 # GOOD — uses a norm fixture derived from solver_settings
-def test_norm_computation(scaled_norm, ...):
+def test_norm_computation(norm_fn, ...):
     ...
 ```
 

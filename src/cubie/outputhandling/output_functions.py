@@ -103,21 +103,21 @@ class OutputFunctionCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    save_state_function
+    save_state_fn
         Compiled CUDA function for saving state values.
-    update_summaries_function
+    update_summaries_fn
         Compiled CUDA function for updating summary metrics.
-    save_summaries_function
+    save_summaries_fn
         Compiled CUDA function for saving summary results.
     """
 
-    save_state_function: Callable = field(
+    save_state_fn: Callable = field(
         validator=validators.instance_of(Callable)
     )
-    update_summaries_function: Callable = field(
+    update_summaries_fn: Callable = field(
         validator=validators.instance_of(Callable)
     )
-    save_summaries_function: Callable = field(
+    save_summaries_fn: Callable = field(
         validator=validators.instance_of(Callable)
     )
 
@@ -287,7 +287,7 @@ class OutputFunctions(CUDAFactory):
         )
 
         # Build functions using output sizes objects
-        save_state_func = save_state_factory(
+        save_state_fn = save_state_factory(
             config.saved_state_indices,
             config.saved_observable_indices,
             config.save_state,
@@ -307,7 +307,7 @@ class OutputFunctions(CUDAFactory):
             unroll=config.unroll.unroll_other_small,
         )
 
-        save_summary_metrics_func = save_summary_factory(
+        save_summaries_fn = save_summary_factory(
             config.summaries_buffer_height_per_var,
             config.summarised_state_indices,
             config.summarised_observable_indices,
@@ -317,20 +317,20 @@ class OutputFunctions(CUDAFactory):
         )
 
         return OutputFunctionCache(
-            save_state_function=save_state_func,
-            update_summaries_function=update_summary_metrics_func,
-            save_summaries_function=save_summary_metrics_func,
+            save_state_fn=save_state_fn,
+            update_summaries_fn=update_summary_metrics_func,
+            save_summaries_fn=save_summaries_fn,
         )
 
     @property
-    def save_state_func(self) -> Callable:
+    def save_state_fn(self) -> Callable:
         """Compiled state saving function."""
-        return self.get_cached_output("save_state_function")
+        return self.get_cached_output("save_state_fn")
 
     @property
-    def update_summaries_func(self) -> Callable:
+    def update_summaries_fn(self) -> Callable:
         """Compiled summary update function."""
-        return self.get_cached_output("update_summaries_function")
+        return self.get_cached_output("update_summaries_fn")
 
     @property
     def output_types(self) -> set[str]:
@@ -338,9 +338,9 @@ class OutputFunctions(CUDAFactory):
         return self.compile_settings.output_types
 
     @property
-    def save_summary_metrics_func(self) -> Callable:
+    def save_summaries_fn(self) -> Callable:
         """Compiled summary saving function."""
-        return self.get_cached_output("save_summaries_function")
+        return self.get_cached_output("save_summaries_fn")
 
     @property
     def compile_flags(self) -> OutputCompileFlags:

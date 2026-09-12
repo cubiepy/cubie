@@ -34,7 +34,7 @@ callbacks compose lives in `summarymetrics/`.
 
 ### The three compiled device functions
 `OutputFunctions` compiles and caches three device functions the loop calls (accessed via
-`save_state_func`, `update_summaries_func`, `save_summary_metrics_func`):
+`save_state_fn`, `update_summaries_fn`, `save_summaries_fn`):
 - **save-state** `(current_state, current_observables, current_counters, current_step,
   output_states_slice, output_observables_slice, output_counters_slice)` — writes the
   selected states, then the time value at slot `nstates` (if `save_time`), the selected
