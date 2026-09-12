@@ -1,0 +1,831 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.batchsolving.optimize &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/calibration.html">Calibration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/optimize.html">Optimisation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.batchsolving.optimize</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.batchsolving.optimize</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Backend of :meth:`cubie.Solver.optimize`: time unroll, placement and</span>
+<span class="sd">launch candidates on a solver copy and apply the fastest.</span>
+
+<span class="sd">Published Objects</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`LaunchResult`</span>
+<span class="sd">    One candidate's timings at one launch.</span>
+<span class="sd">:class:`OptimizeResult`</span>
+<span class="sd">    Every launch, the best one, and the applied settings.</span>
+<span class="sd">:func:`launch_candidates`</span>
+<span class="sd">    Launches a kernel can time.</span>
+<span class="sd">:func:`apply_launch`</span>
+<span class="sd">    Apply one launch to a solver.</span>
+<span class="sd">:func:`run_optimization`</span>
+<span class="sd">    Time a solver's candidates.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="kn">import</span> <span class="n">warn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">define</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">zeros</span> <span class="k">as</span> <span class="n">np_zeros</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.backend.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">active_blocks_per_multiprocessor</span><span class="p">,</span>
+    <span class="n">compile_kernel_specialization</span><span class="p">,</span>
+    <span class="n">kernel_resources</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.calibration</span><span class="w"> </span><span class="kn">import</span> <span class="n">_achieved_waves</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cache_root</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_cache_root_override</span><span class="p">,</span> <span class="n">set_cache_root</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="n">cuda</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.time_logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_timelogger</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">WORKERS</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="sd">"""Parallel compile processes pre-warming the kernel cache."""</span>
+
+<span class="n">TIMED_SOLVES</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="sd">"""Timed solves per launch per round."""</span>
+
+<span class="n">ROUNDS</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="sd">"""Timing rounds; the second visits the launches in reverse order."""</span>
+
+<span class="n">EXCLUSION_RATIO</span> <span class="o">=</span> <span class="mf">2.0</span>
+<span class="sd">"""Launches whose first solve exceeds this multiple of the fastest drop."""</span>
+
+<span class="n">LOCAL_LAUNCH_BLOCKSIZES</span> <span class="o">=</span> <span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+<span class="sd">"""Block sizes timed for local-only kernels."""</span>
+
+<span class="n">SHARED_LAUNCH_BLOCKSIZES</span> <span class="o">=</span> <span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+<span class="sd">"""Block sizes timed for shared-memory kernels."""</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_label</span><span class="p">(</span><span class="n">settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a short name for a candidate's settings."""</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">"unroll_"</span><span class="p">)</span><span class="o">.</span><span class="n">removesuffix</span><span class="p">(</span><span class="s2">"_location"</span><span class="p">)</span>
+        <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">"current"</span>
+
+
+<div class="viewcode-block" id="LaunchResult">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/optimize.html#cubie.batchsolving.optimize.LaunchResult">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LaunchResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Timings of one candidate at one launch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    settings</span>
+<span class="sd">        The candidate's unroll and placement settings.</span>
+<span class="sd">    blocksize</span>
+<span class="sd">        Threads per block of the launch.</span>
+<span class="sd">    resident_blocks</span>
+<span class="sd">        Blocks per SM held resident; ``None`` = the default residency.</span>
+<span class="sd">    blocks_per_sm</span>
+<span class="sd">        Resident blocks per SM the driver reported.</span>
+<span class="sd">    times_ms</span>
+<span class="sd">        Timed solve times in milliseconds.</span>
+<span class="sd">    excluded</span>
+<span class="sd">        Whether the first solve exceeded the exclusion ratio.</span>
+<span class="sd">    """</span>
+
+    <span class="n">settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">blocksize</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">resident_blocks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="n">blocks_per_sm</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">times_ms</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">excluded</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">timed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the launch has a ranking time."""</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times_ms</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">excluded</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">best_ms</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Lowest solve time, ``inf`` when never solved."""</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times_ms</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">times_ms</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">label</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Candidate settings and launch as one line."""</span>
+        <span class="n">resident</span> <span class="o">=</span> <span class="s2">""</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">resident_blocks</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">" x</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">resident_blocks</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_label</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span><span class="si">}</span><span class="s2"> @bs</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">blocksize</span><span class="si">}{</span><span class="n">resident</span><span class="si">}</span><span class="s2">"</span></div>
+
+
+
+<div class="viewcode-block" id="OptimizeResult">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/optimize.html#cubie.batchsolving.optimize.OptimizeResult">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OptimizeResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Complete optimisation report.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    launches</span>
+<span class="sd">        Every launch measured, in run order.</span>
+<span class="sd">    best</span>
+<span class="sd">        Fastest launch, or ``None`` when nothing was timed.</span>
+<span class="sd">    applied_settings</span>
+<span class="sd">        Settings applied to the calling solver, empty when none.</span>
+<span class="sd">    """</span>
+
+    <span class="n">launches</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">LaunchResult</span><span class="p">]</span>
+    <span class="n">best</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">LaunchResult</span><span class="p">]</span>
+    <span class="n">applied_settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ranking</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">LaunchResult</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Every timed launch, fastest first."""</span>
+        <span class="n">timed</span> <span class="o">=</span> <span class="p">[</span><span class="n">launch</span> <span class="k">for</span> <span class="n">launch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">launches</span> <span class="k">if</span> <span class="n">launch</span><span class="o">.</span><span class="n">timed</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">timed</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">launch</span><span class="p">:</span> <span class="n">launch</span><span class="o">.</span><span class="n">best_ms</span><span class="p">)</span>
+
+<div class="viewcode-block" id="OptimizeResult.summary">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/optimize.html#cubie.batchsolving.optimize.OptimizeResult.summary">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a formatted table of every launch measurement."""</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'launch'</span><span class="si">:</span><span class="s2">&lt;48</span><span class="si">}{</span><span class="s1">'blk/SM'</span><span class="si">:</span><span class="s2">&gt;8</span><span class="si">}{</span><span class="s1">'best ms'</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2">  note"</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">header</span><span class="p">,</span> <span class="s2">"-"</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">header</span><span class="p">)]</span>
+        <span class="n">ranks</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="nb">id</span><span class="p">(</span><span class="n">launch</span><span class="p">):</span> <span class="n">position</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="k">for</span> <span class="n">position</span><span class="p">,</span> <span class="n">launch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ranking</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">launch</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">launches</span><span class="p">:</span>
+            <span class="n">best</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">launch</span><span class="o">.</span><span class="n">best_ms</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span>
+            <span class="k">if</span> <span class="n">launch</span><span class="o">.</span><span class="n">excluded</span><span class="p">:</span>
+                <span class="n">note</span> <span class="o">=</span> <span class="s2">"excluded"</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">rank</span> <span class="o">=</span> <span class="n">ranks</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">launch</span><span class="p">))</span>
+                <span class="n">note</span> <span class="o">=</span> <span class="s2">"best"</span> <span class="k">if</span> <span class="n">rank</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">"rank </span><span class="si">{</span><span class="n">rank</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">launch</span><span class="o">.</span><span class="n">label</span><span class="si">:</span><span class="s2">&lt;48</span><span class="si">}{</span><span class="n">launch</span><span class="o">.</span><span class="n">blocks_per_sm</span><span class="si">:</span><span class="s2">&gt;8</span><span class="si">}</span><span class="s2">"</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">best</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">note</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">launch_candidates</span><span class="p">(</span>
+    <span class="n">kernel</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">blocksizes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the ``(blocksize, resident_blocks)`` launches worth timing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kernel</span>
+<span class="sd">        A compiled :class:`~cubie.batchsolving.BatchSolverKernel`.</span>
+<span class="sd">    blocksizes</span>
+<span class="sd">        Block sizes to consider; ``None`` picks the measured set for</span>
+<span class="sd">        shared-memory or local-only kernels.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple</span>
+<span class="sd">        Launchable block sizes at the default residency, plus one and</span>
+<span class="sd">        two blocks under natural occupancy for local frames.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">blocksizes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">blocksizes</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">SHARED_LAUNCH_BLOCKSIZES</span>
+            <span class="k">if</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shared_memory_bytes</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="k">else</span> <span class="n">LOCAL_LAUNCH_BLOCKSIZES</span>
+        <span class="p">)</span>
+    <span class="n">runs</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">run_params</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">runs</span>
+    <span class="n">pad</span> <span class="o">=</span> <span class="mi">4</span> <span class="k">if</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shared_memory_needs_padding</span> <span class="k">else</span> <span class="mi">0</span>
+    <span class="n">padded_bytes</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">shared_memory_bytes</span> <span class="o">+</span> <span class="n">pad</span>
+    <span class="n">dispatcher</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">kernel</span>
+    <span class="n">compile_kernel_specialization</span><span class="p">(</span>
+        <span class="n">dispatcher</span><span class="p">,</span> <span class="n">kernel</span><span class="o">.</span><span class="n">_kernel_launch_args</span><span class="p">(</span><span class="n">kernel</span><span class="o">.</span><span class="n">run_params</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="p">)</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">kernel_resources</span><span class="p">(</span><span class="n">dispatcher</span><span class="p">)</span><span class="o">.</span><span class="n">local_bytes_per_thread</span>
+    <span class="n">cells</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">blocksize</span> <span class="ow">in</span> <span class="n">blocksizes</span><span class="p">:</span>
+        <span class="n">actual</span><span class="p">,</span> <span class="n">dynamic_sharedmem</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">limit_blocksize</span><span class="p">(</span>
+            <span class="n">blocksize</span><span class="p">,</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">padded_bytes</span> <span class="o">*</span> <span class="nb">min</span><span class="p">(</span><span class="n">runs</span><span class="p">,</span> <span class="n">blocksize</span><span class="p">)),</span>
+            <span class="n">padded_bytes</span><span class="p">,</span>
+            <span class="n">runs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># A block size the shared footprint cannot launch is skipped.</span>
+        <span class="k">if</span> <span class="n">actual</span> <span class="o">!=</span> <span class="n">blocksize</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">cells</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">blocksize</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">natural</span> <span class="o">=</span> <span class="n">active_blocks_per_multiprocessor</span><span class="p">(</span>
+            <span class="n">dispatcher</span><span class="p">,</span> <span class="n">blocksize</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">dynamic_sharedmem</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">cut</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">natural</span> <span class="o">-</span> <span class="n">cut</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">cells</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">blocksize</span><span class="p">,</span> <span class="n">natural</span> <span class="o">-</span> <span class="n">cut</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">cells</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">apply_launch</span><span class="p">(</span><span class="n">parent</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">launch</span><span class="p">:</span> <span class="n">LaunchResult</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Apply a launch's settings, block size and residency to ``parent``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        The settings passed to ``parent.update``.</span>
+<span class="sd">    """</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">launch</span><span class="o">.</span><span class="n">settings</span><span class="p">,</span> <span class="s2">"blocksize"</span><span class="p">:</span> <span class="n">launch</span><span class="o">.</span><span class="n">blocksize</span><span class="p">}</span>
+    <span class="n">parent</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+    <span class="n">parent</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">resident_blocks</span> <span class="o">=</span> <span class="n">launch</span><span class="o">.</span><span class="n">resident_blocks</span>
+    <span class="k">return</span> <span class="n">settings</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compile_candidate</span><span class="p">(</span><span class="n">payload</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Compile one candidate in a worker process; return its hash."""</span>
+    <span class="p">(</span>
+        <span class="n">label</span><span class="p">,</span>
+        <span class="n">system_bytes</span><span class="p">,</span>
+        <span class="n">settings</span><span class="p">,</span>
+        <span class="n">candidate</span><span class="p">,</span>
+        <span class="n">n_runs</span><span class="p">,</span>
+        <span class="n">drivers</span><span class="p">,</span>
+        <span class="n">duration</span><span class="p">,</span>
+        <span class="n">settling_time</span><span class="p">,</span>
+        <span class="n">t0</span><span class="p">,</span>
+        <span class="n">cache_root</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">=</span> <span class="n">payload</span>
+    <span class="k">if</span> <span class="n">cache_root</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">set_cache_root</span><span class="p">(</span><span class="n">cache_root</span><span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.solver</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span>
+
+    <span class="n">system</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">system_bytes</span><span class="p">)</span>
+    <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="n">settings</span><span class="p">,</span> <span class="o">**</span><span class="n">candidate</span><span class="p">})</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">sizes</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">sizes</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+            <span class="n">np_zeros</span><span class="p">((</span><span class="n">sizes</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> <span class="n">n_runs</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">system</span><span class="o">.</span><span class="n">precision</span><span class="p">),</span>
+            <span class="n">np_zeros</span><span class="p">((</span><span class="n">sizes</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span> <span class="n">n_runs</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">system</span><span class="o">.</span><span class="n">precision</span><span class="p">),</span>
+            <span class="n">drivers</span><span class="o">=</span><span class="n">drivers</span><span class="p">,</span>
+            <span class="n">duration</span><span class="o">=</span><span class="n">duration</span><span class="p">,</span>
+            <span class="n">settling_time</span><span class="o">=</span><span class="n">settling_time</span><span class="p">,</span>
+            <span class="n">t0</span><span class="o">=</span><span class="n">t0</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">label</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">config_hash</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_OptimizeRunner</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compile and time the candidate launches on a solver copy."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">twin</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">inits</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">drivers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_twin</span> <span class="o">=</span> <span class="n">twin</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inits</span> <span class="o">=</span> <span class="n">cuda</span><span class="o">.</span><span class="n">to_device</span><span class="p">(</span><span class="n">inits</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="n">cuda</span><span class="o">.</span><span class="n">to_device</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_runs</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">inits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_drivers</span> <span class="o">=</span> <span class="n">drivers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_duration</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">duration</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_settling</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">settling_time</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">t0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">verbose</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fastest_ms</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">achieved_waves</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_emit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">compile_candidates</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">parent</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">candidates</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Pre-warm the kernel cache with every candidate in workers."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">parent</span><span class="o">.</span><span class="n">cache_enabled</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">settings_dict</span>
+        <span class="n">system_bytes</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">system</span><span class="p">)</span>
+        <span class="n">payloads</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span>
+                <span class="n">_label</span><span class="p">(</span><span class="n">candidate</span><span class="p">),</span>
+                <span class="n">system_bytes</span><span class="p">,</span>
+                <span class="n">settings</span><span class="p">,</span>
+                <span class="n">candidate</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_n_runs</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_drivers</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_duration</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_settling</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span><span class="p">,</span>
+                <span class="n">get_cache_root_override</span><span class="p">(),</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span>
+        <span class="p">]</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"spawn"</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">context</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">WORKERS</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">candidates</span><span class="p">)))</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">config_hash</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">imap_unordered</span><span class="p">(</span>
+                <span class="n">_compile_candidate</span><span class="p">,</span> <span class="n">payloads</span>
+            <span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">: worker compiled </span><span class="si">{</span><span class="n">config_hash</span><span class="p">[:</span><span class="mi">12</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidate</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply a candidate to the twin and compile it."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_twin</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_twin</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_inits</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
+            <span class="n">duration</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_duration</span><span class="p">,</span>
+            <span class="n">settling_time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_settling</span><span class="p">,</span>
+            <span class="n">t0</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_t0</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_solve_ms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">launch</span><span class="p">:</span> <span class="n">LaunchResult</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run one solve at ``launch`` and return its kernel milliseconds."""</span>
+        <span class="n">twin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_twin</span>
+        <span class="n">twin</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_inits</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
+            <span class="n">duration</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_duration</span><span class="p">,</span>
+            <span class="n">settling_time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_settling</span><span class="p">,</span>
+            <span class="n">t0</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_t0</span><span class="p">,</span>
+            <span class="n">blocksize</span><span class="o">=</span><span class="n">launch</span><span class="o">.</span><span class="n">blocksize</span><span class="p">,</span>
+            <span class="n">on_device</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">twin</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span>
+            <span class="nb">sum</span><span class="p">(</span>
+                <span class="n">event</span><span class="o">.</span><span class="n">elapsed_time_ms</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">twin</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">_cuda_events</span>
+                <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"kernel_chunk"</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">time_candidates</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">candidates</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">blocksizes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">LaunchResult</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Time every launch of every candidate in ABBA order."""</span>
+        <span class="n">verbosity</span> <span class="o">=</span> <span class="n">default_timelogger</span><span class="o">.</span><span class="n">verbosity</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="s2">"silent"</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_candidates</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="n">blocksizes</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">default_timelogger</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="n">verbosity</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_time_candidates</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">candidates</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">blocksizes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">LaunchResult</span><span class="p">]:</span>
+        <span class="n">twin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_twin</span>
+        <span class="n">launches</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_select</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">blocksize</span><span class="p">,</span> <span class="n">resident</span> <span class="ow">in</span> <span class="n">launch_candidates</span><span class="p">(</span>
+                <span class="n">twin</span><span class="o">.</span><span class="n">kernel</span><span class="p">,</span> <span class="n">blocksizes</span>
+            <span class="p">):</span>
+                <span class="n">launches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">LaunchResult</span><span class="p">(</span>
+                        <span class="n">settings</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">candidate</span><span class="p">),</span>
+                        <span class="n">blocksize</span><span class="o">=</span><span class="n">blocksize</span><span class="p">,</span>
+                        <span class="n">resident_blocks</span><span class="o">=</span><span class="n">resident</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">round_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ROUNDS</span><span class="p">):</span>
+            <span class="n">ordered</span> <span class="o">=</span> <span class="n">launches</span> <span class="k">if</span> <span class="n">round_index</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">launches</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">launch</span> <span class="ow">in</span> <span class="n">ordered</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">launch</span><span class="o">.</span><span class="n">excluded</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">launch</span><span class="o">.</span><span class="n">settings</span> <span class="o">!=</span> <span class="n">current</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_select</span><span class="p">(</span><span class="n">launch</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
+                    <span class="n">current</span> <span class="o">=</span> <span class="n">launch</span><span class="o">.</span><span class="n">settings</span>
+                <span class="n">twin</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">resident_blocks</span> <span class="o">=</span> <span class="n">launch</span><span class="o">.</span><span class="n">resident_blocks</span>
+                <span class="k">if</span> <span class="n">round_index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">blocksize</span><span class="p">,</span> <span class="n">dynamic</span> <span class="o">=</span> <span class="n">twin</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">launch_geometry</span><span class="p">(</span>
+                        <span class="n">launch</span><span class="o">.</span><span class="n">blocksize</span>
+                    <span class="p">)</span>
+                    <span class="n">launch</span><span class="o">.</span><span class="n">blocks_per_sm</span> <span class="o">=</span> <span class="n">active_blocks_per_multiprocessor</span><span class="p">(</span>
+                        <span class="n">twin</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">kernel</span><span class="p">,</span> <span class="n">blocksize</span><span class="p">,</span> <span class="n">dynamic</span>
+                    <span class="p">)</span>
+                <span class="n">first</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solve_ms</span><span class="p">(</span><span class="n">launch</span><span class="p">)</span>
+                <span class="n">launch</span><span class="o">.</span><span class="n">times_ms</span> <span class="o">+=</span> <span class="p">(</span><span class="n">first</span><span class="p">,)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">achieved_waves</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_probe_waves</span><span class="p">(</span><span class="n">launch</span><span class="p">)</span>
+                <span class="c1"># A first solve far behind the fastest ends the launch.</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">launch</span><span class="o">.</span><span class="n">times_ms</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="p">(</span>
+                    <span class="n">first</span> <span class="o">&gt;</span> <span class="n">EXCLUSION_RATIO</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fastest_ms</span>
+                <span class="p">):</span>
+                    <span class="n">launch</span><span class="o">.</span><span class="n">excluded</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">launch</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: excluded, </span><span class="si">{</span><span class="n">first</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ms"</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">TIMED_SOLVES</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+                    <span class="n">launch</span><span class="o">.</span><span class="n">times_ms</span> <span class="o">+=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_solve_ms</span><span class="p">(</span><span class="n">launch</span><span class="p">),)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_fastest_ms</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fastest_ms</span><span class="p">,</span> <span class="n">launch</span><span class="o">.</span><span class="n">best_ms</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">launch</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">launch</span><span class="o">.</span><span class="n">best_ms</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ms"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">launches</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_probe_waves</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">launch</span><span class="p">:</span> <span class="n">LaunchResult</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Record achieved occupancy waves; warn once when under two."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">achieved_waves</span> <span class="o">=</span> <span class="n">_achieved_waves</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_twin</span><span class="p">,</span> <span class="n">launch</span><span class="o">.</span><span class="n">blocksize</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">achieved_waves</span> <span class="o">&lt;</span> <span class="mf">2.0</span><span class="p">:</span>
+            <span class="n">more</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">achieved_waves</span>
+            <span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"The batch passed to optimize only fills "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">achieved_waves</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> occupancy waves; the results "</span>
+                <span class="s2">"might not represent the best timing for your system. "</span>
+                <span class="sa">f</span><span class="s2">"Try again with </span><span class="si">{</span><span class="n">more</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">x more runs in the batch and "</span>
+                <span class="s2">"force=True to get the fastest full-GPU batch settings."</span>
+            <span class="p">)</span>
+
+
+<div class="viewcode-block" id="run_optimization">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/optimize.html#cubie.batchsolving.optimize.run_optimization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">run_optimization</span><span class="p">(</span>
+    <span class="n">parent</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">initial_values</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">drivers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"verbatim"</span><span class="p">,</span>
+    <span class="n">apply</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OptimizeResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Time the solver's candidate kernels on a copy; apply the fastest.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parent</span>
+<span class="sd">        The configured :class:`~cubie.batchsolving.solver.Solver`.</span>
+<span class="sd">    initial_values</span>
+<span class="sd">        Initial state values for each run, as accepted by</span>
+<span class="sd">        :meth:`Solver.solve`.</span>
+<span class="sd">    parameters</span>
+<span class="sd">        Parameter values for each run, as accepted by</span>
+<span class="sd">        :meth:`Solver.solve`.</span>
+<span class="sd">    drivers</span>
+<span class="sd">        Time-domain sampled driver values.</span>
+<span class="sd">    duration</span>
+<span class="sd">        Integration time each timed solve runs.</span>
+<span class="sd">    settling_time</span>
+<span class="sd">        Warm-up period before recording outputs.</span>
+<span class="sd">    t0</span>
+<span class="sd">        Initial integration time.</span>
+<span class="sd">    grid_type</span>
+<span class="sd">        Grid strategy when dict inputs trigger grid construction.</span>
+<span class="sd">    apply</span>
+<span class="sd">        Apply the best launch's settings to ``parent`` when ``True``.</span>
+<span class="sd">    verbose</span>
+<span class="sd">        Print per-launch progress lines.</span>
+<span class="sd">    force</span>
+<span class="sd">        Vary the settings given explicitly or applied earlier too.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    OptimizeResult</span>
+<span class="sd">        Best launch, every measurement, and the applied settings.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the system declares drivers but none are supplied.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">parent</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">sizes</span><span class="o">.</span><span class="n">drivers</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">drivers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"The system declares drivers; optimize requires the driver "</span>
+            <span class="s2">"samples that solves will use."</span>
+        <span class="p">)</span>
+    <span class="n">inits</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">build_grid</span><span class="p">(</span>
+        <span class="n">initial_values</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="n">grid_type</span><span class="o">=</span><span class="n">grid_type</span>
+    <span class="p">)</span>
+    <span class="n">candidates</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">single_integrator</span><span class="o">.</span><span class="n">optimisation_candidates</span><span class="p">(</span>
+        <span class="n">force</span><span class="o">=</span><span class="n">force</span>
+    <span class="p">)</span>
+    <span class="n">blocksizes</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">parent</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">blocksize</span><span class="p">,)</span>
+        <span class="k">if</span> <span class="n">parent</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">blocksize_given</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span>
+        <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
+    <span class="n">twin</span> <span class="o">=</span> <span class="n">parent</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">drivers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">twin</span><span class="o">.</span><span class="n">_configure_drivers</span><span class="p">(</span><span class="n">drivers</span><span class="p">)</span>
+        <span class="n">runner</span> <span class="o">=</span> <span class="n">_OptimizeRunner</span><span class="p">(</span>
+            <span class="n">twin</span><span class="p">,</span> <span class="n">inits</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">drivers</span><span class="p">,</span> <span class="n">duration</span><span class="p">,</span> <span class="n">settling_time</span><span class="p">,</span> <span class="n">t0</span><span class="p">,</span> <span class="n">verbose</span>
+        <span class="p">)</span>
+        <span class="n">runner</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"optimize: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span><span class="si">}</span><span class="s2"> candidate kernels"</span><span class="p">)</span>
+        <span class="n">runner</span><span class="o">.</span><span class="n">compile_candidates</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">candidates</span><span class="p">)</span>
+        <span class="n">launches</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">time_candidates</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="n">blocksizes</span><span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">twin</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">ranking</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">launch</span> <span class="k">for</span> <span class="n">launch</span> <span class="ow">in</span> <span class="n">launches</span> <span class="k">if</span> <span class="n">launch</span><span class="o">.</span><span class="n">timed</span><span class="p">),</span>
+        <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">launch</span><span class="p">:</span> <span class="n">launch</span><span class="o">.</span><span class="n">best_ms</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">best</span> <span class="o">=</span> <span class="n">ranking</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">ranking</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">applied_settings</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">best</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">apply</span><span class="p">:</span>
+        <span class="n">applied_settings</span> <span class="o">=</span> <span class="n">apply_launch</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">best</span><span class="p">)</span>
+        <span class="n">runner</span><span class="o">.</span><span class="n">_emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"applied: </span><span class="si">{</span><span class="n">best</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2"> -&gt; parent solver"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">OptimizeResult</span><span class="p">(</span>
+        <span class="n">launches</span><span class="o">=</span><span class="n">launches</span><span class="p">,</span> <span class="n">best</span><span class="o">=</span><span class="n">best</span><span class="p">,</span> <span class="n">applied_settings</span><span class="o">=</span><span class="n">applied_settings</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
