@@ -194,6 +194,15 @@ def _system_from_equations(
     )
 
 
+def _unroll_flags_as_settings(
+    unroll: Optional[UnrollFlags],
+) -> Dict[str, Any]:
+    """Return an ``UnrollFlags`` as the loose ``unroll_*`` keys it sets."""
+    if unroll is None:
+        return {}
+    return {key: getattr(unroll, key) for key in ALL_UNROLL_PARAMETERS}
+
+
 def _check_renamed_kwargs(keys: Iterable[str]) -> None:
     """Raise ``KeyError`` for legacy keyword spellings with rename hints.
 
@@ -475,10 +484,8 @@ class Solver:
         unroll_settings, unroll_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_UNROLL_PARAMETERS,
-            user_settings={},
+            user_settings=_unroll_flags_as_settings(unroll),
         )
-        if unroll is not None:
-            unroll_settings["unroll"] = unroll
         system_settings, system_recognized = merge_kwargs_into_settings(
             kwargs=kwargs,
             valid_keys=ALL_ODE_PARAMETERS,
@@ -1083,6 +1090,10 @@ class Solver:
             return set()
 
         _check_renamed_kwargs(updates_dict)
+        unroll_given = "unroll" in updates_dict
+        if unroll_given:
+            flags = _unroll_flags_as_settings(updates_dict.pop("unroll"))
+            updates_dict = {**flags, **updates_dict}
 
         # Keep the recorded selection current for re-resolution.
         for key in _OUTPUT_SELECTION_KEYS:
@@ -1108,6 +1119,8 @@ class Solver:
         self._refresh_output_selection()
 
         recognised = set(updates_dict.keys()) - all_unrecognized
+        if unroll_given:
+            recognised.add("unroll")
         if recognised:
             self._solve_info_key = None
 

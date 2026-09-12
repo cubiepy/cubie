@@ -139,6 +139,8 @@ class ERKStepConfig(ExplicitStepConfig):
 class ERKStep(ODEExplicitStep):
     """Generic explicit Runge--Kutta step with configurable tableaus."""
 
+    algorithm_family = "erk"
+
     def __init__(
         self,
         precision: PrecisionDType,
@@ -210,7 +212,7 @@ class ERKStep(ODEExplicitStep):
         >>> from cubie.integrators.algorithms.generic_erk import ERKStep
         >>> import numpy as np
         >>> step = ERKStep(precision=np.float32,n_states=3)
-        >>> step.algorithm_defaults["step_controller"]
+        >>> step.algorithm_defaults.settings["step_controller"]
         'i'
 
         Create an ERK step with Classical RK4 (errorless):
@@ -221,7 +223,7 @@ class ERKStep(ODEExplicitStep):
         >>> step = ERKStep(
         ...     precision=np.float32, n_states=3, tableau=CLASSICAL_RK4_TABLEAU
         ... )
-        >>> step.algorithm_defaults["step_controller"]
+        >>> step.algorithm_defaults.settings["step_controller"]
         'fixed'
         """
         config = build_config(

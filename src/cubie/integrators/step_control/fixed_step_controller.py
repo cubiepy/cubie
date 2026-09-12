@@ -26,16 +26,22 @@ See Also
     Base configuration class.
 """
 
+from typing import Optional
+
 from attrs import field, frozen
+from numpy import sqrt
 from cubie.cuda_simsafe import cuda, int32
 from cubie.result_codes import CUBIE_RESULT_CODES
 
-from cubie._utils import getype_validator
+from cubie._utils import opt_getype_validator
 from cubie.integrators.step_control.base_step_controller import (
     BaseStepControllerConfig,
     BaseStepController,
     ControllerCache,
 )
+
+DEFAULT_FIXED_DT = 1e-3
+"""Fixed step when no ``dt`` or bound is given."""
 
 
 @frozen
@@ -56,20 +62,24 @@ class FixedStepControlConfig(BaseStepControllerConfig):
         Relative tolerance vector, on the same terms as ``atol``.
     """
 
-    _dt: float = field(default=1e-3, validator=getype_validator(float, 0))
-
-    def __attrs_post_init__(self) -> None:
-        """Validate configuration after initialisation."""
-        super().__attrs_post_init__()
-        self._validate_config()
-
-    def _validate_config(self) -> None:
-        """Confirm that the configuration is internally consistent."""
+    _dt_min: Optional[float] = field(
+        default=None, validator=opt_getype_validator(float, 0)
+    )
+    _dt_max: Optional[float] = field(
+        default=None, validator=opt_getype_validator(float, 0)
+    )
 
     @property
     def dt(self) -> float:
-        """Return the fixed step size."""
-        return self.precision(self._dt)
+        """Given, else the bounds' geometric mean, else a bound, else 1e-3."""
+        if self._dt is not None:
+            return self.precision(self._dt)
+        if self._dt_min is not None and self._dt_max is not None:
+            return self.precision(sqrt(self._dt_min * self._dt_max))
+        for value in (self._dt_min, self._dt_max):
+            if value is not None:
+                return self.precision(value)
+        return self.precision(DEFAULT_FIXED_DT)
 
     @property
     def dt_min(self) -> float:
@@ -92,24 +102,6 @@ class FixedStepController(BaseStepController):
     """Controller that enforces a constant time step."""
 
     _config_class = FixedStepControlConfig
-
-    def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
-        """Collapse dt_min/dt_max to dt for fixed-step control.
-
-        Parameters
-        ----------
-        dt
-            Fixed step size, or None if not provided.
-        kwargs
-            Mutable dict of keyword arguments. Modified in place.
-        """
-        dt_min = kwargs.pop("dt_min", None)
-        dt_max = kwargs.pop("dt_max", None)
-
-        resolved = dt or dt_min or dt_max
-        if resolved is not None:
-            self._user_step_params["dt"] = resolved
-            kwargs["dt"] = resolved
 
     def build(self) -> ControllerCache:
         """Return a device function that always accepts with fixed step.

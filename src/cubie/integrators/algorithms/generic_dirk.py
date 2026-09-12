@@ -183,6 +183,8 @@ class DIRKStepConfig(ImplicitStepConfig):
 class DIRKStep(ODEImplicitStep):
     """Diagonally implicit Runge–Kutta step with an embedded error estimate."""
 
+    algorithm_family = "dirk"
+
     def __init__(
         self,
         precision: PrecisionDType,
@@ -278,6 +280,7 @@ class DIRKStep(ODEImplicitStep):
             **kwargs,
         )
         self.register_buffers()
+        self.wire_helpers()
 
     def _build_error_solver(self) -> None:
         """Construct the width-n smoothing solver from live settings."""
@@ -384,7 +387,7 @@ class DIRKStep(ODEImplicitStep):
             persistent=True,
         )
 
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by wire_helpers.
         buffer_registry.register(
             'cached_auxiliaries',
             self,
@@ -417,12 +420,10 @@ class DIRKStep(ODEImplicitStep):
             aliases='solver_shared' if self.smooth_error else None,
         )
 
-    def build_implicit_helpers(
-        self,
-    ) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+    def wire_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
-        super().build_implicit_helpers()
+        super().wire_helpers()
 
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()

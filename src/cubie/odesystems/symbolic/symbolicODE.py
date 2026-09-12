@@ -634,6 +634,7 @@ class SymbolicODE(BaseODE):
             lineinfo=lineinfo,
         )
 
+        sizes = self.sizes
         return ODECache(
             dxdt_fn=dxdt_func,
             observables_fn=observables_fn,
@@ -643,6 +644,13 @@ class SymbolicODE(BaseODE):
                     observables_fn
                 ),
             ),
+            get_solver_helper_fn=self.get_solver_helper,
+            n_states=int(sizes.states),
+            n_parameters=int(sizes.parameters),
+            n_observables=int(sizes.observables),
+            n_drivers=int(sizes.drivers),
+            mass_flags=tuple(self.mass_diagonal_flags),
+            precision=self.precision,
         )
 
     def _specialise(

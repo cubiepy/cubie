@@ -195,6 +195,29 @@ class IVPLoop(CUDAFactory):
     """
 
     settings_keys = frozenset(ALL_LOOP_SETTINGS)
+    injected_keys = frozenset(
+        {
+            "precision",
+            "n_states",
+            "n_parameters",
+            "n_drivers",
+            "n_observables",
+            "n_error",
+            "n_counters",
+            "state_summaries_buffer_height",
+            "observable_summaries_buffer_height",
+            "compile_flags",
+            "save_every",
+            "summarise_every",
+            "sample_summaries_every",
+            "save_last",
+            "save_regularly",
+            "summarise_regularly",
+            "dt",
+            "is_adaptive",
+            "state_location",
+        }
+    )
 
     def __init__(
         self,

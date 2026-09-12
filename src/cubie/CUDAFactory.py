@@ -132,11 +132,8 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
 
 @cache
 def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields whose declared type is an attrs class.
-
-    ``Optional``/``Union`` annotations are unwrapped so an optional
-    nested config still participates in recursive updates.
-    """
+    """Return fields typed as attrs classes with ``update``; unwraps
+    ``Optional``."""
     from typing import Union, get_args, get_origin
 
     nested = []
@@ -145,7 +142,11 @@ def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
         if get_origin(fld.type) is Union:
             candidates = get_args(fld.type)
         for candidate in candidates:
-            if isinstance(candidate, type) and has(candidate):
+            if (
+                isinstance(candidate, type)
+                and has(candidate)
+                and callable(getattr(candidate, "update", None))
+            ):
                 nested.append(fld)
                 break
     return tuple(nested)
@@ -441,6 +442,9 @@ class CUDAFactory(ABC):
     settings_keys: Optional[frozenset] = None
     """Loose keys the factory accepts; ``None`` accepts every field."""
 
+    injected_keys: frozenset = frozenset()
+    """Keys a parent writes; dropped from the parent's merged settings."""
+
     def __init__(self):
         """Initialize the CUDA factory."""
         self._compile_settings = None
@@ -449,14 +453,21 @@ class CUDAFactory(ABC):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the keyword arguments that rebuild this configuration."""
+        """Return ``init_kwargs`` within ``settings_keys``, minus ``None``."""
         settings = self.compile_settings.init_kwargs
-        if self.settings_keys is None:
-            return settings
         return {
             key: value
             for key, value in settings.items()
-            if key in self.settings_keys
+            if value is not None
+            and (self.settings_keys is None or key in self.settings_keys)
+        }
+
+    def child_settings(self, child: "CUDAFactory") -> Dict[str, Any]:
+        """Return ``child.settings_dict`` minus ``child.injected_keys``."""
+        return {
+            key: value
+            for key, value in child.settings_dict.items()
+            if key not in child.injected_keys
         }
 
     def copy(self) -> "CUDAFactory":
@@ -607,6 +618,10 @@ class CUDAFactory(ABC):
                 "build() must return an attrs class (CUDADispatcherCache "
                 "subclass)"
             )
+        # Product fields mirror the factory's same-named properties.
+        for fld in fields(type(build_result)):
+            if fld.metadata.get("product"):
+                setattr(build_result, fld.name, getattr(self, fld.name))
 
         self._cache = build_result
         self._cache_valid = True

@@ -13,7 +13,7 @@ from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
 )
 
 
-def test_errorless_tableau_selects_fixed_controller_defaults():
+def test_errorless_tableau_selects_fixed_controller_defaults(system):
     """A Rosenbrock tableau without an error estimate selects the fixed
 
     step-controller defaults instead of the adaptive PI defaults.
@@ -24,15 +24,17 @@ def test_errorless_tableau_selects_fixed_controller_defaults():
     assert errorless_tableau.has_error_estimate is False
 
     step = GenericRosenbrockWStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float32, n_states=3, tableau=errorless_tableau,
     )
     defaults = step.controller_default_settings
     assert defaults["step_controller"] == "fixed"
 
 
-def test_shared_stage_increment_gets_its_own_window():
+def test_shared_stage_increment_gets_its_own_window(system):
     """Shared stage_increment gets a window disjoint from stage_store."""
     step = GenericRosenbrockWStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float32,
         n_states=3,
         tableau=ROS3P_TABLEAU,
@@ -48,25 +50,20 @@ def test_shared_stage_increment_gets_its_own_window():
     )
 
 
-def test_cached_auxiliaries_sized_after_helper_refresh(precision, system):
-    """The auxiliary cache is registered at zero size and takes its
-
-    real size from prepare_jac's HelperResult during the helper
-    refresh; the step keeps no ambient auxiliary-count state.
+def test_cached_auxiliaries_sized_by_the_helper(precision, system):
+    """The auxiliary cache takes its size from prepare_jac's
+    HelperResult when the helpers are wired at construction; the step
+    keeps no ambient auxiliary-count state.
     """
     step = GenericRosenbrockWStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=precision,
         n_states=system.sizes.states,
         dxdt_fn=system.dxdt_fn,
         observables_fn=system.observables_fn,
-        get_solver_helper_fn=system.get_solver_helper,
         tableau=DEFAULT_ROSENBROCK_TABLEAU,
     )
-    entry = buffer_registry._groups[step].entries["cached_auxiliaries"]
-    assert entry.size == 0
     assert not hasattr(step, "_cached_auxiliary_count")
-
-    step.build_implicit_helpers()
 
     expected = system.get_solver_helper(
         role="prepare_jac", jacobian_at="step"

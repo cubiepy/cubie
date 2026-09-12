@@ -35,7 +35,7 @@ See Also
     Configuration for this step.
 """
 
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 from attrs import field, validators, frozen
 from numpy import int32 as np_int32
@@ -50,8 +50,8 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
-    StepCache,
     AlgorithmDefaults,
+    StepCache,
 )
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     DEFAULT_FIRK_TABLEAU,
@@ -97,10 +97,6 @@ FIRK_FIXED_DEFAULTS = AlgorithmDefaults(
     }
 )
 """Defaults for errorless FIRK tableaus."""
-
-SHARED_STAGE_INCREMENT_MIN_STATES = 20
-"""``stage_increment`` goes to shared memory above this state count."""
-
 
 @frozen
 class FIRKStepConfig(ImplicitStepConfig):
@@ -170,6 +166,8 @@ class FIRKStepConfig(ImplicitStepConfig):
 
 class FIRKStep(ODEImplicitStep):
     """Fully implicit Runge--Kutta step with an embedded error estimate."""
+
+    algorithm_family = "firk"
 
     def __init__(
         self,
@@ -299,6 +297,7 @@ class FIRKStep(ODEImplicitStep):
             **kwargs,
         )
         self.register_buffers()
+        self.wire_helpers()
 
     def _build_error_solver(self) -> None:
         """Construct the width-n smoothing solver from live settings."""
@@ -380,7 +379,7 @@ class FIRKStep(ODEImplicitStep):
             n,
             config.stage_state_location,
         )
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by wire_helpers.
         buffer_registry.register(
             "cached_auxiliaries",
             self,
@@ -403,10 +402,26 @@ class FIRKStep(ODEImplicitStep):
                 aliases="solver_shared",
             )
 
-    def build_implicit_helpers(
+    def update(
         self,
-    ) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+        updates_dict: Optional[Dict[str, Any]] = None,
+        silent: bool = False,
+        **kwargs: Any,
+    ) -> Set[str]:
+        """Update the step; a new tableau recoefficients the norm."""
+        all_updates = {}
+        if updates_dict:
+            all_updates.update(updates_dict)
+        all_updates.update(kwargs)
+        if "tableau" in all_updates:
+            precision = all_updates.get("precision", self.precision)
+            all_updates["stage_coefficients"] = all_updates[
+                "tableau"
+            ].a_flat(precision)
+        return super().update(all_updates, silent=silent)
+
+    def wire_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
         config = self.compile_settings
         tableau = config.tableau
@@ -989,12 +1004,6 @@ class FIRKStep(ODEImplicitStep):
         """Return ``True`` as the method has multiple stages."""
 
         return self.stage_count > 1
-
-    @property
-    def performance_defaults(self) -> Dict[str, Any]:
-        """Share ``stage_increment`` above the measured state-count cut."""
-        shared = self.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
-        return {"stage_increment_location": "shared" if shared else "local"}
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:

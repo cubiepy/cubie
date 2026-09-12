@@ -19,7 +19,7 @@ controllers.
 |------|-------------|
 | `__init__.py` | Exports the controller classes, `get_controller`, `_CONTROLLER_REGISTRY`. |
 | `base_step_controller.py` | `BaseStepController` / `BaseStepControllerConfig` / `ControllerCache`; `ALL_STEP_CONTROLLER_PARAMETERS` (union of every controller's kwargs); `CONTROLLER_GAIN_NAMES` (PID gain keys) and `CONTROLLER_GAIN_PARAMETERS` (gain keys plus `filter_coefficients`, excluded from swap carryover); `BaseStepController.gain_names` (gain keys the config class carries); `GAIN_CONTROLLER_CHAIN` + `minimal_gain_controller` + `promoted_gain_controller` (smallest `i`/`pi`/`pid` for a set of nonzero gains); `FILTER_COEFFICIENT_PRESETS` + `filter_coefficients_to_gains` (`(beta1,beta2,beta3)` → gains); `mass_flags` (one per state, default all differential, carried through `settings_dict` on swaps). |
-| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, `min/max_step_growth`, deadband, safety); owns the `TwoRefMaskedScaledNorm` child `norm` (`update` forwards to it; its device function is the `eq=False` config field `norm_fn`); `_ensure_sane_bounds`. |
+| `adaptive_step_controller.py` | `BaseAdaptiveStepController` + `AdaptiveStepControlConfig` (shared adaptive config: `dt_min/max`, `atol/rtol`, `algorithm_order`, `min/max_step_growth`, deadband, safety); owns the `TwoRefMaskedScaledNorm` child `norm` (`update` forwards to it; its device function is the `eq=False` config field `norm_fn`). |
 | `fixed_step_controller.py` | `FixedStepController` — unconditional accept, returns `0`; no history. |
 | `adaptive_I_controller.py` | `AdaptiveIController` (`IStepControlConfig`, `integral_gain=1.0`) — integral-only; gain `safety·norm^(-integral_gain/(2(1+order)))`; no history. |
 | `adaptive_PI_controller.py` | `AdaptivePIController` (`PIStepControlConfig` extends `IStepControlConfig`, `integral_gain=0.3`, `proportional_gain=0.4`) — uses previous + current norm; gains take a float or callable of order. |
@@ -55,18 +55,21 @@ controllers.
   `persistent_local_buffer_size`.
 
 ### Controller specifics
-- **`_resolve_step_params`** differs by family: `FixedStepController` collapses
-  `dt_min`/`dt_max`/`dt` to a single fixed `dt` (first non-None wins; the others are
-  discarded). `BaseAdaptiveStepController` derives `dt_min = dt/100`, `dt_max = dt*100`
-  from a lone `dt`, or `dt = sqrt(dt_min·dt_max)` when only bounds are given.
-- **`_ensure_sane_bounds`** auto-corrects *derived* parameters silently but raises
-  `ValueError` on user-supplied incompatible bounds (e.g. `dt_max < dt_min`).
+- **Step bounds resolve on the config** from `_dt`, `_dt_min`, `_dt_max`: adaptive
+  `dt_min` is given, else `dt/100`, else `DEFAULT_DT_MIN` (lowered under a given
+  `dt_max`); `dt_max` mirrors it; `dt` is given, else `sqrt(dt_min·dt_max)`;
+  contradictory given values raise `ValueError`. Fixed `dt` is given, else the bounds'
+  geometric mean, else one bound, else `DEFAULT_FIXED_DT`.
+- **Injected keys** (`precision`, `n_states`, `algorithm_order`, `mass_flags`, gains,
+  `filter_coefficients`, shrink/growth/safety/deadband) come from the run;
+  `ControllerCache` carries `is_adaptive`, `dt`, `dt_min`, `dt_max`, `atol`, `rtol` as
+  product fields.
 - **Deadband**: `deadband_min == deadband_max == 1.0` elides the branch at compile time; accepted gains inside the band snap to 1.0; rejected steps skip the band and retry on the current-error term alone (Gustafsson: basic gain).
 - **`update` addition**: parameters present in `ALL_STEP_CONTROLLER_PARAMETERS` but not
   applicable to the current controller emit a `UserWarning` and are dropped (so
   cross-controller kwarg forwarding is safe); genuinely unknown keys still raise
   `KeyError` per the base contract.
-- **Gain carryover**: `settings_dict` is the generic `CUDAFactory` one over `ALL_STEP_CONTROLLER_PARAMETERS`; the core's controller swap drops `CONTROLLER_GAIN_PARAMETERS`, so a swapped-in controller uses its own gain defaults unless the ordering update supplies gains explicitly.
+- **Gains** are the run's: resolved from given values and family defaults and written into the controller on every update.
 - **Gain semantics**: `beta1 = kI+kP+kD`, `beta2 = -(kP+2kD)`, `beta3 = kD`, each divided by `order+1` at build; `filter_coefficients` (beta triple or preset name) maps to gains on `i`/`pi`/`pid` and raises when mixed with explicit gains.
 - **Adding a controller**: subclass the config + controller bases, set `_config_class`,
   implement `build_controller(...) → ControllerCache`, register the controller's history

@@ -589,11 +589,13 @@ def test_user_step_control_overrides_algorithm_defaults(
     assert run.step_controller == declared["step_controller"]
     assert run.dt_min == pytest.approx(override_settings["dt_min"])
     assert run.dt_max == pytest.approx(override_settings["dt_max"])
-    controller_settings = run._step_controller.settings_dict
-    assert controller_settings["min_step_shrink"] == pytest.approx(
+    assert run._step_controller.min_step_shrink == pytest.approx(
         override_settings["min_step_shrink"]
     )
-    assert (controller_settings["algorithm_order"]
+    assert run.settings_dict["min_step_shrink"] == pytest.approx(
+        override_settings["min_step_shrink"]
+    )
+    assert (run._step_controller.algorithm_order
             == run._algo_step.algorithm_order)
 
 
@@ -614,9 +616,9 @@ def test_save_last_when_no_save_every(single_integrator_run):
     [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
-def test_is_duration_dependent_no_timing(single_integrator_run):
-    """is_duration_dependent True when summaries requested with no timing."""
-    assert single_integrator_run.is_duration_dependent is True
+def test_summary_window_derived_no_timing(single_integrator_run):
+    """The window follows the duration when summaries have no timing."""
+    assert single_integrator_run.summary_window_derived is True
 
 
 @pytest.mark.parametrize(
@@ -629,12 +631,12 @@ def test_copy_keeps_the_schedule_duration_dependent(
 ):
     """A copy re-derives the summary schedule instead of pinning it."""
     run = single_integrator_run_mutable
-    run.set_summary_timing_from_duration(2.0)
+    run.update(summary_window=2.0)
     settings = run.settings_dict
     assert "summarise_every" not in settings
     assert "sample_summaries_every" not in settings
     twin = run.copy()
-    assert twin.is_duration_dependent is True
+    assert twin.summary_window_derived is True
     assert twin.config_hash == run.copy().config_hash
 
 
@@ -645,9 +647,9 @@ def test_copy_keeps_the_schedule_duration_dependent(
     [{**SUMMARY_ONLY_NO_TIMING, "sample_summaries_every": 0.01}],
     indirect=True,
 )
-def test_is_duration_dependent_with_sample_timing(single_integrator_run):
-    """is_duration_dependent True when summarise_every unset."""
-    assert single_integrator_run.is_duration_dependent is True
+def test_summary_window_derived_with_sample_timing(single_integrator_run):
+    """The window follows the duration while summarise_every is unset."""
+    assert single_integrator_run.summary_window_derived is True
 
 
 @pytest.mark.parametrize(
@@ -698,21 +700,22 @@ def test_no_summary_timing_when_no_summary_outputs(single_integrator_run):
     assert loop_cfg._sample_summaries_every is None
 
 
-# ── set_summary_timing_from_duration ────────────────────────────────────── #
+# ── summary_window ──────────────────────────────────────────────────────── #
 
 @pytest.mark.parametrize(
     "solver_settings_override",
     [SUMMARY_ONLY_TIMED],
     indirect=True,
 )
-def test_set_summary_timing_noop_when_not_dependent(
+def test_summary_window_ignored_when_given(
     single_integrator_run_mutable,
 ):
-    """Explicit timing means set_summary_timing_from_duration is a no-op."""
+    """A given schedule masks the batch's summary window."""
     run = single_integrator_run_mutable
     initial = run.sample_summaries_every
     assert initial == pytest.approx(0.05)
-    run.set_summary_timing_from_duration(duration=1.0)
+    run.update(summary_window=1.0)
+    assert run.summary_window_derived is False
     assert run.sample_summaries_every == pytest.approx(0.05)
 
 
@@ -721,13 +724,13 @@ def test_set_summary_timing_noop_when_not_dependent(
     [SUMMARY_ONLY_NO_TIMING],
     indirect=True,
 )
-def test_set_summary_timing_from_duration_dependent(
+def test_summary_window_sets_the_derived_schedule(
     single_integrator_run_mutable,
 ):
-    """Duration-dependent path sets summarise_every = duration."""
+    """The derived schedule takes the window as summarise_every."""
     run = single_integrator_run_mutable
-    assert run.is_duration_dependent is True
-    run.set_summary_timing_from_duration(duration=1.0)
+    assert run.summary_window_derived is True
+    run.update(summary_window=1.0)
     assert run.summarise_every == pytest.approx(1.0, rel=1e-5)
     assert run.sample_summaries_every == pytest.approx(0.01, rel=1e-5)
 
@@ -1478,7 +1481,7 @@ def test_update_controller_swap_builds(single_integrator_run_mutable):
     """A genuine controller swap reconstructs and builds."""
     run = single_integrator_run_mutable
     target = "i" if run.compile_settings.step_controller != "i" else "pi"
-    run.update({"step_controller": target})
+    run.update({"algorithm": "bogacki-shampine-32", "step_controller": target})
     assert run.compile_settings.step_controller == target
     assert run.device_function is not None
 

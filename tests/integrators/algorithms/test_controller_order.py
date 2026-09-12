@@ -55,19 +55,25 @@ def test_embedded_order_rejects_non_positive_integers(bad_order):
         )
 
 
-def test_algorithm_order_is_the_embedded_pair_order():
+def test_algorithm_order_is_the_embedded_pair_order(system):
     """The controller sees the embedded order, not the main order."""
 
     assert DORMAND_PRINCE_54_TABLEAU.embedded_order == 4
-    step = DIRKStep(precision=np.float64, n_states=2, tableau=KVAERNO3_TABLEAU)
+    step = DIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
+        precision=np.float64,
+        n_states=2,
+        tableau=KVAERNO3_TABLEAU,
+    )
     assert step.order == 3
     assert step.algorithm_order == 2
 
 
-def test_smoothed_radau_algorithm_order():
+def test_smoothed_radau_algorithm_order(system):
     """Smoothing swaps radau's controller order to the smoothed pair."""
 
     step = FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=2,
         tableau=RADAU_IIA_5_TABLEAU,

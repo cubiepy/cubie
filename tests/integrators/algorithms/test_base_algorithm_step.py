@@ -4,9 +4,7 @@ import pytest
 from numpy.testing import assert_array_equal
 
 from cubie.integrators.algorithms import algorithm_is_adaptive
-from cubie.integrators.algorithms.base_algorithm_step import (
-    ButcherTableau,
-)
+from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
 from cubie.integrators.algorithms.explicit_euler import ExplicitEulerStep
 from cubie.integrators.algorithms.generic_erk_tableaus import ERKTableau
 
@@ -129,3 +127,4 @@ def test_algorithm_is_adaptive_unknown_alias_raises():
     """An unregistered alias raises KeyError."""
     with pytest.raises(KeyError):
         algorithm_is_adaptive("not_an_algorithm")
+

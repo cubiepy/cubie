@@ -49,6 +49,8 @@ EE_DEFAULTS = AlgorithmDefaults(
 class ExplicitEulerStep(ODEExplicitStep):
     """Forward Euler integration step for explicit ODE updates."""
 
+    algorithm_family = "explicit_euler"
+
     def __init__(
         self,
         precision: PrecisionDType,

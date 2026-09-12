@@ -119,7 +119,7 @@ def optimize_candidate_arms(system_name, algo_name, duration):
         system, system_name, algo_name, ArmSpec("tierA"), duration
     )
     try:
-        candidates = probe.kernel.single_integrator.optimisation_candidates(
+        candidates = probe.kernel.optimisation_candidates(
             force=True
         )
     finally:

@@ -352,8 +352,7 @@ def is_device_validator(instance, attribute, value):
 
 
 def device_function_field(prefixed: bool = False, **kwargs):
-    """Config field for a device function, keyed by the owner's label
-    when ``prefixed``: identity-compared, unhashed."""
+    """Device-function field: unhashed, identity-compared, label-prefixed."""
     return field(
         default=None,
         eq=False,
@@ -361,6 +360,11 @@ def device_function_field(prefixed: bool = False, **kwargs):
         metadata={"device_function": True, "prefixed": prefixed},
         **kwargs,
     )
+
+
+def product_field(**kwargs):
+    """Cache field ``_build`` fills from the same-named factory property."""
+    return field(default=None, metadata={"product": True}, **kwargs)
 
 
 def float_array_validator(instance, attribute, value):

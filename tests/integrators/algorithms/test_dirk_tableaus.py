@@ -123,12 +123,17 @@ def test_prediction_source_stages_mappings(tableau, expected):
     assert_array_equal(tableau.prediction_source_stages, expected)
 
 
-def test_dirk_step_accepts_tableau_instance(precision):
+def test_dirk_step_accepts_tableau_instance(system, precision):
     """DIRKStep should consume explicit tableau instances."""
 
     custom_name = "sdirk_2_2"
     custom_tableau = DIRK_TABLEAU_REGISTRY[custom_name]
-    step = DIRKStep(precision=precision, n_states=2, tableau=custom_tableau)
+    step = DIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
+        precision=precision,
+        n_states=2,
+        tableau=custom_tableau,
+    )
     assert step.compile_settings.tableau is custom_tableau
 
 

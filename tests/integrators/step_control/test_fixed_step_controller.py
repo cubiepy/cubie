@@ -142,11 +142,11 @@ def test_resolve_fixed_dt_max_only():
 
 
 def test_resolve_fixed_both_bounds():
-    """dt_min + dt_max translates to dt = dt_min (first available)."""
+    """dt_min + dt_max translates to their geometric mean."""
     ctrl = FixedStepController(
         precision=np.float64, dt_min=0.001, dt_max=0.5,
     )
-    assert ctrl.dt == pytest.approx(np.float64(0.001))
+    assert ctrl.dt == pytest.approx(np.float64(np.sqrt(0.001 * 0.5)))
 
 
 def test_resolve_fixed_dt_plus_bounds():
@@ -170,10 +170,20 @@ def test_update_dt_directly():
     assert ctrl.dt == pytest.approx(np.float64(0.005))
 
 
-def test_update_dt_min_warns():
-    """Fixed controller warns when dt_min passed to update."""
+def test_update_dt_min_leaves_a_given_dt():
+    """A bound never moves a given fixed step."""
     ctrl = FixedStepController(precision=np.float64, dt=0.01)
-    with pytest.warns(UserWarning, match="dt_min.*not recognized"):
-        ctrl.update({"dt_min": 0.005})
-    # dt unchanged
+    ctrl.update({"dt_min": 0.005})
     assert ctrl.dt == pytest.approx(np.float64(0.01))
+    assert ctrl.settings_dict["dt_min"] == pytest.approx(0.005)
+
+
+def test_bounds_alone_set_the_fixed_step():
+    """Without ``dt`` the fixed step is the bounds' geometric mean."""
+    ctrl = FixedStepController(
+        precision=np.float64, dt_min=1e-4, dt_max=1e-2
+    )
+    assert ctrl.dt == pytest.approx(np.float64(1e-3))
+    assert FixedStepController(
+        precision=np.float64, dt_min=1e-4
+    ).dt == pytest.approx(np.float64(1e-4))

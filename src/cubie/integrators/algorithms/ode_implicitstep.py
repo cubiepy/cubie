@@ -309,9 +309,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
         directly, all others wrap it in a :class:`NewtonKrylov`.
         """
         super().__init__(config, _defaults)
+        if config.get_solver_helper_fn is None:
+            raise TypeError(
+                f"{type(self).__name__} requires get_solver_helper_fn: "
+                "its solver chain is wired from the system's helpers at "
+                "construction."
+            )
 
-        # Subclasses that support dense stage prediction construct a
-        # DenseStagePredictor here after solver construction.
+        # Dense-prediction subclasses build a DenseStagePredictor here.
         self.dense_predictor = None
 
         # Set by subclasses needing a separate solver for smoothing.
@@ -397,7 +402,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         the linear solver from the outgoing instance's
         ``settings_dict`` and shared norm; the operator and
         preconditioner device functions are re-injected by the next
-        ``build_implicit_helpers`` run. Same-type values and
+        ``wire_helpers`` run. Same-type values and
         within-class MR/SD switches change no class and are left to
         the owned solver's own update.
 
@@ -500,7 +505,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             self._swap_linear_solver(all_updates["linear_correction_type"])
             recognized.add("linear_correction_type")
 
-        if "n_states" in all_updates:
+        if "n_states" in all_updates or "tableau" in all_updates:
             all_updates["solver_width"] = (
                 self.compile_settings.solver_width
             )
@@ -532,6 +537,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
 
         recognized |= super().update(compiled_functions, silent=True)
+        if recognized:
+            self.wire_helpers()
 
         return recognized
 
@@ -574,10 +581,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         StepCache
             Container with the compiled step and nonlinear solver.
         """
-        # The helper refresh replaces the settings snapshot; read after.
-        self.build_implicit_helpers()
         config = self.compile_settings
-
         dxdt_fn = config.dxdt_fn
         numba_precision = config.numba_precision
         n = config.n_states
@@ -586,7 +590,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         n_drivers = config.n_drivers
         solver_function = getattr(config, self.solver_fn_key)
 
-        return self.build_step(
+        cache = self.build_step(
             dxdt_fn,
             observables_fn,
             drivers_fn,
@@ -595,6 +599,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             n,
             n_drivers,
         )
+        return cache
 
     @abstractmethod
     def build_step(
@@ -739,8 +744,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
         return prepare_function, cached_count, counts
 
-    def build_implicit_helpers(self) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+    def wire_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
@@ -829,6 +834,18 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def newton_solves_per_step(self) -> int:
         """Newton solves one step runs."""
         return 0 if self.is_linear else 1
+
+    @property
+    def step_operation_count(self) -> int:
+        """Operator count of one step with every Newton loop unrolled."""
+        solves = self.newton_solves_per_step
+        operations = self.per_step_operation_count
+        if solves > 0:
+            operations += (
+                self.newton_max_iters * solves
+                * self.newton_body_operation_count
+            )
+        return operations
 
     @property
     def is_implicit(self) -> bool:
@@ -956,7 +973,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 {
                     key: value
                     for key, value in solver.settings_dict.items()
-                    if key in self.settings_keys
+                    if key in self.settings_keys and value is not None
                 }
             )
         return settings

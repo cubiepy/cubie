@@ -64,6 +64,8 @@ BE_DEFAULTS = AlgorithmDefaults(
 class BackwardsEulerStep(ODEImplicitStep):
     """Backward Euler step solved with matrix-free Newton–Krylov."""
 
+    algorithm_family = "backwards_euler"
+
     # The single stage solves with a_ij = 1.
     _PREFACTOR_STAGE_DATA = (((1.0,),), (1.0,))
     _BAKED_STAGE_DIAGONAL = 1.0
@@ -120,6 +122,7 @@ class BackwardsEulerStep(ODEImplicitStep):
         super().__init__(config, BE_DEFAULTS.copy(), **kwargs)
 
         self.register_buffers()
+        self.wire_helpers()
 
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
@@ -139,7 +142,7 @@ class BackwardsEulerStep(ODEImplicitStep):
             persistent=True,
         )
 
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by wire_helpers.
         buffer_registry.register(
             'cached_auxiliaries',
             self,

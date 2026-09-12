@@ -10,7 +10,7 @@ ROLLED = UnrollChoice.ROLLED
 
 
 def _candidates(solver, force=False):
-    return solver.kernel.single_integrator.optimisation_candidates(
+    return solver.kernel.optimisation_candidates(
         force=force
     )
 

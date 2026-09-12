@@ -33,8 +33,10 @@ def test_config_defaults():
     """Field defaults are set correctly on bare construction."""
     # Inline construction permitted per Rule 9: __init__ test.
     cfg = AdaptiveStepControlConfig(precision=np.float64)
-    assert cfg._dt_min == 1e-6
-    assert cfg._dt_max == pytest.approx(1.0)
+    assert cfg._dt_min is None
+    assert cfg._dt_max is None
+    assert cfg.dt_min == 1e-6
+    assert cfg.dt_max == pytest.approx(1.0)
     assert_array_equal(cfg.atol, np.asarray([1e-6]))
     assert_array_equal(cfg.rtol, np.asarray([1e-6]))
     assert cfg.algorithm_order == 1
@@ -96,32 +98,21 @@ def test_config_algorithm_order_validates_ge_1():
 # ── __attrs_post_init__ (items 53-57) ────────────────────────────── #
 
 
-def test_post_init_dt_max_none_rejected_by_validator():
-    """dt_max=None is rejected by the field validator (item 53).
-
-    The post_init None-handling path and property fallback are
-    unreachable through normal construction because the validator
-    requires a float > 0.
-    """
-    with pytest.raises(TypeError):
-        AdaptiveStepControlConfig(
-            precision=np.float64, dt_min=0.001, dt_max=None
-        )
-
-
-def test_post_init_dt_max_lt_dt_min_allowed_in_config():
-    """Config allows dt_max < dt_min; validation deferred to controller.
-
-    The config attrs class stores raw values. Validation that raises
-    ValueError for user-provided inverted bounds happens in the
-    controller's _ensure_sane_bounds() method, not in the config.
-    """
+def test_dt_max_none_means_unset():
+    """``dt_max=None`` leaves the bound to its resolution."""
     cfg = AdaptiveStepControlConfig(
-        precision=np.float64, dt_min=1.0, dt_max=0.5
+        precision=np.float64, dt_min=0.001, dt_max=None
     )
-    # Config stores raw values; controller validates on construction
-    assert cfg._dt_min == pytest.approx(1.0)
-    assert cfg._dt_max == pytest.approx(0.5)
+    assert cfg.dt_max == pytest.approx(1.0)
+    assert cfg.dt == pytest.approx(np.sqrt(0.001 * 1.0))
+
+
+def test_config_rejects_inverted_given_bounds():
+    """Given bounds that contradict each other raise at the config."""
+    with pytest.raises(ValueError, match="dt_max.*<.*dt_min"):
+        AdaptiveStepControlConfig(
+            precision=np.float64, dt_min=1.0, dt_max=0.5
+        )
 
 
 def test_post_init_dt_max_ge_dt_min_no_change():
@@ -441,10 +432,9 @@ def test_update_fixes_violated_bounds():
     # Update dt to value outside derived bounds
     ctrl.update({"dt": 1e-2})
     assert ctrl.dt == pytest.approx(np.float64(1e-2))
-    # dt > old dt_max, so dt_max re-derived (not user-set)
+    # Both bounds follow the new dt.
     assert ctrl.dt_max == pytest.approx(np.float64(1e-2 * 100))
-    # dt_min unchanged (no violation)
-    assert ctrl.dt_min == pytest.approx(np.float64(1e-8))
+    assert ctrl.dt_min == pytest.approx(np.float64(1e-2 / 100))
 
 
 def test_update_tracks_newly_set_bounds():
