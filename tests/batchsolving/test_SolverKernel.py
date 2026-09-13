@@ -7,6 +7,7 @@ from cubie.backend.utils import max_shared_memory_per_block
 from cubie.outputhandling.output_sizes import BatchOutputSizes
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
+from cubie.batchsolving.solver_settings import resolve_loop_timing
 
 
 def test_kernel_builds(solverkernel):
@@ -90,9 +91,7 @@ def test_getters_get(solverkernel):
 def test_all_lower_plumbing(
     system,
     solverkernel_mutable,
-    step_controller_settings,
-    algorithm_settings,
-    unroll_settings,
+    effective_settings,
     precision,
     driver_settings,
 ):
@@ -132,40 +131,19 @@ def test_all_lower_plumbing(
         ],
     }
     solverkernel.update(new_settings)
-    updated_controller_settings = step_controller_settings.copy()
-    updated_controller_settings.update(
-        {
-            "dt_min": 0.0001,
-            "dt_max": 0.01,
-            "atol": 1e-2,
-            "rtol": 1e-1,
-        }
-    )
-    output_settings = {
-        "saved_state_indices": np.asarray(saved_state_idx),
-        "saved_observable_indices": np.asarray(saved_obs_idx),
-        "summarised_state_indices": np.asarray(summarised_state_idx),
-        "summarised_observable_indices": np.asarray(summarised_obs_idx),
-        "output_types": [
-            "state",
-            "observables",
-            "mean",
-            "max",
-            "rms",
-            "peaks[3]",
-        ],
-    }
     freshsolver = BatchSolverKernel(
         system,
-        step_control_settings=updated_controller_settings,
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
-        loop_settings={
-            "save_every": 0.01,
-            "summarise_every": 0.1,
-            "sample_summaries_every": 0.05,
+        **{
+            **effective_settings,
+            **new_settings,
+            **resolve_loop_timing(
+                0.01,
+                0.1,
+                0.05,
+                has_time_domain_outputs=True,
+                has_summary_outputs=True,
+            ),
         },
-        unroll_settings=unroll_settings,
     )
     freshsolver.configure_drivers(driver_settings)
     inits = np.ones((n_states, 1), dtype=precision)
@@ -521,9 +499,14 @@ def test_limit_blocksize_leaves_launchable_requests_alone(solverkernel):
     assert new_smem == smem
 
 
-def test_blocksize_setting_follows_updates(solverkernel_mutable):
-    """``blocksize`` is a kernel compile setting with a 64 default."""
-    assert solverkernel_mutable.compile_settings.blocksize == 64
+def test_blocksize_setting_follows_updates(
+    solverkernel_mutable, solver_settings
+):
+    """``blocksize`` is a kernel compile setting taken from the settings."""
+    assert (
+        solverkernel_mutable.compile_settings.blocksize
+        == solver_settings["blocksize"]
+    )
     recognised = solverkernel_mutable.update(blocksize=128)
     assert "blocksize" in recognised
     assert solverkernel_mutable.compile_settings.blocksize == 128
@@ -531,12 +514,14 @@ def test_blocksize_setting_follows_updates(solverkernel_mutable):
         solverkernel_mutable.update(blocksize=0)
 
 
-def test_auto_performance_reaches_the_integrator(solverkernel_mutable):
-    """``auto_performance`` lands on the integrator's compile settings."""
-    assert solverkernel_mutable.single_integrator.auto_performance is True
-    recognised = solverkernel_mutable.update(auto_performance=False)
+def test_auto_performance_is_a_kernel_setting(solverkernel_mutable):
+    """``auto_performance`` lands on the kernel's compile settings."""
+    kernel = solverkernel_mutable
+    assert kernel.compile_settings.auto_performance is True
+    recognised = kernel.update(auto_performance=False)
     assert "auto_performance" in recognised
-    assert solverkernel_mutable.single_integrator.auto_performance is False
+    assert kernel.compile_settings.auto_performance is False
+    assert kernel.settings_dict["auto_performance"] is False
 
 
 def test_persistent_array_sized_from_persistent_layout(solverkernel):

@@ -1,8 +1,14 @@
 """Factories for explicit and implicit algorithm step implementations."""
 
-from typing import Any, Mapping, Optional, Tuple, Type
+from typing import Any, Mapping, Optional, Tuple, Type, Union
 
-from .base_algorithm_step import BaseAlgorithmStep, ButcherTableau
+from attrs import frozen
+
+from .base_algorithm_step import (
+    AlgorithmDefaults,
+    BaseAlgorithmStep,
+    ButcherTableau,
+)
 from .ode_explicitstep import ExplicitStepConfig
 from .ode_implicitstep import ImplicitStepConfig
 from .backwards_euler import BackwardsEulerStep
@@ -32,6 +38,8 @@ from .generic_rosenbrockw_tableaus import (
 
 
 __all__ = [
+    "AlgorithmFacts",
+    "algorithm_facts",
     "algorithm_is_adaptive",
     "get_algorithm_step",
     "ExplicitStepConfig",
@@ -122,6 +130,68 @@ def algorithm_is_adaptive(alias: str) -> bool:
     if tableau is not None:
         return tableau.has_error_estimate
     return algorithm_type.has_error_estimate
+
+
+@frozen
+class AlgorithmFacts:
+    """What an algorithm choice fixes before a step is built.
+
+    Attributes
+    ----------
+    step_class
+        The step class the choice selects.
+    tableau
+        The tableau in effect, ``None`` for fixed schemes.
+    defaults
+        Family defaults overlaid with the tableau's.
+    has_error_estimate, is_implicit, is_linear
+        Flags of the step class and tableau.
+    """
+
+    step_class: Type[BaseAlgorithmStep]
+    tableau: Optional[ButcherTableau]
+    defaults: AlgorithmDefaults
+    has_error_estimate: bool
+    is_implicit: bool
+    is_linear: bool
+
+
+def algorithm_facts(
+    algorithm: Union[str, ButcherTableau],
+    tableau: Optional[ButcherTableau] = None,
+) -> AlgorithmFacts:
+    """Return the facts of ``algorithm``; ``tableau`` overrides the alias'.
+
+    Raises
+    ------
+    ValueError
+        If ``algorithm`` names no registered algorithm.
+    """
+    from .ode_implicitstep import ODEImplicitStep
+
+    if isinstance(algorithm, ButcherTableau):
+        step_class, registry_tableau = resolve_supplied_tableau(algorithm)
+    else:
+        try:
+            step_class, registry_tableau = resolve_alias(algorithm)
+        except KeyError as exc:
+            raise ValueError(f"Unknown algorithm '{algorithm}'.") from exc
+    if tableau is None:
+        tableau = registry_tableau
+    defaults = step_class.family_defaults(tableau)
+    if tableau is not None:
+        defaults.settings.update(tableau.defaults)
+        has_error_estimate = tableau.has_error_estimate
+    else:
+        has_error_estimate = step_class.has_error_estimate
+    return AlgorithmFacts(
+        step_class=step_class,
+        tableau=tableau,
+        defaults=defaults,
+        has_error_estimate=has_error_estimate,
+        is_implicit=issubclass(step_class, ODEImplicitStep),
+        is_linear=step_class.is_linear,
+    )
 
 
 def resolve_supplied_tableau(

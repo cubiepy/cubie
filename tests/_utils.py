@@ -20,6 +20,7 @@ from cubie.integrators.step_control import (
 )
 from cubie.odesystems.symbolic import SymbolicODE
 from cubie.batchsolving.solver import Solver
+from cubie.batchsolving.solver_settings import resolve_loop_timing
 from cubie.outputhandling import OutputFunctions
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.baseODE import BaseODE
@@ -930,7 +931,20 @@ def run_device_loop(
     t0 = solver_config["t0"]
     save_samples = max(singleintegratorrun.output_length(duration), 1)
     summary_samples = max(singleintegratorrun.summaries_length(duration), 1)
-    singleintegratorrun.set_summary_timing_from_duration(duration)
+    if (
+        singleintegratorrun.summary_outputs_requested
+        and solver_config.get("summarise_every") is None
+    ):
+        singleintegratorrun.update(
+            resolve_loop_timing(
+                solver_config.get("save_every"),
+                None,
+                solver_config.get("sample_summaries_every"),
+                singleintegratorrun.time_domain_outputs_requested,
+                True,
+                duration,
+            )
+        )
     heights = singleintegratorrun.output_array_heights
 
     state_width = max(heights.state, 1)
@@ -1327,30 +1341,6 @@ def _driver_sequence(
     return drivers
 
 
-def _build_enhanced_algorithm_settings(
-    algorithm_settings, system, driver_array
-):
-    """Add system and driver functions to algorithm settings.
-
-    Functions are passed directly to get_algorithm_step, not stored
-    in algorithm_settings dict.
-    """
-    enhanced = algorithm_settings.copy()
-    enhanced["dxdt_fn"] = system.dxdt_fn
-    enhanced["observables_fn"] = system.observables_fn
-    enhanced["get_solver_helper_fn"] = system.get_solver_helper
-    enhanced["n_drivers"] = system.num_drivers
-
-    if driver_array is not None:
-        enhanced["drivers_fn"] = driver_array.drivers_fn
-        enhanced["driver_derivative_fn"] = driver_array.driver_derivative_fn
-    else:
-        enhanced["drivers_fn"] = None
-        enhanced["driver_derivative_fn"] = None
-
-    return enhanced
-
-
 # Keys in the shared solver_settings dict that are not Solver
 # constructor settings: solve-time arguments, system-construction
 # options (fix_singularities/voltage_variable feed
@@ -1365,6 +1355,8 @@ NON_SOLVER_SETTINGS = {
     "blocksize",
     "system_type",
     "n_states",
+    "n_drivers",
+    "algorithm_order",
     "n_parameters",
     "n_observables",
     "fix_singularities",

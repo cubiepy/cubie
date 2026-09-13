@@ -55,7 +55,6 @@ LOCAL_LAUNCH_BLOCKSIZES = (64, 256)
 SHARED_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for shared-memory kernels."""
 
-
 def _label(settings: Dict[str, Any]) -> str:
     """Return a short name for a candidate's settings."""
     parts = []
@@ -301,7 +300,12 @@ class _OptimizeRunner:
         """Pre-warm the kernel cache with every candidate in workers."""
         if not parent.cache_enabled:
             return
-        settings = parent.settings_dict
+        # A worker process builds on its own memory manager.
+        settings = {
+            key: value
+            for key, value in parent.settings_dict.items()
+            if key != "memory_manager"
+        }
         system_bytes = pickle.dumps(parent.system)
         payloads = [
             (
@@ -497,12 +501,10 @@ def run_optimization(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    candidates = parent.kernel.single_integrator.optimisation_candidates(
-        force=force
-    )
+    candidates = parent.optimisation_candidates(force=force)
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
-        if parent.kernel.blocksize_given and not force
+        if parent.blocksize_given and not force
         else None
     )
     twin = parent.copy()

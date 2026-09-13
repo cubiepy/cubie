@@ -71,7 +71,10 @@ from numpy.typing import NDArray
 
 from cubie.array_interpolator import ArrayInterpolator
 from cubie.memory import default_memmgr
-from cubie.memory.mem_manager import defer_instance_teardown
+from cubie.memory.mem_manager import (
+    ALL_MEMORY_MANAGER_PARAMETERS,
+    defer_instance_teardown,
+)
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie.batchsolving.arrays.BatchInputArrays import InputArrays
@@ -92,7 +95,9 @@ from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.outputhandling.output_sizes import OutputArrayHeights
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
 from cubie._utils import (
+    build_config,
     getype_validator,
+    merge_kwargs_into_settings,
     precision_converter,
     precision_validator,
     unpack_dict_values,
@@ -278,51 +283,18 @@ class BatchSolverKernel(CUDAFactory):
     ----------
     system
         ODE system describing the problem to integrate.
-    loop_settings
-        Mapping of loop configuration forwarded to
-        :class:`cubie.integrators.SingleIntegratorRun`. Recognised keys include
-        ``"save_every"`` and ``"summarise_every"``.
-    lineinfo
-        Compile the kernel and all device functions with source-line
-        correlation data for profilers. ``None`` defers to the
-        ``CUBIE_LINEINFO`` environment variable (default off).
-    unroll_settings
-        ``unroll`` (an :class:`UnrollFlags`) and loose ``unroll_*``
-        keys applied to the kernel and every child factory.
-    step_control_settings
-        Mapping of overrides forwarded to
-        :class:`cubie.integrators.SingleIntegratorRun` for controller
-        configuration.
-    algorithm_settings
-        Mapping of overrides forwarded to
-        :class:`cubie.integrators.SingleIntegratorRun` for algorithm
-        configuration.
-    output_settings
-        Mapping of output configuration forwarded to the integrator. See
-        :class:`cubie.outputhandling.OutputFunctions` for recognised keys.
-    memory_settings
-        Mapping of memory configuration forwarded to the memory manager,
-        typically via :mod:`cubie.memory`.
-    cache
-        :class:`CacheSettings` or its shorthand: ``True`` caches at
-        the default location, ``False`` disables caching,
-        ``"flush_on_change"`` selects that mode, a string/``Path``
-        sets the cache directory.
-    auto_performance
-        Fill unset unroll, placement and residency settings from the
-        system's size and the GPU.
-    kernel_settings
-        Kernel-level compile settings forwarded to
-        :class:`BatchSolverConfig`; loose ``cache_*`` keys override
-        ``cache``.
+    **settings
+        The resolved settings: the memory keys
+        (``ALL_MEMORY_MANAGER_PARAMETERS``), this kernel's
+        :class:`BatchSolverConfig` fields, and the keys the
+        :class:`cubie.integrators.SingleIntegratorRun` and its children
+        take. ``unroll`` and ``jit_flags`` reach every factory.
 
     Attributes
     ----------
     resident_blocks
         Blocks per SM on the GPU, set by ``auto_performance`` and
         ``Solver.optimize``.
-    blocksize_given
-        Whether ``blocksize`` was set explicitly.
 
     Notes
     -----
@@ -334,29 +306,19 @@ class BatchSolverKernel(CUDAFactory):
 
     settings_keys = frozenset(ALL_KERNEL_PARAMETERS)
 
-    def __init__(
-        self,
-        system: "SymbolicODE",
-        loop_settings: Optional[Dict[str, Any]] = None,
-        lineinfo: Optional[bool] = None,
-        unroll_settings: Optional[Dict[str, Any]] = None,
-        step_control_settings: Optional[Dict[str, Any]] = None,
-        algorithm_settings: Optional[Dict[str, Any]] = None,
-        output_settings: Optional[Dict[str, Any]] = None,
-        memory_settings: Optional[Dict[str, Any]] = None,
-        cache: Union[bool, str, Path] = True,
-        auto_performance: bool = True,
-        kernel_settings: Optional[Dict[str, Any]] = None,
-    ) -> None:
+    def __init__(self, system: "SymbolicODE", **settings: Any) -> None:
         super().__init__()
         self._disk_cache = None
         self._disk_cache_settings = None
-        if memory_settings is None:
-            memory_settings = {}
-        if output_settings is None:
-            output_settings = {}
-        if loop_settings is None:
-            loop_settings = {}
+        settings, _ = unpack_dict_values(settings)
+        memory_settings, _ = merge_kwargs_into_settings(
+            settings, ALL_MEMORY_MANAGER_PARAMETERS
+        )
+        compile_flags = {
+            key: settings[key]
+            for key in ("unroll", "jit_flags")
+            if settings.get(key) is not None
+        }
 
         precision = system.precision
 
@@ -386,6 +348,8 @@ class BatchSolverKernel(CUDAFactory):
             input_dict={},
             memory_manager=self._memory_manager,
         )
+        if compile_flags:
+            self.driver_interpolator.update(compile_flags, silent=True)
 
         system_name = system.name
         system_hash = system.fn_hash
@@ -393,51 +357,27 @@ class BatchSolverKernel(CUDAFactory):
             system_name = f"unnamed_{system_hash[:8]}"
         self._system_name = system_name
 
-        # Build the single integrator to derive compile-critical metadata
         self.single_integrator = SingleIntegratorRun(
             system,
-            loop_settings=loop_settings,
             drivers_fn=self.driver_interpolator.drivers_fn,
             driver_derivative_fn=self.driver_interpolator.driver_derivative_fn,
-            step_control_settings=step_control_settings,
-            algorithm_settings=algorithm_settings,
-            output_settings=output_settings,
-            auto_performance=auto_performance,
+            **settings,
         )
-        # Explicit lineinfo and unroll settings reach every child factory.
-        if lineinfo is not None:
-            self.single_integrator.update(
-                {"lineinfo": lineinfo}, silent=True
+        run = self.single_integrator
+        self.setup_compile_settings(
+            build_config(
+                BatchSolverConfig,
+                required={
+                    "precision": precision,
+                    "loop_fn": run.device_function,
+                    "compile_flags": run.output_compile_flags,
+                    "coefficients_shape": (
+                        self.driver_interpolator.coefficients_shape
+                    ),
+                },
+                **settings,
             )
-        if unroll_settings:
-            self.driver_interpolator.update(unroll_settings, silent=True)
-            self.single_integrator.update(unroll_settings, silent=True)
-
-        if kernel_settings is None:
-            kernel_settings = {}
-        kernel_settings = kernel_settings.copy()
-        self.blocksize_given = "blocksize" in kernel_settings
-        # Seed the baked coefficient layout from the interpolator.
-        coefficients_shape = kernel_settings.pop(
-            "coefficients_shape",
-            self.driver_interpolator.coefficients_shape,
         )
-        initial_config = BatchSolverConfig(
-            precision=precision,
-            loop_fn=self.single_integrator.device_function,
-            compile_flags=self.single_integrator.output_compile_flags,
-            coefficients_shape=coefficients_shape,
-            cache=kernel_settings.pop("cache", cache),
-        )
-        self.setup_compile_settings(initial_config)
-        if kernel_settings:
-            self.update_compile_settings(kernel_settings)
-        if lineinfo is not None:
-            self.update_compile_settings(
-                {"lineinfo": lineinfo}, silent=True
-            )
-        if unroll_settings:
-            self.update_compile_settings(unroll_settings, silent=True)
 
         self.input_arrays = InputArrays.from_solver(self)
         self.output_arrays = OutputArrays.from_solver(self)
@@ -797,19 +737,8 @@ class BatchSolverKernel(CUDAFactory):
             precision=self.single_integrator.precision,
         )
 
-        # Update the single integrator with requested duration if required
-        self.single_integrator.set_summary_timing_from_duration(duration)
-
         # Validate timing parameters to prevent array index errors
         self._validate_timing_parameters(duration)
-
-        # Refresh compile-critical settings before array updates
-        self.update_compile_settings(
-            {
-                "loop_fn": self.single_integrator.device_function,
-                "precision": self.single_integrator.precision,
-            }
-        )
 
         # An attached table is a cached build output: nothing to upload.
         driver_coefficients = self.driver_interpolator.coefficients
@@ -991,7 +920,7 @@ class BatchSolverKernel(CUDAFactory):
             blocksize,
             runs,
             self.resident_blocks,
-            self.single_integrator.auto_performance,
+            self.compile_settings.auto_performance,
         )
         geometries = self.get_cached_output("launch_geometries")
         geometry = geometries.get(key)
@@ -1016,7 +945,7 @@ class BatchSolverKernel(CUDAFactory):
         # The compiler needs a nonzero dynamic shared declaration.
         dynamic_sharedmem = max(4, dynamic_sharedmem)
         blocks = self.resident_blocks
-        if blocks is None and not self.single_integrator.auto_performance:
+        if blocks is None and not self.compile_settings.auto_performance:
             return blocksize, dynamic_sharedmem
         dispatcher = self.kernel
         compile_kernel_specialization(
@@ -1278,8 +1207,8 @@ class BatchSolverKernel(CUDAFactory):
 
         Notes
         -----
-        The method applies updates to the single integrator before refreshing
-        compile-critical settings so the kernel rebuild picks up new metadata.
+        Order: interpolator, run, this kernel's settings with the run's
+        ``loop_fn`` and compile flags.
         """
         if updates_dict is None:
             updates_dict = {}
@@ -1289,46 +1218,25 @@ class BatchSolverKernel(CUDAFactory):
         if updates_dict == {}:
             return set()
 
-        # Flatten nested dict values so that grouped settings can be passed
-        # naturally. For example, step_controller_settings={'dt_min': 0.01}
-        # becomes dt_min=0.01, allowing sub-components to recognize and
-        # apply parameters correctly.
-        updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
+        updates, unpacked_keys = unpack_dict_values(updates_dict)
+        user_keys = set(updates)
 
-        all_unrecognized = set(updates_dict.keys())
-        if "blocksize" in updates_dict:
-            self.blocksize_given = True
-
-        driver_recognised = self.driver_interpolator.update(
-            updates_dict, silent=True
-        )
-        if driver_recognised:
-            updates_dict.update(self._driver_settings())
-        all_unrecognized -= driver_recognised
-
-        all_unrecognized -= self.single_integrator.update(
-            updates_dict, silent=True
-        )
-
-        updates_dict.update(
-            {
-                "loop_fn": self.single_integrator.device_function,
-                "compile_flags": self.single_integrator.output_compile_flags,
-            }
-        )
-
-        all_unrecognized -= self.update_compile_settings(
-            updates_dict, silent=True
-        )
-
-        recognised = set(updates_dict.keys()) - all_unrecognized
+        recognised = self.driver_interpolator.update(updates, silent=True)
+        if recognised:
+            updates.update(self._driver_settings())
+        recognised |= self.single_integrator.update(updates, silent=True)
+        run = self.single_integrator
+        kernel_updates = {
+            **updates,
+            "loop_fn": run.device_function,
+            "compile_flags": run.output_compile_flags,
+        }
+        recognised |= self.update_compile_settings(kernel_updates, silent=True)
         self._known_system_config = self.system.compile_settings
 
-        if all_unrecognized:
-            if not silent:
-                raise KeyError(f"Unrecognized parameters: {all_unrecognized}")
-
-        # Include unpacked dict keys in recognized set
+        unrecognised = user_keys - recognised
+        if unrecognised and not silent:
+            raise KeyError(f"Unrecognized parameters: {unrecognised}")
         return recognised | unpacked_keys
 
     def configure_drivers(self, drivers: Dict[str, Any]) -> None:
@@ -1548,11 +1456,8 @@ class BatchSolverKernel(CUDAFactory):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the keys rebuilding this kernel; ``blocksize`` if given."""
+        """Return the settings of this kernel and its run."""
         settings = super().settings_dict
-        if not self.blocksize_given:
-            settings.pop("blocksize", None)
-        settings["lineinfo"] = self.compile_settings.lineinfo
         settings.update(self.single_integrator.settings_dict)
         settings.update(
             stream_group=self.stream_group,
@@ -1564,25 +1469,13 @@ class BatchSolverKernel(CUDAFactory):
 
     def copy(self) -> "BatchSolverKernel":
         """Return a kernel with these settings on a system copy."""
-        settings = self.settings_dict
-        grouped = self.single_integrator.grouped_settings()
+        config = self.compile_settings
         return type(self)(
             self.system.copy(),
-            lineinfo=settings["lineinfo"],
-            memory_settings={
-                "memory_manager": self.memory_manager,
-                "stream_group": self.stream_group,
-                "mem_proportion": self.mem_proportion,
-                "host_spill_threshold": self.host_spill_threshold,
-                "spill_directory": self.spill_directory,
-            },
-            cache=settings["cache"],
-            kernel_settings={
-                key: settings[key]
-                for key in ("max_registers", "kernel_name", "blocksize")
-                if key in settings
-            },
-            **grouped,
+            memory_manager=self.memory_manager,
+            unroll=config.unroll,
+            jit_flags=config.jit_flags,
+            **self.settings_dict,
         )
 
     @property
@@ -1693,19 +1586,12 @@ class BatchSolverKernel(CUDAFactory):
         return self.system.compile_settings is not self._known_system_config
 
     def resync_system(self) -> None:
-        """Replay the system's current values through the update chain.
+        """Run the update chain so every child takes the system's products.
 
-        A directly mutated system re-enters through the same events
-        as an update carrying the same values. ``precision`` rides
-        along so the chain runs for a constant-less system.
+        ``precision`` is the key that carries the chain through.
         """
 
-        system = self.system
-        resync = {"precision": system.precision}
-        constants = system.compile_settings.constant_values
-        if constants:
-            resync["constants"] = constants
-        self.update(resync)
+        self.update({"precision": self.system.precision})
 
     @property
     def algorithm(self) -> str:

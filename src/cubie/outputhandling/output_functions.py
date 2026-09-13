@@ -173,6 +173,7 @@ class OutputFunctions(CUDAFactory):
         summarised_state_indices: Union[Sequence[int], ArrayLike] = None,
         summarised_observable_indices: Union[Sequence[int], ArrayLike] = None,
         sample_summaries_every: Optional[float] = None,
+        **compile_flags: object,
     ):
         super().__init__()
 
@@ -190,6 +191,7 @@ class OutputFunctions(CUDAFactory):
             summarised_observable_indices=summarised_observable_indices,
             sample_summaries_every=sample_summaries_every,
             precision=precision,
+            **compile_flags,
         )
         self.setup_compile_settings(config)
 

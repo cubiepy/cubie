@@ -11,13 +11,13 @@ from tests._utils import (
     _build_cpu_step_controller,
     _get_algorithm_order,
     _get_algorithm_tableau,
-    _build_enhanced_algorithm_settings,
     _get_evaluate_driver_at_t,
     _get_driver_del_t,
 )
 import attrs
 
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
+from cubie.batchsolving.solver_settings import SolverSettings, resolve
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
@@ -638,6 +638,7 @@ def chunked_solved_solver(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
+        sample_summaries_every=None,
         save_every=0.01,
         dt=0.01,
     )
@@ -666,6 +667,7 @@ def unchunked_solved_solver(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
+        sample_summaries_every=None,
         save_every=0.01,
         dt=0.01,
     )
@@ -942,8 +944,23 @@ def cpu_driver_evaluator(
 
 
 @pytest.fixture(scope="session")
-def algorithm_settings(solver_settings):
-    """Filter algorithm configuration from solver_settings dict.
+def effective_settings(solver_settings, system):
+    """The settings a Solver would push for ``solver_settings``."""
+    names = set(SolverSettings.names())
+    given = SolverSettings.from_kwargs(
+        **{
+            key: value
+            for key, value in solver_settings.items()
+            if key in names
+        }
+    )
+    resolution = resolve(given, system, SystemInterface(system))
+    return resolution.effective.as_updates()
+
+
+@pytest.fixture(scope="session")
+def algorithm_settings(effective_settings):
+    """Filter algorithm configuration from the effective settings.
 
     Note: Functions (dxdt_fn, observables_fn,
     get_solver_helper_fn, drivers_fn, driver_derivative_fn) are NOT
@@ -951,25 +968,23 @@ def algorithm_settings(solver_settings):
     step objects, not stored in settings dict.
     """
     settings, _ = merge_kwargs_into_settings(
-        kwargs=solver_settings,
-        valid_keys=ALL_ALGORITHM_STEP_PARAMETERS,
+        kwargs=effective_settings,
+        valid_keys=ALL_ALGORITHM_STEP_PARAMETERS | {"tableau"},
     )
-    # n_drivers comes from solver_settings (added in Task Group 1)
-    # Functions are NOT part of algorithm_settings
     return settings
 
 
 @pytest.fixture(scope="session")
-def loop_settings(solver_settings):
+def loop_settings(effective_settings):
     settings, _ = merge_kwargs_into_settings(
-        kwargs=solver_settings,
+        kwargs=effective_settings,
         valid_keys=ALL_LOOP_SETTINGS,
     )
     return settings
 
 
 @pytest.fixture(scope="session")
-def step_controller_settings(solver_settings, system):
+def step_controller_settings(effective_settings, solver_settings, system):
     """Base configuration used to instantiate loop step controllers.
 
     algorithm_order comes from solver_settings which was enriched with
@@ -979,6 +994,14 @@ def step_controller_settings(solver_settings, system):
         kwargs=solver_settings,
         valid_keys=ALL_STEP_CONTROLLER_PARAMETERS,
     )
+    resolved, _ = merge_kwargs_into_settings(
+        kwargs=effective_settings,
+        valid_keys=ALL_STEP_CONTROLLER_PARAMETERS,
+    )
+    # The controller named in the settings is built even when the
+    # solver would replace it for an errorless algorithm.
+    resolved.pop("step_controller", None)
+    settings.update(resolved)
     settings.update(algorithm_order=solver_settings["algorithm_order"])
     settings.update(mass_flags=system.mass_diagonal_flags)
     return settings
@@ -1043,65 +1066,19 @@ def output_functions_mutable(output_settings, system, precision):
 
 
 @pytest.fixture(scope="session")
-def solverkernel(
-    solver_settings,
-    system,
-    driver_settings,
-    step_controller_settings,
-    algorithm_settings,
-    output_settings,
-    memory_settings,
-    loop_settings,
-    unroll_settings,
-):
+def solverkernel(system, driver_settings, effective_settings):
     """Top-level composite fixture for BatchSolverKernel."""
-    # Add system functions to algorithm_settings for BatchSolverKernel
-    enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
-        algorithm_settings, system, None
-    )
-    kernel = BatchSolverKernel(
-        system,
-        lineinfo=solver_settings["lineinfo"],
-        unroll_settings=dict(unroll_settings),
-        step_control_settings=dict(step_controller_settings),
-        algorithm_settings=enhanced_algorithm_settings,
-        output_settings=dict(output_settings),
-        memory_settings=dict(memory_settings),
-        loop_settings=dict(loop_settings),
-    )
+    kernel = BatchSolverKernel(system, **effective_settings)
     if driver_settings is not None:
         kernel.configure_drivers(driver_settings)
     return kernel
 
 
 @pytest.fixture(scope="function")
-def solverkernel_mutable(
-    solver_settings,
-    system,
-    driver_settings,
-    step_controller_settings,
-    algorithm_settings,
-    output_settings,
-    memory_settings,
-    loop_settings,
-    unroll_settings,
-):
+def solverkernel_mutable(system, driver_settings, effective_settings):
     """Function-scoped composite fixture for BatchSolverKernel."""
-    # Add system functions to algorithm_settings for BatchSolverKernel
-    enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
-        algorithm_settings, system, None
-    )
     snapshot = system.compile_settings
-    kernel = BatchSolverKernel(
-        system,
-        lineinfo=solver_settings["lineinfo"],
-        unroll_settings=dict(unroll_settings),
-        step_control_settings=dict(step_controller_settings),
-        algorithm_settings=enhanced_algorithm_settings,
-        output_settings=dict(output_settings),
-        memory_settings=dict(memory_settings),
-        loop_settings=dict(loop_settings),
-    )
+    kernel = BatchSolverKernel(system, **effective_settings)
     if driver_settings is not None:
         kernel.configure_drivers(driver_settings)
     yield kernel
@@ -1211,99 +1188,52 @@ def loop_mutable(single_integrator_run_mutable):
 
 
 @pytest.fixture(scope="session")
-def single_integrator_run(
-    system,
-    solver_settings,
-    driver_array,
-    step_controller_settings,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
+def single_integrator_run(system, driver_array, effective_settings):
     """Top-level composite fixture for SingleIntegratorRun.
 
     Exception to single-fixture rule: Requests both system and driver_array
     as these are the two fundamental base CUDAFactory fixtures. All other
     dependencies are settings fixtures.
     """
-    drivers_fn = _get_evaluate_driver_at_t(driver_array)
-    driver_derivative_fn = _get_driver_del_t(driver_array)
-    # Add system functions to algorithm_settings for SingleIntegratorRun
-    enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
-        algorithm_settings, system, driver_array
-    )
     return SingleIntegratorRun(
-        system=system,
-        drivers_fn=drivers_fn,
-        driver_derivative_fn=driver_derivative_fn,
-        step_control_settings=dict(step_controller_settings),
-        algorithm_settings=enhanced_algorithm_settings,
-        output_settings=dict(output_settings),
-        loop_settings=dict(loop_settings),
+        system,
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
+        driver_derivative_fn=_get_driver_del_t(driver_array),
+        **effective_settings,
     )
 
 
 @pytest.fixture(scope="function")
-def single_integrator_run_mutable(
-    system,
-    solver_settings,
-    driver_array,
-    step_controller_settings,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
+def single_integrator_run_mutable(system, driver_array, effective_settings):
     """Function-scoped composite fixture for SingleIntegratorRun.
 
     Exception to single-fixture rule: Requests both system and driver_array
     as these are the two fundamental base CUDAFactory fixtures. All other
     dependencies are settings fixtures.
     """
-    drivers_fn = _get_evaluate_driver_at_t(driver_array)
-    driver_derivative_fn = _get_driver_del_t(driver_array)
-    # Add system functions to algorithm_settings for SingleIntegratorRun
-    enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
-        algorithm_settings, system, driver_array
-    )
     snapshot = system.compile_settings
     yield SingleIntegratorRun(
-        system=system,
-        loop_settings=dict(loop_settings),
-        drivers_fn=drivers_fn,
-        driver_derivative_fn=driver_derivative_fn,
-        step_control_settings=dict(step_controller_settings),
-        algorithm_settings=enhanced_algorithm_settings,
-        output_settings=dict(output_settings),
+        system,
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
+        driver_derivative_fn=_get_driver_del_t(driver_array),
+        **effective_settings,
     )
     _restore_system_flags(system, snapshot)
 
 
 @pytest.fixture(scope="session")
-def time_function_driver_run(
-    time_function_driver_system,
-    solver_settings,
-    step_controller_settings,
-    algorithm_settings,
-    output_settings,
-    loop_settings,
-):
+def time_function_driver_run(time_function_driver_system, effective_settings):
     """Session run over the equation-driven twin of ``time_array_driver``.
 
     Built from the same chain settings as ``single_integrator_run`` so
     driver-interpolation tests can solve both twins and compare; the
     twin has no drivers, so no driver evaluators are wired in.
     """
-    enhanced_algorithm_settings = _build_enhanced_algorithm_settings(
-        algorithm_settings, time_function_driver_system, None
-    )
     return SingleIntegratorRun(
-        system=time_function_driver_system,
+        time_function_driver_system,
         drivers_fn=None,
         driver_derivative_fn=None,
-        step_control_settings=dict(step_controller_settings),
-        algorithm_settings=enhanced_algorithm_settings,
-        output_settings=dict(output_settings),
-        loop_settings=dict(loop_settings),
+        **effective_settings,
     )
 
 

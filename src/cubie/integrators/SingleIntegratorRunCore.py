@@ -22,52 +22,38 @@ See Also
 """
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
-from warnings import warn
 
 from attrs import define, field
-from numpy import asarray, finfo as np_finfo
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
-from cubie._utils import PrecisionDType, unpack_dict_values
+from cubie._utils import (
+    build_config,
+    merge_kwargs_into_settings,
+    unpack_dict_values,
+)
 from cubie.buffer_registry import buffer_registry
-from cubie.backend.utils import SASS_INSTRUCTION_BYTES, device_hardware
-from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollChoice
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
-    ALL_ALGORITHM_STEP_PARAMETERS,
-    LINEAR_SOLVER_VARIANT_PARAMETERS,
-)
-from cubie.integrators.algorithms.ode_implicitstep import (
-    DAE_SOLVER_DEFAULTS,
+    BaseAlgorithmStep,
 )
 from cubie.integrators.dae_initialiser import DAEInitialiser
-from cubie.integrators.loops.ode_loop import IVPLoop
-from cubie.outputhandling.output_functions import OutputFunctions
+from cubie.integrators.loops.ode_loop import ALL_LOOP_SETTINGS, IVPLoop
+from cubie.outputhandling.output_functions import (
+    ALL_OUTPUT_FUNCTION_PARAMETERS,
+    OutputFunctions,
+)
 from cubie.integrators.step_control import (
-    CONTROLLER_GAIN_PARAMETERS,
+    _CONTROLLER_REGISTRY,
     get_controller,
-    promoted_gain_controller,
+)
+from cubie.integrators.step_control.base_step_controller import (
+    BaseStepController,
 )
 
 
 if TYPE_CHECKING:  # pragma: no cover - imported for static typing only
     from cubie.odesystems.baseODE import BaseODE
-
-
-def warn_on_newton_rtol_inversion(newton_rtol, controller_rtol) -> None:
-    """Warn when the Newton rtol reaches the step controller's rtol."""
-    controller = asarray(controller_rtol)
-    newton = asarray(newton_rtol).reshape(-1, controller.size)
-    inverted = (controller > 0.0) & (newton >= controller)
-    if inverted.any():
-        warn(
-            "newton_rtol is at or above the step controller rtol: the "
-            "requested rtol is below what the working precision "
-            "resolves in the stage solves.",
-            UserWarning,
-            stacklevel=2,
-        )
 
 
 @define
@@ -79,7 +65,16 @@ class SingleIntegratorRunCache(CUDADispatcherCache):
     loop_fn
         Compiled CUDA loop callable ready for execution on device.
     """
+
     loop_fn: Callable = field(eq=False)
+
+
+def _controller_name(controller: BaseStepController) -> str:
+    """Return the registry name of ``controller``'s class."""
+    for name, cls in _CONTROLLER_REGISTRY.items():
+        if type(controller) is cls:
+            return name
+    raise ValueError(f"{type(controller).__name__} is not registered.")
 
 
 class SingleIntegratorRunCore(CUDAFactory):
@@ -89,497 +84,259 @@ class SingleIntegratorRunCore(CUDAFactory):
     ----------
     system
         ODE system whose device functions drive the integration.
-    loop_settings
-        Mapping of compile-critical loop configuration forwarded to the
-        :class:`cubie.integrators.loops.ode_loop.IVPLoop`.  Recognised
-        keys include ``"save_every"`` and ``"summarise_every"``.  When
-        ``None`` the loop falls back to built-in defaults.
-    output_settings
-        Mapping forwarded to :class:`cubie.outputhandling.output_functions.
-        OutputFunctions`.  Recognised keys include ``"output_types"`` and
-        the saved or summarised selector fields:
-        ``"saved_state_indices"``, ``"saved_observable_indices"``,
-        ``"summarised_state_indices"``, and
-        ``"summarised_observable_indices"``.
     drivers_fn
-        Optional device function that interpolates driver inputs for use
-        by step algorithms.
+        Device function that interpolates driver inputs.
     driver_derivative_fn
-        Optional device function providing the time derivative of the
-        driver signal, used by Rosenbrock-W methods.
-    algorithm_settings
-        Mapping forwarded to
-        :func:`cubie.integrators.algorithms.get_algorithm_step`
-        containing ``"algorithm"`` and any additional parameters required
-        by the selected step factory.  When ``None`` the algorithm
-        defaults are used.
-    step_control_settings
-        Mapping merged with the algorithm defaults before calling
-        :func:`cubie.integrators.step_control.get_controller`.  Include
-        ``"step_controller"`` to select a controller family and provide
-        bounds such as ``"dt_min"`` and ``"dt_max"`` when configuring
-        adaptive controllers.  Supported identifiers include ``"fixed"``,
-        ``"i"``, ``"pi"``, ``"pid"``, and ``"gustafsson"``.  When
-        ``None`` the algorithm defaults are used.
-    auto_performance
-        Fill unset unroll and placement settings at build.
+        Device function giving the drivers' time derivative.
+    **settings
+        The resolved settings; each child takes the keys it knows.
+        ``algorithm`` is required; ``step_controller`` defaults to
+        ``"fixed"``.
     """
 
-    settings_keys = frozenset(
-        {"algorithm", "step_controller", "auto_performance"}
-    )
-
-    # Keys the user may fix that the performance defaults never touch.
-    _USER_PERF_OVERRIDES = (
-        ALL_ALGORITHM_STEP_PARAMETERS | ALL_UNROLL_PARAMETERS | {"unroll"}
-    )
-
-    _INNER_TOLERANCE_KEYS = (
-        "krylov_atol",
-        "krylov_rtol",
-        "krylov_residual_reduction",
-        "newton_atol",
-        "newton_rtol",
-    )
-
-    # Child keys this run writes from the system, step or controller.
-    _INJECTED_KEYS = frozenset(
-        {
-            "precision",
-            "n_states",
-            "n_drivers",
-            "mass_flags",
-            "algorithm_order",
-            "is_adaptive",
-            "save_last",
-            "save_regularly",
-            "summarise_regularly",
-        }
-    )
-    _TIMING_KEYS = ("save_every", "summarise_every", "sample_summaries_every")
+    settings_keys = frozenset({"algorithm", "step_controller"})
 
     def __init__(
         self,
         system: "BaseODE",
-        loop_settings: Optional[Dict[str, Any]] = None,
-        output_settings: Optional[Dict[str, Any]] = None,
         drivers_fn: Optional[Callable] = None,
         driver_derivative_fn: Optional[Callable] = None,
-        algorithm_settings: Optional[Dict[str, Any]] = None,
-        step_control_settings: Optional[Dict[str, Any]] = None,
-        auto_performance: bool = True,
+        **settings: Any,
     ) -> None:
         super().__init__()
-
-        if step_control_settings is None:
-            step_control_settings = {}
-        if algorithm_settings is None:
-            algorithm_settings = {}
-        if output_settings is None:
-            output_settings = {}
-        if loop_settings is None:
-            loop_settings = {}
-
-        # Track which inner-solver tolerances the user set explicitly so
-        # the derived controller-scaled defaults never overwrite them.
-        self._user_given_inner_tols = {
-            key
-            for key in self._INNER_TOLERANCE_KEYS
-            if algorithm_settings.get(key) is not None
-        }
-        # Step and unroll parameters the user set explicitly.
-        self._user_given_keys = {
-            key
-            for key in self._USER_PERF_OVERRIDES
-            if algorithm_settings.get(key) is not None
-        }
-
-        precision = system.precision
+        settings, _ = unpack_dict_values(settings)
+        if settings.get("algorithm") is None:
+            raise ValueError("Settings must include 'algorithm'.")
+        # The run and its children take the system's precision.
+        settings["precision"] = system.precision
 
         self._system = system
-        system_sizes = system.sizes
-
-        # Outputsettings may/may not include precision, so we pop it here to
-        # ensure that it gets passed a precision matching system's
-        _ = output_settings.pop("precision", None)
-        self._output_functions = OutputFunctions(
-            n_states=system_sizes.states,
-            n_observables=system_sizes.observables,
-            precision=precision,
-            **output_settings,
-        )
-
-        dt = step_control_settings.get("dt", None)
-        algorithm_settings.update(self._step_inputs())
-        if dt is not None:
-            algorithm_settings["dt"] = dt
-        algorithm_settings["drivers_fn"] = drivers_fn
-        # Thread the driver time-derivative through to algorithm factories
-        algorithm_settings["driver_derivative_fn"] = driver_derivative_fn
-        self._algo_step = get_algorithm_step(
-                precision=precision,
-                settings=algorithm_settings,
-        )
-        self._check_algorithm_consumes_mass(algorithm_settings["algorithm"])
-        self._apply_algorithm_step_defaults()
-        self._apply_dae_linear_solve_defaults()
-        # Drop family gains for another controller or a user filter.
-        controller_settings = self._algo_step.controller_default_settings
-        effective_controller = self._resolve_controller_name(
-            step_control_settings, controller_settings["step_controller"]
-        )
-        if (
-            effective_controller != controller_settings["step_controller"]
-            or step_control_settings.get("filter_coefficients") is not None
-        ):
-            for gain_key in CONTROLLER_GAIN_PARAMETERS:
-                controller_settings.pop(gain_key, None)
-        controller_settings.update(step_control_settings)
-        controller_settings["step_controller"] = effective_controller
-        controller_settings["n_states"] = system_sizes.states
-        controller_settings["algorithm_order"] = (
-            self._algo_step.algorithm_order
-        )
-        controller_settings["mass_flags"] = system.mass_diagonal_flags
-
-        self._step_controller = get_controller(
-            precision=precision,
-            settings=controller_settings,
-        )
-
-        self.check_compatibility(
-            algorithm_settings["algorithm"],
-            controller_settings["step_controller"],
-            precision,
-        )
-        self._algo_step.update(
-            {"is_adaptive": self._step_controller.is_adaptive}, silent=True
-        )
-
-        # Default any unset inner-solver tolerances from the controller.
-        self._apply_inner_tolerance_defaults()
-
-        config = IntegratorRunSettings(
-            precision=system.precision,
-            algorithm=algorithm_settings["algorithm"],
-            step_controller=controller_settings["step_controller"],
-            auto_performance=auto_performance,
+        config = build_config(
+            IntegratorRunSettings,
+            required={
+                "precision": system.precision,
+                "drivers_fn": drivers_fn,
+                "driver_derivative_fn": driver_derivative_fn,
+            },
+            **settings,
         )
         self.setup_compile_settings(config)
-        self._apply_performance_defaults()
+        # Every child takes the same compile flags.
+        settings.update(unroll=config.unroll, jit_flags=config.jit_flags)
 
-        # Non-DAE systems and mode "none" compile a no-op initialiser.
-        init_settings = self._algo_step.settings_dict
-        init_settings["dae_initialisation"] = algorithm_settings.get(
-            "dae_initialisation"
+        output_settings, _ = merge_kwargs_into_settings(
+            settings,
+            ALL_OUTPUT_FUNCTION_PARAMETERS | {"unroll", "jit_flags"},
         )
-        init_settings.update(self._initialiser_inputs())
-        self._dae_initialiser = DAEInitialiser(**init_settings)
+        output_settings.update(self._output_inputs())
+        self._output_functions = OutputFunctions(**output_settings)
 
-        loop_settings.setdefault("drivers_fn", drivers_fn)
-        loop_settings.update(self._loop_inputs())
-        self._loop = IVPLoop(**loop_settings)
-
-        # Timing keys as the user gave them.
-        self._user_timing = dict.fromkeys(self._TIMING_KEYS)
-        self.is_duration_dependent = False
-        self._process_loop_timing(loop_settings)
+        self._algo_step = self._new_step(settings)
+        self._step_controller = self._new_controller(settings)
+        self._dae_initialiser = self._new_initialiser(settings)
+        self._loop = self._new_loop(settings)
         self._register_loop_children()
-        self._sync_loop()
-
-    def _process_loop_timing(self, settings_dict: Dict[str, Any]):
-        """Derive and apply timing parameters from *settings_dict*.
-
-        Resolves ``save_every``, ``summarise_every``, and
-        ``sample_summaries_every`` from user intent and output
-        configuration, then forwards the derived values to the loop
-        and output functions.
-
-        Parameters
-        ----------
-        settings_dict
-            Mapping containing timing overrides.  Recognised keys are
-            ``save_every``, ``summarise_every``, and
-            ``sample_summaries_every``.
-        """
-        # 1. Overwrite "user intent" with incoming values
-        for p in self._TIMING_KEYS:
-            if p in settings_dict:
-                self._user_timing[p] = settings_dict[p]
-
-        has_time_domain_outputs = self.time_domain_outputs_requested
-        has_summary_outputs = self.summary_outputs_requested
-
-        # 2. Get provided values from user intent
-        save_every = self._user_timing["save_every"]
-        summarise_every = self._user_timing["summarise_every"]
-        sample_summaries_every = self._user_timing["sample_summaries_every"]
-
-        save_last = False
-        self.is_duration_dependent = False
-
-        # 3. Time-domain outputs
-        if has_time_domain_outputs and save_every is None:
-            save_last = True
-
-        # 4. Summary outputs
-        if has_summary_outputs:
-            if summarise_every is None:
-                # There is no `summarise_last`, we simulate
-                # summarise_regularly once we get a duration.
-                self.is_duration_dependent = True
-            else:
-                if sample_summaries_every is None:
-                    sample_summaries_every = summarise_every / 10.0
-        else:
-            summarise_every = None
-            sample_summaries_every = None
-
-        save_regularly = save_every is not None and has_time_domain_outputs
-        summarise_regularly = (summarise_every is not None and
-                               has_summary_outputs)
-        values = dict(
-            save_every=save_every,
-            summarise_every=summarise_every,
-            sample_summaries_every=sample_summaries_every,
-            save_last=save_last,
-            save_regularly=save_regularly,
-            summarise_regularly=summarise_regularly,
+        self.update_compile_settings(
+            loop_fn=self._loop.device_function, silent=True
         )
 
-        # Update loop and output functions with derived timing values.
-        self._warn_if_summary_timing_derived()
-        self._loop.update(values)
-        self._output_functions.update(values, silent=True)
-
-    def _warn_if_summary_timing_derived(self):
-        if self.is_duration_dependent:
-            warn(
-                "Summary metrics were requested with no "
-                "summarise_every or sample_summaries_every timing. "
-                "Sample_summaries_every was set to duration / 100 by "
-                "default. If duration changes, the kernel will need "
-                "to recompile, which will cause a slow integration "
-                "(once). Set timing parameters explicitly to avoid "
-                "this.",
-                UserWarning,
-                stacklevel=3,
-            )
-
-    def set_summary_timing_from_duration(self,
-                                         duration: float):
-        """Set summary timing from *duration* when no explicit timing
-        was provided.
-
-        Parameters
-        ----------
-        duration
-            Total integration duration used to derive
-            ``sample_summaries_every`` and ``summarise_every``.
-        """
-
-        if self.is_duration_dependent:
-            samples_per_summary = 100
-            sample_summaries_every = duration / samples_per_summary
-
-            self._output_functions.update(
-                sample_summaries_every=sample_summaries_every,
-            )
-            self._sync_loop(
-                summarise_every=duration,
-                sample_summaries_every=sample_summaries_every,
-            )
-
-    def _apply_inner_tolerance_defaults(self) -> set:
-        """Derive unset inner-solver tolerances from the controller.
-
-        Unset ``newton_atol``/``newton_rtol`` default to the
-        controller's ``atol``/``rtol`` divided by ten, so every stage
-        solve converges tighter than the error estimate it feeds.
-        Unset ``krylov_atol``/``krylov_rtol`` default to the
-        controller's ``atol``/``rtol`` directly: they weight the
-        linear stopping norm, placing its absolute floor at the step
-        tolerance envelope.  Unset ``krylov_residual_reduction``
-        defaults to the adaptive controller's tightest ``rtol`` entry,
-        divided by one hundred for linearly-implicit (``is_linear``)
-        steps; non-adaptive runs default to machine epsilon, leaving
-        the floor governing.  Values the user set explicitly (tracked in
-        ``_user_given_inner_tols``) are preserved.  Solver-norm
-        tolerances take the controller's per-state length, coupled
-        FIRK solves included, so a non-uniform vector carries through
-        unchanged.
-
-        Every controller carries ``atol``/``rtol`` — fixed-step
-        included — so the defaults apply whenever the algorithm is
-        implicit (it then owns inner solvers).
-
-        Returns
-        -------
-        set of str
-            The inner-tolerance keys forwarded to the algorithm step;
-            keys its solvers do not use are ignored there.
-        """
-        if not self._algo_step.is_implicit:
-            return set()
-
-        controller_atol = self._step_controller.atol
-        controller_rtol = self._step_controller.rtol
-        derived_source = {
-            "krylov_atol": controller_atol.copy(),
-            "krylov_rtol": controller_rtol.copy(),
-            "newton_atol": controller_atol / 10.0,
-            "newton_rtol": controller_rtol / 10.0,
-        }
-        # Non-adaptive runs and pure-absolute controllers (rtol of
-        # zero) offer no relative target; an epsilon reduction leaves
-        # the floor governing.
-        controller_rtol_floor = float(controller_rtol.min())
-        if self._step_controller.is_adaptive and controller_rtol_floor > 0.0:
-            if self._algo_step.is_linear:
-                controller_rtol_floor *= 0.01
-            derived_source["krylov_residual_reduction"] = (
-                controller_rtol_floor
-            )
-        else:
-            derived_source["krylov_residual_reduction"] = float(
-                np_finfo(self._algo_step.precision).eps
-            )
-        derived = {
-            key: value
-            for key, value in derived_source.items()
-            if key not in self._user_given_inner_tols
-        }
-        if derived:
-            self._algo_step.update(derived, silent=True)
-        if not self._algo_step.is_linear:
-            warn_on_newton_rtol_inversion(
-                self._algo_step.solver.rtol,
-                self._step_controller.rtol,
-            )
-        return set(derived)
-
-    @property
-    def n_error(self) -> int:
-        """Return the length of the shared error buffer."""
-
-        if self._algo_step.uses_error:
-            return int(self._system.sizes.states)
-        return 0
-
-    @property
-    def device_function(self):
-        """Return the compiled CUDA solver kernel.
-
-        Returns
-        -------
-        callable
-            Compiled CUDA device function.
-        """
-        return self.get_cached_output("loop_fn")
-
-    def check_compatibility(
+    # ------------------------------------------------------------------
+    # Update
+    # ------------------------------------------------------------------
+    def update(
         self,
-        algorithm_name: str = None,
-        controller_name: str = None,
-        precision: PrecisionDType = None,
-    ) -> None:
-        """Validate algorithm and controller compatibility.
-
-        This method checks whether the chosen integration algorithm and step
-        controller are compatible. When an adaptive controller is paired with
-        a fixed-step (errorless) algorithm, this method replaces the adaptive
-        controller with a fixed-step controller and issues a warning.
-
-        The validation is performed during integrator initialization, after
-        both the algorithm and controller have been instantiated but before
-        the CUDA loop is compiled.
+        updates_dict: Optional[Dict[str, Any]] = None,
+        silent: bool = False,
+        **kwargs: Any,
+    ) -> set[str]:
+        """Write ``updates`` into every child and recapture ``loop_fn``.
 
         Parameters
         ----------
-        algorithm_name : str, optional
-            Name of the algorithm being used. If not provided, retrieved from
-            compile_settings.
-        controller_name : str, optional
-            Name of the controller being used. If not provided, retrieved from
-            compile_settings.
-        precision : PrecisionDType, optional
-            Numerical precision for the controller. If not provided, retrieved
-            from system.
+        updates_dict
+            Dictionary of parameters to update; nested dicts are
+            flattened one level.
+        silent
+            If ``True``, suppress errors about unrecognised parameters.
+        **kwargs
+            Additional updates provided as keyword arguments.
+
+        Returns
+        -------
+        set[str]
+            Names of parameters that were recognised and applied.
+
+        Raises
+        ------
+        KeyError
+            Raised when unrecognised parameters remain and ``silent`` is
+            ``False``.
 
         Notes
         -----
-        When an incompatible configuration is detected (adaptive controller
-        with errorless algorithm), the controller is automatically replaced
-        with a fixed-step controller using dt from the original controller.
-        A warning is issued to inform the user of this automatic correction.
-
-        Valid combinations:
-        - Adaptive algorithm + adaptive controller: Valid and recommended
-        - Errorless algorithm + fixed controller: Valid
-        - Adaptive algorithm + fixed controller: Valid (uses fixed step)
-        - Errorless algorithm + adaptive controller: Auto-corrected with
-          warning
+        A new ``algorithm`` or ``step_controller`` swaps that child.
         """
+        if updates_dict is None:
+            updates_dict = {}
+        updates_dict = updates_dict.copy()
+        if kwargs:
+            updates_dict.update(kwargs)
+        if updates_dict == {}:
+            return set()
 
-        if (not self._algo_step.has_error_estimate and
-                self._step_controller.is_adaptive):
-            dt = self._step_controller.dt
+        updates, unpacked_keys = unpack_dict_values(updates_dict)
+        user_keys = set(updates)
 
-            # Get names from arguments or compile_settings
-            if algorithm_name is None:
-                algorithm_name = self.compile_settings.algorithm
-            if controller_name is None:
-                controller_name = self.compile_settings.step_controller
-            if precision is None:
-                precision = self._system.precision
+        # Constant values reach the system by name from the Solver only.
+        recognised = self._system.update_compile_settings(
+            updates, silent=True
+        )
+        recognised |= self.update_compile_settings(updates, silent=True)
+        recognised |= self._output_functions.update(
+            {**updates, **self._output_inputs()}, silent=True
+        )
 
-            warn(
-                f"Adaptive step controller '{controller_name}' cannot be "
-                f"used with fixed-step algorithm '{algorithm_name}'. "
-                f"The algorithm does not provide an error estimate "
-                f"required for adaptive stepping. "
-                f"Replacing with fixed-step controller (dt={dt}).",
-                UserWarning,
-                stacklevel=3
-            )
+        config = self.compile_settings
+        if config.algorithm != self._algo_step_algorithm:
+            self._swap_step(updates)
+        recognised |= self._algo_step.update(
+            {**updates, **self._step_inputs()}, silent=True
+        )
 
-            # Replace with a fixed step controller, keeping the outgoing
-            # controller's atol/rtol so implicit algorithms still derive
-            # their inner-solver tolerances from the user's request.
-            self._step_controller = get_controller(
-                precision=precision,
-                settings={
-                    "step_controller": "fixed",
-                    "dt": dt,
-                    "n_states": self._system.sizes.states,
-                    "atol": self._step_controller.atol,
-                    "rtol": self._step_controller.rtol,
-                    "mass_flags": self._step_controller.mass_flags,
-                },
-                warn_on_unused=False,
-            )
-            self._algo_step.update({"is_adaptive": False}, silent=True)
+        if config.step_controller != _controller_name(self._step_controller):
+            self._swap_controller(updates)
+        recognised |= self._step_controller.update(
+            {**updates, **self._controller_inputs()}, silent=True
+        )
+
+        recognised |= self._dae_initialiser.update(
+            {**updates, **self._initialiser_inputs()}, silent=True
+        )
+
+        self._register_loop_children()
+        recognised |= self._loop.update(
+            {**updates, **self._loop_inputs()}, silent=True
+        )
+        self.update_compile_settings(
+            loop_fn=self._loop.device_function, silent=True
+        )
+
+        unrecognised = user_keys - recognised
+        if unrecognised and not silent:
+            raise KeyError(f"Unrecognized parameters: {unrecognised}")
+        return recognised | unpacked_keys
+
+    # ------------------------------------------------------------------
+    # Children: construction and inputs
+    # ------------------------------------------------------------------
+    def _output_inputs(self) -> Dict[str, Any]:
+        """Return the system's sizes and precision the outputs take."""
+        system = self._system
+        return dict(
+            precision=system.precision,
+            n_states=system.sizes.states,
+            n_observables=system.sizes.observables,
+        )
+
+    def _new_step(self, settings: Dict[str, Any]) -> BaseAlgorithmStep:
+        """Build the named step from ``settings`` and the system."""
+        step_settings = {**settings, **self._step_inputs()}
+        step_settings["algorithm"] = self.compile_settings.algorithm
+        step = get_algorithm_step(
+            precision=self.precision, settings=step_settings
+        )
+        self._algo_step_algorithm = self.compile_settings.algorithm
+        self._check_algorithm_consumes_mass(step)
+        return step
+
+    def _swap_step(self, updates: Dict[str, Any]) -> None:
+        """Swap the step, carrying the old one's compile flags."""
+        old = self._algo_step
+        buffer_registry.clear_parent(old)
+        settings = dict(
+            jit_flags=old.compile_settings.jit_flags,
+            unroll=old.compile_settings.unroll,
+        )
+        settings.update(updates)
+        self._algo_step = self._new_step(settings)
 
     def _step_inputs(self) -> Dict[str, Any]:
-        """Return the system's sizes and device functions the step takes."""
+        """Return the system's products and flags the step takes."""
         system = self._system
-        sizes = system.sizes
+        config = self.compile_settings
         return dict(
-            n_states=int(sizes.states),
-            n_drivers=int(sizes.drivers),
+            precision=system.precision,
+            n_states=system.sizes.states,
+            n_drivers=system.sizes.drivers,
             dxdt_fn=system.dxdt_fn,
             observables_fn=system.observables_fn,
             get_solver_helper_fn=system.get_solver_helper,
+            drivers_fn=config.drivers_fn,
+            driver_derivative_fn=config.driver_derivative_fn,
+            is_adaptive=config.step_controller != "fixed",
         )
+
+    def _new_controller(
+        self, settings: Dict[str, Any]
+    ) -> BaseStepController:
+        """Build the named controller from ``settings``."""
+        controller_settings = {**settings, **self._controller_inputs()}
+        controller_settings["step_controller"] = (
+            self.compile_settings.step_controller
+        )
+        return get_controller(
+            precision=self.precision,
+            settings=controller_settings,
+            warn_on_unused=False,
+        )
+
+    def _swap_controller(self, updates: Dict[str, Any]) -> None:
+        """Swap the controller, carrying the old one's compile flags."""
+        old = self._step_controller
+        buffer_registry.clear_parent(old)
+        settings = dict(
+            jit_flags=old.compile_settings.jit_flags,
+            unroll=old.compile_settings.unroll,
+        )
+        settings.update(updates)
+        self._step_controller = self._new_controller(settings)
+
+    def _controller_inputs(self) -> Dict[str, Any]:
+        """Return the sizes, order and mass flags the controller takes."""
+        system = self._system
+        return dict(
+            precision=system.precision,
+            n_states=system.sizes.states,
+            mass_flags=system.mass_diagonal_flags,
+            algorithm_order=self._algo_step.algorithm_order,
+        )
+
+    def _new_initialiser(self, settings: Dict[str, Any]) -> DAEInitialiser:
+        """Build the initialiser from the step's settings and ``settings``."""
+        init_settings = self._algo_step.settings_dict
+        init_settings.update(settings)
+        init_settings.update(self._initialiser_inputs())
+        init_settings["unroll"] = self._algo_step.compile_settings.unroll
+        init_settings["jit_flags"] = self._algo_step.compile_settings.jit_flags
+        return DAEInitialiser(**init_settings)
 
     def _initialiser_inputs(self) -> Dict[str, Any]:
         """Return the sizes and helper getter the initialiser takes."""
         system = self._system
         return dict(
-            n_states=int(system.sizes.states),
+            precision=system.precision,
+            n_states=system.sizes.states,
             mass_flags=system.mass_diagonal_flags,
             get_solver_helper_fn=system.get_solver_helper,
         )
+
+    def _new_loop(self, settings: Dict[str, Any]) -> IVPLoop:
+        """Build the loop from ``settings`` and the children's products."""
+        loop_settings, _ = merge_kwargs_into_settings(
+            settings, ALL_LOOP_SETTINGS | {"unroll", "jit_flags"}
+        )
+        loop_settings.update(self._loop_inputs())
+        return IVPLoop(**loop_settings)
 
     def _loop_inputs(self) -> Dict[str, Any]:
         """Return the sizes, dt and device functions the loop takes."""
@@ -590,10 +347,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         controller = self._step_controller.products
         return dict(
             precision=system.precision,
-            n_states=int(sizes.states),
-            n_parameters=int(sizes.parameters),
-            n_observables=int(sizes.observables),
-            n_drivers=int(sizes.drivers),
+            n_states=sizes.states,
+            n_parameters=sizes.parameters,
+            n_observables=sizes.observables,
+            n_drivers=sizes.drivers,
             compile_flags=outputs["compile_flags"],
             n_counters=outputs["n_counters"],
             state_summaries_buffer_height=(
@@ -611,6 +368,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             step_controller_fn=controller["step_controller_fn"],
             step_fn=step["step_fn"],
             observables_fn=system.observables_fn,
+            drivers_fn=self.compile_settings.drivers_fn,
             initialise_state_fn=self._dae_initialiser.products[
                 "initialise_state_fn"
             ],
@@ -631,530 +389,70 @@ class SingleIntegratorRunCore(CUDAFactory):
             aliases="algorithm_shared",
         )
 
-    def _sync_loop(self, **updates: Any) -> set[str]:
-        """Push ``updates`` and the children's products; capture loop_fn."""
-        recognised = self._loop.update(
-            {**updates, **self._loop_inputs()}, silent=True
-        )
-        self.update_compile_settings(
-            loop_fn=self._loop.device_function, silent=True
-        )
-        return recognised
-
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs: Any,
-    ) -> set[str]:
-        """Update parameters across all components.
-
-        Parameters
-        ----------
-        updates_dict
-            Dictionary of parameters to update.
-        silent
-            If ``True``, suppress warnings about unrecognised parameters.
-        **kwargs
-            Additional updates provided as keyword arguments.
-
-        Returns
-        -------
-        set[str]
-            Names of parameters that were recognised and applied.
-
-        Raises
-        ------
-        KeyError
-            Raised when unrecognised parameters remain and ``silent`` is
-            ``False``.
-
-        Notes
-        -----
-        When algorithm or controller selections change, new instances are
-        created and primed with settings from their predecessors before
-        applying ``updates_dict``. Parameters present only on the new
-        instance are ignored unless explicitly provided in the update.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        if kwargs:
-            updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
-
-        # Flatten any nested dict values so that all parameters are
-        # top-level keys before passing to sub-components. For example,
-        # step_controller_settings={'dt_min': 0.01} becomes dt_min=0.01.
-        # This ensures sub-components (algorithm, controller, output
-        # functions) receive only flat parameter sets.
-        updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
-        user_named_controller = "step_controller" in updates_dict
-
-        # User-given keys, before derived values are injected.
-        requested_keys = {
-            key
-            for key in set(updates_dict) & self._USER_PERF_OVERRIDES
-            if updates_dict[key] is not None
-        }
-
-        all_unrecognized = set(updates_dict.keys())
-        recognized = set()
-
-        system_recognized = self._system.update(updates_dict, silent=True)
-        sizes = self._system.sizes
-
-        # Push the full layout when the system's shape changed.
-        out_config = self._output_functions.compile_settings
-        if (
-            int(sizes.states) != out_config.n_states
-            or int(sizes.observables) != out_config.n_observables
-        ):
-            updates_dict.update(
-                {
-                    "n_states": int(sizes.states),
-                    "n_parameters": int(sizes.parameters),
-                    "n_observables": int(sizes.observables),
-                }
-            )
-
-        out_rcgnzd = self._output_functions.update(updates_dict, silent=True)
-
-        step_recognized = self._switch_algos(updates_dict)
-        step_recognized |= self._algo_step.update(
-            {**updates_dict, **self._step_inputs()}, silent=True
-        )
-
-        updates_dict["algorithm_order"] = self._algo_step.algorithm_order
-        updates_dict["mass_flags"] = self._system.mass_diagonal_flags
-
-        if not user_named_controller:
-            self._promote_controller(updates_dict)
-        ctrl_rcgnzd = self._switch_controllers(updates_dict)
-        ctrl_rcgnzd |= self._step_controller.update(updates_dict, silent=True)
-        self.check_compatibility()
-        step_recognized |= self._algo_step.update(
-            {"is_adaptive": self._step_controller.is_adaptive}, silent=True
-        )
-
-        # Record any inner-solver tolerances the user set explicitly so the
-        # derived defaults never overwrite them on this or a later update.
-        for key in self._INNER_TOLERANCE_KEYS:
-            if updates_dict.get(key) is not None:
-                self._user_given_inner_tols.add(key)
-        self._user_given_keys |= requested_keys
-
-        # Re-derive unset inner-solver tolerances when the controller
-        # tolerances change or the algorithm is swapped, so they keep
-        # tracking the controller atol/rtol.
-        rederive = bool(
-            ctrl_rcgnzd & {"atol", "rtol", "step_controller"}
-            or "algorithm" in step_recognized
-        )
-        if rederive:
-            step_recognized |= self._apply_inner_tolerance_defaults()
-
-        # Re-derive family and mass-matrix defaults for the new step.
-        if "algorithm" in step_recognized:
-            step_recognized |= self._apply_algorithm_step_defaults()
-            step_recognized |= self._apply_dae_linear_solve_defaults()
-        self._apply_performance_defaults()
-
-        recognized |= self._dae_initialiser.update(
-            {**updates_dict, **self._initialiser_inputs()}, silent=True
-        )
-        self._register_loop_children()
-        self._process_loop_timing(updates_dict)
-        loop_recognized = self._sync_loop(**updates_dict)
-
-        recognized |= self.update_compile_settings(updates_dict, silent=True)
-        recognized |= (out_rcgnzd | ctrl_rcgnzd | step_recognized |
-                       system_recognized | loop_recognized)
-
-        all_unrecognized -= recognized
-        if all_unrecognized and not silent:
-            raise KeyError(f"Unrecognized parameters: {all_unrecognized}")
-
-        # Include unpacked dict keys in recognized set
-        return recognized | unpacked_keys
-
-    def _switch_algos(self, updates_dict):
-        """Replace the algorithm step when ``updates_dict`` contains a
-        new ``"algorithm"`` key and propagate defaults.
-
-        Parameters
-        ----------
-        updates_dict
-            Mutable mapping of pending updates.  Modified in-place to
-            include algorithm defaults for the new step.
-
-        Returns
-        -------
-        set of str
-            ``{"algorithm"}`` if a swap occurred, otherwise empty.
-        """
-        if "algorithm" not in updates_dict:
-            return set()
-        precision = updates_dict.get('precision', self.precision)
-
-        new_algo = updates_dict.get("algorithm").lower()
-        if new_algo != self.compile_settings.algorithm:
-            buffer_registry.clear_parent(self._algo_step)
-            old_settings = self._algo_step.settings_dict
-            old_settings["algorithm"] = new_algo
-            # The driver and system device functions carry over.
-            old_settings.update(self._step_device_functions())
-            old_settings.update(self._step_inputs())
-            self._algo_step = get_algorithm_step(
-                    precision=precision,
-                    settings=old_settings,
-            )
-            self.update_compile_settings(algorithm=new_algo)
-            self._check_algorithm_consumes_mass(new_algo)
-        updates_dict["algorithm"] = new_algo
-
-        # Drop family gains for another controller or a user filter.
-        algo_defaults = self._algo_step.controller_default_settings
-        effective_controller = self._resolve_controller_name(
-            updates_dict, algo_defaults["step_controller"]
-        )
-        skip_gains = (
-            effective_controller != algo_defaults["step_controller"]
-            or updates_dict.get("filter_coefficients") is not None
-        )
-        for key, value in algo_defaults.items():
-            if skip_gains and key in CONTROLLER_GAIN_PARAMETERS:
-                continue
-            if key not in updates_dict:
-                updates_dict[key] = value
-        updates_dict["step_controller"] = effective_controller
-        updates_dict["algorithm_order"] = self._algo_step.algorithm_order
-        return {"algorithm"}
-
-    @staticmethod
-    def _resolve_controller_name(settings, family_default: str) -> str:
-        """Return the controller ``settings`` selects over a family default.
-
-        Parameters
-        ----------
-        settings
-            Mapping that may name ``step_controller`` or carry gains.
-        family_default
-            The algorithm family's default controller name.
-
-        Returns
-        -------
-        str
-            The named controller, else the family default promoted
-            within ``i``/``pi``/``pid`` to carry any given gains.
-        """
-        requested = settings.get("step_controller")
-        if requested is not None:
-            return requested.lower()
-        promoted = promoted_gain_controller(family_default, settings)
-        return promoted or family_default
-
-    def _promote_controller(self, updates_dict) -> None:
-        """Promote the controller to carry any gains in ``updates_dict``.
-
-        Parameters
-        ----------
-        updates_dict
-            Mutable mapping of pending updates; gains a
-            ``step_controller`` entry when promotion is needed.
-        """
-        current = updates_dict.get(
-            "step_controller", self.compile_settings.step_controller
-        )
-        promoted = promoted_gain_controller(current, updates_dict)
-        if promoted is not None:
-            updates_dict["step_controller"] = promoted
-
-    def _check_algorithm_consumes_mass(self, algorithm_name: str) -> None:
-        """Reject explicit algorithms on systems with a mass matrix.
-
-        Parameters
-        ----------
-        algorithm_name
-            Name of the algorithm being installed, used in the error
-            message.
+    def _check_algorithm_consumes_mass(self, step: BaseAlgorithmStep) -> None:
+        """Reject an explicit step on a system with a mass matrix.
 
         Raises
         ------
         ValueError
-            If the system defines a mass matrix and the current
-            algorithm is not implicit. Explicit steps cannot consume
-            a mass matrix and would integrate algebraic constraint
-            residuals as derivatives.
+            If the system has a mass matrix and the step is explicit.
         """
-        if self._system.mass is None or self._algo_step.is_implicit:
+        if self._system.mass is None or step.is_implicit:
             return
         raise ValueError(
             "The system defines a mass matrix and requires an "
-            f"implicit algorithm; '{algorithm_name}' does not "
-            "consume a mass matrix and would integrate the "
+            f"implicit algorithm; '{self.compile_settings.algorithm}' "
+            "does not consume a mass matrix and would integrate the "
             "constraint residuals as derivatives."
         )
 
-    def _apply_algorithm_step_defaults(self) -> set:
-        """Apply family and tableau step defaults to unset keys.
-
-        Newton-variant defaults
-        (:data:`LINEAR_SOLVER_VARIANT_PARAMETERS`) apply when the
-        linear solver in use is the family's default one and drop
-        when the user picks a different ``linear_correction_type``.
-
-        Returns
-        -------
-        set of str
-            The default keys forwarded to the algorithm step.
-        """
-        defaults = self._algo_step.step_default_settings
-        user_given = self._user_given_keys
-        if (
-            "linear_correction_type" in user_given
-            and self._algo_step.is_implicit
-            and self._algo_step.linear_correction_type
-            != defaults.get("linear_correction_type")
-        ):
-            for key in LINEAR_SOLVER_VARIANT_PARAMETERS:
-                defaults.pop(key, None)
-        updates = {
-            key: value
-            for key, value in defaults.items()
-            if key not in user_given
-        }
-        if not updates:
-            return set()
-        return self._algo_step.update(updates, silent=True)
-
-    def _apply_dae_linear_solve_defaults(self) -> set:
-        """Fill unset linear solve keys from ``DAE_SOLVER_DEFAULTS``."""
-        if self._system.mass is None or not self._algo_step.is_implicit:
-            return set()
-        user_given = self._user_given_keys
-        updates = {
-            key: value
-            for key, value in DAE_SOLVER_DEFAULTS.items()
-            if key not in user_given
-        }
-        effective = updates.get(
-            "preconditioner_type", self._algo_step.preconditioner_type
-        )
-        if effective == "neumann":
-            raise ValueError(
-                "Neumann preconditioners assume an identity mass "
-                "matrix and cannot precondition a system with torn "
-                "algebraic rows. Use preconditioner_type='jacobi'."
-            )
-        if not updates:
-            return set()
-        return self._algo_step.update(updates)
-
-    def _switch_controllers(self, updates_dict):
-        """Replace the step controller when ``updates_dict`` contains a
-        new ``"step_controller"`` key.
-
-        Parameters
-        ----------
-        updates_dict
-            Mutable mapping of pending updates.  Modified in-place to
-            normalise the controller name.
-
-        Returns
-        -------
-        set of str
-            ``{"step_controller"}`` if a swap occurred, otherwise empty.
-        """
-        if "step_controller" not in updates_dict:
-            return set()
-        precision = updates_dict.get('precision', self.precision)
-
-        new_controller = updates_dict.get("step_controller").lower()
-
-        if new_controller != self.compile_settings.step_controller:
-            buffer_registry.clear_parent(self._step_controller)
-            old_settings = self._step_controller.settings_dict
-            # A new controller starts from its own gain defaults.
-            for key in CONTROLLER_GAIN_PARAMETERS:
-                old_settings.pop(key, None)
-            old_settings["step_controller"] = new_controller
-            old_settings["algorithm_order"] = updates_dict.get(
-                "algorithm_order", self._algo_step.algorithm_order)
-            self._step_controller = get_controller(
-                    precision=precision,
-                    settings=old_settings,
-            )
-            self.update_compile_settings(
-                step_controller=new_controller
-            )
-        updates_dict["step_controller"] = new_controller
-        return {"step_controller"}
+    # ------------------------------------------------------------------
+    # Build and settings
+    # ------------------------------------------------------------------
+    @property
+    def device_function(self):
+        """Return the compiled CUDA loop function."""
+        return self.get_cached_output("loop_fn")
 
     def build(self) -> SingleIntegratorRunCache:
         """Return the loop function captured by the last update."""
         return SingleIntegratorRunCache(loop_fn=self.compile_settings.loop_fn)
 
     @property
+    def n_error(self) -> int:
+        """Return the length of the shared error buffer."""
+        return self._algo_step.n_error
+
+    @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the keys rebuilding this run; derived ones only as given."""
-        step = self._algo_step
+        """Settings of this run and its children."""
         settings = super().settings_dict
-        # The run writes the loop's dt and schedule itself.
-        loop_settings = self._loop.settings_dict
-        for key in ("dt", *self._TIMING_KEYS):
-            loop_settings.pop(key, None)
-        settings.update(loop_settings)
-        for child in (self._output_functions, self._step_controller, step):
+        for child in (
+            self._loop,
+            self._output_functions,
+            self._dae_initialiser,
+            self._step_controller,
+            self._algo_step,
+        ):
             settings.update(child.settings_dict)
-        for key in self._INJECTED_KEYS:
-            settings.pop(key, None)
-        settings.pop("sample_summaries_every", None)
-        settings.update(
-            {
-                key: value
-                for key, value in self._user_timing.items()
-                if value is not None
-            }
-        )
-        for key in self._INNER_TOLERANCE_KEYS:
-            if key not in self._user_given_inner_tols:
-                settings.pop(key, None)
-
-        # Performance defaults stay derived while auto_performance is on.
-        user_given = self._user_given_keys
-        if "unroll" in user_given:
-            user_given = user_given | ALL_UNROLL_PARAMETERS
-        auto = self.compile_settings.auto_performance
-        for key in step.performance_defaults:
-            if auto and key not in user_given:
-                settings.pop(key, None)
-        flags = self.compile_settings.unroll
-        settings.update(
-            {
-                key: getattr(flags, key)
-                for key in ALL_UNROLL_PARAMETERS & user_given
-            }
-        )
-        if not auto and step.is_implicit:
-            settings["unroll_newton_exits"] = (
-                step.compile_settings.unroll.unroll_newton_exits
-            )
         return settings
-
-    def grouped_settings(self) -> Dict[str, Dict[str, Any]]:
-        """Return ``settings_dict`` split into the constructor's groups."""
-        settings = self.settings_dict
-        groups = {
-            "loop_settings": self._loop.settings_keys,
-            "output_settings": self._output_functions.settings_keys,
-            "step_control_settings": self._step_controller.settings_keys,
-            "algorithm_settings": self._algo_step.settings_keys,
-            "unroll_settings": ALL_UNROLL_PARAMETERS,
-        }
-        grouped = {
-            name: {
-                key: value
-                for key, value in settings.items()
-                if key in keys
-            }
-            for name, keys in groups.items()
-        }
-        grouped["auto_performance"] = settings["auto_performance"]
-        return grouped
-
-    def _step_device_functions(self) -> Dict[str, Optional[Callable]]:
-        """Return the device functions the step holds, by settings key."""
-        config = self._algo_step.compile_settings
-        return {
-            key: getattr(config, key, None)
-            for key in (
-                "dxdt_fn",
-                "observables_fn",
-                "drivers_fn",
-                "driver_derivative_fn",
-                "get_solver_helper_fn",
-            )
-        }
 
     def copy(self) -> "SingleIntegratorRunCore":
         """Return a new run with these settings on a copy of the system."""
-        drivers = self._step_device_functions()
-        grouped = self.grouped_settings()
-        unroll_settings = grouped.pop("unroll_settings")
-        twin = type(self)(
+        config = self.compile_settings
+        return type(self)(
             self._system.copy(),
-            drivers_fn=drivers["drivers_fn"],
-            driver_derivative_fn=drivers["driver_derivative_fn"],
-            **grouped,
+            drivers_fn=config.drivers_fn,
+            driver_derivative_fn=config.driver_derivative_fn,
+            unroll=config.unroll,
+            jit_flags=config.jit_flags,
+            **self.settings_dict,
         )
-        if unroll_settings:
-            twin.update(unroll_settings, silent=True)
-        return twin
 
-    def _apply_performance_defaults(self) -> set:
-        """Fill unset unroll and placement keys from size and hardware.
-
-        Returns
-        -------
-        set of str
-            The keys forwarded to the algorithm step.
-        """
-        step = self._algo_step
-        if not self.compile_settings.auto_performance or not step.is_implicit:
-            return set()
-        updates = dict(step.performance_defaults)
-        if step.newton_solves_per_step > 0:
-            unrolled = (
-                self._system.operation_count
-                + step.per_step_operation_count
-                + step.newton_max_iters
-                * step.newton_solves_per_step
-                * step.newton_body_operation_count
-            )
-            capacity = (
-                device_hardware().instruction_cache_bytes
-                // SASS_INSTRUCTION_BYTES
-            )
-            updates["unroll_newton_exits"] = (
-                UnrollChoice.ROLLED
-                if unrolled > capacity
-                else UnrollChoice.FULL
-            )
-        user_given = self._user_given_keys
-        if "unroll" in user_given:
-            user_given = user_given | ALL_UNROLL_PARAMETERS
-        updates = {
-            key: value
-            for key, value in updates.items()
-            if key not in user_given
-        }
-        if not updates:
-            return set()
-        return step.update(updates, silent=True)
-
-    def optimisation_candidates(
-        self, force: bool = False
-    ) -> Tuple[Dict[str, Any], ...]:
-        """Return the step's candidate settings minus keys the user fixed.
-
-        Parameters
-        ----------
-        force
-            Vary the user-fixed keys too.
-        """
-        fixed = set() if force else set(self._user_given_keys)
-        if "unroll" in fixed:
-            fixed |= ALL_UNROLL_PARAMETERS
-        candidates = []
-        for combo in self._algo_step.optimisation_candidates:
-            free = {
-                key: value for key, value in combo.items() if key not in fixed
-            }
-            if free not in candidates:
-                candidates.append(free)
-        return tuple(candidates)
+    @property
+    def algorithm_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """Return the step's candidate settings for ``Solver.optimize``."""
+        return self._algo_step.optimisation_candidates
 
     @property
     def time_domain_outputs_requested(self) -> bool:

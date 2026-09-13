@@ -35,8 +35,7 @@ def test_newton_solves_per_step(step_object, solves):
     "solver_settings_override", [ALGORITHM_CHAIN_SETS["dirk"]], indirect=True
 )
 def test_helper_counts_are_recorded(single_integrator_run, step_object):
-    """The step and system carry operator counts after a build."""
-    single_integrator_run.device_function
+    """The step and system carry operator counts once wired."""
     counts = step_object.compile_settings.helper_operation_counts
     assert counts.residual > 0
     assert counts.total(step_object.NEWTON_HELPERS) > counts.residual
@@ -49,11 +48,9 @@ def test_helper_counts_are_recorded(single_integrator_run, step_object):
 @pytest.mark.parametrize(
     "solver_settings_override", [ALGORITHM_CHAIN_SETS["dirk"]], indirect=True
 )
-def test_small_step_keeps_newton_loop_unrolled(
-    single_integrator_run, step_object, system
-):
+def test_small_step_keeps_newton_loop_unrolled(solver, system):
     """A step under the instruction-cache capacity keeps a full loop."""
-    single_integrator_run.device_function
+    step_object = solver.kernel.single_integrator._algo_step
     unrolled = (
         system.operation_count
         + step_object.per_step_operation_count
@@ -69,11 +66,9 @@ def test_small_step_keeps_newton_loop_unrolled(
 @pytest.mark.parametrize(
     "solver_settings_override", [LARGE_DIRK, LARGE_FIRK], indirect=True
 )
-def test_large_step_rolls_newton_loop(
-    single_integrator_run, step_object, system
-):
+def test_large_step_rolls_newton_loop(solver, system):
     """A step over the instruction-cache capacity rolls its Newton loop."""
-    single_integrator_run.device_function
+    step_object = solver.kernel.single_integrator._algo_step
     unrolled = (
         system.operation_count
         + step_object.per_step_operation_count
@@ -105,24 +100,21 @@ def test_user_newton_flag_wins(solver):
 @pytest.mark.parametrize(
     "solver_settings_override", [LARGE_FIRK], indirect=True
 )
-def test_large_firk_stage_increment_moves_to_shared(
-    single_integrator_run, step_object
-):
+def test_large_firk_stage_increment_moves_to_shared(solver):
     """FIRK ``stage_increment`` is shared above the size cut."""
-    single_integrator_run.device_function
+    run = solver.kernel.single_integrator
+    step_object = run._algo_step
     assert step_object.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
     assert step_object.compile_settings.stage_increment_location == "shared"
-    assert single_integrator_run.shared_memory_elements > 0
+    assert run.shared_memory_elements > 0
 
 
 @pytest.mark.parametrize(
     "solver_settings_override", [ALGORITHM_CHAIN_SETS["firk"]], indirect=True
 )
-def test_small_firk_stage_increment_stays_local(
-    single_integrator_run, step_object
-):
+def test_small_firk_stage_increment_stays_local(solver):
     """FIRK ``stage_increment`` stays local at or below the size cut."""
-    single_integrator_run.device_function
+    step_object = solver.kernel.single_integrator._algo_step
     assert step_object.n_states <= SHARED_STAGE_INCREMENT_MIN_STATES
     assert step_object.compile_settings.stage_increment_location == "local"
 
@@ -132,11 +124,9 @@ def test_small_firk_stage_increment_stays_local(
     [{**LARGE_FIRK, "stage_increment_location": "local"}],
     indirect=True,
 )
-def test_user_location_wins_over_placement(
-    single_integrator_run, step_object
-):
+def test_user_location_wins_over_placement(solver):
     """An explicit ``stage_increment_location`` is never overridden."""
-    single_integrator_run.device_function
+    step_object = solver.kernel.single_integrator._algo_step
     assert step_object.compile_settings.stage_increment_location == "local"
 
 

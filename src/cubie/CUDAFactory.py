@@ -74,6 +74,7 @@ from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 from cubie._serialize import canonical_digest
 from cubie._utils import (
     in_attr,
+    nested_config_fields,
     PrecisionDType,
     precision_validator,
     precision_converter,
@@ -130,21 +131,7 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
     return field_map
 
 
-@cache
-def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields typed as attrs classes; unwraps ``Optional``."""
-    from typing import Union, get_args, get_origin
-
-    nested = []
-    for fld in fields(cls):
-        candidates = (fld.type,)
-        if get_origin(fld.type) is Union:
-            candidates = get_args(fld.type)
-        for candidate in candidates:
-            if isinstance(candidate, type) and has(candidate):
-                nested.append(fld)
-                break
-    return tuple(nested)
+_nested_config_fields = nested_config_fields
 
 
 def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:

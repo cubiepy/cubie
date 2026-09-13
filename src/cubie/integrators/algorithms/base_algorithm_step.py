@@ -752,6 +752,13 @@ class BaseAlgorithmStep(CUDAFactory):
 
     settings_keys = frozenset(ALL_ALGORITHM_STEP_PARAMETERS)
 
+    @classmethod
+    def family_defaults(
+        cls, tableau: Optional[ButcherTableau] = None
+    ) -> AlgorithmDefaults:
+        """Return the family's controller and solver defaults."""
+        raise NotImplementedError
+
     def __init__(
         self,
         config: BaseStepConfig,

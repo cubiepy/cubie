@@ -64,6 +64,11 @@ class CrankNicolsonStepConfig(ImplicitStepConfig):
 class CrankNicolsonStep(ODEImplicitStep):
     """Crank–Nicolson step with embedded backward Euler error estimation."""
 
+    @classmethod
+    def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
+        """Return the Crank-Nicolson defaults."""
+        return CN_DEFAULTS.copy()
+
     # Diagonals 0.5 (trapezoidal) and 1.0 (backward Euler companion).
     _PREFACTOR_STAGE_DATA = (((0.5, 0.0), (0.0, 1.0)), (1.0, 1.0))
 

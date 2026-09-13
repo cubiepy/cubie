@@ -303,7 +303,7 @@ class TestLiveSolverRespecialisation:
             {"x": [1.0]}, {"k": [1.0]}, duration=1.0
         ).time_domain_array.copy()
 
-        solver_mutable.update({"amp": 4.0})
+        solver_mutable.update(system_constants={"amp": 4.0})
         live = solver_mutable.solve(
             {"x": [1.0]}, {"k": [1.0]}, duration=1.0
         ).time_domain_array.copy()
@@ -355,7 +355,7 @@ class TestLiveSolverRespecialisation:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            solver_mutable.update({"Cs": 2e-2})
+            solver_mutable.update(system_constants={"Cs": 2e-2})
         assert system.mass is None
         y0 = {
             name: np.array([float(value)])

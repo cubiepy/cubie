@@ -64,6 +64,11 @@ BE_DEFAULTS = AlgorithmDefaults(
 class BackwardsEulerStep(ODEImplicitStep):
     """Backward Euler step solved with matrix-free Newton–Krylov."""
 
+    @classmethod
+    def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
+        """Return the backward Euler defaults."""
+        return BE_DEFAULTS.copy()
+
     # The single stage solves with a_ij = 1.
     _PREFACTOR_STAGE_DATA = (((1.0,),), (1.0,))
     _BAKED_STAGE_DIAGONAL = 1.0

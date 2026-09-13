@@ -493,22 +493,11 @@ def test_batch_solver_kernel_uses_name_from_system(solverkernel, system):
 
 
 def test_batch_solver_kernel_disabled_cache_attaches_nothing(
-    system,
-    step_controller_settings,
-    algorithm_settings,
-    output_settings,
-    memory_settings,
-    loop_settings,
+    system, effective_settings
 ):
     """cache=False builds a kernel with no disk cache attached."""
     kernel = BatchSolverKernel(
-        system,
-        step_control_settings=step_controller_settings,
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
-        memory_settings=memory_settings,
-        loop_settings=loop_settings,
-        cache=False,
+        system, **{**effective_settings, "cache": False}
     )
     assert kernel.compile_settings.cache.cache_enabled is False
     kernel.kernel

@@ -78,7 +78,11 @@ from numpy import (
 )
 from numpy.typing import ArrayLike
 from cubie.cuda_simsafe import cuda
-from attrs import field, fields, has, validators, Attribute
+from functools import cache as _cache
+from typing import Union as _Union, get_args as _get_args
+from typing import get_origin as _get_origin
+
+from attrs import NOTHING, Factory, field, fields, has, validators, Attribute
 from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
 
 PrecisionDType = Union[
@@ -809,4 +813,40 @@ def build_config(
         if k in field_to_external
     }
 
+    # Loose keys of a nested config fold into it, as update does.
+    loose = {k: v for k, v in merged.items() if k not in field_to_external}
+    for fld in nested_config_fields(config_class):
+        handle = fld.alias if fld.alias is not None else fld.name
+        if not loose or not fld.init:
+            break
+        if handle in final:
+            base = final[handle]
+            if fld.converter is not None:
+                base = fld.converter(base)
+        elif isinstance(fld.default, Factory):
+            base = fld.default.factory()
+        else:
+            base = fld.default
+        if base is None or base is NOTHING:
+            continue
+        nested, recognised, _ = base.update(loose)
+        if recognised:
+            final[handle] = nested
+            loose = {k: v for k, v in loose.items() if k not in recognised}
+
     return config_class(**final)
+
+
+@_cache
+def nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
+    """Return the fields typed as attrs classes; unwraps ``Optional``."""
+    nested = []
+    for fld in fields(cls):
+        candidates = (fld.type,)
+        if _get_origin(fld.type) is _Union:
+            candidates = _get_args(fld.type)
+        for candidate in candidates:
+            if isinstance(candidate, type) and has(candidate):
+                nested.append(fld)
+                break
+    return tuple(nested)

@@ -190,15 +190,11 @@ class DAEInitialiser(CUDAFactory):
             for key, value in kwargs.items()
             if value is not None
         }
-        tolerance_kwargs = {
+        # The cap and correction type never follow the stage solver.
+        child_kwargs = {
             key: value
             for key, value in kwargs.items()
-            if key in ("newton_atol", "newton_rtol")
-        }
-        lu_kwargs = {
-            key: value
-            for key, value in kwargs.items()
-            if key == "lu_factor_location"
+            if key not in ("newton_max_iters", "linear_correction_type")
         }
         self.linear_solver = ODEImplicitStep._construct_linear_solver(
             precision=precision,
@@ -206,14 +202,14 @@ class DAEInitialiser(CUDAFactory):
             norm=None,
             norm_reference="base_state",
             linear_correction_type="lu",
-            **lu_kwargs,
+            **child_kwargs,
         )
         self.norm = DIRKCorrectionNorm(
             precision=precision,
             solver_width=n_states,
             n_states=n_states,
             instance_label="newton",
-            **tolerance_kwargs,
+            **child_kwargs,
         )
 
         config = build_config(
@@ -597,6 +593,17 @@ class DAEInitialiser(CUDAFactory):
             self.build_solver_helpers()
 
         return recognized
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the settings plus the LU solve's and norm's tolerances."""
+        settings = super().settings_dict
+        for key in ("unroll", "jit_flags"):
+            settings.pop(key, None)
+        settings.update(self.linear_solver.settings_dict)
+        settings[self.norm.prefixed("atol")] = self.norm.atol
+        settings[self.norm.prefixed("rtol")] = self.norm.rtol
+        return settings
 
     @property
     def device_function(self) -> Callable:

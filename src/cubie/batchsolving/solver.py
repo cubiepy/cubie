@@ -33,6 +33,7 @@ See Also
 
 from pathlib import Path
 from functools import partial
+from warnings import warn
 from weakref import finalize
 from typing import (
     Any,
@@ -58,34 +59,26 @@ from cubie.batchsolving.calibration import (
     CalibrationResult,
     run_calibration,
 )
-from cubie.batchsolving.optimize import OptimizeResult, run_optimization
+from cubie.batchsolving.optimize import (
+    OptimizeResult,
+    run_optimization,
+)
+from cubie.batchsolving.solver_settings import (
+    SolverSettings,
+    resolve,
+    resolve_performance,
+)
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
     SolveSpec,
 )
 from cubie.batchsolving.SystemInterface import SystemInterface
-from cubie.memory.mem_manager import ALL_MEMORY_MANAGER_PARAMETERS
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.ODEData import ALL_ODE_PARAMETERS
 from cubie.odesystems.symbolic import create_ODE_system
 from cubie.array_interpolator import ArrayInterpolator
-from cubie.integrators.algorithms.base_algorithm_step import (
-    ALL_ALGORITHM_STEP_PARAMETERS,
-)
-from cubie.integrators.loops.ode_loop import (
-    ALL_LOOP_SETTINGS,
-)
-from cubie.integrators.step_control.base_step_controller import (
-    ALL_STEP_CONTROLLER_PARAMETERS,
-)
-from cubie._utils import merge_kwargs_into_settings
-from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollFlags
-from cubie.outputhandling.output_functions import (
-    ALL_OUTPUT_FUNCTION_PARAMETERS,
-)
+from cubie.cuda_simsafe import UnrollFlags
 from cubie.time_logger import default_timelogger
-from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
 
 # Register module-level events
 default_timelogger.register_event(
@@ -117,14 +110,6 @@ def _finalize_solver(kernel: BatchSolverKernel) -> None:
 default_timelogger.register_event(
     "solver_solve", "runtime", "Wall-clock time for Solver.solve()"
 )
-
-
-RENAMED_TIMING_KWARGS = {
-    "dt_save": "save_every",
-    "dt_summarise": "summarise_every",
-    "dt_update_summaries": "sample_summaries_every",
-}
-"""Legacy timing keyword spellings mapped to their current names."""
 
 
 def _system_from_equations(
@@ -192,40 +177,6 @@ def _system_from_equations(
         drivers=drivers,
         **create_kwargs,
     )
-
-
-def _check_renamed_kwargs(keys: Iterable[str]) -> None:
-    """Raise ``KeyError`` for legacy keyword spellings with rename hints.
-
-    Parameters
-    ----------
-    keys
-        Keyword-argument names supplied by the caller.
-
-    Raises
-    ------
-    KeyError
-        If any key is a legacy spelling listed in
-        :data:`RENAMED_TIMING_KWARGS`.
-    """
-    renamed = [key for key in keys if key in RENAMED_TIMING_KWARGS]
-    if renamed:
-        hints = ", ".join(
-            f"'{key}' is now '{RENAMED_TIMING_KWARGS[key]}'"
-            for key in renamed
-        )
-        raise KeyError(f"Renamed keyword argument(s): {hints}.")
-
-
-_OUTPUT_SELECTION_KEYS = (
-    "save_variables",
-    "summarise_variables",
-    "saved_state_indices",
-    "saved_observable_indices",
-    "summarised_state_indices",
-    "summarised_observable_indices",
-)
-"""Settings recording which variables the user asked to output."""
 
 
 def solve_ivp(
@@ -319,9 +270,6 @@ def solve_ivp(
             precision=kwargs.pop("precision", None),
         )
 
-    # Collect required explicit parameters from kwargs
-    loop_settings = kwargs.pop("loop_settings", None)
-
     if save_variables is not None:
         kwargs.setdefault("save_variables", save_variables)
     if summarise_variables is not None:
@@ -336,8 +284,8 @@ def solve_ivp(
     solver = Solver(
         system,
         algorithm=method,
-        loop_settings=loop_settings,
         time_logging_level=time_logging_level,
+        duration=duration,
         **kwargs,
     )
 
@@ -386,9 +334,9 @@ class Solver:
     algorithm_settings
         Explicit algorithm configuration overriding solver defaults.
     system_settings
-        ODE compile settings keyed by :class:`cubie.odesystems.ODEData`
-        compile parameters (for example ``operation_ordering``); each
-        key may also be supplied as a loose keyword.
+        ODE compile settings: ``precision``, ``operation_ordering`` and
+        ``system_constants`` (a name-to-value dict); each may also be
+        supplied as a loose keyword.
     output_settings
         Explicit output configuration overriding solver defaults. Individual
         selectors such as ``save_variables`` or index-based parameters may also
@@ -422,6 +370,13 @@ class Solver:
         Additional keyword arguments forwarded to internal components. See
         "Optional Arguments" in the docs for the possibilities.
 
+    Attributes
+    ----------
+    given
+        The settings as provided, a :class:`SolverSettings`.
+    effective
+        The settings in effect, provided and derived.
+
     Notes
     -----
     Instances coordinate batch grid construction, kernel configuration, and
@@ -453,135 +408,44 @@ class Solver:
         auto_performance: bool = True,
         **kwargs: Any,
     ) -> None:
-        if output_settings is None:
-            output_settings = {}
-        if memory_settings is None:
-            memory_settings = {}
-        if step_control_settings is None:
-            step_control_settings = {}
-        if algorithm_settings is None:
-            algorithm_settings = {}
-        if system_settings is None:
-            system_settings = {}
-        if loop_settings is None:
-            loop_settings = {}
-
-        _check_renamed_kwargs(kwargs)
-
         # Set global time logging level
         default_timelogger.set_verbosity(time_logging_level)
 
         super().__init__()
-        unroll_settings, unroll_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_UNROLL_PARAMETERS,
-            user_settings={},
-        )
-        if unroll is not None:
-            unroll_settings["unroll"] = unroll
-        system_settings, system_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_ODE_PARAMETERS,
-            user_settings=system_settings,
-        )
-        if system_settings:
-            system.update(system_settings)
-        precision = system.precision
-        kwargs["precision"] = precision
-        interface = SystemInterface(system)
-        self.system_interface = interface
-
-        recognized_kwargs: set[str] = set()
-
-        output_settings, output_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_OUTPUT_FUNCTION_PARAMETERS,
-            user_settings=output_settings,
-        )
-        # Label kwargs are converted to index settings, not forwarded.
-        output_settings, label_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=("save_variables", "summarise_variables"),
-            user_settings=output_settings,
-        )
-        output_recognized |= label_recognized
-        # Record the selection before conversion for re-resolution.
-        self._output_selection_intent = {
-            key: output_settings[key]
-            for key in _OUTPUT_SELECTION_KEYS
-            if output_settings.get(key) is not None
-        }
-        self._resolved_output_layout = None
-        self.convert_output_labels(output_settings)
-        self._resolved_output_layout = self._output_layout()
-
-        memory_settings, memory_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_MEMORY_MANAGER_PARAMETERS,
-            user_settings=memory_settings,
-        )
-
-        step_settings, step_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_STEP_CONTROLLER_PARAMETERS,
-            user_settings=step_control_settings,
-        )
-        algorithm_settings, algorithm_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_ALGORITHM_STEP_PARAMETERS,
-            user_settings=algorithm_settings,
-        )
-        algorithm_settings["algorithm"] = algorithm
-        loop_settings, loop_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_LOOP_SETTINGS,
-            user_settings=loop_settings,
-        )
-        kernel_settings, kernel_recognized = merge_kwargs_into_settings(
-            kwargs=kwargs,
-            valid_keys=ALL_KERNEL_PARAMETERS,
-            user_settings={},
-        )
-        recognized_kwargs = (
-            step_recognized
-            | algorithm_recognized
-            | system_recognized
-            | output_recognized
-            | memory_recognized
-            | loop_recognized
-            | kernel_recognized
-            | unroll_recognized
-        )
-
-        self.kernel = BatchSolverKernel(
-            system,
-            loop_settings=loop_settings,
+        for group in (
+            step_control_settings,
+            algorithm_settings,
+            system_settings,
+            output_settings,
+            memory_settings,
+            loop_settings,
+        ):
+            if group:
+                kwargs.update(group)
+        self.given = SolverSettings.from_kwargs(
+            algorithm=algorithm,
             lineinfo=lineinfo,
-            unroll_settings=unroll_settings,
-            step_control_settings=step_settings,
-            algorithm_settings=algorithm_settings,
-            output_settings=output_settings,
-            memory_settings=memory_settings,
+            unroll=unroll,
             cache=cache,
             auto_performance=auto_performance,
-            kernel_settings=kernel_settings,
+            **kwargs,
         )
+        self.system_interface = SystemInterface(system)
+        self._notices: Set[str] = set()
+        self._apply_system_settings(system)
+        self.effective = self._resolve(system)
+        self.kernel = BatchSolverKernel(system, **self.effective.as_updates())
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
+        self._push()
         # Grids assemble into buffers per the kernel's spill settings.
         self.input_handler = BatchInputHandler(
-            interface,
+            self.system_interface,
             memory_manager=self.kernel.memory_manager,
             host_spill_threshold=self.kernel.host_spill_threshold,
             spill_directory=self.kernel.spill_directory,
         )
         self._solve_info_cache = None
         self._solve_info_key = None
-
-        if set(kwargs) - recognized_kwargs:
-            raise KeyError(
-                "Unrecognized keyword arguments: "
-                f"{set(kwargs) - recognized_kwargs}"
-            )
 
     def close(self, shutdown_timeout: Optional[float] = None) -> None:
         """Release GPU resources after pending transfers finish.
@@ -598,19 +462,87 @@ class Solver:
         if finalizer is not None:
             finalizer.detach()
 
+    # ------------------------------------------------------------------
+    # Settings
+    # ------------------------------------------------------------------
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the kwargs rebuilding this solver; derived ones as given."""
-        settings = self.kernel.settings_dict
-        for key in _OUTPUT_SELECTION_KEYS:
-            settings.pop(key, None)
-        settings.update(self._output_selection_intent)
+        """Return the kwargs rebuilding this solver: the provided ones."""
+        settings = self.given.as_kwargs()
         settings["time_logging_level"] = default_timelogger.verbosity
         return settings
+
+    @property
+    def effective_settings(self) -> Dict[str, Any]:
+        """Return the settings in effect, provided and derived."""
+        return self.effective.as_kwargs()
+
+    @property
+    def blocksize_given(self) -> bool:
+        """Return whether ``blocksize`` was provided."""
+        return self.given.given("blocksize")
+
+    def optimisation_candidates(
+        self, force: bool = False
+    ) -> Tuple[Dict[str, Any], ...]:
+        """Step candidates minus the provided keys; ``force`` keeps them."""
+        candidates = []
+        for combo in self.kernel.single_integrator.algorithm_candidates:
+            free = {
+                key: value
+                for key, value in combo.items()
+                if force or not self.given.given(key)
+            }
+            if free not in candidates:
+                candidates.append(free)
+        return tuple(candidates)
 
     def copy(self) -> "Solver":
         """Return a solver with these settings on a system copy; no drivers."""
         return type(self)(self.system.copy(), **self.settings_dict)
+
+    def _apply_system_settings(self, system: BaseODE) -> None:
+        """Write the provided system settings into ``system``."""
+        given = self.given
+        updates = {
+            key: getattr(given, key)
+            for key in ("precision", "operation_ordering")
+            if given.given(key)
+        }
+        if updates:
+            system.update(updates, silent=True)
+        if given.system_constants:
+            system.set_constants(given.system_constants, silent=True)
+
+    def _resolve(self, system: BaseODE) -> SolverSettings:
+        """Resolve the effective settings; warn about new notices."""
+        resolution = resolve(self.given, system, self.system_interface)
+        for notice in resolution.notices:
+            if notice not in self._notices:
+                warn(notice, UserWarning, stacklevel=4)
+        self._notices = set(resolution.notices)
+        return resolution.effective
+
+    def _push(self) -> None:
+        """Resolve and push the effective settings into the kernel."""
+        system = self.system
+        effective = self._resolve(system)
+        self.kernel.update(effective.as_updates(), silent=True)
+        # The unroll and placement defaults follow the built step.
+        performed = resolve_performance(
+            self.given,
+            effective,
+            self.kernel.single_integrator._algo_step,
+            system,
+            previous=self.effective,
+        )
+        if any(
+            getattr(performed, name) is not getattr(effective, name)
+            for name in performed.names()
+        ):
+            self.kernel.update(performed.as_updates(), silent=True)
+        self.effective = performed
+        self._solve_info_key = None
 
     def __enter__(self) -> "Solver":
         """Return self so the solver can be used as a context manager."""
@@ -619,23 +551,6 @@ class Solver:
     def __exit__(self, exc_type, exc, traceback) -> None:
         """Release GPU resources on exit from a ``with`` block."""
         self.close()
-
-    def _output_layout(self) -> tuple:
-        """Return the system's current state/observable name layout."""
-        return (
-            tuple(self.system_interface.states.names),
-            tuple(self.system_interface.observables.names),
-        )
-
-    def _refresh_output_selection(self) -> None:
-        """Re-resolve the output selection after a layout change."""
-        layout = self._output_layout()
-        if layout == self._resolved_output_layout:
-            return
-        settings = dict(self._output_selection_intent)
-        self.convert_output_labels(settings)
-        self.kernel.update(settings, silent=True)
-        self._resolved_output_layout = layout
 
     def convert_output_labels(
         self,
@@ -673,6 +588,17 @@ class Solver:
             :meth:`ArrayInterpolator.update_from_dict`.
         """
         self.kernel.configure_drivers(drivers)
+
+    def _prepare(self, duration: float, kwargs: Dict[str, Any]) -> None:
+        """Apply solve-time settings and a changed duration."""
+        if duration != self.given.duration:
+            kwargs = {**kwargs, "duration": duration}
+        if kwargs:
+            self.update(kwargs)
+        if self.kernel.system_config_stale:
+            # Replay a direct system mutation through the update chain.
+            self.kernel.resync_system()
+            self._push()
 
     def solve(
         self,
@@ -766,13 +692,7 @@ class Solver:
         and the next ``solve()`` on this solver overwrites them. A
         chunked run raises ``ValueError``.
         """
-        if kwargs:
-            self.update(kwargs)
-
-        if self.kernel.system_config_stale:
-            # Replay a direct system mutation through the update chain.
-            self.kernel.resync_system()
-            self._refresh_output_selection()
+        self._prepare(duration, kwargs)
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
@@ -825,13 +745,7 @@ class Solver:
         **kwargs: Any,
     ) -> None:
         """Compile the batch kernel for these inputs without solving."""
-        if kwargs:
-            self.update(kwargs)
-
-        if self.kernel.system_config_stale:
-            # Replay a direct system mutation through the update chain.
-            self.kernel.resync_system()
-            self._refresh_output_selection()
+        self._prepare(duration, kwargs)
 
         inits, params = self.input_handler(
             states=initial_values, params=parameters, kind=grid_type
@@ -1052,12 +966,12 @@ class Solver:
         silent: bool = False,
         **kwargs: Any,
     ) -> Set[str]:
-        """Update solver, integrator, and system settings.
+        """Record settings as provided, resolve and push them down.
 
         Parameters
         ----------
         updates_dict
-            Mapping of attribute names to new values.
+            Mapping of setting names to new values; ``None`` unsets.
         silent
             If ``True`` unknown keys are ignored instead of raising
             ``KeyError``.
@@ -1067,7 +981,7 @@ class Solver:
         Returns
         -------
         Set[str]
-            Set of keys that were successfully updated.
+            Set of keys that were recognised.
 
         Raises
         ------
@@ -1082,38 +996,15 @@ class Solver:
         if updates_dict == {}:
             return set()
 
-        _check_renamed_kwargs(updates_dict)
-
-        # Keep the recorded selection current for re-resolution.
-        for key in _OUTPUT_SELECTION_KEYS:
-            if updates_dict.get(key) is not None:
-                self._output_selection_intent[key] = updates_dict[key]
-
-        # Only convert output labels if variable-related keys are present
-        variable_keys = {"save_variables", "summarise_variables"}
-        if any(key in updates_dict for key in variable_keys):
-            self.convert_output_labels(updates_dict)
-            self._resolved_output_layout = self._output_layout()
-
-        all_unrecognized = set(updates_dict.keys())
-        all_unrecognized -= self.update_memory_settings(
-            updates_dict, silent=True
+        self.given, recognised = self.given.updated(
+            updates_dict, strict=not silent
         )
-        all_unrecognized -= self.system_interface.update(
-            updates_dict, silent=True
-        )
-        all_unrecognized -= self.kernel.update(updates_dict, silent=True)
-
-        # Re-resolve the output selection if the layout changed.
-        self._refresh_output_selection()
-
-        recognised = set(updates_dict.keys()) - all_unrecognized
-        if recognised:
-            self._solve_info_key = None
-
-        if all_unrecognized:
-            if not silent:
-                raise KeyError(f"Unrecognized parameters: {all_unrecognized}")
+        if "mem_proportion" in recognised:
+            self.update_memory_settings(
+                {"mem_proportion": self.given.mem_proportion}, silent=True
+            )
+        self._apply_system_settings(self.system)
+        self._push()
         return recognised
 
     def update_memory_settings(
