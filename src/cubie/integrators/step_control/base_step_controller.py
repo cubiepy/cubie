@@ -59,6 +59,7 @@ from cubie._utils import (
     optional_tuple_converter,
     build_config,
     PrecisionDType,
+    product_field,
     tol_converter,
 )
 from cubie.buffer_registry import buffer_registry
@@ -299,15 +300,23 @@ def promoted_gain_controller(current: str, settings) -> Optional[str]:
 
 @define
 class ControllerCache(CUDADispatcherCache):
-    """Cache container for compiled step-controller device functions.
+    """The controller's device function, step bounds and tolerances.
 
     Attributes
     ----------
     step_controller_fn
         Compiled CUDA device function, or ``-1`` before compilation.
+    is_adaptive, dt, dt_min, dt_max, atol, rtol
+        The controller's adaptivity, step bounds and tolerances.
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)
+    is_adaptive: bool = product_field()
+    dt: float = product_field()
+    dt_min: float = product_field()
+    dt_max: float = product_field()
+    atol: Optional[ndarray] = product_field()
+    rtol: Optional[ndarray] = product_field()
 
 
 @frozen

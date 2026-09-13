@@ -157,12 +157,18 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 
 ### Solver helpers arrive by name
 Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=..., **kwargs).device_function` with plain strings and bools: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus the request axes (`jacobian_at="step"` for frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing, `prefactored=True` for step-start LU factors). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
-`ODEImplicitStep.update` refreshes the step settings
-first, then adds the derived `solver_width` (the coupled all-stages length
-for FIRK; `n_states` elsewhere) for the solver subtree. `ODEImplicitStep.build()` runs `build_implicit_helpers()`
-**before** reading `compile_settings` — the helper refresh replaces the
-snapshot. Each `build_implicit_helpers` pushes an `OperationCounts` into
-`helper_operation_counts`; `newton_body_operation_count`, `per_step_operation_count`,
+Every implicit step and the initialiser take `get_solver_helper_fn` at
+construction: constructors and `update` (after a recognised key) run
+`build_implicit_helpers()`, which requests the helpers, pushes them into the
+solver children and writes their device functions and an `OperationCounts`
+into the step's config; `build()` reads that config only.
+`ODEImplicitStep.update` adds `solver_width` (the coupled all-stages length
+for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change; FIRK
+adds the tableau's rows for its norm in the same update. `StepCache`
+carries `threads_per_step`, `n_error`, `algorithm_order`,
+`has_error_estimate`, `is_implicit`, `is_linear`, `newton_solves_per_step`
+and `step_operation_count` from the same-named properties.
+`newton_body_operation_count`, `per_step_operation_count`,
 `newton_solves_per_step` and `performance_defaults` feed the core's
 `_apply_performance_defaults`. `optimisation_candidates` lists the setting
 combinations `Solver.optimize` times (base `({},)`).

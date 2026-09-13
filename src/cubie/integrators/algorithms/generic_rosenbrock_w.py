@@ -209,6 +209,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         super().__init__(config, defaults, **kwargs)
 
         self.register_buffers()
+        self.build_implicit_helpers()
 
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
@@ -265,10 +266,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             dtype=np_int32,
         )
 
-    def build_implicit_helpers(
-        self,
-    ) -> None:
-        """Construct the linear solver used by Rosenbrock methods."""
+    def build_implicit_helpers(self) -> None:
+        """Request the helpers and push the linear solver's product."""
         config = self.compile_settings
         request_kwargs = self._helper_request_kwargs()
 

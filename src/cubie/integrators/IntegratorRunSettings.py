@@ -22,8 +22,11 @@ See Also
     controller factories.
 """
 
+from typing import Callable, Optional
+
 import attrs
 
+from cubie._utils import device_function_field
 from cubie.CUDAFactory import CUDAFactoryConfig
 
 
@@ -40,7 +43,9 @@ class IntegratorRunSettings(CUDAFactoryConfig):
     step_controller
         Name of the step-size controller.
     auto_performance
-        Fill unset unroll and placement settings at build; hash-excluded.
+        Fill unset unroll and placement settings; hash-excluded.
+    loop_fn
+        The loop device function captured after every update.
     """
 
     algorithm: str = attrs.field(
@@ -56,6 +61,7 @@ class IntegratorRunSettings(CUDAFactoryConfig):
         validator=attrs.validators.instance_of(bool),
         eq=False,
     )
+    loop_fn: Optional[Callable] = device_function_field()
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()

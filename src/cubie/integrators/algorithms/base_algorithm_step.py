@@ -14,7 +14,7 @@ Published Classes
 
 :class:`StepCache`
     Cache container for compiled step and optional nonlinear solver
-    device functions.
+    device functions, the step's sizes, order and flags.
 
 :class:`BaseAlgorithmStep`
     Abstract CUDAFactory base for all integration step implementations.
@@ -40,7 +40,12 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict, Optional, Set, Any, Tuple, Sequence
 import warnings
 
-from attrs import define, field, validators, frozen
+from attrs import (
+    define,
+    field,
+    validators,
+    frozen,
+)
 from numpy import (
     array as np_array,
     ascontiguousarray as np_ascontiguousarray,
@@ -60,6 +65,7 @@ from cubie._utils import (
     opt_getype_validator,
     precision_converter,
     PrecisionDType,
+    product_field,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import (
@@ -716,22 +722,21 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
 
 @define
 class StepCache(CUDADispatcherCache):
-    """Container for compiled device helpers used by an algorithm step.
-
-    Parameters
-    ----------
-    step_fn
-        Device function that advances the integration state.
-    nonlinear_solver_fn
-        Optional device function used by implicit methods to perform
-        nonlinear solves.
-    """
+    """A step's device functions with its sizes, order and flags."""
 
     step_fn: Callable = field(validator=is_device_validator)
     nonlinear_solver_fn: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
     )
+    threads_per_step: int = product_field()
+    n_error: int = product_field()
+    algorithm_order: int = product_field()
+    has_error_estimate: bool = product_field()
+    is_implicit: bool = product_field()
+    is_linear: bool = product_field()
+    newton_solves_per_step: int = product_field()
+    step_operation_count: int = product_field()
 
 
 class BaseAlgorithmStep(CUDAFactory):
@@ -844,6 +849,21 @@ class BaseAlgorithmStep(CUDAFactory):
         return recognised
 
     @property
+    def n_error(self) -> int:
+        """``n_states`` while the step writes an error estimate, else 0."""
+        return self.n_states if self.uses_error else 0
+
+    @property
+    def newton_solves_per_step(self) -> int:
+        """Return the Newton solves one step runs."""
+        return 0
+
+    @property
+    def step_operation_count(self) -> int:
+        """Return the operator count of one fully unrolled step."""
+        return 0
+
+    @property
     def n_drivers(self) -> int:
         """Return the configured number of external drivers."""
 
@@ -857,7 +877,7 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     def algorithm_defaults(self) -> Dict[str, Any]:
-        """Return combined family and individual tableau defaults."""
+        """Return the family defaults overlaid with the tableau's."""
         merged = dict(self._defaults.settings)
         tableau = self.compile_settings.tableau
         if tableau is not None:
@@ -986,9 +1006,11 @@ class BaseAlgorithmStep(CUDAFactory):
         return self.get_cached_output("step_fn")
 
     def copy(self) -> "BaseAlgorithmStep":
-        """Return a new step of this family with these settings."""
+        """Return a new step with these settings and the helper factory."""
         return type(self)(
-            tableau=self.compile_settings.tableau, **self.settings_dict
+            tableau=self.compile_settings.tableau,
+            get_solver_helper_fn=self.get_solver_helper_fn,
+            **self.settings_dict,
         )
 
     @property
