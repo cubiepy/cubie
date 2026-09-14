@@ -240,8 +240,7 @@ class ODELoopConfig(CUDAFactoryConfig):
         Returns
         -------
         int
-            Number of samples per summary, or ``0`` when either timing
-            parameter is ``None``.
+            Number of samples per summary, or ``0`` without a window.
 
         Raises
         ------
@@ -252,7 +251,7 @@ class ODELoopConfig(CUDAFactoryConfig):
         summarise_every = self.summarise_every
         sample_summaries_every = self.sample_summaries_every
 
-        if summarise_every is None or sample_summaries_every is None:
+        if not self.summarise_regularly:
             return 0
 
         raw_ratio = summarise_every / sample_summaries_every

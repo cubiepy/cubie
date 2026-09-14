@@ -607,12 +607,15 @@ def test_update_process_loop_timing_called(
     run.update({
         "output_types": ["state"],
         "save_every": 0.05,
+        "save_regularly": True,
         "summarise_every": None,
         "sample_summaries_every": None,
+        "summarise_regularly": False,
     })
     assert run.save_every == pytest.approx(0.05, rel=1e-3)
     loop_cfg = run._loop.compile_settings
     assert loop_cfg._summarise_every is None
+    assert loop_cfg.summarise_regularly is False
 
 
 # ── Computed properties ─────────────────────────────────────────────────── #

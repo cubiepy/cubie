@@ -395,19 +395,15 @@ class SingleIntegratorRunCore(CUDAFactory):
     @property
     def has_time_domain_outputs(self) -> bool:
         """Return True if time-domain outputs will be produced by the loop"""
-        has_time_domain_types = self.time_domain_outputs_requested
-        has_save_timing = (
-            self._loop.compile_settings._save_every is not None
-            or self._loop.compile_settings.save_last
+        config = self._loop.compile_settings
+        return self.time_domain_outputs_requested and (
+            config.save_regularly or config.save_last
         )
-        return has_time_domain_types and has_save_timing
 
     @property
     def has_summary_outputs(self) -> bool:
         """Return True if summary outputs will be produced by the loop"""
-        has_summaries_types = self.summary_outputs_requested
         config = self._loop.compile_settings
-        has_summarise_timing = (
-            config._summarise_every is not None or config.summarise_last
+        return self.summary_outputs_requested and (
+            config.summarise_regularly or config.summarise_last
         )
-        return has_summaries_types and has_summarise_timing

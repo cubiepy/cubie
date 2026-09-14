@@ -500,14 +500,9 @@ class BatchSolverKernel(CUDAFactory):
         end_time = self.precision(duration) + self.dt_min
 
         # Validate time-domain output timing parameters
-        if integrator.has_time_domain_outputs:
+        if integrator.save_regularly:
             save_every = integrator.save_every
-            save_last = integrator.save_last
-            if (
-                save_every is not None
-                and save_every > end_time
-                and not save_last
-            ):
+            if save_every > end_time:
                 raise ValueError(
                     f"save_every ({save_every}) > duration ({duration}) "
                     f"so this loop will produce no outputs"

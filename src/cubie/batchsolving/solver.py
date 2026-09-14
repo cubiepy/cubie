@@ -1387,17 +1387,17 @@ class Solver:
     @property
     def save_every(self) -> Optional[float]:
         """Return the interval between saved time-domain outputs."""
-        return self.kernel.save_every
+        return self.effective.save_every
 
     @property
     def summarise_every(self) -> Optional[float]:
-        """Return the interval between summary computations."""
-        return self.kernel.summarise_every
+        """Return the summary window; ``None`` is one over the run."""
+        return self.effective.summarise_every
 
     @property
     def sample_summaries_every(self) -> Optional[float]:
         """Return the interval between summary metric samples."""
-        return self.kernel.sample_summaries_every
+        return self.effective.sample_summaries_every
 
     @property
     def duration(self):
