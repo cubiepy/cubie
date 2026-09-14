@@ -471,8 +471,7 @@ class Solver:
     def optimisation_candidates(
         self, force: bool = False
     ) -> Tuple[Dict[str, Any], ...]:
-        """Return possible optimisation candidates for a step, keeping any
-        user-given parameters fixed unless ``force`` is True."""
+        """Return optimisation candidates; ``force`` frees the given keys."""
         candidates = []
         for combo in self.kernel.single_integrator.optimisation_candidates:
             free = {
@@ -489,8 +488,7 @@ class Solver:
         return type(self)(self.system.copy(), **self.settings_dict)
 
     def _apply_performance_defaults(self) -> None:
-        """Update the loop-unrolling and buffer-placement parameters from
-        auto-performance defaults."""
+        """Apply the auto-performance unroll and placement defaults."""
         defaults = performance_defaults(
             self.given, self.kernel.single_integrator._algo_step, self.system
         )
