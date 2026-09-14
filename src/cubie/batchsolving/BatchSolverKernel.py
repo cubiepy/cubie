@@ -660,8 +660,6 @@ class BatchSolverKernel(CUDAFactory):
             precision=self.single_integrator.precision,
         )
 
-        # Validate timing parameters to prevent array index errors
-
         # An attached table is a cached build output: nothing to upload.
         driver_coefficients = self.driver_interpolator.coefficients
         attached = self.input_arrays.host.driver_coefficients.array
