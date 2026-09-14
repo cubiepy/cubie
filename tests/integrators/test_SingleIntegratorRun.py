@@ -145,7 +145,7 @@ def test_system_forwarding(single_integrator_run, system):
 def test_save_summaries_func_chain(single_integrator_run):
     """save_summaries_fn chains through save_summaries_fn."""
     run = single_integrator_run
-    assert run.save_summaries_fn is run.save_summaries_fn
+    assert run.save_summaries_fn is run._output_functions.save_summaries_fn
 
 
 # ── shared_memory_bytes ─────────────────────────────────────────────────── #
