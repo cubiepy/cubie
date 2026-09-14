@@ -2040,8 +2040,7 @@ LARGE_DIRK = {**LARGE_STATE_ONLY, "algorithm": "dirk"}
 
 LARGE_FIRK = {**LARGE_STATE_ONLY, "algorithm": "radau_iia_3"}
 
-# Matrix-free (Krylov) implicit sets for the shared-memory placement
-# rules; the small Krylov FIRK is ``BICGSTAB_STEP_CASES[0]``.
+# Krylov implicit sets; the small Krylov FIRK is BICGSTAB_STEP_CASES[0].
 KRYLOV_DIRK = {
     "algorithm": "dirk",
     "linear_correction_type": "bicgstab",

@@ -41,11 +41,10 @@ def _hardware(l2_cache_bytes, instruction_cache_bytes=128 * 1024):
     )
 
 
-# A 4 KiB frame at 64-thread blocks on 56 SMs is 14 MB of local memory
-# per resident block.
+# 4 KiB frames: 14 MB of local memory per resident 64-thread block.
 FRAME = 4096
+# Blocks per SM per block size: 384, 512, 512 and 256 threads.
 SHAPES = {32: 12, 64: 8, 128: 4, 256: 1}
-"""Blocks per SM per block size: 384, 512, 512 and 256 threads."""
 
 
 def test_small_frames_are_never_cut():
@@ -79,15 +78,13 @@ def test_default_launch_takes_the_most_threads_smaller_block_on_a_tie():
 
 
 def test_default_launch_over_the_instruction_cache_takes_the_larger_block():
-    """A kernel over the instruction cache takes the largest block
-    within the tie band of the most resident threads."""
+    """Over the instruction cache the largest block in the tie band wins."""
     hardware = _hardware(48 * MIB, instruction_cache_bytes=1024)
     assert default_launch(SHAPES, 0, 2048, hardware) == (128, 4)
 
 
 def test_default_launch_cuts_every_block_size_to_the_budget():
-    """The L2 budget counted at 64-thread blocks caps every block size;
-    a block size that cannot hold it in whole blocks is out."""
+    """The 64-thread-block budget caps every block size in whole blocks."""
     hardware = _hardware(48 * MIB)
     budget = BUDGET_BLOCKSIZE * resident_blocks_within_l2(
         FRAME, BUDGET_BLOCKSIZE, SHAPES[BUDGET_BLOCKSIZE], hardware

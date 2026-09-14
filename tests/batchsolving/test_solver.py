@@ -2919,9 +2919,8 @@ def test_run_rejects_a_driver_system_without_driver_inputs(
 def test_auto_launch_follows_residency_budget(
     solver, simple_initial_values, simple_parameters
 ):
-    """An unset block size launches a launchable shape within the L2
-    residency budget, memoised per batch; a block size given to the
-    launch is kept."""
+    """An unset block size launches within the residency budget, memoised
+    per batch; a given block size is kept."""
     solver.compile(
         simple_initial_values,
         simple_parameters,
@@ -2986,10 +2985,8 @@ def test_given_blocksize_setting_is_launched_as_given(
 def test_auto_blocksize_of_shared_kernel_maximises_threads(
     solver, simple_initial_values, simple_parameters
 ):
-    """A shared-memory kernel with a small local frame launches the
-    block size with the most resident threads: the smallest on a tie,
-    or the largest within the tie band once the kernel is over the
-    instruction cache."""
+    """A shared-memory kernel launches the most resident threads: the
+    smaller block on a tie, the larger one over the instruction cache."""
     solver.compile(
         simple_initial_values,
         simple_parameters,
