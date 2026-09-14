@@ -106,7 +106,7 @@ class InterpolatorCache(CUDADispatcherCache):
 ALL_INTERPOLATOR_PARAMETERS = frozenset(
     {"order", "wrap", "boundary_condition"}
 )
-"""Interpolation keywords a Solver takes; samples come with the drivers."""
+"""Keyword args for interpolation settings passed to the solver."""
 
 
 def _input_array_converter(value: Any) -> FloatArray:

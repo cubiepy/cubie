@@ -82,7 +82,7 @@ from functools import cache as _cache
 from typing import Union as _Union, get_args as _get_args
 from typing import get_origin as _get_origin
 
-from attrs import field, fields, has, validators, Attribute
+from attrs import evolve, field, fields, has, validators, Attribute
 from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
 
 PrecisionDType = Union[
@@ -816,11 +816,19 @@ def build_config(
         if k in field_to_external
     }
 
-    # Loose nested keys fold through the config's own update.
     config = config_class(**final)
+    # Remaining keys name fields of nested settings (unroll_*, lineinfo).
     loose = {k: v for k, v in merged.items() if k not in field_to_external}
-    if loose and callable(getattr(config, "update", None)):
-        config, _, _ = config.update(loose)
+    nested = {}
+    for fld in nested_config_fields(config_class) if loose else ():
+        current = getattr(config, fld.name)
+        if current is None:
+            continue
+        replacement, _, changed = current.update(loose)
+        if changed:
+            nested[fld.alias or fld.name] = replacement
+    if nested:
+        config = evolve(config, **nested)
     return config
 
 

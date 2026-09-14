@@ -760,7 +760,7 @@ class BaseAlgorithmStep(CUDAFactory):
         driver_derivative_fn: Optional[Callable],
         is_adaptive: bool,
     ) -> Dict[str, Any]:
-        """Return what a step takes from ``system`` and the drivers."""
+        """Return step settings from a system object and driver functions."""
         return dict(
             precision=system.precision,
             n_states=system.sizes.states,

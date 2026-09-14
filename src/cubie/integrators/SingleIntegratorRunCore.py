@@ -161,6 +161,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         }
     )
     _TIMING_KEYS = ("save_every", "summarise_every", "sample_summaries_every")
+    SAMPLES_PER_SUMMARY_WINDOW = 10
+    """Summary samples per window when only ``summarise_every`` is given."""
+    SAMPLES_PER_RUN_SUMMARY = 100
+    """Summary samples when the window is the run duration."""
 
     def __init__(
         self,
@@ -333,7 +337,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             else:
                 if sample_summaries_every is None:
                     sample_summaries_every = (
-                        summarise_every / IVPLoop.DEFAULT_SAMPLES_PER_SUMMARY
+                        summarise_every / self.SAMPLES_PER_SUMMARY_WINDOW
                     )
         else:
             summarise_every = None
@@ -383,8 +387,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """
 
         if self.is_duration_dependent:
-            samples_per_summary = 100
-            sample_summaries_every = duration / samples_per_summary
+            sample_summaries_every = duration / self.SAMPLES_PER_RUN_SUMMARY
 
             self._output_functions.update(
                 sample_summaries_every=sample_summaries_every,
@@ -567,8 +570,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _step_inputs(
         self, updates: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Return what the step takes from the system and the drivers."""
-        # Driver functions in the updates replace the step's current ones.
+        """Return step settings from the system; updates may name drivers."""
         config = self._algo_step.compile_settings
         updates = {} if updates is None else updates
         return BaseAlgorithmStep.system_inputs(
@@ -582,7 +584,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
     def _initialiser_inputs(self) -> Dict[str, Any]:
-        """Return what the initialiser takes from the system."""
+        """Return initialiser settings from the system."""
         return DAEInitialiser.system_inputs(self._system)
 
     def _loop_inputs(self) -> Dict[str, Any]:
@@ -807,8 +809,6 @@ class SingleIntegratorRunCore(CUDAFactory):
             buffer_registry.clear_parent(self._algo_step)
             old_settings = self._algo_step.settings_dict
             old_settings["algorithm"] = new_algo
-            # The driver and system device functions carry over.
-            old_settings.update(self._step_device_functions())
             old_settings.update(self._step_inputs(updates_dict))
             self._algo_step = get_algorithm_step(
                     precision=precision,

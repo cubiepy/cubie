@@ -1123,3 +1123,15 @@ def test_child_products_carry_their_declared_fields(
     assert interpolator["coefficients_shape"] == (
         solverkernel.driver_interpolator.coefficients_shape
     )
+
+
+def test_update_validates_a_value_equal_to_the_stored_one():
+    """A wrong-typed value that compares equal still runs the validator."""
+    @attrs.frozen
+    class _C(_CubieConfigBase):
+        x: float = attrs.field(
+            default=1.0, validator=attrs.validators.instance_of(float)
+        )
+
+    with pytest.raises(TypeError):
+        _C().update({"x": True})

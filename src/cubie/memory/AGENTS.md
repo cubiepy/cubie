@@ -77,7 +77,7 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   retained bytes are reclaimed via `free_all_blocks` under pressure.
 - `create_host_array` allocates the requested type; a `"pinned"`
   request whose reservation or `cudaHostAlloc` fails lands pageable.
-  `"memmap"` arrays land in `spill_directory` (default: system temp).
+  `"memmap"` arrays land in `spill_directory` (default: the cache root).
 - Pageable and memmap transfers stage through the pinned buffer pool,
   charged to the same budget; the first buffer per label reserves
   past it.

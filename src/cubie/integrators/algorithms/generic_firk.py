@@ -271,11 +271,7 @@ class FIRKStep(ODEImplicitStep):
             **kwargs,
         )
 
-        # Select defaults based on error estimate
-        if tableau.has_error_estimate:
-            defaults = FIRK_ADAPTIVE_DEFAULTS
-        else:
-            defaults = FIRK_FIXED_DEFAULTS
+        defaults = self.family_defaults(tableau)
 
         newton_norm = FIRKCorrectionNorm(
             precision=precision,

@@ -416,7 +416,7 @@ class BaseStepController(CUDAFactory):
     def system_inputs(
         cls, system: Any, algorithm_order: int
     ) -> Dict[str, Any]:
-        """Return what a controller takes from ``system`` and the step."""
+        """Return controller settings from a system object and step order."""
         return dict(
             precision=system.precision,
             n_states=system.sizes.states,

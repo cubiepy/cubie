@@ -400,9 +400,9 @@ class Solver:
         default only arrays larger than 80% of total system RAM spill
         — everything smaller is pageable RAM the operating system
         manages. Lower it to keep RAM free for other work, or raise it
-        to keep even larger results in RAM. ``spill_directory`` is an
-        existing directory for spill files (default: the system temp
-        directory); point it at a fast disk for large spilled runs.
+        to keep even larger results in RAM. ``spill_directory`` holds
+        the spill files (default: the cache root); point it at a fast
+        disk for large spilled runs.
         An idle solver's completed device buffers are freed when
         another solver faces a genuine VRAM shortage; the evicted
         solver reallocates on its next solve.

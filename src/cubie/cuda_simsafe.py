@@ -89,7 +89,6 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
 from attrs import Factory, field, frozen
-from attrs import evolve as attrs_evolve
 from attrs import fields as attrs_fields
 from attrs import validators as attrs_validators
 from numpy import (
@@ -102,6 +101,7 @@ from numpy import (
 
 from cubie.cuda_backend import IS_MLIR
 from cubie._env import lineinfo_default
+from cubie._settings import FrozenSettings
 
 
 CUDA_SIMULATION: bool = os.environ.get("NUMBA_ENABLE_CUDASIM") == "1"
@@ -160,15 +160,14 @@ else:
 
 
 @frozen
-class JITFlags:
+class JITFlags(FrozenSettings):
     """Per-factory ``cuda.jit`` compile flags.
 
     Every managed jit option travels the same path: stored on the
     factory's compile settings (hashed into the config, so a change
     triggers a rebuild), then rendered to decorator keyword arguments
     by :func:`get_jit_kwargs`. New jit options are added here as new
-    fields. Instances are immutable snapshots; :meth:`update` derives
-    a replacement rather than mutating in place.
+    fields.
 
     Attributes
     ----------
@@ -225,50 +224,6 @@ class JITFlags:
         }
         return {name for name, on in enabled.items() if on}
 
-    def update(self, updates_dict=None, **kwargs):
-        """Derive a replacement snapshot with new flag values.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of flag names to new boolean values. Unknown keys
-            are ignored so composite configs can broadcast one updates
-            dict to every nested attrs class.
-        **kwargs
-            Additional flag updates.
-
-        Returns
-        -------
-        tuple[JITFlags, set[str], set[str]]
-            Replacement snapshot (``self`` when unchanged), names of
-            recognised settings, and names of changed settings.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = {**updates_dict, **kwargs}
-        recognized = set()
-        changed = set()
-        replacements = {}
-        flag_names = {
-            "lineinfo",
-            "nsz",
-            "contract",
-            "arcp",
-            "afn",
-            "ftz",
-            "lto",
-        }
-        for key, value in updates_dict.items():
-            if key not in flag_names:
-                continue
-            recognized.add(key)
-            if getattr(self, key) != value:
-                replacements[key] = bool(value)
-                changed.add(key)
-        if not changed:
-            return self, recognized, changed
-        return attrs_evolve(self, **replacements), recognized, changed
-
 
 UnrollFlag = Tuple[bool, Optional[int]]
 """Loop-group flag: ``(unroll, count)``."""
@@ -300,7 +255,7 @@ def _unroll_flag_field():
 
 
 @frozen
-class UnrollFlags:
+class UnrollFlags(FrozenSettings):
     """Per-loop-group ``(unroll, count)`` flags read by ``unroll_if`` sites.
 
     Attributes
@@ -333,42 +288,6 @@ class UnrollFlags:
     unroll_krylov_exits: UnrollFlag = field(
         default=UnrollChoice.ROLLED, converter=unroll_flag_converter
     )
-
-    def update(self, updates_dict=None, **kwargs):
-        """Derive a replacement snapshot with new flag values.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of flag names to new values. Unknown keys are
-            ignored so composite configs can broadcast one updates
-            dict to every nested attrs class.
-        **kwargs
-            Additional flag updates.
-
-        Returns
-        -------
-        tuple[UnrollFlags, set[str], set[str]]
-            Replacement snapshot (``self`` when unchanged), names of
-            recognised settings, and names of changed settings.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = {**updates_dict, **kwargs}
-        recognized = set()
-        changed = set()
-        replacements = {}
-        for key, value in updates_dict.items():
-            if key not in ALL_UNROLL_PARAMETERS:
-                continue
-            recognized.add(key)
-            value = unroll_flag_converter(value)
-            if getattr(self, key) != value:
-                replacements[key] = value
-                changed.add(key)
-        if not changed:
-            return self, recognized, changed
-        return attrs_evolve(self, **replacements), recognized, changed
 
 
 ALL_UNROLL_PARAMETERS = frozenset(

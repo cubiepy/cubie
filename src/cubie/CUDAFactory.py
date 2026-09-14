@@ -63,15 +63,11 @@ from attrs import (
     has,
 )
 from attrs import validators as attrs_validators
-from numpy import (
-    array_equal,
-    asarray,
-    ndarray,
-    dtype as np_dtype,
-)
+from numpy import dtype as np_dtype
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 
 from cubie._serialize import canonical_digest
+from cubie._settings import FrozenSettings, values_differ
 from cubie._utils import (
     in_attr,
     nested_config_fields,
@@ -131,18 +127,8 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
     return field_map
 
 
-def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:
-    """Compare device functions by identity, arrays elementwise, else
-    ``!=``."""
-    if fld.metadata.get("device_function"):
-        return old is not new
-    if isinstance(old, ndarray) or isinstance(new, ndarray):
-        return not array_equal(asarray(old), asarray(new))
-    return bool(old != new)
-
-
 @frozen
-class _CubieConfigBase:
+class _CubieConfigBase(FrozenSettings):
     """Immutable base for configuration containers with session state.
 
     Instances are frozen snapshots: fields change only by deriving a
@@ -223,11 +209,9 @@ class _CubieConfigBase:
             recognized.add(key)
             direct[key] = fld
 
-        # An equal value is no change and needs no replacement.
         evolve_kwargs = {}
         for key, fld in direct.items():
-            if _values_differ(fld, getattr(self, fld.name), updates_dict[key]):
-                evolve_kwargs[fld.alias or fld.name] = updates_dict[key]
+            evolve_kwargs[fld.alias or fld.name] = updates_dict[key]
 
         changed = set()
         for fld in nested_config_fields(cls):
@@ -254,7 +238,7 @@ class _CubieConfigBase:
         for key, fld in direct.items():
             old_value = getattr(self, fld.name)
             new_value = getattr(candidate, fld.name)
-            if _values_differ(fld, old_value, new_value):
+            if values_differ(fld, old_value, new_value):
                 changed.add(key)
 
         if not changed:

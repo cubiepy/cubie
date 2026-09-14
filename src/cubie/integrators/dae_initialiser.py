@@ -178,7 +178,7 @@ class DAEInitialiser(CUDAFactory):
 
     @classmethod
     def system_inputs(cls, system: Any) -> Dict[str, Any]:
-        """Return the sizes, flags and helper getter taken from a system."""
+        """Return initialiser settings from a system object."""
         return dict(
             precision=system.precision,
             n_states=system.sizes.states,

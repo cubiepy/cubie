@@ -28,7 +28,6 @@ See Also
     Output array manager owned by the kernel.
 """
 
-import os
 import re
 from typing import (
     TYPE_CHECKING,
@@ -110,30 +109,6 @@ DEFAULT_MEMORY_SETTINGS = {
     "host_spill_threshold": None,
     "spill_directory": None,
 }
-
-
-def _checked_spill_threshold(threshold: Any) -> Optional[int]:
-    """Return ``threshold`` when it is ``None`` or a non-negative int."""
-    if threshold is not None and (
-        not isinstance(threshold, int) or threshold < 0
-    ):
-        raise ValueError(
-            f"host_spill_threshold must be an int >= 0, got {threshold!r}"
-        )
-    return threshold
-
-
-def _checked_spill_directory(directory: Any) -> Optional[str]:
-    """Return ``directory`` as a path string; it must exist."""
-    if directory is None:
-        return None
-    directory = os.fspath(directory)
-    if not os.path.isdir(directory):
-        raise ValueError(
-            f"spill_directory must be an existing directory, got "
-            f"'{directory}'"
-        )
-    return directory
 
 
 @define(frozen=True)
@@ -492,12 +467,8 @@ class BatchSolverKernel(CUDAFactory):
         memory_manager = merged_settings["memory_manager"]
         stream_group = merged_settings["stream_group"]
         mem_proportion = merged_settings["mem_proportion"]
-        self.host_spill_threshold = _checked_spill_threshold(
-            merged_settings["host_spill_threshold"]
-        )
-        self.spill_directory = _checked_spill_directory(
-            merged_settings["spill_directory"]
-        )
+        self.host_spill_threshold = merged_settings["host_spill_threshold"]
+        self.spill_directory = merged_settings["spill_directory"]
         memory_manager.register(
             self,
             stream_group=stream_group,

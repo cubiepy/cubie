@@ -20,7 +20,9 @@ from cubie.integrators.algorithms import (
     DIRK_TABLEAU_REGISTRY,
     FIRK_TABLEAU_REGISTRY,
     ROSENBROCK_TABLEAUS,
+    algorithm_facts,
     resolve_alias,
+    resolve_algorithm,
     resolve_supplied_tableau,
     get_algorithm_step,
 )
@@ -246,3 +248,39 @@ def test_get_algorithm_step_injects_precision():
         },
     )
     assert step.compile_settings.precision == np.float64
+
+
+# ── resolve_algorithm ─────────────────────────────────────── #
+
+def test_resolve_algorithm_named_alias_keeps_its_tableau():
+    """A named tableau alias ignores a supplied tableau."""
+    named = ERK_TABLEAU_REGISTRY["dormand-prince-54"]
+    other = ERK_TABLEAU_REGISTRY["rk4"]
+    assert resolve_algorithm("dopri54", other) == (ERKStep, named)
+    assert algorithm_facts("dopri54", other).tableau is named
+    step = get_algorithm_step(
+        np.float32,
+        settings={"algorithm": "dopri54", "tableau": other, "n_states": 3},
+    )
+    assert step.tableau is named
+
+
+def test_resolve_algorithm_family_alias_takes_its_own_tableau():
+    """A bare family alias takes a tableau of that family."""
+    tableau = DIRK_TABLEAU_REGISTRY["kvaerno3"]
+    assert resolve_algorithm("dirk", tableau) == (DIRKStep, tableau)
+    assert algorithm_facts("dirk", tableau).tableau is tableau
+
+
+def test_resolve_algorithm_rejects_another_family_tableau():
+    """A tableau of another family raises on every path."""
+    tableau = ERK_TABLEAU_REGISTRY["dormand-prince-54"]
+    with pytest.raises(ValueError, match="does not belong"):
+        resolve_algorithm("dirk", tableau)
+    with pytest.raises(ValueError, match="does not belong"):
+        algorithm_facts("euler", tableau)
+    with pytest.raises(ValueError, match="does not belong"):
+        get_algorithm_step(
+            np.float32,
+            settings={"algorithm": "dirk", "tableau": tableau, "n_states": 3},
+        )

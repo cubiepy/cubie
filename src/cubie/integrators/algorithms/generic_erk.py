@@ -248,12 +248,7 @@ class ERKStep(ODEExplicitStep):
             **kwargs
         )
 
-        if tableau.has_error_estimate:
-            defaults = ERK_ADAPTIVE_DEFAULTS
-        else:
-            defaults = ERK_FIXED_DEFAULTS
-
-        super().__init__(config, defaults)
+        super().__init__(config, self.family_defaults(tableau))
         self.register_buffers()
 
     def register_buffers(self) -> None:

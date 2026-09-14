@@ -514,7 +514,7 @@ class BatchInputHandler:
     host_spill_threshold
         Disk-backing size in bytes; ``None`` = the RAM default.
     spill_directory
-        Directory for disk-backed arrays; ``None`` = temp dir.
+        Directory for disk-backed arrays; ``None`` = the cache root.
 
     Attributes
     ----------
@@ -575,7 +575,7 @@ class BatchInputHandler:
         host_spill_threshold
             Disk-backing size in bytes; ``None`` = the RAM default.
         spill_directory
-            Directory for disk-backed arrays; ``None`` = temp dir.
+            Directory for disk-backed arrays; ``None`` = the cache root.
 
         Returns
         -------

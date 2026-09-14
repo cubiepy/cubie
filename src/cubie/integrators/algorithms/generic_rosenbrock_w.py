@@ -209,13 +209,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             **kwargs,
         )
 
-        # Select defaults based on error estimate
-        if tableau_value.has_error_estimate:
-            defaults = ROSENBROCK_ADAPTIVE_DEFAULTS
-        else:
-            defaults = ROSENBROCK_FIXED_DEFAULTS
-
-        super().__init__(config, defaults, **kwargs)
+        super().__init__(
+            config, self.family_defaults(tableau_value), **kwargs
+        )
 
         self.register_buffers()
         self.build_implicit_helpers()

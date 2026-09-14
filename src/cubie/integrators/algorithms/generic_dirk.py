@@ -271,13 +271,7 @@ class DIRKStep(ODEImplicitStep):
             **kwargs
         )
 
-        # Select defaults based on error estimate
-        if tableau.has_error_estimate:
-            defaults = DIRK_ADAPTIVE_DEFAULTS
-        else:
-            defaults = DIRK_FIXED_DEFAULTS
-
-        super().__init__(config, defaults, **kwargs)
+        super().__init__(config, self.family_defaults(tableau), **kwargs)
 
         settings = self.compile_settings
         self.dense_predictor = DenseStagePredictor(

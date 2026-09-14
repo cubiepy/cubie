@@ -164,7 +164,7 @@ class OutputFunctions(CUDAFactory):
 
     @classmethod
     def system_inputs(cls, system: Any) -> Dict[str, Any]:
-        """Return the sizes and precision the outputs take from a system."""
+        """Return output settings from a system object."""
         return dict(
             precision=system.precision,
             n_states=system.sizes.states,

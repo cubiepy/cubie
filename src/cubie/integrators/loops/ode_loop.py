@@ -196,9 +196,6 @@ class IVPLoop(CUDAFactory):
 
     settings_keys = frozenset(ALL_LOOP_SETTINGS)
 
-    DEFAULT_SAMPLES_PER_SUMMARY = 10
-    """Summary samples per window when only the window is given."""
-
     def __init__(
         self,
         precision: PrecisionDType,

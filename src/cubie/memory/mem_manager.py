@@ -49,7 +49,7 @@ See Also
 """
 
 from collections import deque
-from tempfile import gettempdir, mkstemp
+from tempfile import mkstemp
 from threading import Lock
 from types import TracebackType
 from functools import partial
@@ -62,6 +62,7 @@ import ctypes
 import os
 import sys
 
+from cubie.cache_root import get_cache_root
 from cubie.cuda_simsafe import cuda
 from cubie._utils import getype_validator, opt_getype_validator
 from attrs import define, Factory as attrsFactory, field
@@ -1476,7 +1477,7 @@ class MemoryManager:
         like
             Optional source data.
         spill_directory
-            Directory for ``"memmap"`` arrays; ``None`` = temp dir.
+            Directory for ``"memmap"`` arrays; ``None`` = the cache root.
 
         Returns
         -------
@@ -1565,11 +1566,11 @@ class MemoryManager:
         dtype: DTypeLike,
         directory: Optional[os.PathLike | str],
     ) -> np_memmap:
-        """Create a disk-backed array in ``directory`` or the temp dir."""
+        """Create a disk-backed array in ``directory`` or the cache root."""
         if directory is None:
-            directory = gettempdir()
-        else:
-            directory = os.fspath(directory)
+            directory = get_cache_root()
+        directory = os.fspath(directory)
+        os.makedirs(directory, exist_ok=True)
         handle, path = mkstemp(
             prefix="cubie-spill-", suffix=".dat", dir=directory
         )
