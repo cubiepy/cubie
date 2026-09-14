@@ -375,16 +375,14 @@ def test_finish_check_no_float32_stagnation():
 
     sir = SingleIntegratorRun(
         system=system,
-        step_control_settings={"step_controller": "fixed", "dt": 1e-8},
-        algorithm_settings={"algorithm": "euler"},
-        output_settings={
-            "output_types": ["state", "time"],
-            "saved_state_indices": [0],
-            "saved_observable_indices": [],
-            "summarised_state_indices": [],
-            "summarised_observable_indices": [],
-        },
-        loop_settings={},
+        step_controller="fixed",
+        dt=1e-8,
+        algorithm="euler",
+        output_types=["state", "time"],
+        saved_state_indices=[0],
+        saved_observable_indices=[],
+        summarised_state_indices=[],
+        summarised_observable_indices=[],
     )
 
     # Verify the no-regular-outputs branch is exercised

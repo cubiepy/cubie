@@ -243,7 +243,7 @@ def test_solve_info_cached(solver_mutable):
     assert changed_duration is not first
     assert changed_duration.duration == solver.duration
 
-    solver.update({"save_every": solver.save_every})
+    solver.update({"save_every": solver.save_every / 2})
     assert solver.solve_info is not changed_duration
 
 
@@ -1879,32 +1879,6 @@ def test_solver_unknown_kwarg_raises(system, solver_settings):
         )
 
 
-def test_solver_dt_save_raises_with_rename_hint(system, solver_settings):
-    """The legacy dt_save spelling raises and names save_every."""
-    with pytest.raises(KeyError, match="save_every"):
-        Solver(
-            system,
-            algorithm=solver_settings["algorithm"],
-            memory_manager=solver_settings["memory_manager"],
-            stream_group=solver_settings["stream_group"],
-            dt_save=1.0,
-        )
-
-
-def test_solve_dt_save_raises_with_rename_hint(
-    solver_mutable, simple_initial_values, simple_parameters, driver_settings
-):
-    """The legacy dt_save spelling raises from solve-time kwargs."""
-    with pytest.raises(KeyError, match="save_every"):
-        solver_mutable.solve(
-            initial_values=simple_initial_values,
-            parameters=simple_parameters,
-            drivers=driver_settings,
-            duration=0.1,
-            dt_save=0.05,
-        )
-
-
 def test_solve_unknown_kwarg_raises(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
@@ -2406,21 +2380,6 @@ def test_unroll_settings_solve(
 @pytest.mark.parametrize(
     "solver_settings_override", [UNROLL_SETTINGS], indirect=True
 )
-def test_unroll_object_with_loose_keys(solver_mutable):
-    """Loose keys override the fields of a supplied ``UnrollFlags``."""
-    solver = solver_mutable
-    updated_keys = solver.update(
-        {
-            "unroll": UnrollFlags(unroll_accumulator=True),
-            "unroll_stage": (True, 2),
-        }
-    )
-    assert {"unroll", "unroll_stage"} <= updated_keys
-    expected = UnrollFlags(unroll_accumulator=True, unroll_stage=(True, 2))
-    for factory in _unroll_factories(solver):
-        assert factory.compile_settings.unroll == expected
-
-
 def test_update_unroll_loose_key(solver_mutable):
     """A loose ``unroll_*`` update reaches the kernel and its children."""
     solver = solver_mutable
@@ -2460,19 +2419,6 @@ def test_copy_rebuilds_the_same_kernel_on_its_own_system(
         assert twin.kernel.compile_settings.blocksize == (
             solver.kernel.compile_settings.blocksize
         )
-    finally:
-        twin.close()
-
-
-def test_kernel_copy_rebuilds_an_equal_kernel(solver, driver_settings):
-    """The kernel's own copy hashes identically and shares the manager."""
-    twin = solver.kernel.copy()
-    try:
-        if driver_settings is not None:
-            twin.configure_drivers(driver_settings)
-        assert twin.config_hash == solver.kernel.config_hash
-        assert twin.memory_manager is solver.kernel.memory_manager
-        assert twin.stream_group == solver.kernel.stream_group
     finally:
         twin.close()
 
@@ -2551,7 +2497,9 @@ def test_copy_rederives_what_the_parent_derived(solver, driver_settings):
         assert twin_run._step_controller.compile_settings == (
             run._step_controller.compile_settings
         )
-        assert twin.kernel.blocksize_given == solver.kernel.blocksize_given
+        assert twin.given.is_given("blocksize") == solver.given.is_given(
+            "blocksize"
+        )
         assert twin.kernel.config_hash == solver.kernel.config_hash
     finally:
         twin.close()
@@ -2875,15 +2823,15 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
     solver, driver_settings
 ):
     """An empty kernel interpolator gains its evaluators on configure."""
-    twin = solver.kernel.copy()
+    twin = solver.copy()
     try:
-        interpolator = twin.driver_interpolator
-        integrator = twin.single_integrator
+        interpolator = twin.kernel.driver_interpolator
+        integrator = twin.kernel.single_integrator
         assert interpolator.num_inputs == 0
         assert interpolator.drivers_fn is None
         assert integrator._loop.compile_settings.drivers_fn is None
-        assert twin.coefficients_shape[0] == 0
-        twin.configure_drivers(driver_settings)
+        assert twin.kernel.coefficients_shape[0] == 0
+        twin._configure_drivers(driver_settings)
         assert interpolator.num_inputs == twin.system.num_drivers
         assert (
             integrator._loop.compile_settings.drivers_fn
@@ -2893,7 +2841,7 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
             integrator._algo_step.compile_settings.drivers_fn
             is interpolator.drivers_fn
         )
-        assert twin.coefficients_shape == (
+        assert twin.kernel.coefficients_shape == (
             interpolator.coefficients_shape
         )
     finally:

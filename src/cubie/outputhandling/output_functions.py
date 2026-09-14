@@ -41,7 +41,12 @@ from attrs import define, field, validators
 from numpy import int_
 from numpy.typing import ArrayLike, NDArray
 
-from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
+from cubie.CUDAFactory import (
+    ALL_JIT_PARAMETERS,
+    ALL_UNROLL_PARAMETERS,
+    CUDAFactory,
+    CUDADispatcherCache,
+)
 from cubie.outputhandling.output_config import OutputCompileFlags, OutputConfig
 from cubie.outputhandling.output_sizes import OutputArrayHeights
 from cubie.outputhandling.save_state import save_state_factory
@@ -59,7 +64,7 @@ ALL_OUTPUT_FUNCTION_PARAMETERS = {
     "summarised_observable_indices",
     "sample_summaries_every",
     "precision",
-}
+} | ALL_UNROLL_PARAMETERS | ALL_JIT_PARAMETERS
 """Keyword arguments accepted by :class:`OutputFunctions`.
 
 These parameters can be passed to :class:`OutputFunctions` or to

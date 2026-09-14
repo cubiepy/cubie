@@ -154,13 +154,16 @@ TORN_INIT_COMMON = {
 # the scaled norm's denominator is exactly atol, independent of the
 # state values — the injected error vectors in the controller tests
 # then map to known norm ratios.
+# Each set names an algorithm with an error estimate, so the chain
+# builds the named adaptive controller.
 CONTROLLER_TOLERANCE_SETS = {
-    "i": {"step_controller": "i", "atol": 1e-3, "rtol": 0.0},
-    "pi": {"step_controller": "pi", "atol": 1e-3, "rtol": 0.0},
-    "pid": {"step_controller": "pid", "atol": 1e-3, "rtol": 0.0},
-    "gustafsson": {
-        "step_controller": "gustafsson", "atol": 1e-3, "rtol": 0.0,
-    },
+    name: {
+        "algorithm": "erk",
+        "step_controller": name,
+        "atol": 1e-3,
+        "rtol": 0.0,
+    }
+    for name in ("i", "pi", "pid", "gustafsson")
 }
 
 
@@ -930,7 +933,6 @@ def run_device_loop(
     t0 = solver_config["t0"]
     save_samples = max(singleintegratorrun.output_length(duration), 1)
     summary_samples = max(singleintegratorrun.summaries_length(duration), 1)
-    singleintegratorrun.set_summary_timing_from_duration(duration)
     heights = singleintegratorrun.output_array_heights
 
     state_width = max(heights.state, 1)
@@ -1327,30 +1329,6 @@ def _driver_sequence(
     return drivers
 
 
-def _build_enhanced_algorithm_settings(
-    algorithm_settings, system, driver_array
-):
-    """Add system and driver functions to algorithm settings.
-
-    Functions are passed directly to get_algorithm_step, not stored
-    in algorithm_settings dict.
-    """
-    enhanced = algorithm_settings.copy()
-    enhanced["dxdt_fn"] = system.dxdt_fn
-    enhanced["observables_fn"] = system.observables_fn
-    enhanced["get_solver_helper_fn"] = system.get_solver_helper
-    enhanced["n_drivers"] = system.num_drivers
-
-    if driver_array is not None:
-        enhanced["drivers_fn"] = driver_array.drivers_fn
-        enhanced["driver_derivative_fn"] = driver_array.driver_derivative_fn
-    else:
-        enhanced["drivers_fn"] = None
-        enhanced["driver_derivative_fn"] = None
-
-    return enhanced
-
-
 # Keys in the shared solver_settings dict that are not Solver
 # constructor settings: solve-time arguments, system-construction
 # options (fix_singularities/voltage_variable feed
@@ -1359,12 +1337,13 @@ def _build_enhanced_algorithm_settings(
 # ArrayInterpolator), and test-harness metadata. Solver rejects
 # unconsumed kwargs, so these are stripped before construction.
 NON_SOLVER_SETTINGS = {
-    "duration",
     "warmup",
     "t0",
     "blocksize",
     "system_type",
     "n_states",
+    "n_drivers",
+    "algorithm_order",
     "n_parameters",
     "n_observables",
     "fix_singularities",

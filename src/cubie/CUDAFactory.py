@@ -320,6 +320,11 @@ ALL_UNROLL_PARAMETERS = frozenset(
 )
 """Loose keyword names of the :class:`UnrollFlags` fields."""
 
+ALL_JIT_PARAMETERS = frozenset(
+    fld.name for fld in fields(JITFlags)
+)
+"""Loose keyword names of the :class:`JITFlags` fields."""
+
 
 @frozen
 class _CubieConfigBase(FrozenSettings):

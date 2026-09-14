@@ -53,7 +53,7 @@ from tempfile import mkstemp
 from threading import Lock
 from types import TracebackType
 from functools import partial
-from typing import Any, Optional, Callable, Dict, Tuple, Union
+from typing import Any, Optional, Callable, Dict, Set, Tuple, Union
 from warnings import warn
 from copy import deepcopy
 from inspect import ismethod
@@ -801,6 +801,65 @@ class MemoryManager:
             self._add_manual_proportion(instance, proportion)
         else:
             self._add_auto_proportion(instance)
+
+    def update(
+        self,
+        instance: object,
+        updates_dict: Optional[Dict[str, Any]] = None,
+        silent: bool = False,
+        **kwargs: Any,
+    ) -> Set[str]:
+        """Update a registered instance's memory settings.
+
+        Parameters
+        ----------
+        instance
+            Registered instance to update.
+        updates_dict
+            Setting names to new values: ``stream_group``,
+            ``mem_proportion`` (``None`` selects the automatic limit)
+            and ``memory_manager`` (this manager only).
+        silent
+            Ignore unknown names instead of raising.
+        **kwargs
+            Further updates.
+
+        Returns
+        -------
+        Set[str]
+            The recognised names.
+
+        Raises
+        ------
+        KeyError
+            Unknown names when not ``silent``.
+        ValueError
+            A different memory manager.
+        """
+        updates = {**(updates_dict or {}), **kwargs}
+        recognised = set()
+        if "memory_manager" in updates:
+            if updates["memory_manager"] is not self:
+                raise ValueError(
+                    "A registered instance cannot change memory manager."
+                )
+            recognised.add("memory_manager")
+        if "stream_group" in updates:
+            group = updates["stream_group"]
+            if group is not None and group != self.get_stream_group(instance):
+                self.change_stream_group(instance, group)
+            recognised.add("stream_group")
+        if "mem_proportion" in updates:
+            proportion = updates["mem_proportion"]
+            if proportion is None:
+                self.set_auto_limit_mode(instance)
+            else:
+                self.set_manual_proportion(instance, proportion)
+            recognised.add("mem_proportion")
+        unrecognised = set(updates) - recognised
+        if unrecognised and not silent:
+            raise KeyError(f"Unrecognized parameters: {sorted(unrecognised)}")
+        return recognised
 
     def get_registration(self, instance: object) -> InstanceMemorySettings:
         """Return the registry entry for a registered instance.

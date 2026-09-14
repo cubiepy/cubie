@@ -10,9 +10,7 @@ ROLLED = UnrollChoice.ROLLED
 
 
 def _candidates(solver, force=False):
-    return solver.kernel.single_integrator.optimisation_candidates(
-        force=force
-    )
+    return solver.optimisation_candidates(force=force)
 
 
 @pytest.mark.parametrize(
@@ -139,7 +137,7 @@ def test_apply_launch_sets_settings_blocksize_and_residency(solver_mutable):
     }
     kernel = solver_mutable.kernel
     assert kernel.compile_settings.blocksize == 128
-    assert kernel.blocksize_given
+    assert solver_mutable.given.is_given("blocksize")
     assert kernel.resident_blocks == 2
     loop = kernel.single_integrator._loop
     assert loop.compile_settings.state_location == "shared"

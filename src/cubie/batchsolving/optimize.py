@@ -26,12 +26,15 @@ from attrs import define
 from numpy import zeros as np_zeros
 
 from cubie.backend.utils import (
+    SASS_INSTRUCTION_BYTES,
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
+    device_hardware,
     kernel_resources,
 )
 from cubie.batchsolving.calibration import _achieved_waves
 from cubie.cache_root import get_cache_root_override, set_cache_root
+from cubie.CUDAFactory import UnrollChoice
 from cubie.cuda_simsafe import cuda
 from cubie.time_logger import default_timelogger
 
@@ -301,7 +304,12 @@ class _OptimizeRunner:
         """Pre-warm the kernel cache with every candidate in workers."""
         if not parent.cache_enabled:
             return
-        settings = parent.settings_dict
+        # Pickled into spawned workers; the manager holds CUDA state.
+        settings = {
+            key: value
+            for key, value in parent.settings_dict.items()
+            if key != "memory_manager"
+        }
         system_bytes = pickle.dumps(parent.system)
         payloads = [
             (
@@ -437,6 +445,50 @@ class _OptimizeRunner:
             )
 
 
+def performance_defaults(
+    given: Any,
+    step: Any,
+    system: Any,
+    hardware: Any = None,
+) -> Dict[str, Any]:
+    """Return the loop-unrolling and buffer-placement settings for an
+    already-built solver.
+
+    Parameters
+    ----------
+    given
+        The given settings; a given setting is never overridden.
+    step
+        The built algorithm step.
+    system
+        The system being solved.
+    hardware
+        Device hardware facts; queried from the device when omitted.
+
+    Returns
+    -------
+    dict
+        The settings ``auto_performance`` applies; empty when it is off.
+    """
+    if given.auto_performance is False:
+        return {}
+    defaults = dict(step.performance_defaults)
+    # A Newton loop that overflows the instruction cache stays rolled.
+    if step.is_implicit and step.newton_solves_per_step > 0:
+        if hardware is None:
+            hardware = device_hardware()
+        unrolled = system.operation_count + step.step_operation_count
+        capacity = hardware.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
+        defaults["unroll_newton_exits"] = (
+            UnrollChoice.ROLLED if unrolled > capacity else UnrollChoice.FULL
+        )
+    return {
+        key: value
+        for key, value in defaults.items()
+        if not given.is_given(key)
+    }
+
+
 def run_optimization(
     parent: Any,
     initial_values: Any,
@@ -497,12 +549,10 @@ def run_optimization(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    candidates = parent.kernel.single_integrator.optimisation_candidates(
-        force=force
-    )
+    candidates = parent.optimisation_candidates(force=force)
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
-        if parent.kernel.blocksize_given and not force
+        if parent.given.is_given("blocksize") and not force
         else None
     )
     twin = parent.copy()

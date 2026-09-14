@@ -1,10 +1,11 @@
-"""Runtime configuration settings for numerical integration algorithms.
+"""Compile settings of a single integrator run.
 
 Published Classes
 -----------------
 :class:`IntegratorRunSettings`
-    Attrs container holding algorithm name and step controller name
-    alongside the inherited precision field.
+    Attrs container holding the algorithm and step controller names,
+    the driver device functions and the captured loop device function
+    alongside the inherited precision and compile flags.
 
     >>> from numpy import float32
     >>> settings = IntegratorRunSettings(
@@ -16,7 +17,8 @@ Published Classes
 See Also
 --------
 :class:`~cubie.CUDAFactory.CUDAFactoryConfig`
-    Parent class providing precision and numba type conversion.
+    Parent class providing precision, compile flags and numba type
+    conversion.
 :class:`~cubie.integrators.SingleIntegratorRunCore.SingleIntegratorRunCore`
     Consumer that uses these settings to select algorithm and
     controller factories.
@@ -25,6 +27,7 @@ See Also
 from typing import Callable, Optional
 
 import attrs
+from attrs import field, validators
 
 from cubie._utils import device_function_field
 from cubie.CUDAFactory import CUDAFactoryConfig
@@ -32,7 +35,7 @@ from cubie.CUDAFactory import CUDAFactoryConfig
 
 @attrs.frozen
 class IntegratorRunSettings(CUDAFactoryConfig):
-    """Container for runtime and controller settings used by IVP loops.
+    """Container for the run and controller settings used by IVP loops.
 
     Attributes
     ----------
@@ -42,26 +45,24 @@ class IntegratorRunSettings(CUDAFactoryConfig):
         Name of the integration step algorithm.
     step_controller
         Name of the step-size controller.
-    auto_performance
-        Fill unset unroll and placement settings; hash-excluded.
+    drivers_fn
+        Device function evaluating the drivers at a time.
+    driver_derivative_fn
+        Device function evaluating the drivers' time derivative.
     loop_fn
         The loop device function captured after every update.
     """
 
-    algorithm: str = attrs.field(
+    algorithm: str = field(
         default="euler",
-        validator=attrs.validators.instance_of(str),
+        converter=str.lower,
+        validator=validators.instance_of(str),
     )
-    step_controller: str = attrs.field(
+    step_controller: str = field(
         default="fixed",
-        validator=attrs.validators.instance_of(str),
+        converter=str.lower,
+        validator=validators.instance_of(str),
     )
-    auto_performance: bool = attrs.field(
-        default=True,
-        validator=attrs.validators.instance_of(bool),
-        eq=False,
-    )
+    drivers_fn: Optional[Callable] = device_function_field()
+    driver_derivative_fn: Optional[Callable] = device_function_field()
     loop_fn: Optional[Callable] = device_function_field()
-
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()

@@ -191,10 +191,9 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
      - ``max_registers``, ``blocksize``
      - :doc:`speed`
 
-A keyword argument that matches no group raises ``KeyError`` at
-construction rather than being silently ignored, and the legacy
-timing spellings (``dt_save``, ``dt_summarise``,
-``dt_update_summaries``) raise ``KeyError`` with a rename hint.
+A keyword argument that is neither a setting nor a constant of the
+system raises ``KeyError``. Constants are given by name, at
+construction or through ``update``.
 
 Notes on selected parameters
 ----------------------------

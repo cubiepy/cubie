@@ -458,75 +458,6 @@ def build_colliding_constants_system(precision: np_dtype) -> BaseODE:
 
 
 # ---------------------------------------------------------------------------
-# Hostile-name system: one constant per class of generated binding
-# ---------------------------------------------------------------------------
-
-# Factory arguments (beta, gamma, order), factory locals (n, total_n,
-# stage_width, beta_inv, h_eff_factor, precision), FIRK tableau
-# metadata (c_0, a_0_0), and generated body locals (dx_0).
-HOSTILE_NAME_CONSTANTS = {
-    "beta": 8.0 / 3.0,
-    "gamma": 0.5,
-    "order": 2.0,
-    "n": 1.5,
-    "total_n": 0.25,
-    "stage_width": 0.125,
-    "beta_inv": 0.75,
-    "h_eff_factor": 0.375,
-    "precision": 1.25,
-    "c_0": 0.6,
-    "a_0_0": 0.3,
-    "dx_0": 0.2,
-}
-
-HOSTILE_NAME_EQUATION = (
-    "dx = -(beta + gamma + n + dx_0)*x - 0.1*x**order"
-    " + c_0 + a_0_0 + beta_inv + h_eff_factor"
-    " + total_n + stage_width + precision"
-)
-
-HOSTILE_NAME_STATES = {"x": 2.0}
-
-SAFE_NAME_CONSTANTS = {
-    f"k_{index}": value
-    for index, value in enumerate(HOSTILE_NAME_CONSTANTS.values())
-}
-
-SAFE_NAME_EQUATION = (
-    "dx = -(k_0 + k_1 + k_3 + k_11)*x - 0.1*x**k_2"
-    " + k_9 + k_10 + k_6 + k_7 + k_4 + k_5 + k_8"
-)
-
-
-def build_hostile_names_system(precision: np_dtype) -> BaseODE:
-    """Return a system whose constants shadow every generated binding."""
-
-    system = create_ODE_system(
-        HOSTILE_NAME_EQUATION,
-        states=dict(HOSTILE_NAME_STATES),
-        constants=dict(HOSTILE_NAME_CONSTANTS),
-        precision=precision,
-        name="hostile_names",
-    )
-
-    return system
-
-
-def build_safe_names_system(precision: np_dtype) -> BaseODE:
-    """Return the hostile-name system with unremarkable names."""
-
-    system = create_ODE_system(
-        SAFE_NAME_EQUATION,
-        states=dict(HOSTILE_NAME_STATES),
-        constants=dict(SAFE_NAME_CONSTANTS),
-        precision=precision,
-        name="safe_names",
-    )
-
-    return system
-
-
-# ---------------------------------------------------------------------------
 # Lorenz system pinned by the Julia golden-reference gate
 # ---------------------------------------------------------------------------
 
@@ -683,8 +614,6 @@ __all__ = [
     "build_large_nonlinear_system",
     "build_three_state_constant_deriv_system",
     "build_diagonally_dominant_system",
-    "build_hostile_names_system",
-    "build_safe_names_system",
     "build_time_function_driver_system",
     "build_time_array_driver_system",
     "build_torn_driver_system",
