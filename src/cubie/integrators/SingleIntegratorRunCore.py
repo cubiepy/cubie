@@ -566,11 +566,12 @@ class SingleIntegratorRunCore(CUDAFactory):
 
     def _step_inputs(self) -> Dict[str, Any]:
         """Return what the step takes from the system and the drivers."""
+        # Only Rosenbrock configs carry the driver derivative.
         config = self._algo_step.compile_settings
         return BaseAlgorithmStep.system_inputs(
             self._system,
             drivers_fn=config.drivers_fn,
-            driver_derivative_fn=config.driver_derivative_fn,
+            driver_derivative_fn=getattr(config, "driver_derivative_fn", None),
             is_adaptive=self._step_controller.is_adaptive,
         )
 
