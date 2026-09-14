@@ -848,7 +848,7 @@ class Solver:
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
-        mode: str = "auto",
+        auto_size: bool = True,
         waves: int = 5,
         target_ms: float = 20.0,
     ) -> OptimizeResult:
@@ -879,13 +879,13 @@ class Solver:
             Print per-launch progress lines. Default ``True``.
         force
             Vary the settings you gave or applied earlier too.
-        mode
-            ``"auto"`` times a sized batch and duration; ``"given"``
-            times your grid at ``duration``.
+        auto_size
+            ``True`` times a sized batch and duration; ``False`` times
+            your grid at ``duration``. Default ``True``.
         waves
-            Occupancy waves the ``"auto"`` batch fills. Default ``5``.
+            Occupancy waves the sized batch fills. Default ``5``.
         target_ms
-            Kernel milliseconds per ``"auto"`` solve. Default ``20.0``.
+            Kernel milliseconds per sized solve. Default ``20.0``.
 
         Returns
         -------
@@ -895,7 +895,7 @@ class Solver:
         Raises
         ------
         ValueError
-            Unknown ``mode``, ``waves`` under 1, or ``target_ms`` under 10.
+            ``waves`` under 1, or ``target_ms`` under 10 or not finite.
         """
         return run_optimization(
             self,
@@ -909,7 +909,7 @@ class Solver:
             apply=apply,
             verbose=verbose,
             force=force,
-            mode=mode,
+            auto_size=auto_size,
             waves=waves,
             target_ms=target_ms,
         )

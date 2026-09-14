@@ -12,6 +12,7 @@ from cubie.batchsolving.optimize import (
     resident_blocks_within_l2,
 )
 from cubie.CUDAFactory import UnrollChoice
+from cubie.time_logger import default_timelogger
 from tests._utils import LARGE_FIRK
 
 FULL = UnrollChoice.FULL
@@ -327,6 +328,7 @@ def test_optimize_applies_the_fastest_launch(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
     """The fastest timed launch is applied to the solver."""
+    verbosity = default_timelogger.verbosity
     result = solver_mutable.optimize(
         simple_initial_values,
         parameters=simple_parameters,
@@ -335,8 +337,11 @@ def test_optimize_applies_the_fastest_launch(
         grid_type="combinatorial",
         verbose=False,
     )
+    assert default_timelogger.verbosity == verbosity
     timed = [launch for launch in result.launches if launch.timed]
     assert timed
+    for launch in result.launches:
+        assert all(time_ms > 0.0 for time_ms in launch.times_ms)
     assert result.best is min(timed, key=lambda launch: launch.best_ms)
     assert result.ranking[0] is result.best
     assert result.applied_settings == {
@@ -365,39 +370,30 @@ def test_optimize_applies_the_fastest_launch(
 @pytest.mark.parametrize(
     "kwargs, message",
     [
-        ({"mode": "fastest"}, "mode"),
         ({"waves": 0}, "waves"),
         ({"target_ms": 5.0}, "target_ms"),
+        ({"target_ms": float("inf")}, "target_ms"),
     ],
 )
 def test_invalid_arguments_are_rejected(solver, kwargs, message):
-    """Bad mode, waves or target_ms raise before anything is built."""
+    """Bad waves or target_ms raise before anything is built."""
     with pytest.raises(ValueError, match=message):
         solver.optimize({}, {}, **kwargs)
 
 
 @pytest.mark.nocudasim
 def test_kernel_is_cached_reports_the_disk_cache(
-    solver_mutable,
-    simple_initial_values,
-    simple_parameters,
-    driver_settings,
-    tmp_path,
+    solver_mutable, batch_input_arrays, driver_settings, tmp_path
 ):
     """A fresh cache directory holds nothing until the kernel compiles."""
-    inits, params = solver_mutable.build_grid(
-        simple_initial_values, simple_parameters, grid_type="combinatorial"
-    )
-    solver_mutable.compile(
-        inits, params, drivers=driver_settings, duration=0.1
-    )
+    inits, params = batch_input_arrays
     kernel = solver_mutable.kernel
     kernel.set_cache_dir(tmp_path / "fresh")
-    assert not kernel.kernel_is_cached(inits, params, 0.1)
+    assert not kernel.kernel_is_cached()
     solver_mutable.compile(
         inits, params, drivers=driver_settings, duration=0.1
     )
-    assert kernel.kernel_is_cached(inits, params, 0.1)
+    assert kernel.kernel_is_cached()
 
 
 def test_copy_registers_memory_like_its_parent(solver_mutable):
