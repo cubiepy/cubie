@@ -177,8 +177,7 @@ def test_different_solver_choice_drops_variant_defaults(system):
 def test_constant_change_replaces_the_step_device_functions(
     single_integrator_run,
 ):
-    """A constant pushed through the run rebuilds the system, the
-    helpers and the step."""
+    """A constant pushed through the run replaces every device function."""
     run = single_integrator_run
     step = run._algo_step
     loop_fn = run.device_function
