@@ -727,9 +727,8 @@ def test_newton_rtol_inversion_warns(system, solver_settings, driver_settings):
     "solver_settings_override", [ALGORITHM_CHAIN_SETS["dirk"]], indirect=True
 )
 def test_resolve_performance_derives_only_the_keys_not_given(solver, system):
-    """The step's placement and the Newton-exit unrolling are derived
-    for the keys the user left unset; a given key is never derived and
-    ``auto_performance=False`` derives nothing."""
+    """Placement and Newton-exit unrolling are derived only for unset
+    keys; ``auto_performance=False`` derives nothing."""
     step = solver.kernel.single_integrator._algo_step
     hardware = device_hardware()
     free = _given(algorithm="dirk")

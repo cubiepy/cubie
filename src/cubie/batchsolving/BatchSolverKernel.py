@@ -913,8 +913,8 @@ class BatchSolverKernel(CUDAFactory):
         return geometry
 
     def _launch_shape(self, blocksize: int, runs: int) -> tuple[int, int]:
-        """Return the block size (halved until its shared footprint fits)
-        and dynamic shared bytes of a launch."""
+        """Return a launch's block size, halved until its shared
+        footprint fits, and dynamic shared bytes."""
         pad = SHARED_SKEW_BYTES if self.shared_memory_needs_padding else 0
         padded_bytes = self.shared_memory_bytes + pad
         blocksize, dynamic_sharedmem = self.limit_blocksize(
@@ -939,9 +939,8 @@ class BatchSolverKernel(CUDAFactory):
     def launchable_shapes(
         self, blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES
     ) -> Dict[int, Tuple[int, int]]:
-        """Return the dynamic shared bytes and blocks per SM the driver
-        fits at each of ``blocksizes`` the shared footprint launches whole,
-        for the current batch."""
+        """Return ``{blocksize: (dynamic shared bytes, blocks per SM)}``
+        for the block sizes that launch whole on the current batch."""
         runs = self.run_params[0].runs
         shapes = {}
         for blocksize in blocksizes:

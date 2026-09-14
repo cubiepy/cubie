@@ -987,8 +987,8 @@ class BaseAlgorithmStep(CUDAFactory):
     def shared_keeps_occupancy(
         self, elements: int, fraction: int = 1, hardware: Any = None
     ) -> bool:
-        """Whether ``elements`` shared per run, plus the kernel's bank
-        skew, keep ``1 / fraction`` of the register-limited threads."""
+        """Whether ``elements`` shared per run plus the kernel's skew
+        keep ``1 / fraction`` of the register-limited threads."""
         if hardware is None:
             hardware = device_hardware()
         itemsize = np_dtype(self.precision).itemsize

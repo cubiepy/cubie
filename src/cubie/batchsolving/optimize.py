@@ -1,6 +1,6 @@
 """Backend of :meth:`cubie.Solver.optimize`: time unroll, placement and
-launch candidates on a solver copy and apply the fastest; the launch
-rules ``auto_performance`` applies without timing live here too.
+launch candidates on a solver copy and apply the fastest; also the
+untimed launch rules of ``auto_performance``.
 
 Published Objects
 -----------------
@@ -66,44 +66,30 @@ SHARED_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
 """Fraction of L2 three or more resident blocks' local memory may fill.
 
-Empirical, not hardware-derived: in the placement landscape (PR 917)
-one block per SM beat two only where two blocks' local memory
-overflowed the whole L2; the two-thirds share above two blocks is the
-cut point fitted to the same records. The L2 size itself is read from
-the driver.
+Empirical: fitted to the placement landscape, where one block beat two
+only when two blocks overflowed the whole L2.
 """
 
 RESIDENCY_CUT_MIN_FRAME_BYTES = 2048
 """Local memory per thread below which residency is never cut.
 
-Empirical, not hardware-derived: on the RTX 4070 SUPER (48 MiB L2) and
-RTX 2060 SUPER (4 MiB L2) landscapes a residency cut only paid for
-kernels keeping 2 KiB or more of local memory per thread; cut launches
-of smaller frames ran 10 to 50% slower. Both cards agree on the floor
-although their L2 sizes differ twelvefold, so it is a property of the
-kernels' L2 traffic rather than of the cache.
+Empirical: on the RTX 4070 SUPER and RTX 2060 SUPER landscapes a cut
+paid only from 2 KiB up; smaller frames ran 10 to 50% slower when cut.
 """
 
 BUDGET_BLOCKSIZE = 64
 """Block size the L2 rule counts resident threads at; the shape follows.
 
-A protocol choice, not hardware-derived: the residency landscapes were
-recorded at 64-thread blocks, so the rule's cut points are validated at
-that granularity. Counting the budget at a larger block leaves the rule
-one block to cut to and loses the cut entirely.
+Protocol choice: the block size the residency landscapes were recorded
+at, so the cut points are validated at this granularity.
 """
 
 LAUNCH_OCCUPANCY_TIE = 0.9
 """Share of the most resident threads a larger block must keep to win.
 
-Empirical, not hardware-derived: for kernels over the instruction cache
-the largest block size won 52 and lost 13 of 259 equal-residency
-comparisons on the RTX 2060 SUPER and won 30, lost 13 of 179 on the
-RTX 4070 SUPER, but block sizes rarely fit the same thread count, so
-the band admits a larger block that keeps most of the threads. Its
-width is fitted to those records: with it the launch rule reproduces
-the recorded best launch on 69 of 70 RTX 4070 SUPER rows and 60 of 61
-RTX 2060 SUPER rows.
+Empirical: over the instruction cache the largest block won 52/13 of
+259 equal-residency comparisons on the RTX 2060 SUPER and 30/13 of 179
+on the RTX 4070 SUPER; the band width is fitted to those records.
 """
 
 
@@ -213,8 +199,7 @@ class OptimizeResult:
 def resident_blocks_within_l2(
     frame: int, blocksize: int, natural: int, hardware: DeviceHardware
 ) -> int:
-    """Return the most blocks per SM whose threads' local memory fits
-    in L2.
+    """Return the most blocks per SM whose local memory fits in L2.
 
     Parameters
     ----------
@@ -230,8 +215,7 @@ def resident_blocks_within_l2(
     Returns
     -------
     int
-        The cut block count; ``natural`` for a frame under
-        :data:`RESIDENCY_CUT_MIN_FRAME_BYTES` or when no count fits.
+        The cut count; ``natural`` for a small frame or when none fits.
     """
     if frame < RESIDENCY_CUT_MIN_FRAME_BYTES:
         return natural
@@ -276,8 +260,7 @@ def default_launch(
     tuple[int, int]
         The block size and blocks per SM to launch.
     """
-    # How many threads per SM the L2 rule lets stay resident, counted
-    # at BUDGET_BLOCKSIZE; None leaves every block size at its own count.
+    # Resident-thread budget from the L2 rule; None means no cut.
     budget = None
     if BUDGET_BLOCKSIZE in shapes:
         blocks = resident_blocks_within_l2(
@@ -285,8 +268,7 @@ def default_launch(
         )
         if blocks < shapes[BUDGET_BLOCKSIZE]:
             budget = BUDGET_BLOCKSIZE * blocks
-    # Every block size within the budget, at its own count or cut to it;
-    # a block size that cannot hold the budget in whole blocks is out.
+    # Block sizes within the budget or cut to it in whole blocks.
     launches = []
     for blocksize, blocks in shapes.items():
         if budget is None or budget >= blocksize * blocks:
@@ -294,15 +276,14 @@ def default_launch(
         elif budget % blocksize == 0:
             launches.append((blocksize, budget // blocksize))
     most = max(size * blocks for size, blocks in launches)
-    # A kernel too big for the instruction cache takes the largest
-    # block size keeping most of the threads; any other kernel takes
-    # the most threads, the smaller block size on a tie.
+    # Over the instruction cache: largest block within the tie band.
     if sass_bytes > hardware.instruction_cache_bytes:
         fitting = [
             launch for launch in launches
             if launch[0] * launch[1] >= LAUNCH_OCCUPANCY_TIE * most
         ]
         return max(fitting, key=lambda launch: launch[0])
+    # Otherwise the most threads, the smaller block on a tie.
     return min(
         launches, key=lambda launch: (-launch[0] * launch[1], launch[0])
     )

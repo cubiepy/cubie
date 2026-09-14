@@ -101,14 +101,11 @@ summarised defaults to saved when all summarise inputs are `None`.
 - **Launch geometry:** `launch_geometry(blocksize=None)` returns a launch's block size and
   dynamic shared bytes: `limit_blocksize` halves the block size until its shared footprint
   fits the per-block limit, then a pad holds `resident_blocks` per SM (`None` = the L2 rule
-  under `auto_performance`). `launchable_shapes(blocksizes)` is the one enumeration of
-  block sizes the driver launches whole, with their dynamic shared bytes and natural block
-  counts; `optimize.launch_candidates` and the automatic launch both read it. The launch
-  rules and their constants live in `optimize.py`: `resident_blocks_within_l2` (the L2
-  cut, never for small local frames) and `default_launch` (residency budget first, then
-  the block size). `blocksize` (`BatchSolverConfig`) is `None` unless given
-  (`Solver.given.is_given("blocksize")`); unset under `auto_performance` the kernel takes
-  `default_launch` on its launchable shapes, unset without it `DEFAULT_BLOCKSIZE`.
+  under `auto_performance`). `launchable_shapes(blocksizes)` lists the block sizes that
+  launch whole with their dynamic shared bytes and natural block counts. The launch rules
+  and constants are in `optimize.py`: `resident_blocks_within_l2` and `default_launch`.
+  `blocksize` (`BatchSolverConfig`) is `None` unless given; unset under `auto_performance`
+  the kernel applies `default_launch`, unset without it `DEFAULT_BLOCKSIZE`.
   `shared_memory_needs_padding` adds a `SHARED_SKEW_BYTES` skew only for single precision
   with an even element count. Memoised on the build's `BatchSolverCache`:
   `launch_geometries` per `(blocksize, runs, resident_blocks, auto_performance)`,
