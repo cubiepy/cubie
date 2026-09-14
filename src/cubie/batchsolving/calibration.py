@@ -1003,10 +1003,7 @@ def _usable_trials(
     duration: float,
     settling_time: float,
 ) -> Tuple[Tuple[float, float], ...]:
-    """Drop leading trials too short for the summary sample interval.
-
-    The full duration stands in when no trial fits.
-    """
+    """Drop leading trials the sample interval rejects, else the full run."""
     usable = list(trials)
     while usable:
         try:

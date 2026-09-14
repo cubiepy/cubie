@@ -513,8 +513,7 @@ def check_loop_timing(
 ) -> None:
     """Raise when the loop schedule would produce no output.
 
-    ``dt_min`` is added to ``duration`` as the tolerance for in-loop
-    oversteps smaller than one minimum step.
+    ``duration`` plus ``dt_min`` is the end-time tolerance.
 
     Raises
     ------

@@ -722,8 +722,7 @@ class IVPLoop(CUDAFactory):
                 )
                 save_idx += int32(1)
 
-                # Call save_summaries only to reset buffer values; the
-                # divisor is irrelevant here.
+                # Reset the summary buffers; the divisor is irrelevant.
                 if summarise:
                     statesumm_idx = summary_idx * summarise_state_bool
                     obsumm_idx = summary_idx * summarise_obs_bool
@@ -781,8 +780,7 @@ class IVPLoop(CUDAFactory):
                     finished = bool_(t_next >= t_end)
 
                 if save_last or summarise_last:
-                    # Schedules done short of t_end: one more step lands
-                    # on t_end.
+                    # Schedules done short of t_end: the next step lands on it.
                     at_end = bool_(t_prec < t_end) & finished
                     finished = finished & ~at_end
 
@@ -809,8 +807,7 @@ class IVPLoop(CUDAFactory):
                     else:
                         do_update_summary = False
 
-                    # Shorten the step to the nearest due event; the end
-                    # step is an event at t_end.
+                    # Clamp to the nearest due event; at_end is one at t_end.
                     dt_eff = dt_raw
                     truncated = False
                     # Fixed mode starts the event and its f64 copy at t_end.

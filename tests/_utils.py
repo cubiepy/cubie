@@ -2607,8 +2607,7 @@ WARMUP_SAVE_BOUNDARY = {
     "save_every": 0.1,
 }
 
-# Final save and one summary at the end, sampled every step on a grid
-# that lands exactly on t_end in float32.
+# Final save and one summary at the end on a grid exact in float32.
 MIXED_OUTPUTS_LAST = {
     "precision": np.float32,
     "duration": 1.0,
