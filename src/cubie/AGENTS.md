@@ -118,9 +118,9 @@ back here. CUDA-authoring **optimisation** conventions are in
   excluded factories deliberately contribute nothing to semantic identity.
 - **`MultipleInstanceCUDAFactory`** maps prefixed external keys (e.g. `krylov_atol`)
   to unprefixed internal fields via `instance_label`; build configs with
-  `build_config(...)`. Its `products` and `settings_dict` carry the label too
-  (`krylov_linear_solver_fn`, `krylov_atol`); `prefixed(name)` on the config and the
-  factory returns the labelled key. A consumer field a labelled child
+  `build_config(...)`. `products` and `settings_dict` carry the label
+  (`krylov_linear_solver_fn`, `krylov_atol`); `prefixed(name)` returns the labelled
+  key. A consumer field a labelled child
   fills is named with that label (`newton_nonlinear_solver_fn`,
   `error_linear_solver_fn`); a labelled consumer's own device slot is declared
   `device_function_field(prefixed=True)` and keyed `{label}_norm_fn`.

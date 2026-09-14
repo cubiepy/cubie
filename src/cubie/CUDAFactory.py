@@ -449,8 +449,7 @@ class CUDAFactory(ABC):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the children's settings under this factory's own,
-        limited to ``settings_keys``."""
+        """Return the children's settings under this factory's own."""
         settings = {}
         for child in self._iter_child_factories():
             settings.update(child.settings_dict)
@@ -947,8 +946,7 @@ class MultipleInstanceCUDAFactory(CUDAFactory):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the settings with this instance's fields keyed by
-        its label."""
+        """Return the settings with the prefixed fields keyed by label."""
         prefixed = self.compile_settings.prefixed_attributes
         return {
             (self.prefixed(key) if key in prefixed else key): value
