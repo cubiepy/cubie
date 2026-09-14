@@ -55,7 +55,8 @@ Iteration counts are returned separately via the
 `Solver.status_messages`).
 
 ### Component assembly (`SingleIntegratorRunCore.__init__`)
-Order matters — each component seeds the next:
+Each child class declares `system_inputs(system, ...)`, what it takes from the system
+(sizes, precision, products, mass flags). Order matters — each component seeds the next:
 1. `OutputFunctions` first (its compile flags + summary buffer heights feed `IVPLoop`).
 2. `_algo_step = get_algorithm_step(precision, settings)` — supplies
    `controller_defaults.step_controller`, seeding the controller settings before user

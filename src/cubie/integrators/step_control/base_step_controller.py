@@ -33,7 +33,7 @@ See Also
 """
 
 from abc import ABC, abstractmethod
-from typing import Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 import warnings
 
 from attrs import (
@@ -411,6 +411,18 @@ class BaseStepController(CUDAFactory):
 
     _config_class = None  # Subclasses must override
     _timestep_buffer_elements = 0  # History slots; overridden per controller
+
+    @classmethod
+    def system_inputs(
+        cls, system: Any, algorithm_order: int
+    ) -> Dict[str, Any]:
+        """Return what a controller takes from ``system`` and the step."""
+        return dict(
+            precision=system.precision,
+            n_states=system.sizes.states,
+            mass_flags=system.mass_diagonal_flags,
+            algorithm_order=algorithm_order,
+        )
 
     def __init__(
         self,

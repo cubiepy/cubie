@@ -176,6 +176,16 @@ class DAEInitialiser(CUDAFactory):
         values, and unrecognised keys are ignored.
     """
 
+    @classmethod
+    def system_inputs(cls, system: Any) -> Dict[str, Any]:
+        """Return the sizes, flags and helper getter taken from a system."""
+        return dict(
+            precision=system.precision,
+            n_states=system.sizes.states,
+            mass_flags=system.mass_diagonal_flags,
+            get_solver_helper_fn=system.get_solver_helper,
+        )
+
     def __init__(
         self,
         precision: PrecisionDType,

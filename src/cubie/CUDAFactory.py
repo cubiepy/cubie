@@ -74,6 +74,7 @@ from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 from cubie._serialize import canonical_digest
 from cubie._utils import (
     in_attr,
+    nested_config_fields,
     PrecisionDType,
     precision_validator,
     precision_converter,
@@ -128,23 +129,6 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
                 "the compile-critical data you're adding."
             )
     return field_map
-
-
-@cache
-def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields typed as attrs classes; unwraps ``Optional``."""
-    from typing import Union, get_args, get_origin
-
-    nested = []
-    for fld in fields(cls):
-        candidates = (fld.type,)
-        if get_origin(fld.type) is Union:
-            candidates = get_args(fld.type)
-        for candidate in candidates:
-            if isinstance(candidate, type) and has(candidate):
-                nested.append(fld)
-                break
-    return tuple(nested)
 
 
 def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:
@@ -239,12 +223,14 @@ class _CubieConfigBase:
             recognized.add(key)
             direct[key] = fld
 
+        # An equal value is no change and needs no replacement.
         evolve_kwargs = {}
         for key, fld in direct.items():
-            evolve_kwargs[fld.alias or fld.name] = updates_dict[key]
+            if _values_differ(fld, getattr(self, fld.name), updates_dict[key]):
+                evolve_kwargs[fld.alias or fld.name] = updates_dict[key]
 
         changed = set()
-        for fld in _nested_config_fields(cls):
+        for fld in nested_config_fields(cls):
             # A supplied nested object is the base for its loose keys.
             handle = fld.alias or fld.name
             nested_obj = evolve_kwargs.get(handle, getattr(self, fld.name))

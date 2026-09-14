@@ -78,6 +78,10 @@ from numpy import (
 )
 from numpy.typing import ArrayLike
 from cubie.cuda_simsafe import cuda
+from functools import cache as _cache
+from typing import Union as _Union, get_args as _get_args
+from typing import get_origin as _get_origin
+
 from attrs import field, fields, has, validators, Attribute
 from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
 
@@ -505,7 +509,10 @@ def tol_converter(
         Raised when ``value`` cannot be broadcast to shape
         (tol_length,).
     """
-    if isscalar(value):
+    # A 0-d array is a scalar specification too.
+    if isscalar(value) or (
+        isinstance(value, ndarray) and value.ndim == 0
+    ):
         tol = full(self_.tol_length, value, dtype=self_.precision)
     else:
         # Copy: asarray would alias a caller array that already has
@@ -809,4 +816,24 @@ def build_config(
         if k in field_to_external
     }
 
-    return config_class(**final)
+    # Loose nested keys fold through the config's own update.
+    config = config_class(**final)
+    loose = {k: v for k, v in merged.items() if k not in field_to_external}
+    if loose and callable(getattr(config, "update", None)):
+        config, _, _ = config.update(loose)
+    return config
+
+
+@_cache
+def nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
+    """Return the fields typed as attrs classes; unwraps ``Optional``."""
+    nested = []
+    for fld in fields(cls):
+        candidates = (fld.type,)
+        if _get_origin(fld.type) is _Union:
+            candidates = _get_args(fld.type)
+        for candidate in candidates:
+            if isinstance(candidate, type) and has(candidate):
+                nested.append(fld)
+                break
+    return tuple(nested)

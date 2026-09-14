@@ -83,6 +83,13 @@ def gain_converter(value):
     return float(value)
 
 
+DEFAULT_DT_MIN = 1e-6
+"""Minimum step when none is given."""
+
+DEFAULT_DT_MAX = 1.0
+"""Maximum step when none is given."""
+
+
 @frozen
 class AdaptiveStepControlConfig(BaseStepControllerConfig):
     """Configuration for adaptive step controllers.
@@ -93,9 +100,11 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
     functions are rebuilt when they change.
     """
 
-    _dt_min: float = field(default=1e-6, validator=getype_validator(float, 0))
-    _dt_max: Optional[float] = field(
-        default=1.0, validator=getype_validator(float, 0)
+    _dt_min: float = field(
+        default=DEFAULT_DT_MIN, validator=getype_validator(float, 0)
+    )
+    _dt_max: float = field(
+        default=DEFAULT_DT_MAX, validator=getype_validator(float, 0)
     )
     algorithm_order: int = field(default=1, validator=getype_validator(int, 1))
     _min_step_shrink: float = field(
