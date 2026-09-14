@@ -30,9 +30,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     DAE_SOLVER_DEFAULTS,
     ImplicitStepConfig,
 )
-from cubie.integrators.loops.ode_loop_config import (
-    MISSING_SAMPLE_INTERVAL_MESSAGE,
-)
 from cubie.integrators.step_control import _CONTROLLER_REGISTRY
 from cubie.integrators.step_control.adaptive_step_controller import (
     DEFAULT_DT_MAX,
@@ -480,7 +477,11 @@ def resolve_loop_timing(
         summarise_every = None
         sample_summaries_every = None
     elif sample_summaries_every is None:
-        raise ValueError(MISSING_SAMPLE_INTERVAL_MESSAGE)
+        raise ValueError(
+            "When summary metrics are requested, you must provide a "
+            "sampling period for the loop to collect summary samples by "
+            "setting sample_summaries_every"
+        )
     return {
         "save_every": save_every,
         "summarise_every": summarise_every,
@@ -504,6 +505,53 @@ def _newton_rtol_inverted(
     return bool(((controller > 0.0) & (newton >= controller)).any())
 
 
+def check_loop_timing(
+    timing: Dict[str, Any],
+    duration: Optional[float],
+    dt_min: float,
+    precision: type,
+) -> None:
+    """Raise when the loop schedule would produce no output.
+
+    ``dt_min`` is added to ``duration`` as the tolerance for in-loop
+    oversteps smaller than one minimum step.
+
+    Raises
+    ------
+    ValueError
+        An interval longer than the run, or a sample interval that is
+        not shorter than its window.
+    """
+    save_every = timing["save_every"]
+    summarise_every = timing["summarise_every"]
+    sample_every = timing["sample_summaries_every"]
+    if timing["summarise_regularly"] and sample_every >= summarise_every:
+        raise ValueError(
+            f"sample_summaries_every ({sample_every}) >= summarise_every "
+            f"({summarise_every}); The saved summary will be based on 0 "
+            f"samples, so will result in 0/inf/NaN values."
+        )
+    if duration is None:
+        return
+    end_time = precision(duration) + dt_min
+    if timing["save_regularly"] and save_every > end_time:
+        raise ValueError(
+            f"save_every ({save_every}) > duration ({duration}) so this "
+            f"loop will produce no outputs"
+        )
+    if timing["summarise_last"] and sample_every > end_time:
+        raise ValueError(
+            f"sample_summaries_every ({sample_every}) > duration "
+            f"({duration}), so the summary at the end will be based on 0 "
+            f"samples"
+        )
+    if timing["summarise_regularly"] and summarise_every > end_time:
+        raise ValueError(
+            f"summarise_every ({summarise_every}) > duration ({duration}), "
+            f"so this loop will produce no summary outputs"
+        )
+
+
 def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     """Resolve user-given arguments to the low-level settings in effect.
 
@@ -525,8 +573,9 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     ------
     ValueError
         A Neumann preconditioner on a mass-matrix system, gains given
-        with a filter, an output index the system does not have, or
-        summary metrics without ``sample_summaries_every``.
+        with a filter, an output index the system does not have, summary
+        metrics without ``sample_summaries_every``, or an output interval
+        the run cannot fit.
     """
     precision = system.precision
     resolved = {"precision": precision}
@@ -596,13 +645,19 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
         int(sizes.observables),
         precision,
     )
-    resolved.update(
-        resolve_loop_timing(
-            given.save_every,
-            given.summarise_every,
-            given.sample_summaries_every,
-            time_domain,
-            summaries,
-        )
+    timing = resolve_loop_timing(
+        given.save_every,
+        given.summarise_every,
+        given.sample_summaries_every,
+        time_domain,
+        summaries,
     )
+    # Fixed control has no dt_min; its step is the tolerance.
+    check_loop_timing(
+        timing,
+        given.duration,
+        resolved.get("dt_min", resolved["dt"]),
+        precision,
+    )
+    resolved.update(timing)
     return EffectiveSettings(**{**given.as_kwargs(), **resolved})

@@ -154,7 +154,7 @@ etc.) are computed from all samples taken during that window, written to
 output, and the accumulator resets for the next window.
 
 - **Default**: If not specified but summary outputs are requested, one
-  window spans the whole run and its summary is written at the end.
+  summary is calculated and saved at the end of the integration.
 - **Type**: ``float`` (seconds of simulation time)
 
 .. code-block:: python
@@ -168,7 +168,7 @@ output, and the accumulator resets for the next window.
        output_types=["mean"],
    )
 
-   # No summarise_every: one summary over the whole run
+   # No summarise_every: one summary at the end of the integration
    solver.solve(
        ..., sample_summaries_every=0.1, duration=10.0, output_types=["mean"]
    )
@@ -186,9 +186,8 @@ current max, etc.).
   it raises ``ValueError``.
 - **Type**: ``float`` (seconds of simulation time)
 - **Constraint**: ``summarise_every``, when set, must be an integer
-  multiple of ``sample_summaries_every``; with no window,
-  ``sample_summaries_every`` must fit inside ``duration`` so the
-  whole-run summary has at least one sample.
+  multiple of ``sample_summaries_every``; ``sample_summaries_every``
+  must fit inside ``duration``.
 
 .. code-block:: python
 
@@ -213,9 +212,6 @@ The summary system uses fixed, non-overlapping windows:
 2. At each ``summarise_every`` interval, final metrics are computed from
    the accumulators, written to output, and accumulators reset
 3. The next window starts fresh with no memory of previous windows
-
-With no ``summarise_every`` there is a single window: sampling runs on
-the same grid and the one summary is written when the run ends.
 
 This differs from sliding-window approaches where windows overlap.
 
@@ -243,8 +239,7 @@ Relationship Between Output Parameters
    * - ``sample_summaries_every``
      - Interval for sampling values into summary accumulators
    * - ``summarise_every``
-     - Window length; summaries computed and reset at this interval.
-       Unset, one window covers the run and is written at its end
+     - Window length; summaries computed and reset at this interval
 
 These are independent: you can save states at high frequency while
 computing summaries over longer windows, or vice versa.

@@ -51,19 +51,21 @@ list summary metrics instead:
        sample_summaries_every=0.5,
    )
 
-Summaries run on two clocks.  ``sample_summaries_every`` sets the
-measurement cadence: the metric is computed from the trajectory
-sampled at that interval, and you must set it whenever you request
-summaries.  ``summarise_every`` sets the window length: each metric
-produces one value per window per variable.  With
+Summary metrics sample the variables at a fixed sample period,
+``sample_summaries_every``, and calculate and save the summary at
+every ``summarise_every`` time units.  ``summarise_every`` can be
+thought of as the width of the summary window, and
+``sample_summaries_every`` the inverse of a sample rate.  With
 ``summarise_every=10.0`` and ``sample_summaries_every=1.0``, the
 first ``"mean"`` is the mean of the measurements at t = 1, 2, ...,
 10 time-units, the second covers t = 11 through 20, and so on.
 
-Here ``summarise_every`` is left unset, so one window spans the whole
-run and each metric reduces to a single number per variable per run,
-written when the run ends.  Shorter windows give a statistic per
-window instead, which is handy for tracking slow drift.
+If ``summarise_every`` is left unset, a single summary is calculated
+at the end of the integration (when ``t == duration``).  When you've
+enabled summaries but left ``summarise_every`` unset, you still need
+to provide a ``sample_summaries_every`` period to tell the loop how
+often it should stop and measure the states.  Shorter windows give a
+statistic per window instead, which is handy for tracking slow drift.
 
 There are 18 built-in metrics, including ``"rms"``, ``"std"``,
 ``"peaks"``, and first/second-derivative extrema; the full table is
@@ -118,7 +120,7 @@ starts, so start-up transients do not pollute your statistics.
 Settling extends the run rather than eating into it: the solver
 integrates for ``settling_time + duration`` in total, so the
 recorded window is still the full 50 time-units and the unset
-``summarise_every`` produces exactly one summary window per run.
+``summarise_every`` produces exactly one summary per run.
 
 When to use which output
 ------------------------

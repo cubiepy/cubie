@@ -39,14 +39,6 @@ from cubie._utils import (
 )
 from cubie.outputhandling.output_config import OutputCompileFlags
 
-MISSING_SAMPLE_INTERVAL_MESSAGE = (
-    "When summary metrics are requested, you must provide a sampling "
-    "period for the loop to collect summary samples by setting "
-    "sample_summaries_every"
-)
-"""Raised when summaries are requested without a sample interval."""
-
-
 @frozen
 class ODELoopConfig(CUDAFactoryConfig):
     """Compile-critical settings for an integrator loop.
@@ -75,16 +67,16 @@ class ODELoopConfig(CUDAFactoryConfig):
     save_every
         Save interval; ``None`` saves the final state only.
     summarise_every
-        Summary window; ``None`` is one window over the run.
+        Summary window; ``None`` writes one summary at the end of the run.
     sample_summaries_every
-        Summary sample interval; set whenever summaries are produced.
+        Interval between summary metric updates.
     save_last
         When ``True``, the loop saves the final state regardless of
         ``save_every`` alignment.
     save_regularly
         When ``True``, state saves occur at ``save_every`` intervals.
     summarise_last
-        When ``True``, one whole-run summary is written at the end.
+        When ``True``, one summary is written at the end of the run.
     summarise_regularly
         When ``True``, a summary is written every ``summarise_every``.
     save_state_fn

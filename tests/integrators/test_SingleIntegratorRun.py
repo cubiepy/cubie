@@ -227,7 +227,7 @@ def test_summaries_length_none(single_integrator_run):
     indirect=True,
 )
 def test_summaries_length_last(single_integrator_run):
-    """One whole-run window is one row at any duration."""
+    """An unset window is one summary row at any duration."""
     assert single_integrator_run.summaries_length(0.3) == 1
     assert single_integrator_run.summaries_length(7.0) == 1
 
