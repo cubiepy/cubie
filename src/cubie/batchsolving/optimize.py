@@ -451,8 +451,7 @@ def performance_defaults(
     system: Any,
     hardware: Any = None,
 ) -> Dict[str, Any]:
-    """Return the loop-unrolling and buffer-placement settings for an
-    already-built solver.
+    """Return the unroll and placement settings for a built solver.
 
     Parameters
     ----------

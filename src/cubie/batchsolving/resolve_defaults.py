@@ -1,6 +1,6 @@
-"""Resolve default settings for the solver subcomponents from a subset
-of user-given arguments: all user-intent interpretation and translation
-to low-level toggles and settings.
+"""Resolve subcomponent defaults from user-given arguments.
+
+All user-intent interpretation and translation to low-level settings.
 
 Published Classes
 -----------------

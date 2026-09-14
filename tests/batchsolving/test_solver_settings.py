@@ -76,8 +76,7 @@ def _names(cls):
 
 
 def test_record_matches_the_children_settings(system):
-    """The record is the children's settings minus their system inputs
-    plus the Solver's own."""
+    """Record = children's settings minus system inputs plus the Solver's."""
     children = (
         set(ALL_ALGORITHM_STEP_PARAMETERS)
         | set(ALL_STEP_CONTROLLER_PARAMETERS)
