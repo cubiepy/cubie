@@ -121,7 +121,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         dxdt_fn: Optional[Callable] = None,
         observables_fn: Optional[Callable] = None,
         drivers_fn: Optional[Callable] = None,
@@ -142,7 +142,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         ----------
         precision
             Floating-point precision for CUDA computations.
-        n
+        n_states
             Number of state variables in the ODE system.
         dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
@@ -187,7 +187,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             RosenbrockWStepConfig,
             required={
                 "precision": precision,
-                "n": n,
+                "n_states": n_states,
                 "dxdt_fn": dxdt_fn,
                 "observables_fn": observables_fn,
                 "drivers_fn": drivers_fn,
@@ -213,7 +213,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
-        n = config.n
+        n = config.n_states
         tableau = config.tableau
 
         # Calculate buffer sizes
@@ -334,7 +334,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         # Return linear solver device function
         self.update_compile_settings(
             {
-                "solver_function": self.solver.device_function,
+                self.solver_fn_key: self.solver.device_function,
                 "time_derivative_fn": (
                     time_derivative.device_function
                 ),

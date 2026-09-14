@@ -24,7 +24,7 @@ def test_bicgstab_settings_dict_reports_config_and_locations():
     solver = BiCGSTABSolver(
         precision=np.float32, solver_width=3, krylov_max_iters=42,
     )
-    settings = solver.compile_settings.settings_dict
+    settings = solver.settings_dict
     assert settings["krylov_max_iters"] == 42
     assert settings["linear_correction_type"] == "bicgstab"
     assert settings["r0_hat_location"] == "local"
@@ -41,7 +41,7 @@ def test_bicgstab_unset_max_iters_covers_krylov_space():
     """Unset cap resolves to ceil(1.5 * width); settings keep it unset."""
     solver = BiCGSTABSolver(precision=np.float32, solver_width=6)
     assert solver.max_iters == 9
-    settings = solver.compile_settings.settings_dict
+    settings = solver.settings_dict
     assert settings["krylov_max_iters"] is None
 
 

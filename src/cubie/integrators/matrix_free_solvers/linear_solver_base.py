@@ -34,17 +34,17 @@ from cubie.integrators.norms import ScaledNorm
 
 
 def _default_residual_reduction(value, self_):
-    """Resolve ``None`` to machine epsilon at the config precision."""
+    """Resolve ``None`` to machine epsilon; round to the precision."""
     if value is None:
-        return float(np_finfo(self_.precision).eps)
-    return value
+        value = np_finfo(self_.precision).eps
+    return float(self_.precision(value))
 
 
 def _default_residual_floor(value, self_):
-    """Resolve ``None`` to ``sqrt(eps)`` at the config precision."""
+    """Resolve ``None`` to ``sqrt(eps)``; round to the precision."""
     if value is None:
-        return float(np_finfo(self_.precision).eps) ** 0.5
-    return value
+        value = float(np_finfo(self_.precision).eps) ** 0.5
+    return float(self_.precision(value))
 
 
 @frozen
@@ -122,23 +122,6 @@ class LinearSolverBaseConfig(MatrixFreeSolverConfig):
         default="local", validator=validators.in_(["local", "shared"])
     )
 
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return the settings carried across solver class swaps."""
-        return {
-            "zero_initial_guess": self.zero_initial_guess,
-            "lu_factor_location": self.lu_factor_location,
-            "preconditioned_vec_location": (
-                self.preconditioned_vec_location
-            ),
-            "temp_location": self.temp_location,
-            "r0_hat_location": self.r0_hat_location,
-            "p_location": self.p_location,
-            "v_location": self.v_location,
-            "tmp_location": self.tmp_location,
-            "s_hat_location": self.s_hat_location,
-        }
-
 
 @frozen
 class IterativeLinearSolverConfig(LinearSolverBaseConfig):
@@ -214,13 +197,6 @@ class IterativeLinearSolverConfig(LinearSolverBaseConfig):
         """Return ``finfo.max`` in configured precision."""
         return self.precision(np_finfo(self.precision).max)
 
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return the shared settings plus the raw iteration cap."""
-        settings = super().settings_dict
-        settings["krylov_max_iters"] = self._max_iters
-        return settings
-
 
 @define
 class LinearSolverCache(CUDADispatcherCache):
@@ -288,7 +264,7 @@ class LinearSolverBase(MatrixFreeSolver):
 
         super().__init__(
             precision=precision,
-            solver_type="krylov",
+            solver_type=instance_label,
             solver_width=solver_width,
             norm=norm,
             **kwargs,
@@ -365,10 +341,12 @@ class LinearSolverBase(MatrixFreeSolver):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the solver configuration plus its norm's tolerances."""
-        settings = dict(self.compile_settings.settings_dict)
-        settings["krylov_atol"] = self.atol
-        settings["krylov_rtol"] = self.rtol
+        """Return the settings plus the correction type and guess policy."""
+        settings = super().settings_dict
+        settings["linear_correction_type"] = self.linear_correction_type
+        settings["zero_initial_guess"] = (
+            self.compile_settings.zero_initial_guess
+        )
         return settings
 
 
@@ -399,11 +377,3 @@ class IterativeLinearSolverBase(LinearSolverBase):
     def krylov_residual_floor(self) -> float:
         """Return the weighted-residual floor."""
         return self.compile_settings.residual_floor
-
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return the solver configuration plus the stopping settings."""
-        result = super().settings_dict
-        result["krylov_residual_reduction"] = self.krylov_residual_reduction
-        result["krylov_residual_floor"] = self.krylov_residual_floor
-        return result

@@ -48,7 +48,7 @@ def erk_step_settings(erk_step_settings_override):
 
     settings = {
         "precision": np.float64,
-        "n": 2,
+        "n_states": 2,
     }
     if erk_step_settings_override:
         settings.update(erk_step_settings_override)
@@ -72,7 +72,7 @@ def test_default_tableau_is_registered(erk_registry):
 
 @pytest.mark.parametrize(
     "erk_step_settings_override",
-    [{"n": 3}],
+    [{"n_states": 3}],
     indirect=True,
 )
 def test_step_accepts_registered_tableau(erk_step_settings, erk_registry):

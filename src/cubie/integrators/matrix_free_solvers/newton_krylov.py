@@ -84,7 +84,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         Compiled correction norm for convergence checks.
     residual_fn : Optional[Callable]
         Device function evaluating residuals.
-    linear_solver_fn : Optional[Callable]
+    krylov_linear_solver_fn : Optional[Callable]
         Device function for solving linear systems.
     delta_location : str
         Memory location for delta buffer.
@@ -111,7 +111,7 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
     )
     use_cached_auxiliaries: bool = field(default=False)
     residual_fn: Optional[Callable] = device_function_field()
-    linear_solver_fn: Optional[Callable] = device_function_field()
+    krylov_linear_solver_fn: Optional[Callable] = device_function_field()
     delta_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -124,26 +124,6 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
     prev_theta_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return Newton-Krylov configuration as dictionary.
-
-        Returns
-        -------
-        dict
-            Configuration dictionary. Note: newton_atol and newton_rtol
-            are not included here; access them via solver.newton_atol
-            and solver.newton_rtol properties which delegate to the
-            norm factory.
-        """
-        return {
-            "newton_max_iters": self.max_iters,
-            "delta_location": self.delta_location,
-            "residual_location": self.residual_location,
-            "krylov_iters_local_location": self.krylov_iters_local_location,
-            "prev_theta_location": self.prev_theta_location,
-        }
 
 
 @define
@@ -209,7 +189,7 @@ class NewtonKrylov(MatrixFreeSolver):
             norm = DIRKCorrectionNorm(
                 precision=precision,
                 solver_width=solver_width,
-                n=solver_width,
+                n_states=solver_width,
                 instance_label="newton",
                 **kwargs,
             )
@@ -226,7 +206,7 @@ class NewtonKrylov(MatrixFreeSolver):
             required={
                 "precision": precision,
                 "solver_width": solver_width,
-                "norm_fn": self.norm.device_function,
+                "newton_norm_fn": self.norm.device_function,
             },
             instance_label="newton",
             **kwargs,
@@ -288,7 +268,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
         # Extract parameters from config
         residual_fn = config.residual_fn
-        linear_solver_fn = config.linear_solver_fn
+        linear_solver_fn = config.krylov_linear_solver_fn
         correction_norm_fn = config.norm_fn
 
         n = config.solver_width
@@ -565,8 +545,7 @@ class NewtonKrylov(MatrixFreeSolver):
 
         # Forward krylov-prefixed params to linear solver
         recognized |= self.linear_solver.update(all_updates, silent=True)
-        # Add linear_solver_fn to updates for compile settings
-        all_updates["linear_solver_fn"] = (
+        all_updates["krylov_linear_solver_fn"] = (
             self.linear_solver.device_function
         )
         recognized |= super().update(all_updates, silent=True)
@@ -632,23 +611,3 @@ class NewtonKrylov(MatrixFreeSolver):
     def linear_correction_type(self) -> str:
         """Return correction type from nested linear solver."""
         return self.linear_solver.linear_correction_type
-
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return merged Newton and linear solver configuration.
-
-        Combines Newton-level settings from compile_settings with
-        linear solver settings from nested linear_solver instance,
-        plus tolerance arrays from the norm factory.
-
-        Returns
-        -------
-        dict
-            Merged configuration dictionary containing both Newton
-            parameters, linear solver parameters, and tolerance arrays.
-        """
-        combined = dict(self.linear_solver.settings_dict)
-        combined.update(self.compile_settings.settings_dict)
-        combined["newton_atol"] = self.newton_atol
-        combined["newton_rtol"] = self.newton_rtol
-        return combined

@@ -119,6 +119,68 @@ def test_settings_keys_limit_the_settings_dict():
     assert _Keyed(value=2).settings_dict == {"value": 2}
 
 
+@attrs.frozen
+class _ParentConfig(_CubieConfigBase):
+    value: int = attrs.field(default=1)
+    own: str = attrs.field(default="parent")
+
+
+class _ParentFactory(CUDAFactory):
+    settings_keys = frozenset({"value", "own", "flag"})
+
+    def __init__(self, child, value=1):
+        super().__init__()
+        self.child = child
+        self.setup_compile_settings(_ParentConfig(value=value))
+
+    def build(self):
+        return CUDADispatcherCache()
+
+
+def test_settings_dict_merges_the_children_under_the_parent():
+    """A child's settings appear under the parent's own values."""
+    child = _SettingsFactory(value=7, flag=False)
+    parent = _ParentFactory(child, value=3)
+    assert parent.settings_dict == {
+        "value": 3, "own": "parent", "flag": False
+    }
+
+
+@attrs.frozen
+class _LabelledConfig(MultipleInstanceCUDAFactoryConfig):
+    _atol: float = attrs.field(
+        default=1e-6, alias="atol", metadata={"prefixed": True}
+    )
+    width: int = attrs.field(default=2)
+
+
+class _LabelledFactory(MultipleInstanceCUDAFactory):
+    def __init__(self, instance_label, child=None, **kwargs):
+        super().__init__(instance_label=instance_label)
+        if child is not None:
+            self.child = child
+        self.setup_compile_settings(
+            _LabelledConfig(
+                precision=np.float32, instance_label=instance_label, **kwargs
+            )
+        )
+
+    def build(self):
+        return _TestCache()
+
+
+def test_labelled_settings_dict_keys_prefixed_fields_by_label():
+    """Prefixed fields carry the label; shared fields and children do not."""
+    child = _LabelledFactory("newton", atol=1e-3)
+    parent = _LabelledFactory("krylov", child=child, atol=1e-9, width=5)
+    settings = parent.settings_dict
+    assert settings["krylov_atol"] == 1e-9
+    assert settings["newton_atol"] == 1e-3
+    assert settings["width"] == 5
+    assert settings["instance_label"] == "krylov"
+    assert _LabelledFactory("", atol=1e-4).settings_dict["atol"] == 1e-4
+
+
 # ── attribute_is_hashable ──────────────────────────────────── #
 
 
@@ -941,6 +1003,17 @@ def test_mi_factory_instance_label_property():
 
     f = _F(instance_label="krylov")
     assert f.instance_label == "krylov"
+
+
+def test_mi_factory_products_carry_the_label():
+    """products keys a labelled factory's cache fields by its label."""
+    labelled = _LabelledFactory("krylov")
+    plain = _LabelledFactory("")
+    fields = {fld.name for fld in attrs.fields(_TestCache)}
+    assert set(labelled.products) == {f"krylov_{name}" for name in fields}
+    assert set(plain.products) == fields
+    assert labelled.prefixed("norm_fn") == "krylov_norm_fn"
+    assert plain.prefixed("norm_fn") == "norm_fn"
 
 
 def test_device_function_field_compares_by_identity_and_is_unhashed():

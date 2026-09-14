@@ -739,7 +739,7 @@ def solver_settings(solver_settings_override, system, precision):
         "min_step_shrink": precision(0.1),
         "max_step_growth": precision(5.0),
         "safety": precision(0.9),
-        "n": system.sizes.states,
+        "n_states": system.sizes.states,
         "integral_gain": None,
         "proportional_gain": None,
         "derivative_gain": None,

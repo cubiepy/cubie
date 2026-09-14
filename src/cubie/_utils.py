@@ -351,13 +351,14 @@ def is_device_validator(instance, attribute, value):
         )
 
 
-def device_function_field(**kwargs):
-    """Config field for a device function: identity-compared, unhashed."""
+def device_function_field(prefixed: bool = False, **kwargs):
+    """Config field for a device function, keyed by the owner's label
+    when ``prefixed``: identity-compared, unhashed."""
     return field(
         default=None,
         eq=False,
         validator=validators.optional(is_device_validator),
-        metadata={"device_function": True},
+        metadata={"device_function": True, "prefixed": prefixed},
         **kwargs,
     )
 
@@ -738,13 +739,13 @@ def build_config(
     >>> # Without instance_label
     >>> config = build_config(
     ...     DIRKStepConfig,
-    ...     required={"precision": np.float32, "n": 3},
+    ...     required={"precision": np.float32, "n_states": 3},
     ... )
     >>>
     >>> # With instance_label (prefix transformation)
     >>> config = build_config(
     ...     ScaledNormConfig,
-    ...     required={"precision": np.float32, "n": 3},
+    ...     required={"precision": np.float32, "n_states": 3},
     ...     instance_label="krylov",
     ...     krylov_atol=1e-6,  # Transformed to atol
     ... )

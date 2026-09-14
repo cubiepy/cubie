@@ -169,8 +169,8 @@ def test_lu_solver_config_defaults(precision):
     config = LUSolverConfig(precision=precision, solver_width=3)
     assert config.lu_solve_fn is None
     assert config.lu_nnz == 0
-    settings = config.settings_dict
-    assert settings["linear_correction_type"] == "lu"
+    assert config.zero_initial_guess is True
+    assert config.init_kwargs["lu_nnz"] == 0
 
 
 def _dense_jacobian(system_setup, y):

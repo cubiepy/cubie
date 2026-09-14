@@ -449,8 +449,11 @@ class CUDAFactory(ABC):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the keyword arguments that rebuild this configuration."""
-        settings = self.compile_settings.init_kwargs
+        """Return the children's settings under this factory's own."""
+        settings = {}
+        for child in self._iter_child_factories():
+            settings.update(child.settings_dict)
+        settings.update(self.compile_settings.init_kwargs)
         if self.settings_keys is None:
             return settings
         return {
@@ -762,7 +765,7 @@ class MultipleInstanceCUDAFactoryConfig(CUDAFactoryConfig):
     instance_label: str = field(default="", repr=False, eq=False)
     prefixed_attributes: frozenset = field(
         factory=frozenset,
-        converter=frozenset,
+        init=False,
         repr=False,
         eq=False,
     )
@@ -809,6 +812,11 @@ class MultipleInstanceCUDAFactoryConfig(CUDAFactoryConfig):
         """
         return self.instance_label
 
+    def prefixed(self, name: str) -> str:
+        """Return ``name`` keyed by this instance's label."""
+        label = self.instance_label
+        return f"{label}_{name}" if label else name
+
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
         if self.instance_label != "":
@@ -849,7 +857,7 @@ class MultipleInstanceCUDAFactoryConfig(CUDAFactoryConfig):
 
         # Get rid of non-prefixed keys; write de-prefixed values in their place
         for key in self.prefixed_attributes:
-            prefixed_key = f"{self.prefix}_{key}"
+            prefixed_key = self.prefixed(key)
             has_prefixed = prefixed_key in all_updates
 
             _ = all_updates.pop(key, None)
@@ -861,18 +869,18 @@ class MultipleInstanceCUDAFactoryConfig(CUDAFactoryConfig):
             all_updates
         )
 
-        # Transform recognised keys back into prefixed versions to make as seen
+        # Report recognised and changed keys as the caller spelled them.
         recognized = set()
         for key in recognized_base:
             if key in self.prefixed_attributes:
-                recognized.add(f"{self.prefix}_{key}")
+                recognized.add(self.prefixed(key))
             else:
                 recognized.add(key)
 
         changed = set()
         for key in changed_base:
             if key in self.prefixed_attributes:
-                changed.add(f"{self.prefix}_{key}")
+                changed.add(self.prefixed(key))
             else:
                 changed.add(key)
 
@@ -923,3 +931,24 @@ class MultipleInstanceCUDAFactory(CUDAFactory):
     def instance_label(self) -> str:
         """Return the instance label for this factory."""
         return self._instance_label
+
+    def prefixed(self, name: str) -> str:
+        """Return ``name`` keyed by this instance's label."""
+        return self.compile_settings.prefixed(name)
+
+    @property
+    def products(self) -> Dict[str, Any]:
+        """Return the build's outputs keyed by the instance label."""
+        return {
+            self.prefixed(name): value
+            for name, value in super().products.items()
+        }
+
+    @property
+    def settings_dict(self) -> Dict[str, Any]:
+        """Return the settings with the prefixed fields keyed by label."""
+        prefixed = self.compile_settings.prefixed_attributes
+        return {
+            (self.prefixed(key) if key in prefixed else key): value
+            for key, value in super().settings_dict.items()
+        }

@@ -9,7 +9,7 @@ Published Classes
     Integral-only adaptive step-size controller.
 
     >>> from numpy import float64
-    >>> ctrl = AdaptiveIController(precision=float64, n=4)
+    >>> ctrl = AdaptiveIController(precision=float64, n_states=4)
     >>> ctrl.is_adaptive
     True
 

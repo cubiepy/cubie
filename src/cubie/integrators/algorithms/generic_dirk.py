@@ -186,7 +186,7 @@ class DIRKStep(ODEImplicitStep):
     def __init__(
         self,
         precision: PrecisionDType,
-        n: int,
+        n_states: int,
         dxdt_fn: Optional[Callable] = None,
         observables_fn: Optional[Callable] = None,
         drivers_fn: Optional[Callable] = None,
@@ -208,7 +208,7 @@ class DIRKStep(ODEImplicitStep):
         ----------
         precision
             Floating-point precision for CUDA computations.
-        n
+        n_states
             Number of state variables in the ODE system.
         dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
@@ -248,7 +248,7 @@ class DIRKStep(ODEImplicitStep):
             DIRKStepConfig,
             required={
                 'precision': precision,
-                'n': n,
+                'n_states': n_states,
                 'n_drivers': n_drivers,
                 'dxdt_fn': dxdt_fn,
                 'observables_fn': observables_fn,
@@ -273,7 +273,7 @@ class DIRKStep(ODEImplicitStep):
         settings = self.compile_settings
         self.dense_predictor = DenseStagePredictor(
             precision=settings.precision,
-            n=n,
+            n_states=n_states,
             tableau=settings.tableau,
             **kwargs,
         )
@@ -284,27 +284,28 @@ class DIRKStep(ODEImplicitStep):
         config = self.compile_settings
         # Smoothing solves with the at-state operator family.
         carried = {
-            key: value
+            key.replace("krylov_", "error_", 1): value
             for key, value in self.linear_solver.settings_dict.items()
             if key in self._LINEAR_SOLVER_PARAMS and value is not None
         }
         norm_kwargs = {
             key: carried[key]
-            for key in ("krylov_atol", "krylov_rtol")
+            for key in ("error_atol", "error_rtol")
             if key in carried
         }
         # Smoothing solves warm-start from the raw error estimate.
         self.error_solver = self._construct_linear_solver(
             precision=config.precision,
-            solver_width=config.n,
+            solver_width=config.n_states,
             norm=ScaledNorm(
                 precision=config.precision,
-                solver_width=config.n,
-                n=config.n,
-                instance_label="krylov",
+                solver_width=config.n_states,
+                n_states=config.n_states,
+                instance_label="error",
                 **norm_kwargs,
             ),
             norm_reference="base_state",
+            instance_label="error",
             zero_initial_guess=False,
             **carried,
         )
@@ -312,7 +313,7 @@ class DIRKStep(ODEImplicitStep):
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
-        n = config.n
+        n = config.n_states
         tableau = config.tableau
         if self.smooth_error and self.error_solver is None:
             self._build_error_solver()
@@ -481,7 +482,7 @@ class DIRKStep(ODEImplicitStep):
                     if self.dense_prediction
                     else None
                 ),
-                'error_solver_fn': (
+                'error_linear_solver_fn': (
                     self.error_solver.device_function
                     if self.smooth_error
                     else None
@@ -515,7 +516,7 @@ class DIRKStep(ODEImplicitStep):
         use_dense_prediction = self.dense_prediction
         predict_stages = config.predictor_fn
         use_smoothed_error = self.smooth_error
-        error_solver = config.error_solver_fn
+        error_solver = config.error_linear_solver_fn
         smoothing_gamma = config.smoothing_gamma
         apply_mass = config.apply_mass_fn
         evaluate_inv_mass_f = config.inverse_mass_dxdt_fn

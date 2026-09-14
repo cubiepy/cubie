@@ -227,7 +227,7 @@ def test_config_dt_max_property_normal_path():
 def test_controller_derives_dt_from_bounds():
     """Controller derives dt as sqrt(dt_min * dt_max) when not provided."""
     ctrl = AdaptiveIController(
-        precision=np.float64, n=3, dt_min=1e-4, dt_max=1.0
+        precision=np.float64, n_states=3, dt_min=1e-4, dt_max=1.0
     )
     expected = np.float64(sqrt(1e-4 * 1.0))
     assert ctrl.dt == pytest.approx(expected)
@@ -252,7 +252,7 @@ def test_settings_dict_keys():
     expected_keys = {
         "dt_min", "dt_max", "atol", "rtol", "algorithm_order",
         "min_step_shrink", "max_step_growth", "safety", "deadband_min",
-        "deadband_max", "dt", "n", "integral_gain",
+        "deadband_max", "dt", "n_states", "integral_gain",
     }
     assert expected_keys <= set(d.keys())
     assert d["dt_min"] == 1e-5
@@ -534,13 +534,13 @@ def test_deadband_swap_branch_is_unreachable():
 
 
 def test_config_mass_flags_default_every_state_differential():
-    cfg = AdaptiveStepControlConfig(precision=np.float32, n=3)
+    cfg = AdaptiveStepControlConfig(precision=np.float32, n_states=3)
     assert cfg.mass_flags == (True, True, True)
 
 
 def test_mass_flags_carried_into_settings_dict():
     controller = AdaptivePIDController(
-        precision=np.float64, n=3, mass_flags=[True, False, True]
+        precision=np.float64, n_states=3, mass_flags=[True, False, True]
     )
     assert controller.compile_settings.mass_flags == (True, False, True)
     assert controller.settings_dict["mass_flags"] == (True, False, True)
@@ -550,7 +550,7 @@ def test_controller_mass_flags_length_must_match_n():
     """The owned norm rejects a flag tuple of the wrong length."""
     with pytest.raises(ValueError, match="one flag per state"):
         AdaptiveIController(
-            precision=np.float64, dt=1e-3, n=3, mass_flags=(True, False)
+            precision=np.float64, dt=1e-3, n_states=3, mass_flags=(True, False)
         )
 
 
@@ -562,7 +562,7 @@ def test_controller_norm_mirrors_config_at_construction():
         ctrl = AdaptiveIController(
             precision=np.float32,
             dt=1e-3,
-            n=3,
+            n_states=3,
             atol=np.asarray([1e-3, 0.0, 1e-5]),
             rtol=1e-4,
             mass_flags=(True, False, True),
@@ -586,11 +586,11 @@ def test_controller_norm_mirrors_config_at_construction():
 
 
 def test_controller_update_carries_into_norm():
-    ctrl = AdaptiveIController(precision=np.float64, dt=1e-3, n=2)
-    ctrl.update({"n": 3, "atol": 1e-2, "mass_flags": (True, True, False)})
+    ctrl = AdaptiveIController(precision=np.float64, dt=1e-3, n_states=2)
+    ctrl.update({"n_states": 3, "atol": 1e-2, "mass_flags": (True, True, False)})
     norm = ctrl.norm
     assert norm.solver_width == 3
-    assert norm.compile_settings.n == 3
+    assert norm.compile_settings.n_states == 3
     assert norm.mass_flags == (True, True, False)
     assert_array_equal(norm.atol, np.full(3, 1e-2))
     assert ctrl.mass_flags == (True, True, False)

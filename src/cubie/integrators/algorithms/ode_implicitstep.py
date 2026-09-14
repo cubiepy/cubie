@@ -171,9 +171,10 @@ class ImplicitStepConfig(BaseStepConfig):
     cached_auxiliaries_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    solver_function: Optional[Callable] = device_function_field()
+    newton_nonlinear_solver_fn: Optional[Callable] = device_function_field()
+    krylov_linear_solver_fn: Optional[Callable] = device_function_field()
     prepare_jacobian_fn: Optional[Callable] = device_function_field()
-    error_solver_fn: Optional[Callable] = device_function_field()
+    error_linear_solver_fn: Optional[Callable] = device_function_field()
     helper_operation_counts: OperationCounts = field(
         factory=OperationCounts,
         validator=validators.instance_of(OperationCounts),
@@ -210,7 +211,7 @@ class ImplicitStepConfig(BaseStepConfig):
     @property
     def solver_width(self) -> int:
         """Return the solver vector length."""
-        return self.n
+        return self.n_states
 
     @property
     def preconditioner_order(self) -> int:
@@ -245,6 +246,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "krylov_max_iters",
             "krylov_residual_reduction",
             "krylov_residual_floor",
+            "error_atol",
+            "error_rtol",
+            "error_max_iters",
+            "error_residual_reduction",
+            "error_residual_floor",
             # MR buffer locations
             "preconditioned_vec_location",
             "temp_location",
@@ -362,6 +368,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         solver_width,
         norm,
         norm_reference,
+        instance_label="krylov",
         **linear_kwargs,
     ):
         """Construct the linear solver ``linear_correction_type`` selects."""
@@ -379,6 +386,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             solver_width=solver_width,
             norm=norm,
             norm_reference=norm_reference,
+            instance_label=instance_label,
             **linear_kwargs,
         )
 
@@ -436,12 +444,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         carried = current.settings_dict
         carried["linear_correction_type"] = new_type
+        carried["norm_reference"] = norm_reference
         replacement = self._construct_linear_solver(
-            precision=current.precision,
-            solver_width=current.solver_width,
-            norm=current.norm,
-            norm_reference=norm_reference,
-            **carried,
+            norm=current.norm, **carried
         )
         buffer_registry.clear_parent(current)
         return replacement
@@ -491,7 +496,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             self._swap_linear_solver(all_updates["linear_correction_type"])
             recognized.add("linear_correction_type")
 
-        if "n" in all_updates:
+        if "n_states" in all_updates:
             all_updates["solver_width"] = (
                 self.compile_settings.solver_width
             )
@@ -501,7 +506,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         # Push the children's rebuilt device functions into the step
         # settings.
         compiled_functions = {
-            "solver_function": self.solver.device_function
+            self.solver_fn_key: self.solver.device_function
         }
 
         if self.dense_predictor is not None:
@@ -518,7 +523,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             # The error solve is single-stage: width n, not s*n.
             recognized |= self.error_solver.update(
                 all_updates,
-                solver_width=self.compile_settings.n,
+                solver_width=self.compile_settings.n_states,
                 silent=True,
             )
 
@@ -571,11 +576,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         dxdt_fn = config.dxdt_fn
         numba_precision = config.numba_precision
-        n = config.n
+        n = config.n_states
         observables_fn = config.observables_fn
         drivers_fn = config.drivers_fn
         n_drivers = config.n_drivers
-        solver_function = config.solver_function
+        solver_function = getattr(config, self.solver_fn_key)
 
         return self.build_step(
             dxdt_fn,
@@ -784,7 +789,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         )
         self.update_compile_settings(
             {
-                "solver_function": self.solver.device_function,
+                self.solver_fn_key: self.solver.device_function,
                 "prepare_jacobian_fn": prepare_function,
                 "helper_operation_counts": OperationCounts(**counts),
             }
@@ -825,6 +830,13 @@ class ODEImplicitStep(BaseAlgorithmStep):
     def is_implicit(self) -> bool:
         """Return ``True`` to indicate the algorithm is implicit."""
         return True
+
+    @property
+    def solver_fn_key(self) -> str:
+        """Return the config field the owned solver's product fills."""
+        if self.is_linear:
+            return "krylov_linear_solver_fn"
+        return "newton_nonlinear_solver_fn"
 
     @property
     def beta(self) -> float:
@@ -927,16 +939,3 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """Return the maximum allowed Newton iterations."""
         val = getattr(self.solver, "newton_max_iters", None)
         return int(val) if val is not None else None
-
-    @property
-    def settings_dict(self) -> dict:
-        """Return the step's settings plus its solver's step-level keys."""
-        settings = super().settings_dict
-        settings.update(
-            {
-                key: value
-                for key, value in self.solver.settings_dict.items()
-                if key in self.settings_keys
-            }
-        )
-        return settings

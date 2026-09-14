@@ -31,7 +31,7 @@ resolves `__version__` via `importlib.metadata.version("cubie")`.
 | File | Description |
 |------|-------------|
 | `__init__.py` | Package entry point: star-imports subpackages, sets the Numba occupancy-warning env var, defines `__all__` and `__version__`. |
-| `CUDAFactory.py` | Core cached-compilation framework: `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`), `CUDAFactoryConfig`/`_CubieConfigBase` (frozen attrs snapshots; carry the `jit_flags: JITFlags` and `unroll: UnrollFlags` compile settings every factory honours, with a read-only `lineinfo` passthrough; `init_kwargs` returns the `__init__` fields by `__init__` name without device-function slots), `CUDADispatcherCache`, and the `MultipleInstance*` variants. `CUDAFactory.settings_dict` returns the config's `init_kwargs` limited to the class's `settings_keys` (a factory's loose-key set; `None` keeps every field); a factory that derives values overrides it to return them only as given. `copy()` is `type(self)(**settings_dict)`; factories that take a system override it. Hashing derives from `_serialize`. |
+| `CUDAFactory.py` | Core cached-compilation framework: `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`), `CUDAFactoryConfig`/`_CubieConfigBase` (frozen attrs snapshots; carry the `jit_flags: JITFlags` and `unroll: UnrollFlags` compile settings every factory honours, with a read-only `lineinfo` passthrough; `init_kwargs` returns the `__init__` fields by `__init__` name without device-function slots), `CUDADispatcherCache`, and the `MultipleInstance*` variants. `CUDAFactory.settings_dict` merges every child factory's `settings_dict` (the `config_hash` children), writes the config's `init_kwargs` over them and keeps the class's `settings_keys` (a factory's loose-key set; `None` keeps every key); a factory that derives values overrides it to return them only as given. `copy()` is `type(self)(**settings_dict)`; factories that take a system override it. Hashing derives from `_serialize`. |
 | `_serialize.py` | Versioned typed canonical serializer: `canonical_bytes`/`canonical_digest` with explicit type tags and length prefixes over the compile-setting value domain (no `str()` fallback — unsupported values raise). Every semantic identity (values_hash, config_hash, helper source/member hashes, ODE constants fold) derives from it; `SCHEMA_VERSION` prefixes every digest. Value objects join via a `_cubie_canonical_()` method. |
 | `_env.py` | `CUBIE_*` environment-variable registry: `env_bool`, `lineinfo_default` (`CUBIE_LINEINFO`), `cache_dir_default` (`CUBIE_CACHE_DIR`), `kernel_cache_dir_default` (`CUBIE_KERNEL_CACHE_DIR`), `max_cache_entries_default` (`CUBIE_MAX_CACHE_ENTRIES`), `operation_ordering_default` (`CUBIE_OPERATION_ORDERING`, the codegen ordering-policy default consumed by every `operation_ordering` signature default), `block_schedule_default`/`active_block_schedule`/`set_active_block_schedule` (`CUBIE_BLOCK_SCHEDULE`, the typed-IR scheduler policy, default `anchor_dfs`; the active value folds into the kernel-cache fingerprint), plus documentation of `CUBIE_CUDA_BACKEND`. Env values are defaults; explicit solver arguments always win. |
 | `cuda_backend.py` | Resolves which CUDA backend cubie compiles against: `CUDA_BACKEND` (`"numba-cuda"` or `"mlir"`) and `IS_MLIR`. `CUBIE_CUDA_BACKEND` picks explicitly; otherwise the installed backend is used (mlir preferred when both are installed; numba-cuda preferred under CUDASIM). Consumed by `cuda_simsafe`, `cubie_cache`, and `__init__` (which imports `backend/_numba_cuda_compat` or `backend/_mlir_compat` accordingly). |
@@ -118,7 +118,12 @@ back here. CUDA-authoring **optimisation** conventions are in
   excluded factories deliberately contribute nothing to semantic identity.
 - **`MultipleInstanceCUDAFactory`** maps prefixed external keys (e.g. `krylov_atol`)
   to unprefixed internal fields via `instance_label`; build configs with
-  `build_config(...)`.
+  `build_config(...)`. `products` and `settings_dict` carry the label
+  (`krylov_linear_solver_fn`, `krylov_atol`); `prefixed(name)` returns the labelled
+  key. A consumer field a labelled child
+  fills is named with that label (`newton_nonlinear_solver_fn`,
+  `error_linear_solver_fn`); a labelled consumer's own device slot is declared
+  `device_function_field(prefixed=True)` and keyed `{label}_norm_fn`.
 
 ### Config classes (attrs convention)
 - Compile settings are **frozen** attrs classes (`@attrs.frozen`) subclassing
@@ -134,7 +139,7 @@ back here. CUDA-authoring **optimisation** conventions are in
   (tuples, not lists).
 - A system runs at **one precision** (`ALLOWED_PRECISIONS` = float16/32/64); float
   members are returned cast to it via `self.precision(...)`.
-- **Device functions are named `<full words>_fn`** on both sides: the producer's cache field and every consumer's config field carry the same name (`dxdt_fn`, `step_fn`, `loop_fn`).
+- **Device functions are named `<full words>_fn`** on both sides: the producer's cache field and every consumer's config field carry the same name (`dxdt_fn`, `step_fn`, `loop_fn`). State counts are `n_states` everywhere (`n_observables`, `n_parameters`, `n_drivers` alongside); `solver_width` is a solver's vector length.
 - **Device-function fields are declared with `device_function_field()`** (`_utils`):
   `metadata={"device_function": True}`, compared by identity for invalidation,
   excluded from hashing. `CUDAFactory.products` returns a build's cache fields by
