@@ -3,10 +3,9 @@
 Published Classes
 -----------------
 :class:`SolverSettings`
-    One attrs record of every user-facing setting. The ``Solver`` holds
-    one instance as provided and one as resolved.
+    One attrs record of every user-facing setting.
 :class:`Resolution`
-    A resolved :class:`SolverSettings` and the notices to warn about.
+    A resolved record and the notices to warn about.
 
 Module-Level Functions
 ----------------------
@@ -85,12 +84,7 @@ def _local(**kwargs) -> Any:
 
 @define
 class SolverSettings:
-    """Every user-facing solver setting; ``None`` is not provided.
-
-    The Solver keeps one instance as the user provided it and one as
-    :func:`resolve` filled it. Grouped by the component that consumes
-    each setting.
-    """
+    """Every user-facing solver setting; ``None`` is not provided."""
 
     # The system: applied to it before anything else resolves.
     precision: Optional[type] = _setting()
@@ -299,11 +293,8 @@ class SolverSettings:
     def updated(
         self, updates: Dict[str, Any], strict: bool = True
     ) -> Tuple["SolverSettings", Set[str]]:
-        """Return a copy with ``updates`` recorded and the names taken.
-
-        ``None`` unsets a setting. Unknown names raise ``KeyError``
-        unless ``strict`` is ``False``.
-        """
+        """Return a copy with ``updates`` recorded (``None`` unsets) and
+        the names taken; unknown names raise unless not ``strict``."""
         flat, recognised = self._flatten(updates, strict=strict)
         return evolve(self, **flat), recognised
 
@@ -746,10 +737,8 @@ def resolve_performance(
     previous: Optional[SolverSettings] = None,
     hardware: Any = None,
 ) -> SolverSettings:
-    """Fill the unset unroll and placement values from the built step.
-
-    With ``auto_performance`` off the values ``previous`` derived stay.
-    """
+    """Fill the unset unroll and placement values from the built step;
+    with ``auto_performance`` off the values in ``previous`` stay."""
     defaults = dict(step.performance_defaults)
     if effective.auto_performance is False:
         if previous is None:

@@ -971,22 +971,21 @@ class Solver:
         Parameters
         ----------
         updates_dict
-            Mapping of setting names to new values; ``None`` unsets.
+            Setting names to new values; ``None`` unsets.
         silent
-            If ``True`` unknown keys are ignored instead of raising
-            ``KeyError``.
+            Ignore unknown names instead of raising.
         **kwargs
-            Additional updates supplied as keyword arguments.
+            Further updates.
 
         Returns
         -------
         Set[str]
-            Set of keys that were recognised.
+            The recognised names.
 
         Raises
         ------
         KeyError
-            If ``silent`` is ``False`` and unknown settings are supplied.
+            Unknown names when not ``silent``.
         """
         if updates_dict is None:
             updates_dict = {}

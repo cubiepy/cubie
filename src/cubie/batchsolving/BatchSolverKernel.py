@@ -284,11 +284,8 @@ class BatchSolverKernel(CUDAFactory):
     system
         ODE system describing the problem to integrate.
     **settings
-        The resolved settings: the memory keys
-        (``ALL_MEMORY_MANAGER_PARAMETERS``), this kernel's
-        :class:`BatchSolverConfig` fields, and the keys the
-        :class:`cubie.integrators.SingleIntegratorRun` and its children
-        take. ``unroll`` and ``jit_flags`` reach every factory.
+        The resolved settings: memory keys, this kernel's config fields
+        and the run's keys.
 
     Attributes
     ----------

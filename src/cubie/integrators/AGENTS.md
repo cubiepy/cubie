@@ -55,32 +55,23 @@ Iteration counts are returned separately via the
 `Solver.status_messages`).
 
 ### Component assembly (`SingleIntegratorRunCore.__init__`)
-The run derives nothing: the Solver passes resolved settings as one flat dict
-(`SingleIntegratorRun(system, drivers_fn=..., driver_derivative_fn=..., **settings)`;
-grouped dicts flatten), and the run takes the system's precision. Order:
-1. `IntegratorRunSettings` from `algorithm`, `step_controller` (default `fixed`), the
-   driver functions and the compile flags; every child then takes the same `unroll` and
-   `jit_flags`.
+The run derives nothing; it takes one flat dict of resolved settings and the system's
+precision. Order:
+1. `IntegratorRunSettings` (`algorithm`, `step_controller`, driver functions, compile
+   flags); every child takes the same `unroll` and `jit_flags`.
 2. `OutputFunctions` from the output keys and the system's sizes.
-3. The step from the settings, the system's sizes and device functions
-   (`_step_inputs()`), and `is_adaptive` (`step_controller != "fixed"`); an explicit step
-   on a mass-matrix system raises.
-4. The controller from the settings, `n_states`, `mass_flags` and the step's
-   `algorithm_order` (`_controller_inputs()`).
-5. `DAEInitialiser` from the step's `settings_dict`, the settings and the system's
-   sizes and helper getter (`_initialiser_inputs()`); no-op configurations register
-   zero-size buffers.
-6. `IVPLoop` from the loop keys and the children's products (`_loop_inputs()`: sizes,
-   compile flags, `dt`, `is_adaptive`, `n_error` and the device functions); the step,
-   controller and initialiser (`aliases="algorithm_shared"`) register under it and
-   `loop_fn` is captured on the run's config.
+3. The step from the settings plus `_step_inputs()` (sizes, device functions,
+   `is_adaptive`); an explicit step on a mass-matrix system raises.
+4. The controller from the settings plus `_controller_inputs()`.
+5. `DAEInitialiser` from the step's `settings_dict`, the settings and
+   `_initialiser_inputs()`; no-op configurations register zero-size buffers.
+6. `IVPLoop` from the loop keys plus `_loop_inputs()` (the children's products); the
+   step, controller and initialiser register under it and `loop_fn` is captured.
 
 `update()` writes the system's config fields, this run's config, then each child with
-the same dict plus the products it consumes, and recaptures `loop_fn`; a new
-`algorithm` or `step_controller` swaps that child, built from the update and the old
-compile flags. `build()` returns `loop_fn`; a child changed outside `update()` is not
-seen until the next `update()`. `settings_dict` merges the children's; `copy()`
-rebuilds on `system.copy()` from it.
+the same dict plus its inputs, and recaptures `loop_fn`; a new `algorithm` or
+`step_controller` swaps that child. `build()` returns `loop_fn`. `settings_dict`
+merges the children's; `copy()` rebuilds on `system.copy()` from it.
 
 ### Testing
 Top-level files are exercised via `tests/integrators/` integration tests and

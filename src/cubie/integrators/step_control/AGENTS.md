@@ -55,9 +55,8 @@ controllers.
   `persistent_local_buffer_size`.
 
 ### Controller specifics
-- **Step bounds are plain fields**: adaptive `dt_min` (`DEFAULT_DT_MIN`), `dt_max`
-  (`DEFAULT_DT_MAX`) and `dt` (the bounds' geometric mean when unset); fixed `dt`
-  (`DEFAULT_FIXED_DT`). Contradictory bounds raise `ValueError`.
+- **Step bounds are plain fields** with `DEFAULT_*` defaults; an unset adaptive `dt`
+  is the bounds' geometric mean; contradictory bounds raise `ValueError`.
 - **Deadband**: `deadband_min == deadband_max == 1.0` elides the branch at compile time; accepted gains inside the band snap to 1.0; rejected steps skip the band and retry on the current-error term alone (Gustafsson: basic gain).
 - **`update` addition**: parameters present in `ALL_STEP_CONTROLLER_PARAMETERS` but not
   applicable to the current controller emit a `UserWarning` and are dropped (so

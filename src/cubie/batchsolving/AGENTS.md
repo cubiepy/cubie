@@ -18,7 +18,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | File | Description |
 |------|-------------|
 | `solver.py` | `Solver` + `solve_ivp()` — the public API. `solve_ivp` also accepts raw equations (callable / string / iterable of strings), building the system via `_system_from_equations` (state names from a `y0` dict, parameter defaults from a `parameters` dict; array `parameters` rejected). `Solver` owns `system_interface`, `input_handler` (`BatchInputHandler`), and `kernel` (`BatchSolverKernel`); `driver_interpolator` is a passthrough to the kernel-owned interpolator, and most getters are thin pass-throughs to `kernel`. `Solver.compile()` runs the same input processing as `solve` and compiles the kernel without launching. `Solver.given` and `Solver.effective` are `SolverSettings` records (provided and resolved); `Solver.settings_dict` is `given` plus the logger level; `Solver.copy()` is `Solver(system.copy(), **settings_dict)` (drivers not copied); `optimisation_candidates(force)` drops the provided performance keys; `blocksize_given`. |
-| `solver_settings.py` | `SolverSettings`: one attrs field per user-facing setting (`None` = not provided), `from_kwargs` flattens grouped dicts and an `unroll` object and raises on unknown or renamed names, `updated` records new values (`None` unsets), `as_kwargs` returns the provided values, `as_updates` returns what the kernel takes with the `unroll`, `jit_flags` and `cache` objects assembled. `resolve(given, system, interface)` returns a `Resolution` (the effective record and the notices to warn about): algorithm facts, controller name and gains, step bounds, family/tableau/DAE step defaults, inner tolerances, the output selection (labels to indices) and the loop schedule for the provided `duration`. `resolve_performance(given, effective, step, system, previous)` takes the built step's placement defaults and the instruction-cache rule for Newton unrolling; with `auto_performance` off the previous values stay. |
+| `solver_settings.py` | `SolverSettings`: one attrs field per user-facing setting (`None` = not provided); `from_kwargs` (grouped dicts flatten; unknown or renamed names raise), `updated` (`None` unsets), `as_kwargs` (provided values), `as_updates` (what the kernel takes, with the `unroll`, `jit_flags` and `cache` objects assembled). `resolve(given, system, interface)` -> `Resolution` (effective record, notices): algorithm facts, controller name and gains, step bounds, family/tableau/DAE step defaults, inner tolerances, output selection (labels to indices), loop schedule for `duration`. `resolve_performance(given, effective, step, system, previous)`: the step's placement defaults and the instruction-cache rule for Newton unrolling; `auto_performance` off keeps `previous`. |
 | `BatchSolverKernel.py` | `BatchSolverKernel(CUDAFactory)` — the batch `@cuda.jit` kernel; maps each run to the `SingleIntegratorRun` device loop. Owns the `ArrayInterpolator` as a direct child factory (`driver_interpolator`; `configure_drivers()` updates it and the dependent compile settings as one unit; `run()` raises `ValueError` when the system declares drivers and no evaluator is wired). `build_kernel()` attaches a `CUBIECache` built from the config's `cache` settings and `config_hash` to the dispatcher and keeps it for the flush-on-change path in `_invalidate_cache`. Defines `RunParams` (frozen: duration/warmup/t0/runs + chunk metadata) and `BatchSolverCache`; owns the `InputArrays`/`OutputArrays` managers and memory-manager registration. `compile()` allocates the batch and compiles the specialised kernel through the disk cache without launching, via the backend-selected `compile_kernel_specialization` in `backend/utils`. The constructor takes one flat dict (`BatchSolverKernel(system, **settings)`): the memory keys, its own config fields and everything the run's children take. `settings_dict` is the kernel's `ALL_KERNEL_PARAMETERS` fields, the plain memory keys and the run's `settings_dict`; `copy()` rebuilds on `system.copy()` sharing the memory manager. |
 | `BatchSolverConfig.py` | `BatchSolverConfig(CUDAFactoryConfig)` — holds `precision`, `loop_fn`, `compile_flags`, `coefficients_shape`, `max_registers`, `kernel_name`, `blocksize` and `auto_performance` (both `eq=False`), and the hash-excluded (`eq=False`) nested `cache: CacheSettings` (`cache_enabled`/`cache_mode`/`max_cache_entries`/`cache_dir`, loose keys in `ALL_CACHE_PARAMETERS`, all part of `ALL_KERNEL_PARAMETERS`); the field's converter accepts the `cache=` shorthand (bool, `"flush_on_change"`, or a directory) and loose keys evolve the nested object like `UnrollFlags`. `ActiveOutputs(_CubieConfigBase)` — booleans for which output arrays are produced, built via `ActiveOutputs.from_compile_flags(...)`. |
 | `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
@@ -46,23 +46,18 @@ launching the compiled kernel. Results flow back through `OutputArrays` →
 `SolveResult.from_solver`.
 
 ### Solver: settings
-`Solver.__init__` and `Solver.update` record what was provided in `given`
-(`SolverSettings.from_kwargs` / `updated`; grouped dicts flatten, unknown and renamed
-names raise, `None` unsets), write the system settings (`precision`,
-`operation_ordering`, `system_constants`) into the system, resolve `effective` with
-`solver_settings.resolve`, push `effective.as_updates()` down `kernel.update`, then run
-`resolve_performance` on the built step and push again if a value changed. Notices from
-a resolution are warned once. Every child `update` below the Solver is `silent=True`
-and takes the keys it knows. `duration` is a provided setting that only the derived
-summary window reads. Add a new result accessor on `kernel` and expose it as a
-`Solver` property.
+`__init__` and `update` record the provided settings in `given`, write the system
+settings (`precision`, `operation_ordering`, `system_constants`) into the system,
+resolve `effective`, push `effective.as_updates()` down `kernel.update`, then
+`resolve_performance` on the built step and push again if a value changed. Notices
+warn once. Child `update` calls are `silent=True`. `duration` is a setting only the
+derived summary window reads. New result accessors go on `kernel` with a `Solver`
+property.
 
 ### Live system updates
-Constant values reach a live solver as `system_constants={name: value}` through
-`Solver.update`/solve kwargs. The kernel records the system's compile-settings snapshot
-after every update; a replaced snapshot at `Solver.solve` triggers
-`kernel.resync_system()`, which runs the update chain so every child takes the system's
-current products, and the Solver re-resolves.
+Constants reach a live solver as `system_constants={name: value}`. A system snapshot
+replaced outside the chain triggers `kernel.resync_system()` at the next solve, which
+runs the update chain, and the Solver re-resolves.
 
 ### Solver teardown
 `Solver.close()` waits only for its last run stream, drains staging work, and

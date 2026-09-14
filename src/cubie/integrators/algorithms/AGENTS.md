@@ -165,10 +165,9 @@ solver children and writes their device functions and an `OperationCounts`
 into the step's config; `build()` reads that config only.
 `ODEImplicitStep.update` adds `solver_width` (the coupled all-stages length
 for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change.
-`performance_defaults` (a step's own placement values, FIRK's
-`stage_increment` cut) and `step_operation_count` feed the Solver's
-`resolve_performance`. `optimisation_candidates` lists the setting
-combinations `Solver.optimize` times (base `({},)`).
+`performance_defaults` (the step's own placement values) and
+`step_operation_count` feed the Solver's `resolve_performance`.
+`optimisation_candidates` lists the combinations `Solver.optimize` times.
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
 the `lu_solve` role instead of the operator + preconditioner pair;

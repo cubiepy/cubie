@@ -89,9 +89,7 @@ class SingleIntegratorRunCore(CUDAFactory):
     driver_derivative_fn
         Device function giving the drivers' time derivative.
     **settings
-        The resolved settings; each child takes the keys it knows.
-        ``algorithm`` is required; ``step_controller`` defaults to
-        ``"fixed"``.
+        The resolved settings; ``algorithm`` is required.
     """
 
     settings_keys = frozenset({"algorithm", "step_controller"})
@@ -154,27 +152,21 @@ class SingleIntegratorRunCore(CUDAFactory):
         Parameters
         ----------
         updates_dict
-            Dictionary of parameters to update; nested dicts are
-            flattened one level.
+            Parameters to update; nested dicts flatten one level.
         silent
-            If ``True``, suppress errors about unrecognised parameters.
+            Ignore unrecognised parameters instead of raising.
         **kwargs
-            Additional updates provided as keyword arguments.
+            Further updates.
 
         Returns
         -------
         set[str]
-            Names of parameters that were recognised and applied.
+            The recognised names.
 
         Raises
         ------
         KeyError
-            Raised when unrecognised parameters remain and ``silent`` is
-            ``False``.
-
-        Notes
-        -----
-        A new ``algorithm`` or ``step_controller`` swaps that child.
+            Unrecognised parameters when not ``silent``.
         """
         if updates_dict is None:
             updates_dict = {}
