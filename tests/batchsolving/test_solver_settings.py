@@ -13,7 +13,6 @@ from cubie.batchsolving.resolve_defaults import (
     resolve_inner_tolerances,
     resolve_loop_timing,
     resolve_step_bounds,
-    unset_updates,
 )
 from cubie.batchsolving.solver import Solver
 from cubie.batchsolving.solver_settings import (
@@ -436,27 +435,6 @@ def test_unset_window_summarises_last():
     assert timing["summarise_regularly"] is False
 
 
-def test_unset_updates_carry_unset_intervals(system):
-    """An interval unset to ``None`` is pushed; other unsets are not."""
-    before = _effective(
-        system,
-        output_types=["state", "mean"],
-        save_every=0.02,
-        summarise_every=0.04,
-        sample_summaries_every=0.02,
-        blocksize=64,
-    )
-    after = _effective(
-        system,
-        output_types=["state", "mean"],
-        sample_summaries_every=0.02,
-    )
-    assert unset_updates(before, after) == {
-        "save_every": None,
-        "summarise_every": None,
-    }
-
-
 def test_no_summaries_clears_the_summary_timing():
     """Without summary outputs neither summary flag is set."""
     timing = resolve_loop_timing(None, 0.1, 0.05, True, False)
@@ -712,6 +690,31 @@ def test_unset_window_keeps_the_build_across_durations(
     )
     assert solver_mutable.kernel._cache_valid
     assert second.state_summaries.shape[0] == 1
+
+
+def test_unsetting_the_intervals_at_solve_switches_to_last(
+    solver_mutable, batch_input_arrays, driver_settings
+):
+    """Unset intervals at solve time give a final save and one summary."""
+    initial_values, parameters = batch_input_arrays
+    result = solver_mutable.solve(
+        initial_values=initial_values,
+        parameters=parameters,
+        drivers=driver_settings,
+        duration=0.2,
+        save_every=None,
+        summarise_every=None,
+    )
+    integrator = solver_mutable.kernel.single_integrator
+    assert solver_mutable.save_every is None
+    assert solver_mutable.summarise_every is None
+    assert solver_mutable.solve_info.summarise_every is None
+    assert integrator.save_last is True
+    assert integrator.summarise_last is True
+    assert integrator.save_event_count(0.2) == 1
+    assert integrator.summaries_length(0.2) == 1
+    assert result.time_domain_array.shape[0] == 2
+    assert result.state_summaries.shape[0] == 1
 
 
 @pytest.mark.parametrize(

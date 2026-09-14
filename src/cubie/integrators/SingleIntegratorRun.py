@@ -154,9 +154,19 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         return self._loop.compile_settings.save_last
 
     @property
+    def save_regularly(self) -> bool:
+        """Return True if states save every ``save_every``."""
+        return self._loop.compile_settings.save_regularly
+
+    @property
     def summarise_last(self) -> bool:
         """Return True if one summary over the whole run is configured."""
         return self._loop.compile_settings.summarise_last
+
+    @property
+    def summarise_regularly(self) -> bool:
+        """Return True if a summary is written every ``summarise_every``."""
+        return self._loop.compile_settings.summarise_regularly
 
     def _regular_event_count(self, duration: float, interval: float) -> int:
         """Count how many scheduled events fit inside a duration.
@@ -220,30 +230,28 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         int
             Number of output samples including initial and optionally final.
         """
-        save_every = self.save_every
-
         regular_samples = 0
         final_samples = 1 if self.save_last else 0
         initial_sample = 1
-        if save_every is not None:
+        if self.save_regularly:
             regular_samples = self._regular_event_count(
-                duration, save_every
+                duration, self.save_every
             )
         return regular_samples + initial_sample + final_samples
 
     def save_event_count(self, duration: float) -> int:
         """Return the number of scheduled save rows, initial included."""
-        save_every = self.save_every
-        if save_every is None:
+        if not self.save_regularly:
             return 1
-        return self._regular_event_count(duration, save_every) + 1
+        return self._regular_event_count(duration, self.save_every) + 1
 
     def summary_sample_count(self, duration: float) -> int:
         """Return the number of scheduled summary samples."""
-        sample_every = self.sample_summaries_every
-        if sample_every is None:
+        if not (self.summarise_regularly or self.summarise_last):
             return 0
-        return self._regular_event_count(duration, sample_every)
+        return self._regular_event_count(
+            duration, self.sample_summaries_every
+        )
 
     def summaries_length(self, duration: float) -> int:
         """Calculate number of summary output rows for a duration.
@@ -270,10 +278,9 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         """
         if self.summarise_last:
             return 1
-        summarise_every = self.summarise_every
 
         regular_summaries = 0
-        if summarise_every is not None:
+        if self.summarise_regularly:
             sample_every = self.sample_summaries_every
             updates = self._regular_event_count(duration, sample_every)
             samples_per_summary = (
