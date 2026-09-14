@@ -52,7 +52,7 @@ ROUNDS = 2
 EXCLUSION_RATIO = 2.0
 """Launches whose first solve exceeds this multiple of the fastest drop."""
 
-LOCAL_LAUNCH_BLOCKSIZES = (64, 256)
+LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
 
 SHARED_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
@@ -471,11 +471,11 @@ def performance_defaults(
     """
     if given.auto_performance is False:
         return {}
-    defaults = dict(step.performance_defaults)
+    if hardware is None:
+        hardware = device_hardware()
+    defaults = dict(step.performance_defaults(hardware))
     # A Newton loop that overflows the instruction cache stays rolled.
     if step.is_implicit and step.newton_solves_per_step > 0:
-        if hardware is None:
-            hardware = device_hardware()
         unrolled = system.operation_count + step.step_operation_count
         capacity = hardware.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
         defaults["unroll_newton_exits"] = (

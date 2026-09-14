@@ -49,6 +49,7 @@ from attrs import (
 from numpy import (
     array as np_array,
     ascontiguousarray as np_ascontiguousarray,
+    dtype as np_dtype,
     float16 as np_float16,
     float32 as np_float32,
     int32 as np_int32,
@@ -66,6 +67,7 @@ from cubie._utils import (
     precision_converter,
     PrecisionDType,
 )
+from cubie.backend.utils import device_hardware, shared_keeps_occupancy
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import (
     CUDAFactory,
@@ -920,6 +922,22 @@ class BaseAlgorithmStep(CUDAFactory):
         return 0
 
     @property
+    def uses_direct_solver(self) -> bool:
+        """Return whether the step solves its stages with a direct LU."""
+        return False
+
+    @property
+    def accumulates_output(self) -> bool:
+        """Whether the tableau accumulates its output over the stages."""
+        tableau = self.compile_settings.tableau
+        return bool(tableau is not None and tableau.accumulates_output)
+
+    @property
+    def local_elements(self) -> int:
+        """Elements the step declares in local memory."""
+        return buffer_registry.declared_local_elements(self)
+
+    @property
     def n_drivers(self) -> int:
         """Return the configured number of external drivers."""
 
@@ -958,10 +976,21 @@ class BaseAlgorithmStep(CUDAFactory):
             if key not in ALL_ALGORITHM_STEP_PARAMETERS
         }
 
-    @property
-    def performance_defaults(self) -> Dict[str, Any]:
-        """Return size-dependent settings ``auto_performance`` applies."""
+    def performance_defaults(self, hardware: Any = None) -> Dict[str, Any]:
+        """Return the placements ``auto_performance`` sets for this step."""
         return {}
+
+    def shared_keeps_occupancy(
+        self, elements: int, fraction: int = 1, hardware: Any = None
+    ) -> bool:
+        """Whether ``elements`` + 1 shared per run keep ``1 / fraction``
+        of the register-limited threads."""
+        if hardware is None:
+            hardware = device_hardware()
+        itemsize = np_dtype(self.precision).itemsize
+        return shared_keeps_occupancy(
+            hardware, (elements + 1) * itemsize, fraction
+        )
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:

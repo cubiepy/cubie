@@ -65,6 +65,7 @@ from cubie.integrators.algorithms.ode_implicitstep import (
 )
 from cubie.integrators.norms import ScaledNorm
 from cubie.integrators.stage_predictors import DenseStagePredictor
+from cubie.backend.utils import MAX_REGISTERS_PER_THREAD
 from cubie.buffer_registry import buffer_registry
 
 
@@ -1095,18 +1096,46 @@ class DIRKStep(ODEImplicitStep):
         return len(self.tableau.implicit_stages)
 
     @property
-    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """Newton unrolling, plus one rolled-Newton arm per solver kind."""
-        rolled = UnrollChoice.ROLLED
-        if self.uses_direct_solver:
-            extra = {"unroll_newton_exits": rolled, "unroll_other_small": rolled}
-        else:
-            extra = {"unroll_newton_exits": rolled, "accumulator_location": "shared"}
-        return (
-            {"unroll_newton_exits": UnrollChoice.FULL},
-            {"unroll_newton_exits": rolled},
-            extra,
+    def local_elements(self) -> int:
+        """Declared local elements, counting the accumulator and its
+        ``stage_base`` alias as local wherever they are placed."""
+        declared = buffer_registry.declared_local_elements(self)
+        if self.compile_settings.accumulator_location == "shared":
+            declared += self.accumulator_elements + self.n_states
+        return declared
+
+    @property
+    def accumulator_elements(self) -> int:
+        """Elements of the explicit-stage accumulator."""
+        return max(self.tableau.stage_count - 1, 0) * self.n_states
+
+    def performance_defaults(self, hardware: Any = None) -> Dict[str, Any]:
+        """Share a spilling Krylov accumulator while half occupancy holds."""
+        shared = (
+            not self.uses_direct_solver
+            and self.local_elements > MAX_REGISTERS_PER_THREAD
+            and self.shared_keeps_occupancy(
+                self.accumulator_elements, 2, hardware
+            )
         )
+        return {"accumulator_location": "shared" if shared else "local"}
+
+    @property
+    def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
+        """Newton unrolling crossed with ``accumulator`` placement, plus
+        rolled ``other_small`` at rolled Newton with a local accumulator."""
+        rolled = UnrollChoice.ROLLED
+        cross = [
+            {"unroll_newton_exits": unroll, "accumulator_location": location}
+            for unroll in (UnrollChoice.FULL, rolled)
+            for location in ("local", "shared")
+        ]
+        cross.append({
+            "unroll_newton_exits": rolled,
+            "unroll_other_small": rolled,
+            "accumulator_location": "local",
+        })
+        return tuple(cross)
 
     @property
     def has_error_estimate(self) -> bool:

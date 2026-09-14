@@ -164,9 +164,15 @@ construction: constructors and `update` (after a recognised key) run
 solver children and writes their device functions and an `OperationCounts`
 into the step's config; `build()` reads that config only.
 `ODEImplicitStep.update` adds `solver_width` (the coupled all-stages length
-for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change.
-`performance_defaults` (the step's own placement values) and
-`step_operation_count` feed `optimize.performance_defaults`.
+for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change; FIRK
+adds the tableau's rows for its norm in the same update. `StepCache`
+carries `threads_per_step`, `n_error`, `algorithm_order`,
+`has_error_estimate`, `is_implicit`, `is_linear`, `newton_solves_per_step`
+and `step_operation_count` from the same-named properties.
+`performance_defaults(hardware)` (the step's placements, from
+`shared_keeps_occupancy`, `uses_direct_solver`, `local_elements`,
+`accumulates_output`) and `step_operation_count` feed
+`optimize.performance_defaults`.
 `optimisation_candidates` lists the combinations `Solver.optimize` times.
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request

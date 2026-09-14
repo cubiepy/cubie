@@ -60,6 +60,7 @@ from cubie.CUDAFactory import UnrollChoice
 from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import PrecisionDType, build_config
+from cubie.backend.utils import MAX_REGISTERS_PER_THREAD
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import all_sync, activemask
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -591,14 +592,30 @@ class ERKStep(ODEExplicitStep):
         """Return ``True`` when the method has multiple stages."""
         return self.tableau.stage_count > 1
 
+    def performance_defaults(self, hardware: Any = None) -> Dict[str, Any]:
+        """Share a spilling accumulating ``state`` while occupancy holds."""
+        shared = (
+            self.accumulates_output
+            and self.n_states * self.stage_count > MAX_REGISTERS_PER_THREAD
+            and self.shared_keeps_occupancy(self.n_states, 1, hardware)
+        )
+        return {"state_location": "shared" if shared else "local"}
+
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """``other_small`` unrolling crossed with ``state`` placement."""
-        return tuple(
+        """``other_small`` unrolling crossed with ``state`` placement,
+        plus a shared ``stage_rhs`` at full unrolling."""
+        cross = [
             {"unroll_other_small": unroll, "state_location": location}
             for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
             for location in ("local", "shared")
-        )
+        ]
+        cross.append({
+            "unroll_other_small": UnrollChoice.FULL,
+            "state_location": "local",
+            "stage_rhs_location": "shared",
+        })
+        return tuple(cross)
 
     @property
     def has_error_estimate(self) -> bool:
