@@ -98,16 +98,16 @@ def _variant_probe_tableau():
     indirect=True,
 )
 def test_constant_change_replaces_the_step_device_functions(
-    single_integrator_run,
+    solver_mutable,
 ):
-    """A constant pushed through the run replaces every device function."""
-    run = single_integrator_run
+    """A constant pushed through the Solver replaces every device function."""
+    run = solver_mutable.kernel.single_integrator
     step = run._algo_step
     loop_fn = run.device_function
     dxdt_fn = step.compile_settings.dxdt_fn
     residual_fn = step.solver.compile_settings.residual_fn
     step_fn = step.step_fn
-    run.update({"c0": 0.75})
+    solver_mutable.update(system_constants={"c0": 0.75})
     assert step.compile_settings.dxdt_fn is not dxdt_fn
     assert step.solver.compile_settings.residual_fn is not residual_fn
     assert step.step_fn is not step_fn

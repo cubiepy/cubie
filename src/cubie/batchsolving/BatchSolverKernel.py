@@ -1465,12 +1465,9 @@ class BatchSolverKernel(CUDAFactory):
 
     def copy(self) -> "BatchSolverKernel":
         """Return a kernel with these settings on a system copy."""
-        config = self.compile_settings
         return type(self)(
             self.system.copy(),
             memory_manager=self.memory_manager,
-            unroll=config.unroll,
-            jit_flags=config.jit_flags,
             **self.settings_dict,
         )
 

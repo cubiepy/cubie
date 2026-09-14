@@ -596,13 +596,13 @@ class DAEInitialiser(CUDAFactory):
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the settings plus the LU solve's and norm's tolerances."""
-        settings = super().settings_dict
+        """Return the settings plus both norms' tolerances."""
+        settings = self.compile_settings.init_kwargs
         for key in ("unroll", "jit_flags"):
             settings.pop(key, None)
-        settings.update(self.linear_solver.settings_dict)
-        settings[self.norm.prefixed("atol")] = self.norm.atol
-        settings[self.norm.prefixed("rtol")] = self.norm.rtol
+        for norm in (self.norm, self.linear_solver.norm):
+            settings[norm.prefixed("atol")] = norm.atol
+            settings[norm.prefixed("rtol")] = norm.rtol
         return settings
 
     @property
