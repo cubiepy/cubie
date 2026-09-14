@@ -567,7 +567,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             and tableau_supports_dense_prediction(config.tableau)
         )
 
-    def build(self) -> StepCache:
+    def compile_step(self) -> StepCache:
         """Create and cache the device helpers for the implicit algorithm.
 
         Returns

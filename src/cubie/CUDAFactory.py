@@ -132,8 +132,7 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
 
 @cache
 def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields typed as attrs classes with ``update``; unwraps
-    ``Optional``."""
+    """Return fields typed as attrs classes; unwraps ``Optional``."""
     from typing import Union, get_args, get_origin
 
     nested = []
@@ -142,11 +141,7 @@ def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
         if get_origin(fld.type) is Union:
             candidates = get_args(fld.type)
         for candidate in candidates:
-            if (
-                isinstance(candidate, type)
-                and has(candidate)
-                and callable(getattr(candidate, "update", None))
-            ):
+            if isinstance(candidate, type) and has(candidate):
                 nested.append(fld)
                 break
     return tuple(nested)
@@ -156,8 +151,6 @@ def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:
     """Compare device functions by identity, arrays elementwise, else
     ``!=``."""
     if fld.metadata.get("device_function"):
-        return old is not new
-    if fld.eq is False and (callable(old) or callable(new)):
         return old is not new
     if isinstance(old, ndarray) or isinstance(new, ndarray):
         return not array_equal(asarray(old), asarray(new))
@@ -216,8 +209,8 @@ class _CubieConfigBase:
         -----
         This method never mutates ``self``. Field converters and
         validators run on the replacement snapshot, and change
-        detection compares post-conversion values — ``eq=False``
-        callables by identity, arrays elementwise, everything else by
+        detection compares post-conversion values — device functions
+        by identity, arrays elementwise, everything else by
         inequality. Fields tagged ``metadata={"constructor_only":
         True}`` are settable only at construction: update treats
         their keys as unrecognised. Nested attrs-class fields are
@@ -611,11 +604,6 @@ class CUDAFactory(ABC):
                 "build() must return an attrs class (CUDADispatcherCache "
                 "subclass)"
             )
-        # Product fields mirror the factory's same-named properties.
-        for fld in fields(type(build_result)):
-            if fld.metadata.get("product"):
-                setattr(build_result, fld.name, getattr(self, fld.name))
-
         self._cache = build_result
         self._cache_valid = True
 

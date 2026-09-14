@@ -88,6 +88,7 @@ class ExplicitEulerStep(ODEExplicitStep):
                 'dxdt_fn': dxdt_fn,
                 'observables_fn': observables_fn,
                 'drivers_fn': drivers_fn,
+                'get_solver_helper_fn': get_solver_helper_fn,
             },
             **kwargs
         )

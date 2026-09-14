@@ -197,8 +197,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         precision = system.precision
 
         self._system = system
-        # Bound once: device-function fields compare by identity.
-        self._get_solver_helper_fn = system.get_solver_helper
         system_sizes = system.sizes
 
         # Outputsettings may/may not include precision, so we pop it here to
@@ -571,7 +569,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             n_drivers=int(sizes.drivers),
             dxdt_fn=system.dxdt_fn,
             observables_fn=system.observables_fn,
-            get_solver_helper_fn=self._get_solver_helper_fn,
+            get_solver_helper_fn=system.get_solver_helper,
         )
 
     def _initialiser_inputs(self) -> Dict[str, Any]:
@@ -580,7 +578,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return dict(
             n_states=int(system.sizes.states),
             mass_flags=system.mass_diagonal_flags,
-            get_solver_helper_fn=self._get_solver_helper_fn,
+            get_solver_helper_fn=system.get_solver_helper,
         )
 
     def _loop_inputs(self) -> Dict[str, Any]:

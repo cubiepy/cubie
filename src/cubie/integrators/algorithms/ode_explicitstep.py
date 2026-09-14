@@ -41,7 +41,7 @@ class ExplicitStepConfig(BaseStepConfig):
 class ODEExplicitStep(BaseAlgorithmStep):
     """Base helper for explicit integration algorithms."""
 
-    def build(self) -> StepCache:
+    def compile_step(self) -> StepCache:
         """Create and cache the device function for the explicit algorithm.
 
         Returns

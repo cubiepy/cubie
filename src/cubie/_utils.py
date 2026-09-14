@@ -362,11 +362,6 @@ def device_function_field(prefixed: bool = False, **kwargs):
     )
 
 
-def product_field(**kwargs):
-    """Cache field ``_build`` fills from the same-named factory property."""
-    return field(default=None, metadata={"product": True}, **kwargs)
-
-
 def float_array_validator(instance, attribute, value):
     """Validate that a value is a NumPy np_floating-point array with finite
     values.

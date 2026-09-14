@@ -59,7 +59,6 @@ from cubie._utils import (
     optional_tuple_converter,
     build_config,
     PrecisionDType,
-    product_field,
     tol_converter,
 )
 from cubie.buffer_registry import buffer_registry
@@ -311,12 +310,12 @@ class ControllerCache(CUDADispatcherCache):
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)
-    is_adaptive: bool = product_field()
-    dt: float = product_field()
-    dt_min: float = product_field()
-    dt_max: float = product_field()
-    atol: Optional[ndarray] = product_field()
-    rtol: Optional[ndarray] = product_field()
+    is_adaptive: bool = field(default=False)
+    dt: float = field(default=0.0)
+    dt_min: float = field(default=0.0)
+    dt_max: float = field(default=0.0)
+    atol: Optional[ndarray] = field(default=None)
+    rtol: Optional[ndarray] = field(default=None)
 
 
 @frozen
@@ -566,14 +565,31 @@ class BaseStepController(CUDAFactory):
         """Return the compiled step-controller device function."""
         return self.get_cached_output("step_controller_fn")
 
-    @abstractmethod
     def build(self) -> ControllerCache:
-        """Compile and return the CUDA device controller.
+        """Compile the controller and record its bounds and tolerances.
 
         Returns
         -------
         ControllerCache
-            Cache containing the compiled controller device function.
+            The compiled controller with its products filled in.
+        """
+        cache = self.compile_controller()
+        cache.is_adaptive = self.is_adaptive
+        cache.dt = self.dt
+        cache.dt_min = self.dt_min
+        cache.dt_max = self.dt_max
+        cache.atol = self.atol
+        cache.rtol = self.rtol
+        return cache
+
+    @abstractmethod
+    def compile_controller(self) -> ControllerCache:
+        """Compile the controller device function.
+
+        Returns
+        -------
+        ControllerCache
+            The compiled controller.
         """
 
     @property

@@ -35,10 +35,10 @@ See Also
     Configuration for this step.
 """
 
-from typing import Any, Callable, Dict, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from numpy import float64 as np_float64, int32 as np_int32
+from numpy import int32 as np_int32
 from cubie.cuda_simsafe import UnrollChoice, cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
@@ -403,20 +403,6 @@ class FIRKStep(ODEImplicitStep):
                 name="error_solver",
                 aliases="solver_shared",
             )
-
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs: Any,
-    ) -> Set[str]:
-        """Update the step; a new tableau carries its rows to the norm."""
-        all_updates = {**(updates_dict or {}), **kwargs}
-        tableau = all_updates.get("tableau")
-        if tableau is not None:
-            # The norm checks the row count against solver_width.
-            all_updates["stage_coefficients"] = tableau.a_flat(np_float64)
-        return super().update(all_updates, silent=silent)
 
     def build_implicit_helpers(self) -> None:
         """Request the helpers and push the solver chain's products."""

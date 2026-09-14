@@ -65,7 +65,6 @@ from cubie._utils import (
     opt_getype_validator,
     precision_converter,
     PrecisionDType,
-    product_field,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import (
@@ -729,14 +728,14 @@ class StepCache(CUDADispatcherCache):
         default=None,
         validator=validators.optional(is_device_validator),
     )
-    threads_per_step: int = product_field()
-    n_error: int = product_field()
-    algorithm_order: int = product_field()
-    has_error_estimate: bool = product_field()
-    is_implicit: bool = product_field()
-    is_linear: bool = product_field()
-    newton_solves_per_step: int = product_field()
-    step_operation_count: int = product_field()
+    threads_per_step: int = field(default=0)
+    n_error: int = field(default=0)
+    algorithm_order: int = field(default=0)
+    has_error_estimate: bool = field(default=False)
+    is_implicit: bool = field(default=False)
+    is_linear: bool = field(default=False)
+    newton_solves_per_step: int = field(default=0)
+    step_operation_count: int = field(default=0)
 
 
 class BaseAlgorithmStep(CUDAFactory):
@@ -847,6 +846,35 @@ class BaseAlgorithmStep(CUDAFactory):
             )
 
         return recognised
+
+    def build(self) -> StepCache:
+        """Compile the step and record its sizes, order and flags.
+
+        Returns
+        -------
+        StepCache
+            The compiled step with its products filled in.
+        """
+        cache = self.compile_step()
+        cache.threads_per_step = self.threads_per_step
+        cache.n_error = self.n_error
+        cache.algorithm_order = self.algorithm_order
+        cache.has_error_estimate = self.has_error_estimate
+        cache.is_implicit = self.is_implicit
+        cache.is_linear = self.is_linear
+        cache.newton_solves_per_step = self.newton_solves_per_step
+        cache.step_operation_count = self.step_operation_count
+        return cache
+
+    @abstractmethod
+    def compile_step(self) -> StepCache:
+        """Compile the step's device functions.
+
+        Returns
+        -------
+        StepCache
+            The compiled step and any nonlinear solver.
+        """
 
     @property
     def n_error(self) -> int:

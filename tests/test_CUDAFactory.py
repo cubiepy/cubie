@@ -334,6 +334,27 @@ def test_update_eq_false_same_identity_no_change():
     assert changed == set()
 
 
+def test_update_eq_false_rebound_method_no_change():
+    """A fresh binding of the same method is not a change."""
+
+    class _Owner:
+        def helper(self):
+            return 1
+
+    owner = _Owner()
+
+    @attrs.frozen
+    class _C(_CubieConfigBase):
+        fn: object = attrs.field(default=None, eq=False)
+
+    c = _C(fn=owner.helper)
+    replacement, recognized, changed = c.update({"fn": owner.helper})
+    assert replacement is c
+    assert changed == set()
+    replacement, recognized, changed = c.update({"fn": _Owner().helper})
+    assert changed == {"fn"}
+
+
 def test_update_ndarray_comparison():
     """Semantic array fields compare elementwise."""
     @attrs.frozen
@@ -1050,6 +1071,22 @@ def test_products_returns_the_cache_fields(system):
     assert set(products) == {
         fld.name for fld in attrs.fields(type(system._cache))
     }
+
+
+def test_pushing_the_system_helper_getter_again_keeps_the_step_built(
+    single_integrator_run,
+):
+    """Re-sending ``system.get_solver_helper`` does not rebuild the step."""
+    run = single_integrator_run
+    step = run._algo_step
+    step.step_fn
+    assert step.cache_valid
+    step.update(
+        get_solver_helper_fn=run._system.get_solver_helper, silent=True
+    )
+    assert step.cache_valid
+    run.update(dt=run._step_controller.dt, silent=True)
+    assert step.cache_valid
 
 
 def test_child_products_carry_their_declared_fields(

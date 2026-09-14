@@ -61,7 +61,7 @@ def test_algorithm_order_is_the_embedded_pair_order(system):
     assert DORMAND_PRINCE_54_TABLEAU.embedded_order == 4
     step = DIRKStep(
         get_solver_helper_fn=system.get_solver_helper,
-        precision=np.float64,
+        precision=np.float32,
         n_states=2,
         tableau=KVAERNO3_TABLEAU,
     )
@@ -74,7 +74,7 @@ def test_smoothed_radau_algorithm_order(system):
 
     step = FIRKStep(
         get_solver_helper_fn=system.get_solver_helper,
-        precision=np.float64,
+        precision=np.float32,
         n_states=2,
         tableau=RADAU_IIA_5_TABLEAU,
         use_smoothed_error=False,

@@ -59,9 +59,10 @@ resolves a name or `ButcherTableau` to the right factory.
   types; keep it in sync but it stays commented.
 
 ### Factory & dispatch
-- Subclasses implement **`build_step(...)`** (not `build()` — the bases provide that),
-  returning a `StepCache(step_fn=..., nonlinear_solver_fn=...)`; the compiled step is exposed
-  via the `step_fn` property.
+- Subclasses implement **`build_step(...)`**, returning a
+  `StepCache(step_fn=..., nonlinear_solver_fn=...)`; the bases' `compile_step()`
+  call it and `BaseAlgorithmStep.build()` fills the cache's remaining fields
+  from the same-named properties. The compiled step is the `step_fn` property.
 - `get_algorithm_step(precision, settings, **kwargs)` requires `settings["algorithm"]`
   — a name string or a `ButcherTableau` instance. Names resolve via
   `_TABLEAU_REGISTRY_BY_ALGORITHM` (`resolve_alias`); tableau instances dispatch by
@@ -163,11 +164,7 @@ construction: constructors and `update` (after a recognised key) run
 solver children and writes their device functions and an `OperationCounts`
 into the step's config; `build()` reads that config only.
 `ODEImplicitStep.update` adds `solver_width` (the coupled all-stages length
-for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change; FIRK
-adds the tableau's rows for its norm in the same update. `StepCache`
-carries `threads_per_step`, `n_error`, `algorithm_order`,
-`has_error_estimate`, `is_implicit`, `is_linear`, `newton_solves_per_step`
-and `step_operation_count` from the same-named properties.
+for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change.
 `newton_body_operation_count`, `per_step_operation_count`,
 `newton_solves_per_step` and `performance_defaults` feed the core's
 `_apply_performance_defaults`. `optimisation_candidates` lists the setting

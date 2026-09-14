@@ -166,14 +166,6 @@ class FIRKCorrectionNormConfig(CorrectionNormConfig):
         ),
     )
 
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
-        stage_count = self.stage_count
-        if self.stage_coefficients.size != stage_count * stage_count:
-            raise ValueError(
-                "stage_coefficients must hold stage_count**2 values"
-            )
-
     def _check_widths(self) -> None:
         """Require whole stage blocks of ``n_states`` physical states."""
         if self.solver_width % self.n_states != 0:
