@@ -668,31 +668,16 @@ class BatchSolverKernel(CUDAFactory):
             counts[key] = entry
         return entry
 
-    def kernel_is_cached(
-        self,
-        inits: NDArray[floating],
-        params: NDArray[floating],
-        duration: float,
-        warmup: float = 0.0,
-        t0: float = 0.0,
-    ) -> bool:
-        """Prepare the batch as :meth:`compile` does and report whether
-        the disk cache holds its kernel; ``False`` when caching is off."""
+    def kernel_is_cached(self) -> bool:
+        """Whether the disk cache holds this configuration's kernel;
+        ``False`` when caching is off."""
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "
                 "released; build a new Solver to run again."
             )
-        stream = self.stream
-        self._memory_manager.begin_work(self)
-        try:
-            self._prepare_batch(
-                inits, params, duration, warmup, t0, stream
-            )
-            # Building the dispatcher attaches the disk cache.
-            self.kernel
-        finally:
-            self._memory_manager.end_work(self, stream)
+        # Building the dispatcher attaches the disk cache.
+        self.kernel
         disk_cache = self._disk_cache
         return disk_cache is not None and disk_cache.holds_kernel()
 

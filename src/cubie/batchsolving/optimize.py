@@ -25,6 +25,7 @@ import logging
 import multiprocessing
 import pickle
 from enum import Enum
+from math import isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from warnings import warn
 
@@ -64,7 +65,7 @@ CONFIRMATION_RATIO = 3.0
 """Slow first solves under this multiple of the fastest are repeated."""
 
 PROBE_FRACTIONS = (0.01, 0.1, 1.0)
-"""Fractions of the given duration the ``"auto"`` probe ramps through."""
+"""Fractions of the given duration the ``auto_size`` probe ramps through."""
 
 LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
@@ -443,6 +444,13 @@ class _OptimizeRunner:
         self._drivers = drivers
         self._given_duration = float(duration)
         self._given_settling = float(settling_time)
+        # Pin an unset summary window so probe durations share a kernel.
+        self._pinned = {}
+        if (
+            parent.kernel.single_integrator.summary_outputs_requested
+            and not parent.given.is_given("summarise_every")
+        ):
+            self._pinned = {"summarise_every": self._given_duration}
         self.duration = float(duration)
         self.settling = float(settling_time)
         self._t0 = float(t0)
@@ -472,14 +480,11 @@ class _OptimizeRunner:
     def _make_twin(self, candidate: Dict[str, Any]) -> Any:
         """Return a parent copy carrying ``candidate``."""
         twin = self._parent.copy()
+        # Kernel timing events exist only under the "silent" level.
+        twin.set_verbosity("silent")
         if self._drivers is not None:
             twin._configure_drivers(self._drivers)
-        twin.update(candidate, silent=True)
-        if twin.effective.summarise_regularly and not twin.given.is_given(
-            "summarise_every"
-        ):
-            # Pin the summary window at the given duration.
-            twin.update(summarise_every=self._given_duration, silent=True)
+        twin.update({**candidate, **self._pinned}, silent=True)
         return twin
 
     def build_twins(self, candidates: Sequence[Dict[str, Any]]) -> None:
@@ -490,20 +495,18 @@ class _OptimizeRunner:
     def set_batch(self, runs: int) -> None:
         """Stage ``runs`` grid columns on the device, cycling if short."""
         inits, params = self._grid
-        columns = np_arange(int(runs)) % inits.shape[1]
-        self._inits = cuda.to_device(np_take(inits, columns, axis=1))
-        self._params = cuda.to_device(np_take(params, columns, axis=1))
-        self.runs = int(runs)
+        runs = int(runs)
+        if runs != inits.shape[1]:
+            columns = np_arange(runs) % inits.shape[1]
+            inits = np_take(inits, columns, axis=1)
+            params = np_take(params, columns, axis=1)
+        self._inits = cuda.to_device(inits)
+        self._params = cuda.to_device(params)
+        self.runs = runs
 
     def _compile(self, twin: Any) -> None:
         """Compile ``twin`` for the staged batch."""
         twin.kernel.compile(
-            self._inits, self._params, self.duration, self.settling, self._t0
-        )
-
-    def _is_cached(self, twin: Any) -> bool:
-        """Whether the disk cache holds ``twin``'s kernel."""
-        return twin.kernel.kernel_is_cached(
             self._inits, self._params, self.duration, self.settling, self._t0
         )
 
@@ -515,7 +518,7 @@ class _OptimizeRunner:
         missing = []
         for index, twin in enumerate(self._twins):
             label = _label(self._candidates[index])
-            if self._is_cached(twin):
+            if twin.kernel.kernel_is_cached():
                 self._emit(f"  {label}: cached")
             else:
                 missing.append(index)
@@ -780,7 +783,7 @@ def run_optimization(
     apply: bool = True,
     verbose: bool = True,
     force: bool = False,
-    mode: str = "auto",
+    auto_size: bool = True,
     waves: int = 5,
     target_ms: float = 20.0,
 ) -> OptimizeResult:
@@ -812,14 +815,14 @@ def run_optimization(
         Print per-launch progress lines.
     force
         Vary the settings given explicitly or applied earlier too.
-    mode
-        ``"auto"``: a ``waves``-wave batch from the grid, duration cut
-        to ``target_ms`` per solve. ``"given"``: the whole grid at
+    auto_size
+        ``True``: a ``waves``-wave batch from the grid, duration cut
+        to ``target_ms`` per solve. ``False``: the whole grid at
         ``duration``.
     waves
-        Occupancy waves the ``"auto"`` batch fills.
+        Occupancy waves the sized batch fills.
     target_ms
-        Kernel milliseconds one ``"auto"`` solve aims for.
+        Kernel milliseconds one sized solve aims for.
 
     Returns
     -------
@@ -829,14 +832,15 @@ def run_optimization(
     Raises
     ------
     ValueError
-        Unknown ``mode``, ``waves`` under 1, or ``target_ms`` under 10.
+        ``waves`` under 1, or ``target_ms`` under 10 or not finite.
     """
-    if mode not in ("auto", "given"):
-        raise ValueError(f"mode must be 'auto' or 'given', got {mode!r}")
     if int(waves) < 1 or waves != int(waves):
         raise ValueError(f"waves must be a positive integer, got {waves!r}")
-    if not target_ms >= 10.0:
-        raise ValueError(f"target_ms must be at least 10, got {target_ms!r}")
+    if not (isfinite(target_ms) and target_ms >= 10.0):
+        raise ValueError(
+            f"target_ms must be a finite number of at least 10, "
+            f"got {target_ms!r}"
+        )
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
@@ -862,11 +866,10 @@ def run_optimization(
     try:
         runner._emit(f"optimize: {len(candidates)} candidate kernels")
         runner.build_twins(candidates)
-        runner.set_batch(inits.shape[1])
-        if mode == "auto":
-            runner.use_shortest_duration()
         runner.prewarm()
-        if mode == "auto":
+        runner.set_batch(inits.shape[1])
+        if auto_size:
+            runner.use_shortest_duration()
             runner.size_batch(waves)
             runner.probe_duration(target_ms)
         runner.compile_twins()
