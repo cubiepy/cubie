@@ -415,7 +415,8 @@ def test_kernel_is_cached_reports_the_disk_cache(
 
 def test_copy_registers_memory_like_its_parent(solver_mutable):
     """A copy joins the auto pool, or reserves what its parent reserved."""
-    assert solver_mutable.settings_dict["mem_proportion"] is None
+    manager = solver_mutable.memory_manager
+    assert manager.manual_proportion(solver_mutable.kernel) is None
     twin = solver_mutable.copy()
     try:
         manager = twin.kernel.memory_manager
