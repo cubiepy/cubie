@@ -153,6 +153,11 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         """Return True if end-of-run-only state saving is configured."""
         return self._loop.compile_settings.save_last
 
+    @property
+    def summarise_last(self) -> bool:
+        """Return True if one summary over the whole run is configured."""
+        return self._loop.compile_settings.summarise_last
+
     def _regular_event_count(self, duration: float, interval: float) -> int:
         """Count how many scheduled events fit inside a duration.
 
@@ -243,7 +248,8 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
     def summaries_length(self, duration: float) -> int:
         """Calculate number of summary output rows for a duration.
 
-        The device writes one summary row after every
+        ``summarise_last`` is one row. Otherwise the device writes one
+        summary row after every
         ``samples_per_summary`` summary measurements. The number of
         measurements in a run follows the same counting rule as
         saves (:meth:`_regular_event_count`), and only a complete
@@ -262,6 +268,8 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         int
             Number of summary rows.
         """
+        if self.summarise_last:
+            return 1
         summarise_every = self.summarise_every
 
         regular_summaries = 0

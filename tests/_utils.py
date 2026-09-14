@@ -103,12 +103,12 @@ STATE_OBS_NO_TIMING = {
     "sample_summaries_every": None,
 }
 
-# Summary-only outputs with no timing (duration-dependent path).
-SUMMARY_ONLY_NO_TIMING = {
+# Summary-only outputs with no window: one summary over the run.
+SUMMARY_ONLY_LAST = {
     "output_types": ["mean"],
     "save_every": None,
     "summarise_every": None,
-    "sample_summaries_every": None,
+    "sample_summaries_every": 0.02,
 }
 
 # Summary-only outputs with explicit timing (no derivation needed).
@@ -2607,13 +2607,14 @@ WARMUP_SAVE_BOUNDARY = {
     "save_every": 0.1,
 }
 
-DURATION_ONLY_MIXED_OUTPUTS = {
-            "precision": np.float32,
-            "duration": 0.1,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        }
+# Final save and one whole-run summary sampled every step.
+MIXED_OUTPUTS_LAST = {
+    "precision": np.float32,
+    "duration": 0.1,
+    "output_types": ["state", "time", "mean"],
+    "algorithm": "euler",
+    "dt": 0.01,
+    "save_every": None,
+    "summarise_every": None,
+    "sample_summaries_every": 0.01,
+}

@@ -620,7 +620,6 @@ def chunked_solved_solver(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
-        sample_summaries_every=None,
         save_every=0.01,
         dt=0.01,
     )
@@ -649,7 +648,6 @@ def unchunked_solved_solver(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
-        sample_summaries_every=None,
         save_every=0.01,
         dt=0.01,
     )

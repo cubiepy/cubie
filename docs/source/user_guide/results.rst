@@ -121,10 +121,12 @@ Time-Domain vs Summary Output
 Time-domain saves and summary metrics operate at independent cadences:
 
 - ``save_every`` controls how often state snapshots are written.
-- ``summarise_every`` controls how often summary metrics are calculated
-  and saved.
-- ``sample_summaries_every`` controls how often measurements are
-  accumulated into the summary metric buffers.
+- ``summarise_every`` controls how often a
+  summary window closes and is written; unset, one window covers the
+  run.
+- ``sample_summaries_every`` controls the sampling rate feeding the
+  summary accumulators, and must be set whenever summaries are
+  requested.
 
 Using summaries lets you extract statistics (mean, max, peaks, etc.)
 without ever writing the full trajectory to VRAM.

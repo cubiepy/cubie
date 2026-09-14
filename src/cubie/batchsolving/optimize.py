@@ -439,13 +439,6 @@ class _OptimizeRunner:
         self._grid = (inits, params)
         self._given_duration = float(duration)
         self._given_settling = float(settling_time)
-        # Pin an unset summary window so probe durations share a kernel.
-        self._pinned = {}
-        if (
-            parent.kernel.single_integrator.summary_outputs_requested
-            and not parent.given.is_given("summarise_every")
-        ):
-            self._pinned = {"summarise_every": self._given_duration}
         self.duration = float(duration)
         self.settling = float(settling_time)
         self._t0 = float(t0)
@@ -473,7 +466,7 @@ class _OptimizeRunner:
     def _make_twin(self, candidate: Dict[str, Any]) -> Any:
         """Return a parent copy carrying ``candidate``."""
         twin = self._parent.copy()
-        twin.update({**candidate, **self._pinned}, silent=True)
+        twin.update(candidate, silent=True)
         return twin
 
     def build_twins(self, candidates: Sequence[Dict[str, Any]]) -> None:
