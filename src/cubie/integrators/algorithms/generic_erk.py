@@ -593,7 +593,7 @@ class ERKStep(ODEExplicitStep):
         return self.tableau.stage_count > 1
 
     def performance_defaults(self, hardware: Any = None) -> Dict[str, Any]:
-        """Share a spilling accumulating ``state`` while occupancy holds."""
+        """Share a spilling accumulating ``state`` while the GPU stays full."""
         shared = (
             self.accumulates_output
             and self.n_states * self.stage_count > MAX_REGISTERS_PER_THREAD
