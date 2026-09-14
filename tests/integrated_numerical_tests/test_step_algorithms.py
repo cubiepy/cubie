@@ -73,13 +73,13 @@ def _execute_step_twice(
 
     shared_elems = step_object.shared_buffer_size
 
-    step_function = step_object.step_function
-    evaluate_driver_at_t = (
-        driver_array.evaluation_function
+    step_fn = step_object.step_fn
+    drivers_fn = (
+        driver_array.drivers_fn
         if driver_array is not None
         else None
     )
-    evaluate_observables = system.evaluate_observables
+    observables_fn = system.observables_fn
 
     params = step_inputs["parameters"]
     state = np.asarray(step_inputs["state"], dtype=precision)
@@ -181,11 +181,11 @@ def _execute_step_twice(
         for pers_idx in range(persistent_len):
             persistent[pers_idx] = zero
 
-        if evaluate_driver_at_t is not None:
-            evaluate_driver_at_t(
+        if drivers_fn is not None:
+            drivers_fn(
                 zero, driver_coeffs_vec, drivers_current_vec
             )
-        evaluate_observables(
+        observables_fn(
             state_vec,
             params_vec,
             drivers_current_vec,
@@ -193,7 +193,7 @@ def _execute_step_twice(
             zero,
         )
 
-        first_status = step_function(
+        first_status = step_fn(
             state_vec,
             proposed_vec_first,
             params_vec,
@@ -224,7 +224,7 @@ def _execute_step_twice(
                 proposed_observables_vec_first[obs_idx]
             )
 
-        second_status = step_function(
+        second_status = step_fn(
             state_vec,
             proposed_vec_second,
             params_vec,

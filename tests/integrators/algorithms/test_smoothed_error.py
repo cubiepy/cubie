@@ -513,7 +513,7 @@ def test_error_solver_solves_the_at_state_dense_system(
 
     step = step_object
     assert step.smooth_error
-    step.step_function
+    step.step_fn
     error_solver = step.error_solver.device_function
 
     state = np.array([0.3, -1.2])
@@ -614,7 +614,7 @@ def _run_one_device_step(step, state, dt, time_value):
     persistent_len = max(1, int(step.persistent_local_buffer_size))
     shared_elems = max(1, int(step.shared_buffer_size))
     shared_bytes = np.float64(0).itemsize * shared_elems
-    step_fn = step.step_function
+    step_fn = step.step_fn
 
     @cuda.jit
     def kernel(state_in, proposed_out, error_out, status_out):

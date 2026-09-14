@@ -85,7 +85,7 @@ def save_state_factory(
         inline=True,
         **get_jit_kwargs(lineinfo),
     )
-    def save_state_func(
+    def save_state_fn(
         current_state,
         current_observables,
         current_counters,
@@ -148,4 +148,4 @@ def save_state_factory(
                 stwt(output_counters_slice, i, current_counters[i])
         # no cover: stop
 
-    return save_state_func
+    return save_state_fn

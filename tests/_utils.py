@@ -1336,17 +1336,17 @@ def _build_enhanced_algorithm_settings(
     in algorithm_settings dict.
     """
     enhanced = algorithm_settings.copy()
-    enhanced["evaluate_f"] = system.evaluate_f
-    enhanced["evaluate_observables"] = system.evaluate_observables
+    enhanced["dxdt_fn"] = system.dxdt_fn
+    enhanced["observables_fn"] = system.observables_fn
     enhanced["get_solver_helper_fn"] = system.get_solver_helper
     enhanced["n_drivers"] = system.num_drivers
 
     if driver_array is not None:
-        enhanced["evaluate_driver_at_t"] = driver_array.evaluation_function
-        enhanced["driver_del_t"] = driver_array.driver_del_t
+        enhanced["drivers_fn"] = driver_array.drivers_fn
+        enhanced["driver_derivative_fn"] = driver_array.driver_derivative_fn
     else:
-        enhanced["evaluate_driver_at_t"] = None
-        enhanced["driver_del_t"] = None
+        enhanced["drivers_fn"] = None
+        enhanced["driver_derivative_fn"] = None
 
     return enhanced
 
@@ -1552,7 +1552,7 @@ def _get_evaluate_driver_at_t(
     """Return the evaluation callable for ``driver_array`` if it exists."""
     if driver_array is None:
         return None
-    return driver_array.evaluation_function
+    return driver_array.drivers_fn
 
 
 def _get_driver_del_t(
@@ -1562,7 +1562,7 @@ def _get_driver_del_t(
 
     if driver_array is None:
         return None
-    return driver_array.driver_del_t
+    return driver_array.driver_derivative_fn
 
 
 def make_slice_fn(run_axis_idx, chunk_size, ndim):
@@ -1934,7 +1934,7 @@ def run_device_step_schedule(
     Parameters
     ----------
     step_object
-        Algorithm step whose ``step_function`` drives the schedule.
+        Algorithm step whose ``step_fn`` drives the schedule.
     system
         System supplying the state, observable and driver widths.
     precision
@@ -1960,7 +1960,7 @@ def run_device_step_schedule(
         1, int(step_object.persistent_local_buffer_size)
     )
     kernel = _step_schedule_kernel(
-        step_object.step_function,
+        step_object.step_fn,
         int(system.sizes.states),
         max(1, int(system.sizes.observables)),
         max(1, int(system.sizes.drivers)),

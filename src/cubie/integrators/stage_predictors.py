@@ -385,7 +385,7 @@ class DenseStagePredictorConfig(CUDAFactoryConfig):
 class DenseStagePredictorCache(CUDADispatcherCache):
     """Hold the compiled in-place prediction device function."""
 
-    predict: Callable = field(validator=is_device_validator)
+    predictor_fn: Callable = field(validator=is_device_validator)
 
 
 class DenseStagePredictor(CUDAFactory):
@@ -488,7 +488,7 @@ class DenseStagePredictor(CUDAFactory):
     def device_function(self) -> Callable:
         """Return the compiled prediction device function."""
 
-        return self.get_cached_output("predict")
+        return self.get_cached_output("predictor_fn")
 
     def build(self) -> DenseStagePredictorCache:
         """Compile the in-place prediction device function."""
@@ -583,4 +583,4 @@ class DenseStagePredictor(CUDAFactory):
                     )
 
         # no cover: end
-        return DenseStagePredictorCache(predict=predict)
+        return DenseStagePredictorCache(predictor_fn=predict)

@@ -202,7 +202,7 @@ def test_newton_rtol_inversion_warns(
         return SingleIntegratorRun(
             system=system,
             loop_settings=dict(loop_settings),
-            evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+            drivers_fn=_get_evaluate_driver_at_t(driver_array),
             step_control_settings={
                 "step_controller": "pi",
                 "rtol": rtol,
@@ -238,7 +238,7 @@ def test_default_controller_settings_from_algorithm(
     run = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         step_control_settings=None,
         algorithm_settings=dict(algorithm_settings),
         output_settings=dict(output_settings),
@@ -280,7 +280,7 @@ def test_controller_override_reverts_family_gains(
     run = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         step_control_settings={"step_controller": "pi"},
         algorithm_settings=settings,
         output_settings=dict(output_settings),
@@ -298,7 +298,7 @@ def test_controller_override_reverts_family_gains(
     explicit = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         step_control_settings={
             "step_controller": "pi",
             "integral_gain": 0.9,
@@ -320,7 +320,7 @@ def _build_run(system, driver_array, output_settings, loop_settings,
     return SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         step_control_settings=dict(step_control),
         algorithm_settings=settings,
         output_settings=dict(output_settings),
@@ -487,7 +487,7 @@ def test_none_filter_coefficients_keeps_family_gains(
     run = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         step_control_settings={"filter_coefficients": None},
         algorithm_settings=settings,
         output_settings=dict(output_settings),
@@ -524,7 +524,7 @@ def test_precision_popped_from_output_settings(
     run = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         algorithm_settings=dict(algorithm_settings),
         output_settings=settings,
     )
@@ -547,7 +547,7 @@ def test_dt_from_step_control_reaches_controller(
     run = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         step_control_settings={"dt": 0.005},
         algorithm_settings=dict(algorithm_settings),
         output_settings=dict(output_settings),
@@ -579,7 +579,7 @@ def test_user_step_control_overrides_algorithm_defaults(
     run = SingleIntegratorRun(
         system=system,
         loop_settings=dict(loop_settings),
-        evaluate_driver_at_t=_get_evaluate_driver_at_t(driver_array),
+        drivers_fn=_get_evaluate_driver_at_t(driver_array),
         step_control_settings=dict(override_settings),
         algorithm_settings=settings,
         output_settings=dict(output_settings),
@@ -1414,8 +1414,8 @@ def test_build_returns_cache_with_loop_function(single_integrator_run):
     run = single_integrator_run
     _ = run.device_function  # trigger build
     cache = run._cache
-    assert hasattr(cache, "single_integrator_function")
-    assert callable(cache.single_integrator_function)
+    assert hasattr(cache, "loop_fn")
+    assert callable(cache.loop_fn)
 
 
 def test_build_compiled_functions_reach_loop(single_integrator_run):
@@ -1423,13 +1423,13 @@ def test_build_compiled_functions_reach_loop(single_integrator_run):
     run = single_integrator_run
     _ = run.device_function  # trigger build
     loop = run._loop
-    assert loop.save_state_fn is run._output_functions.save_state_func
+    assert loop.save_state_fn is run._output_functions.save_state_fn
     output_functions = run._output_functions
     assert loop.update_summaries_fn is (
-        output_functions.update_summaries_func
+        output_functions.update_summaries_fn
     )
     assert loop.save_summaries_fn is (
-        output_functions.save_summary_metrics_func
+        output_functions.save_summaries_fn
     )
 
 

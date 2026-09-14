@@ -318,7 +318,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
         krylov_max_iters=case["krylov_max_iters"],
         zero_initial_guess=True,
     )
-    linear_solver.update(operator_apply=newton_edge_system["operator"])
+    linear_solver.update(operator_apply_fn=newton_edge_system["operator"])
     newton = NewtonKrylov(
         precision=precision,
         solver_width=case["n"],
@@ -327,7 +327,7 @@ def newton_edge_solver(newton_edge_case, newton_edge_system, precision):
         newton_rtol=case["newton_rtol"],
         newton_max_iters=case["newton_max_iters"],
     )
-    newton.update(residual_function=newton_edge_system["residual"])
+    newton.update(residual_fn=newton_edge_system["residual"])
     return newton
 
 
@@ -469,7 +469,7 @@ def system_setup(request, precision):
     sym_system = create_ODE_system(dxdt,
                                    states=[f"x{i}" for i in range(3)],
                                    precision=precision)
-    dxdt_func = sym_system.evaluate_f
+    dxdt_func = sym_system.dxdt_fn
     operator = sym_system.get_solver_helper(
         role="linear_operator"
     ).device_function
@@ -825,7 +825,7 @@ def degenerate_linear_solver(
         solver = MRLinearSolver(
             linear_correction_type=request.param, **common
         )
-    solver.update(operator_apply=zero_operator)
+    solver.update(operator_apply_fn=zero_operator)
     return solver
 
 
@@ -901,7 +901,7 @@ def _build_linear_solver(
             "lu_solve"
         )
         solver.update(
-            lu_solve_function=lu_result.device_function,
+            lu_solve_fn=lu_result.device_function,
             lu_nnz=lu_result.lu_nnz,
         )
         return solver
@@ -919,8 +919,8 @@ def _build_linear_solver(
             linear_correction_type=correction_type, **common
         )
     solver.update(
-        operator_apply=system_setup["operator"],
-        preconditioner=preconditioner,
+        operator_apply_fn=system_setup["operator"],
+        preconditioner_fn=preconditioner,
     )
     return solver
 
@@ -1010,5 +1010,5 @@ def newton_solver_instance(
         newton_rtol=matrixfree_settings["newton_rtol"],
         newton_max_iters=matrixfree_settings["newton_max_iters"],
     )
-    solver.update(residual_function=system_setup["residual"])
+    solver.update(residual_fn=system_setup["residual"])
     return solver

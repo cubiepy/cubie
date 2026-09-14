@@ -115,9 +115,9 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
         config = self.compile_settings
 
         # Device Functions
-        operator_apply = config.operator_apply
-        preconditioner = config.preconditioner
-        scaled_norm_fn = config.norm_device_function
+        operator_apply_fn = config.operator_apply_fn
+        preconditioner = config.preconditioner_fn
+        scaled_norm_fn = config.norm_fn
 
         # Config parameters
         n = config.solver_width
@@ -270,7 +270,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                     return success
             else:
                 converged = False
-                operator_apply(
+                operator_apply_fn(
                     state, parameters, drivers, cached_aux, base_state,
                     t, h, a_ij, x, tmp,
                 )
@@ -336,7 +336,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
                 # ── Step 2-3 fused: v = clamp(A(tmp)) and
                 # dot_r0v = <r0_hat, v> in one pass.
-                operator_apply(
+                operator_apply_fn(
                     state, parameters, drivers, cached_aux, base_state,
                     t, h, a_ij, tmp, v,
                 )
@@ -400,7 +400,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
                 # ── Step 8-9 fused: tmp = clamp(A(s_hat)),
                 # omega = <tmp,s>/<tmp,tmp> in the same pass.
-                operator_apply(
+                operator_apply_fn(
                     state, parameters, drivers, cached_aux, base_state,
                     t, h, a_ij, s_hat, tmp,
                 )
@@ -501,4 +501,4 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
             return final_status
 
         # no cover: end
-        return LinearSolverCache(linear_solver=bicgstab_solver)
+        return LinearSolverCache(linear_solver_fn=bicgstab_solver)

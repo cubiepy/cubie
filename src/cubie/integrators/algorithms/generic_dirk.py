@@ -121,7 +121,7 @@ class DIRKStepConfig(ImplicitStepConfig):
         each stage's Newton solve by reading the previous step's
         stage curve ahead over the next step. Ignored when the
         tableau does not meet the transform's preconditions.
-    predictor_function : Callable or None
+    predictor_fn : Callable or None
         Compiled dense-prediction device function, piped through
         compile settings so predictor rebuilds invalidate the step.
     stage_increment_location : str
@@ -138,9 +138,9 @@ class DIRKStepConfig(ImplicitStepConfig):
         Buffer location for the explicit stage accumulator.
     stage_rhs_location : str
         Buffer location for the cached stage effective derivative.
-    apply_mass_function : Callable or None
+    apply_mass_fn : Callable or None
         Compiled mass-matrix product used by error smoothing.
-    evaluate_inv_mass_f_function : Callable or None
+    inverse_mass_dxdt_fn : Callable or None
         Compiled effective derivative ``M**-1 @ f`` for explicit
         stages.
     """
@@ -151,7 +151,7 @@ class DIRKStepConfig(ImplicitStepConfig):
     attempt_dense_prediction: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
-    predictor_function: Optional[Callable] = device_function_field()
+    predictor_fn: Optional[Callable] = device_function_field()
     stage_increment_location: str = field(
         default='local',
         validator=validators.in_(['local', 'shared'])
@@ -176,8 +176,8 @@ class DIRKStepConfig(ImplicitStepConfig):
         default='local',
         validator=validators.in_(['local', 'shared'])
     )
-    apply_mass_function: Optional[Callable] = device_function_field()
-    evaluate_inv_mass_f_function: Optional[Callable] = device_function_field()
+    apply_mass_fn: Optional[Callable] = device_function_field()
+    inverse_mass_dxdt_fn: Optional[Callable] = device_function_field()
 
 
 class DIRKStep(ODEImplicitStep):
@@ -187,9 +187,9 @@ class DIRKStep(ODEImplicitStep):
         self,
         precision: PrecisionDType,
         n: int,
-        evaluate_f: Optional[Callable] = None,
-        evaluate_observables: Optional[Callable] = None,
-        evaluate_driver_at_t: Optional[Callable] = None,
+        dxdt_fn: Optional[Callable] = None,
+        observables_fn: Optional[Callable] = None,
+        drivers_fn: Optional[Callable] = None,
         get_solver_helper_fn: Optional[Callable] = None,
         tableau: DIRKTableau = DEFAULT_DIRK_TABLEAU,
         n_drivers: int = 0,
@@ -210,11 +210,11 @@ class DIRKStep(ODEImplicitStep):
             Floating-point precision for CUDA computations.
         n
             Number of state variables in the ODE system.
-        evaluate_f
+        dxdt_fn
             Device function for evaluating f(t, y) right-hand side.
-        evaluate_observables
+        observables_fn
             Device function computing system observables.
-        evaluate_driver_at_t
+        drivers_fn
             Optional device function evaluating drivers at arbitrary times.
         get_solver_helper_fn
             Factory function returning solver helper for Jacobian operations.
@@ -250,9 +250,9 @@ class DIRKStep(ODEImplicitStep):
                 'precision': precision,
                 'n': n,
                 'n_drivers': n_drivers,
-                'evaluate_f': evaluate_f,
-                'evaluate_observables': evaluate_observables,
-                'evaluate_driver_at_t': evaluate_driver_at_t,
+                'dxdt_fn': dxdt_fn,
+                'observables_fn': observables_fn,
+                'drivers_fn': drivers_fn,
                 'get_solver_helper_fn': get_solver_helper_fn,
                 'tableau': tableau,
                 'attempt_dense_prediction': attempt_dense_prediction,
@@ -427,7 +427,7 @@ class DIRKStep(ODEImplicitStep):
         request_kwargs = self._helper_request_kwargs()
         get_fn = config.get_solver_helper_fn
 
-        apply_mass_function = None
+        apply_mass_fn = None
         counts = {}
         if self.smooth_error:
             # Smoothing solves at the accepted state, not an increment.
@@ -436,7 +436,7 @@ class DIRKStep(ODEImplicitStep):
                     "lu_solve", jacobian_at="state", **request_kwargs
                 )
                 self.error_solver.update(
-                    lu_solve_function=lu_at_state.device_function,
+                    lu_solve_fn=lu_at_state.device_function,
                     lu_nnz=lu_at_state.lu_nnz,
                 )
                 counts["error_solve"] = lu_at_state.operation_count
@@ -452,8 +452,8 @@ class DIRKStep(ODEImplicitStep):
                     **request_kwargs,
                 )
                 self.error_solver.update(
-                    operator_apply=operator_at_state.device_function,
-                    preconditioner=preconditioner_at_state.device_function,
+                    operator_apply_fn=operator_at_state.device_function,
+                    preconditioner_fn=preconditioner_at_state.device_function,
                 )
                 counts["error_solve"] = (
                     operator_at_state.operation_count
@@ -461,34 +461,34 @@ class DIRKStep(ODEImplicitStep):
                 )
             # The smoothing rhs is M @ raw_error.
             apply_mass = get_fn("apply_mass")
-            apply_mass_function = apply_mass.device_function
+            apply_mass_fn = apply_mass.device_function
             counts["apply_mass"] = apply_mass.operation_count
 
         # Explicit stages evaluate k = M**-1 @ f in one call.
-        evaluate_inv_mass_f_function = None
+        inverse_mass_dxdt_fn = None
         tableau = config.tableau
         if tableau.explicit_first_stage or tableau.explicit_last_stage:
             evaluate_inv_mass_f = get_fn("evaluate_inv_mass_f")
-            evaluate_inv_mass_f_function = evaluate_inv_mass_f.device_function
+            inverse_mass_dxdt_fn = evaluate_inv_mass_f.device_function
             counts["evaluate_inv_mass_f"] = (
                 evaluate_inv_mass_f.operation_count
             )
 
         self.update_compile_settings(
             {
-                'predictor_function': (
+                'predictor_fn': (
                     self.dense_predictor.device_function
                     if self.dense_prediction
                     else None
                 ),
-                'error_solver_function': (
+                'error_solver_fn': (
                     self.error_solver.device_function
                     if self.smooth_error
                     else None
                 ),
-                'apply_mass_function': apply_mass_function,
-                'evaluate_inv_mass_f_function': (
-                    evaluate_inv_mass_f_function
+                'apply_mass_fn': apply_mass_fn,
+                'inverse_mass_dxdt_fn': (
+                    inverse_mass_dxdt_fn
                 ),
                 'helper_operation_counts': evolve(
                     config.helper_operation_counts, **counts
@@ -498,9 +498,9 @@ class DIRKStep(ODEImplicitStep):
 
     def build_step(
         self,
-        evaluate_f: Callable,
-        evaluate_observables: Callable,
-        evaluate_driver_at_t: Optional[Callable],
+        dxdt_fn: Callable,
+        observables_fn: Callable,
+        drivers_fn: Optional[Callable],
         solver_function: Callable,
         numba_precision: type,
         n: int,
@@ -510,17 +510,17 @@ class DIRKStep(ODEImplicitStep):
 
         config = self.compile_settings
         tableau = config.tableau
-        nonlinear_solver = solver_function
+        nonlinear_solver_fn = solver_function
 
         use_dense_prediction = self.dense_prediction
-        predict_stages = config.predictor_function
+        predict_stages = config.predictor_fn
         use_smoothed_error = self.smooth_error
-        error_solver = config.error_solver_function
+        error_solver = config.error_solver_fn
         smoothing_gamma = config.smoothing_gamma
-        apply_mass = config.apply_mass_function
-        evaluate_inv_mass_f = config.evaluate_inv_mass_f_function
+        apply_mass = config.apply_mass_fn
+        evaluate_inv_mass_f = config.inverse_mass_dxdt_fn
         use_cached_solve = self.uses_cached_solve
-        prepare_jacobian = config.prepare_jacobian_function
+        prepare_jacobian = config.prepare_jacobian_fn
 
         n = int32(n)
         unroll_stage = self.compile_settings.unroll.unroll_stage
@@ -530,7 +530,7 @@ class DIRKStep(ODEImplicitStep):
         stages_except_first = stage_count - int32(1)
 
         # Compile-time toggles
-        has_evaluate_driver_at_t = evaluate_driver_at_t is not None
+        has_evaluate_driver_at_t = drivers_fn is not None
         has_error = self.uses_error
         multistage = stage_count > 1
         first_same_as_last = self.first_same_as_last
@@ -773,14 +773,14 @@ class DIRKStep(ODEImplicitStep):
 
                 else:
                     if has_evaluate_driver_at_t:
-                        evaluate_driver_at_t(
+                        drivers_fn(
                             stage_time,
                             driver_coeffs,
                             proposed_drivers,
                         )
 
                 if explicit_first_stage:
-                    evaluate_observables(
+                    observables_fn(
                         stage_base,
                         parameters,
                         proposed_drivers,
@@ -801,7 +801,7 @@ class DIRKStep(ODEImplicitStep):
                             stage_increment[idx] = (
                                 stage_increment_history[idx]
                             )
-                    solver_status = nonlinear_solver(
+                    solver_status = nonlinear_solver_fn(
                         stage_increment,
                         parameters,
                         proposed_drivers,
@@ -890,7 +890,7 @@ class DIRKStep(ODEImplicitStep):
                 )
 
                 if has_evaluate_driver_at_t:
-                    evaluate_driver_at_t(
+                    drivers_fn(
                         stage_time,
                         driver_coeffs,
                         proposed_drivers,
@@ -910,7 +910,7 @@ class DIRKStep(ODEImplicitStep):
                         stage_increment[idx] = (
                             stage_increment_history[source_offset + idx]
                         )
-                solver_status = nonlinear_solver(
+                solver_status = nonlinear_solver_fn(
                     stage_increment,
                     parameters,
                     proposed_drivers,
@@ -978,7 +978,7 @@ class DIRKStep(ODEImplicitStep):
                     )
 
                     if has_evaluate_driver_at_t:
-                        evaluate_driver_at_t(
+                        drivers_fn(
                             stage_time,
                             driver_coeffs,
                             proposed_drivers,
@@ -988,7 +988,7 @@ class DIRKStep(ODEImplicitStep):
                         stage_base[idx] = (stage_accumulator[stage_offset + idx]
                                            * dt_scalar + state[idx])
 
-                    evaluate_observables(
+                    observables_fn(
                         stage_base,
                         parameters,
                         proposed_drivers,
@@ -1062,13 +1062,13 @@ class DIRKStep(ODEImplicitStep):
                 counters[1] += error_solve_iters[0]
 
             if has_evaluate_driver_at_t:
-                evaluate_driver_at_t(
+                drivers_fn(
                     end_time,
                     driver_coeffs,
                     proposed_drivers,
                 )
 
-            evaluate_observables(
+            observables_fn(
                 proposed_state,
                 parameters,
                 proposed_drivers,
@@ -1078,7 +1078,7 @@ class DIRKStep(ODEImplicitStep):
 
             return int32(status_code)
         # no cover: end
-        return StepCache(step=step, nonlinear_solver=nonlinear_solver)
+        return StepCache(step_fn=step, nonlinear_solver_fn=nonlinear_solver_fn)
 
     @property
     def is_multistage(self) -> bool:

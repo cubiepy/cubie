@@ -258,4 +258,4 @@ class GustafssonController(BaseAdaptiveStepController):
             return ret
 
         # no cover: end
-        return ControllerCache(device_function=controller_gustafsson)
+        return ControllerCache(step_controller_fn=controller_gustafsson)

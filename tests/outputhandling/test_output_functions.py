@@ -93,26 +93,26 @@ def test_update_suppresses_unrecognised_silent_true(
 def test_build_populates_cache(output_functions):
     """build produces cache whose functions match the property accessors."""
     # Trigger build by accessing a cached property
-    _ = output_functions.save_state_func
+    _ = output_functions.save_state_fn
     cache = output_functions._cache
     assert isinstance(cache, OutputFunctionCache)
-    assert cache.save_state_function is output_functions.save_state_func
+    assert cache.save_state_fn is output_functions.save_state_fn
     assert (
-        cache.update_summaries_function
-        is output_functions.update_summaries_func
+        cache.update_summaries_fn
+        is output_functions.update_summaries_fn
     )
     assert (
-        cache.save_summaries_function
-        is output_functions.save_summary_metrics_func
+        cache.save_summaries_fn
+        is output_functions.save_summaries_fn
     )
 
 
 def test_build_cache_has_three_distinct_functions(output_functions):
     """The three cached functions are distinct callables."""
     fns = {
-        output_functions.save_state_func,
-        output_functions.update_summaries_func,
-        output_functions.save_summary_metrics_func,
+        output_functions.save_state_fn,
+        output_functions.update_summaries_fn,
+        output_functions.save_summaries_fn,
     }
     assert len(fns) == 3
 
@@ -208,9 +208,9 @@ def test_array_forwarding_to_compile_settings(
 @pytest.mark.parametrize(
     "prop, cache_attr",
     [
-        ("save_state_func", "save_state_function"),
-        ("update_summaries_func", "update_summaries_function"),
-        ("save_summary_metrics_func", "save_summaries_function"),
+        ("save_state_fn", "save_state_fn"),
+        ("update_summaries_fn", "update_summaries_fn"),
+        ("save_summaries_fn", "save_summaries_fn"),
     ],
 )
 def test_func_properties_forward_from_cache(
