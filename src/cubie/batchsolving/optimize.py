@@ -589,11 +589,7 @@ class _OptimizeRunner:
         return min(floor, self._given_duration)
 
     def _trial_durations(self) -> List[float]:
-        """Ascending probe durations within the cadence and the given.
-
-        A trial too short for the summary sample interval is skipped;
-        the given duration always remains.
-        """
+        """Ascending probe durations the cadence and sample interval allow."""
         given = self._given_duration
         floor = self._duration_floor()
         twin = self._twins[0]
