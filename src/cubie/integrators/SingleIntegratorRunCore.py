@@ -567,11 +567,8 @@ class SingleIntegratorRunCore(CUDAFactory):
     def _step_inputs(
         self, updates: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Return what the step takes from the system and the drivers.
-
-        Driver functions in ``updates`` replace the step's current ones;
-        only Rosenbrock configs carry the driver derivative.
-        """
+        """Return what the step takes from the system and the drivers."""
+        # Driver functions in the updates replace the step's current ones.
         config = self._algo_step.compile_settings
         updates = {} if updates is None else updates
         return BaseAlgorithmStep.system_inputs(
