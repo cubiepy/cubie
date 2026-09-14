@@ -67,6 +67,7 @@ from cubie.batchsolving.solver_settings import (
     SolverSettings,
     resolve,
     resolve_performance,
+    settings_differ,
 )
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
@@ -436,7 +437,7 @@ class Solver:
         self.effective = self._resolve(system)
         self.kernel = BatchSolverKernel(system, **self.effective.as_updates())
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
-        self._push()
+        self._push(self.effective)
         # Grids assemble into buffers per the kernel's spill settings.
         self.input_handler = BatchInputHandler(
             self.system_interface,
@@ -523,11 +524,13 @@ class Solver:
         self._notices = set(resolution.notices)
         return resolution.effective
 
-    def _push(self) -> None:
-        """Resolve and push the effective settings into the kernel."""
+    def _push(self, effective: Any = None) -> None:
+        """Push the effective settings that changed into the kernel."""
         system = self.system
-        effective = self._resolve(system)
-        self.kernel.update(effective.as_updates(), silent=True)
+        if effective is None:
+            effective = self._resolve(system)
+        if settings_differ(self.effective, effective):
+            self.kernel.update(effective.as_updates(), silent=True)
         # The unroll and placement defaults follow the built step.
         performed = resolve_performance(
             self.given,
@@ -536,10 +539,7 @@ class Solver:
             system,
             previous=self.effective,
         )
-        if any(
-            getattr(performed, name) is not getattr(effective, name)
-            for name in performed.names()
-        ):
+        if settings_differ(effective, performed):
             self.kernel.update(performed.as_updates(), silent=True)
         self.effective = performed
         self._solve_info_key = None

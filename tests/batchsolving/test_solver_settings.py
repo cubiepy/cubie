@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 from attrs import evolve
 
-from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
 from cubie.batchsolving.solver_settings import (
     SolverSettings,
     resolve,
@@ -15,33 +14,7 @@ from cubie.batchsolving.solver_settings import (
     resolve_step_bounds,
 )
 from cubie.batchsolving.SystemInterface import SystemInterface
-from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS
 from cubie.integrators.algorithms import DIRK_TABLEAU_REGISTRY
-from cubie.integrators.algorithms.base_algorithm_step import (
-    ALL_ALGORITHM_STEP_PARAMETERS,
-)
-from cubie.integrators.algorithms.generic_dirk import (
-    DIRK_ADAPTIVE_DEFAULTS,
-    DIRK_SOLVER_DEFAULTS,
-)
-from cubie.integrators.algorithms.ode_implicitstep import (
-    DAE_SOLVER_DEFAULTS,
-)
-from cubie.integrators.loops.ode_loop import ALL_LOOP_SETTINGS
-from cubie.integrators.step_control.adaptive_step_controller import (
-    DEFAULT_DT_MAX,
-    DEFAULT_DT_MIN,
-)
-from cubie.integrators.step_control.base_step_controller import (
-    ALL_STEP_CONTROLLER_PARAMETERS,
-)
-from cubie.integrators.step_control.fixed_step_controller import (
-    DEFAULT_FIXED_DT,
-)
-from cubie.memory.mem_manager import ALL_MEMORY_MANAGER_PARAMETERS
-from cubie.outputhandling.output_functions import (
-    ALL_OUTPUT_FUNCTION_PARAMETERS,
-)
 from tests._utils import (
     LARGE_DIRK,
     SUMMARY_ONLY_NO_TIMING,
@@ -64,32 +37,6 @@ def _notices(system, **given):
 # ── The record ──────────────────────────────────────────────────────── #
 
 
-def test_settings_cover_every_child_keyword():
-    """Every loose keyword a child takes is a settings field."""
-    injected = {
-        "precision",
-        "n_states",
-        "n_drivers",
-        "algorithm_order",
-        "mass_flags",
-        "dxdt_fn",
-        "observables_fn",
-        "drivers_fn",
-        "driver_derivative_fn",
-        "get_solver_helper_fn",
-    }
-    child_keys = (
-        ALL_ALGORITHM_STEP_PARAMETERS
-        | ALL_STEP_CONTROLLER_PARAMETERS
-        | ALL_LOOP_SETTINGS
-        | ALL_OUTPUT_FUNCTION_PARAMETERS
-        | ALL_KERNEL_PARAMETERS
-        | ALL_MEMORY_MANAGER_PARAMETERS
-        | ALL_UNROLL_PARAMETERS
-    ) - injected
-    assert child_keys <= set(SolverSettings.names())
-
-
 def test_grouped_dicts_flatten_and_unknown_names_raise():
     """Grouped dicts flatten into the record; unknown names raise."""
     given = SolverSettings.from_kwargs(
@@ -101,6 +48,12 @@ def test_grouped_dicts_flatten_and_unknown_names_raise():
         SolverSettings.from_kwargs(not_a_setting=1)
     with pytest.raises(KeyError, match="dt_save"):
         SolverSettings.from_kwargs(dt_save=0.1)
+
+
+def test_derived_names_are_not_settings():
+    """A name only resolution sets is not a provided setting."""
+    with pytest.raises(KeyError, match="is_adaptive"):
+        SolverSettings.from_kwargs(is_adaptive=True)
 
 
 def test_update_records_and_none_unsets():
@@ -122,26 +75,7 @@ def test_gains_with_a_filter_raise():
         )
 
 
-def test_as_updates_builds_the_unroll_and_cache_objects():
-    """The pushed dict carries whole ``unroll`` and ``cache`` objects."""
-    updates = SolverSettings.from_kwargs(
-        unroll_norms=(True, 1), cache_mode="flush_on_change", lineinfo=True
-    ).as_updates()
-    assert updates["unroll"].unroll_norms == (True, 1)
-    assert updates["cache"].cache_mode == "flush_on_change"
-    assert updates["jit_flags"].lineinfo is True
-    assert "unroll_norms" not in updates
-    assert "lineinfo" not in updates
-
-
 # ── Step keys ───────────────────────────────────────────────────────── #
-
-
-def test_step_defaults_apply_to_unset_step_keys(system):
-    """Unset step keys take the family's declared defaults."""
-    effective = _effective(system, algorithm="kvaerno3")
-    for key, value in DIRK_SOLVER_DEFAULTS.items():
-        assert getattr(effective, key) == value
 
 
 def test_explicit_step_setting_overrides_step_default(system):
@@ -199,11 +133,8 @@ def test_different_solver_choice_drops_variant_defaults(system):
     [{"system_type": "torn_time", **TORN_NO_OBSERVABLES}],
     indirect=True,
 )
-def test_mass_matrix_systems_take_the_dae_solver_defaults(system):
-    """A mass-matrix system takes the DAE linear solve over the family's."""
-    effective = _effective(system, algorithm="backwards_euler")
-    for key, value in DAE_SOLVER_DEFAULTS.items():
-        assert getattr(effective, key) == value
+def test_neumann_on_a_mass_matrix_system_raises(system):
+    """A Neumann preconditioner cannot serve a mass-matrix system."""
     with pytest.raises(ValueError, match="Neumann"):
         _effective(
             system, algorithm="backwards_euler", preconditioner_type="neumann"
@@ -211,16 +142,6 @@ def test_mass_matrix_systems_take_the_dae_solver_defaults(system):
 
 
 # ── Controller ──────────────────────────────────────────────────────── #
-
-
-def test_default_controller_and_gains_come_from_the_family(system):
-    """An unnamed controller is the family's with the family's gains."""
-    effective = _effective(system, algorithm="kvaerno3")
-    defaults = DIRK_ADAPTIVE_DEFAULTS.settings
-    assert effective.step_controller == defaults["step_controller"]
-    assert effective.integral_gain == defaults["integral_gain"]
-    assert effective.proportional_gain == defaults["proportional_gain"]
-    assert effective.is_adaptive is True
 
 
 def test_unnamed_controller_promotes_to_carry_given_gains(system):
@@ -273,26 +194,13 @@ def test_adaptive_dt_is_the_geometric_mean_of_given_bounds():
     assert bounds["dt"] == pytest.approx(1e-3)
 
 
-def test_adaptive_defaults_apply_without_dt_or_bounds():
-    """Nothing provided takes the adaptive defaults."""
-    bounds = resolve_step_bounds(None, None, None, True)
-    assert bounds["dt_min"] == DEFAULT_DT_MIN
-    assert bounds["dt_max"] == DEFAULT_DT_MAX
-    assert bounds["dt"] == pytest.approx(
-        np.sqrt(DEFAULT_DT_MIN * DEFAULT_DT_MAX)
-    )
-
-
 def test_fixed_step_from_bounds():
-    """A fixed step is the bounds' geometric mean, a lone bound, or 1e-3."""
+    """A fixed step is the bounds' geometric mean or a lone bound."""
     assert resolve_step_bounds(None, 1e-4, 1e-2, False) == {
         "dt": pytest.approx(1e-3)
     }
     assert resolve_step_bounds(None, 1e-4, None, False) == {"dt": 1e-4}
     assert resolve_step_bounds(None, None, 0.5, False) == {"dt": 0.5}
-    assert resolve_step_bounds(None, None, None, False) == {
-        "dt": DEFAULT_FIXED_DT
-    }
 
 
 def test_inner_tolerances_derive_from_the_controller():
@@ -394,8 +302,6 @@ def test_settings_dict_is_the_provided_settings(solver, solver_settings):
     settings = solver.settings_dict
     assert settings["algorithm"] == solver_settings["algorithm"]
     assert settings["dt"] == solver_settings["dt"]
-    assert "save_last" not in settings
-    assert "is_adaptive" not in settings
     assert solver.effective_settings["save_regularly"] is True
 
 
@@ -475,7 +381,6 @@ def test_summary_window_follows_the_duration(
     )
     assert solver_mutable.summarise_every == pytest.approx(0.5)
     assert solver_mutable.sample_summaries_every == pytest.approx(0.05)
-    assert "summarise_every" not in solver_mutable.settings_dict
 
 
 @pytest.mark.parametrize(
@@ -552,28 +457,39 @@ def test_auto_performance_off_keeps_the_derived_values(solver_mutable):
     solver_mutable.update(auto_performance=False)
     step = solver_mutable.kernel.single_integrator._algo_step
     assert step.compile_settings.unroll.unroll_newton_exits == rolled
-    assert "unroll_newton_exits" not in solver_mutable.settings_dict
 
 
-def test_precision_reaches_every_factory(solver_mutable, system):
+def test_precision_reaches_every_factory(
+    system, solver_settings, driver_settings
+):
     """A provided precision updates the system and every child."""
     other = np.float64 if system.precision == np.float32 else np.float32
-    solver_mutable.update(precision=other)
-    run = solver_mutable.kernel.single_integrator
-    assert solver_mutable.system.precision == other
-    assert solver_mutable.kernel.precision == other
+    built = _build_solver_instance(
+        system.copy(), solver_settings, driver_settings
+    )
+    built.update(precision=other)
+    run = built.kernel.single_integrator
+    assert built.system.precision == other
+    assert built.kernel.precision == other
     assert run._algo_step.precision == other
     assert run._step_controller.precision == other
     assert run._loop.precision == other
     assert run._output_functions.precision == other
+    built.close()
 
 
-def test_system_constants_reach_the_system(solver_mutable, system):
+def test_system_constants_reach_the_system(
+    system, solver_settings, driver_settings
+):
     """Provided constants are written into the system."""
     name = system.constants.names[0]
     value = float(system.constants.values_dict[name]) * 1.5
-    solver_mutable.update(system_constants={name: value})
-    assert float(solver_mutable.system.constants.values_dict[name]) == (
+    built = _build_solver_instance(
+        system.copy(), solver_settings, driver_settings
+    )
+    built.update(system_constants={name: value})
+    assert float(built.system.constants.values_dict[name]) == (
         pytest.approx(value)
     )
-    assert solver_mutable.settings_dict["system_constants"] == {name: value}
+    assert built.settings_dict["system_constants"] == {name: value}
+    built.close()

@@ -311,11 +311,6 @@ class BatchSolverKernel(CUDAFactory):
         memory_settings, _ = merge_kwargs_into_settings(
             settings, ALL_MEMORY_MANAGER_PARAMETERS
         )
-        compile_flags = {
-            key: settings[key]
-            for key in ("unroll", "jit_flags")
-            if settings.get(key) is not None
-        }
 
         precision = system.precision
 
@@ -345,8 +340,6 @@ class BatchSolverKernel(CUDAFactory):
             input_dict={},
             memory_manager=self._memory_manager,
         )
-        if compile_flags:
-            self.driver_interpolator.update(compile_flags, silent=True)
 
         system_name = system.name
         system_hash = system.fn_hash
@@ -374,6 +367,12 @@ class BatchSolverKernel(CUDAFactory):
                 },
                 **settings,
             )
+        )
+        # The interpolator compiles with the kernel's flags.
+        config = self.compile_settings
+        self.driver_interpolator.update(
+            {"unroll": config.unroll, "jit_flags": config.jit_flags},
+            silent=True,
         )
 
         self.input_arrays = InputArrays.from_solver(self)

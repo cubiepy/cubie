@@ -1,11 +1,13 @@
-"""User-provided solver settings and the effective values resolved from them.
+"""Provided solver settings and the effective values resolved from them.
 
 Published Classes
 -----------------
 :class:`SolverSettings`
-    One attrs record of every user-facing setting.
+    Every user-facing setting.
+:class:`EffectiveSettings`
+    Those plus the resolution-only names.
 :class:`Resolution`
-    A resolved record and the notices to warn about.
+    A resolved record and its notices.
 
 Module-Level Functions
 ----------------------
@@ -18,34 +20,42 @@ Module-Level Functions
 from math import sqrt
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from attrs import NOTHING, define, evolve, field, fields
+from attrs import (
+    NOTHING,
+    asdict,
+    define,
+    evolve,
+    field,
+    fields,
+    make_class,
+)
 from numpy import asarray, finfo as np_finfo
 
 from cubie._utils import unpack_dict_values
+from cubie.array_interpolator import ALL_INTERPOLATOR_PARAMETERS
 from cubie.backend.utils import SASS_INSTRUCTION_BYTES, device_hardware
-from cubie.batchsolving.BatchSolverConfig import (
-    ALL_CACHE_PARAMETERS,
-    cache_settings_converter,
-)
+from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
 from cubie.cuda_simsafe import (
     ALL_UNROLL_PARAMETERS,
     JITFlags,
     UnrollChoice,
-    UnrollFlags,
 )
 from cubie.integrators.algorithms import algorithm_facts
 from cubie.integrators.algorithms.base_algorithm_step import (
+    ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
     DAE_SOLVER_DEFAULTS,
 )
+from cubie.integrators.loops.ode_loop import ALL_LOOP_SETTINGS
 from cubie.integrators.step_control import _CONTROLLER_REGISTRY
 from cubie.integrators.step_control.adaptive_step_controller import (
     DEFAULT_DT_MAX,
     DEFAULT_DT_MIN,
 )
 from cubie.integrators.step_control.base_step_controller import (
+    ALL_STEP_CONTROLLER_PARAMETERS,
     BaseStepControllerConfig,
     CONTROLLER_GAIN_NAMES,
     promoted_gain_controller,
@@ -53,7 +63,12 @@ from cubie.integrators.step_control.base_step_controller import (
 from cubie.integrators.step_control.fixed_step_controller import (
     DEFAULT_FIXED_DT,
 )
+from cubie.memory.mem_manager import ALL_MEMORY_MANAGER_PARAMETERS
+from cubie.odesystems.ODEData import ALL_ODE_PARAMETERS
 from cubie.outputhandling.output_config import OutputConfig
+from cubie.outputhandling.output_functions import (
+    ALL_OUTPUT_FUNCTION_PARAMETERS,
+)
 
 
 DEFAULT_SAMPLES_PER_SUMMARY = 10
@@ -71,10 +86,26 @@ RENAMED_TIMING_KWARGS = {
 }
 """Legacy timing keyword spellings mapped to their current names."""
 
+DERIVED_NAMES = frozenset(
+    {"is_adaptive", "save_last", "save_regularly", "summarise_regularly"}
+)
+"""Names only resolution sets."""
 
-def _setting(**kwargs) -> Any:
-    """A user-facing setting; ``None`` means not provided."""
-    return field(default=None, **kwargs)
+
+def _child_names() -> Set[str]:
+    """Names the kernel and the run's children take as settings."""
+    return set().union(
+        ALL_ALGORITHM_STEP_PARAMETERS,
+        ALL_STEP_CONTROLLER_PARAMETERS,
+        ALL_LOOP_SETTINGS,
+        ALL_OUTPUT_FUNCTION_PARAMETERS,
+        ALL_KERNEL_PARAMETERS,
+        ALL_MEMORY_MANAGER_PARAMETERS,
+        ALL_ODE_PARAMETERS,
+        ALL_UNROLL_PARAMETERS,
+        ALL_INTERPOLATOR_PARAMETERS,
+        (fld.name for fld in fields(JITFlags)),
+    )
 
 
 def _local(**kwargs) -> Any:
@@ -82,158 +113,15 @@ def _local(**kwargs) -> Any:
     return field(default=None, metadata={"push": False}, **kwargs)
 
 
-@define
-class SolverSettings:
-    """Every user-facing solver setting; ``None`` is not provided."""
+@define(eq=False)
+class _SolverOwnSettings:
+    """The settings the Solver itself reads; ``None`` is not provided."""
 
-    # The system: applied to it before anything else resolves.
-    precision: Optional[type] = _setting()
-    operation_ordering: Optional[str] = _setting()
+    tableau: Any = field(default=None)
     system_constants: Optional[Dict[str, float]] = _local()
-
-    # The algorithm step.
-    algorithm: Any = _setting()
-    tableau: Any = _setting()
-    attempt_dense_prediction: Optional[bool] = _setting()
-    beta: Optional[float] = _setting()
-    gamma: Optional[float] = _setting()
-    preconditioner_order: Optional[int] = _setting()
-    preconditioner_type: Optional[str] = _setting()
-    linear_correction_type: Optional[str] = _setting()
-    inexact_newton: Optional[bool] = _setting()
-    prefactored: Optional[bool] = _setting()
-    use_smoothed_error: Optional[bool] = _setting()
-    dae_initialisation: Optional[str] = _setting()
-    krylov_atol: Any = _setting()
-    krylov_rtol: Any = _setting()
-    krylov_max_iters: Optional[int] = _setting()
-    krylov_residual_reduction: Optional[float] = _setting()
-    krylov_residual_floor: Optional[float] = _setting()
-    newton_atol: Any = _setting()
-    newton_rtol: Any = _setting()
-    newton_max_iters: Optional[int] = _setting()
-    error_atol: Any = _setting()
-    error_rtol: Any = _setting()
-    error_max_iters: Optional[int] = _setting()
-    error_residual_reduction: Optional[float] = _setting()
-    error_residual_floor: Optional[float] = _setting()
-
-    # The step's buffer placements.
-    stage_increment_location: Optional[str] = _setting()
-    stage_increment_history_location: Optional[str] = _setting()
-    stage_base_location: Optional[str] = _setting()
-    accumulator_location: Optional[str] = _setting()
-    previous_step_size_location: Optional[str] = _setting()
-    predictor_transform_location: Optional[str] = _setting()
-    predictor_previous_values_location: Optional[str] = _setting()
-    stage_rhs_location: Optional[str] = _setting()
-    stage_accumulator_location: Optional[str] = _setting()
-    stage_driver_stack_location: Optional[str] = _setting()
-    stage_state_location: Optional[str] = _setting()
-    stage_store_location: Optional[str] = _setting()
-    cached_auxiliaries_location: Optional[str] = _setting()
-    increment_cache_location: Optional[str] = _setting()
-    dxdt_location: Optional[str] = _setting()
-    preconditioned_vec_location: Optional[str] = _setting()
-    temp_location: Optional[str] = _setting()
-    r0_hat_location: Optional[str] = _setting()
-    p_location: Optional[str] = _setting()
-    v_location: Optional[str] = _setting()
-    tmp_location: Optional[str] = _setting()
-    s_hat_location: Optional[str] = _setting()
-    lu_factor_location: Optional[str] = _setting()
-    delta_location: Optional[str] = _setting()
-    residual_location: Optional[str] = _setting()
-    krylov_iters_local_location: Optional[str] = _setting()
-    prev_theta_location: Optional[str] = _setting()
-    base_state_placeholder_location: Optional[str] = _setting()
-    krylov_iters_out_location: Optional[str] = _setting()
-
-    # The step controller.
-    step_controller: Optional[str] = _setting()
-    is_adaptive: Optional[bool] = _setting()
-    dt: Optional[float] = _setting()
-    dt_min: Optional[float] = _setting()
-    dt_max: Optional[float] = _setting()
-    atol: Any = _setting()
-    rtol: Any = _setting()
-    min_step_shrink: Optional[float] = _setting()
-    max_step_growth: Optional[float] = _setting()
-    safety: Optional[float] = _setting()
-    integral_gain: Any = _setting()
-    proportional_gain: Any = _setting()
-    derivative_gain: Any = _setting()
-    filter_coefficients: Any = _setting()
-    deadband_min: Optional[float] = _setting()
-    deadband_max: Optional[float] = _setting()
-    newton_target_iters: Optional[int] = _setting()
-    timestep_memory_location: Optional[str] = _setting()
-
-    # The loop's schedule and buffer placements.
     duration: Optional[float] = _local()
-    save_every: Optional[float] = _setting()
-    summarise_every: Optional[float] = _setting()
-    sample_summaries_every: Optional[float] = _setting()
-    save_last: Optional[bool] = _setting()
-    save_regularly: Optional[bool] = _setting()
-    summarise_regularly: Optional[bool] = _setting()
-    state_location: Optional[str] = _setting()
-    proposed_state_location: Optional[str] = _setting()
-    parameters_location: Optional[str] = _setting()
-    drivers_location: Optional[str] = _setting()
-    proposed_drivers_location: Optional[str] = _setting()
-    observables_location: Optional[str] = _setting()
-    proposed_observables_location: Optional[str] = _setting()
-    error_location: Optional[str] = _setting()
-    counters_location: Optional[str] = _setting()
-    state_summary_location: Optional[str] = _setting()
-    observable_summary_location: Optional[str] = _setting()
-    dt_location: Optional[str] = _setting()
-    accept_step_location: Optional[str] = _setting()
-    proposed_counters_location: Optional[str] = _setting()
-
-    # The outputs: labels resolve to the index arrays.
-    output_types: Optional[List[str]] = _setting()
     save_variables: Optional[List[str]] = _local()
     summarise_variables: Optional[List[str]] = _local()
-    saved_state_indices: Any = _setting()
-    saved_observable_indices: Any = _setting()
-    summarised_state_indices: Any = _setting()
-    summarised_observable_indices: Any = _setting()
-
-    # The kernel.
-    blocksize: Optional[int] = _setting()
-    max_registers: Optional[int] = _setting()
-    kernel_name: Optional[str] = _setting()
-    cache: Any = _setting()
-    cache_enabled: Optional[bool] = _setting()
-    cache_mode: Optional[str] = _setting()
-    max_cache_entries: Optional[int] = _setting()
-    cache_dir: Any = _setting()
-    auto_performance: Optional[bool] = _setting()
-    lineinfo: Optional[bool] = _setting()
-
-    # Loop unrolling, one flag per loop group.
-    unroll_stage: Any = _setting()
-    unroll_step_element: Any = _setting()
-    unroll_accumulator: Any = _setting()
-    unroll_solver_element: Any = _setting()
-    unroll_norms: Any = _setting()
-    unroll_other_small: Any = _setting()
-    unroll_newton_exits: Any = _setting()
-    unroll_krylov_exits: Any = _setting()
-
-    # Driver interpolation.
-    order: Optional[int] = _setting()
-    wrap: Optional[bool] = _setting()
-    boundary_condition: Optional[str] = _setting()
-
-    # Memory.
-    memory_manager: Any = _setting()
-    stream_group: Optional[str] = _setting()
-    mem_proportion: Optional[float] = _setting()
-    host_spill_threshold: Optional[int] = _setting()
-    spill_directory: Any = _setting()
 
     def __attrs_post_init__(self) -> None:
         """Reject gains given together with a filter."""
@@ -244,17 +132,14 @@ class SolverSettings:
                 "give one or the other."
             )
 
-    # ------------------------------------------------------------------
-    # Construction and update
-    # ------------------------------------------------------------------
     @classmethod
     def names(cls) -> Tuple[str, ...]:
         """Return every setting name."""
         return tuple(fld.name for fld in fields(cls))
 
-    @staticmethod
+    @classmethod
     def _flatten(
-        kwargs: Dict[str, Any], strict: bool = True
+        cls, kwargs: Dict[str, Any], strict: bool = True
     ) -> Tuple[Dict[str, Any], Set[str]]:
         """Flatten grouped dicts and an ``unroll`` object; check names."""
         kwargs = dict(kwargs)
@@ -277,7 +162,7 @@ class SolverSettings:
             if unroll is not None:
                 for key in ALL_UNROLL_PARAMETERS:
                     flat.setdefault(key, getattr(unroll, key))
-        names = set(SolverSettings.names())
+        names = set(cls.names())
         unknown = set(flat) - names
         if unknown and strict:
             raise KeyError(f"Unrecognized keyword arguments: {unknown}")
@@ -285,20 +170,20 @@ class SolverSettings:
         return flat, recognised | set(flat)
 
     @classmethod
-    def from_kwargs(cls, **kwargs: Any) -> "SolverSettings":
+    def from_kwargs(cls, **kwargs: Any) -> "_SolverOwnSettings":
         """Record ``kwargs`` as provided; grouped dicts are flattened."""
         flat, _ = cls._flatten(kwargs)
         return cls(**flat)
 
     def updated(
         self, updates: Dict[str, Any], strict: bool = True
-    ) -> Tuple["SolverSettings", Set[str]]:
+    ) -> Tuple["_SolverOwnSettings", Set[str]]:
         """Return a copy with ``updates`` recorded (``None`` unsets) and
         the names taken; unknown names raise unless not ``strict``."""
         flat, recognised = self._flatten(updates, strict=strict)
         return evolve(self, **flat), recognised
 
-    def update(self, updates: Dict[str, Any]) -> "SolverSettings":
+    def update(self, updates: Dict[str, Any]) -> "_SolverOwnSettings":
         """Return a copy with ``updates`` recorded; ``None`` unsets."""
         return self.updated(updates)[0]
 
@@ -316,38 +201,60 @@ class SolverSettings:
         return {name: getattr(self, name) for name in self.given_names}
 
     def as_updates(self) -> Dict[str, Any]:
-        """The settings the kernel takes, with the unroll and jit objects."""
-        updates = {
+        """The provided settings the kernel takes."""
+        return {
             fld.name: getattr(self, fld.name)
             for fld in fields(type(self))
             if fld.metadata.get("push", True)
             and getattr(self, fld.name) is not None
         }
-        unroll = {
-            key: updates.pop(key)
-            for key in ALL_UNROLL_PARAMETERS
-            if key in updates
-        }
-        if unroll:
-            updates["unroll"] = UnrollFlags(**unroll)
-        if "lineinfo" in updates:
-            updates["jit_flags"] = JITFlags(lineinfo=updates.pop("lineinfo"))
-        cache_keys = {
-            key: updates.pop(key)
-            for key in ALL_CACHE_PARAMETERS
-            if key in updates
-        }
-        if cache_keys:
-            cache = cache_settings_converter(updates.get("cache", True))
-            updates["cache"], _, _ = cache.update(cache_keys)
-        return updates
+
+
+SolverSettings = make_class(
+    "SolverSettings",
+    {
+        name: field(default=None)
+        for name in sorted(_child_names() - DERIVED_NAMES)
+    },
+    bases=(_SolverOwnSettings,),
+    eq=False,
+    slots=True,
+)
+SolverSettings.__doc__ = (
+    "Every user-facing solver setting; ``None`` is not provided."
+)
+
+EffectiveSettings = make_class(
+    "EffectiveSettings",
+    {name: field(default=None) for name in sorted(DERIVED_NAMES)},
+    bases=(SolverSettings,),
+    eq=False,
+    slots=True,
+)
+EffectiveSettings.__doc__ = "The settings in effect, provided and derived."
+
+
+def settings_differ(old: Any, new: Any) -> bool:
+    """Whether any field of two records differs in value."""
+    for name in type(new).names():
+        before, after = getattr(old, name, None), getattr(new, name)
+        if before is after:
+            continue
+        equal = before == after
+        if not isinstance(equal, bool):
+            equal = bool(asarray(equal).all()) and (
+                asarray(before).shape == asarray(after).shape
+            )
+        if not equal:
+            return True
+    return False
 
 
 @define
 class Resolution:
-    """A resolved :class:`SolverSettings` and the notices to warn about."""
+    """A resolved :class:`EffectiveSettings` and the notices to warn about."""
 
-    effective: SolverSettings
+    effective: Any
     notices: Tuple[str, ...] = ()
 
 
@@ -362,7 +269,7 @@ def _controller_gain_names(step_controller: str) -> Tuple[str, ...]:
 
 
 def resolve_controller(
-    given: SolverSettings, facts: Any
+    given: Any, facts: Any
 ) -> Tuple[Dict[str, Any], Optional[str]]:
     """Return the controller name, gains and limits; the name replaced."""
     defaults = facts.defaults.settings
@@ -397,18 +304,15 @@ def resolve_controller(
         # A controller drops the gains it does not carry.
         resolved[name] = value if name in carried else None
     if resolved["is_adaptive"]:
-        for key in (
-            "min_step_shrink",
-            "max_step_growth",
-            "safety",
-            "deadband_min",
-            "deadband_max",
-        ):
-            value = getattr(given, key)
-            if value is None:
-                value = defaults.get(key)
-            if value is not None:
-                resolved[key] = value
+        # The family's other controller keys fill the unset ones.
+        for key, value in defaults.items():
+            if (
+                key in ALL_STEP_CONTROLLER_PARAMETERS
+                and key not in CONTROLLER_GAIN_NAMES
+                and key != "step_controller"
+            ):
+                provided = getattr(given, key)
+                resolved[key] = value if provided is None else provided
     return resolved, replaced
 
 
@@ -453,17 +357,18 @@ def resolve_step_bounds(
 
 
 def resolve_step_defaults(
-    given: SolverSettings, facts: Any, has_mass: bool
+    given: Any, facts: Any, has_mass: bool
 ) -> Dict[str, Any]:
     """Fill the unset step keys from the family, tableau and DAE tables."""
     defaults = facts.defaults.settings
     resolved = {}
-    for key in (
-        "preconditioner_type",
-        "preconditioner_order",
-        "linear_correction_type",
-        "attempt_dense_prediction",
-    ):
+    step_keys = {
+        key
+        for key in (*defaults, *DAE_SOLVER_DEFAULTS)
+        if key in ALL_ALGORITHM_STEP_PARAMETERS
+        and key not in LINEAR_SOLVER_VARIANT_PARAMETERS
+    }
+    for key in sorted(step_keys):
         value = getattr(given, key)
         # A mass matrix takes the DAE linear solve over the family's.
         if value is None and has_mass and key in DAE_SOLVER_DEFAULTS:
@@ -492,7 +397,7 @@ def resolve_step_defaults(
 
 
 def resolve_inner_tolerances(
-    given: SolverSettings,
+    given: Any,
     atol: Any,
     rtol: Any,
     is_adaptive: bool,
@@ -527,9 +432,7 @@ def resolve_inner_tolerances(
     }
 
 
-def resolve_output_selection(
-    given: SolverSettings, interface: Any
-) -> Dict[str, Any]:
+def resolve_output_selection(given: Any, interface: Any) -> Dict[str, Any]:
     """Return the output types and the index arrays the labels select."""
     resolved = {"output_types": given.output_types or ["state"]}
     saved_state, saved_observable = interface.merge_variable_inputs(
@@ -634,9 +537,7 @@ def _newton_rtol_inverted(
     return bool(((controller > 0.0) & (newton >= controller)).any())
 
 
-def resolve(
-    given: SolverSettings, system: Any, interface: Any
-) -> Resolution:
+def resolve(given: Any, system: Any, interface: Any) -> Resolution:
     """Resolve every effective setting for ``system``.
 
     Raises
@@ -720,23 +621,20 @@ def resolve(
             "summarise_every to avoid this."
         )
 
-    # Every unroll flag is pushed so the children share one object.
-    for key in ALL_UNROLL_PARAMETERS:
-        if getattr(given, key) is None:
-            resolved[key] = getattr(UnrollFlags(), key)
-
-    effective = evolve(given, **resolved)
+    effective = EffectiveSettings(
+        **{**asdict(given, recurse=False), **resolved}
+    )
     return Resolution(effective=effective, notices=tuple(notices))
 
 
 def resolve_performance(
-    given: SolverSettings,
-    effective: SolverSettings,
+    given: Any,
+    effective: Any,
     step: Any,
     system: Any,
-    previous: Optional[SolverSettings] = None,
+    previous: Any = None,
     hardware: Any = None,
-) -> SolverSettings:
+) -> Any:
     """Fill the unset unroll and placement values from the built step;
     with ``auto_performance`` off the values in ``previous`` stay."""
     defaults = dict(step.performance_defaults)

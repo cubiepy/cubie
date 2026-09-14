@@ -119,8 +119,12 @@ class SingleIntegratorRunCore(CUDAFactory):
             **settings,
         )
         self.setup_compile_settings(config)
-        # Every child takes the same compile flags.
+        # Every child and the system take the same compile flags.
         settings.update(unroll=config.unroll, jit_flags=config.jit_flags)
+        system.update_compile_settings(
+            {"unroll": config.unroll, "jit_flags": config.jit_flags},
+            silent=True,
+        )
 
         output_settings, _ = merge_kwargs_into_settings(
             settings,
