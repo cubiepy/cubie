@@ -101,18 +101,19 @@ summarised defaults to saved when all summarise inputs are `None`.
 - **Launch geometry:** `launch_geometry(blocksize=None)` returns a launch's block size and
   dynamic shared bytes: `limit_blocksize` halves the block size until its shared footprint
   fits the per-block limit, then a pad holds `resident_blocks` per SM (`None` = the L2 rule
-  under `auto_performance`; frames under `RESIDENCY_CUT_MIN_FRAME_BYTES` are never cut).
-  `blocksize` (`BatchSolverConfig`) is `None` unless given (`Solver.given.is_given("blocksize")`); unset under
-  `auto_performance`, `_default_launch` picks the block size and residency: every
-  `LAUNCH_BLOCKSIZES` shape the driver fits, cut to the L2 budget counted at
-  `BUDGET_BLOCKSIZE`; a kernel over the instruction cache takes the largest block keeping
-  `LAUNCH_OCCUPANCY_TIE` of the most threads, any other the most threads (smaller on a
-  tie). Unset without `auto_performance` launches `DEFAULT_BLOCKSIZE`.
-  `shared_memory_needs_padding` adds a 4-byte skew only for single precision with an even
-  element count. Memoised on the build's `BatchSolverCache`: `launch_geometries` per
-  `(blocksize, runs, resident_blocks, auto_performance)`, `default_launches` per `runs`,
-  plus `duration_counts`, `output_array_heights`, `time_domain_legend` and
-  `summaries_legend`; `SolveResult.from_solver` copies them.
+  under `auto_performance`). `launchable_shapes(blocksizes)` is the one enumeration of
+  block sizes the driver launches whole, with their dynamic shared bytes and natural block
+  counts; `optimize.launch_candidates` and the automatic launch both read it. The launch
+  rules and their constants live in `optimize.py`: `resident_blocks_within_l2` (the L2
+  cut, never for small local frames) and `default_launch` (residency budget first, then
+  the block size). `blocksize` (`BatchSolverConfig`) is `None` unless given
+  (`Solver.given.is_given("blocksize")`); unset under `auto_performance` the kernel takes
+  `default_launch` on its launchable shapes, unset without it `DEFAULT_BLOCKSIZE`.
+  `shared_memory_needs_padding` adds a `SHARED_SKEW_BYTES` skew only for single precision
+  with an even element count. Memoised on the build's `BatchSolverCache`:
+  `launch_geometries` per `(blocksize, runs, resident_blocks, auto_performance)`,
+  `default_launches` per `runs`, plus `duration_counts`, `output_array_heights`,
+  `time_domain_legend` and `summaries_legend`; `SolveResult.from_solver` copies them.
 - **Kept across solves:** the system snapshot identity (`system_config_stale`), the chunk
   partition until an allocation replaces it, and the timing `CUDAEvent`s while timing is
   on (rebuilt on a chunk-count or verbosity change).

@@ -175,15 +175,17 @@ def grid_param(name, low, high):
 
 
 def grid_fabbri(solver, n_runs):
-    """ACh by Iso mesh, truncated to ``n_runs`` trajectories."""
+    """``n_runs`` points spread evenly over the ACh by Iso mesh."""
     side = int(np.ceil(np.sqrt(n_runs)))
     ach, iso = np.meshgrid(
         np.linspace(0.0, 2e-8, side), np.linspace(0.0, 1.0, side)
     )
+    # Evenly spaced mesh indices keep the whole Iso range for any count.
+    index = np.linspace(0, side * side - 1, n_runs).round().astype(int)
     return solver.build_grid(
         parameters={
-            FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
-            FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
+            FABBRI_PARAMETERS[0]: ach.ravel()[index],
+            FABBRI_PARAMETERS[1]: iso.ravel()[index],
         }
     )
 
@@ -985,7 +987,7 @@ def run_config(
 
 
 def run_signature(system_name, algo_name, n_runs, duration, specs,
-                  blocksizes, icache_bytes, cap, block_arms):
+                  blocksizes, icache_bytes, cap, block_arms, rounds):
     """Identity of one configuration run for resuming a records file."""
     return dict(
         system=system_name,
@@ -997,6 +999,7 @@ def run_signature(system_name, algo_name, n_runs, duration, specs,
         icache_bytes=icache_bytes,
         cap=float(cap),
         block_arms=int(block_arms),
+        rounds=int(rounds),
     )
 
 
@@ -1381,7 +1384,7 @@ def run_jobs(configs, arms_for, args, log, duration_override=None):
         specs = arms_for(system_name, algo_name)
         signature = run_signature(
             system_name, algo_name, n_runs, duration, specs, blocksizes,
-            icache_bytes, args.cap, args.block_arms,
+            icache_bytes, args.cap, args.block_arms, args.rounds,
         )
         if signature in finished:
             continue

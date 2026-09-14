@@ -37,13 +37,30 @@ DEFAULT_INSTRUCTION_CACHE_BYTES = 131072
 """Capacity assumed for an unmeasured compute capability."""
 
 MAX_REGISTERS_PER_THREAD = 255
-"""Registers a thread can address; register-capped kernels sit here."""
+"""Registers a thread can address; register-capped kernels sit here.
+
+Hardware-derived: the register operand field of the instruction set
+addresses 255 registers on every supported compute capability.
+"""
 
 REGISTER_ALLOCATION_GRANULARITY = 256
-"""Registers are allocated to a warp in units of this size."""
+"""Registers are allocated to a warp in units of this size.
+
+Hardware-derived: the per-warp allocation unit the CUDA occupancy
+calculator (``cuda_occupancy.h``) applies on compute capability 3.0
+and later.
+"""
+
+SHARED_SKEW_BYTES = 4
+"""Bytes the kernel adds per run to a shared-memory layout that would
+otherwise place every run's first element on the same bank."""
 
 LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
-"""Block sizes the automatic launch chooses between."""
+"""Block sizes the automatic launch chooses between.
+
+A protocol choice: one to eight warps, the range the launch landscapes
+timed; the occupancy estimates take the best of these too.
+"""
 
 
 @frozen
@@ -348,6 +365,7 @@ __all__ = [
     "MAX_REGISTERS_PER_THREAD",
     "REGISTER_ALLOCATION_GRANULARITY",
     "SASS_INSTRUCTION_BYTES",
+    "SHARED_SKEW_BYTES",
     "DeviceHardware",
     "KernelResources",
     "active_blocks_per_multiprocessor",

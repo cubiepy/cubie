@@ -67,7 +67,11 @@ from cubie._utils import (
     precision_converter,
     PrecisionDType,
 )
-from cubie.backend.utils import device_hardware, shared_keeps_occupancy
+from cubie.backend.utils import (
+    SHARED_SKEW_BYTES,
+    device_hardware,
+    shared_keeps_occupancy,
+)
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import (
     CUDAFactory,
@@ -934,8 +938,8 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     def local_elements(self) -> int:
-        """Elements the step declares in local memory."""
-        return buffer_registry.declared_local_elements(self)
+        """Elements the step's buffers would take with every one local."""
+        return buffer_registry.declared_elements(self)
 
     @property
     def n_drivers(self) -> int:
@@ -983,13 +987,13 @@ class BaseAlgorithmStep(CUDAFactory):
     def shared_keeps_occupancy(
         self, elements: int, fraction: int = 1, hardware: Any = None
     ) -> bool:
-        """Whether ``elements`` + 1 shared per run keep ``1 / fraction``
-        of the register-limited threads."""
+        """Whether ``elements`` shared per run, plus the kernel's bank
+        skew, keep ``1 / fraction`` of the register-limited threads."""
         if hardware is None:
             hardware = device_hardware()
         itemsize = np_dtype(self.precision).itemsize
         return shared_keeps_occupancy(
-            hardware, (elements + 1) * itemsize, fraction
+            hardware, elements * itemsize + SHARED_SKEW_BYTES, fraction
         )
 
     @property

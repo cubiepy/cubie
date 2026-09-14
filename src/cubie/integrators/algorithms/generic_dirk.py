@@ -1096,15 +1096,6 @@ class DIRKStep(ODEImplicitStep):
         return len(self.tableau.implicit_stages)
 
     @property
-    def local_elements(self) -> int:
-        """Declared local elements, counting the accumulator and its
-        ``stage_base`` alias as local wherever they are placed."""
-        declared = buffer_registry.declared_local_elements(self)
-        if self.compile_settings.accumulator_location == "shared":
-            declared += self.accumulator_elements + self.n_states
-        return declared
-
-    @property
     def accumulator_elements(self) -> int:
         """Elements of the explicit-stage accumulator."""
         return max(self.tableau.stage_count - 1, 0) * self.n_states

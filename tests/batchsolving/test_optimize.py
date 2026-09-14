@@ -2,16 +2,112 @@
 
 import pytest
 
-from cubie.batchsolving.optimize import LaunchResult, apply_launch
+from cubie.backend.utils import DeviceHardware
+from cubie.batchsolving.optimize import (
+    BUDGET_BLOCKSIZE,
+    RESIDENCY_CUT_MIN_FRAME_BYTES,
+    LaunchResult,
+    apply_launch,
+    default_launch,
+    resident_blocks_within_l2,
+)
 from cubie.CUDAFactory import UnrollChoice
 from tests._utils import LARGE_FIRK
 
 FULL = UnrollChoice.FULL
 ROLLED = UnrollChoice.ROLLED
 
+MIB = 1 << 20
+
 
 def _candidates(solver, force=False):
     return solver.optimisation_candidates(force=force)
+
+
+def _hardware(l2_cache_bytes, instruction_cache_bytes=128 * 1024):
+    """An RTX 4070 SUPER-shaped device with the given L2 and icache."""
+    return DeviceHardware(
+        compute_capability=(8, 9),
+        multiprocessor_count=56,
+        l2_cache_bytes=l2_cache_bytes,
+        shared_memory_per_multiprocessor=102400,
+        reserved_shared_memory_per_block=1024,
+        max_dynamic_shared_memory_per_block=101376,
+        instruction_cache_bytes=instruction_cache_bytes,
+        registers_per_multiprocessor=65536,
+        max_threads_per_multiprocessor=1536,
+        max_blocks_per_multiprocessor=24,
+        warp_size=32,
+    )
+
+
+# A 4 KiB frame at 64-thread blocks on 56 SMs is 14 MB of local memory
+# per resident block.
+FRAME = 4096
+SHAPES = {32: 12, 64: 8, 128: 4, 256: 1}
+"""Blocks per SM per block size: 384, 512, 512 and 256 threads."""
+
+
+def test_small_frames_are_never_cut():
+    """Local memory under the floor keeps the driver's block count."""
+    hardware = _hardware(4 * MIB)
+    blocks = resident_blocks_within_l2(
+        RESIDENCY_CUT_MIN_FRAME_BYTES - 1, 64, 8, hardware
+    )
+    assert blocks == 8
+
+
+def test_residency_is_cut_to_the_count_that_fits_l2():
+    """Two blocks may fill the whole L2; three would need two thirds."""
+    assert resident_blocks_within_l2(FRAME, 64, 8, _hardware(48 * MIB)) == 2
+
+
+def test_residency_cuts_to_one_block_within_two_thirds_of_l2():
+    """One block is kept when its memory fits two thirds of L2."""
+    assert resident_blocks_within_l2(FRAME, 64, 8, _hardware(24 * MIB)) == 1
+
+
+def test_residency_stays_natural_when_no_count_fits():
+    """A frame no block count fits keeps the driver's count."""
+    assert resident_blocks_within_l2(FRAME, 64, 8, _hardware(4 * MIB)) == 8
+
+
+def test_default_launch_takes_the_most_threads_smaller_block_on_a_tie():
+    """Without a cut, the most resident threads win; 64 beats 128."""
+    hardware = _hardware(48 * MIB)
+    assert default_launch(SHAPES, 0, 1024, hardware) == (64, 8)
+
+
+def test_default_launch_over_the_instruction_cache_takes_the_larger_block():
+    """A kernel over the instruction cache takes the largest block
+    within the tie band of the most resident threads."""
+    hardware = _hardware(48 * MIB, instruction_cache_bytes=1024)
+    assert default_launch(SHAPES, 0, 2048, hardware) == (128, 4)
+
+
+def test_default_launch_cuts_every_block_size_to_the_budget():
+    """The L2 budget counted at 64-thread blocks caps every block size;
+    a block size that cannot hold it in whole blocks is out."""
+    hardware = _hardware(48 * MIB)
+    budget = BUDGET_BLOCKSIZE * resident_blocks_within_l2(
+        FRAME, BUDGET_BLOCKSIZE, SHAPES[BUDGET_BLOCKSIZE], hardware
+    )
+    assert budget == 128
+    assert default_launch(SHAPES, FRAME, 1024, hardware) == (32, 4)
+    over_icache = _hardware(48 * MIB, instruction_cache_bytes=1024)
+    assert default_launch(SHAPES, FRAME, 2048, over_icache) == (128, 1)
+
+
+def test_default_launch_budget_excludes_block_sizes_that_do_not_divide_it():
+    """A 192-thread budget admits 32- and 64-thread blocks only."""
+    hardware = _hardware(72 * MIB)
+    budget = BUDGET_BLOCKSIZE * resident_blocks_within_l2(
+        FRAME, BUDGET_BLOCKSIZE, SHAPES[BUDGET_BLOCKSIZE], hardware
+    )
+    assert budget == 192
+    assert default_launch(SHAPES, FRAME, 1024, hardware) == (32, 6)
+    over_icache = _hardware(72 * MIB, instruction_cache_bytes=1024)
+    assert default_launch(SHAPES, FRAME, 2048, over_icache) == (64, 3)
 
 
 @pytest.mark.parametrize(
@@ -177,9 +273,7 @@ def test_force_varies_user_fixed_axes(solver):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override",
-    [{**LARGE_FIRK, "unroll_newton_exits": None}],
-    indirect=True,
+    "solver_settings_override", [LARGE_FIRK], indirect=True
 )
 def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
     """Defaults the kernel derived are varied by the parent and its copy."""

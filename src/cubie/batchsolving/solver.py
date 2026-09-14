@@ -592,7 +592,8 @@ class Solver:
             Initial integration time. Default ``0.0``.
         blocksize
             CUDA block size for this launch; ``None`` uses the
-            solver's ``blocksize`` setting (default ``64``).
+            solver's ``blocksize`` setting, or the launch the solver
+            picks when that is unset.
         grid_type
             Strategy for constructing the integration grid from inputs.
             Only used when dict inputs trigger grid construction.
