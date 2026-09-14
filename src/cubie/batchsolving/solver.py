@@ -493,12 +493,8 @@ class Solver:
         return tuple(candidates)
 
     def copy(self) -> "Solver":
-        """Copy: same settings and memory manager, system copy, no drivers."""
-        return type(self)(
-            self.system.copy(),
-            memory_settings={"memory_manager": self.kernel.memory_manager},
-            **self.settings_dict,
-        )
+        """Return a solver with these settings on a system copy; no drivers."""
+        return type(self)(self.system.copy(), **self.settings_dict)
 
     def _apply_performance_defaults(self) -> None:
         """Apply the auto-performance unroll and placement defaults."""

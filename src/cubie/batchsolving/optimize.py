@@ -475,13 +475,11 @@ class _OptimizeRunner:
         if self._drivers is not None:
             twin._configure_drivers(self._drivers)
         twin.update(candidate, silent=True)
-        integrator = twin.kernel.single_integrator
-        if integrator.is_duration_dependent:
-            # Pin the summary cadence at the given duration.
-            twin.update(
-                summarise_every=self._given_duration,
-                sample_summaries_every=self._given_duration / 100.0,
-            )
+        if twin.effective.summarise_regularly and not twin.given.is_given(
+            "summarise_every"
+        ):
+            # Pin the summary window at the given duration.
+            twin.update(summarise_every=self._given_duration, silent=True)
         return twin
 
     def build_twins(self, candidates: Sequence[Dict[str, Any]]) -> None:
@@ -563,14 +561,12 @@ class _OptimizeRunner:
 
     def _duration_floor(self) -> float:
         """Shortest duration the configured output cadence allows."""
-        integrator = self._twins[0].kernel.single_integrator
+        effective = self._twins[0].effective
         floor = 0.0
-        if integrator.has_time_domain_outputs:
-            save_every = integrator.save_every
-            if save_every is not None and not integrator.save_last:
-                floor = max(floor, float(save_every))
-        if integrator.has_summary_outputs:
-            floor = max(floor, float(integrator.summarise_every))
+        if effective.save_regularly:
+            floor = max(floor, float(effective.save_every))
+        if effective.summarise_regularly:
+            floor = max(floor, float(effective.summarise_every))
         return min(floor, self._given_duration)
 
     def _trial_durations(self) -> List[float]:
