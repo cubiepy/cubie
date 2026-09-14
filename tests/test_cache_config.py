@@ -460,7 +460,7 @@ class TestParseCacheParam:
 
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache=True,
         )
 
@@ -482,7 +482,7 @@ class TestParseCacheParam:
 
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache=False,
         )
 
@@ -494,7 +494,7 @@ class TestParseCacheParam:
 
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache="flush_on_change",
         )
 
@@ -508,7 +508,7 @@ class TestParseCacheParam:
         custom_path = tmp_path / "custom_cache"
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache=custom_path,
         )
 
@@ -523,7 +523,7 @@ class TestParseCacheParam:
         custom_path = str(tmp_path / "custom_cache")
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache=custom_path,
         )
 
@@ -542,9 +542,10 @@ class TestKernelCacheSettings:
 
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache="flush_on_change",
-            kernel_settings={"cache_mode": "hash", "cache_dir": tmp_path},
+            cache_mode="hash",
+            cache_dir=tmp_path,
         )
 
         assert kernel.compile_settings.cache.cache_enabled is True
@@ -561,7 +562,7 @@ class TestSetCacheDir:
 
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache=True,
         )
         new_path_str = str(tmp_path / "string_cache_dir")
@@ -577,7 +578,7 @@ class TestSetCacheDir:
 
         kernel = BatchSolverKernel(
             simple_system,
-            algorithm_settings={"algorithm": "euler"},
+            algorithm="euler",
             cache=True,
         )
         new_path = tmp_path / "path_cache_dir"

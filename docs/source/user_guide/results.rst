@@ -120,12 +120,11 @@ Time-Domain vs Summary Output
 
 Time-domain saves and summary metrics operate at independent cadences:
 
-- ``dt_save`` (or ``save_every``) controls how often state snapshots are
-  written.
-- ``dt_summarise`` (or ``summarise_every``) controls how often the
-  summary accumulators are updated.
-- ``sample_summaries_every`` controls the sub-step sampling rate for
-  metrics that interpolate between steps.
+- ``save_every`` controls how often state snapshots are written.
+- ``summarise_every`` controls how often summary metrics are calculated
+  and saved.
+- ``sample_summaries_every`` controls how often measurements are
+  accumulated into the summary metric buffers.
 
 Using summaries lets you extract statistics (mean, max, peaks, etc.)
 without ever writing the full trajectory to VRAM.

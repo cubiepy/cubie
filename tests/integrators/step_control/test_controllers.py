@@ -273,7 +273,7 @@ class TestControllerHistory:
 
 # torn_driver has states (x0, x1) with x1 a zero-mass algebraic row.
 MASKED_CONTROLLER_SETS = {
-    name: {**settings, "system_type": "torn_driver"}
+    name: {**settings, "algorithm": "radau", "system_type": "torn_driver"}
     for name, settings in CONTROLLER_TOLERANCE_SETS.items()
 }
 

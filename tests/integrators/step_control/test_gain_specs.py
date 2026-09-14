@@ -24,11 +24,13 @@ def half_over_order(order):
 
 
 PI_CALLABLE_GAINS = {
+    "algorithm": "erk",
     "step_controller": "pi",
     "integral_gain": dirk_default_integral_gain,
     "proportional_gain": dirk_default_proportional_gain,
 }
 PID_CALLABLE_GAINS = {
+    "algorithm": "erk",
     "step_controller": "pid",
     "integral_gain": dirk_default_integral_gain,
     "proportional_gain": dirk_default_proportional_gain,

@@ -72,7 +72,7 @@ resolves a name or `ButcherTableau` to the right factory.
   `"crank_nicolson"` are fixed schemes with no tableau.
 - `AlgorithmDefaults`: one flat settings dict per family (controller and solver keys together); the adaptive/fixed variant is chosen from `tableau.has_error_estimate`, and a tableau's own `defaults` mapping overlays the family dict in `BaseAlgorithmStep.algorithm_defaults`.
 
-- Keys in `ALL_ALGORITHM_STEP_PARAMETERS` are step defaults (`step_default_settings`, applied to user-unset keys by `SingleIntegratorRunCore._apply_algorithm_step_defaults`); every other key is a controller default (`controller_default_settings`). The `family_defaults(tableau)` classmethod and `algorithm_facts(algorithm, tableau)` (`AlgorithmFacts`: step class, tableau, defaults, `has_error_estimate`, `is_implicit`, `is_linear`) give the table without a step instance; a bare family alias (`dirk`, `firk`, `erk`, `rosenbrock`) resolves to the class's `default_tableau`, the tableau its constructor builds on.
+- Keys in `ALL_ALGORITHM_STEP_PARAMETERS` are step defaults (`step_default_settings`); every other key is a controller default (`controller_default_settings`). The `family_defaults(tableau)` classmethod and `algorithm_facts(algorithm, tableau)` (`AlgorithmFacts`: step class, tableau, defaults, `has_error_estimate`, `is_implicit`, `is_linear`) give the table without a step instance; the Solver applies it. A bare family alias (`dirk`, `firk`, `erk`, `rosenbrock`) resolves to the class's `default_tableau`, the tableau its constructor builds on.
 
 - **Errorless tableaus must use a fixed controller** — constructors enforce this; never pair an adaptive controller with an errorless tableau.
 - **`update` additions:** new keywords must be added to `ALL_ALGORITHM_STEP_PARAMETERS`
@@ -165,10 +165,9 @@ solver children and writes their device functions and an `OperationCounts`
 into the step's config; `build()` reads that config only.
 `ODEImplicitStep.update` adds `solver_width` (the coupled all-stages length
 for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change.
-`newton_body_operation_count`, `per_step_operation_count`,
-`newton_solves_per_step` and `performance_defaults` feed the core's
-`_apply_performance_defaults`. `optimisation_candidates` lists the setting
-combinations `Solver.optimize` times (base `({},)`).
+`performance_defaults` (the step's own placement values) and
+`step_operation_count` feed `optimize.performance_defaults`.
+`optimisation_candidates` lists the combinations `Solver.optimize` times.
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
 the `lu_solve` role instead of the operator + preconditioner pair;

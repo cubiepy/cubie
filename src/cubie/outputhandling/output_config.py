@@ -55,6 +55,7 @@ from numpy import (
 from numpy.typing import NDArray
 
 from cubie._utils import (
+    build_config,
     opt_gttype_validator,
     PrecisionDType,
 )
@@ -817,15 +818,20 @@ class OutputConfig(CUDAFactoryConfig):
         if summarised_observable_indices is None:
             summarised_observable_indices = np_asarray([], dtype=np_int32)
 
-        return cls(
-            n_states=n_states,
-            n_observables=n_observables,
-            saved_state_indices=saved_state_indices,
-            saved_observable_indices=saved_observable_indices,
-            summarised_state_indices=summarised_state_indices,
-            summarised_observable_indices=summarised_observable_indices,
-            output_types=output_types,
-            sample_summaries_every=sample_summaries_every,
-            precision=precision,
+        return build_config(
+            cls,
+            required={
+                "n_states": n_states,
+                "n_observables": n_observables,
+                "saved_state_indices": saved_state_indices,
+                "saved_observable_indices": saved_observable_indices,
+                "summarised_state_indices": summarised_state_indices,
+                "summarised_observable_indices": (
+                    summarised_observable_indices
+                ),
+                "output_types": output_types,
+                "sample_summaries_every": sample_summaries_every,
+                "precision": precision,
+            },
             **compile_flags,
         )

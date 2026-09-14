@@ -153,8 +153,6 @@ UnrollFlag = Tuple[bool, Optional[int]]
 """Loop-group flag: ``(unroll, count)``."""
 
 
-
-
 # MLIR-only jit options carried by every compile.
 _BACKEND_JIT_OPTIONS: Mapping[str, Any] = MappingProxyType(
     {"experimental_ast_transforms": True} if IS_MLIR else {}

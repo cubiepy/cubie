@@ -445,8 +445,8 @@ class BaseStepController(CUDAFactory):
             Additional parameters passed to the config class.
         """
         super().__init__()
-        self._user_step_params = {}
-        self._resolve_step_params(dt, kwargs)
+        if dt is not None:
+            kwargs["dt"] = dt
         self._apply_filter_coefficients(kwargs)
         config = build_config(
             self._config_class,
@@ -454,48 +454,7 @@ class BaseStepController(CUDAFactory):
             **kwargs,
         )
         self.setup_compile_settings(config)
-        self._ensure_sane_bounds()
         self.register_buffers()
-
-    @property
-    def settings_dict(self) -> dict[str, object]:
-        """Return the settings; step bounds only as they were given."""
-        settings = super().settings_dict
-        for key in ("dt", "dt_min", "dt_max"):
-            settings.pop(key, None)
-        settings.update(
-            {
-                key: value
-                for key, value in self._user_step_params.items()
-                if value is not None
-            }
-        )
-        return settings
-
-    def _resolve_step_params(self, dt: float, kwargs: dict) -> None:
-        """Resolve step parameters and track user-provided values.
-
-        Subclasses override to implement controller-specific translation
-        and set entries in ``self._user_step_params`` for user-provided
-        values.
-
-        Parameters
-        ----------
-        dt
-            Step size, or None if not provided.
-        kwargs
-            Mutable dict of keyword arguments. Modified in place.
-        """
-        pass
-
-    def _ensure_sane_bounds(self) -> None:
-        """Ensure step bounds satisfy constraints.
-
-        Called during __init__ and after update(). Subclasses override
-        to validate bounds and fix constraint violations on
-        non-user-provided parameters.
-        """
-        pass
 
     @property
     def gain_names(self) -> tuple[str, ...]:
@@ -688,11 +647,6 @@ class BaseStepController(CUDAFactory):
         if updates_dict == {}:
             return set()
 
-        # Track newly user-set step params
-        for key in ("dt", "dt_min", "dt_max"):
-            if key in updates_dict:
-                self._user_step_params[key] = updates_dict[key]
-
         recognised = self._apply_filter_coefficients(updates_dict)
         recognised |= self.update_compile_settings(updates_dict, silent=True)
         unrecognised = set(updates_dict.keys()) - recognised
@@ -724,6 +678,5 @@ class BaseStepController(CUDAFactory):
                 "These parameters were not updated.",
             )
 
-        self._ensure_sane_bounds()
         self.register_buffers()
         return recognised
