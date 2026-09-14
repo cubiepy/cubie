@@ -939,8 +939,7 @@ class BatchSolverKernel(CUDAFactory):
     def launchable_shapes(
         self, blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES
     ) -> Dict[int, Tuple[int, int]]:
-        """Return, for each block size in ``blocksizes`` the shared memory
-        allows, its dynamic shared bytes and the blocks per SM it fits."""
+        """Dynamic shared bytes and blocks per SM per launchable block size."""
         runs = self.run_params[0].runs
         shapes = {}
         for blocksize in blocksizes:
