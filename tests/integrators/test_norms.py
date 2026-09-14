@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
 from cubie.integrators.algorithms.generic_firk_tableaus import (
-    FIRKTableau,
     GAUSS_LEGENDRE_2_TABLEAU,
 )
 from cubie.memory import default_memmgr
@@ -221,16 +220,6 @@ def test_whole_vector_config_rejects_smaller_n():
         ScaledNormConfig(precision=np.float64, solver_width=6, n_states=3)
 
 
-def _two_stage_tableau(a):
-    """Return a two-stage FIRK tableau with the ``a`` matrix given."""
-    return FIRKTableau(
-        a=tuple(tuple(float(v) for v in row) for row in a),
-        b=(0.5, 0.5),
-        c=tuple(float(sum(row)) for row in a),
-        order=2,
-    )
-
-
 @pytest.mark.parametrize(
     "config_class, extra",
     [
@@ -307,14 +296,14 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
     n = 2
     stages = 2
     width = n * stages
-    a = np.array([[0.5, 0.0], [0.5, 0.5]], dtype=np.float64)
+    a = np.array(GAUSS_LEGENDRE_2_TABLEAU.a, dtype=np.float64)
     atol = np.array([1.0, 0.25], dtype=np.float64)
     rtol = np.array([0.1, 0.4], dtype=np.float64)
     factory = FIRKCorrectionNorm(
         precision=np.float64,
         solver_width=width,
         n_states=n,
-        tableau=_two_stage_tableau(a),
+        tableau=GAUSS_LEGENDRE_2_TABLEAU,
         atol=atol,
         rtol=rtol,
     )
@@ -655,16 +644,14 @@ _CORRECTION_NORM_CASES = {
         factory_kwargs=dict(
             solver_width=4,
             n_states=2,
-            tableau=_two_stage_tableau(
-                np.array([[0.5, 0.0], [0.5, 0.5]])
-            ),
+            tableau=GAUSS_LEGENDRE_2_TABLEAU,
         ),
         a_ij=0.0,
         delta=(0.21, 0.3, 0.46, 0.15),
         increment=(2.0, -1.0, 4.0, 3.0),
         stage_base=(10.0, -4.0),
         step_start=(8.0, -5.0),
-        expected=0.025,
+        expected=0.026016785,
     ),
 }
 
