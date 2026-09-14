@@ -406,7 +406,8 @@ class SingleIntegratorRunCore(CUDAFactory):
     def has_summary_outputs(self) -> bool:
         """Return True if summary outputs will be produced by the loop"""
         has_summaries_types = self.summary_outputs_requested
+        config = self._loop.compile_settings
         has_summarise_timing = (
-            self._loop.compile_settings._summarise_every is not None
+            config._summarise_every is not None or config.summarise_last
         )
         return has_summaries_types and has_summarise_timing

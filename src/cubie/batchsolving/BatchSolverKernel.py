@@ -101,6 +101,9 @@ from cubie.odesystems.baseODE import BaseODE
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.outputhandling.output_sizes import OutputArrayHeights
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
+from cubie.integrators.loops.ode_loop_config import (
+    MISSING_SAMPLE_INTERVAL_MESSAGE,
+)
 from cubie._utils import (
     build_config,
     getype_validator,
@@ -516,29 +519,31 @@ class BatchSolverKernel(CUDAFactory):
             summarise_every = integrator.summarise_every
 
             if sample_summaries_every is None:
-                raise ValueError(
-                    "Summary outputs are enabled but sample_summaries_every "
-                    "is None"
-                )
-            if summarise_every is None:
-                raise ValueError(
-                    "Summary outputs are enabled but summarise_every is None"
-                )
+                raise ValueError(MISSING_SAMPLE_INTERVAL_MESSAGE)
 
-            if sample_summaries_every >= summarise_every:
-                raise ValueError(
-                    f"sample_summaries_every ({sample_summaries_every}) "
-                    f">= summarise_every ({summarise_every}); "
-                    f"The saved summary will be based on 0 samples, so will "
-                    f"result in 0/inf/NaN values."
-                )
+            if integrator.summarise_last:
+                # One window over the run needs at least one sample.
+                if sample_summaries_every > end_time:
+                    raise ValueError(
+                        f"sample_summaries_every ({sample_summaries_every})"
+                        f" > duration ({duration}), so the whole-run "
+                        f"summary will be based on 0 samples"
+                    )
+            else:
+                if sample_summaries_every >= summarise_every:
+                    raise ValueError(
+                        f"sample_summaries_every ({sample_summaries_every})"
+                        f" >= summarise_every ({summarise_every}); "
+                        f"The saved summary will be based on 0 samples, so "
+                        f"will result in 0/inf/NaN values."
+                    )
 
-            if summarise_every > end_time:
-                raise ValueError(
-                    f"summarise_every ({summarise_every}) > duration "
-                    f"({duration}), so this loop will produce no summary "
-                    f"outputs"
-                )
+                if summarise_every > end_time:
+                    raise ValueError(
+                        f"summarise_every ({summarise_every}) > duration "
+                        f"({duration}), so this loop will produce no "
+                        f"summary outputs"
+                    )
 
     def run(
         self,

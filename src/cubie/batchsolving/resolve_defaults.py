@@ -37,6 +37,9 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     DAE_SOLVER_DEFAULTS,
     ImplicitStepConfig,
 )
+from cubie.integrators.loops.ode_loop_config import (
+    MISSING_SAMPLE_INTERVAL_MESSAGE,
+)
 from cubie.integrators.step_control import _CONTROLLER_REGISTRY
 from cubie.integrators.step_control.adaptive_step_controller import (
     DEFAULT_DT_MAX,
@@ -61,10 +64,6 @@ DEFAULT_TOLERANCE = float(
 
 STEP_BOUND_DECADES = 3
 """How many decades either side of dt to set the min and max step bounds."""
-
-DEFAULT_SAMPLES_PER_SUMMARY = 10
-"""Summary samples per ``summarise_every`` when no sample interval is given."""
-
 
 def given_or(given: Any, name: str, default: Any) -> Any:
     """Return the given value of ``name``, or ``default`` if not given."""
@@ -458,7 +457,6 @@ def resolve_loop_timing(
     sample_summaries_every: Optional[float],
     has_time_domain_outputs: bool,
     has_summary_outputs: bool,
-    duration: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Return the save and summary intervals and the flags selecting them.
 
@@ -468,37 +466,36 @@ def resolve_loop_timing(
         The given intervals; ``None`` when not given.
     has_time_domain_outputs, has_summary_outputs
         Which output arrays are produced.
-    duration
-        The solve duration, if known.
 
     Returns
     -------
     dict
-        The intervals and ``save_last``, ``save_regularly`` and
-        ``summarise_regularly``.
+        The intervals and ``save_last``, ``save_regularly``,
+        ``summarise_last`` and ``summarise_regularly``.
+
+    Raises
+    ------
+    ValueError
+        Summary outputs requested without ``sample_summaries_every``.
     """
-    # Time-domain outputs with no interval save the final state only.
+    # Outputs with no interval fire once at the end of the run.
     save_last = has_time_domain_outputs and save_every is None
     save_regularly = has_time_domain_outputs and save_every is not None
+    summarise_last = has_summary_outputs and summarise_every is None
+    summarise_regularly = has_summary_outputs and summarise_every is not None
     if not has_summary_outputs:
         summarise_every = None
         sample_summaries_every = None
-    else:
-        # No summarise_every: summarise once over the whole duration.
-        if summarise_every is None:
-            summarise_every = duration
-        # No sample interval: sample ten times per summary.
-        if sample_summaries_every is None and summarise_every is not None:
-            sample_summaries_every = (
-                summarise_every / DEFAULT_SAMPLES_PER_SUMMARY
-            )
+    elif sample_summaries_every is None:
+        raise ValueError(MISSING_SAMPLE_INTERVAL_MESSAGE)
     return {
         "save_every": save_every,
         "summarise_every": summarise_every,
         "sample_summaries_every": sample_summaries_every,
         "save_last": save_last,
         "save_regularly": save_regularly,
-        "summarise_regularly": summarise_every is not None,
+        "summarise_last": summarise_last,
+        "summarise_regularly": summarise_regularly,
     }
 
 
@@ -538,7 +535,8 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     ------
     ValueError
         A Neumann preconditioner on a mass-matrix system, gains given
-        with a filter, or an output index the system does not have.
+        with a filter, an output index the system does not have, or
+        summary metrics without ``sample_summaries_every``.
     """
     precision = system.precision
     if given.precision is not None:
@@ -617,7 +615,6 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
             given.sample_summaries_every,
             time_domain,
             summaries,
-            given.duration,
         )
     )
     return EffectiveSettings(**{**given.as_kwargs(), **resolved})

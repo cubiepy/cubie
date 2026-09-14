@@ -153,20 +153,25 @@ for summary statistics. At the end of each window, metrics (mean, max, RMS,
 etc.) are computed from all samples taken during that window, written to
 output, and the accumulator resets for the next window.
 
-- **Default**: If not specified but summary outputs are requested, defaults
-  to ``duration`` (one summary window covering the entire integration).
-  This default is derived from the duration, so CuBIE emits a
-  ``UserWarning``: if ``duration`` changes on a later solve, the kernel
-  must recompile once.  Set ``summarise_every`` explicitly to avoid it.
+- **Default**: If not specified but summary outputs are requested, one
+  window spans the whole run and its summary is written at the end.
 - **Type**: ``float`` (seconds of simulation time)
 
 .. code-block:: python
 
    # 10 summary windows, each 1 second long
-   solver.solve(..., summarise_every=1.0, duration=10.0, output_types=["mean"])
+   solver.solve(
+       ...,
+       summarise_every=1.0,
+       sample_summaries_every=0.1,
+       duration=10.0,
+       output_types=["mean"],
+   )
 
-   # No summarise_every: one summary over entire duration
-   solver.solve(..., duration=10.0, output_types=["mean"])
+   # No summarise_every: one summary over the whole run
+   solver.solve(
+       ..., sample_summaries_every=0.1, duration=10.0, output_types=["mean"]
+   )
 
 sample_summaries_every
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -177,12 +182,13 @@ the current state/observable values are fed into the running accumulator
 (e.g., added to a running sum for mean calculation, compared against
 current max, etc.).
 
-- **Default**: ``summarise_every / 10`` (10 samples per window) when
-  you set ``summarise_every``.  When you set neither,
-  ``duration / 100`` (100 samples in the single whole-run window).
+- **Required** whenever summary outputs are requested; a solve without
+  it raises ``ValueError``.
 - **Type**: ``float`` (seconds of simulation time)
-- **Constraint**: ``summarise_every`` must be an integer multiple of
-  ``sample_summaries_every``
+- **Constraint**: ``summarise_every``, when set, must be an integer
+  multiple of ``sample_summaries_every``; with no window,
+  ``sample_summaries_every`` must fit inside ``duration`` so the
+  whole-run summary has at least one sample.
 
 .. code-block:: python
 
@@ -207,6 +213,9 @@ The summary system uses fixed, non-overlapping windows:
 2. At each ``summarise_every`` interval, final metrics are computed from
    the accumulators, written to output, and accumulators reset
 3. The next window starts fresh with no memory of previous windows
+
+With no ``summarise_every`` there is a single window: sampling runs on
+the same grid and the one summary is written when the run ends.
 
 This differs from sliding-window approaches where windows overlap.
 
@@ -234,7 +243,8 @@ Relationship Between Output Parameters
    * - ``sample_summaries_every``
      - Interval for sampling values into summary accumulators
    * - ``summarise_every``
-     - Window length; summaries computed and reset at this interval
+     - Window length; summaries computed and reset at this interval.
+       Unset, one window covers the run and is written at its end
 
 These are independent: you can save states at high frequency while
 computing summaries over longer windows, or vice versa.

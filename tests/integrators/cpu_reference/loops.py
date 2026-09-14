@@ -5,6 +5,9 @@ from typing import Any, Mapping, Optional, Sequence, Union
 import numpy as np
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
+from cubie.integrators.loops.ode_loop_config import (
+    MISSING_SAMPLE_INTERVAL_MESSAGE,
+)
 
 from .algorithms import get_ref_stepper
 from .cpu_ode_system import CPUODESystem
@@ -98,7 +101,7 @@ def run_reference_loop(
     duration = np.float64(solver_settings["duration"])
     warmup = np.float64(solver_settings["warmup"])
     t0 = np.float64(solver_settings["t0"])
-    # Resolve unset timing the way SingleIntegratorRunCore does.
+    # An unset interval means one event at the end of the run.
     flags = output_functions.compile_flags
     save_last = solver_settings["save_every"] is None
     if save_last:
@@ -108,14 +111,14 @@ def run_reference_loop(
     summarise = bool(flags.summarise)
     summarise_every = solver_settings["summarise_every"]
     sample_summaries_every = solver_settings.get("sample_summaries_every")
+    summarise_last = summarise and summarise_every is None
     if not summarise:
         summarise_every = duration
         sample_summaries_every = duration
-    elif summarise_every is None:
-        summarise_every = duration
-        sample_summaries_every = duration / 100.0
     elif sample_summaries_every is None:
-        sample_summaries_every = summarise_every / 10.0
+        raise ValueError(MISSING_SAMPLE_INTERVAL_MESSAGE)
+    elif summarise_last:
+        summarise_every = duration
     summarise_every = precision(summarise_every)
     sample_summaries_every = precision(sample_summaries_every)
 
@@ -184,12 +187,17 @@ def run_reference_loop(
     save_time = output_functions.save_time
     max_save_samples = _event_count(duration, save_every, precision) + 1
 
-    # Calculate summary sample counts
+    # A whole-run window holds every sample.
     if summarise:
         max_summary_samples = _event_count(
             duration, sample_summaries_every, precision
         )
-        samples_per_summary = int(summarise_every / sample_summaries_every)
+        if summarise_last:
+            samples_per_summary = max_summary_samples
+        else:
+            samples_per_summary = int(
+                summarise_every / sample_summaries_every
+            )
     else:
         max_summary_samples = 0
         samples_per_summary = 1

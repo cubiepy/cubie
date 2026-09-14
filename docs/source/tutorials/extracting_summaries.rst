@@ -48,24 +48,22 @@ list summary metrics instead:
        method="ode45",
        duration=50.0,
        output_types=["mean", "max"],
-       summarise_every=50.0,
+       sample_summaries_every=0.5,
    )
 
-Summaries run on two clocks.  ``summarise_every`` sets the window
-length: each metric produces one value per window per variable.
-``sample_summaries_every`` sets the measurement cadence inside each
-window: the metric is computed from the trajectory sampled at that
-interval, and it defaults to a tenth of the window length.  With
+Summaries run on two clocks.  ``sample_summaries_every`` sets the
+measurement cadence: the metric is computed from the trajectory
+sampled at that interval, and you must set it whenever you request
+summaries.  ``summarise_every`` sets the window length: each metric
+produces one value per window per variable.  With
 ``summarise_every=10.0`` and ``sample_summaries_every=1.0``, the
 first ``"mean"`` is the mean of the measurements at t = 1, 2, ...,
 10 time-units, the second covers t = 11 through 20, and so on.
 
-Here ``summarise_every=50.0`` makes one window spanning the whole
-run, so each metric reduces to a single number per variable per run.
-Shorter windows give a statistic per window instead, which is handy
-for tracking slow drift.  If you omit ``summarise_every``, CuBIE
-defaults to one whole-run window but warns you, because the derived
-timing forces a recompile whenever ``duration`` changes.
+Here ``summarise_every`` is left unset, so one window spans the whole
+run and each metric reduces to a single number per variable per run,
+written when the run ends.  Shorter windows give a statistic per
+window instead, which is handy for tracking slow drift.
 
 There are 18 built-in metrics, including ``"rms"``, ``"std"``,
 ``"peaks"``, and first/second-derivative extrema; the full table is
@@ -109,7 +107,7 @@ Two more levers cut memory and time further:
        duration=50.0,
        settling_time=20.0,                # discard the transient
        output_types=["mean", "max"],
-       summarise_every=50.0,
+       sample_summaries_every=0.5,
        summarise_variables=["x"],         # only summarise prey
    )
 
@@ -119,9 +117,8 @@ Two more levers cut memory and time further:
 starts, so start-up transients do not pollute your statistics.
 Settling extends the run rather than eating into it: the solver
 integrates for ``settling_time + duration`` in total, so the
-recorded window is still the full 50 time-units and
-``summarise_every=50.0`` produces exactly one summary window per
-run.
+recorded window is still the full 50 time-units and the unset
+``summarise_every`` produces exactly one summary window per run.
 
 When to use which output
 ------------------------

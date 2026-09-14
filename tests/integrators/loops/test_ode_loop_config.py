@@ -119,6 +119,7 @@ def test_flag_defaults():
     cfg = ODELoopConfig(precision=np.float32)
     assert cfg.save_last is False
     assert cfg.save_regularly is False
+    assert cfg.summarise_last is False
     assert cfg.summarise_regularly is False
 
 

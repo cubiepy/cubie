@@ -12,7 +12,7 @@ import pytest
 from tests._utils import (
     ALGORITHM_CHAIN_CASES,
     ALGORITHM_CHAIN_SETS,
-    DURATION_ONLY_MIXED_OUTPUTS,
+    MIXED_OUTPUTS_LAST,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
     TINY_DT_ADAPTIVE_CN,
@@ -290,27 +290,23 @@ def test_save_at_settling_time_boundary(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        DURATION_ONLY_MIXED_OUTPUTS
-    ],
+    [MIXED_OUTPUTS_LAST],
     indirect=True,
 )
 def test_final_summary(
     device_loop_outputs,
-    precision,
+    cpu_loop_outputs,
+    tolerance,
 ):
-    """Verify summaries collected at end of run with summaries unset.
-
-    When all timing parameters are None, the loop should collect a
-    summary at the end of the integration run.
-    """
+    """No window: one summary of every sample, written at the end."""
     state_summaries = device_loop_outputs.state_summaries
 
-    assert state_summaries is not None, (
-        "State summaries should be collected"
-    )
-    assert state_summaries.shape[0] >= 1, (
-        "At least one summary should exist"
+    assert state_summaries.shape[0] == 1
+    np.testing.assert_allclose(
+        state_summaries,
+        cpu_loop_outputs["state_summaries"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
     )
 
     final_summary = state_summaries[0]
@@ -323,12 +319,7 @@ def test_summarise_every(
     device_loop_outputs,
     precision,
 ):
-    """Verify summarise_every works without double-write.
-
-    When both periodic summaries and summarise_last are enabled,
-    the loop should collect summaries at regular intervals and also
-    at the end.
-    """
+    """A set window writes one row per window and none at the end."""
     state_summaries = device_loop_outputs.state_summaries
 
     assert state_summaries is not None, (
