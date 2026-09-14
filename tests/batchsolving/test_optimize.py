@@ -274,9 +274,7 @@ def test_force_varies_user_fixed_axes(solver):
 )
 def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
     """Defaults the kernel derived are varied by the parent and its copy."""
-    run = solver.kernel.single_integrator
-    run.device_function
-    step = run._algo_step.compile_settings
+    step = solver.kernel.single_integrator._algo_step.compile_settings
     assert step.stage_increment_location == "local"
     assert step.unroll.unroll_newton_exits == ROLLED.value
     # The shared fixture fixes unroll_other_small, so its arms fold in.

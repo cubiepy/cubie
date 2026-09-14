@@ -995,7 +995,8 @@ class FIRKStep(ODEImplicitStep):
         return self.stage_count > 1
 
     def performance_defaults(self, hardware: Any = None) -> Dict[str, Any]:
-        """Share ``stage_increment`` of a Krylov solve while occupancy holds."""
+        """Share a Krylov solve's ``stage_increment`` while the GPU stays
+        full."""
         shared = not self.uses_direct_solver and self.shared_keeps_occupancy(
             self.stage_count * self.n_states, 1, hardware
         )

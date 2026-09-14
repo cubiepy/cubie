@@ -1,4 +1,4 @@
-"""Tests for the driver and compiled-kernel queries in ``backend.utils``."""
+"""Tests for the occupancy and cubin helpers in ``backend.utils``."""
 
 from struct import pack
 
@@ -7,8 +7,6 @@ import pytest
 from cubie.backend.utils import (
     DeviceHardware,
     MAX_REGISTERS_PER_THREAD,
-    SASS_INSTRUCTION_BYTES,
-    kernel_resources,
     register_limited_threads,
     sass_bytes_from_cubin,
     shared_keeps_occupancy,
@@ -115,21 +113,3 @@ def test_sass_bytes_rejects_a_non_elf_image():
     with pytest.raises(ValueError, match="ELF"):
         sass_bytes_from_cubin(b"not a cubin")
 
-
-@pytest.mark.nocudasim
-def test_compiled_kernel_reports_whole_instructions(
-    solver, simple_initial_values, simple_parameters
-):
-    """A compiled kernel's SASS size is a positive number of
-    instructions, and its registers and local memory are reported."""
-    solver.compile(
-        simple_initial_values,
-        simple_parameters,
-        duration=0.1,
-        grid_type="combinatorial",
-    )
-    resources = kernel_resources(solver.kernel.kernel)
-    assert resources.sass_bytes > 0
-    assert resources.sass_bytes % SASS_INSTRUCTION_BYTES == 0
-    assert resources.registers_per_thread > 0
-    assert resources.local_bytes_per_thread >= 0

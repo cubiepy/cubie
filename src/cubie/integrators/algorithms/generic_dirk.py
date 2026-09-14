@@ -1103,7 +1103,8 @@ class DIRKStep(ODEImplicitStep):
         return max(self.tableau.stage_count - 1, 0) * self.n_states
 
     def performance_defaults(self, hardware: Any = None) -> Dict[str, Any]:
-        """Share a spilling Krylov accumulator while half occupancy holds."""
+        """Share a spilling Krylov accumulator while the GPU stays at least
+        half full."""
         shared = (
             not self.uses_direct_solver
             and self.local_elements > MAX_REGISTERS_PER_THREAD

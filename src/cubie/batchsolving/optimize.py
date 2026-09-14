@@ -1,6 +1,5 @@
 """Backend of :meth:`cubie.Solver.optimize`: time unroll, placement and
-launch candidates on a solver copy and apply the fastest; also the
-untimed launch rules of ``auto_performance``.
+launch candidates on a solver copy and apply the fastest.
 
 Published Objects
 -----------------
@@ -9,9 +8,9 @@ Published Objects
 :class:`OptimizeResult`
     Every launch, the best one, and the applied settings.
 :func:`resident_blocks_within_l2`
-    The L2 residency rule.
+    Blocks per SM whose local memory fits in L2.
 :func:`default_launch`
-    The block size and residency of an untimed launch.
+    Block size and blocks per SM for a launch with no block size given.
 :func:`launch_candidates`
     Launches a kernel can time.
 :func:`apply_launch`
@@ -554,12 +553,7 @@ class _OptimizeRunner:
             )
 
 
-def performance_defaults(
-    given: Any,
-    step: Any,
-    system: Any,
-    hardware: Any = None,
-) -> Dict[str, Any]:
+def performance_defaults(given: Any, step: Any, system: Any) -> Dict[str, Any]:
     """Return the unroll and placement settings for a built solver.
 
     Parameters
@@ -570,8 +564,6 @@ def performance_defaults(
         The built algorithm step.
     system
         The system being solved.
-    hardware
-        Device hardware facts; queried from the device when omitted.
 
     Returns
     -------
@@ -580,8 +572,7 @@ def performance_defaults(
     """
     if given.auto_performance is False:
         return {}
-    if hardware is None:
-        hardware = device_hardware()
+    hardware = device_hardware()
     defaults = dict(step.performance_defaults(hardware))
     # A Newton loop that overflows the instruction cache stays rolled.
     if step.is_implicit and step.newton_solves_per_step > 0:

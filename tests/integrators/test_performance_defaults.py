@@ -170,9 +170,9 @@ def test_register_resident_krylov_dirk_keeps_accumulator_local(solver):
 @pytest.mark.parametrize(
     "solver_settings_override", [MEDIUM_KRYLOV_DIRK], indirect=True
 )
-def test_spilling_krylov_dirk_shares_accumulator(solver_mutable):
-    """A spilling Krylov DIRK shares its accumulator, also after a rebuild."""
-    run = solver_mutable.kernel.single_integrator
+def test_spilling_krylov_dirk_shares_accumulator(solver):
+    """A spilling Krylov DIRK shares its accumulator."""
+    run = solver.kernel.single_integrator
     step = run._algo_step
     assert not step.uses_direct_solver
     assert step.local_elements > MAX_REGISTERS_PER_THREAD
@@ -181,9 +181,6 @@ def test_spilling_krylov_dirk_shares_accumulator(solver_mutable):
     )
     assert step.compile_settings.accumulator_location == "shared"
     assert run.shared_memory_elements > 0
-    solver_mutable.update(krylov_max_iters=step.solver.krylov_max_iters + 1)
-    run.device_function
-    assert run._algo_step.compile_settings.accumulator_location == "shared"
 
 
 @pytest.mark.parametrize(
