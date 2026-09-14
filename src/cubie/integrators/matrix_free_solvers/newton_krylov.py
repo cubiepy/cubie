@@ -125,26 +125,6 @@ class NewtonKrylovConfig(MatrixFreeSolverConfig):
         default="local", validator=validators.in_(["local", "shared"])
     )
 
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return Newton-Krylov configuration as dictionary.
-
-        Returns
-        -------
-        dict
-            Configuration dictionary. Note: newton_atol and newton_rtol
-            are not included here; access them via solver.newton_atol
-            and solver.newton_rtol properties which delegate to the
-            norm factory.
-        """
-        return {
-            "newton_max_iters": self.max_iters,
-            "delta_location": self.delta_location,
-            "residual_location": self.residual_location,
-            "krylov_iters_local_location": self.krylov_iters_local_location,
-            "prev_theta_location": self.prev_theta_location,
-        }
-
 
 @define
 class NewtonKrylovCache(CUDADispatcherCache):
@@ -631,23 +611,3 @@ class NewtonKrylov(MatrixFreeSolver):
     def linear_correction_type(self) -> str:
         """Return correction type from nested linear solver."""
         return self.linear_solver.linear_correction_type
-
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return merged Newton and linear solver configuration.
-
-        Combines Newton-level settings from compile_settings with
-        linear solver settings from nested linear_solver instance,
-        plus tolerance arrays from the norm factory.
-
-        Returns
-        -------
-        dict
-            Merged configuration dictionary containing both Newton
-            parameters, linear solver parameters, and tolerance arrays.
-        """
-        combined = dict(self.linear_solver.settings_dict)
-        combined.update(self.compile_settings.settings_dict)
-        combined["newton_atol"] = self.newton_atol
-        combined["newton_rtol"] = self.newton_rtol
-        return combined

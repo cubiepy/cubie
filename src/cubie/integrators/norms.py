@@ -118,7 +118,7 @@ class ScaledNormConfig(MultipleInstanceCUDAFactoryConfig):
         """Require one tolerance per solver-vector entry."""
         if self.n_states != self.solver_width:
             raise ValueError(
-                "n must equal solver_width for a whole-vector norm; "
+                "n_states must equal solver_width for a whole-vector norm; "
                 "use a tiled norm config for stage-blocked tolerances"
             )
 
@@ -175,10 +175,10 @@ class FIRKCorrectionNormConfig(CorrectionNormConfig):
             )
 
     def _check_widths(self) -> None:
-        """Require whole stage blocks of ``n`` physical states."""
+        """Require whole stage blocks of ``n_states`` physical states."""
         if self.solver_width % self.n_states != 0:
             raise ValueError(
-                "solver_width must be a multiple of n"
+                "solver_width must be a multiple of n_states"
             )
 
     @property
@@ -339,10 +339,10 @@ class TiledScaledNormConfig(ScaledNormConfig):
     """
 
     def _check_widths(self) -> None:
-        """Require whole stage blocks of ``n`` physical states."""
+        """Require whole stage blocks of ``n_states`` physical states."""
         if self.solver_width % self.n_states != 0:
             raise ValueError(
-                "solver_width must be a multiple of n"
+                "solver_width must be a multiple of n_states"
             )
 
 

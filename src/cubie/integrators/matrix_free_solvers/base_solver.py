@@ -110,15 +110,17 @@ class MatrixFreeSolver(MultipleInstanceCUDAFactory):
         norm : ScaledNorm, optional
             Norm owned by the solver.
         **kwargs
-            Settings for the default norm.
+            Settings for the default norm; ``n_states`` defaults to
+            ``solver_width``.
         """
         self.solver_type = solver_type
         super().__init__(instance_label=solver_type)
+        n_states = kwargs.pop("n_states", solver_width)
         if norm is None:
             norm = ScaledNorm(
                 precision=precision,
                 solver_width=solver_width,
-                n_states=solver_width,
+                n_states=n_states,
                 instance_label=solver_type,
                 **kwargs,
             )

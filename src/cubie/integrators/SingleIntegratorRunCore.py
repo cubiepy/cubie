@@ -742,8 +742,6 @@ class SingleIntegratorRunCore(CUDAFactory):
                     "n_states": int(sizes.states),
                     "n_parameters": int(sizes.parameters),
                     "n_observables": int(sizes.observables),
-                    "n_states": int(sizes.states),
-                    "n_observables": int(sizes.observables),
                 }
             )
 

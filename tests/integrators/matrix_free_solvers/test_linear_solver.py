@@ -469,30 +469,22 @@ def test_linear_solver_config_no_tolerance_fields(precision):
     assert not hasattr(config, "krylov_tolerance")
 
 
-def test_linear_solver_config_settings_dict_excludes_tolerance_arrays(
-    precision,
-):
-    """Verify settings_dict does not include tolerance arrays."""
-    from cubie.integrators.matrix_free_solvers.linear_solver import (
-        MRLinearSolverConfig,
+def test_linear_solver_settings_dict_rebuilds_an_equal_solver(precision):
+    """settings_dict carries every key the constructor takes."""
+    solver = MRLinearSolver(
+        precision=precision,
+        solver_width=3,
+        krylov_max_iters=5,
+        linear_correction_type="steepest_descent",
+        preconditioned_vec_location="shared",
     )
-
-    config = MRLinearSolverConfig(
-        precision=precision, solver_width=3, instance_label="krylov"
-    )
-    settings = config.settings_dict
-
-    # Tolerance arrays should not be in settings_dict
-    assert "krylov_atol" not in settings
-    assert "krylov_rtol" not in settings
-
-    # Legacy tolerance should not be in settings_dict
-    assert "krylov_tolerance" not in settings
-
-    # Other expected settings should be present
-    assert "krylov_max_iters" in settings
-    assert "linear_correction_type" in settings
-    assert "preconditioned_vec_location" in settings
+    settings = solver.settings_dict
+    assert settings["krylov_max_iters"] == 5
+    assert settings["linear_correction_type"] == "steepest_descent"
+    assert settings["preconditioned_vec_location"] == "shared"
+    assert settings["instance_label"] == "krylov"
+    twin = MRLinearSolver(**settings)
+    assert twin.config_hash == solver.config_hash
     assert "temp_location" in settings
 
 

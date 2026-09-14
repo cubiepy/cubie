@@ -23,7 +23,7 @@ See Also
     Generates the device function this factory wraps.
 """
 
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Optional
 
 from attrs import field, frozen
 
@@ -59,13 +59,6 @@ class LUSolverConfig(LinearSolverBaseConfig):
     )
     # The direct solve ignores the incoming guess in ``x``.
     zero_initial_guess: bool = field(default=True, init=False)
-
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return direct solver configuration as dictionary."""
-        settings = super().settings_dict
-        settings["linear_correction_type"] = "lu"
-        return settings
 
 
 class LUSolver(LinearSolverBase):

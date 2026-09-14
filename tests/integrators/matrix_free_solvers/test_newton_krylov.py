@@ -281,30 +281,30 @@ def test_newton_krylov_config_no_tolerance_fields(precision):
     assert config.precision == precision
 
 
-def test_newton_krylov_config_settings_dict_excludes_tolerance_arrays(
-    precision,
-):
-    """Verify settings_dict does not include tolerance arrays."""
-    from cubie.integrators.matrix_free_solvers.newton_krylov import (
-        NewtonKrylovConfig,
+def test_newton_krylov_settings_dict_merges_the_linear_solver(precision):
+    """settings_dict carries the Newton fields and the linear solver's."""
+    linear_solver = MRLinearSolver(
+        precision=precision,
+        solver_width=3,
+        krylov_max_iters=4,
+        zero_initial_guess=True,
     )
-
-    config = NewtonKrylovConfig(precision=precision, solver_width=3)
-    settings = config.settings_dict
-
-    # Verify tolerance arrays are NOT in settings_dict
-    assert "newton_atol" not in settings
-    assert "newton_rtol" not in settings
-
-    # Verify legacy tolerance scalar is NOT in settings_dict
-    assert "newton_tolerance" not in settings
-
-    # Verify other expected keys ARE present
-    assert "newton_max_iters" in settings
-    assert "delta_location" in settings
-    assert "residual_location" in settings
-    assert "krylov_iters_local_location" in settings
-    assert "prev_theta_location" in settings
+    newton = NewtonKrylov(
+        precision=precision,
+        solver_width=3,
+        linear_solver=linear_solver,
+        newton_max_iters=7,
+        delta_location="shared",
+    )
+    settings = newton.settings_dict
+    assert settings["newton_max_iters"] == 7
+    assert settings["delta_location"] == "shared"
+    assert settings["residual_location"] == "local"
+    assert settings["krylov_iters_local_location"] == "local"
+    assert settings["prev_theta_location"] == "local"
+    assert settings["krylov_max_iters"] == 4
+    assert settings["linear_correction_type"] == "minimal_residual"
+    assert settings["instance_label"] == "newton"
 
 
 def test_newton_krylov_inherits_from_matrix_free_solver(precision):

@@ -26,7 +26,6 @@ See Also
 """
 
 from math import sqrt as math_sqrt
-from typing import Dict, Any
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
@@ -60,19 +59,6 @@ class MRLinearSolverConfig(IterativeLinearSolverConfig):
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return linear solver configuration as dictionary.
-
-        Returns
-        -------
-        dict
-            Configuration dictionary.
-        """
-        settings = super().settings_dict
-        settings["linear_correction_type"] = self.linear_correction_type
-        return settings
 
 
 class MRLinearSolver(IterativeLinearSolverBase):

@@ -444,13 +444,9 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         carried = current.settings_dict
         carried["linear_correction_type"] = new_type
+        carried["norm_reference"] = norm_reference
         replacement = self._construct_linear_solver(
-            precision=current.precision,
-            solver_width=current.solver_width,
-            norm=current.norm,
-            norm_reference=norm_reference,
-            instance_label=current.instance_label,
-            **carried,
+            norm=current.norm, **carried
         )
         buffer_registry.clear_parent(current)
         return replacement
@@ -943,20 +939,3 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """Return the maximum allowed Newton iterations."""
         val = getattr(self.solver, "newton_max_iters", None)
         return int(val) if val is not None else None
-
-    @property
-    def settings_dict(self) -> dict:
-        """Return the step's settings plus its solvers' step-level keys."""
-        settings = super().settings_dict
-        solvers = [self.solver]
-        if self.error_solver is not None:
-            solvers.append(self.error_solver)
-        for solver in solvers:
-            settings.update(
-                {
-                    key: value
-                    for key, value in solver.settings_dict.items()
-                    if key in self.settings_keys
-                }
-            )
-        return settings
