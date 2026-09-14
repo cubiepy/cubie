@@ -97,8 +97,8 @@ also differs by variant (see Generator variants): non-cached paths substitute
 ### The `_cubie_codegen_` reserved namespace (#373 and successors)
 User constants never bind a name at all — their values fold into the
 equations as literals before generation (the LU family also folds
-`beta`/`gamma`, keying its source hash on them via the role's
-`folded_args`). Every name the generators do bind — solver
+the request's `operator_beta`/`operator_gamma`, keying its source hash on them
+via the role's `folded_args`). Every name the generators do bind — solver
 scalings (`_cubie_codegen_beta`/`_cubie_codegen_gamma`), the scalar device arguments
 `_cubie_codegen_h`/`_cubie_codegen_a_ij`, factory locals (`_cubie_codegen_n`,
 `_cubie_codegen_order`, `_cubie_codegen_total_n`, ...), tableau metadata
@@ -110,8 +110,8 @@ that prefix, so a user symbol can never alias a generated binding (in either
 direction) at IR-merge time, factory scope, or device-body scope. When adding a
 generator, bind nothing outside this namespace except the template's positional
 argument names (`t` is parse-reserved and stays bare). Factory signatures
-expose `precision` (plus `order` for preconditioners); `beta`/`gamma` fold
-into the source as numeric literals and key the source hash through each
+expose `precision` (plus `order` for preconditioners); the request's
+`operator_beta`/`operator_gamma` fold into the source as numeric literals and key the source hash through each
 role's `folded_args`.
 
 ### Mass matrix & order

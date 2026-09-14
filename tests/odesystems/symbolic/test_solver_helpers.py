@@ -1241,7 +1241,7 @@ def test_solver_helper_preserves_colliding_constants(
     """Helper generation leaves beta/gamma constants untouched."""
 
     residual = system.get_solver_helper(
-        role="residual", beta=1.0, gamma=1.0
+        role="residual", operator_beta=1.0, operator_gamma=1.0
     ).device_function
     assert system.constants.values_array.dtype == np.dtype(precision)
     assert system.constants.values_dict["beta"] == precision(2.5)
@@ -1310,8 +1310,8 @@ def test_solver_helper_rebuilds_on_scaling_change(
     for beta, gamma in (first_scalings, second_scalings):
         residual = system.get_solver_helper(
             role="residual",
-            beta=beta,
-            gamma=gamma,
+            operator_beta=beta,
+            operator_gamma=gamma,
         ).device_function
         helpers.append(residual)
         kernel = residual_kernel(residual)
@@ -1352,8 +1352,8 @@ def test_neumann_helper_rebuilds_on_order_change(system):
     """
     first_kwargs = dict(
         role="neumann_preconditioner",
-        beta=1.0,
-        gamma=1.0,
+        operator_beta=1.0,
+        operator_gamma=1.0,
         preconditioner_order=1,
     )
     second_kwargs = dict(first_kwargs, preconditioner_order=2)
@@ -1429,7 +1429,9 @@ def test_helper_requests_reuse_members_without_touching_settings(system):
     settings_before = system.compile_settings
     hash_before = system.config_hash
 
-    scaled_kwargs = dict(role="linear_operator", beta=2.5, gamma=0.5)
+    scaled_kwargs = dict(
+        role="linear_operator", operator_beta=2.5, operator_gamma=0.5
+    )
     scaled = system.get_solver_helper(**scaled_kwargs)
     first = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
     second = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
@@ -2088,7 +2090,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
     assert torn.fn_hash != explicit.fn_hash
 
     jacobi_kwargs = dict(
-        role="jacobi_preconditioner", beta=1.0, gamma=1.0
+        role="jacobi_preconditioner", operator_beta=1.0, operator_gamma=1.0
     )
     jacobi_request = SolverHelperRequest(**jacobi_kwargs)
     assert helper_source_hash(
@@ -2311,7 +2313,7 @@ def test_cache_selection_changes_cached_source_hash(system):
         role="prepare_jac", jacobian_at="step"
     )
     plain_request = SolverHelperRequest(
-        role="linear_operator", beta=1.0, gamma=1.0
+        role="linear_operator", operator_beta=1.0, operator_gamma=1.0
     )
     equations = system._get_jvp_exprs()
     original = equations.cache_selection
@@ -2357,14 +2359,14 @@ def test_hh_cached_operator_matches_inline(
     cached_op = system.get_solver_helper(
         role="linear_operator",
         jacobian_at="step",
-        beta=1.0,
-        gamma=1.0,
+        operator_beta=1.0,
+        operator_gamma=1.0,
     ).device_function
     inline_op = system.get_solver_helper(
         role="linear_operator",
         jacobian_at="state",
-        beta=1.0,
-        gamma=1.0,
+        operator_beta=1.0,
+        operator_gamma=1.0,
     ).device_function
 
     kernel = system_operator_pair_kernel(
@@ -2425,8 +2427,8 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     jacobi = system.get_solver_helper(
         role="jacobi_preconditioner",
         jacobian_at="step",
-        beta=1.0,
-        gamma=1.0,
+        operator_beta=1.0,
+        operator_gamma=1.0,
     ).device_function
 
     kernel = system_cached_precond_kernel(prepare, jacobi, aux_count)
@@ -2555,12 +2557,14 @@ def test_illegal_role_variant_pairs_fail_at_construction(
 )
 def test_cached_variant_on_cache_invariant_role_serves_plain(system):
     """CACHED on a role without a Jacobian returns the PLAIN member."""
-    plain = system.get_solver_helper(role="residual", beta=1.0, gamma=1.0)
+    plain = system.get_solver_helper(
+        role="residual", operator_beta=1.0, operator_gamma=1.0
+    )
     cached = system.get_solver_helper(
         role="residual",
         jacobian_at="step",
-        beta=1.0,
-        gamma=1.0,
+        operator_beta=1.0,
+        operator_gamma=1.0,
     )
     assert cached is plain
     assert cached.prepare_jac is None
@@ -2576,8 +2580,8 @@ def test_cached_member_carries_prepare_companion(system):
     operator = system.get_solver_helper(
         role="linear_operator",
         jacobian_at="step",
-        beta=1.0,
-        gamma=1.0,
+        operator_beta=1.0,
+        operator_gamma=1.0,
     )
     direct = system.get_solver_helper(role="prepare_jac", jacobian_at="step")
     assert operator.prepare_jac is direct.device_function
@@ -2639,7 +2643,7 @@ def test_lu_solve_scaled_binding_matches_dense(
     beta = 0.8
     gamma = 0.6
     member = operator_system.get_solver_helper(
-        "lu_solve", beta=beta, gamma=gamma
+        "lu_solve", operator_beta=beta, operator_gamma=gamma
     )
     lu_solve = member.device_function
     factor_len = max(member.lu_nnz, 1)
@@ -2747,4 +2751,3 @@ def test_none_preconditioner_is_identity(operator_system, precision):
     out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
     assert np.all(out == v)
-

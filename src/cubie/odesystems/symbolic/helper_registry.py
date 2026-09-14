@@ -74,7 +74,7 @@ class LinearOperator(SolverHelperRole):
     name = "linear_operator"
     jacobian_carrying = True
     stacked_capable = True
-    folded_args = ("beta", "gamma", "a_ij")
+    folded_args = ("operator_beta", "operator_gamma", "a_ij")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -88,8 +88,8 @@ class LinearOperator(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
-            beta=request.beta,
-            gamma=request.gamma,
+            beta=request.operator_beta,
+            gamma=request.operator_gamma,
             a_ij=request.a_ij,
         )
 
@@ -101,7 +101,7 @@ class NeumannPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
-    folded_args = ("beta", "gamma", "a_ij")
+    folded_args = ("operator_beta", "operator_gamma", "a_ij")
     preconditioner_type_name = "neumann"
     default_preconditioner_order = 2
 
@@ -116,8 +116,8 @@ class NeumannPreconditioner(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
-            beta=request.beta,
-            gamma=request.gamma,
+            beta=request.operator_beta,
+            gamma=request.operator_gamma,
             a_ij=request.a_ij,
         )
 
@@ -139,7 +139,7 @@ class JacobiPreconditioner(SolverHelperRole):
     jacobian_carrying = True
     stacked_capable = True
     factory_args = ORDERED_FACTORY_ARGS
-    folded_args = ("beta", "gamma", "a_ij")
+    folded_args = ("operator_beta", "operator_gamma", "a_ij")
     preconditioner_type_name = "jacobi"
     default_preconditioner_order = 0
 
@@ -168,8 +168,8 @@ class JacobiPreconditioner(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
-            beta=request.beta,
-            gamma=request.gamma,
+            beta=request.operator_beta,
+            gamma=request.operator_gamma,
             a_ij=request.a_ij,
         )
 
@@ -204,7 +204,7 @@ class LuSolve(SolverHelperRole):
     stacked_capable = True
     prefactor_capable = True
     factory_args = SCALAR_FACTORY_ARGS
-    folded_args = ("beta", "gamma", "a_ij")
+    folded_args = ("operator_beta", "operator_gamma", "a_ij")
 
     @classmethod
     def uses_cache_selection(cls, variant):
@@ -219,8 +219,8 @@ class LuSolve(SolverHelperRole):
             "jacobian_at": "step",
             "prefactored": True,
             "stacked": request.stacked,
-            "beta": request.beta,
-            "gamma": request.gamma,
+            "operator_beta": request.operator_beta,
+            "operator_gamma": request.operator_gamma,
             "stage_coefficients": request.stage_coefficients,
             "stage_nodes": request.stage_nodes,
         }
@@ -237,8 +237,8 @@ class LuSolve(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
-            beta=request.beta,
-            gamma=request.gamma,
+            beta=request.operator_beta,
+            gamma=request.operator_gamma,
             a_ij=request.a_ij,
         )
         return code
@@ -255,7 +255,7 @@ class LuPrepareBlocks(SolverHelperRole):
     jacobian_carrying = True
     is_prepare_helper = True
     factory_args = SCALAR_FACTORY_ARGS
-    folded_args = ("beta", "gamma")
+    folded_args = ("operator_beta", "operator_gamma")
 
     @classmethod
     def legal_variants(cls):
@@ -281,8 +281,8 @@ class LuPrepareBlocks(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
-            beta=request.beta,
-            gamma=request.gamma,
+            beta=request.operator_beta,
+            gamma=request.operator_gamma,
         )
         return code
 
@@ -293,7 +293,7 @@ class LuSmoothingSolve(SolverHelperRole):
     name = "lu_smoothing_solve"
     jacobian_carrying = True
     factory_args = SCALAR_FACTORY_ARGS
-    folded_args = ("beta", "gamma")
+    folded_args = ("operator_beta", "operator_gamma")
 
     @classmethod
     def legal_variants(cls):
@@ -310,8 +310,8 @@ class LuSmoothingSolve(SolverHelperRole):
             "jacobian_at": "step",
             "prefactored": True,
             "stacked": True,
-            "beta": request.beta,
-            "gamma": request.gamma,
+            "operator_beta": request.operator_beta,
+            "operator_gamma": request.operator_gamma,
             "stage_coefficients": request.stage_coefficients,
             "stage_nodes": request.stage_nodes,
         }
@@ -326,8 +326,8 @@ class LuSmoothingSolve(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
-            beta=request.beta,
-            gamma=request.gamma,
+            beta=request.operator_beta,
+            gamma=request.operator_gamma,
         )
         return code
 
@@ -337,7 +337,7 @@ class Residual(SolverHelperRole):
 
     name = "residual"
     stacked_capable = True
-    folded_args = ("beta", "gamma", "a_ij")
+    folded_args = ("operator_beta", "operator_gamma", "a_ij")
 
     @classmethod
     def generate(cls, system, request, func_name):
@@ -350,8 +350,8 @@ class Residual(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
-            beta=request.beta,
-            gamma=request.gamma,
+            beta=request.operator_beta,
+            gamma=request.operator_gamma,
             a_ij=request.a_ij,
         )
 

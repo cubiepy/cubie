@@ -4,7 +4,8 @@ Published Classes
 -----------------
 :class:`ImplicitStepConfig`
     Configuration container extending :class:`BaseStepConfig` with
-    implicit-specific fields (beta, gamma, preconditioner order).
+    implicit-specific fields (operator_beta, operator_gamma,
+    preconditioner order).
 
 :class:`ODEImplicitStep`
     Abstract base for implicit algorithms. Owns a
@@ -110,10 +111,10 @@ class ImplicitStepConfig(BaseStepConfig):
 
     Parameters
     ----------
-    beta
-        Implicit integration coefficient applied to the stage derivative.
-    gamma
-        Implicit integration coefficient applied to the mass matrix product.
+    operator_beta
+        Stage-operator coefficient on the mass-matrix term.
+    operator_gamma
+        Stage-operator coefficient on the Jacobian term.
     preconditioner_order
         Number of series terms the preconditioner carries; order zero
         on ``'jacobi'`` is the plain diagonal solve. Unset, it takes
@@ -140,10 +141,10 @@ class ImplicitStepConfig(BaseStepConfig):
     system when generated through ``get_solver_helper_fn``.
     """
 
-    _beta: float = field(
+    _operator_beta: float = field(
         default=1.0, validator=inrangetype_validator(float, 0, 1)
     )
-    _gamma: float = field(
+    _operator_gamma: float = field(
         default=1.0, validator=inrangetype_validator(float, 0, 1)
     )
     _preconditioner_order: Optional[int] = field(
@@ -223,15 +224,14 @@ class ImplicitStepConfig(BaseStepConfig):
         ].default_preconditioner_order
 
     @property
-    def beta(self) -> float:
-        """Return the implicit integration beta coefficient."""
-        return self.precision(self._beta)
+    def operator_beta(self) -> float:
+        """Return the stage operator's mass-matrix coefficient."""
+        return self.precision(self._operator_beta)
 
     @property
-    def gamma(self) -> float:
-        """Return the implicit integration gamma coefficient."""
-        return self.precision(self._gamma)
-
+    def operator_gamma(self) -> float:
+        """Return the stage operator's Jacobian coefficient."""
+        return self.precision(self._operator_gamma)
 
 
 class ODEImplicitStep(BaseAlgorithmStep):
@@ -636,11 +636,13 @@ class ODEImplicitStep(BaseAlgorithmStep):
         config = self.compile_settings
         linear_config = self.linear_solver.compile_settings
         return {
-            "beta": float(config.beta),
-            "gamma": float(config.gamma),
+            "operator_beta": float(config.operator_beta),
+            "operator_gamma": float(config.operator_gamma),
             "preconditioner_order": config.preconditioner_order,
             "a_ij": self.baked_stage_diagonal,
-            "unroll_solver_element": linear_config.unroll.unroll_solver_element,
+            "unroll_solver_element": (
+                linear_config.unroll.unroll_solver_element
+            ),
             "unroll_other_small": linear_config.unroll.unroll_other_small,
         }
 
@@ -853,16 +855,16 @@ class ODEImplicitStep(BaseAlgorithmStep):
         return "newton_nonlinear_solver_fn"
 
     @property
-    def beta(self) -> float:
-        """Return the implicit integration beta coefficient."""
+    def operator_beta(self) -> float:
+        """Return the stage operator's mass-matrix coefficient."""
 
-        return self.compile_settings.beta
+        return self.compile_settings.operator_beta
 
     @property
-    def gamma(self) -> float:
-        """Return the implicit integration gamma coefficient."""
+    def operator_gamma(self) -> float:
+        """Return the stage operator's Jacobian coefficient."""
 
-        return self.compile_settings.gamma
+        return self.compile_settings.operator_gamma
 
     @property
     def preconditioner_order(self) -> int:

@@ -267,7 +267,7 @@ class DAEInitialiser(CUDAFactory):
             residual = get_fn("init_residual").device_function
             lu_result = get_fn("init_lu_solve")
         else:
-            request_kwargs = {"beta": 1.0, "gamma": 1.0}
+            request_kwargs = {"operator_beta": 1.0, "operator_gamma": 1.0}
             residual = get_fn(
                 "residual", **request_kwargs
             ).device_function

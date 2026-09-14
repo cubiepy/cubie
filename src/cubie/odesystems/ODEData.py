@@ -157,7 +157,8 @@ class ODEData(CUDAFactoryConfig):
     Notes
     -----
     This container holds only ODE-system state. Solver-helper request
-    parameters (beta, gamma, preconditioner order, stage tableaus)
+    parameters (operator_beta, operator_gamma, preconditioner order,
+    stage tableaus)
     belong to the requesting algorithm's compile settings and reach
     the system as immutable
     :class:`~cubie.odesystems.solver_helpers.SolverHelperRequest`

@@ -184,8 +184,10 @@ def test_implicit_step_settings_dict_includes_implicit_fields(
         preconditioner_order=1,
     )
     settings = step.settings_dict
-    assert settings['beta'] == step.compile_settings.beta
-    assert settings['gamma'] == step.compile_settings.gamma
+    assert settings['operator_beta'] == step.compile_settings.operator_beta
+    assert settings['operator_gamma'] == (
+        step.compile_settings.operator_gamma
+    )
     assert settings['n_states'] == 3
     assert 'M' not in settings
     assert (
@@ -220,15 +222,15 @@ def test_implicit_step_device_function_fields_are_tagged():
     } <= tagged
 
 
-def test_implicit_step_beta_gamma_properties(system, precision):
-    """beta and gamma forward to compile_settings."""
+def test_implicit_step_operator_properties(system, precision):
+    """The operator coefficients forward to compile_settings."""
     step = BackwardsEulerStep(
         get_solver_helper_fn=system.get_solver_helper,
         precision=precision,
         n_states=3,
     )
-    assert step.beta == step.compile_settings.beta
-    assert step.gamma == step.compile_settings.gamma
+    assert step.operator_beta == step.compile_settings.operator_beta
+    assert step.operator_gamma == step.compile_settings.operator_gamma
 
 
 def test_implicit_step_preconditioner_type_property(system, precision):

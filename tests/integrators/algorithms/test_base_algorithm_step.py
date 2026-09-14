@@ -85,8 +85,8 @@ def test_update_warns_on_valid_but_inapplicable_parameter(precision):
     """
     step = ExplicitEulerStep(precision=precision, n_states=2)
     with pytest.warns(UserWarning, match="not recognized by"):
-        recognised = step.update(beta=0.5)
-    assert "beta" in recognised
+        recognised = step.update(operator_beta=0.5)
+    assert "operator_beta" in recognised
 
 
 def test_update_raises_on_truly_invalid_parameter(precision):

@@ -84,8 +84,8 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "drivers_fn",
     "get_solver_helper_fn",
     "driver_derivative_fn",
-    "beta",
-    "gamma",
+    "operator_beta",
+    "operator_gamma",
     "preconditioner_order",
     "preconditioner_type",
     "krylov_atol",
@@ -189,12 +189,12 @@ components use this set to filter kwargs before forwarding.
    * - ``driver_derivative_fn``
      - Rosenbrock algorithms
      - Device function for driver time derivative.
-   * - ``beta``
+   * - ``operator_beta``
      - :class:`ImplicitStepConfig`
-     - Implicit integration coefficient on stage derivative.
-   * - ``gamma``
+     - Stage-operator coefficient on the mass-matrix term.
+   * - ``operator_gamma``
      - :class:`ImplicitStepConfig`
-     - Implicit integration coefficient on mass matrix product.
+     - Stage-operator coefficient on the Jacobian term.
    * - ``M``
      - :class:`ImplicitStepConfig`
      - Mass matrix for residual and Jacobian actions.
