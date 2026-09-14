@@ -1140,6 +1140,42 @@ class BufferRegistry:
 
         return plain_local(group) + group.persistent_local_buffer_size()
 
+    def declared_elements(self, parent: object) -> int:
+        """Return the elements the parent's buffers would take per thread
+        with every one a plain local array.
+
+        Counts every buffer registered on the parent and, recursively,
+        on the children recorded by :meth:`register_child`, wherever it
+        is placed; an alias counts as its own array, as it does in
+        local memory. Independent of the current placements.
+
+        Parameters
+        ----------
+        parent
+            Parent instance to query.
+
+        Returns
+        -------
+        int
+            Elements per thread with every buffer local.
+        """
+        group = self._groups.get(parent)
+        if group is None:
+            return 0
+
+        def all_local(current: BufferGroup) -> int:
+            total = sum(
+                max(current.entries[name].size, 1)
+                for name in current.relocatable_names()
+            )
+            for child in current.children.values():
+                child_group = self._groups.get(child)
+                if child_group is not None:
+                    total += all_local(child_group)
+            return total
+
+        return all_local(group)
+
     def get_allocator(
         self,
         name: str,

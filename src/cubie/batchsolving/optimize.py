@@ -1,5 +1,6 @@
 """Backend of :meth:`cubie.Solver.optimize`: time unroll, placement and
-launch candidates on a solver copy and apply the fastest.
+launch candidates on a solver copy and apply the fastest; the launch
+rules ``auto_performance`` applies without timing live here too.
 
 Published Objects
 -----------------
@@ -7,6 +8,10 @@ Published Objects
     One candidate's timings at one launch.
 :class:`OptimizeResult`
     Every launch, the best one, and the applied settings.
+:func:`resident_blocks_within_l2`
+    The L2 residency rule.
+:func:`default_launch`
+    The block size and residency of an untimed launch.
 :func:`launch_candidates`
     Launches a kernel can time.
 :func:`apply_launch`
@@ -26,9 +31,9 @@ from attrs import define
 from numpy import zeros as np_zeros
 
 from cubie.backend.utils import (
+    DeviceHardware,
     SASS_INSTRUCTION_BYTES,
     active_blocks_per_multiprocessor,
-    compile_kernel_specialization,
     device_hardware,
     kernel_resources,
 )
@@ -57,6 +62,49 @@ LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 
 SHARED_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for shared-memory kernels."""
+
+RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
+"""Fraction of L2 three or more resident blocks' local memory may fill.
+
+Empirical, not hardware-derived: in the placement landscape (PR 917)
+one block per SM beat two only where two blocks' local memory
+overflowed the whole L2; the two-thirds share above two blocks is the
+cut point fitted to the same records. The L2 size itself is read from
+the driver.
+"""
+
+RESIDENCY_CUT_MIN_FRAME_BYTES = 2048
+"""Local memory per thread below which residency is never cut.
+
+Empirical, not hardware-derived: on the RTX 4070 SUPER (48 MiB L2) and
+RTX 2060 SUPER (4 MiB L2) landscapes a residency cut only paid for
+kernels keeping 2 KiB or more of local memory per thread; cut launches
+of smaller frames ran 10 to 50% slower. Both cards agree on the floor
+although their L2 sizes differ twelvefold, so it is a property of the
+kernels' L2 traffic rather than of the cache.
+"""
+
+BUDGET_BLOCKSIZE = 64
+"""Block size the L2 rule counts resident threads at; the shape follows.
+
+A protocol choice, not hardware-derived: the residency landscapes were
+recorded at 64-thread blocks, so the rule's cut points are validated at
+that granularity. Counting the budget at a larger block leaves the rule
+one block to cut to and loses the cut entirely.
+"""
+
+LAUNCH_OCCUPANCY_TIE = 0.9
+"""Share of the most resident threads a larger block must keep to win.
+
+Empirical, not hardware-derived: for kernels over the instruction cache
+the largest block size won 52 and lost 13 of 259 equal-residency
+comparisons on the RTX 2060 SUPER and won 30, lost 13 of 179 on the
+RTX 4070 SUPER, but block sizes rarely fit the same thread count, so
+the band admits a larger block that keeps most of the threads. Its
+width is fitted to those records: with it the launch rule reproduces
+the recorded best launch on 69 of 70 RTX 4070 SUPER rows and 60 of 61
+RTX 2060 SUPER rows.
+"""
 
 
 def _label(settings: Dict[str, Any]) -> str:
@@ -162,6 +210,104 @@ class OptimizeResult:
         return "\n".join(lines)
 
 
+def resident_blocks_within_l2(
+    frame: int, blocksize: int, natural: int, hardware: DeviceHardware
+) -> int:
+    """Return the most blocks per SM whose threads' local memory fits
+    in L2.
+
+    Parameters
+    ----------
+    frame
+        Local memory per thread in bytes.
+    blocksize
+        Threads per block.
+    natural
+        Blocks per SM the driver fits at this launch shape.
+    hardware
+        The device's L2 size and SM count.
+
+    Returns
+    -------
+    int
+        The cut block count; ``natural`` for a frame under
+        :data:`RESIDENCY_CUT_MIN_FRAME_BYTES` or when no count fits.
+    """
+    if frame < RESIDENCY_CUT_MIN_FRAME_BYTES:
+        return natural
+    l2_bytes = hardware.l2_cache_bytes
+    footprint = frame * blocksize * hardware.multiprocessor_count
+
+    def budget(count):
+        # Two blocks may fill the whole L2; more share two-thirds.
+        if count == 2:
+            return l2_bytes
+        return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
+
+    blocks = natural
+    while blocks > 1 and footprint * blocks > budget(blocks):
+        blocks -= 1
+    if footprint * blocks > budget(blocks):
+        return natural
+    return blocks
+
+
+def default_launch(
+    shapes: Dict[int, int],
+    frame: int,
+    sass_bytes: int,
+    hardware: DeviceHardware,
+) -> Tuple[int, int]:
+    """Return the ``(blocksize, resident_blocks)`` of an untimed launch.
+
+    Parameters
+    ----------
+    shapes
+        Blocks per SM the driver fits at each launchable block size.
+    frame
+        Local memory per thread in bytes.
+    sass_bytes
+        Machine-code size of the kernel.
+    hardware
+        The device's L2 size, SM count and instruction cache.
+
+    Returns
+    -------
+    tuple[int, int]
+        The block size and blocks per SM to launch.
+    """
+    # How many threads per SM the L2 rule lets stay resident, counted
+    # at BUDGET_BLOCKSIZE; None leaves every block size at its own count.
+    budget = None
+    if BUDGET_BLOCKSIZE in shapes:
+        blocks = resident_blocks_within_l2(
+            frame, BUDGET_BLOCKSIZE, shapes[BUDGET_BLOCKSIZE], hardware
+        )
+        if blocks < shapes[BUDGET_BLOCKSIZE]:
+            budget = BUDGET_BLOCKSIZE * blocks
+    # Every block size within the budget, at its own count or cut to it;
+    # a block size that cannot hold the budget in whole blocks is out.
+    launches = []
+    for blocksize, blocks in shapes.items():
+        if budget is None or budget >= blocksize * blocks:
+            launches.append((blocksize, blocks))
+        elif budget % blocksize == 0:
+            launches.append((blocksize, budget // blocksize))
+    most = max(size * blocks for size, blocks in launches)
+    # A kernel too big for the instruction cache takes the largest
+    # block size keeping most of the threads; any other kernel takes
+    # the most threads, the smaller block size on a tie.
+    if sass_bytes > hardware.instruction_cache_bytes:
+        fitting = [
+            launch for launch in launches
+            if launch[0] * launch[1] >= LAUNCH_OCCUPANCY_TIE * most
+        ]
+        return max(fitting, key=lambda launch: launch[0])
+    return min(
+        launches, key=lambda launch: (-launch[0] * launch[1], launch[0])
+    )
+
+
 def launch_candidates(
     kernel: Any, blocksizes: Optional[Sequence[int]] = None
 ) -> Tuple[Tuple[int, Optional[int]], ...]:
@@ -187,31 +333,13 @@ def launch_candidates(
             if kernel.shared_memory_bytes > 0
             else LOCAL_LAUNCH_BLOCKSIZES
         )
-    runs = kernel.run_params[0].runs
-    pad = 4 if kernel.shared_memory_needs_padding else 0
-    padded_bytes = kernel.shared_memory_bytes + pad
-    dispatcher = kernel.kernel
-    compile_kernel_specialization(
-        dispatcher, kernel._kernel_launch_args(kernel.run_params[0])
-    )
-    frame = kernel_resources(dispatcher).local_bytes_per_thread
+    shapes = kernel.launchable_shapes(blocksizes)
+    frame = kernel_resources(kernel.kernel).local_bytes_per_thread
     cells = []
-    for blocksize in blocksizes:
-        actual, dynamic_sharedmem = kernel.limit_blocksize(
-            blocksize,
-            int(padded_bytes * min(runs, blocksize)),
-            padded_bytes,
-            runs,
-        )
-        # A block size the shared footprint cannot launch is skipped.
-        if actual != blocksize:
-            continue
+    for blocksize, (_, natural) in shapes.items():
         cells.append((blocksize, None))
         if frame == 0:
             continue
-        natural = active_blocks_per_multiprocessor(
-            dispatcher, blocksize, max(4, dynamic_sharedmem)
-        )
         for cut in (1, 2):
             if natural - cut >= 1:
                 cells.append((blocksize, natural - cut))

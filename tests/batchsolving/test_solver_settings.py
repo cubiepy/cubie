@@ -8,7 +8,9 @@ import pytest
 from attrs import evolve, fields, fields_dict
 
 from cubie.array_interpolator import ALL_INTERPOLATOR_PARAMETERS
+from cubie.backend.utils import device_hardware
 from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
+from cubie.batchsolving.optimize import performance_defaults
 from cubie.batchsolving.resolve_defaults import (
     resolve,
     resolve_inner_tolerances,
@@ -21,7 +23,11 @@ from cubie.batchsolving.solver_settings import (
     SolverSettings,
 )
 from cubie.batchsolving.SystemInterface import SystemInterface
-from cubie.CUDAFactory import ALL_JIT_PARAMETERS, ALL_UNROLL_PARAMETERS
+from cubie.CUDAFactory import (
+    ALL_JIT_PARAMETERS,
+    ALL_UNROLL_PARAMETERS,
+    UnrollChoice,
+)
 from cubie.integrators.algorithms import DIRK_TABLEAU_REGISTRY
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
@@ -44,6 +50,7 @@ from cubie.outputhandling.output_functions import (
 )
 from cubie.time_logger import default_timelogger
 from tests._utils import (
+    ALGORITHM_CHAIN_SETS,
     LARGE_DIRK,
     SUMMARY_ONLY_NO_TIMING,
     TORN_NO_OBSERVABLES,
@@ -803,6 +810,32 @@ def test_newton_rtol_inversion_warns(system, solver_settings, driver_settings):
         )
     built.close()
     assert not [w for w in caught if "newton_rtol" in str(w.message)]
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALGORITHM_CHAIN_SETS["dirk"]], indirect=True
+)
+def test_resolve_performance_derives_only_the_keys_not_given(solver, system):
+    """The step's placement and the Newton-exit unrolling are derived
+    for the keys the user left unset; a given key is never derived and
+    ``auto_performance=False`` derives nothing."""
+    step = solver.kernel.single_integrator._algo_step
+    hardware = device_hardware()
+    free = _given(algorithm="dirk")
+    assert performance_defaults(free, step, system, hardware) == {
+        "accumulator_location": "local",
+        "unroll_newton_exits": UnrollChoice.FULL,
+    }
+    placed = _given(algorithm="dirk", accumulator_location="shared")
+    assert performance_defaults(placed, step, system, hardware) == {
+        "unroll_newton_exits": UnrollChoice.FULL,
+    }
+    unrolled = _given(algorithm="dirk", unroll_newton_exits=(True, None))
+    assert performance_defaults(unrolled, step, system, hardware) == {
+        "accumulator_location": "local",
+    }
+    off = _given(algorithm="dirk", auto_performance=False)
+    assert performance_defaults(off, step, system, hardware) == {}
 
 
 @pytest.mark.parametrize(

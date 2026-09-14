@@ -36,6 +36,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
@@ -57,11 +58,16 @@ from attrs import define, field, evolve
 from cubie.odesystems import SymbolicODE
 from cubie.backend.utils import (
     LAUNCH_BLOCKSIZES,
+    SHARED_SKEW_BYTES,
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
     device_hardware,
     kernel_resources,
     max_shared_memory_per_block,
+)
+from cubie.batchsolving.optimize import (
+    default_launch,
+    resident_blocks_within_l2,
 )
 from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cubie_cache import CUBIECache
@@ -270,18 +276,6 @@ class BatchSolverCache(CUDADispatcherCache):
     time_domain_legend: Dict[int, str] = field(factory=dict)
     summaries_legend: Dict[int, str] = field(factory=dict)
 
-
-RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
-"""Fraction of L2 three or more resident blocks' local memory may fill."""
-
-RESIDENCY_CUT_MIN_FRAME_BYTES = 2048
-"""Local memory per thread below which residency is never cut."""
-
-BUDGET_BLOCKSIZE = 64
-"""Block size the L2 rule counts resident threads at; the shape follows."""
-
-LAUNCH_OCCUPANCY_TIE = 0.9
-"""Share of the most resident threads a larger block must keep to win."""
 
 DYNAMIC_SHARED_PAD_STEP = 256
 """Bytes the residency pad steps by."""
@@ -921,7 +915,7 @@ class BatchSolverKernel(CUDAFactory):
     def _launch_shape(self, blocksize: int, runs: int) -> tuple[int, int]:
         """Return the block size (halved until its shared footprint fits)
         and dynamic shared bytes of a launch."""
-        pad = 4 if self.shared_memory_needs_padding else 0
+        pad = SHARED_SKEW_BYTES if self.shared_memory_needs_padding else 0
         padded_bytes = self.shared_memory_bytes + pad
         blocksize, dynamic_sharedmem = self.limit_blocksize(
             blocksize,
@@ -941,6 +935,23 @@ class BatchSolverKernel(CUDAFactory):
         return active_blocks_per_multiprocessor(
             dispatcher, blocksize, dynamic_sharedmem
         )
+
+    def launchable_shapes(
+        self, blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES
+    ) -> Dict[int, Tuple[int, int]]:
+        """Return the dynamic shared bytes and blocks per SM the driver
+        fits at each of ``blocksizes`` the shared footprint launches whole,
+        for the current batch."""
+        runs = self.run_params[0].runs
+        shapes = {}
+        for blocksize in blocksizes:
+            actual, dynamic = self._launch_shape(blocksize, runs)
+            if actual != blocksize:
+                continue
+            blocks = self._natural_blocks(blocksize, dynamic)
+            if blocks > 0:
+                shapes[blocksize] = (dynamic, blocks)
+        return shapes
 
     def _default_launch(self, runs: int) -> tuple[int, Optional[int]]:
         """Return the block size and resident blocks per SM of a launch
@@ -963,49 +974,19 @@ class BatchSolverKernel(CUDAFactory):
         chosen = launches_by_runs.get(runs)
         if chosen is not None:
             return chosen
-        # How many blocks each block size fits per SM on its own.
-        natural = {}
-        for candidate in LAUNCH_BLOCKSIZES:
-            actual, dynamic = self._launch_shape(candidate, runs)
-            if actual != candidate:
-                continue
-            blocks = self._natural_blocks(candidate, dynamic)
-            if blocks > 0:
-                natural[candidate] = blocks
-        if not natural:
+        shapes = {
+            blocksize: blocks
+            for blocksize, (_, blocks) in self.launchable_shapes().items()
+        }
+        if not shapes:
             return DEFAULT_BLOCKSIZE, None
-        # How many threads per SM the L2 rule lets stay resident, counted
-        # at 64-thread blocks; None leaves every block size at its own count.
-        budget = None
-        if BUDGET_BLOCKSIZE in natural:
-            blocks = self._resident_blocks_within_l2(
-                self.kernel, BUDGET_BLOCKSIZE, natural[BUDGET_BLOCKSIZE]
-            )
-            if blocks < natural[BUDGET_BLOCKSIZE]:
-                budget = BUDGET_BLOCKSIZE * blocks
-        # Every block size within the budget, at its own count or cut to it.
-        launches = []
-        for candidate, blocks in natural.items():
-            if budget is None or budget >= candidate * blocks:
-                launches.append((candidate, blocks))
-            elif budget % candidate == 0:
-                launches.append((candidate, budget // candidate))
-        most = max(size * blocks for size, blocks in launches)
-        # A kernel too big for the instruction cache takes the largest
-        # block size keeping most of the threads; any other kernel takes
-        # the most threads, the smaller block size on a tie.
-        sass = kernel_resources(self.kernel).sass_bytes
-        if sass > device_hardware().instruction_cache_bytes:
-            fitting = [
-                launch for launch in launches
-                if launch[0] * launch[1] >= LAUNCH_OCCUPANCY_TIE * most
-            ]
-            chosen = max(fitting, key=lambda launch: launch[0])
-        else:
-            chosen = min(
-                launches,
-                key=lambda launch: (-launch[0] * launch[1], launch[0]),
-            )
+        resources = kernel_resources(self.kernel)
+        chosen = default_launch(
+            shapes,
+            resources.local_bytes_per_thread,
+            resources.sass_bytes,
+            device_hardware(),
+        )
         launches_by_runs[runs] = chosen
         return chosen
 
@@ -1020,40 +1001,17 @@ class BatchSolverKernel(CUDAFactory):
         natural = self._natural_blocks(blocksize, dynamic_sharedmem)
         dispatcher = self.kernel
         if blocks is None:
-            blocks = self._resident_blocks_within_l2(
-                dispatcher, blocksize, natural
+            blocks = resident_blocks_within_l2(
+                kernel_resources(dispatcher).local_bytes_per_thread,
+                blocksize,
+                natural,
+                device_hardware(),
             )
         if blocks >= natural:
             return blocksize, dynamic_sharedmem
         return blocksize, self._dynamic_shared_for_blocks(
             dispatcher, blocksize, dynamic_sharedmem, blocks
         )
-
-    @staticmethod
-    def _resident_blocks_within_l2(
-        dispatcher: Any, blocksize: int, natural: int
-    ) -> int:
-        """Return the most blocks per SM whose threads' local memory fits in
-        L2; ``natural`` for small local memory or when no count fits."""
-        frame = kernel_resources(dispatcher).local_bytes_per_thread
-        if frame < RESIDENCY_CUT_MIN_FRAME_BYTES:
-            return natural
-        hardware = device_hardware()
-        l2_bytes = hardware.l2_cache_bytes
-        footprint = frame * blocksize * hardware.multiprocessor_count
-
-        def budget(count):
-            # Two blocks may fill the whole L2; more share two-thirds.
-            if count == 2:
-                return l2_bytes
-            return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
-
-        blocks = natural
-        while blocks > 1 and footprint * blocks > budget(blocks):
-            blocks -= 1
-        if footprint * blocks > budget(blocks):
-            return natural
-        return blocks
 
     @staticmethod
     def _dynamic_shared_for_blocks(
