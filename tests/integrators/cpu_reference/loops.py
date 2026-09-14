@@ -5,9 +5,6 @@ from typing import Any, Mapping, Optional, Sequence, Union
 import numpy as np
 
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
-from cubie.integrators.loops.ode_loop_config import (
-    MISSING_SAMPLE_INTERVAL_MESSAGE,
-)
 
 from .algorithms import get_ref_stepper
 from .cpu_ode_system import CPUODESystem
@@ -116,7 +113,7 @@ def run_reference_loop(
         summarise_every = duration
         sample_summaries_every = duration
     elif sample_summaries_every is None:
-        raise ValueError(MISSING_SAMPLE_INTERVAL_MESSAGE)
+        raise ValueError("summaries need sample_summaries_every")
     elif summarise_last:
         summarise_every = duration
     summarise_every = precision(summarise_every)
@@ -187,7 +184,7 @@ def run_reference_loop(
     save_time = output_functions.save_time
     max_save_samples = _event_count(duration, save_every, precision) + 1
 
-    # A whole-run window holds every sample.
+    # With no window the one summary holds every sample.
     if summarise:
         max_summary_samples = _event_count(
             duration, sample_summaries_every, precision

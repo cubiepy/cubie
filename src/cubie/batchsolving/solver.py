@@ -1391,7 +1391,7 @@ class Solver:
 
     @property
     def summarise_every(self) -> Optional[float]:
-        """Return the summary window; ``None`` is one over the run."""
+        """Return the summary window; ``None`` summarises once at the end."""
         return self.effective.summarise_every
 
     @property

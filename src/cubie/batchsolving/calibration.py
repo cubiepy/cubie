@@ -751,6 +751,9 @@ class _CalibrationRunner:
                 solver = None
                 try:
                     solver = self._build_solver(spec)
+                    self._trials = _usable_trials(
+                        solver, self._trials, self._duration, self._settling
+                    )
                     # Compile overlaps solves queued on the stream.
                     self._compile(solver)
                     token = self._launch(solver, *self._trials[0])
@@ -992,6 +995,31 @@ def _trial_durations(
         if not trials or trials[-1] != trial:
             trials.append(trial)
     return tuple(trials)
+
+
+def _usable_trials(
+    solver: Any,
+    trials: Tuple[Tuple[float, float], ...],
+    duration: float,
+    settling_time: float,
+) -> Tuple[Tuple[float, float], ...]:
+    """Drop leading trials too short for the summary sample interval.
+
+    The full duration stands in when no trial fits.
+    """
+    usable = list(trials)
+    while usable:
+        try:
+            solver.update(duration=usable[0][0], silent=True)
+        except ValueError as error:
+            if "sample_summaries_every" not in str(error):
+                raise
+            usable.pop(0)
+        else:
+            break
+    if not usable:
+        usable.append((float(duration), float(settling_time)))
+    return tuple(usable)
 
 
 def run_calibration(

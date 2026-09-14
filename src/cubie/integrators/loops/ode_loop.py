@@ -117,7 +117,7 @@ or to :meth:`IVPLoop.update`.  Parent components use this set to filter
      - Interval between accepted state saves.
    * - ``summarise_every``
      - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`
-     - Summary window length; ``None`` is one window over the run.
+     - Summary window length; ``None`` writes one summary at the end.
    * - ``sample_summaries_every``
      - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`
      - Interval between summary samples.
@@ -135,7 +135,7 @@ or to :meth:`IVPLoop.update`.  Parent components use this set to filter
      - Enable periodic state saving.
    * - ``summarise_last``
      - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`
-     - Write one summary over the whole run at its end.
+     - Write one summary at the end of the run.
    * - ``summarise_regularly``
      - :class:`~cubie.integrators.loops.ode_loop_config.ODELoopConfig`
      - Write a summary at every ``summarise_every`` window.
@@ -173,9 +173,10 @@ class IVPLoop(CUDAFactory):
     save_every
         Save interval; ``None`` saves the final state only.
     summarise_every
-        Summary window; ``None`` is one window over the run.
+        Summary window; ``None`` writes one summary at the end of the run.
     sample_summaries_every
-        Summary sample interval; an integer divisor of ``summarise_every``.
+        Interval between summary metric updates. Must be an integer divisor
+        of ``summarise_every``.
     save_state_fn
         Device function that writes state and observable snapshots.
     update_summaries_fn
@@ -254,10 +255,11 @@ class IVPLoop(CUDAFactory):
         save_every
             Save interval; ``None`` saves the final state only.
         summarise_every
-            Summary window; ``None`` is one window over the run.
+            Summary window; ``None`` writes one summary at the end of the
+            run.
         sample_summaries_every
-            Summary sample interval; an integer divisor of
-            ``summarise_every``.
+            Interval between summary metric updates. Must be an integer divisor
+            of ``summarise_every``.
         save_state_fn
             Device function that writes state and observable snapshots.
         update_summaries_fn
@@ -484,18 +486,12 @@ class IVPLoop(CUDAFactory):
         save_every = config.save_every
         sample_summaries_every = config.sample_summaries_every
         samples_per_summary = int32(config.samples_per_summary)
-        # Divisor of the t0 reset call; never zero.
-        reset_samples = int32(max(config.samples_per_summary, 1))
 
         # Boolean control-flow constants
         save_last = config.save_last
         save_regularly = config.save_regularly
         summarise_last = config.summarise_last
         summarise_regularly = config.summarise_regularly
-        # Summary samples run on their grid under either summary mode.
-        summarise_scheduled = summarise_regularly or summarise_last
-        # Either final event lands the last step exactly on t_end.
-        end_on_t_end = save_last or summarise_last
 
         # Loop sizes from config (sizes also used for iteration bounds)
         n_states = int32(config.n_states)
@@ -706,7 +702,7 @@ class IVPLoop(CUDAFactory):
                     next_save = precision(next_save + save_every)
                     if fixed_mode:
                         next_save64 = float64(next_save)
-                if summarise_scheduled:
+                if summarise:
                     next_update_summary = precision(
                         sample_summaries_every + next_update_summary
                     )
@@ -726,7 +722,8 @@ class IVPLoop(CUDAFactory):
                 )
                 save_idx += int32(1)
 
-                # Call save_summaries only to reset buffer values
+                # Call save_summaries only to reset buffer values; the
+                # divisor is irrelevant here.
                 if summarise:
                     statesumm_idx = summary_idx * summarise_state_bool
                     obsumm_idx = summary_idx * summarise_obs_bool
@@ -735,7 +732,7 @@ class IVPLoop(CUDAFactory):
                         observable_summary_buffer,
                         state_summaries_output[statesumm_idx, :],
                         observable_summaries_output[obsumm_idx, :],
-                        reset_samples,
+                        int32(1),
                     )
 
             status = int32(success | init_status)
@@ -766,14 +763,13 @@ class IVPLoop(CUDAFactory):
                 # ----------------------------------------------------------- #
                 #               Events due - end, update, save                #
                 # ----------------------------------------------------------- #
-                # Constant flags let Numba drop dead branches.
-                if save_regularly or summarise_scheduled:
+                if save_regularly or summarise:
                     # Loop continues until every schedule's count is met.
                     finished = True
                     if save_regularly:
                         save_finished = bool_(save_idx >= save_count)
                         finished &= save_finished
-                    if summarise_scheduled:
+                    if summarise:
                         summary_finished = bool_(
                             update_idx >= summary_count
                         )
@@ -784,8 +780,9 @@ class IVPLoop(CUDAFactory):
                     # save_last window below.
                     finished = bool_(t_next >= t_end)
 
-                if end_on_t_end:
-                    # at_end marks the last step before t_end.
+                if save_last or summarise_last:
+                    # Schedules done short of t_end: one more step lands
+                    # on t_end.
                     at_end = bool_(t_prec < t_end) & finished
                     finished = finished & ~at_end
 
@@ -804,7 +801,7 @@ class IVPLoop(CUDAFactory):
                     else:
                         do_save = False
 
-                    if summarise_scheduled:
+                    if summarise:
                         do_update_summary = (
                             bool_(t_next >= next_update_summary)
                             & ~summary_finished
@@ -812,14 +809,8 @@ class IVPLoop(CUDAFactory):
                     else:
                         do_update_summary = False
 
-                    if save_last:
-                        do_save |= at_end
-                    if summarise_last:
-                        do_final_summary = at_end
-                    else:
-                        do_final_summary = False
-
-                    # Shorten the step to the nearest due event.
+                    # Shorten the step to the nearest due event; the end
+                    # step is an event at t_end.
                     dt_eff = dt_raw
                     truncated = False
                     # Fixed mode starts the event and its f64 copy at t_end.
@@ -827,7 +818,7 @@ class IVPLoop(CUDAFactory):
                         next_event = t_end
                         next_event64 = t_end64
                     # If an event is due
-                    if do_save or do_update_summary:
+                    if do_save or do_update_summary or at_end:
                         # Adaptive mode starts the event at t_end only here.
                         if not fixed_mode:
                             next_event = t_end
@@ -842,7 +833,7 @@ class IVPLoop(CUDAFactory):
                                     next_event64,
                                 )
                         # On a summary event, the same
-                        if do_update_summary and summarise_scheduled:
+                        if do_update_summary and summarise:
                             next_event = fmin(
                                 next_event, next_update_summary
                             )
@@ -856,6 +847,18 @@ class IVPLoop(CUDAFactory):
                         gap = precision(next_event - t_prec)
                         dt_eff = fmin(gap, dt_raw)
                         truncated = bool_(dt_eff != dt_raw)
+                        if save_last or summarise_last:
+                            # A due event on t_end makes this the end step.
+                            at_end |= bool_(next_event == t_end)
+
+                    if save_last:
+                        # Save the final state on the end step.
+                        do_save |= at_end
+                    if summarise_last:
+                        # Write the one summary on the end step.
+                        do_final_summary = at_end
+                    else:
+                        do_final_summary = False
 
                     # An unclamped step ends at t_next.
                     t_proposal = t_next64
@@ -871,7 +874,7 @@ class IVPLoop(CUDAFactory):
                             t_proposal = t + float64(dt_eff)
                             t_prec_proposal = narrow_time(t_proposal)
                     # Land the final at_end step exactly on t_end.
-                    if end_on_t_end:
+                    if save_last or summarise_last:
                         t_prec_proposal = selp(
                             at_end, t_end, t_prec_proposal
                         )
@@ -1065,7 +1068,7 @@ class IVPLoop(CUDAFactory):
 
                     if do_update_summary:
                         # Advance the summary schedule the same way.
-                        if summarise_scheduled:
+                        if summarise:
                             next_update_summary = fmin(
                                 next_update_summary + sample_summaries_every,
                                 t_end,
@@ -1104,7 +1107,7 @@ class IVPLoop(CUDAFactory):
                                 summary_idx += int32(1)
 
                     if do_final_summary:
-                        # One window over the run: every sample so far.
+                        # The one summary of every sample in the run.
                         statesumm_idx = summary_idx * summarise_state_bool
                         obssumm_idx = summary_idx * summarise_obs_bool
                         save_summaries(

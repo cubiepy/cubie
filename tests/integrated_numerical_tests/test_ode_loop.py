@@ -13,6 +13,7 @@ from tests._utils import (
     ALGORITHM_CHAIN_CASES,
     ALGORITHM_CHAIN_SETS,
     MIXED_OUTPUTS_LAST,
+    MIXED_OUTPUTS_WINDOWED,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
     TINY_DT_ADAPTIVE_CN,
@@ -308,6 +309,13 @@ def test_final_summary(
         rtol=tolerance.rel_loose,
         atol=tolerance.abs_loose,
     )
+    assert device_loop_outputs.state.shape[0] == 2
+    np.testing.assert_allclose(
+        device_loop_outputs.state,
+        cpu_loop_outputs["state"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
 
     final_summary = state_summaries[0]
     assert not np.isnan(final_summary).any(), (
@@ -315,18 +323,32 @@ def test_final_summary(
     )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [MIXED_OUTPUTS_WINDOWED],
+    indirect=True,
+)
 def test_summarise_every(
     device_loop_outputs,
-    precision,
+    cpu_loop_outputs,
+    tolerance,
 ):
-    """A set window writes one row per window and none at the end."""
+    """A set window writes one row per window and the final save lands."""
     state_summaries = device_loop_outputs.state_summaries
 
-    assert state_summaries is not None, (
-        "State summaries should be collected"
+    assert state_summaries.shape[0] == 4
+    np.testing.assert_allclose(
+        state_summaries,
+        cpu_loop_outputs["state_summaries"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
     )
-    assert state_summaries.shape[0] >= 3, (
-        "Multiple summaries expected"
+    assert device_loop_outputs.state.shape[0] == 2
+    np.testing.assert_allclose(
+        device_loop_outputs.state,
+        cpu_loop_outputs["state"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
     )
 
     for i in range(min(4, state_summaries.shape[0])):

@@ -332,7 +332,7 @@ class TestTimingParameterValidation:
         self, system, precision, driver_array, solver_mutable,
         driver_settings
     ):
-        """A whole-run summary needs one sample inside the run."""
+        """The summary at the end needs one sample inside the run."""
         inits = np.ones((3, 1), dtype=precision)
         params = np.ones((3, 1), dtype=precision)
 

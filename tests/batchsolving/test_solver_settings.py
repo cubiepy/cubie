@@ -453,7 +453,7 @@ def test_given_window_summarises_regularly():
 
 
 def test_unset_window_summarises_last():
-    """An unset window is one summary over the run at its end."""
+    """An unset window is one summary at the end of the run."""
     timing = resolve_loop_timing(None, None, 0.05, False, True)
     assert timing["summarise_every"] is None
     assert timing["sample_summaries_every"] == 0.05
@@ -758,7 +758,7 @@ def test_memory_manager_cannot_change_on_a_live_solver(solver_mutable):
 def test_unset_window_keeps_the_build_across_durations(
     solver_mutable, batch_input_arrays, driver_settings
 ):
-    """One whole-run summary per solve, whatever the duration."""
+    """One summary at the end per solve, whatever the duration."""
     initial_values, parameters = batch_input_arrays
     first = solver_mutable.solve(
         initial_values=initial_values,

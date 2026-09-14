@@ -103,7 +103,7 @@ STATE_OBS_NO_TIMING = {
     "sample_summaries_every": None,
 }
 
-# Summary-only outputs with no window: one summary over the run.
+# Summary-only outputs with no window: one summary at the end.
 SUMMARY_ONLY_LAST = {
     "output_types": ["mean"],
     "save_every": None,
@@ -2607,14 +2607,21 @@ WARMUP_SAVE_BOUNDARY = {
     "save_every": 0.1,
 }
 
-# Final save and one whole-run summary sampled every step.
+# Final save and one summary at the end, sampled every step on a grid
+# that lands exactly on t_end in float32.
 MIXED_OUTPUTS_LAST = {
     "precision": np.float32,
-    "duration": 0.1,
+    "duration": 1.0,
     "output_types": ["state", "time", "mean"],
     "algorithm": "euler",
-    "dt": 0.01,
+    "dt": 0.125,
     "save_every": None,
     "summarise_every": None,
-    "sample_summaries_every": 0.01,
+    "sample_summaries_every": 0.125,
+}
+
+# Final save and four summary windows on the same exact grid.
+MIXED_OUTPUTS_WINDOWED = {
+    **MIXED_OUTPUTS_LAST,
+    "summarise_every": 0.25,
 }
