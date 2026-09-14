@@ -564,14 +564,23 @@ class SingleIntegratorRunCore(CUDAFactory):
             )
             self._algo_step.update({"is_adaptive": False}, silent=True)
 
-    def _step_inputs(self) -> Dict[str, Any]:
-        """Return what the step takes from the system and the drivers."""
-        # Only Rosenbrock configs carry the driver derivative.
+    def _step_inputs(
+        self, updates: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Return what the step takes from the system and the drivers.
+
+        Driver functions in ``updates`` replace the step's current ones;
+        only Rosenbrock configs carry the driver derivative.
+        """
         config = self._algo_step.compile_settings
+        updates = {} if updates is None else updates
         return BaseAlgorithmStep.system_inputs(
             self._system,
-            drivers_fn=config.drivers_fn,
-            driver_derivative_fn=getattr(config, "driver_derivative_fn", None),
+            drivers_fn=updates.get("drivers_fn", config.drivers_fn),
+            driver_derivative_fn=updates.get(
+                "driver_derivative_fn",
+                getattr(config, "driver_derivative_fn", None),
+            ),
             is_adaptive=self._step_controller.is_adaptive,
         )
 
@@ -721,7 +730,7 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         step_recognized = self._switch_algos(updates_dict)
         step_recognized |= self._algo_step.update(
-            {**updates_dict, **self._step_inputs()}, silent=True
+            {**updates_dict, **self._step_inputs(updates_dict)}, silent=True
         )
 
         updates_dict["algorithm_order"] = self._algo_step.algorithm_order
@@ -803,7 +812,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             old_settings["algorithm"] = new_algo
             # The driver and system device functions carry over.
             old_settings.update(self._step_device_functions())
-            old_settings.update(self._step_inputs())
+            old_settings.update(self._step_inputs(updates_dict))
             self._algo_step = get_algorithm_step(
                     precision=precision,
                     settings=old_settings,
