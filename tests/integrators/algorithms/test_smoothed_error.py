@@ -192,6 +192,9 @@ def test_request_survives_tableau_swap(system):
     assert not step.smooth_error
     step.update(tableau=RADAU_IIA_5_TABLEAU)
     assert step.smooth_error
+    norm_config = step.solver.norm.compile_settings
+    assert norm_config.tableau is RADAU_IIA_5_TABLEAU
+    assert norm_config.stage_count == RADAU_IIA_5_TABLEAU.stage_count
 
 
 @pytest.mark.parametrize("enabled", [False, True])

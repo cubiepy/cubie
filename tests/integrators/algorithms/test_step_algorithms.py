@@ -707,6 +707,15 @@ def test_algorithm(
             base_newton_rtol = solver_settings["newton_rtol"]
             if base_newton_rtol is None:
                 base_newton_rtol = solver_settings["rtol"] / 10.0
+            # A different value inside the supported 0-2 range.
+            preconditioner_order = (
+                solver_settings["preconditioner_order"] + 1
+            ) % 3
+            # A stacked multi-stage Jacobi preconditioner is order 0.
+            if isinstance(step_object, FIRKStep) and (
+                step_object.stage_count > 1
+            ):
+                preconditioner_order = 0
             updates = {
                 "newton_max_iters": max(
                     1, step_object.newton_max_iters // 2
@@ -717,9 +726,7 @@ def test_algorithm(
                 solver_settings["krylov_rtol"] * 0.5,
                 "newton_atol": base_newton_atol * 0.5,
                 "newton_rtol": base_newton_rtol * 0.5,
-                # A different value inside the supported 0-2 range.
-                "preconditioner_order":
-                (solver_settings["preconditioner_order"] + 1) % 3,
+                "preconditioner_order": preconditioner_order,
             }
             recognised = step_object.update(updates)
             assert set(updates).issubset(recognised), "updates recognised"

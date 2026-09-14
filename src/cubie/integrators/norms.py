@@ -11,7 +11,6 @@ from attrs import define, field, Converter, frozen, validators
 from cubie._utils import (
     PrecisionDType,
     build_config,
-    float_array_validator,
     getype_validator,
     nonnegative_float_array_validator,
     is_device_validator,
@@ -57,11 +56,6 @@ def rtol_floor_converter(value, self_) -> ndarray:
     floor = 4.0 * float(finfo(self_.precision).eps)
     below = (tolerance > 0.0) & (tolerance < floor)
     return _floored(tolerance, floor, below)
-
-
-def stage_coefficients_converter(value, self_) -> ndarray:
-    """Cast the stage coefficients to the configured precision."""
-    return asarray(value, dtype=self_.precision)
 
 
 @frozen
@@ -154,17 +148,11 @@ class FIRKCorrectionNormConfig(CorrectionNormConfig):
     n : int
         Number of physical states per stage. The tolerance arrays hold
         one entry per physical state, reused for every stage block.
-    stage_coefficients : ndarray
-        Flattened row-major ``a`` matrix in the configured precision.
+    tableau : ButcherTableau
+        The tableau whose ``a`` matrix weights the stage increments.
     """
 
-    stage_coefficients: ndarray = field(
-        default=asarray([1.0]),
-        validator=float_array_validator,
-        converter=Converter(
-            stage_coefficients_converter, takes_self=True
-        ),
-    )
+    tableau: Optional[object] = field(default=None)
 
     def _check_widths(self) -> None:
         """Require whole stage blocks of ``n_states`` physical states."""
@@ -455,7 +443,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
         unroll_norms = config.unroll.unroll_norms
         state_n = int32(config.n_states)
         stage_count = int32(config.stage_count)
-        stage_coefficients = config.stage_coefficients
+        stage_coefficients = config.tableau.a_flat(config.precision)
         typed_zero = numba_precision(0.0)
 
         # no cover: start

@@ -7,6 +7,10 @@ import warnings
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.integrators.algorithms.generic_firk_tableaus import (
+    FIRKTableau,
+    GAUSS_LEGENDRE_2_TABLEAU,
+)
 from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose, assert_array_equal
 
@@ -217,13 +221,23 @@ def test_whole_vector_config_rejects_smaller_n():
         ScaledNormConfig(precision=np.float64, solver_width=6, n_states=3)
 
 
+def _two_stage_tableau(a):
+    """Return a two-stage FIRK tableau with the ``a`` matrix given."""
+    return FIRKTableau(
+        a=tuple(tuple(float(v) for v in row) for row in a),
+        b=(0.5, 0.5),
+        c=tuple(float(sum(row)) for row in a),
+        order=2,
+    )
+
+
 @pytest.mark.parametrize(
     "config_class, extra",
     [
         (TiledScaledNormConfig, {}),
         (
             FIRKCorrectionNormConfig,
-            {"stage_coefficients": tuple(np.arange(4, dtype=float))},
+            {"tableau": GAUSS_LEGENDRE_2_TABLEAU},
         ),
     ],
 )
@@ -300,7 +314,7 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
         precision=np.float64,
         solver_width=width,
         n_states=n,
-        stage_coefficients=tuple(a.ravel().tolist()),
+        tableau=_two_stage_tableau(a),
         atol=atol,
         rtol=rtol,
     )
@@ -641,7 +655,9 @@ _CORRECTION_NORM_CASES = {
         factory_kwargs=dict(
             solver_width=4,
             n_states=2,
-            stage_coefficients=(0.5, 0.0, 0.5, 0.5),
+            tableau=_two_stage_tableau(
+                np.array([[0.5, 0.0], [0.5, 0.5]])
+            ),
         ),
         a_ij=0.0,
         delta=(0.21, 0.3, 0.46, 0.15),

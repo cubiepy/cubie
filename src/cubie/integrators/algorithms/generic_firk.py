@@ -272,7 +272,7 @@ class FIRKStep(ODEImplicitStep):
             precision=precision,
             solver_width=config.solver_width,
             n_states=n_states,
-            stage_coefficients=tableau.a_flat(precision),
+            tableau=tableau,
             instance_label="newton",
             **kwargs,
         )
