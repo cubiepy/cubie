@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from cubie import cache_root
+from cubie._utils import package_source_hash
 from cubie.cubie_cache import CUBIECacheLocator
 from cubie.odesystems.symbolic.odefile import ODEFile
 from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
@@ -65,10 +66,11 @@ def test_all_cache_layers_share_the_root(
 ):
     """Codegen, CellML parse, and kernel caches resolve one root."""
     root = isolated_cache_root
+    salt = package_source_hash()[:8]
 
     ode_file = ODEFile("shared_root_system", fn_hash=1234)
     assert ode_file.file_path == (
-        root / "shared_root_system" / "shared_root_system_1234.py"
+        root / "shared_root_system" / f"shared_root_system_1234_{salt}.py"
     )
 
     cellml_cache = CellMLCache(

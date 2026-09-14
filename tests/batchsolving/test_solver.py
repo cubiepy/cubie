@@ -1,3 +1,4 @@
+import warnings
 from typing import Iterable
 
 import pytest
@@ -47,6 +48,7 @@ from tests._utils import (
     FIXED_EULER_TIMED_STATE,
     LARGE_DIRK,
     LARGE_STATE_ONLY,
+    LORENZ_ITERATION_BASE,
     MOVABLE_LOCATION_KEYS,
     UNROLL_SETTINGS,
 )
@@ -685,6 +687,38 @@ def test_device_inputs_match_host_inputs(
     np.testing.assert_array_equal(
         host_again.time_domain_array, host_state
     )
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{**LORENZ_ITERATION_BASE, "duration": 0.05, "save_every": 0.01}],
+    indirect=True,
+)
+def test_driverless_copy_compiles_device_inputs_without_warning(
+    solver_mutable, system, precision
+):
+    """A copy staging device inputs attaches its empty driver table."""
+    n_runs = 4
+    inits = np.ones((system.sizes.states, n_runs), dtype=precision)
+    params = np.ones((system.sizes.parameters, n_runs), dtype=precision)
+    twin = solver_mutable.copy()
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            twin.compile(
+                cuda.to_device(inits), cuda.to_device(params), duration=0.05
+            )
+        input_arrays = twin.kernel.input_arrays
+        assert input_arrays.has_device_inputs
+        table = twin.driver_interpolator.coefficients
+        assert input_arrays.host.driver_coefficients.array is table
+        assert table.size == 0
+        assert tuple(input_arrays.device_driver_coefficients.shape) == (
+            1, 1, 1
+        )
+    finally:
+        twin.close()
 
 
 @pytest.mark.parametrize(

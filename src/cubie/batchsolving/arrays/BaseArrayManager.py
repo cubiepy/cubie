@@ -785,6 +785,9 @@ class BaseArrayManager(ABC):
 
             if len(array_shape) != len(expected_shape):
                 matches[array_name] = False
+            elif array.size == 0:
+                # Zero-size data fits the unit slot sizing floors it to.
+                matches[array_name] = True
             else:
                 shape_matches = True
                 for actual_dim, expected_dim in zip(

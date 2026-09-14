@@ -80,7 +80,7 @@ from cubie.odesystems.solver_helpers import (
 )
 from cubie._serialize import canonical_digest
 from cubie._env import operation_ordering_default
-from cubie._utils import PrecisionDType, is_devfunc
+from cubie._utils import PrecisionDType, is_devfunc, package_source_hash
 from cubie.time_logger import default_timelogger
 
 
@@ -591,43 +591,39 @@ class SymbolicODE(BaseODE):
             new_hash,
             self.compile_settings.operation_ordering,
         )
-        if new_hash != self.fn_hash or self.gen_file.fn_hash != source_hash:
+        if (
+            new_hash != self.fn_hash
+            or self.gen_file.fn_hash != source_hash
+            or self.gen_file.salt != package_source_hash()[:8]
+        ):
             self.gen_file = ODEFile(self.name, source_hash)
             self.fn_hash = new_hash
 
-        dxdt_code = None
-        if not self.gen_file.function_is_cached("dxdt_factory"):
-            dxdt_code = generate_dxdt_fac_code(
+        ordering = self.compile_settings.operation_ordering
+        dxdt_factory, _ = self.gen_file.import_function(
+            "dxdt_factory",
+            injections=self._device_function_injections(),
+            generate=lambda: generate_dxdt_fac_code(
                 self.equations,
                 self.indices,
                 "dxdt_factory",
-                operation_ordering=(
-                    self.compile_settings.operation_ordering
-                ),
-            )
-        dxdt_factory, _ = self.gen_file.import_function(
-            "dxdt_factory",
-            dxdt_code,
-            injections=self._device_function_injections(),
+                operation_ordering=ordering,
+            ),
         )
         dxdt_func = dxdt_factory(
             numba_precision,
             lineinfo=lineinfo,
         )
 
-        obs_code = None
-        if not self.gen_file.function_is_cached("observables_factory"):
-            obs_code = generate_observables_fac_code(
-                self.equations, self.indices,
-                func_name="observables_factory",
-                operation_ordering=(
-                    self.compile_settings.operation_ordering
-                ),
-            )
         observables_factory, _ = self.gen_file.import_function(
             "observables_factory",
-            obs_code,
             injections=self._device_function_injections(),
+            generate=lambda: generate_observables_fac_code(
+                self.equations,
+                self.indices,
+                func_name="observables_factory",
+                operation_ordering=ordering,
+            ),
         )
         observables_fn = observables_factory(
             numba_precision,
@@ -1047,13 +1043,10 @@ class SymbolicODE(BaseODE):
         if source_hash not in helpers.factories:
             is_cached = self.gen_file.function_is_cached(factory_name)
             default_timelogger.start_event(event_name, skipped=is_cached)
-            code = None
-            if not is_cached:
-                code = role.generate(self, request, factory_name)
             factory, _ = self.gen_file.import_function(
                 factory_name,
-                code,
                 injections=self._device_function_injections(),
+                generate=lambda: role.generate(self, request, factory_name),
             )
             default_timelogger.stop_event(event_name)
             helpers.factories[source_hash] = factory

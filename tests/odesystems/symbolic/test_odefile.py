@@ -36,11 +36,59 @@ def test_init_creates_system_directory(codegen_dir):
 
 
 def test_init_sets_file_path(codegen_dir):
-    """file_path carries the name and a hash-prefixed variant."""
+    """file_path carries the name, the variant and the package salt."""
     name = f"test_{uuid.uuid4().hex}"
     odf = ODEFile(name, 99)
-    assert odf.file_path.name == f"{name}_99.py"
+    salt = package_source_hash()[:8]
+    assert odf.file_path.name == f"{name}_99_{salt}.py"
     assert odf.file_path.parent.name == name
+
+
+def test_distinct_package_sources_use_distinct_files(codegen_dir, monkeypatch):
+    """A different package source hash maps to its own file."""
+    from cubie.odesystems.symbolic import odefile
+
+    name = f"test_{uuid.uuid4().hex}"
+    first = ODEFile(name, 5)
+    first.add_function(_simple_code("foo_factory"))
+    monkeypatch.setattr(odefile, "package_source_hash", lambda: "f" * 64)
+    second = ODEFile(name, 5)
+    assert second.file_path != first.file_path
+    assert first.function_is_cached("foo_factory")
+    assert second.cached_file_valid(5)
+
+
+def test_import_function_generates_only_when_missing(codegen_dir):
+    """``generate`` is called for a missing function and not again."""
+    name = f"test_{uuid.uuid4().hex}"
+    odf = ODEFile(name, 7)
+    calls = []
+
+    def generate():
+        calls.append(1)
+        return _simple_code("gen_factory")
+
+    fn, was_cached = odf.import_function("gen_factory", generate=generate)
+    assert fn()() == 1
+    assert was_cached is False
+    fn, was_cached = odf.import_function("gen_factory", generate=generate)
+    assert fn()() == 1
+    assert was_cached is True
+    assert len(calls) == 1
+
+
+def test_stale_header_is_replaced_whole(codegen_dir):
+    """A stale file is replaced by a complete header-only file."""
+    name = f"test_{uuid.uuid4().hex}"
+    odf = ODEFile(name, 11)
+    odf.add_function(_simple_code("old_factory"))
+    odf.file_path.write_text(
+        f"#stale\n{HEADER}{_simple_code('old_factory')}", encoding="utf-8"
+    )
+    assert odf._init_file(11) is True
+    text = odf.file_path.read_text(encoding="utf-8")
+    assert text == f"#{_salted_hash(11)}\n{HEADER}"
+    assert not list(odf.file_path.parent.glob("*.tmp"))
 
 
 def test_distinct_hashes_use_distinct_files(codegen_dir):
