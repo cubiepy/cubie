@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.13.0](https://github.com/cubiepy/cubie/compare/v0.12.0...v0.13.0) (2026-09-15)
+
+
+### Features
+
+* **batchsolving:** Solver.optimize auto-sizes its runs and checks cached kernels before spawning processes ([#937](https://github.com/cubiepy/cubie/issues/937)) ([23ca4bb](https://github.com/cubiepy/cubie/commit/23ca4bb9349192e58f577b6f137355e4d026efd7))
+
+
+### Bug Fixes
+
+* **batchsolving:** Default derivation from user-given parameters all happens at the top-level Solver ([#951](https://github.com/cubiepy/cubie/issues/951)) ([74d2bd7](https://github.com/cubiepy/cubie/commit/74d2bd7e0c5af010efe5790cbd5cb4080dd71a73))
+* **batchsolving:** status-code scan only happens when nan_error_trajectories=True ([#930](https://github.com/cubiepy/cubie/issues/930)) ([8b8b6d6](https://github.com/cubiepy/cubie/commit/8b8b6d688dab4f46b44da33894837cb674b2524c))
+* **benchmarks:** compile workers recycle and ab_gate starts its workers again ([#925](https://github.com/cubiepy/cubie/issues/925)) ([ee121f2](https://github.com/cubiepy/cubie/commit/ee121f2bae76172d43f7d52556d54bc3b0dde7c4))
+* **ci:** precompile plugin's fake device carries the hardware attributes device_hardware reads; launch-geometry helpers run driverless in population mode ([#936](https://github.com/cubiepy/cubie/issues/936)) ([ee89969](https://github.com/cubiepy/cubie/commit/ee899698e4b61a704096c06738e4d395709339b8))
+* **integrators:** CUDAFactories now output their derived quantities as cache members ([#947](https://github.com/cubiepy/cubie/issues/947)) ([1fe7912](https://github.com/cubiepy/cubie/commit/1fe79123b9849311b7f780ed670bf52363c526ab))
+* **interpolator:** ArrayInterpolator builds coefficients as a cached output ([#935](https://github.com/cubiepy/cubie/issues/935)) ([4448f65](https://github.com/cubiepy/cubie/commit/4448f65553959a61d7bfe5c7d79682df71848418))
+* **performance:** auto_performance defaults adjusted to span machines, values cached ([#927](https://github.com/cubiepy/cubie/issues/927)) ([b7e6a11](https://github.com/cubiepy/cubie/commit/b7e6a1107654ee1a1998922ca9ef4b1c351f9d86))
+
+
+### Performance Improvements
+
+* **batchsolving:** per-solve host work memoised across repeat solves ([#931](https://github.com/cubiepy/cubie/issues/931)) ([6803304](https://github.com/cubiepy/cubie/commit/6803304b3cc26d9ffa2969b328cfe2d7197a2489))
+
 ## [0.12.0](https://github.com/cubiepy/cubie/compare/v0.11.1...v0.12.0) (2026-09-08)
 
 
