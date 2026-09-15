@@ -67,7 +67,6 @@ from numpy import dtype as np_dtype
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 
 from cubie._serialize import canonical_digest
-from cubie._settings import FrozenSettings, values_differ
 from cubie._utils import (
     in_attr,
     nested_config_fields,
@@ -75,7 +74,13 @@ from cubie._utils import (
     precision_validator,
     precision_converter,
 )
-from cubie.cuda_simsafe import JITFlags, UnrollFlags, get_jit_kwargs
+from cubie.cuda_simsafe import (
+    FrozenSettings,
+    JITFlags,
+    UnrollFlags,
+    get_jit_kwargs,
+    values_differ,
+)
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.buffer_registry import buffer_registry
 

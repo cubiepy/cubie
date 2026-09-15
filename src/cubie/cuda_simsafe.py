@@ -44,6 +44,9 @@ Published Device Functions
 
 Published Classes
 -----------------
+:class:`FrozenSettings`
+    Frozen attrs settings base; ``update`` derives a replacement
+    snapshot and reports the recognised and changed keys.
 :class:`JITFlags`
     Managed ``cuda.jit`` compile options stored on every factory's
     compile settings and rendered to decorator kwargs by
@@ -86,12 +89,14 @@ from ctypes import c_void_p
 from enum import Enum
 import os
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Mapping, Optional, Set, Tuple, Union
 
-from attrs import Factory, field, frozen
+from attrs import Attribute, Factory, evolve, field, fields, frozen
 from attrs import fields as attrs_fields
 from attrs import validators as attrs_validators
 from numpy import (
+    array_equal,
+    asarray,
     dtype,
     empty as np_empty,
     fmax as np_fmax,
@@ -101,7 +106,6 @@ from numpy import (
 
 from cubie.cuda_backend import IS_MLIR
 from cubie._env import lineinfo_default
-from cubie._settings import FrozenSettings
 
 
 CUDA_SIMULATION: bool = os.environ.get("NUMBA_ENABLE_CUDASIM") == "1"
@@ -157,6 +161,61 @@ else:
     from numba import types as numba_types
 
     INLINE_ALWAYS = "always"
+
+
+def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
+    """Compare by identity (device fns), value (arrays), else !=."""
+    if fld.metadata.get("device_function"):
+        return old is not new
+    if isinstance(old, np_ndarray) or isinstance(new, np_ndarray):
+        return not array_equal(asarray(old), asarray(new))
+    return bool(old != new)
+
+
+@frozen
+class FrozenSettings:
+    """Frozen attrs settings; :meth:`update` derives a replacement."""
+
+    def update(
+        self, updates_dict: dict = None, **kwargs
+    ) -> Tuple["FrozenSettings", Set[str], Set[str]]:
+        """Derive a replacement snapshot with new field values.
+
+        Parameters
+        ----------
+        updates_dict
+            Init names to new values; unknown keys are ignored.
+        **kwargs
+            Additional settings to update.
+
+        Returns
+        -------
+        tuple[FrozenSettings, set[str], set[str]]
+            Replacement (``self`` when unchanged), recognised names,
+            and the names whose converted value changed.
+        """
+        updates = {**(updates_dict or {}), **kwargs}
+        by_handle = {
+            (fld.alias or fld.name): fld
+            for fld in fields(type(self))
+            if fld.init
+        }
+        given = {
+            key: by_handle[key] for key in updates if key in by_handle
+        }
+        if not given:
+            return self, set(), set()
+        candidate = evolve(self, **{key: updates[key] for key in given})
+        changed = {
+            key
+            for key, fld in given.items()
+            if values_differ(
+                fld, getattr(self, fld.name), getattr(candidate, fld.name)
+            )
+        }
+        if not changed:
+            return self, set(given), set()
+        return candidate, set(given), changed
 
 
 @frozen
@@ -828,6 +887,7 @@ __all__ = [
     "get_jit_kwargs",
     "IndexDataCacheFile",
     "INLINE_ALWAYS",
+    "FrozenSettings",
     "JITFlags",
     "CUDA_SIMULATION",
     "CUDACache",
@@ -860,6 +920,7 @@ __all__ = [
     "unroll_if",
     "UnrollFlag",
     "UnrollFlags",
+    "values_differ",
     "unroll_flag_converter",
     "ALL_UNROLL_PARAMETERS",
 ]
