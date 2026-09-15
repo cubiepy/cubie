@@ -10,6 +10,7 @@ from attrs import evolve, fields, fields_dict
 from cubie.array_interpolator import ALL_INTERPOLATOR_PARAMETERS
 from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
 from cubie.batchsolving.resolve_defaults import (
+    check_loop_timing,
     resolve,
     resolve_inner_tolerances,
     resolve_loop_timing,
@@ -440,6 +441,32 @@ def test_summaries_need_a_sample_interval():
         resolve_loop_timing(0.02, 0.1, None, True, True)
     with pytest.raises(ValueError, match="sample_summaries_every"):
         resolve_loop_timing(None, None, None, False, True)
+
+
+def test_final_summary_needs_one_sample_in_the_run():
+    """A sample interval with no event inside the run raises."""
+    timing = resolve_loop_timing(None, None, 0.505, False, True)
+    with pytest.raises(ValueError, match="sample_summaries_every"):
+        check_loop_timing(timing, 0.5, np.float32)
+
+
+def test_sample_interval_equal_to_the_run_passes():
+    """One sample landing on t_end is a valid final summary."""
+    timing = resolve_loop_timing(None, None, 0.5, False, True)
+    check_loop_timing(timing, 0.5, np.float32)
+
+
+def test_whole_number_of_saves_passes_in_float32():
+    """A whole-number ratio the float32 casts push under passes."""
+    timing = resolve_loop_timing(0.001, None, None, True, False)
+    check_loop_timing(timing, 10.0, np.float32)
+
+
+def test_window_longer_than_the_run_raises():
+    """A summary window with no event inside the run raises."""
+    timing = resolve_loop_timing(None, 0.6, 0.1, False, True)
+    with pytest.raises(ValueError, match="summarise_every"):
+        check_loop_timing(timing, 0.5, np.float32)
 
 
 def test_given_window_summarises_regularly():

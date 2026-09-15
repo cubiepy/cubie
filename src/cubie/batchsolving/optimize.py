@@ -425,17 +425,6 @@ def _compile_candidate(payload: Tuple) -> Tuple[str, str]:
         solver.close()
 
 
-def _fits_sample_interval(solver: Any, duration: float) -> bool:
-    """Whether ``solver`` accepts ``duration`` under its sample interval."""
-    try:
-        solver.update(duration=duration, silent=True)
-    except ValueError as error:
-        if "sample_summaries_every" in str(error):
-            return False
-        raise
-    return True
-
-
 class _OptimizeRunner:
     """Compile and time the candidate launches, one solver copy each."""
 
@@ -586,21 +575,19 @@ class _OptimizeRunner:
             floor = max(floor, float(effective.save_every))
         if effective.summarise_regularly:
             floor = max(floor, float(effective.summarise_every))
+        if effective.summarise_last:
+            floor = max(floor, float(effective.sample_summaries_every))
         return min(floor, self._given_duration)
 
     def _trial_durations(self) -> List[float]:
-        """Ascending probe durations the cadence and sample interval allow."""
+        """Ascending probe durations within the cadence and the given."""
         given = self._given_duration
         floor = self._duration_floor()
-        twin = self._twins[0]
         trials = []
         for fraction in PROBE_FRACTIONS:
             trial = min(given, max(given * fraction, floor))
-            if trial in trials:
-                continue
-            if trial < given and not _fits_sample_interval(twin, trial):
-                continue
-            trials.append(trial)
+            if trial not in trials:
+                trials.append(trial)
         return trials
 
     def probe_duration(self, target_ms: float) -> None:

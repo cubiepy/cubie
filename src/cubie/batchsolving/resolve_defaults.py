@@ -29,6 +29,7 @@ from numpy import (
 from cubie._utils import precision_converter
 from cubie.batchsolving.solver_settings import EffectiveSettings
 from cubie.integrators.algorithms import algorithm_facts
+from cubie.integrators.SingleIntegratorRun import regular_event_count
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
@@ -61,6 +62,7 @@ DEFAULT_TOLERANCE = float(
 
 STEP_BOUND_DECADES = 3
 """How many decades either side of dt to set the min and max step bounds."""
+
 
 def given_or(given: Any, name: str, default: Any) -> Any:
     """Return the given value of ``name``, or ``default`` if not given."""
@@ -516,20 +518,18 @@ def _newton_rtol_inverted(
 
 
 def check_loop_timing(
-    timing: Dict[str, Any],
-    duration: Optional[float],
-    dt_min: float,
-    precision: type,
+    timing: Dict[str, Any], duration: Optional[float], precision: type
 ) -> None:
-    """Raise when the loop schedule would produce no output.
+    """Raise when a schedule would produce no output.
 
-    ``duration`` plus ``dt_min`` is the end-time tolerance.
+    Each interval is checked by the event count the loop will run,
+    :func:`regular_event_count`.
 
     Raises
     ------
     ValueError
-        An interval longer than the run, or a sample interval that is
-        not shorter than its window.
+        An interval with no event inside the run, or a sample
+        interval that is not shorter than its window.
     """
     save_every = timing["save_every"]
     summarise_every = timing["summarise_every"]
@@ -542,19 +542,22 @@ def check_loop_timing(
         )
     if duration is None:
         return
-    end_time = precision(duration) + dt_min
-    if timing["save_regularly"] and save_every > end_time:
+
+    def events(interval: float) -> int:
+        return regular_event_count(duration, interval, precision)
+
+    if timing["save_regularly"] and events(save_every) == 0:
         raise ValueError(
             f"save_every ({save_every}) > duration ({duration}) so this "
             f"loop will produce no outputs"
         )
-    if timing["summarise_last"] and sample_every > end_time:
+    if timing["summarise_last"] and events(sample_every) == 0:
         raise ValueError(
             f"sample_summaries_every ({sample_every}) > duration "
             f"({duration}), so the summary at the end will be based on 0 "
             f"samples"
         )
-    if timing["summarise_regularly"] and summarise_every > end_time:
+    if timing["summarise_regularly"] and events(summarise_every) == 0:
         raise ValueError(
             f"summarise_every ({summarise_every}) > duration ({duration}), "
             f"so this loop will produce no summary outputs"
@@ -663,12 +666,6 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
         time_domain,
         summaries,
     )
-    # Fixed control has no dt_min; its step is the tolerance.
-    check_loop_timing(
-        timing,
-        given.duration,
-        resolved.get("dt_min", resolved["dt"]),
-        precision,
-    )
+    check_loop_timing(timing, given.duration, precision)
     resolved.update(timing)
     return EffectiveSettings(**{**given.as_kwargs(), **resolved})
