@@ -21,6 +21,7 @@ from cubie.integrators.algorithms import (
     FIRK_TABLEAU_REGISTRY,
     ROSENBROCK_TABLEAUS,
     algorithm_facts,
+    algorithm_is_adaptive,
     resolve_alias,
     resolve_algorithm,
     resolve_supplied_tableau,
@@ -270,6 +271,43 @@ def test_resolve_algorithm_family_alias_takes_its_own_tableau():
     tableau = DIRK_TABLEAU_REGISTRY["kvaerno3"]
     assert resolve_algorithm("dirk", tableau) == (DIRKStep, tableau)
     assert algorithm_facts("dirk", tableau).tableau is tableau
+
+
+@pytest.mark.parametrize(
+    "alias, step_class",
+    [
+        ("dirk", DIRKStep),
+        ("firk", FIRKStep),
+        ("erk", ERKStep),
+        ("rosenbrock", GenericRosenbrockWStep),
+    ],
+)
+def test_bare_family_alias_resolves_to_default_tableau(
+    alias, step_class, system
+):
+    """A bare family alias carries the tableau its constructor builds on."""
+    default = step_class.default_tableau
+    assert resolve_algorithm(alias) == (step_class, default)
+    facts = algorithm_facts(alias)
+    assert facts.tableau is default
+    assert facts.has_error_estimate is default.has_error_estimate
+    assert algorithm_is_adaptive(alias) is default.has_error_estimate
+    inputs = step_class.system_inputs(
+        system, None, None, facts.has_error_estimate
+    )
+    step = get_algorithm_step(
+        system.precision, settings={"algorithm": alias, **inputs}
+    )
+    assert step.tableau is default
+    assert step.has_error_estimate is facts.has_error_estimate
+
+
+def test_fixed_scheme_alias_has_no_default_tableau():
+    """A fixed scheme's facts carry no tableau and its class flag."""
+    facts = algorithm_facts("crank_nicolson")
+    assert facts.tableau is None
+    assert facts.has_error_estimate is CrankNicolsonStep.has_error_estimate
+    assert algorithm_facts("euler").has_error_estimate is False
 
 
 def test_resolve_algorithm_rejects_another_family_tableau():

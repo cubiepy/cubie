@@ -750,6 +750,10 @@ class BaseAlgorithmStep(CUDAFactory):
     #: Linearly-implicit steps own their linear solver directly.
     is_linear = False
 
+    #: The tableau a bare family alias builds on; ``None`` for fixed
+    #: schemes.
+    default_tableau = None
+
     settings_keys = frozenset(ALL_ALGORITHM_STEP_PARAMETERS)
 
     @classmethod

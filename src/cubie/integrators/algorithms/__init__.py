@@ -10,7 +10,7 @@ from .base_algorithm_step import (
     ButcherTableau,
 )
 from .ode_explicitstep import ExplicitStepConfig
-from .ode_implicitstep import ImplicitStepConfig
+from .ode_implicitstep import ImplicitStepConfig, ODEImplicitStep
 from .backwards_euler import BackwardsEulerStep
 from .backwards_euler_predict_correct import BackwardsEulerPCStep
 from .crank_nicolson import CrankNicolsonStep
@@ -128,6 +128,8 @@ def algorithm_is_adaptive(alias: str) -> bool:
     """
 
     algorithm_type, tableau = resolve_alias(alias)
+    if tableau is None:
+        tableau = algorithm_type.default_tableau
     if tableau is not None:
         return tableau.has_error_estimate
     return algorithm_type.has_error_estimate
@@ -164,7 +166,8 @@ def resolve_algorithm(
     """Return the step class and tableau for ``algorithm``.
 
     A named tableau's alias keeps its tableau; a bare family alias
-    takes ``tableau``.
+    takes ``tableau``, or the family's ``default_tableau`` without
+    one.
 
     Raises
     ------
@@ -184,8 +187,10 @@ def resolve_algorithm(
         step_class, registry_tableau = resolve_alias(algorithm)
     except KeyError as exc:
         raise ValueError(f"Unknown algorithm '{algorithm}'.") from exc
-    if registry_tableau is not None or tableau is None:
+    if registry_tableau is not None:
         return step_class, registry_tableau
+    if tableau is None:
+        return step_class, step_class.default_tableau
     tableau_class, _ = resolve_supplied_tableau(tableau)
     if tableau_class is not step_class:
         raise ValueError(
@@ -206,8 +211,6 @@ def algorithm_facts(
     ValueError
         Unknown ``algorithm``, or ``tableau`` of another family.
     """
-    from .ode_implicitstep import ODEImplicitStep
-
     step_class, tableau = resolve_algorithm(algorithm, tableau)
     defaults = step_class.family_defaults(tableau)
     if tableau is not None:

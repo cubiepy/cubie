@@ -139,11 +139,13 @@ class ERKStepConfig(ExplicitStepConfig):
 class ERKStep(ODEExplicitStep):
     """Generic explicit Runge--Kutta step with configurable tableaus."""
 
+    default_tableau = DEFAULT_ERK_TABLEAU
+
     @classmethod
     def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
         """Adaptive or fixed defaults by the tableau's error estimate."""
         if tableau is None:
-            tableau = DEFAULT_ERK_TABLEAU
+            tableau = cls.default_tableau
         if tableau.has_error_estimate:
             return ERK_ADAPTIVE_DEFAULTS.copy()
         return ERK_FIXED_DEFAULTS.copy()

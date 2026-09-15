@@ -171,11 +171,13 @@ class FIRKStepConfig(ImplicitStepConfig):
 class FIRKStep(ODEImplicitStep):
     """Fully implicit Runge--Kutta step with an embedded error estimate."""
 
+    default_tableau = DEFAULT_FIRK_TABLEAU
+
     @classmethod
     def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
         """Adaptive or fixed defaults by the tableau's error estimate."""
         if tableau is None:
-            tableau = DEFAULT_FIRK_TABLEAU
+            tableau = cls.default_tableau
         if tableau.has_error_estimate:
             return FIRK_ADAPTIVE_DEFAULTS.copy()
         return FIRK_FIXED_DEFAULTS.copy()

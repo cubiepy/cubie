@@ -183,11 +183,13 @@ class DIRKStepConfig(ImplicitStepConfig):
 class DIRKStep(ODEImplicitStep):
     """Diagonally implicit Runge–Kutta step with an embedded error estimate."""
 
+    default_tableau = DEFAULT_DIRK_TABLEAU
+
     @classmethod
     def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
         """Adaptive or fixed defaults by the tableau's error estimate."""
         if tableau is None:
-            tableau = DEFAULT_DIRK_TABLEAU
+            tableau = cls.default_tableau
         if tableau.has_error_estimate:
             return DIRK_ADAPTIVE_DEFAULTS.copy()
         return DIRK_FIXED_DEFAULTS.copy()
