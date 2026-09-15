@@ -943,12 +943,12 @@ class Solver:
             and duration to reduce runtime; ``False`` optimizes at your
             given batch size and duration. Default ``True``.
         waves
-            How many occupancy waves ``auto_size`` sets your batch size
-            to fill. Default ``5``.
+            How many waves the ``auto_size`` setting sets your batch
+            size to fill. Default ``5``.
         target_ms
-            Target kernel runtime in milliseconds that ``auto_size``
-            sets your integration duration to; the duration is only
-            ever shortened. Default ``20.0``.
+            Target kernel runtime that ``auto_size`` sets your
+            integration duration to; the duration is only ever
+            shortened. Default ``20.0``.
 
         Returns
         -------

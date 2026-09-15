@@ -811,12 +811,15 @@ def run_optimization(
     force
         Vary the settings given explicitly or applied earlier too.
     auto_size
-        ``True`` picks the batch size and duration; ``False`` keeps
-        the given ones.
+        ``True`` optimizes at an automatically selected batch size and
+        duration to reduce runtime; ``False`` optimizes at your given
+        batch size and duration.
     waves
-        Occupancy waves ``auto_size`` sizes the batch to fill.
+        How many waves the ``auto_size`` setting sets your batch size
+        to fill.
     target_ms
-        Kernel milliseconds ``auto_size`` shortens the duration to.
+        Target kernel runtime that ``auto_size`` sets your integration
+        duration to; the duration is only ever shortened.
 
     Returns
     -------
