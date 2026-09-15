@@ -291,7 +291,9 @@ def achieved_waves(solver, n_runs: int) -> float:
     """Return occupancy waves filled at the actual launch geometry."""
     (kern,) = solver.kernel.kernel.overloads.values()
     cufunc = kern._codelibrary.get_cufunc()
-    actual_blocksize, dynshared = solver.kernel.launch_geometry(blocksize)
+    actual_blocksize, dynshared = solver.kernel.launch_geometry(
+        blocksize, runs=n_runs
+    )
     context = cuda.current_context()
     blocks_per_sm = context.get_active_blocks_per_multiprocessor(
         cufunc, actual_blocksize, dynshared

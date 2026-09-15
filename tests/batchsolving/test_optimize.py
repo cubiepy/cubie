@@ -386,16 +386,13 @@ def test_invalid_arguments_are_rejected(solver, kwargs, message):
 
 @pytest.mark.nocudasim
 def test_kernel_is_cached_reports_the_disk_cache(
-    solver_mutable, batch_input_arrays, driver_settings, tmp_path
+    solver_mutable, driver_settings, tmp_path
 ):
     """A fresh cache directory holds nothing until the kernel compiles."""
-    inits, params = batch_input_arrays
     kernel = solver_mutable.kernel
     kernel.set_cache_dir(tmp_path / "fresh")
     assert not kernel.kernel_is_cached()
-    solver_mutable.compile(
-        inits, params, drivers=driver_settings, duration=0.1
-    )
+    solver_mutable.compile(drivers=driver_settings, duration=0.1)
     assert kernel.kernel_is_cached()
 
 
