@@ -344,7 +344,9 @@ def launch_candidates(
     """
     blocksizes = launch_blocksizes(kernel, blocksizes)
     shapes = kernel.launchable_shapes(blocksizes, runs=runs)
-    frame = kernel_resources(kernel.kernel).local_bytes_per_thread
+    frame = kernel_resources(
+        kernel.kernel, kernel.signature
+    ).local_bytes_per_thread
     cells = []
     for blocksize, (_, natural) in shapes.items():
         cells.append((blocksize, None))
@@ -663,7 +665,7 @@ class _OptimizeRunner:
                         launch.blocksize, runs=kernel.run_params[0].runs
                     )
                     launch.blocks_per_sm = active_blocks_per_multiprocessor(
-                        kernel.kernel, blocksize, dynamic
+                        kernel.kernel, blocksize, dynamic, kernel.signature
                     )
                 if round_index == 0:
                     self._record_waves(twin, launch.blocksize)

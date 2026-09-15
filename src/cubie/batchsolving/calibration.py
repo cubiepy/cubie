@@ -954,7 +954,8 @@ def _achieved_waves(solver: Any, blocksize: int) -> float:
         blocksize, runs=runs
     )
     blocks_per_sm = active_blocks_per_multiprocessor(
-        kernel_factory.kernel, actual_blocksize, dynshared
+        kernel_factory.kernel, actual_blocksize, dynshared,
+        kernel_factory.signature,
     )
     device = cuda.get_current_device()
     threads_per_loop = (
