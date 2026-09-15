@@ -67,8 +67,8 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   reallocate on their next solve.
 
 ### Host backing policy
-- `choose_host_memory_type(nbytes, host_spill_threshold, allow_pinned)`: memmap above the
-  threshold (`None` = 80% of RAM), pinned up to `pinned_max_bytes` (default: total VRAM),
+- `choose_host_memory_type(nbytes, allow_pinned)`: memmap above `HOST_SPILL_FRACTION`
+  (80%) of RAM, pinned up to `pinned_max_bytes` (default: total VRAM),
   else pageable. Only a reachable pinned choice needs a device (see **No device**).
 - The pinned ceiling is cumulative: `allocate_pinned_array` reserves
   against `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in
@@ -77,7 +77,7 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   retained bytes are reclaimed via `free_all_blocks` under pressure.
 - `create_host_array` allocates the requested type; a `"pinned"`
   request whose reservation or `cudaHostAlloc` fails lands pageable.
-  `"memmap"` arrays land in `spill_directory` (default: the cache root).
+  `"memmap"` arrays land in the cache root.
 - Pageable and memmap transfers stage through the pinned buffer pool,
   charged to the same budget; the first buffer per label reserves
   past it.

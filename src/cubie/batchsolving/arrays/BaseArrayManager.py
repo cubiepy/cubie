@@ -593,20 +593,6 @@ class BaseArrayManager(ABC):
         """Return cleanup calls that do not capture this manager."""
         return [self.device.delete_all]
 
-    @property
-    def host_spill_threshold(self) -> Optional[int]:
-        """Owner's spill threshold; None without an owner."""
-        if self._memory_owner is None:
-            return None
-        return self._memory_owner.host_spill_threshold
-
-    @property
-    def spill_directory(self) -> Optional[str]:
-        """Owner's spill directory; None without an owner."""
-        if self._memory_owner is None:
-            return None
-        return self._memory_owner.spill_directory
-
     def close(self) -> None:
         """Release this manager's resources."""
         settings = self._memory_manager.registry.get(id(self))
@@ -931,7 +917,6 @@ class BaseArrayManager(ABC):
                     (1,) * len(current_array.shape),
                     managed.dtype,
                     self._base_memory_type(managed.memory_type),
-                    spill_directory=self.spill_directory,
                 )
 
         if current_array is not new_array:
@@ -1176,7 +1161,7 @@ class BaseArrayManager(ABC):
             ):
                 continue
             target_type = self._memory_manager.choose_host_memory_type(
-                old_array.nbytes, self.host_spill_threshold
+                old_array.nbytes
             )
             if target_type != "pinned":
                 continue

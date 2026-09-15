@@ -715,8 +715,6 @@ def solver_settings(solver_settings_override, system, precision):
         "memory_manager": default_memmgr,
         "stream_group": "test_group",
         "mem_proportion": None,
-        "host_spill_threshold": None,
-        "spill_directory": None,
         "step_controller": "fixed",
         "precision": precision,
         "driverspline_order": 3,

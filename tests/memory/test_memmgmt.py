@@ -2325,47 +2325,44 @@ def test_available_system_ram_reports_reclaimable_memory():
     assert 0 < available <= total_system_ram()
 
 
-def test_choose_host_memory_type_applies_policy(mgr, tmp_path):
+def test_choose_host_memory_type_applies_policy(mgr):
     """The chooser maps sizes to pinned, pageable, and disk backing."""
+    from cubie.cache_root import get_cache_root
+
     mgr.pinned_max_bytes = 256
 
-    assert mgr.choose_host_memory_type(128, 1024) == "pinned"
-    assert mgr.choose_host_memory_type(512, 1024) == "host"
-    assert mgr.choose_host_memory_type(4096, 1024) == "memmap"
+    assert mgr.choose_host_memory_type(128) == "pinned"
+    assert mgr.choose_host_memory_type(512) == "host"
     assert (
-        mgr.choose_host_memory_type(128, 1024, allow_pinned=False)
-        == "host"
+        mgr.choose_host_memory_type(128, allow_pinned=False) == "host"
     )
 
     small = mgr.create_host_array((4, 4), np.float64, "host")
     assert not isinstance(small, np.memmap)
 
-    big_type = mgr.choose_host_memory_type(64 * 64 * 8, 1024)
-    big = mgr.create_host_array(
-        (64, 64), np.float64, big_type, spill_directory=str(tmp_path)
-    )
+    big = mgr.create_host_array((64, 64), np.float64, "memmap")
     assert isinstance(big, np.memmap)
     assert (np.asarray(big) == 0.0).all()
-    assert len(list(tmp_path.iterdir())) == 1
+    big_path = Path(big._cubie_spill_path)
+    assert big_path.parent == Path(get_cache_root())
+    assert big_path.exists()
 
     source = np.arange(16, dtype=np.float64).reshape(4, 4)
     explicit = mgr.create_host_array(
-        (4, 4),
-        np.float64,
-        "memmap",
-        like=source,
-        spill_directory=str(tmp_path),
+        (4, 4), np.float64, "memmap", like=source
     )
     assert isinstance(explicit, np.memmap)
     assert np.array_equal(np.asarray(explicit), source)
+    explicit_path = Path(explicit._cubie_spill_path)
 
     del big, explicit
     gc.collect()
-    assert len(list(tmp_path.iterdir())) == 0
+    assert not big_path.exists()
+    assert not explicit_path.exists()
 
 
 def test_choose_host_memory_type_default_threshold(mgr):
-    """An unset threshold spills only above the RAM fraction."""
+    """Only sizes above the RAM fraction spill."""
     ram_threshold = int(HOST_SPILL_FRACTION * total_system_ram())
     assert mgr.choose_host_memory_type(ram_threshold + 1) == "memmap"
     mgr.pinned_max_bytes = 256
@@ -2380,10 +2377,10 @@ def test_choose_host_memory_type_host_only_without_device():
             raise CudaSupportError("Error at driver init")
 
     mgr = NoCudaMemoryManager()
-    assert mgr.choose_host_memory_type(2048, 1024) == "memmap"
+    ram_threshold = int(HOST_SPILL_FRACTION * total_system_ram())
+    assert mgr.choose_host_memory_type(ram_threshold + 1) == "memmap"
     assert (
-        mgr.choose_host_memory_type(128, 1024, allow_pinned=False)
-        == "host"
+        mgr.choose_host_memory_type(128, allow_pinned=False) == "host"
     )
 
 
@@ -2494,11 +2491,9 @@ def test_pinned_budget_capped_by_ram_fraction(mgr):
     )
 
 
-def test_release_host_array_reports_unlink_failure(mgr, tmp_path):
+def test_release_host_array_reports_unlink_failure(mgr):
     """Explicit spill cleanup reports a filesystem failure."""
-    array = mgr.create_host_array(
-        (4,), np.float64, "memmap", spill_directory=str(tmp_path)
-    )
+    array = mgr.create_host_array((4,), np.float64, "memmap")
     path = Path(array._cubie_spill_path)
     cleanup = array._cubie_spill_cleanup
     array._mmap.close()
@@ -2514,16 +2509,13 @@ def test_release_host_array_reports_unlink_failure(mgr, tmp_path):
 
 @pytest.mark.nocudasim
 def test_host_spill_does_not_wait_for_unrelated_stream(
-    tmp_path, start_cuda_busy_work
+    start_cuda_busy_work,
 ):
     """Host spill setup leaves unrelated CUDA work running."""
     work, stream, done, release = start_cuda_busy_work()
     manager = MemoryManager()
     try:
-        memory_type = manager.choose_host_memory_type(32 * 4, 1)
-        arr = manager.create_host_array(
-            (32,), np.float32, memory_type, spill_directory=tmp_path
-        )
+        arr = manager.create_host_array((32,), np.float32, "memmap")
         assert isinstance(arr, np.memmap)
         assert not done.query()
     finally:

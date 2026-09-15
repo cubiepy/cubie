@@ -106,8 +106,6 @@ DEFAULT_MEMORY_SETTINGS = {
     "memory_manager": default_memmgr,
     "stream_group": "solver",
     "mem_proportion": None,
-    "host_spill_threshold": None,
-    "spill_directory": None,
 }
 
 
@@ -467,8 +465,6 @@ class BatchSolverKernel(CUDAFactory):
         memory_manager = merged_settings["memory_manager"]
         stream_group = merged_settings["stream_group"]
         mem_proportion = merged_settings["mem_proportion"]
-        self.host_spill_threshold = merged_settings["host_spill_threshold"]
-        self.spill_directory = merged_settings["spill_directory"]
         memory_manager.register(
             self,
             stream_group=stream_group,
@@ -1540,8 +1536,6 @@ class BatchSolverKernel(CUDAFactory):
         settings.update(
             stream_group=self.stream_group,
             mem_proportion=self.mem_proportion,
-            host_spill_threshold=self.host_spill_threshold,
-            spill_directory=self.spill_directory,
         )
         return settings
 
@@ -1556,8 +1550,6 @@ class BatchSolverKernel(CUDAFactory):
                 "memory_manager": self.memory_manager,
                 "stream_group": self.stream_group,
                 "mem_proportion": self.mem_proportion,
-                "host_spill_threshold": self.host_spill_threshold,
-                "spill_directory": self.spill_directory,
             },
             cache=settings["cache"],
             kernel_settings={
