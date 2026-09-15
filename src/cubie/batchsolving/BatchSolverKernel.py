@@ -950,10 +950,16 @@ class BatchSolverKernel(CUDAFactory):
         )
 
     def launchable_shapes(
-        self, blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES
+        self,
+        blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES,
+        runs: Optional[int] = None,
     ) -> Dict[int, Tuple[int, int]]:
-        """Dynamic shared bytes and blocks per SM per launchable block size."""
-        runs = self.run_params[0].runs
+        """Dynamic shared bytes and blocks per SM per launchable block size.
+
+        ``runs`` types the shapes; ``None`` uses the staged batch.
+        """
+        if runs is None:
+            runs = self.run_params[0].runs
         shapes = {}
         for blocksize in blocksizes:
             actual, dynamic = self._launch_shape(blocksize, runs)

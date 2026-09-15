@@ -13,8 +13,8 @@ Published Objects
     Block size and blocks per SM for a launch with no block size given.
 :func:`launch_candidates`
     Launches a kernel can time.
-:func:`sized_batch_runs`
-    Runs filling a number of occupancy waves at a kernel's launch.
+:func:`most_resident_runs`
+    Most runs resident at once over a kernel's launches.
 :func:`apply_launch`
     Apply one launch to a solver.
 :func:`run_optimization`
@@ -42,7 +42,7 @@ from cubie.backend.utils import (
     device_hardware,
     kernel_resources,
 )
-from cubie.batchsolving.calibration import _achieved_waves
+from cubie.batchsolving.calibration import _achieved_waves, _device_to_host
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from cubie.CUDAFactory import UnrollChoice
 from cubie.cuda_simsafe import cuda
@@ -310,8 +310,21 @@ def default_launch(
     )
 
 
-def launch_candidates(
+def launch_blocksizes(
     kernel: Any, blocksizes: Optional[Sequence[int]] = None
+) -> Sequence[int]:
+    """Return ``blocksizes``, or the measured set for ``kernel``'s frame."""
+    if blocksizes is not None:
+        return blocksizes
+    if kernel.shared_memory_bytes > 0:
+        return SHARED_LAUNCH_BLOCKSIZES
+    return LOCAL_LAUNCH_BLOCKSIZES
+
+
+def launch_candidates(
+    kernel: Any,
+    blocksizes: Optional[Sequence[int]] = None,
+    runs: Optional[int] = None,
 ) -> Tuple[Tuple[int, Optional[int]], ...]:
     """Return the ``(blocksize, resident_blocks)`` launches worth timing.
 
@@ -322,6 +335,9 @@ def launch_candidates(
     blocksizes
         Block sizes to consider; ``None`` picks the measured set for
         shared-memory or local-only kernels.
+    runs
+        Batch size the launch shapes are typed at; ``None`` uses the
+        staged batch.
 
     Returns
     -------
@@ -329,13 +345,8 @@ def launch_candidates(
         Launchable block sizes at the default residency, plus one and
         two blocks under natural occupancy for local frames.
     """
-    if blocksizes is None:
-        blocksizes = (
-            SHARED_LAUNCH_BLOCKSIZES
-            if kernel.shared_memory_bytes > 0
-            else LOCAL_LAUNCH_BLOCKSIZES
-        )
-    shapes = kernel.launchable_shapes(blocksizes)
+    blocksizes = launch_blocksizes(kernel, blocksizes)
+    shapes = kernel.launchable_shapes(blocksizes, runs=runs)
     frame = kernel_resources(kernel.kernel).local_bytes_per_thread
     cells = []
     for blocksize, (_, natural) in shapes.items():
@@ -348,29 +359,21 @@ def launch_candidates(
     return tuple(cells)
 
 
-def sized_batch_runs(kernel: Any, waves: int = 5) -> int:
-    """Return the runs filling ``waves`` occupancy waves of ``kernel``.
-
-    Parameters
-    ----------
-    kernel
-        A compiled :class:`~cubie.batchsolving.BatchSolverKernel`.
-    waves
-        Occupancy waves the batch fills at the kernel's default launch.
-
-    Returns
-    -------
-    int
-        ``waves`` times the SMs times the resident blocks per SM times
-        the runs per block at the default launch geometry.
-    """
-    blocksize, dynamic_sharedmem = kernel.launch_geometry()
-    blocks_per_sm = active_blocks_per_multiprocessor(
-        kernel.kernel, blocksize, dynamic_sharedmem
-    )
-    runs_per_block = blocksize // kernel.threads_per_loop
+def most_resident_runs(
+    kernel: Any, blocksizes: Optional[Sequence[int]] = None
+) -> int:
+    """Return the most runs resident at once over ``kernel``'s launches."""
+    blocksizes = launch_blocksizes(kernel, blocksizes)
+    shapes = kernel.launchable_shapes(blocksizes, runs=max(blocksizes))
     multiprocessors = device_hardware().multiprocessor_count
-    return int(waves) * multiprocessors * blocks_per_sm * runs_per_block
+    threads_per_loop = kernel.threads_per_loop
+    return max(
+        (
+            blocks * multiprocessors * (blocksize // threads_per_loop)
+            for blocksize, (_, blocks) in shapes.items()
+        ),
+        default=0,
+    )
 
 
 def apply_launch(parent: Any, launch: LaunchResult) -> Dict[str, Any]:
@@ -436,7 +439,7 @@ class _OptimizeRunner:
         verbose: bool,
     ) -> None:
         self._parent = parent
-        self._grid = (inits, params)
+        self._grid = (_device_to_host(inits), _device_to_host(params))
         self._given_duration = float(duration)
         self._given_settling = float(settling_time)
         # Pin an unset summary window so probe durations share a kernel.
@@ -471,15 +474,25 @@ class _OptimizeRunner:
         self._twins = []
 
     def _make_twin(self, candidate: Dict[str, Any]) -> Any:
-        """Return a parent copy carrying ``candidate``."""
-        twin = self._parent.copy()
-        twin.update({**candidate, **self._pinned}, silent=True)
+        """Return a parent copy carrying ``candidate`` in the auto pool."""
+        twin = self._parent.copy(mem_proportion=None)
+        try:
+            twin.update({**candidate, **self._pinned}, silent=True)
+        except BaseException:
+            twin.close()
+            raise
         return twin
 
     def build_twins(self, candidates: Sequence[Dict[str, Any]]) -> None:
-        """Create one solver copy per candidate."""
+        """Create one solver copy per candidate; close them on failure."""
         self._candidates = tuple(dict(c) for c in candidates)
-        self._twins = [self._make_twin(c) for c in self._candidates]
+        self._twins = []
+        try:
+            for candidate in self._candidates:
+                self._twins.append(self._make_twin(candidate))
+        except BaseException:
+            self.close()
+            raise
 
     def set_batch(self, runs: int) -> None:
         """Stage ``runs`` grid columns on the device, cycling if short."""
@@ -549,9 +562,15 @@ class _OptimizeRunner:
             ):
                 self._emit(f"  {label}: worker compiled {config_hash[:12]}")
 
-    def size_batch(self, waves: int) -> None:
-        """Stage the batch filling ``waves`` at the first candidate."""
-        self.set_batch(sized_batch_runs(self._twins[0].kernel, waves))
+    def size_batch(
+        self, waves: int, blocksizes: Optional[Sequence[int]] = None
+    ) -> None:
+        """Stage the batch filling ``waves`` at every candidate's launches."""
+        resident = max(
+            most_resident_runs(twin.kernel, blocksizes)
+            for twin in self._twins
+        )
+        self.set_batch(int(waves) * resident)
         self._sized = True
         self._emit(f"batch: {self.runs} runs fill {waves} waves")
 
@@ -638,7 +657,9 @@ class _OptimizeRunner:
             # The launch shapes are typed on a resident stand-in batch.
             self._compile(self._twins[index])
             kernel = self._twins[index].kernel
-            for blocksize, resident in launch_candidates(kernel, blocksizes):
+            for blocksize, resident in launch_candidates(
+                kernel, blocksizes, runs=self.runs
+            ):
                 launch = LaunchResult(
                     settings=dict(candidate),
                     blocksize=blocksize,
@@ -665,8 +686,8 @@ class _OptimizeRunner:
                     launch.blocks_per_sm = active_blocks_per_multiprocessor(
                         kernel.kernel, blocksize, dynamic
                     )
-                if self.achieved_waves is None:
-                    self._probe_waves(twin, launch.blocksize)
+                if round_index == 0:
+                    self._record_waves(twin, launch.blocksize)
                 # A moderately slow first solve is repeated once.
                 limit = EXCLUSION_RATIO * self._fastest_ms
                 if round_index == 0 and first > limit:
@@ -688,12 +709,20 @@ class _OptimizeRunner:
                     )
                 self._fastest_ms = min(self._fastest_ms, launch.best_ms)
                 self._emit(f"  {launch.label}: {launch.best_ms:.3f} ms")
+        self._warn_under_two_waves()
         return launches
 
-    def _probe_waves(self, twin: Any, blocksize: int) -> None:
-        """Record achieved occupancy waves; warn once when under two."""
-        self.achieved_waves = _achieved_waves(twin, blocksize)
-        if not self._sized and self.achieved_waves < 2.0:
+    def _record_waves(self, twin: Any, blocksize: int) -> None:
+        """Keep the fewest occupancy waves any launch achieves."""
+        waves = _achieved_waves(twin, blocksize)
+        if self.achieved_waves is None or waves < self.achieved_waves:
+            self.achieved_waves = waves
+
+    def _warn_under_two_waves(self) -> None:
+        """Warn once when a given batch fills under two waves."""
+        if self._sized or self.achieved_waves is None:
+            return
+        if self.achieved_waves < 2.0:
             more = 2.0 / self.achieved_waves
             warn(
                 f"The batch passed to optimize only fills "
@@ -840,7 +869,7 @@ def run_optimization(
         runner.prewarm()
         runner.compile_twins()
         if auto_size:
-            runner.size_batch(waves)
+            runner.size_batch(waves, blocksizes)
             runner.probe_duration(target_ms)
         else:
             runner.set_batch(inits.shape[1])

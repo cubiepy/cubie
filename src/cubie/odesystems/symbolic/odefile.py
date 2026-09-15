@@ -212,6 +212,7 @@ class ODEFile:
                         "provided."
                     )
                 self.add_function(code_lines)
+            imported = self._import_function(func_name, injections)
 
         if was_cached and not self._cache_notification_printed:
             default_timelogger.print_message(
@@ -220,7 +221,7 @@ class ODEFile:
             )
             self._cache_notification_printed = True
 
-        return self._import_function(func_name, injections), was_cached
+        return imported, was_cached
 
     def add_function(self, printed_code: str) -> None:
         """Append generated code to the cache file.

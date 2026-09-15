@@ -543,11 +543,19 @@ class Solver:
                 candidates.append(free)
         return tuple(candidates)
 
-    def copy(self) -> "Solver":
-        """Return a copy: same settings and drivers, current log level."""
+    def copy(self, **overrides: Any) -> "Solver":
+        """Return a copy: same settings and drivers, current log level.
+
+        Parameters
+        ----------
+        **overrides
+            Settings applied over this solver's; ``None`` leaves one
+            not given.
+        """
         settings = {
             **self.settings_dict,
             "time_logging_level": default_timelogger.verbosity,
+            **overrides,
         }
         twin = type(self)(self.system.copy(), **settings)
         drivers = self.kernel.driver_inputs()
