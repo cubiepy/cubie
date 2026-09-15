@@ -1296,6 +1296,25 @@ class BatchSolverKernel(CUDAFactory):
         if self.driver_interpolator.config_hash != known_hash:
             self.update(self._driver_settings())
 
+    def driver_inputs(self) -> Optional[Dict[str, Any]]:
+        """Drivers as passed to ``configure_drivers``; ``None`` when unset."""
+        interpolator = self.driver_interpolator
+        samples = interpolator.input_array
+        if samples.shape[0] == 0:
+            return None
+        names = list(self.system.indices.driver_names)
+        inputs = {
+            name: samples[:, index] for index, name in enumerate(names)
+        }
+        return {
+            **inputs,
+            "t0": interpolator.t0,
+            "driver_sample_period": interpolator.driver_sample_period,
+            "order": interpolator.order,
+            "wrap": interpolator.wrap,
+            "boundary_condition": interpolator.boundary_condition,
+        }
+
     def _driver_settings(self) -> Dict[str, Any]:
         """Return the interpolator's evaluators and coefficient layout."""
         interpolator = self.driver_interpolator
