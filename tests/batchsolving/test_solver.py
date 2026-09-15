@@ -322,8 +322,7 @@ def test_compile_then_solve(
     simple_parameters,
     driver_settings,
 ):
-    """Compile records the time parameters and allocates no batch; the
-    following solve allocates its batch and is valid."""
+    """Compile allocates no batch; the following solve does."""
     expected_inits, expected_params = solver_mutable.build_grid(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
@@ -363,8 +362,7 @@ def test_compile_between_solves_keeps_the_batch_arrays(
     simple_parameters,
     driver_settings,
 ):
-    """A compile and a sizing between two solves leave the batch's
-    device arrays, partition and kernel in place for the repeat."""
+    """A compile between solves leaves the batch arrays in place."""
     solver = solver_mutable
     kernel = solver.kernel
     inputs = kernel.input_arrays
@@ -408,8 +406,7 @@ def test_compile_between_solves_keeps_the_batch_arrays(
 
 
 def test_launch_geometry_needs_no_batch(solver_mutable, driver_settings):
-    """A fresh kernel sizes its launches before any batch exists; a
-    launch of fewer runs than a block takes their shared bytes only."""
+    """A fresh kernel sizes its launches before any batch exists."""
     solver = solver_mutable
     kernel = solver.kernel
     solver.compile(drivers=driver_settings, duration=0.05)
