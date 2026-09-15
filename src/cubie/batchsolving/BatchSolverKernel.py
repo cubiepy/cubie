@@ -566,7 +566,8 @@ class BatchSolverKernel(CUDAFactory):
         warmup: float = 0.0,
         t0: float = 0.0,
     ) -> None:
-        """Compile the launch specialization without preparing a batch.
+        """Record the time parameters and compile the launch
+        specialization on unit stand-in arrays; no batch is allocated.
 
         Parameters
         ----------
@@ -576,13 +577,6 @@ class BatchSolverKernel(CUDAFactory):
             Warmup time before the main simulation.
         t0
             Initial integration time.
-
-        Notes
-        -----
-        The time parameters are recorded on :attr:`run_params`. The
-        specialization is typed on unit stand-in arrays, so no batch
-        array is allocated or uploaded and the array managers keep
-        whatever the last run attached.
         """
         if self._closed:
             raise RuntimeError(
@@ -607,14 +601,8 @@ class BatchSolverKernel(CUDAFactory):
         return dispatcher
 
     def _specialization_args(self) -> Tuple:
-        """Return launch arguments typed like a solve's, on unit arrays.
-
-        One device array per kernel array argument, with a solve's dtype
-        and dimension count and every extent 1, then the scalar
-        arguments at their launch types. Memoised per precision; the
-        arrays live outside the array managers, so a solve's batch
-        arrays are never displaced.
-        """
+        """Return launch arguments typed like a solve's: unit device
+        arrays and launch-typed scalars, memoised per precision."""
         precision = self.precision
         cached = self._specialization_cache
         if cached is not None and cached[0] is precision:
@@ -890,21 +878,13 @@ class BatchSolverKernel(CUDAFactory):
             Requested CUDA block size; ``None`` uses the ``blocksize``
             setting, or the automatic launch when that is unset.
         runs
-            Runs in the launch, which bounds the dynamic shared bytes
-            of a launch smaller than a block; ``None`` sizes a full
-            block.
+            Runs in the launch; ``None`` sizes a full block.
 
         Returns
         -------
         tuple[int, int]
             Block size and dynamic shared bytes, padded to hold the
             resident block count.
-
-        Notes
-        -----
-        Needs no batch: the specialization is typed on unit stand-in
-        arrays, so the geometry of a batch is available before the
-        batch is prepared.
         """
         resident = self.resident_blocks
         if blocksize is None:
@@ -930,8 +910,7 @@ class BatchSolverKernel(CUDAFactory):
         self, blocksize: int, runs: Optional[int]
     ) -> tuple[int, int]:
         """Return a launch's block size, halved until its shared
-        footprint fits, and dynamic shared bytes; ``runs`` of ``None``
-        fills the block."""
+        footprint fits, and dynamic shared bytes."""
         pad = SHARED_SKEW_BYTES if self.shared_memory_needs_padding else 0
         padded_bytes = self.shared_memory_bytes + pad
         runs_in_block = blocksize if runs is None else min(runs, blocksize)

@@ -700,7 +700,8 @@ class Solver:
         t0: float = 0.0,
         **kwargs: Any,
     ) -> None:
-        """Compile the batch kernel without preparing or solving a batch.
+        """Apply settings and drivers and compile the kernel; no batch
+        is allocated.
 
         Parameters
         ----------
@@ -715,13 +716,6 @@ class Solver:
             Initial integration time. Default ``0.0``.
         **kwargs
             Additional options forwarded to :meth:`update`.
-
-        Notes
-        -----
-        Settings and drivers are applied as :meth:`solve` applies them.
-        The launch specialization is typed on unit stand-in arrays, so
-        batch inputs play no part: the batch arrays are allocated and
-        uploaded by a solve.
         """
         self.update(duration=duration, **kwargs)
 
