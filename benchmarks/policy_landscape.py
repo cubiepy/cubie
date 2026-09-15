@@ -726,7 +726,7 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP,
     floor = float("inf")
     current = None
     for round_index in range(rounds):
-        ordered = units if round_index == 0 else units[::-1]
+        ordered = units if round_index % 2 == 0 else units[::-1]
         for arm, cell in ordered:
             if cell.capped:
                 continue

@@ -317,6 +317,19 @@ def test_apply_launch_sets_settings_blocksize_and_residency(solver_mutable):
     assert loop.compile_settings.unroll.unroll_other_small == ROLLED.value
 
 
+def test_block_size_change_clears_the_pinned_residency(solver_mutable):
+    """A new block size drops the residency timed with the old one."""
+    launch = LaunchResult(settings={}, blocksize=128, resident_blocks=2)
+    apply_launch(solver_mutable, launch)
+    kernel = solver_mutable.kernel
+    assert kernel.resident_blocks == 2
+    solver_mutable.update(dt=solver_mutable.dt * 0.5)
+    assert kernel.resident_blocks == 2
+    solver_mutable.update(blocksize=64)
+    assert kernel.resident_blocks is None
+    assert kernel.compile_settings.blocksize == 64
+
+
 @pytest.mark.nocudasim
 @pytest.mark.parametrize(
     "solver_settings_override",

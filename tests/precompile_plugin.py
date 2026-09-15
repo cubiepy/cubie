@@ -552,7 +552,7 @@ if POPULATION:
         _population_compile_kernel_specialization
     )
     _backend_utils.kernel_resources = (
-        lambda dispatcher: _backend_utils.KernelResources(0, 0)
+        lambda dispatcher: _backend_utils.KernelResources(0, 0, 0)
     )
     _backend_utils.active_blocks_per_multiprocessor = (
         lambda dispatcher, blocksize, dynamic_shared: 1

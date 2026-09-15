@@ -201,12 +201,12 @@ def shared_limited_threads(
     """Return the most resident threads per SM ``bytes_per_run`` allows."""
     best = 0
     for blocksize in LAUNCH_BLOCKSIZES:
-        block_bytes = (
-            bytes_per_run * blocksize
-            + hardware.reserved_shared_memory_per_block
-        )
-        if block_bytes > hardware.max_dynamic_shared_memory_per_block:
+        dynamic_bytes = bytes_per_run * blocksize
+        if dynamic_bytes > hardware.max_dynamic_shared_memory_per_block:
             continue
+        block_bytes = (
+            dynamic_bytes + hardware.reserved_shared_memory_per_block
+        )
         blocks = min(
             hardware.shared_memory_per_multiprocessor // block_bytes,
             hardware.max_threads_per_multiprocessor // blocksize,

@@ -1258,7 +1258,11 @@ class BatchSolverKernel(CUDAFactory):
             "loop_fn": run.device_function,
             "compile_flags": run.output_compile_flags,
         }
+        blocksize = self.compile_settings.blocksize
         recognised |= self.update_compile_settings(kernel_updates, silent=True)
+        if self.compile_settings.blocksize != blocksize:
+            # A pinned residency belongs to the block size it was timed with.
+            self.resident_blocks = None
         self._known_system_config = self.system.compile_settings
 
         unrecognised = user_keys - recognised

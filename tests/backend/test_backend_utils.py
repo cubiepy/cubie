@@ -57,6 +57,12 @@ def test_shared_limited_threads_take_the_best_block_size():
     assert shared_limited_threads(_hardware(), 400) == 224
 
 
+def test_shared_limited_threads_compare_dynamic_bytes_to_the_limit():
+    """396 B per run fills the dynamic limit exactly at 256 threads; the
+    reserve counts against the SM, not the block limit."""
+    assert shared_limited_threads(_hardware(), 396) == 256
+
+
 def test_shared_keeps_occupancy_compares_with_the_register_limit():
     """A register-capped kernel keeps 256 threads; 100 B per run keeps
     768, 400 B keeps 224, which half occupancy still accepts."""

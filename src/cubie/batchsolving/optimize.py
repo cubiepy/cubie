@@ -507,7 +507,7 @@ class _OptimizeRunner:
                 )
         current = None
         for round_index in range(ROUNDS):
-            ordered = launches if round_index == 0 else launches[::-1]
+            ordered = launches if round_index % 2 == 0 else launches[::-1]
             for launch in ordered:
                 if launch.excluded:
                     continue
