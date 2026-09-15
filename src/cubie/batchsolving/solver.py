@@ -973,6 +973,12 @@ class Solver:
         if "time_logging_level" in updates:
             default_timelogger.set_verbosity(updates["time_logging_level"])
         self.given = given
+        if (
+            not changed
+            and updates.keys() <= recognised
+            and not self.kernel.system_config_stale
+        ):
+            return recognised | groups
         system = self.system
         recognised |= system.update(
             {key: val for key, val in updates.items() if val is not None},
