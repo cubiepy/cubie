@@ -120,6 +120,11 @@ class OutputFunctionCache(CUDADispatcherCache):
     save_summaries_fn: Callable = field(
         validator=validators.instance_of(Callable)
     )
+    compile_flags: Optional[OutputCompileFlags] = field(default=None)
+    n_counters: int = field(default=0)
+    state_summaries_buffer_height: int = field(default=0)
+    observable_summaries_buffer_height: int = field(default=0)
+    output_array_heights: Optional[OutputArrayHeights] = field(default=None)
 
 
 class OutputFunctions(CUDAFactory):
@@ -320,6 +325,15 @@ class OutputFunctions(CUDAFactory):
             save_state_fn=save_state_fn,
             update_summaries_fn=update_summary_metrics_func,
             save_summaries_fn=save_summaries_fn,
+            compile_flags=config.compile_flags,
+            n_counters=config.buffer_sizes_dict["n_counters"],
+            state_summaries_buffer_height=(
+                config.state_summaries_buffer_height
+            ),
+            observable_summaries_buffer_height=(
+                config.observable_summaries_buffer_height
+            ),
+            output_array_heights=OutputArrayHeights.from_output_fns(self),
         )
 
     @property

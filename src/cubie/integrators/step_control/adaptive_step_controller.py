@@ -308,7 +308,7 @@ class BaseAdaptiveStepController(BaseStepController):
         if fixes:
             self.update_compile_settings(fixes, silent=True)
 
-    def build(self) -> ControllerCache:
+    def compile_controller(self) -> ControllerCache:
         """Construct the device function implementing the controller.
 
         Returns

@@ -41,7 +41,7 @@ class ExplicitStepConfig(BaseStepConfig):
 class ODEExplicitStep(BaseAlgorithmStep):
     """Base helper for explicit integration algorithms."""
 
-    def build(self) -> StepCache:
+    def compile_step(self) -> StepCache:
         """Create and cache the device function for the explicit algorithm.
 
         Returns
@@ -57,7 +57,7 @@ class ODEExplicitStep(BaseAlgorithmStep):
         observables_fn = config.observables_fn
         drivers_fn = config.drivers_fn
         n_drivers = config.n_drivers
-        return self.build_step(
+        cache = self.build_step(
             dxdt_fn,
             observables_fn,
             drivers_fn,
@@ -65,6 +65,7 @@ class ODEExplicitStep(BaseAlgorithmStep):
             n,
             n_drivers,
         )
+        return cache
 
     @abstractmethod
     def build_step(

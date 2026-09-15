@@ -14,7 +14,7 @@ Published Classes
 
 :class:`StepCache`
     Cache container for compiled step and optional nonlinear solver
-    device functions.
+    device functions, the step's sizes, order and flags.
 
 :class:`BaseAlgorithmStep`
     Abstract CUDAFactory base for all integration step implementations.
@@ -40,7 +40,12 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict, Optional, Set, Any, Tuple, Sequence
 import warnings
 
-from attrs import define, field, validators, frozen
+from attrs import (
+    define,
+    field,
+    validators,
+    frozen,
+)
 from numpy import (
     array as np_array,
     ascontiguousarray as np_ascontiguousarray,
@@ -716,22 +721,21 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
 
 @define
 class StepCache(CUDADispatcherCache):
-    """Container for compiled device helpers used by an algorithm step.
-
-    Parameters
-    ----------
-    step_fn
-        Device function that advances the integration state.
-    nonlinear_solver_fn
-        Optional device function used by implicit methods to perform
-        nonlinear solves.
-    """
+    """A step's device functions with its sizes, order and flags."""
 
     step_fn: Callable = field(validator=is_device_validator)
     nonlinear_solver_fn: Optional[Callable] = field(
         default=None,
         validator=validators.optional(is_device_validator),
     )
+    threads_per_step: int = field(default=0)
+    n_error: int = field(default=0)
+    algorithm_order: int = field(default=0)
+    has_error_estimate: bool = field(default=False)
+    is_implicit: bool = field(default=False)
+    is_linear: bool = field(default=False)
+    newton_solves_per_step: int = field(default=0)
+    step_operation_count: int = field(default=0)
 
 
 class BaseAlgorithmStep(CUDAFactory):
@@ -843,6 +847,50 @@ class BaseAlgorithmStep(CUDAFactory):
 
         return recognised
 
+    def build(self) -> StepCache:
+        """Compile the step and record its sizes, order and flags.
+
+        Returns
+        -------
+        StepCache
+            The compiled step with its products filled in.
+        """
+        cache = self.compile_step()
+        cache.threads_per_step = self.threads_per_step
+        cache.n_error = self.n_error
+        cache.algorithm_order = self.algorithm_order
+        cache.has_error_estimate = self.has_error_estimate
+        cache.is_implicit = self.is_implicit
+        cache.is_linear = self.is_linear
+        cache.newton_solves_per_step = self.newton_solves_per_step
+        cache.step_operation_count = self.step_operation_count
+        return cache
+
+    @abstractmethod
+    def compile_step(self) -> StepCache:
+        """Compile the step's device functions.
+
+        Returns
+        -------
+        StepCache
+            The compiled step and any nonlinear solver.
+        """
+
+    @property
+    def n_error(self) -> int:
+        """``n_states`` while the step writes an error estimate, else 0."""
+        return self.n_states if self.uses_error else 0
+
+    @property
+    def newton_solves_per_step(self) -> int:
+        """Return the Newton solves one step runs."""
+        return 0
+
+    @property
+    def step_operation_count(self) -> int:
+        """Return the operator count of one fully unrolled step."""
+        return 0
+
     @property
     def n_drivers(self) -> int:
         """Return the configured number of external drivers."""
@@ -857,7 +905,7 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     def algorithm_defaults(self) -> Dict[str, Any]:
-        """Return combined family and individual tableau defaults."""
+        """Return the family defaults overlaid with the tableau's."""
         merged = dict(self._defaults.settings)
         tableau = self.compile_settings.tableau
         if tableau is not None:
@@ -986,9 +1034,11 @@ class BaseAlgorithmStep(CUDAFactory):
         return self.get_cached_output("step_fn")
 
     def copy(self) -> "BaseAlgorithmStep":
-        """Return a new step of this family with these settings."""
+        """Return a new step with these settings and the helper factory."""
         return type(self)(
-            tableau=self.compile_settings.tableau, **self.settings_dict
+            tableau=self.compile_settings.tableau,
+            get_solver_helper_fn=self.get_solver_helper_fn,
+            **self.settings_dict,
         )
 
     @property

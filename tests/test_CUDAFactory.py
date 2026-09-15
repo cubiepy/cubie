@@ -334,6 +334,27 @@ def test_update_eq_false_same_identity_no_change():
     assert changed == set()
 
 
+def test_update_eq_false_rebound_method_no_change():
+    """A fresh binding of the same method is not a change."""
+
+    class _Owner:
+        def helper(self):
+            return 1
+
+    owner = _Owner()
+
+    @attrs.frozen
+    class _C(_CubieConfigBase):
+        fn: object = attrs.field(default=None, eq=False)
+
+    c = _C(fn=owner.helper)
+    replacement, recognized, changed = c.update({"fn": owner.helper})
+    assert replacement is c
+    assert changed == set()
+    replacement, recognized, changed = c.update({"fn": _Owner().helper})
+    assert changed == {"fn"}
+
+
 def test_update_ndarray_comparison():
     """Semantic array fields compare elementwise."""
     @attrs.frozen
@@ -1050,3 +1071,55 @@ def test_products_returns_the_cache_fields(system):
     assert set(products) == {
         fld.name for fld in attrs.fields(type(system._cache))
     }
+
+
+def test_pushing_the_system_helper_getter_again_keeps_the_step_built(
+    single_integrator_run,
+):
+    """Re-sending ``system.get_solver_helper`` does not rebuild the step."""
+    run = single_integrator_run
+    step = run._algo_step
+    step.step_fn
+    assert step.cache_valid
+    step.update(
+        get_solver_helper_fn=run._system.get_solver_helper, silent=True
+    )
+    assert step.cache_valid
+    run.update(dt=run._step_controller.dt, silent=True)
+    assert step.cache_valid
+
+
+def test_child_products_carry_their_declared_fields(
+    single_integrator_run, solverkernel
+):
+    """Every child delivers its device functions, sizes and flags."""
+    run = single_integrator_run
+    run.device_function
+    outputs = run._output_functions.products
+    assert {
+        "save_state_fn", "update_summaries_fn", "save_summaries_fn",
+        "compile_flags", "n_counters", "state_summaries_buffer_height",
+        "observable_summaries_buffer_height", "output_array_heights",
+    } <= set(outputs)
+    assert outputs["compile_flags"] == run._output_functions.compile_flags
+    step = run._algo_step.products
+    assert {
+        "step_fn", "nonlinear_solver_fn", "threads_per_step", "n_error",
+        "algorithm_order", "has_error_estimate", "is_implicit",
+        "is_linear", "newton_solves_per_step", "step_operation_count",
+    } <= set(step)
+    assert step["algorithm_order"] == run._algo_step.algorithm_order
+    assert step["n_error"] == run.n_error
+    controller = run._step_controller.products
+    assert {
+        "step_controller_fn", "is_adaptive", "dt", "dt_min", "dt_max",
+        "atol", "rtol",
+    } <= set(controller)
+    assert controller["is_adaptive"] == run._step_controller.is_adaptive
+    assert controller["dt"] == run._step_controller.dt
+    assert "initialise_state_fn" in run._dae_initialiser.products
+    assert run.products["loop_fn"] is run._loop.products["loop_fn"]
+    interpolator = solverkernel.driver_interpolator.products
+    assert interpolator["coefficients_shape"] == (
+        solverkernel.driver_interpolator.coefficients_shape
+    )

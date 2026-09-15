@@ -299,15 +299,23 @@ def promoted_gain_controller(current: str, settings) -> Optional[str]:
 
 @define
 class ControllerCache(CUDADispatcherCache):
-    """Cache container for compiled step-controller device functions.
+    """The controller's device function, step bounds and tolerances.
 
     Attributes
     ----------
     step_controller_fn
         Compiled CUDA device function, or ``-1`` before compilation.
+    is_adaptive, dt, dt_min, dt_max, atol, rtol
+        The controller's adaptivity, step bounds and tolerances.
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)
+    is_adaptive: bool = field(default=False)
+    dt: float = field(default=0.0)
+    dt_min: float = field(default=0.0)
+    dt_max: float = field(default=0.0)
+    atol: Optional[ndarray] = field(default=None)
+    rtol: Optional[ndarray] = field(default=None)
 
 
 @frozen
@@ -557,14 +565,31 @@ class BaseStepController(CUDAFactory):
         """Return the compiled step-controller device function."""
         return self.get_cached_output("step_controller_fn")
 
-    @abstractmethod
     def build(self) -> ControllerCache:
-        """Compile and return the CUDA device controller.
+        """Compile the controller and record its bounds and tolerances.
 
         Returns
         -------
         ControllerCache
-            Cache containing the compiled controller device function.
+            The compiled controller with its products filled in.
+        """
+        cache = self.compile_controller()
+        cache.is_adaptive = self.is_adaptive
+        cache.dt = self.dt
+        cache.dt_min = self.dt_min
+        cache.dt_max = self.dt_max
+        cache.atol = self.atol
+        cache.rtol = self.rtol
+        return cache
+
+    @abstractmethod
+    def compile_controller(self) -> ControllerCache:
+        """Compile the controller device function.
+
+        Returns
+        -------
+        ControllerCache
+            The compiled controller.
         """
 
     @property

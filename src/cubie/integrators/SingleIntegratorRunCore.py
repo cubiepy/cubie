@@ -43,7 +43,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
 )
 from cubie.integrators.dae_initialiser import DAEInitialiser
 from cubie.integrators.loops.ode_loop import IVPLoop
-from cubie.outputhandling import OutputCompileFlags
 from cubie.outputhandling.output_functions import OutputFunctions
 from cubie.integrators.step_control import (
     CONTROLLER_GAIN_PARAMETERS,
@@ -199,7 +198,6 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         self._system = system
         system_sizes = system.sizes
-        n = system_sizes.states
 
         # Outputsettings may/may not include precision, so we pop it here to
         # ensure that it gets passed a precision matching system's
@@ -212,8 +210,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         dt = step_control_settings.get("dt", None)
-        algorithm_settings["n_states"] = n
-        algorithm_settings["n_drivers"] = system_sizes.drivers
+        algorithm_settings.update(self._step_inputs())
         if dt is not None:
             algorithm_settings["dt"] = dt
         algorithm_settings["drivers_fn"] = drivers_fn
@@ -262,62 +259,33 @@ class SingleIntegratorRunCore(CUDAFactory):
         # Default any unset inner-solver tolerances from the controller.
         self._apply_inner_tolerance_defaults()
 
-        loop_settings["dt"] = self._step_controller.dt
-        loop_settings["dt_min"] = self._step_controller.dt_min
-        loop_settings["dt_max"] = self._step_controller.dt_max
-        loop_settings["is_adaptive"] = self._step_controller.is_adaptive
-
         config = IntegratorRunSettings(
             precision=system.precision,
             algorithm=algorithm_settings["algorithm"],
             step_controller=controller_settings["step_controller"],
             auto_performance=auto_performance,
         )
-
         self.setup_compile_settings(config)
-        self._loop = self.instantiate_loop(
-            precision=precision,
-            n_states=system_sizes.states,
-            n_parameters=system_sizes.parameters,
-            n_observables=system_sizes.observables,
-            n_drivers=system_sizes.drivers,
-            compile_flags=self._output_functions.compile_flags,
-            state_summaries_buffer_height=(
-                self._output_functions.state_summaries_buffer_height
-            ),
-            observable_summaries_buffer_height=(
-                self._output_functions.observable_summaries_buffer_height
-            ),
-            loop_settings=loop_settings,
-            drivers_fn=drivers_fn,
-        )
-
-        # Timing keys as the user gave them.
-        self._user_timing = dict.fromkeys(self._TIMING_KEYS)
-        self.is_duration_dependent = False
-        self._process_loop_timing(loop_settings)
-
-        # Register algorithm step and controller buffers with loop as parent
-        buffer_registry.register_child(
-            self._loop, self._algo_step, name="algorithm"
-        )
-        buffer_registry.register_child(
-                self._loop, self._step_controller, name='controller'
-        )
+        self._apply_performance_defaults()
 
         # Non-DAE systems and mode "none" compile a no-op initialiser.
         init_settings = self._algo_step.settings_dict
         init_settings["dae_initialisation"] = algorithm_settings.get(
             "dae_initialisation"
         )
-        init_settings["mass_flags"] = system.mass_diagonal_flags
+        init_settings.update(self._initialiser_inputs())
         self._dae_initialiser = DAEInitialiser(**init_settings)
-        buffer_registry.register_child(
-            self._loop,
-            self._dae_initialiser,
-            name="initialiser",
-            aliases="algorithm_shared",
-        )
+
+        loop_settings.setdefault("drivers_fn", drivers_fn)
+        loop_settings.update(self._loop_inputs())
+        self._loop = IVPLoop(**loop_settings)
+
+        # Timing keys as the user gave them.
+        self._user_timing = dict.fromkeys(self._TIMING_KEYS)
+        self.is_duration_dependent = False
+        self._process_loop_timing(loop_settings)
+        self._register_loop_children()
+        self._sync_loop()
 
     def _process_loop_timing(self, settings_dict: Dict[str, Any]):
         """Derive and apply timing parameters from *settings_dict*.
@@ -414,11 +382,11 @@ class SingleIntegratorRunCore(CUDAFactory):
             samples_per_summary = 100
             sample_summaries_every = duration / samples_per_summary
 
-            self._loop.update(
-                summarise_every=duration,
+            self._output_functions.update(
                 sample_summaries_every=sample_summaries_every,
             )
-            self._output_functions.update(
+            self._sync_loop(
+                summarise_every=duration,
                 sample_summaries_every=sample_summaries_every,
             )
 
@@ -592,75 +560,86 @@ class SingleIntegratorRunCore(CUDAFactory):
             )
             self._algo_step.update({"is_adaptive": False}, silent=True)
 
-    def instantiate_loop(
-        self,
-        precision: PrecisionDType,
-        n_states: int,
-        n_parameters: int,
-        n_observables: int,
-        n_drivers: int,
-        state_summaries_buffer_height: int,
-        observable_summaries_buffer_height: int,
-        compile_flags: OutputCompileFlags,
-        loop_settings: Dict[str, Any],
-        drivers_fn: Optional[Callable] = None,
-    ) -> IVPLoop:
-        """Instantiate the integrator loop.
-
-        Parameters
-        ----------
-        precision
-            Numerical precision used when compiling the loop.
-        n_states
-            Number of state variables in the system.
-        n_parameters
-            Number of persistent parameters available to the loop.
-        n_observables
-            Number of observables emitted by the system.
-        n_drivers
-            Number of external driver signals consumed by the loop.
-        state_summaries_buffer_height
-            Height of the state summary buffer managed by the outputs.
-        observable_summaries_buffer_height
-            Height of the observable summary buffer managed by the outputs.
-        compile_flags
-            Output function compile flags generated by
-            :class:`cubie.outputhandling.OutputFunctions`.
-        loop_settings
-            Mapping of loop configuration overrides forwarded directly to the
-            :class:`~cubie.integrators.loops.ode_loop.IVPLoop` constructor.
-        drivers_fn
-            Optional device function that evaluates drivers for proposed times.
-
-        Returns
-        -------
-        IVPLoop
-            Configured loop instance ready for CUDA compilation.
-        """
-        n_counters = self._output_functions.buffer_sizes_dict["n_counters"]
-
-        loop_kwargs = dict(loop_settings)
-
-        # Build the loop with individual parameters (new API)
-        loop_kwargs.update(
-            precision=precision,
-            n_states=n_states,
-            compile_flags=compile_flags,
-            n_parameters=n_parameters,
-            n_drivers=n_drivers,
-            n_observables=n_observables,
-            n_error=self.n_error,
-            n_counters=n_counters,
-            state_summaries_buffer_height=state_summaries_buffer_height,
-            observable_summaries_buffer_height=(
-                observable_summaries_buffer_height
-            ),
+    def _step_inputs(self) -> Dict[str, Any]:
+        """Return the system's sizes and device functions the step takes."""
+        system = self._system
+        sizes = system.sizes
+        return dict(
+            n_states=int(sizes.states),
+            n_drivers=int(sizes.drivers),
+            dxdt_fn=system.dxdt_fn,
+            observables_fn=system.observables_fn,
+            get_solver_helper_fn=system.get_solver_helper,
         )
-        if "drivers_fn" not in loop_kwargs:
-            loop_kwargs["drivers_fn"] = drivers_fn
 
-        loop = IVPLoop(**loop_kwargs)
-        return loop
+    def _initialiser_inputs(self) -> Dict[str, Any]:
+        """Return the sizes and helper getter the initialiser takes."""
+        system = self._system
+        return dict(
+            n_states=int(system.sizes.states),
+            mass_flags=system.mass_diagonal_flags,
+            get_solver_helper_fn=system.get_solver_helper,
+        )
+
+    def _loop_inputs(self) -> Dict[str, Any]:
+        """Return the sizes, dt and device functions the loop takes."""
+        system = self._system
+        sizes = system.sizes
+        outputs = self._output_functions.products
+        step = self._algo_step.products
+        controller = self._step_controller.products
+        return dict(
+            precision=system.precision,
+            n_states=int(sizes.states),
+            n_parameters=int(sizes.parameters),
+            n_observables=int(sizes.observables),
+            n_drivers=int(sizes.drivers),
+            compile_flags=outputs["compile_flags"],
+            n_counters=outputs["n_counters"],
+            state_summaries_buffer_height=(
+                outputs["state_summaries_buffer_height"]
+            ),
+            observable_summaries_buffer_height=(
+                outputs["observable_summaries_buffer_height"]
+            ),
+            n_error=step["n_error"],
+            dt=controller["dt"],
+            is_adaptive=controller["is_adaptive"],
+            save_state_fn=outputs["save_state_fn"],
+            update_summaries_fn=outputs["update_summaries_fn"],
+            save_summaries_fn=outputs["save_summaries_fn"],
+            step_controller_fn=controller["step_controller_fn"],
+            step_fn=step["step_fn"],
+            observables_fn=system.observables_fn,
+            initialise_state_fn=self._dae_initialiser.products[
+                "initialise_state_fn"
+            ],
+        )
+
+    def _register_loop_children(self) -> None:
+        """Register the step, controller and initialiser under the loop."""
+        buffer_registry.register_child(
+            self._loop, self._algo_step, name="algorithm"
+        )
+        buffer_registry.register_child(
+            self._loop, self._step_controller, name="controller"
+        )
+        buffer_registry.register_child(
+            self._loop,
+            self._dae_initialiser,
+            name="initialiser",
+            aliases="algorithm_shared",
+        )
+
+    def _sync_loop(self, **updates: Any) -> set[str]:
+        """Push ``updates`` and the children's products; capture loop_fn."""
+        recognised = self._loop.update(
+            {**updates, **self._loop_inputs()}, silent=True
+        )
+        self.update_compile_settings(
+            loop_fn=self._loop.device_function, silent=True
+        )
+        return recognised
 
     def update(
         self,
@@ -724,12 +703,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         recognized = set()
 
         system_recognized = self._system.update(updates_dict, silent=True)
-
-        # Capture n and n_drivers whether or not system updated, in case
-        # of an algo/step swap
         sizes = self._system.sizes
-        updates_dict.update({'n_states': int(sizes.states)})
-        updates_dict.update({'n_drivers': int(sizes.drivers)})
 
         # Push the full layout when the system's shape changed.
         out_config = self._output_functions.compile_settings
@@ -745,18 +719,12 @@ class SingleIntegratorRunCore(CUDAFactory):
                 }
             )
 
-        # Capture outputsettings-generated compile settings and pass on
         out_rcgnzd = self._output_functions.update(updates_dict, silent=True)
-        if out_rcgnzd:
-            updates_dict.update({**self._output_functions.buffer_sizes_dict})
 
-        # Capture algorithm-generated compile settings and pass on
         step_recognized = self._switch_algos(updates_dict)
-        step_recognized |= self._algo_step.update(updates_dict, silent=True)
-        if step_recognized:
-            updates_dict.update(
-                {"threads_per_step": self._algo_step.threads_per_step}
-            )
+        step_recognized |= self._algo_step.update(
+            {**updates_dict, **self._step_inputs()}, silent=True
+        )
 
         updates_dict["algorithm_order"] = self._algo_step.algorithm_order
         updates_dict["mass_flags"] = self._system.mass_diagonal_flags
@@ -765,19 +733,10 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._promote_controller(updates_dict)
         ctrl_rcgnzd = self._switch_controllers(updates_dict)
         ctrl_rcgnzd |= self._step_controller.update(updates_dict, silent=True)
-        if ctrl_rcgnzd:
-            updates_dict.update(
-                {
-                    "is_adaptive": self._step_controller.is_adaptive,
-                    "dt_min": self._step_controller.dt_min,
-                    "dt_max": self._step_controller.dt_max,
-                    "dt": self._step_controller.dt,
-                }
-            )
+        self.check_compatibility()
         step_recognized |= self._algo_step.update(
             {"is_adaptive": self._step_controller.is_adaptive}, silent=True
         )
-        updates_dict["n_error"] = self.n_error
 
         # Record any inner-solver tolerances the user set explicitly so the
         # derived defaults never overwrite them on this or a later update.
@@ -800,27 +759,14 @@ class SingleIntegratorRunCore(CUDAFactory):
         if "algorithm" in step_recognized:
             step_recognized |= self._apply_algorithm_step_defaults()
             step_recognized |= self._apply_dae_linear_solve_defaults()
-
-        # Re-register algo and controller buffers to refresh sizing in loop
-        buffer_registry.register_child(
-                self._loop, self._algo_step, name='algorithm'
-        )
-        buffer_registry.register_child(
-                self._loop, self._step_controller, name='controller'
-        )
+        self._apply_performance_defaults()
 
         recognized |= self._dae_initialiser.update(
-            updates_dict, silent=True
+            {**updates_dict, **self._initialiser_inputs()}, silent=True
         )
-        buffer_registry.register_child(
-            self._loop,
-            self._dae_initialiser,
-            name="initialiser",
-            aliases="algorithm_shared",
-        )
-
-        loop_recognized = self._loop.update(updates_dict, silent=True)
+        self._register_loop_children()
         self._process_loop_timing(updates_dict)
+        loop_recognized = self._sync_loop(**updates_dict)
 
         recognized |= self.update_compile_settings(updates_dict, silent=True)
         recognized |= (out_rcgnzd | ctrl_rcgnzd | step_recognized |
@@ -829,10 +775,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         all_unrecognized -= recognized
         if all_unrecognized and not silent:
             raise KeyError(f"Unrecognized parameters: {all_unrecognized}")
-        if recognized:
-            self._invalidate_cache()
-
-        self.check_compatibility()
 
         # Include unpacked dict keys in recognized set
         return recognized | unpacked_keys
@@ -861,8 +803,9 @@ class SingleIntegratorRunCore(CUDAFactory):
             buffer_registry.clear_parent(self._algo_step)
             old_settings = self._algo_step.settings_dict
             old_settings["algorithm"] = new_algo
-            # The system's device functions carry over to the new step.
+            # The driver and system device functions carry over.
             old_settings.update(self._step_device_functions())
+            old_settings.update(self._step_inputs())
             self._algo_step = get_algorithm_step(
                     precision=precision,
                     settings=old_settings,
@@ -1050,77 +993,8 @@ class SingleIntegratorRunCore(CUDAFactory):
         return {"step_controller"}
 
     def build(self) -> SingleIntegratorRunCache:
-        """Compile the integration loop and its dependencies.
-
-        Returns
-        -------
-        SingleIntegratorRunCache
-            Cache containing the compiled loop device function.
-        """
-
-        # Lowest level - check for changes in dxdt_fn, get_solver_helper_fn
-        dxdt_fn = self._system.dxdt_fn
-        observables_fn = self._system.observables_fn
-        get_solver_helper_fn = self._system.get_solver_helper
-        compiled_fns_dict = {}
-        if dxdt_fn != self._algo_step.dxdt_fn:
-            compiled_fns_dict["dxdt_fn"] = dxdt_fn
-        if observables_fn != self._algo_step.observables_fn:
-            compiled_fns_dict["observables_fn"] = observables_fn
-        if get_solver_helper_fn != self._algo_step.get_solver_helper_fn:
-            compiled_fns_dict['get_solver_helper_fn'] = get_solver_helper_fn
-
-        # Build algorithm fn after change made
-        self._algo_step.update(compiled_fns_dict)
-        self._apply_performance_defaults()
-
-        # Building the step and controller functions must precede the
-        # child-buffer registration below: an implicit step refreshes
-        # its nested solver buffer sizes during build_step, so a size
-        # snapshot taken before the build undersizes the loop's pool.
-        compiled_functions = {
-            'save_state_fn': self._output_functions.save_state_fn,
-            'update_summaries_fn': (
-                self._output_functions.update_summaries_fn
-            ),
-            'save_summaries_fn': (
-                self._output_functions.save_summaries_fn
-            ),
-            'step_controller_fn': self._step_controller.device_function,
-            'step_fn': self._algo_step.step_fn,
-            'observables_fn': observables_fn}
-
-        # Re-register algo and controller buffers to refresh sizing in loop
-        buffer_registry.register_child(
-                self._loop, self._algo_step, name='algorithm'
-        )
-        buffer_registry.register_child(
-                self._loop, self._step_controller, name='controller'
-        )
-
-        # Build the initialiser before snapshotting its footprint.
-        if (
-            get_solver_helper_fn
-            != self._dae_initialiser.get_solver_helper_fn
-        ):
-            self._dae_initialiser.update(
-                {"get_solver_helper_fn": get_solver_helper_fn},
-                silent=True,
-            )
-        compiled_functions["initialise_state_fn"] = (
-            self._dae_initialiser.device_function
-        )
-        buffer_registry.register_child(
-            self._loop,
-            self._dae_initialiser,
-            name="initialiser",
-            aliases="algorithm_shared",
-        )
-
-        self._loop.update(compiled_functions)
-        loop_fn = self._loop.device_function
-
-        return SingleIntegratorRunCache(loop_fn=loop_fn)
+        """Return the loop function captured by the last update."""
+        return SingleIntegratorRunCache(loop_fn=self.compile_settings.loop_fn)
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -1230,7 +1104,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         step = self._algo_step
         if not self.compile_settings.auto_performance or not step.is_implicit:
             return set()
-        step.build_implicit_helpers()
         updates = dict(step.performance_defaults)
         if step.newton_solves_per_step > 0:
             unrolled = (

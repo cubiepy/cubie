@@ -50,8 +50,8 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.integrators.algorithms.base_algorithm_step import (
-    StepCache,
     AlgorithmDefaults,
+    StepCache,
 )
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     DEFAULT_FIRK_TABLEAU,
@@ -272,7 +272,7 @@ class FIRKStep(ODEImplicitStep):
             precision=precision,
             solver_width=config.solver_width,
             n_states=n_states,
-            stage_coefficients=tableau.a_flat(precision),
+            tableau=tableau,
             instance_label="newton",
             **kwargs,
         )
@@ -299,6 +299,7 @@ class FIRKStep(ODEImplicitStep):
             **kwargs,
         )
         self.register_buffers()
+        self.build_implicit_helpers()
 
     def _build_error_solver(self) -> None:
         """Construct the width-n smoothing solver from live settings."""
@@ -380,7 +381,7 @@ class FIRKStep(ODEImplicitStep):
             n,
             config.stage_state_location,
         )
-        # Frozen-Jacobian cache; resized in build_implicit_helpers.
+        # Frozen-Jacobian cache; resized by build_implicit_helpers.
         buffer_registry.register(
             "cached_auxiliaries",
             self,
@@ -403,10 +404,8 @@ class FIRKStep(ODEImplicitStep):
                 aliases="solver_shared",
             )
 
-    def build_implicit_helpers(
-        self,
-    ) -> None:
-        """Construct the nonlinear solver chain used by implicit methods."""
+    def build_implicit_helpers(self) -> None:
+        """Request the helpers and push the solver chain's products."""
 
         config = self.compile_settings
         tableau = config.tableau

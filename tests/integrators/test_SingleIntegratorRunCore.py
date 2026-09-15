@@ -171,6 +171,28 @@ def test_different_solver_choice_drops_variant_defaults(system):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
+    [ALGORITHM_CHAIN_SETS["backwards_euler"]],
+    indirect=True,
+)
+def test_constant_change_replaces_the_step_device_functions(
+    single_integrator_run,
+):
+    """A constant pushed through the run replaces every device function."""
+    run = single_integrator_run
+    step = run._algo_step
+    loop_fn = run.device_function
+    dxdt_fn = step.compile_settings.dxdt_fn
+    residual_fn = step.solver.compile_settings.residual_fn
+    step_fn = step.step_fn
+    run.update({"c0": 0.75})
+    assert step.compile_settings.dxdt_fn is not dxdt_fn
+    assert step.solver.compile_settings.residual_fn is not residual_fn
+    assert step.step_fn is not step_fn
+    assert run.device_function is not loop_fn
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
     [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )

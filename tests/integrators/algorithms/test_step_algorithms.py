@@ -445,6 +445,7 @@ ALIAS_CASES = [
     ALIAS_CASES,
 )
 def test_algorithm_factory_resolves_tableau_alias(
+    system,
     alias_key,
     expected_step_type,
     expected_tableau,
@@ -454,7 +455,12 @@ def test_algorithm_factory_resolves_tableau_alias(
 
     step = get_algorithm_step(
         np.float64,
-        settings={"algorithm": alias_key, "n_states": 2, "dt": 1e-3},
+        settings={
+            "algorithm": alias_key,
+            "n_states": 2,
+            "dt": 1e-3,
+            "get_solver_helper_fn": system.get_solver_helper,
+        },
         warn_on_unused=False,
     )
     assert isinstance(step, expected_step_type)
@@ -701,6 +707,15 @@ def test_algorithm(
             base_newton_rtol = solver_settings["newton_rtol"]
             if base_newton_rtol is None:
                 base_newton_rtol = solver_settings["rtol"] / 10.0
+            # A different value inside the supported 0-2 range.
+            preconditioner_order = (
+                solver_settings["preconditioner_order"] + 1
+            ) % 3
+            # A stacked multi-stage Jacobi preconditioner is order 0.
+            if isinstance(step_object, FIRKStep) and (
+                step_object.stage_count > 1
+            ):
+                preconditioner_order = 0
             updates = {
                 "newton_max_iters": max(
                     1, step_object.newton_max_iters // 2
@@ -711,9 +726,7 @@ def test_algorithm(
                 solver_settings["krylov_rtol"] * 0.5,
                 "newton_atol": base_newton_atol * 0.5,
                 "newton_rtol": base_newton_rtol * 0.5,
-                # A different value inside the supported 0-2 range.
-                "preconditioner_order":
-                (solver_settings["preconditioner_order"] + 1) % 3,
+                "preconditioner_order": preconditioner_order,
             }
             recognised = step_object.update(updates)
             assert set(updates).issubset(recognised), "updates recognised"
@@ -756,9 +769,10 @@ def test_algorithm(
             ), "newton_rtol update"
 
 
-def test_firk_step_is_multistage_matches_tableau():
+def test_firk_step_is_multistage_matches_tableau(system):
     """FIRKStep.is_multistage forwards stage_count > 1 from the tableau."""
     step = FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float32, n_states=3, tableau=DEFAULT_FIRK_TABLEAU,
     )
     assert step.is_multistage == (DEFAULT_FIRK_TABLEAU.stage_count > 1)
@@ -774,10 +788,14 @@ def test_firk_step_is_multistage_matches_tableau():
     ],
 )
 def test_implicit_algorithm_selects_correction_norm(
-    step_class, tableau, norm_type
+    system, step_class, tableau, norm_type
 ):
     """Each implicit family selects its correction norm."""
-    kwargs = {"precision": np.float32, "n_states": 3}
+    kwargs = {
+        "precision": np.float32,
+        "n_states": 3,
+        "get_solver_helper_fn": system.get_solver_helper,
+    }
     if tableau is not None:
         kwargs["tableau"] = tableau
     step = step_class(**kwargs)
@@ -795,10 +813,11 @@ def test_implicit_algorithm_selects_correction_norm(
     ],
 )
 def test_errorless_tableau_selects_fixed_controller(
-    step_class, tableau
+    system, step_class, tableau
 ):
     """Errorless tableaus select the fixed-step controller defaults."""
     step = step_class(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float32,
         n_states=3,
         tableau=tableau,

@@ -111,7 +111,7 @@ class FixedStepController(BaseStepController):
             self._user_step_params["dt"] = resolved
             kwargs["dt"] = resolved
 
-    def build(self) -> ControllerCache:
+    def compile_controller(self) -> ControllerCache:
         """Return a device function that always accepts with fixed step.
 
         Returns

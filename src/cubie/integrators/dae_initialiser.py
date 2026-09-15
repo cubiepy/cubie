@@ -227,6 +227,7 @@ class DAEInitialiser(CUDAFactory):
         )
         self.setup_compile_settings(config)
         self.register_buffers()
+        self.build_solver_helpers()
 
     def register_buffers(self) -> None:
         """Register solve buffers and the linear-solver footprint."""
@@ -258,6 +259,8 @@ class DAEInitialiser(CUDAFactory):
     def build_solver_helpers(self) -> None:
         """Wire the mode's residual and LU solve into the solve."""
         config = self.compile_settings
+        if config.is_noop:
+            return
 
         get_fn = config.get_solver_helper_fn
         if config.dae_initialisation == "brown":
@@ -313,10 +316,7 @@ class DAEInitialiser(CUDAFactory):
                 initialise_state_fn=initialise_state_fn
             )
 
-        # The helper refresh replaces the settings snapshot; read after.
-        self.build_solver_helpers()
         config = self.compile_settings
-
         residual_fn = config.residual_fn
         linear_solver_fn = config.krylov_linear_solver_fn
         norm_fn = config.newton_norm_fn
@@ -582,7 +582,6 @@ class DAEInitialiser(CUDAFactory):
         }
         if "n_states" in all_updates:
             child_updates["solver_width"] = all_updates["n_states"]
-
         recognized = self.linear_solver.update(
             child_updates, silent=True
         )
@@ -594,6 +593,8 @@ class DAEInitialiser(CUDAFactory):
             self, updates_dict=all_updates, silent=True
         )
         self.register_buffers()
+        if recognized:
+            self.build_solver_helpers()
 
         return recognized
 

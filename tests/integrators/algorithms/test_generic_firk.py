@@ -20,10 +20,11 @@ def opened(tableau, ceiling=8.0):
     )
 
 
-def test_previous_step_size_owned_by_algorithm():
+def test_previous_step_size_owned_by_algorithm(system):
     """The previous-step-size scalar lives on the FIRK config; the
     predictor has no such setting."""
     step = FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=2,
         tableau=opened(RADAU_IIA_5_TABLEAU),
@@ -41,10 +42,11 @@ def test_previous_step_size_owned_by_algorithm():
     )
 
 
-def test_update_carries_typed_ceiling():
+def test_update_carries_typed_ceiling(system):
     """Tableau and precision updates leave the step holding the
     matching typed ratio ceiling."""
     step = FIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
         n_states=2,
         tableau=opened(RADAU_IIA_5_TABLEAU, ceiling=4.0),

@@ -424,7 +424,7 @@ class BatchSolverKernel(CUDAFactory):
         )
         initial_config = BatchSolverConfig(
             precision=precision,
-            loop_fn=None,
+            loop_fn=self.single_integrator.device_function,
             compile_flags=self.single_integrator.output_compile_flags,
             coefficients_shape=coefficients_shape,
             cache=kernel_settings.pop("cache", cache),
@@ -1308,10 +1308,6 @@ class BatchSolverKernel(CUDAFactory):
 
         all_unrecognized -= self.single_integrator.update(
             updates_dict, silent=True
-        )
-
-        all_unrecognized -= buffer_registry.update(
-            self.single_integrator._loop, updates_dict, silent=True
         )
 
         updates_dict.update(

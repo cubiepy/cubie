@@ -132,11 +132,7 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
 
 @cache
 def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields whose declared type is an attrs class.
-
-    ``Optional``/``Union`` annotations are unwrapped so an optional
-    nested config still participates in recursive updates.
-    """
+    """Return fields typed as attrs classes; unwraps ``Optional``."""
     from typing import Union, get_args, get_origin
 
     nested = []
@@ -155,8 +151,6 @@ def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:
     """Compare device functions by identity, arrays elementwise, else
     ``!=``."""
     if fld.metadata.get("device_function"):
-        return old is not new
-    if fld.eq is False and (callable(old) or callable(new)):
         return old is not new
     if isinstance(old, ndarray) or isinstance(new, ndarray):
         return not array_equal(asarray(old), asarray(new))
@@ -215,8 +209,8 @@ class _CubieConfigBase:
         -----
         This method never mutates ``self``. Field converters and
         validators run on the replacement snapshot, and change
-        detection compares post-conversion values — ``eq=False``
-        callables by identity, arrays elementwise, everything else by
+        detection compares post-conversion values — device functions
+        by identity, arrays elementwise, everything else by
         inequality. Fields tagged ``metadata={"constructor_only":
         True}`` are settable only at construction: update treats
         their keys as unrecognised. Nested attrs-class fields are
@@ -610,7 +604,6 @@ class CUDAFactory(ABC):
                 "build() must return an attrs class (CUDADispatcherCache "
                 "subclass)"
             )
-
         self._cache = build_result
         self._cache_valid = True
 
