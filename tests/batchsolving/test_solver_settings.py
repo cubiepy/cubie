@@ -576,6 +576,10 @@ def test_time_logging_level_applies_on_update(solver_mutable):
         solver_mutable.update(time_logging_level="silent")
         assert default_timelogger.verbosity == "silent"
         assert solver_mutable.settings_dict["time_logging_level"] == "silent"
+        default_timelogger.set_verbosity(None)
+        recognised = solver_mutable.update(time_logging_level="silent")
+        assert recognised == {"time_logging_level"}
+        assert default_timelogger.verbosity == "silent"
     finally:
         default_timelogger.set_verbosity(previous)
 
@@ -852,6 +856,17 @@ def test_duration_with_explicit_timing_keeps_the_build(solver_mutable):
     assert solver_mutable.kernel._cache_valid
     solver_mutable.update(duration=0.9)
     assert solver_mutable.kernel._cache_valid
+
+
+def test_unchanged_duration_keeps_resolved_settings(solver_mutable):
+    """A repeated grouped duration keeps the resolved settings snapshot."""
+    solver_mutable.update(duration=0.9)
+    given = solver_mutable.given
+    effective = solver_mutable.effective
+    recognised = solver_mutable.update({"loop": {"duration": 0.9}})
+    assert recognised == {"loop", "duration"}
+    assert solver_mutable.given is given
+    assert solver_mutable.effective is effective
 
 
 @pytest.mark.parametrize(
