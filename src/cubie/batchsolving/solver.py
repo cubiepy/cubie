@@ -700,8 +700,7 @@ class Solver:
         t0: float = 0.0,
         **kwargs: Any,
     ) -> None:
-        """Apply settings and drivers and compile the kernel; no batch
-        is allocated.
+        """Apply settings and drivers and compile the kernel.
 
         Parameters
         ----------

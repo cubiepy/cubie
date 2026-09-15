@@ -292,7 +292,7 @@ def test_compile_then_solve(
     simple_parameters,
     driver_settings,
 ):
-    """Compile allocates no batch; the following solve does."""
+    """A compiled solver produces a valid batch result."""
     expected_inits, expected_params = solver_mutable.build_grid(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
@@ -376,7 +376,7 @@ def test_compile_between_solves_keeps_the_batch_arrays(
 
 
 def test_launch_geometry_needs_no_batch(solver_mutable, driver_settings):
-    """A fresh kernel sizes its launches before any batch exists."""
+    """A fresh kernel sizes full and partial blocks."""
     solver = solver_mutable
     kernel = solver.kernel
     solver.compile(drivers=driver_settings, duration=0.05)
@@ -422,6 +422,56 @@ def test_compile_publishes_solve_specialization(
     assert solver_mutable.kernel.kernel is dispatcher
     assert set(dispatcher.overloads) == keys_after_compile
     assert np.all(np.isfinite(result.state))
+
+
+@pytest.mark.parametrize(
+    "input_layouts", [("C", "F"), ("F", "C"), ("F", "F"), ("A", "A")]
+)
+@pytest.mark.nocudasim
+def test_compile_and_solve_device_input_layouts(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+    input_layouts,
+):
+    """Device layouts preserve results across compilation and sizing."""
+    solver = solver_mutable
+    initial, parameters = solver.build_grid(
+        simple_initial_values, simple_parameters
+    )
+    solver.compile(drivers=driver_settings, duration=0.05)
+    for runs in (4, 8):
+        columns = np.arange(runs) % initial.shape[1]
+        inits = np.take(initial, columns, axis=1)
+        params = np.take(parameters, columns, axis=1)
+        expected = solver.solve(inits, params, duration=0.05)
+        expected_state = expected.state.copy()
+        device_inputs = []
+        for values, layout in zip((inits, params), input_layouts):
+            if layout == "A":
+                backing = cuda.to_device(np.repeat(values, 2, axis=1))
+                device_inputs.append(backing[:, ::2])
+            else:
+                device_inputs.append(
+                    cuda.to_device(np.array(values, order=layout))
+                )
+        actual = solver.solve(*device_inputs, duration=0.05)
+        np.testing.assert_array_equal(actual.state, expected_state)
+        blocksize, dynamic = solver.kernel.launch_geometry(runs=runs)
+        assert blocksize > 0
+        assert dynamic >= 4
+        assert active_blocks_per_multiprocessor(
+            solver.kernel.kernel, blocksize, dynamic,
+            solver.kernel.signature,
+        ) > 0
+        assert kernel_resources(
+            solver.kernel.kernel, solver.kernel.signature
+        ).registers_per_thread > 0
+        assert solver.kernel.launchable_shapes(runs=runs)
+        solver.compile(duration=0.05)
+        repeated = solver.solve(*device_inputs, duration=0.05)
+        np.testing.assert_array_equal(repeated.state, expected_state)
 
 
 @pytest.mark.parametrize(
@@ -2729,7 +2779,7 @@ def test_auto_launch_of_a_local_kernel(solved_solver_simple):
     else:
         assert blocks == natural
     assert kernel.get_cached_output("default_launches") == {
-        None: (blocksize, blocks)
+        (kernel.signature, None): (blocksize, blocks)
     }
     assert kernel.launch_geometry(64)[0] == 64
 

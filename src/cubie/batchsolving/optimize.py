@@ -338,7 +338,9 @@ def launch_candidates(
             else LOCAL_LAUNCH_BLOCKSIZES
         )
     shapes = kernel.launchable_shapes(blocksizes, runs=runs)
-    frame = kernel_resources(kernel.kernel).local_bytes_per_thread
+    frame = kernel_resources(
+        kernel.kernel, kernel.signature
+    ).local_bytes_per_thread
     cells = []
     for blocksize, (_, natural) in shapes.items():
         cells.append((blocksize, None))
@@ -369,7 +371,7 @@ def sized_batch_runs(kernel: Any, waves: int = 5) -> int:
     """
     blocksize, dynamic_sharedmem = kernel.launch_geometry()
     blocks_per_sm = active_blocks_per_multiprocessor(
-        kernel.kernel, blocksize, dynamic_sharedmem
+        kernel.kernel, blocksize, dynamic_sharedmem, kernel.signature
     )
     runs_per_block = blocksize // kernel.threads_per_loop
     multiprocessors = device_hardware().multiprocessor_count
@@ -663,7 +665,7 @@ class _OptimizeRunner:
                         launch.blocksize, runs=kernel.run_params[0].runs
                     )
                     launch.blocks_per_sm = active_blocks_per_multiprocessor(
-                        kernel.kernel, blocksize, dynamic
+                        kernel.kernel, blocksize, dynamic, kernel.signature
                     )
                 if self.achieved_waves is None:
                     self._probe_waves(twin, launch.blocksize)
