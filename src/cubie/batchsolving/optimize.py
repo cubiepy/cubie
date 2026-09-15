@@ -31,9 +31,7 @@ from warnings import warn
 
 from attrs import define
 from numpy import arange as np_arange
-from numpy import ascontiguousarray as np_ascontiguousarray
 from numpy import take as np_take
-from numpy import zeros as np_zeros
 
 from cubie.backend.utils import (
     DeviceHardware,
@@ -336,8 +334,7 @@ def launch_candidates(
         Block sizes to consider; ``None`` picks the measured set for
         shared-memory or local-only kernels.
     runs
-        Batch size the launch shapes are typed at; ``None`` uses the
-        staged batch.
+        Runs in the timed launches; ``None`` sizes a full block.
 
     Returns
     -------
@@ -397,7 +394,6 @@ def _compile_candidate(payload: Tuple) -> Tuple[str, str]:
         system_bytes,
         settings,
         candidate,
-        n_runs,
         drivers,
         duration,
         settling_time,
@@ -411,10 +407,7 @@ def _compile_candidate(payload: Tuple) -> Tuple[str, str]:
     system = pickle.loads(system_bytes)
     solver = Solver(system, **{**settings, **candidate})
     try:
-        sizes = system.sizes
         solver.compile(
-            np_zeros((sizes.states, n_runs), dtype=system.precision),
-            np_zeros((sizes.parameters, n_runs), dtype=system.precision),
             drivers=drivers,
             duration=duration,
             settling_time=settling_time,
@@ -500,15 +493,8 @@ class _OptimizeRunner:
         self.runs = runs
 
     def _compile(self, twin: Any) -> None:
-        """Compile ``twin`` on a one-run stand-in of the grid."""
-        inits, params = self._grid
-        twin.kernel.compile(
-            np_ascontiguousarray(inits[:, :1]),
-            np_ascontiguousarray(params[:, :1]),
-            self.duration,
-            self.settling,
-            self._t0,
-        )
+        """Compile ``twin``'s kernel at the timed duration."""
+        twin.kernel.compile(self.duration, self.settling, self._t0)
 
     def prewarm(self) -> None:
         """Compile the uncached candidates in workers; one miss waits."""
@@ -532,14 +518,12 @@ class _OptimizeRunner:
         }
         system_bytes = pickle.dumps(parent.system)
         drivers = parent.kernel.driver_inputs()
-        # Workers compile on one run; the batch size is not in the key.
         payloads = [
             (
                 _label(self._candidates[index]),
                 system_bytes,
                 settings,
                 self._candidates[index],
-                1,
                 drivers,
                 self._given_duration,
                 self._given_settling,
@@ -649,7 +633,7 @@ class _OptimizeRunner:
         launches = []
         owners = {}
         for index, candidate in enumerate(self._candidates):
-            # The launch shapes are typed on a resident stand-in batch.
+            # The launch shapes are sized at the staged batch.
             self._compile(self._twins[index])
             kernel = self._twins[index].kernel
             for blocksize, resident in launch_candidates(
@@ -673,10 +657,10 @@ class _OptimizeRunner:
                 first = self._solve_ms(twin, launch.blocksize)
                 launch.times_ms += (first,)
                 solved = 1
-                # The solve allocates the batch the geometry is typed on.
+                # The geometry of the solve's launch.
                 if round_index == 0:
                     blocksize, dynamic = kernel.launch_geometry(
-                        launch.blocksize
+                        launch.blocksize, runs=kernel.run_params[0].runs
                     )
                     launch.blocks_per_sm = active_blocks_per_multiprocessor(
                         kernel.kernel, blocksize, dynamic

@@ -337,6 +337,8 @@ class BatchSolverKernel(CUDAFactory):
         self._closed = False
         self._last_stream = None
         self._work_complete = True
+        # (precision, launch arguments) the specialization is typed on.
+        self._specialization_cache = None
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
 
@@ -560,29 +562,88 @@ class BatchSolverKernel(CUDAFactory):
 
     def compile(
         self,
-        inits: NDArray[floating],
-        params: NDArray[floating],
         duration: float,
         warmup: float = 0.0,
         t0: float = 0.0,
     ) -> None:
-        """Compile the batch kernel for these inputs without launching."""
+        """Compile the launch specialization without preparing a batch.
+
+        Parameters
+        ----------
+        duration
+            Duration of the simulation window.
+        warmup
+            Warmup time before the main simulation.
+        t0
+            Initial integration time.
+
+        Notes
+        -----
+        The time parameters are recorded on :attr:`run_params`. The
+        specialization is typed on unit stand-in arrays, so no batch
+        array is allocated or uploaded and the array managers keep
+        whatever the last run attached.
+        """
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "
                 "released; build a new Solver to run again."
             )
+        self.run_params = evolve(
+            self.run_params,
+            duration=np_float64(duration),
+            warmup=np_float64(warmup),
+            t0=np_float64(t0),
+            precision=self.single_integrator.precision,
+        )
+        self._compile_specialization()
+
+    def _compile_specialization(self) -> Callable:
+        """Compile the specialization a solve reuses; return the kernel."""
+        dispatcher = self.kernel
+        compile_kernel_specialization(
+            dispatcher, self._specialization_args()
+        )
+        return dispatcher
+
+    def _specialization_args(self) -> Tuple:
+        """Return launch arguments typed like a solve's, on unit arrays.
+
+        One device array per kernel array argument, with a solve's dtype
+        and dimension count and every extent 1, then the scalar
+        arguments at their launch types. Memoised per precision; the
+        arrays live outside the array managers, so a solve's batch
+        arrays are never displaced.
+        """
+        precision = self.precision
+        cached = self._specialization_cache
+        if cached is not None and cached[0] is precision:
+            return cached[1]
         stream = self.stream
-        self._memory_manager.begin_work(self)
-        try:
-            self._prepare_batch(
-                inits, params, duration, warmup, t0, stream
-            )
-            dispatcher = self.kernel
-            args = self._kernel_launch_args(self.run_params[0])
-            compile_kernel_specialization(dispatcher, args)
-        finally:
-            self._memory_manager.end_work(self, stream)
+        allocate = self.memory_manager.allocate
+
+        def unit(ndim, dtype):
+            return allocate((1,) * ndim, dtype, "device", stream=stream)
+
+        args = (
+            unit(2, precision),  # initial values
+            unit(2, precision),  # parameters
+            unit(3, precision),  # driver coefficients
+            unit(3, precision),  # state
+            unit(3, precision),  # observables
+            unit(3, precision),  # state summaries
+            unit(3, precision),  # observable summaries
+            unit(3, np_int32),  # iteration counters
+            unit(1, np_int32),  # status codes
+            precision(0.0),  # duration
+            precision(0.0),  # warmup
+            precision(0.0),  # t0
+            np_int32(0),  # save count
+            np_int32(0),  # summary count
+            1,  # runs
+        )
+        self._specialization_cache = (precision, args)
+        return args
 
     def _duration_counts(self, duration: float) -> DurationCounts:
         """Return the event counts for ``duration``, memoised per build."""
@@ -713,7 +774,9 @@ class BatchSolverKernel(CUDAFactory):
                     "batch size."
                 )
 
-        blocksize, dynamic_sharedmem = self.launch_geometry(blocksize)
+        blocksize, dynamic_sharedmem = self.launch_geometry(
+            blocksize, runs=self.run_params[0].runs
+        )
         threads_per_loop = self.single_integrator.threads_per_step
         runsperblock = int(blocksize / self.single_integrator.threads_per_step)
 
@@ -779,7 +842,7 @@ class BatchSolverKernel(CUDAFactory):
         bytes_per_run
             Shared-memory requirement per run.
         numruns
-            Total number of runs queued for the launch.
+            Runs the launch places in one block.
 
         Returns
         -------
@@ -817,7 +880,7 @@ class BatchSolverKernel(CUDAFactory):
         return blocksize, dynamic_sharedmem
 
     def launch_geometry(
-        self, blocksize: Optional[int] = None
+        self, blocksize: Optional[int] = None, runs: Optional[int] = None
     ) -> tuple[int, int]:
         """Return the block size and dynamic shared bytes of a launch.
 
@@ -826,14 +889,23 @@ class BatchSolverKernel(CUDAFactory):
         blocksize
             Requested CUDA block size; ``None`` uses the ``blocksize``
             setting, or the automatic launch when that is unset.
+        runs
+            Runs in the launch, which bounds the dynamic shared bytes
+            of a launch smaller than a block; ``None`` sizes a full
+            block.
 
         Returns
         -------
         tuple[int, int]
             Block size and dynamic shared bytes, padded to hold the
             resident block count.
+
+        Notes
+        -----
+        Needs no batch: the specialization is typed on unit stand-in
+        arrays, so the geometry of a batch is available before the
+        batch is prepared.
         """
-        runs = self.run_params[0].runs
         resident = self.resident_blocks
         if blocksize is None:
             blocksize, chosen = self._default_launch(runs)
@@ -854,26 +926,27 @@ class BatchSolverKernel(CUDAFactory):
             geometries[key] = geometry
         return geometry
 
-    def _launch_shape(self, blocksize: int, runs: int) -> tuple[int, int]:
+    def _launch_shape(
+        self, blocksize: int, runs: Optional[int]
+    ) -> tuple[int, int]:
         """Return a launch's block size, halved until its shared
-        footprint fits, and dynamic shared bytes."""
+        footprint fits, and dynamic shared bytes; ``runs`` of ``None``
+        fills the block."""
         pad = SHARED_SKEW_BYTES if self.shared_memory_needs_padding else 0
         padded_bytes = self.shared_memory_bytes + pad
+        runs_in_block = blocksize if runs is None else min(runs, blocksize)
         blocksize, dynamic_sharedmem = self.limit_blocksize(
             blocksize,
-            int(padded_bytes * min(runs, blocksize)),
+            int(padded_bytes * runs_in_block),
             padded_bytes,
-            runs,
+            runs_in_block,
         )
         # The compiler needs a nonzero dynamic shared declaration.
         return blocksize, max(4, dynamic_sharedmem)
 
     def _natural_blocks(self, blocksize: int, dynamic_sharedmem: int) -> int:
         """Return the blocks per SM the driver fits at this launch shape."""
-        dispatcher = self.kernel
-        compile_kernel_specialization(
-            dispatcher, self._kernel_launch_args(self.run_params[0])
-        )
+        dispatcher = self._compile_specialization()
         return active_blocks_per_multiprocessor(
             dispatcher, blocksize, dynamic_sharedmem
         )
@@ -885,10 +958,13 @@ class BatchSolverKernel(CUDAFactory):
     ) -> Dict[int, Tuple[int, int]]:
         """Dynamic shared bytes and blocks per SM per launchable block size.
 
-        ``runs`` types the shapes; ``None`` uses the staged batch.
+        Parameters
+        ----------
+        blocksizes
+            Block sizes to consider.
+        runs
+            Runs in the launch; ``None`` sizes a full block.
         """
-        if runs is None:
-            runs = self.run_params[0].runs
         shapes = {}
         for blocksize in blocksizes:
             actual, dynamic = self._launch_shape(blocksize, runs)
@@ -899,7 +975,9 @@ class BatchSolverKernel(CUDAFactory):
                 shapes[blocksize] = (dynamic, blocks)
         return shapes
 
-    def _default_launch(self, runs: int) -> tuple[int, Optional[int]]:
+    def _default_launch(
+        self, runs: Optional[int]
+    ) -> tuple[int, Optional[int]]:
         """Return the block size and resident blocks per SM of a launch
         with no block size requested.
 
@@ -922,7 +1000,9 @@ class BatchSolverKernel(CUDAFactory):
             return chosen
         shapes = {
             blocksize: blocks
-            for blocksize, (_, blocks) in self.launchable_shapes().items()
+            for blocksize, (_, blocks) in self.launchable_shapes(
+                runs=runs
+            ).items()
         }
         if not shapes:
             return DEFAULT_BLOCKSIZE, None
@@ -937,7 +1017,7 @@ class BatchSolverKernel(CUDAFactory):
         return chosen
 
     def _compute_launch_geometry(
-        self, blocksize: int, runs: int, resident: Optional[int]
+        self, blocksize: int, runs: Optional[int], resident: Optional[int]
     ) -> tuple[int, int]:
         """Return the geometry holding ``resident`` blocks per SM."""
         blocksize, dynamic_sharedmem = self._launch_shape(blocksize, runs)
@@ -1291,6 +1371,7 @@ class BatchSolverKernel(CUDAFactory):
         self.wait_for_writeback(timeout=shutdown_timeout)
         self.input_arrays.close()
         self.output_arrays.close()
+        self._specialization_cache = None
         finalizer = getattr(self, "_finalizer", None)
         settings = self.memory_manager.registry.get(id(self))
         if settings is not None:

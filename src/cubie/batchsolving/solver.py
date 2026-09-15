@@ -753,28 +753,41 @@ class Solver:
 
     def compile(
         self,
-        initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
-        parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
         drivers: Optional[Dict[str, Any]] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        grid_type: str = "verbatim",
         **kwargs: Any,
     ) -> None:
-        """Compile the batch kernel for these inputs without solving."""
-        self.update(duration=duration, **kwargs)
+        """Compile the batch kernel without preparing or solving a batch.
 
-        inits, params = self.input_handler(
-            states=initial_values, params=parameters, kind=grid_type
-        )
+        Parameters
+        ----------
+        drivers
+            Driver samples or configuration matching
+            :class:`cubie.array_interpolator.ArrayInterpolator`.
+        duration
+            Total integration time. Default is ``1.0``.
+        settling_time
+            Warm-up period before recording outputs. Default ``0.0``.
+        t0
+            Initial integration time. Default ``0.0``.
+        **kwargs
+            Additional options forwarded to :meth:`update`.
+
+        Notes
+        -----
+        Settings and drivers are applied as :meth:`solve` applies them.
+        The launch specialization is typed on unit stand-in arrays, so
+        batch inputs play no part: the batch arrays are allocated and
+        uploaded by a solve.
+        """
+        self.update(duration=duration, **kwargs)
 
         if drivers is not None:
             self._configure_drivers(drivers)
 
         self.kernel.compile(
-            inits=inits,
-            params=params,
             duration=duration,
             warmup=settling_time,
             t0=t0,
