@@ -196,6 +196,10 @@ def _three_dims(instance, attribute, value) -> None:
         )
 
 
+DEFAULT_BLOCKSIZE = 64
+"""Threads per block for an unset ``blocksize`` without ``auto_performance``."""
+
+
 @attrs.frozen
 class BatchSolverConfig(CUDAFactoryConfig):
     """Compile-critical settings for the batch solver kernel.
@@ -230,9 +234,10 @@ class BatchSolverConfig(CUDAFactoryConfig):
         :class:`CacheSettings`; accepts the ``cache`` shorthand and
         loose ``cache_*`` keys through ``update``.
     blocksize
-        Threads per block for every launch.
+        Threads per block; ``None`` = the kernel picks under
+        ``auto_performance``, else ``DEFAULT_BLOCKSIZE``.
     auto_performance
-        Pad launches to the residency the L2 rule picks.
+        Pick the launch's block size and residency.
     """
 
     loop_fn: Optional[Callable] = device_function_field()
@@ -266,8 +271,10 @@ class BatchSolverConfig(CUDAFactoryConfig):
         validator=val.instance_of(CacheSettings),
         eq=False,
     )
-    blocksize: int = attrs.field(
-        default=64, validator=getype_validator(int, 1), eq=False
+    blocksize: Optional[int] = attrs.field(
+        default=None,
+        validator=val.optional(getype_validator(int, 1)),
+        eq=False,
     )
     auto_performance: bool = attrs.field(
         default=True, validator=val.instance_of(bool), eq=False

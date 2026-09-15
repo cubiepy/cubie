@@ -99,13 +99,17 @@ summarised defaults to saved when all summarise inputs are `None`.
   loop iterates chunks, calling `input_arrays.initialise(i)` (H2D) and
   `output_arrays.finalise(i)` (D2H/writeback).
 - **Launch geometry:** `launch_geometry(blocksize=None)` returns a launch's block size and
-  dynamic shared bytes: `limit_blocksize` halves the block size until dynamic shared memory
-  fits the opt-in per-block limit, then a pad holds `resident_blocks` per SM (`None` = the
-  L2 rule under `auto_performance`). `blocksize` is a `BatchSolverConfig` field (default
-  64); `run(blocksize=None)` uses it; `Solver.given.is_given("blocksize")` says whether it was given. `shared_memory_needs_padding` adds a 4-byte skew only
-  for single precision with an even element count (float64 never pads — it would misalign).
-  Memoised per `(blocksize, runs, resident_blocks, auto_performance)` on the build's
-  `BatchSolverCache`, alongside its `duration_counts`, `output_array_heights`,
+  dynamic shared bytes: `limit_blocksize` halves the block size until its shared footprint
+  fits the per-block limit, then a pad holds `resident_blocks` per SM (`None` = the L2 rule
+  under `auto_performance`). `launchable_shapes(blocksizes)` lists the block sizes that
+  launch whole with their dynamic shared bytes and natural block counts. The launch rules
+  and constants are in `optimize.py`: `resident_blocks_within_l2` and `default_launch`.
+  `blocksize` (`BatchSolverConfig`) is `None` unless given; unset under `auto_performance`
+  the kernel applies `default_launch`, unset without it `DEFAULT_BLOCKSIZE`.
+  `shared_memory_needs_padding` adds a `SHARED_SKEW_BYTES` skew only for single precision
+  with an even element count. Memoised on the build's `BatchSolverCache`:
+  `launch_geometries` per `(blocksize, runs, resident_blocks, auto_performance)`,
+  `default_launches` per `runs`, plus `duration_counts`, `output_array_heights`,
   `time_domain_legend` and `summaries_legend`; `SolveResult.from_solver` copies them.
 - **Kept across solves:** the system snapshot identity (`system_config_stale`), the chunk
   partition until an allocation replaces it, and the timing `CUDAEvent`s while timing is

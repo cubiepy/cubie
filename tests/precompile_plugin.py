@@ -184,6 +184,9 @@ if POPULATION:
         MULTIPROCESSOR_COUNT=1,
         L2_CACHE_SIZE=4 << 20,
         WARP_SIZE=32,
+        MAX_REGISTERS_PER_MULTIPROCESSOR=65536,
+        MAX_THREADS_PER_MULTIPROCESSOR=1024,
+        MAX_BLOCKS_PER_MULTIPROCESSOR=16,
     )
     _fake_context = SimpleNamespace(device=_fake_device)
     backend_cuda.get_current_device = lambda: _fake_device
@@ -549,7 +552,7 @@ if POPULATION:
         _population_compile_kernel_specialization
     )
     _backend_utils.kernel_resources = (
-        lambda dispatcher: _backend_utils.KernelResources(0, 0)
+        lambda dispatcher: _backend_utils.KernelResources(0, 0, 0)
     )
     _backend_utils.active_blocks_per_multiprocessor = (
         lambda dispatcher, blocksize, dynamic_shared: 1

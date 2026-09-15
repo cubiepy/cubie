@@ -36,6 +36,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
 )
@@ -56,11 +57,17 @@ from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
 from cubie.backend.utils import (
+    LAUNCH_BLOCKSIZES,
+    SHARED_SKEW_BYTES,
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
     device_hardware,
     kernel_resources,
     max_shared_memory_per_block,
+)
+from cubie.batchsolving.optimize import (
+    default_launch,
+    resident_blocks_within_l2,
 )
 from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cubie_cache import CUBIECache
@@ -82,6 +89,7 @@ from cubie.batchsolving.arrays.BatchOutputArrays import (
 )
 from cubie.batchsolving.BatchSolverConfig import (
     ALL_KERNEL_PARAMETERS,
+    DEFAULT_BLOCKSIZE,
     ActiveOutputs,
     BatchSolverConfig,
 )
@@ -262,12 +270,12 @@ class BatchSolverCache(CUDADispatcherCache):
     output_array_heights: Optional[OutputArrayHeights] = field(default=None)
     duration_counts: Dict[float, DurationCounts] = field(factory=dict)
     launch_geometries: Dict[Tuple, Tuple[int, int]] = field(factory=dict)
+    default_launches: Dict[int, Tuple[int, Optional[int]]] = field(
+        factory=dict
+    )
     time_domain_legend: Dict[int, str] = field(factory=dict)
     summaries_legend: Dict[int, str] = field(factory=dict)
 
-
-RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
-"""Fraction of L2 three or more resident blocks' local memory may fill."""
 
 DYNAMIC_SHARED_PAD_STEP = 256
 """Bytes the residency pad steps by."""
@@ -560,7 +568,8 @@ class BatchSolverKernel(CUDAFactory):
             Duration of the simulation window.
         blocksize
             CUDA block size for this launch; ``None`` uses the
-            ``blocksize`` compile setting.
+            ``blocksize`` setting, or the automatic launch when that
+            is unset.
         warmup
             Warmup time before the main simulation.
         t0
@@ -874,7 +883,7 @@ class BatchSolverKernel(CUDAFactory):
         ----------
         blocksize
             Requested CUDA block size; ``None`` uses the ``blocksize``
-            compile setting.
+            setting, or the automatic launch when that is unset.
 
         Returns
         -------
@@ -882,80 +891,125 @@ class BatchSolverKernel(CUDAFactory):
             Block size and dynamic shared bytes, padded to hold the
             resident block count.
         """
-        if blocksize is None:
-            blocksize = self.compile_settings.blocksize
         runs = self.run_params[0].runs
+        resident = self.resident_blocks
+        if blocksize is None:
+            blocksize, chosen = self._default_launch(runs)
+            if resident is None:
+                resident = chosen
         key = (
             blocksize,
             runs,
-            self.resident_blocks,
+            resident,
             self.compile_settings.auto_performance,
         )
         geometries = self.get_cached_output("launch_geometries")
         geometry = geometries.get(key)
         if geometry is None:
-            geometry = self._compute_launch_geometry(blocksize, runs)
+            geometry = self._compute_launch_geometry(
+                blocksize, runs, resident
+            )
             geometries[key] = geometry
         return geometry
 
-    def _compute_launch_geometry(
-        self, blocksize: int, runs: int
-    ) -> tuple[int, int]:
-        """Return the launch geometry of ``blocksize`` for ``runs``."""
-        pad = 4 if self.shared_memory_needs_padding else 0
+    def _launch_shape(self, blocksize: int, runs: int) -> tuple[int, int]:
+        """Return a launch's block size, halved until its shared
+        footprint fits, and dynamic shared bytes."""
+        pad = SHARED_SKEW_BYTES if self.shared_memory_needs_padding else 0
         padded_bytes = self.shared_memory_bytes + pad
-        dynamic_sharedmem = int(padded_bytes * min(runs, blocksize))
         blocksize, dynamic_sharedmem = self.limit_blocksize(
             blocksize,
-            dynamic_sharedmem,
+            int(padded_bytes * min(runs, blocksize)),
             padded_bytes,
             runs,
         )
         # The compiler needs a nonzero dynamic shared declaration.
-        dynamic_sharedmem = max(4, dynamic_sharedmem)
-        blocks = self.resident_blocks
-        if blocks is None and not self.compile_settings.auto_performance:
-            return blocksize, dynamic_sharedmem
+        return blocksize, max(4, dynamic_sharedmem)
+
+    def _natural_blocks(self, blocksize: int, dynamic_sharedmem: int) -> int:
+        """Return the blocks per SM the driver fits at this launch shape."""
         dispatcher = self.kernel
         compile_kernel_specialization(
             dispatcher, self._kernel_launch_args(self.run_params[0])
         )
-        natural = active_blocks_per_multiprocessor(
+        return active_blocks_per_multiprocessor(
             dispatcher, blocksize, dynamic_sharedmem
         )
+
+    def launchable_shapes(
+        self, blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES
+    ) -> Dict[int, Tuple[int, int]]:
+        """Dynamic shared bytes and blocks per SM per launchable block size."""
+        runs = self.run_params[0].runs
+        shapes = {}
+        for blocksize in blocksizes:
+            actual, dynamic = self._launch_shape(blocksize, runs)
+            if actual != blocksize:
+                continue
+            blocks = self._natural_blocks(blocksize, dynamic)
+            if blocks > 0:
+                shapes[blocksize] = (dynamic, blocks)
+        return shapes
+
+    def _default_launch(self, runs: int) -> tuple[int, Optional[int]]:
+        """Return the block size and resident blocks per SM of a launch
+        with no block size requested.
+
+        Returns
+        -------
+        tuple[int, int or None]
+            The automatic choice, or the ``blocksize`` setting (unset:
+            ``DEFAULT_BLOCKSIZE``) with ``None`` when none is made.
+        """
+        configured = self.compile_settings.blocksize
+        # A set block size, or the default without auto_performance.
+        if configured is not None:
+            return configured, None
+        if not self.compile_settings.auto_performance:
+            return DEFAULT_BLOCKSIZE, None
+        # One choice per kernel build and batch size.
+        launches_by_runs = self.get_cached_output("default_launches")
+        chosen = launches_by_runs.get(runs)
+        if chosen is not None:
+            return chosen
+        shapes = {
+            blocksize: blocks
+            for blocksize, (_, blocks) in self.launchable_shapes().items()
+        }
+        if not shapes:
+            return DEFAULT_BLOCKSIZE, None
+        resources = kernel_resources(self.kernel)
+        chosen = default_launch(
+            shapes,
+            resources.local_bytes_per_thread,
+            resources.sass_bytes,
+            device_hardware(),
+        )
+        launches_by_runs[runs] = chosen
+        return chosen
+
+    def _compute_launch_geometry(
+        self, blocksize: int, runs: int, resident: Optional[int]
+    ) -> tuple[int, int]:
+        """Return the geometry holding ``resident`` blocks per SM."""
+        blocksize, dynamic_sharedmem = self._launch_shape(blocksize, runs)
+        blocks = resident
+        if blocks is None and not self.compile_settings.auto_performance:
+            return blocksize, dynamic_sharedmem
+        natural = self._natural_blocks(blocksize, dynamic_sharedmem)
+        dispatcher = self.kernel
         if blocks is None:
-            blocks = self._resident_blocks_within_l2(
-                dispatcher, blocksize, natural
+            blocks = resident_blocks_within_l2(
+                kernel_resources(dispatcher).local_bytes_per_thread,
+                blocksize,
+                natural,
+                device_hardware(),
             )
         if blocks >= natural:
             return blocksize, dynamic_sharedmem
         return blocksize, self._dynamic_shared_for_blocks(
             dispatcher, blocksize, dynamic_sharedmem, blocks
         )
-
-    @staticmethod
-    def _resident_blocks_within_l2(
-        dispatcher: Any, blocksize: int, natural: int
-    ) -> int:
-        """Return the most blocks per SM whose local frames fit in L2."""
-        frame = kernel_resources(dispatcher).local_bytes_per_thread
-        if frame == 0:
-            return natural
-        hardware = device_hardware()
-        l2_bytes = hardware.l2_cache_bytes
-        footprint = frame * blocksize * hardware.multiprocessor_count
-        blocks = natural
-        while blocks > 1:
-            # Two blocks may fill the whole L2; more share two-thirds.
-            budget = (
-                l2_bytes
-                if blocks == 2
-                else RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
-            )
-            if footprint * blocks <= budget:
-                break
-            blocks -= 1
-        return blocks
 
     @staticmethod
     def _dynamic_shared_for_blocks(
@@ -1204,7 +1258,11 @@ class BatchSolverKernel(CUDAFactory):
             "loop_fn": run.device_function,
             "compile_flags": run.output_compile_flags,
         }
+        blocksize = self.compile_settings.blocksize
         recognised |= self.update_compile_settings(kernel_updates, silent=True)
+        if self.compile_settings.blocksize != blocksize:
+            # A pinned residency belongs to the block size it was timed with.
+            self.resident_blocks = None
         self._known_system_config = self.system.compile_settings
 
         unrecognised = user_keys - recognised

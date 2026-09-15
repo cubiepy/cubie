@@ -7,6 +7,10 @@ Published Objects
     One candidate's timings at one launch.
 :class:`OptimizeResult`
     Every launch, the best one, and the applied settings.
+:func:`resident_blocks_within_l2`
+    Blocks per SM whose local memory fits in L2.
+:func:`default_launch`
+    Block size and blocks per SM for a launch with no block size given.
 :func:`launch_candidates`
     Launches a kernel can time.
 :func:`apply_launch`
@@ -26,9 +30,9 @@ from attrs import define
 from numpy import zeros as np_zeros
 
 from cubie.backend.utils import (
+    DeviceHardware,
     SASS_INSTRUCTION_BYTES,
     active_blocks_per_multiprocessor,
-    compile_kernel_specialization,
     device_hardware,
     kernel_resources,
 )
@@ -52,11 +56,40 @@ ROUNDS = 2
 EXCLUSION_RATIO = 2.0
 """Launches whose first solve exceeds this multiple of the fastest drop."""
 
-LOCAL_LAUNCH_BLOCKSIZES = (64, 256)
+LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
 
 SHARED_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for shared-memory kernels."""
+
+RESIDENT_FOOTPRINT_L2_FRACTION = 2.0 / 3.0
+"""Fraction of L2 three or more resident blocks' local memory may fill.
+
+Empirical: fitted to the placement landscape, where one block beat two
+only when two blocks overflowed the whole L2.
+"""
+
+RESIDENCY_CUT_MIN_FRAME_BYTES = 2048
+"""Local memory per thread below which residency is never cut.
+
+Empirical: on the RTX 4070 SUPER and RTX 2060 SUPER landscapes a cut
+paid only from 2 KiB up; smaller frames ran 10 to 50% slower when cut.
+"""
+
+BUDGET_BLOCKSIZE = 64
+"""Block size the L2 rule counts resident threads at; the shape follows.
+
+Protocol choice: the block size the residency landscapes were recorded
+at, so the cut points are validated at this granularity.
+"""
+
+LAUNCH_OCCUPANCY_TIE = 0.9
+"""Share of the most resident threads a larger block must keep to win.
+
+Empirical: over the instruction cache the largest block won 52/13 of
+259 equal-residency comparisons on the RTX 2060 SUPER and 30/13 of 179
+on the RTX 4070 SUPER; the band width is fitted to those records.
+"""
 
 
 def _label(settings: Dict[str, Any]) -> str:
@@ -162,6 +195,99 @@ class OptimizeResult:
         return "\n".join(lines)
 
 
+def resident_blocks_within_l2(
+    frame: int, blocksize: int, natural: int, hardware: DeviceHardware
+) -> int:
+    """Return the most blocks per SM whose local memory fits in L2.
+
+    Parameters
+    ----------
+    frame
+        Local memory per thread in bytes.
+    blocksize
+        Threads per block.
+    natural
+        Blocks per SM the driver fits at this launch shape.
+    hardware
+        The device's L2 size and SM count.
+
+    Returns
+    -------
+    int
+        The cut count; ``natural`` for a small frame or when none fits.
+    """
+    if frame < RESIDENCY_CUT_MIN_FRAME_BYTES:
+        return natural
+    l2_bytes = hardware.l2_cache_bytes
+    footprint = frame * blocksize * hardware.multiprocessor_count
+
+    def budget(count):
+        # Two blocks may fill the whole L2; more share two-thirds.
+        if count == 2:
+            return l2_bytes
+        return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
+
+    blocks = natural
+    while blocks > 1 and footprint * blocks > budget(blocks):
+        blocks -= 1
+    if footprint * blocks > budget(blocks):
+        return natural
+    return blocks
+
+
+def default_launch(
+    shapes: Dict[int, int],
+    frame: int,
+    sass_bytes: int,
+    hardware: DeviceHardware,
+) -> Tuple[int, int]:
+    """Return the ``(blocksize, resident_blocks)`` of an untimed launch.
+
+    Parameters
+    ----------
+    shapes
+        Blocks per SM the driver fits at each launchable block size.
+    frame
+        Local memory per thread in bytes.
+    sass_bytes
+        Machine-code size of the kernel.
+    hardware
+        The device's L2 size, SM count and instruction cache.
+
+    Returns
+    -------
+    tuple[int, int]
+        The block size and blocks per SM to launch.
+    """
+    # Resident-thread budget from the L2 rule; None means no cut.
+    budget = None
+    if BUDGET_BLOCKSIZE in shapes:
+        blocks = resident_blocks_within_l2(
+            frame, BUDGET_BLOCKSIZE, shapes[BUDGET_BLOCKSIZE], hardware
+        )
+        if blocks < shapes[BUDGET_BLOCKSIZE]:
+            budget = BUDGET_BLOCKSIZE * blocks
+    # Block sizes within the budget or cut to it in whole blocks.
+    launches = []
+    for blocksize, blocks in shapes.items():
+        if budget is None or budget >= blocksize * blocks:
+            launches.append((blocksize, blocks))
+        elif budget % blocksize == 0:
+            launches.append((blocksize, budget // blocksize))
+    most = max(size * blocks for size, blocks in launches)
+    # Over the instruction cache: largest block within the tie band.
+    if sass_bytes > hardware.instruction_cache_bytes:
+        fitting = [
+            launch for launch in launches
+            if launch[0] * launch[1] >= LAUNCH_OCCUPANCY_TIE * most
+        ]
+        return max(fitting, key=lambda launch: launch[0])
+    # Otherwise the most threads, the smaller block on a tie.
+    return min(
+        launches, key=lambda launch: (-launch[0] * launch[1], launch[0])
+    )
+
+
 def launch_candidates(
     kernel: Any, blocksizes: Optional[Sequence[int]] = None
 ) -> Tuple[Tuple[int, Optional[int]], ...]:
@@ -187,31 +313,13 @@ def launch_candidates(
             if kernel.shared_memory_bytes > 0
             else LOCAL_LAUNCH_BLOCKSIZES
         )
-    runs = kernel.run_params[0].runs
-    pad = 4 if kernel.shared_memory_needs_padding else 0
-    padded_bytes = kernel.shared_memory_bytes + pad
-    dispatcher = kernel.kernel
-    compile_kernel_specialization(
-        dispatcher, kernel._kernel_launch_args(kernel.run_params[0])
-    )
-    frame = kernel_resources(dispatcher).local_bytes_per_thread
+    shapes = kernel.launchable_shapes(blocksizes)
+    frame = kernel_resources(kernel.kernel).local_bytes_per_thread
     cells = []
-    for blocksize in blocksizes:
-        actual, dynamic_sharedmem = kernel.limit_blocksize(
-            blocksize,
-            int(padded_bytes * min(runs, blocksize)),
-            padded_bytes,
-            runs,
-        )
-        # A block size the shared footprint cannot launch is skipped.
-        if actual != blocksize:
-            continue
+    for blocksize, (_, natural) in shapes.items():
         cells.append((blocksize, None))
         if frame == 0:
             continue
-        natural = active_blocks_per_multiprocessor(
-            dispatcher, blocksize, max(4, dynamic_sharedmem)
-        )
         for cut in (1, 2):
             if natural - cut >= 1:
                 cells.append((blocksize, natural - cut))
@@ -399,7 +507,7 @@ class _OptimizeRunner:
                 )
         current = None
         for round_index in range(ROUNDS):
-            ordered = launches if round_index == 0 else launches[::-1]
+            ordered = launches if round_index % 2 == 0 else launches[::-1]
             for launch in ordered:
                 if launch.excluded:
                     continue
@@ -445,12 +553,7 @@ class _OptimizeRunner:
             )
 
 
-def performance_defaults(
-    given: Any,
-    step: Any,
-    system: Any,
-    hardware: Any = None,
-) -> Dict[str, Any]:
+def performance_defaults(given: Any, step: Any, system: Any) -> Dict[str, Any]:
     """Return the unroll and placement settings for a built solver.
 
     Parameters
@@ -461,8 +564,6 @@ def performance_defaults(
         The built algorithm step.
     system
         The system being solved.
-    hardware
-        Device hardware facts; queried from the device when omitted.
 
     Returns
     -------
@@ -471,11 +572,10 @@ def performance_defaults(
     """
     if given.auto_performance is False:
         return {}
-    defaults = dict(step.performance_defaults)
+    hardware = device_hardware()
+    defaults = dict(step.performance_defaults(hardware))
     # A Newton loop that overflows the instruction cache stays rolled.
     if step.is_implicit and step.newton_solves_per_step > 0:
-        if hardware is None:
-            hardware = device_hardware()
         unrolled = system.operation_count + step.step_operation_count
         capacity = hardware.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
         defaults["unroll_newton_exits"] = (

@@ -24,12 +24,17 @@ from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
 from cubie.backend.utils import (
+    SASS_INSTRUCTION_BYTES,
     active_blocks_per_multiprocessor,
     device_hardware,
     kernel_resources,
 )
-from cubie.batchsolving.BatchSolverKernel import (
+from cubie.batchsolving.optimize import (
+    BUDGET_BLOCKSIZE,
+    LAUNCH_OCCUPANCY_TIE,
+    RESIDENCY_CUT_MIN_FRAME_BYTES,
     RESIDENT_FOOTPRINT_L2_FRACTION,
+    resident_blocks_within_l2,
 )
 from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
 from cubie.cuda_simsafe import cuda, is_device_array
@@ -37,6 +42,7 @@ from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
 )
 from tests._utils import (
+    BICGSTAB_STEP_CASES,
     DEVICE_SOLVE_SETTINGS,
     FIXED_EULER_TIMED_STATE,
     LARGE_DIRK,
@@ -2590,25 +2596,32 @@ def test_auto_performance_off_launches_at_natural_occupancy(
 @pytest.mark.parametrize(
     "solver_settings_override", [LARGE_DIRK], indirect=True
 )
-def test_auto_residency_keeps_local_footprint_in_l2(
-    solver_mutable, simple_initial_values, simple_parameters, driver_settings
-):
-    """The residency pad holds the resident local footprint within budget."""
-    solver_mutable.solve(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        drivers=driver_settings,
-        duration=0.02,
-        grid_type="combinatorial",
-    )
-    kernel = solver_mutable.kernel
-    blocksize, dynamic_shared = kernel.launch_geometry()
+def test_auto_launch_of_a_local_kernel(solved_solver_simple):
+    """With no block size given, a local-memory kernel launches a
+    launchable block size within the L2 residency budget, cut only for
+    a large local frame, memoised per batch; a given block size is
+    kept; the compiled kernel reports whole SASS instructions."""
+    solver, _ = solved_solver_simple
+    kernel = solver.kernel
+    assert kernel.shared_memory_bytes == 0
+    assert not solver.given.is_given("blocksize")
+    assert kernel.compile_settings.blocksize is None
+    resources = kernel_resources(kernel.kernel)
+    assert resources.sass_bytes > 0
+    assert resources.sass_bytes % SASS_INSTRUCTION_BYTES == 0
+    assert resources.registers_per_thread > 0
+    frame = resources.local_bytes_per_thread
+    assert frame >= RESIDENCY_CUT_MIN_FRAME_BYTES
     hardware = device_hardware()
-    frame = kernel_resources(kernel.kernel).local_bytes_per_thread
-    assert frame > 0
+    shapes = kernel.launchable_shapes()
+    assert BUDGET_BLOCKSIZE in shapes
+    blocksize, dynamic = kernel.launch_geometry()
     blocks = active_blocks_per_multiprocessor(
-        kernel.kernel, blocksize, dynamic_shared
+        kernel.kernel, blocksize, dynamic
     )
+    natural_dynamic, natural = shapes[blocksize]
+    assert 1 <= blocks <= natural
+    assert dynamic >= natural_dynamic
     footprint = frame * blocksize * hardware.multiprocessor_count
     l2_bytes = hardware.l2_cache_bytes
 
@@ -2617,14 +2630,25 @@ def test_auto_residency_keeps_local_footprint_in_l2(
             return l2_bytes
         return RESIDENT_FOOTPRINT_L2_FRACTION * l2_bytes
 
-    assert blocks == 1 or footprint * blocks <= budget(blocks)
-    natural_blocks = active_blocks_per_multiprocessor(
-        kernel.kernel, blocksize, _natural_dynamic_shared(kernel, blocksize)
+    if blocks < natural:
+        # A cut count fits its budget and one more block would not.
+        assert footprint * blocks <= budget(blocks)
+        assert footprint * (blocks + 1) > budget(blocks + 1)
+    else:
+        # The driver's count fits, or no count at all does.
+        assert footprint * blocks <= budget(blocks) or footprint > budget(1)
+    budget_blocks = resident_blocks_within_l2(
+        frame, BUDGET_BLOCKSIZE, shapes[BUDGET_BLOCKSIZE][1], hardware
     )
-    assert blocks == natural_blocks or (
-        footprint * (blocks + 1) > budget(blocks + 1)
-    )
-
+    if budget_blocks < shapes[BUDGET_BLOCKSIZE][1]:
+        assert blocksize * blocks <= BUDGET_BLOCKSIZE * budget_blocks
+    else:
+        assert blocks == natural
+    runs = kernel.run_params[0].runs
+    assert kernel.get_cached_output("default_launches") == {
+        runs: (blocksize, blocks)
+    }
+    assert kernel.launch_geometry(64)[0] == 64
 
 
 def test_repeat_solve_reuses_the_build_state(
@@ -2896,3 +2920,38 @@ def test_run_rejects_a_driver_system_without_driver_inputs(
             )
     finally:
         twin.close()
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override", [BICGSTAB_STEP_CASES[0]], indirect=True
+)
+def test_auto_blocksize_of_shared_kernel_maximises_threads(
+    solved_solver_simple,
+):
+    """A shared-memory kernel launches the most resident threads: the
+    smaller block on a tie, the larger one over the instruction cache."""
+    solver, _ = solved_solver_simple
+    kernel = solver.kernel
+    assert kernel.shared_memory_bytes > 0
+    resources = kernel_resources(kernel.kernel)
+    assert resources.local_bytes_per_thread < RESIDENCY_CUT_MIN_FRAME_BYTES
+    blocksize, dynamic = kernel.launch_geometry()
+    chosen = blocksize * active_blocks_per_multiprocessor(
+        kernel.kernel, blocksize, dynamic
+    )
+    shapes = kernel.launchable_shapes()
+    most = max(size * count for size, (_, count) in shapes.items())
+    over_icache = (
+        resources.sass_bytes > device_hardware().instruction_cache_bytes
+    )
+    if over_icache:
+        assert chosen >= LAUNCH_OCCUPANCY_TIE * most
+        for candidate, (_, count) in shapes.items():
+            if candidate * count >= LAUNCH_OCCUPANCY_TIE * most:
+                assert candidate <= blocksize
+    else:
+        assert chosen == most
+        for candidate, (_, count) in shapes.items():
+            if candidate * count == most:
+                assert blocksize <= candidate

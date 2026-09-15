@@ -99,9 +99,6 @@ FIRK_FIXED_DEFAULTS = AlgorithmDefaults(
 )
 """Defaults for errorless FIRK tableaus."""
 
-SHARED_STAGE_INCREMENT_MIN_STATES = 20
-"""``stage_increment`` goes to shared memory above this state count."""
-
 
 @frozen
 class FIRKStepConfig(ImplicitStepConfig):
@@ -997,20 +994,33 @@ class FIRKStep(ODEImplicitStep):
 
         return self.stage_count > 1
 
-    @property
-    def performance_defaults(self) -> Dict[str, Any]:
-        """Share ``stage_increment`` above the measured state-count cut."""
-        shared = self.n_states > SHARED_STAGE_INCREMENT_MIN_STATES
+    def performance_defaults(self, hardware: Any = None) -> Dict[str, Any]:
+        """Share a Krylov solve's ``stage_increment`` while the GPU stays
+        full."""
+        shared = not self.uses_direct_solver and self.shared_keeps_occupancy(
+            self.stage_count * self.n_states, 1, hardware
+        )
         return {"stage_increment_location": "shared" if shared else "local"}
 
     @property
     def optimisation_candidates(self) -> Tuple[Dict[str, Any], ...]:
-        """Newton unrolling crossed with ``stage_increment`` placement."""
-        return tuple(
+        """Newton unrolling crossed with ``stage_increment`` placement,
+        plus rolled ``other_small`` at rolled Newton per placement."""
+        rolled = UnrollChoice.ROLLED
+        cross = [
             {"unroll_newton_exits": unroll, "stage_increment_location": loc}
-            for unroll in (UnrollChoice.FULL, UnrollChoice.ROLLED)
+            for unroll in (UnrollChoice.FULL, rolled)
             for loc in ("local", "shared")
-        )
+        ]
+        extra = [
+            {
+                "unroll_newton_exits": rolled,
+                "unroll_other_small": rolled,
+                "stage_increment_location": loc,
+            }
+            for loc in ("local", "shared")
+        ]
+        return tuple(cross + extra)
 
     @property
     def has_error_estimate(self) -> bool:
