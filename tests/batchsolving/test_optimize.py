@@ -3,7 +3,7 @@
 import pytest
 
 from cubie.batchsolving.optimize import LaunchResult, apply_launch
-from cubie.cuda_simsafe import UnrollChoice
+from cubie.CUDAFactory import UnrollChoice
 
 FULL = UnrollChoice.FULL
 ROLLED = UnrollChoice.ROLLED

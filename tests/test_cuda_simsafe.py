@@ -22,7 +22,8 @@ def test_compile_kwargs_without_cudasim():
 @pytest.mark.nocudasim
 def test_jit_flags_render_over_live_defaults():
     """Overrides render without mutating the live default flag set."""
-    from cubie.cuda_simsafe import JITFlags, compile_kwargs, get_jit_kwargs
+    from cubie.CUDAFactory import JITFlags
+    from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
 
     kwargs = get_jit_kwargs(JITFlags(afn=False, lto=False))
 
@@ -386,7 +387,7 @@ def test_unroll_if_flag_must_be_a_closed_over_name():
 
 def test_unroll_flags_update_reads_field_keys():
     """``unroll_*`` keys derive a replacement; other keys are ignored."""
-    from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollFlags
+    from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
 
     flags = UnrollFlags()
     replacement, recognised, changed = flags.update(
@@ -420,7 +421,7 @@ def test_unroll_flags_update_reads_field_keys():
 
 def test_unroll_flag_converter_forms():
     """Bools and pairs convert to ``(unroll, count)``; bad pairs raise."""
-    from cubie.cuda_simsafe import (
+    from cubie.CUDAFactory import (
         UnrollChoice,
         UnrollFlags,
         unroll_flag_converter,
@@ -465,7 +466,8 @@ def test_unroll_flag_converter_forms():
 @pytest.mark.mlir_only
 def test_unroll_if_pass_resolves_attribute_flags():
     """A ``name.attr`` flag on a closure object resolves per attribute."""
-    from cubie.cuda_simsafe import UnrollFlags, unroll_if
+    from cubie.CUDAFactory import UnrollFlags
+    from cubie.cuda_simsafe import unroll_if
 
     width = 3
     unroll = UnrollFlags(
