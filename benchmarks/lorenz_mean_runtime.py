@@ -427,7 +427,9 @@ def compile_meta(solver):
         log, entry_name
     )
 
-    actual_blocksize, dynshared = solver.kernel.launch_geometry(blocksize)
+    actual_blocksize, dynshared = solver.kernel.launch_geometry(
+        blocksize, runs=solver.kernel.run_params[0].runs
+    )
     context = cuda.current_context()
     blocks_per_sm = context.get_active_blocks_per_multiprocessor(
         cufunc, actual_blocksize, dynshared

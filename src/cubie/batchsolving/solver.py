@@ -694,28 +694,34 @@ class Solver:
 
     def compile(
         self,
-        initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
-        parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
         drivers: Optional[Dict[str, Any]] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        grid_type: str = "verbatim",
         **kwargs: Any,
     ) -> None:
-        """Compile the batch kernel for these inputs without solving."""
-        self.update(duration=duration, **kwargs)
+        """Apply settings and drivers and compile the kernel.
 
-        inits, params = self.input_handler(
-            states=initial_values, params=parameters, kind=grid_type
-        )
+        Parameters
+        ----------
+        drivers
+            Driver samples or configuration matching
+            :class:`cubie.array_interpolator.ArrayInterpolator`.
+        duration
+            Total integration time. Default is ``1.0``.
+        settling_time
+            Warm-up period before recording outputs. Default ``0.0``.
+        t0
+            Initial integration time. Default ``0.0``.
+        **kwargs
+            Additional options forwarded to :meth:`update`.
+        """
+        self.update(duration=duration, **kwargs)
 
         if drivers is not None:
             self._configure_drivers(drivers)
 
         self.kernel.compile(
-            inits=inits,
-            params=params,
             duration=duration,
             warmup=settling_time,
             t0=t0,

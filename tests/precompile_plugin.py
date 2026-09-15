@@ -546,16 +546,18 @@ if POPULATION:
     def _population_compile_kernel_specialization(dispatcher, args):
         _attach_pending()
         _attach_cache(dispatcher)
-        _production_compile(dispatcher, args)
+        return _production_compile(dispatcher, args)
 
     _backend_utils.compile_kernel_specialization = (
         _population_compile_kernel_specialization
     )
     _backend_utils.kernel_resources = (
-        lambda dispatcher: _backend_utils.KernelResources(0, 0)
+        lambda dispatcher, signature=None: _backend_utils.KernelResources(
+            0, 0, 0
+        )
     )
     _backend_utils.active_blocks_per_multiprocessor = (
-        lambda dispatcher, blocksize, dynamic_shared: 1
+        lambda dispatcher, blocksize, dynamic_shared, signature=None: 1
     )
     for _module_name in (
         "cubie.batchsolving.BatchSolverKernel",
