@@ -1,13 +1,11 @@
 """Solver resource cleanup tests."""
 
 import gc
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from cubie.batchsolving.solver import solve_ivp
-from cubie.batchsolving.solveresult import SolveResult
 from cubie.cuda_simsafe import cuda
 from tests._utils import _build_solver_instance
 
@@ -207,39 +205,6 @@ def test_solve_ivp_releases_temporary_solver(
     )
 
     assert set(manager.registry) == baseline
-
-
-def test_solve_ivp_spill_survives_solver_close(
-    system, batch_input_arrays, tmp_path, driver_settings
-):
-    """Spilled results remain readable after temporary solver cleanup."""
-    y0, params = batch_input_arrays
-    result = solve_ivp(
-        system,
-        y0,
-        params,
-        drivers=driver_settings,
-        duration=0.1,
-        grid_type="verbatim",
-        dt=0.01,
-        host_spill_threshold=1,
-        spill_directory=tmp_path,
-    )
-    assert isinstance(result, SolveResult)
-    spill_paths = [
-        Path(array._cubie_spill_path)
-        for array in (result.state, result.status_codes)
-        if isinstance(array, np.memmap)
-    ]
-    try:
-        assert spill_paths
-        assert all(path.exists() for path in spill_paths)
-        assert np.isfinite(
-            np.array(result.time_domain_array, copy=True)
-        ).all()
-    finally:
-        result.close()
-    assert all(not path.exists() for path in spill_paths)
 
 
 @pytest.mark.nocudasim

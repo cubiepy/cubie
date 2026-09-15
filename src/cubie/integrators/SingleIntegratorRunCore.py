@@ -36,6 +36,7 @@ from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
+    BaseAlgorithmStep,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
 )
 from cubie.integrators.algorithms.ode_implicitstep import (
@@ -48,6 +49,9 @@ from cubie.integrators.step_control import (
     CONTROLLER_GAIN_PARAMETERS,
     get_controller,
     promoted_gain_controller,
+)
+from cubie.integrators.step_control.base_step_controller import (
+    BaseStepController,
 )
 
 
@@ -157,6 +161,10 @@ class SingleIntegratorRunCore(CUDAFactory):
         }
     )
     _TIMING_KEYS = ("save_every", "summarise_every", "sample_summaries_every")
+    SAMPLES_PER_SUMMARY_WINDOW = 10
+    """Summary samples per window when only ``summarise_every`` is given."""
+    SAMPLES_PER_RUN_SUMMARY = 100
+    """Summary samples when the window is the run duration."""
 
     def __init__(
         self,
@@ -197,25 +205,23 @@ class SingleIntegratorRunCore(CUDAFactory):
         precision = system.precision
 
         self._system = system
-        system_sizes = system.sizes
 
-        # Outputsettings may/may not include precision, so we pop it here to
-        # ensure that it gets passed a precision matching system's
-        _ = output_settings.pop("precision", None)
-        self._output_functions = OutputFunctions(
-            n_states=system_sizes.states,
-            n_observables=system_sizes.observables,
-            precision=precision,
-            **output_settings,
-        )
+        # The system's precision overrides one in the output settings.
+        output_settings.update(OutputFunctions.system_inputs(system))
+        self._output_functions = OutputFunctions(**output_settings)
 
         dt = step_control_settings.get("dt", None)
-        algorithm_settings.update(self._step_inputs())
         if dt is not None:
             algorithm_settings["dt"] = dt
-        algorithm_settings["drivers_fn"] = drivers_fn
-        # Thread the driver time-derivative through to algorithm factories
-        algorithm_settings["driver_derivative_fn"] = driver_derivative_fn
+        # The controller is built after the step and sets is_adaptive.
+        algorithm_settings.update(
+            BaseAlgorithmStep.system_inputs(
+                system,
+                drivers_fn=drivers_fn,
+                driver_derivative_fn=driver_derivative_fn,
+                is_adaptive=True,
+            )
+        )
         self._algo_step = get_algorithm_step(
                 precision=precision,
                 settings=algorithm_settings,
@@ -236,11 +242,11 @@ class SingleIntegratorRunCore(CUDAFactory):
                 controller_settings.pop(gain_key, None)
         controller_settings.update(step_control_settings)
         controller_settings["step_controller"] = effective_controller
-        controller_settings["n_states"] = system_sizes.states
-        controller_settings["algorithm_order"] = (
-            self._algo_step.algorithm_order
+        controller_settings.update(
+            BaseStepController.system_inputs(
+                system, algorithm_order=self._algo_step.algorithm_order
+            )
         )
-        controller_settings["mass_flags"] = system.mass_diagonal_flags
 
         self._step_controller = get_controller(
             precision=precision,
@@ -330,7 +336,9 @@ class SingleIntegratorRunCore(CUDAFactory):
                 self.is_duration_dependent = True
             else:
                 if sample_summaries_every is None:
-                    sample_summaries_every = summarise_every / 10.0
+                    sample_summaries_every = (
+                        summarise_every / self.SAMPLES_PER_SUMMARY_WINDOW
+                    )
         else:
             summarise_every = None
             sample_summaries_every = None
@@ -379,8 +387,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """
 
         if self.is_duration_dependent:
-            samples_per_summary = 100
-            sample_summaries_every = duration / samples_per_summary
+            sample_summaries_every = duration / self.SAMPLES_PER_RUN_SUMMARY
 
             self._output_functions.update(
                 sample_summaries_every=sample_summaries_every,
@@ -560,26 +567,25 @@ class SingleIntegratorRunCore(CUDAFactory):
             )
             self._algo_step.update({"is_adaptive": False}, silent=True)
 
-    def _step_inputs(self) -> Dict[str, Any]:
-        """Return the system's sizes and device functions the step takes."""
-        system = self._system
-        sizes = system.sizes
-        return dict(
-            n_states=int(sizes.states),
-            n_drivers=int(sizes.drivers),
-            dxdt_fn=system.dxdt_fn,
-            observables_fn=system.observables_fn,
-            get_solver_helper_fn=system.get_solver_helper,
+    def _step_inputs(
+        self, updates: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Return step settings from the system; updates may name drivers."""
+        config = self._algo_step.compile_settings
+        updates = {} if updates is None else updates
+        return BaseAlgorithmStep.system_inputs(
+            self._system,
+            drivers_fn=updates.get("drivers_fn", config.drivers_fn),
+            driver_derivative_fn=updates.get(
+                "driver_derivative_fn",
+                getattr(config, "driver_derivative_fn", None),
+            ),
+            is_adaptive=self._step_controller.is_adaptive,
         )
 
     def _initialiser_inputs(self) -> Dict[str, Any]:
-        """Return the sizes and helper getter the initialiser takes."""
-        system = self._system
-        return dict(
-            n_states=int(system.sizes.states),
-            mass_flags=system.mass_diagonal_flags,
-            get_solver_helper_fn=system.get_solver_helper,
-        )
+        """Return initialiser settings from the system."""
+        return DAEInitialiser.system_inputs(self._system)
 
     def _loop_inputs(self) -> Dict[str, Any]:
         """Return the sizes, dt and device functions the loop takes."""
@@ -723,7 +729,7 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         step_recognized = self._switch_algos(updates_dict)
         step_recognized |= self._algo_step.update(
-            {**updates_dict, **self._step_inputs()}, silent=True
+            {**updates_dict, **self._step_inputs(updates_dict)}, silent=True
         )
 
         updates_dict["algorithm_order"] = self._algo_step.algorithm_order
@@ -803,9 +809,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             buffer_registry.clear_parent(self._algo_step)
             old_settings = self._algo_step.settings_dict
             old_settings["algorithm"] = new_algo
-            # The driver and system device functions carry over.
-            old_settings.update(self._step_device_functions())
-            old_settings.update(self._step_inputs())
+            old_settings.update(self._step_inputs(updates_dict))
             self._algo_step = get_algorithm_step(
                     precision=precision,
                     settings=old_settings,

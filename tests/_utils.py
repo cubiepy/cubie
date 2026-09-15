@@ -2083,7 +2083,7 @@ UNROLL_SETTINGS = {
     "unroll_krylov_exits": (True, 2),
 }
 
-# One chain for the device-path, spill, proportion and counter tests.
+# One chain for the device-path, proportion and counter tests.
 DEVICE_SOLVE_SETTINGS = {
     "duration": 0.05,
     "dt": 0.01,
@@ -2091,7 +2091,6 @@ DEVICE_SOLVE_SETTINGS = {
     "summarise_every": None,
     "output_types": ["state", "time", "iteration_counters"],
     "mem_proportion": 0.1,
-    "host_spill_threshold": 512,
 }
 
 MOVABLE_LOCATION_KEYS = (

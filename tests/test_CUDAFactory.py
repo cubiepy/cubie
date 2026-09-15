@@ -14,9 +14,9 @@ from cubie.CUDAFactory import (
     MultipleInstanceCUDAFactoryConfig,
     _CubieConfigBase,
     _config_field_map,
-    _nested_config_fields,
     attribute_is_hashable,
 )
+from cubie._utils import nested_config_fields
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
@@ -247,7 +247,7 @@ def test_nested_config_fields_identifies_attrs_fields():
         inner: _Inner = attrs.Factory(_Inner)
         plain: int = 2
 
-    nested_names = {fld.name for fld in _nested_config_fields(_Outer)}
+    nested_names = {fld.name for fld in nested_config_fields(_Outer)}
     assert "inner" in nested_names
     assert "plain" not in nested_names
 
@@ -1123,3 +1123,15 @@ def test_child_products_carry_their_declared_fields(
     assert interpolator["coefficients_shape"] == (
         solverkernel.driver_interpolator.coefficients_shape
     )
+
+
+def test_update_validates_a_value_equal_to_the_stored_one():
+    """A wrong-typed value that compares equal still runs the validator."""
+    @attrs.frozen
+    class _C(_CubieConfigBase):
+        x: float = attrs.field(
+            default=1.0, validator=attrs.validators.instance_of(float)
+        )
+
+    with pytest.raises(TypeError):
+        _C().update({"x": True})

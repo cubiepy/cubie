@@ -63,22 +63,24 @@ from attrs import (
     has,
 )
 from attrs import validators as attrs_validators
-from numpy import (
-    array_equal,
-    asarray,
-    ndarray,
-    dtype as np_dtype,
-)
+from numpy import dtype as np_dtype
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 
 from cubie._serialize import canonical_digest
 from cubie._utils import (
     in_attr,
+    nested_config_fields,
     PrecisionDType,
     precision_validator,
     precision_converter,
 )
-from cubie.cuda_simsafe import JITFlags, UnrollFlags, get_jit_kwargs
+from cubie.cuda_simsafe import (
+    FrozenSettings,
+    JITFlags,
+    UnrollFlags,
+    get_jit_kwargs,
+    values_differ,
+)
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.buffer_registry import buffer_registry
 
@@ -130,35 +132,8 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
     return field_map
 
 
-@cache
-def _nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return fields typed as attrs classes; unwraps ``Optional``."""
-    from typing import Union, get_args, get_origin
-
-    nested = []
-    for fld in fields(cls):
-        candidates = (fld.type,)
-        if get_origin(fld.type) is Union:
-            candidates = get_args(fld.type)
-        for candidate in candidates:
-            if isinstance(candidate, type) and has(candidate):
-                nested.append(fld)
-                break
-    return tuple(nested)
-
-
-def _values_differ(fld: Attribute, old: Any, new: Any) -> bool:
-    """Compare device functions by identity, arrays elementwise, else
-    ``!=``."""
-    if fld.metadata.get("device_function"):
-        return old is not new
-    if isinstance(old, ndarray) or isinstance(new, ndarray):
-        return not array_equal(asarray(old), asarray(new))
-    return bool(old != new)
-
-
 @frozen
-class _CubieConfigBase:
+class _CubieConfigBase(FrozenSettings):
     """Immutable base for configuration containers with session state.
 
     Instances are frozen snapshots: fields change only by deriving a
@@ -244,7 +219,7 @@ class _CubieConfigBase:
             evolve_kwargs[fld.alias or fld.name] = updates_dict[key]
 
         changed = set()
-        for fld in _nested_config_fields(cls):
+        for fld in nested_config_fields(cls):
             # A supplied nested object is the base for its loose keys.
             handle = fld.alias or fld.name
             nested_obj = evolve_kwargs.get(handle, getattr(self, fld.name))
@@ -268,7 +243,7 @@ class _CubieConfigBase:
         for key, fld in direct.items():
             old_value = getattr(self, fld.name)
             new_value = getattr(candidate, fld.name)
-            if _values_differ(fld, old_value, new_value):
+            if values_differ(fld, old_value, new_value):
                 changed.add(key)
 
         if not changed:

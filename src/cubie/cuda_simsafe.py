@@ -44,6 +44,9 @@ Published Device Functions
 
 Published Classes
 -----------------
+:class:`FrozenSettings`
+    Frozen attrs settings base; ``update`` derives a replacement
+    snapshot and reports the recognised and changed keys.
 :class:`JITFlags`
     Managed ``cuda.jit`` compile options stored on every factory's
     compile settings and rendered to decorator kwargs by
@@ -86,13 +89,14 @@ from ctypes import c_void_p
 from enum import Enum
 import os
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Mapping, Optional, Set, Tuple, Union
 
-from attrs import Factory, field, frozen
-from attrs import evolve as attrs_evolve
+from attrs import Attribute, Factory, evolve, field, fields, frozen
 from attrs import fields as attrs_fields
 from attrs import validators as attrs_validators
 from numpy import (
+    array_equal,
+    asarray,
     dtype,
     empty as np_empty,
     fmax as np_fmax,
@@ -159,16 +163,70 @@ else:
     INLINE_ALWAYS = "always"
 
 
+def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
+    """Compare by identity (device fns), value (arrays), else !=."""
+    if fld.metadata.get("device_function"):
+        return old is not new
+    if isinstance(old, np_ndarray) or isinstance(new, np_ndarray):
+        return not array_equal(asarray(old), asarray(new))
+    return bool(old != new)
+
+
 @frozen
-class JITFlags:
+class FrozenSettings:
+    """Frozen attrs settings; :meth:`update` derives a replacement."""
+
+    def update(
+        self, updates_dict: dict = None, **kwargs
+    ) -> Tuple["FrozenSettings", Set[str], Set[str]]:
+        """Derive a replacement snapshot with new field values.
+
+        Parameters
+        ----------
+        updates_dict
+            Init names to new values; unknown keys are ignored.
+        **kwargs
+            Additional settings to update.
+
+        Returns
+        -------
+        tuple[FrozenSettings, set[str], set[str]]
+            Replacement (``self`` when unchanged), recognised names,
+            and the names whose converted value changed.
+        """
+        updates = {**(updates_dict or {}), **kwargs}
+        by_handle = {
+            (fld.alias or fld.name): fld
+            for fld in fields(type(self))
+            if fld.init
+        }
+        given = {
+            key: by_handle[key] for key in updates if key in by_handle
+        }
+        if not given:
+            return self, set(), set()
+        candidate = evolve(self, **{key: updates[key] for key in given})
+        changed = {
+            key
+            for key, fld in given.items()
+            if values_differ(
+                fld, getattr(self, fld.name), getattr(candidate, fld.name)
+            )
+        }
+        if not changed:
+            return self, set(given), set()
+        return candidate, set(given), changed
+
+
+@frozen
+class JITFlags(FrozenSettings):
     """Per-factory ``cuda.jit`` compile flags.
 
     Every managed jit option travels the same path: stored on the
     factory's compile settings (hashed into the config, so a change
     triggers a rebuild), then rendered to decorator keyword arguments
     by :func:`get_jit_kwargs`. New jit options are added here as new
-    fields. Instances are immutable snapshots; :meth:`update` derives
-    a replacement rather than mutating in place.
+    fields.
 
     Attributes
     ----------
@@ -225,50 +283,6 @@ class JITFlags:
         }
         return {name for name, on in enabled.items() if on}
 
-    def update(self, updates_dict=None, **kwargs):
-        """Derive a replacement snapshot with new flag values.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of flag names to new boolean values. Unknown keys
-            are ignored so composite configs can broadcast one updates
-            dict to every nested attrs class.
-        **kwargs
-            Additional flag updates.
-
-        Returns
-        -------
-        tuple[JITFlags, set[str], set[str]]
-            Replacement snapshot (``self`` when unchanged), names of
-            recognised settings, and names of changed settings.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = {**updates_dict, **kwargs}
-        recognized = set()
-        changed = set()
-        replacements = {}
-        flag_names = {
-            "lineinfo",
-            "nsz",
-            "contract",
-            "arcp",
-            "afn",
-            "ftz",
-            "lto",
-        }
-        for key, value in updates_dict.items():
-            if key not in flag_names:
-                continue
-            recognized.add(key)
-            if getattr(self, key) != value:
-                replacements[key] = bool(value)
-                changed.add(key)
-        if not changed:
-            return self, recognized, changed
-        return attrs_evolve(self, **replacements), recognized, changed
-
 
 UnrollFlag = Tuple[bool, Optional[int]]
 """Loop-group flag: ``(unroll, count)``."""
@@ -300,7 +314,7 @@ def _unroll_flag_field():
 
 
 @frozen
-class UnrollFlags:
+class UnrollFlags(FrozenSettings):
     """Per-loop-group ``(unroll, count)`` flags read by ``unroll_if`` sites.
 
     Attributes
@@ -333,42 +347,6 @@ class UnrollFlags:
     unroll_krylov_exits: UnrollFlag = field(
         default=UnrollChoice.ROLLED, converter=unroll_flag_converter
     )
-
-    def update(self, updates_dict=None, **kwargs):
-        """Derive a replacement snapshot with new flag values.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of flag names to new values. Unknown keys are
-            ignored so composite configs can broadcast one updates
-            dict to every nested attrs class.
-        **kwargs
-            Additional flag updates.
-
-        Returns
-        -------
-        tuple[UnrollFlags, set[str], set[str]]
-            Replacement snapshot (``self`` when unchanged), names of
-            recognised settings, and names of changed settings.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = {**updates_dict, **kwargs}
-        recognized = set()
-        changed = set()
-        replacements = {}
-        for key, value in updates_dict.items():
-            if key not in ALL_UNROLL_PARAMETERS:
-                continue
-            recognized.add(key)
-            value = unroll_flag_converter(value)
-            if getattr(self, key) != value:
-                replacements[key] = value
-                changed.add(key)
-        if not changed:
-            return self, recognized, changed
-        return attrs_evolve(self, **replacements), recognized, changed
 
 
 ALL_UNROLL_PARAMETERS = frozenset(
@@ -909,6 +887,7 @@ __all__ = [
     "get_jit_kwargs",
     "IndexDataCacheFile",
     "INLINE_ALWAYS",
+    "FrozenSettings",
     "JITFlags",
     "CUDA_SIMULATION",
     "CUDACache",
@@ -941,6 +920,7 @@ __all__ = [
     "unroll_if",
     "UnrollFlag",
     "UnrollFlags",
+    "values_differ",
     "unroll_flag_converter",
     "ALL_UNROLL_PARAMETERS",
 ]

@@ -511,10 +511,6 @@ class BatchInputHandler:
         System interface containing parameter and state metadata.
     memory_manager
         Manager that allocates materialised input arrays.
-    host_spill_threshold
-        Disk-backing size in bytes; ``None`` = the RAM default.
-    spill_directory
-        Directory for disk-backed arrays; ``None`` = temp dir.
 
     Attributes
     ----------
@@ -526,25 +522,17 @@ class BatchInputHandler:
         Floating-point precision for returned arrays.
     memory_manager
         Manager that allocates materialised input arrays.
-    host_spill_threshold
-        Disk-backing size in bytes for assembled arrays.
-    spill_directory
-        Directory for disk-backed arrays.
     """
 
     def __init__(
         self,
         interface: SystemInterface,
         memory_manager: "MemoryManager" = default_memmgr,
-        host_spill_threshold: Optional[int] = None,
-        spill_directory: Optional[str] = None,
     ):
         """Initialise the handler with a system interface."""
         self.interface = interface
         self.precision = interface.parameters.precision
         self.memory_manager = memory_manager
-        self.host_spill_threshold = host_spill_threshold
-        self.spill_directory = spill_directory
 
     @property
     def parameters(self) -> SystemValues:
@@ -561,8 +549,6 @@ class BatchInputHandler:
         cls,
         system: BaseODE,
         memory_manager: "MemoryManager" = default_memmgr,
-        host_spill_threshold: Optional[int] = None,
-        spill_directory: Optional[str] = None,
     ) -> "BatchInputHandler":
         """Create a handler from a system model.
 
@@ -572,10 +558,6 @@ class BatchInputHandler:
             System model providing parameter and state metadata.
         memory_manager
             Manager that allocates materialised input arrays.
-        host_spill_threshold
-            Disk-backing size in bytes; ``None`` = the RAM default.
-        spill_directory
-            Directory for disk-backed arrays; ``None`` = temp dir.
 
         Returns
         -------
@@ -583,12 +565,7 @@ class BatchInputHandler:
             Handler configured for ``system``.
         """
         interface = SystemInterface(system)
-        return cls(
-            interface,
-            memory_manager=memory_manager,
-            host_spill_threshold=host_spill_threshold,
-            spill_directory=spill_directory,
-        )
+        return cls(interface, memory_manager=memory_manager)
 
     def __call__(
         self,
@@ -1141,9 +1118,7 @@ class BatchInputHandler:
 
     def _choose_backing(self, nbytes: int) -> str:
         """Pick the backing for a handler-materialised array."""
-        return self.memory_manager.choose_host_memory_type(
-            nbytes, self.host_spill_threshold
-        )
+        return self.memory_manager.choose_host_memory_type(nbytes)
 
     def _final_array(
         self, n_rows: int, n_runs: int, backed: set
@@ -1154,10 +1129,7 @@ class BatchInputHandler:
         nbytes = n_rows * n_runs * np_dtype(self.precision).itemsize
         memory_type = self._choose_backing(nbytes)
         array = self.memory_manager.create_host_array(
-            (n_rows, n_runs),
-            self.precision,
-            memory_type,
-            spill_directory=self.spill_directory,
+            (n_rows, n_runs), self.precision, memory_type
         )
         backed.add(id(array))
         return array
@@ -1227,11 +1199,7 @@ class BatchInputHandler:
             return array
         # Copy once into a buffer of the chosen backing.
         return self.memory_manager.create_host_array(
-            array.shape,
-            self.precision,
-            memory_type,
-            like=array,
-            spill_directory=self.spill_directory,
+            array.shape, self.precision, memory_type, like=array
         )
 
     def _is_right_sized_array(

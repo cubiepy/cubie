@@ -899,3 +899,18 @@ def test_build_config_instance_label_invalid_for_class_raises():
             required={"precision": np.float32, "n": 3},
             instance_label="krylov",
         )
+
+
+def test_build_config_folds_loose_keys_into_nested_settings():
+    """Loose flag keys land in the config's nested settings."""
+    from cubie.CUDAFactory import CUDAFactoryConfig
+
+    config = build_config(
+        CUDAFactoryConfig,
+        required={"precision": np.float32},
+        unroll_solver_element=(True, 2),
+        lineinfo=True,
+        extra_param="ignored",
+    )
+    assert config.unroll.unroll_solver_element == (True, 2)
+    assert config.jit_flags.lineinfo is True

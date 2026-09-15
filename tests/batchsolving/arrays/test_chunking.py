@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from time import sleep
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -253,27 +252,11 @@ def test_chunked_solver_changes_to_unchunked_backing(
         solver.close()
 
 
-def test_output_allocation_tracks_policy_spill(tmp_path):
-    """Above-threshold output buffers are disk-backed at creation.
-
-    The spill policy applies when the buffer is created; conversion
-    after the chunk decision only repins small pageable slots and
-    never moves a buffer between backings.
-    """
+def test_output_allocation_keeps_disk_backing():
+    """Pinned conversion after chunking leaves a memmap slot alone."""
     manager = _make_test_array_manager()
-    manager._memory_owner = SimpleNamespace(
-        host_spill_threshold=1, spill_directory=str(tmp_path)
-    )
-
-    memory_type = manager._memory_manager.choose_host_memory_type(
-        10 * 3 * 100 * 4, manager.host_spill_threshold, allow_pinned=False
-    )
-    assert memory_type == "memmap"
     array = manager._memory_manager.create_host_array(
-        (10, 3, 100),
-        np.float32,
-        memory_type,
-        spill_directory=manager.spill_directory,
+        (10, 3, 100), np.float32, "memmap"
     )
     slot = manager.host.get_managed_array("state")
     slot.array = array

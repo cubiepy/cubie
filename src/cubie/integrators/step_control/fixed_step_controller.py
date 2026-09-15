@@ -37,6 +37,9 @@ from cubie.integrators.step_control.base_step_controller import (
     ControllerCache,
 )
 
+DEFAULT_FIXED_DT = 1e-3
+"""Fixed step when none is given."""
+
 
 @frozen
 class FixedStepControlConfig(BaseStepControllerConfig):
@@ -56,7 +59,9 @@ class FixedStepControlConfig(BaseStepControllerConfig):
         Relative tolerance vector, on the same terms as ``atol``.
     """
 
-    _dt: float = field(default=1e-3, validator=getype_validator(float, 0))
+    _dt: float = field(
+        default=DEFAULT_FIXED_DT, validator=getype_validator(float, 0)
+    )
 
     def __attrs_post_init__(self) -> None:
         """Validate configuration after initialisation."""

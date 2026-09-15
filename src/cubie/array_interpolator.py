@@ -103,6 +103,12 @@ class InterpolatorCache(CUDADispatcherCache):
     coefficients_shape: Tuple[int, int, int] = field(default=(0, 0, 0))
 
 
+ALL_INTERPOLATOR_PARAMETERS = frozenset(
+    {"order", "wrap", "boundary_condition"}
+)
+"""Keyword args for interpolation settings passed to the solver."""
+
+
 def _input_array_converter(value: Any) -> FloatArray:
     """Copy sampled inputs into an owned read-only 2-D array."""
     array = asarray(value).copy()

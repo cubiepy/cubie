@@ -759,6 +759,7 @@ class OutputConfig(CUDAFactoryConfig):
         n_states: int = 0,
         n_observables: int = 0,
         sample_summaries_every: Optional[float] = 0.01,
+        **compile_flags: object,
     ) -> "OutputConfig":
         """
         Create configuration from integrator-compatible specifications.
@@ -787,6 +788,8 @@ class OutputConfig(CUDAFactoryConfig):
             metrics to scale finite differences. Defaults to ``0.01``.
         precision
             Numerical precision for output calculations.
+        **compile_flags
+            ``unroll`` and ``jit_flags`` for the compiled functions.
 
         Returns
         -------
@@ -824,4 +827,5 @@ class OutputConfig(CUDAFactoryConfig):
             output_types=output_types,
             sample_summaries_every=sample_summaries_every,
             precision=precision,
+            **compile_flags,
         )

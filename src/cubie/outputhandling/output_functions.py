@@ -35,7 +35,7 @@ See Also
     Summary-update device function factory.
 """
 
-from typing import Callable, Sequence, Union, Optional
+from typing import Any, Callable, Dict, Sequence, Union, Optional
 
 from attrs import define, field, validators
 from numpy import int_
@@ -162,6 +162,15 @@ class OutputFunctions(CUDAFactory):
 
     settings_keys = frozenset(ALL_OUTPUT_FUNCTION_PARAMETERS)
 
+    @classmethod
+    def system_inputs(cls, system: Any) -> Dict[str, Any]:
+        """Return output settings from a system object."""
+        return dict(
+            precision=system.precision,
+            n_states=system.sizes.states,
+            n_observables=system.sizes.observables,
+        )
+
     def __init__(
         self,
         n_states: int,
@@ -173,6 +182,7 @@ class OutputFunctions(CUDAFactory):
         summarised_state_indices: Union[Sequence[int], ArrayLike] = None,
         summarised_observable_indices: Union[Sequence[int], ArrayLike] = None,
         sample_summaries_every: Optional[float] = None,
+        **compile_flags: object,
     ):
         super().__init__()
 
@@ -190,6 +200,7 @@ class OutputFunctions(CUDAFactory):
             summarised_observable_indices=summarised_observable_indices,
             sample_summaries_every=sample_summaries_every,
             precision=precision,
+            **compile_flags,
         )
         self.setup_compile_settings(config)
 

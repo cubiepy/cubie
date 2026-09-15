@@ -49,7 +49,7 @@ See Also
 """
 
 from collections import deque
-from tempfile import gettempdir, mkstemp
+from tempfile import mkstemp
 from threading import Lock
 from types import TracebackType
 from functools import partial
@@ -62,6 +62,7 @@ import ctypes
 import os
 import sys
 
+from cubie.cache_root import get_cache_root
 from cubie.cuda_simsafe import cuda
 from cubie._utils import getype_validator, opt_getype_validator
 from attrs import define, Factory as attrsFactory, field
@@ -101,8 +102,6 @@ ALL_MEMORY_MANAGER_PARAMETERS = {
     "memory_manager",
     "stream_group",
     "mem_proportion",
-    "host_spill_threshold",
-    "spill_directory",
 }
 """Solver memory keyword names."""
 
@@ -1460,7 +1459,6 @@ class MemoryManager:
         dtype: DTypeLike,
         memory_type: str = "pinned",
         like: Optional[ndarray] = None,
-        spill_directory: Optional[os.PathLike | str] = None,
     ) -> ndarray:
         """
         Create a C-contiguous host array.
@@ -1475,14 +1473,12 @@ class MemoryManager:
             ``"pinned"``, ``"host"``, or ``"memmap"``.
         like
             Optional source data.
-        spill_directory
-            Directory for ``"memmap"`` arrays; ``None`` = temp dir.
 
         Returns
         -------
         numpy.ndarray
-            C-contiguous host array. A :class:`numpy.memmap` when the
-            array spilled to disk. A ``"pinned"`` request whose
+            C-contiguous host array; a :class:`numpy.memmap` in the
+            cache root when spilled. A ``"pinned"`` request whose
             reservation or driver allocation fails lands pageable.
 
         Raises
@@ -1498,7 +1494,7 @@ class MemoryManager:
                 f"got '{memory_type}'"
             )
         if memory_type == "memmap":
-            arr = self._create_spill_array(shape, dtype, spill_directory)
+            arr = self._create_spill_array(shape, dtype)
         elif memory_type == "pinned":
             arr = self.allocate_pinned_array(shape, dtype)
             if arr is None:
@@ -1514,24 +1510,17 @@ class MemoryManager:
         return arr
 
     def choose_host_memory_type(
-        self,
-        nbytes: int,
-        host_spill_threshold: Optional[int] = None,
-        allow_pinned: bool = True,
+        self, nbytes: int, allow_pinned: bool = True
     ) -> str:
         """Pick the backing for a host array of ``nbytes`` bytes.
 
-        Arrays above the spill threshold are disk-backed. Below it,
-        sizes within ``pinned_max_bytes`` choose pinned and the rest
-        pageable. :meth:`allocate_pinned_array` budgets the actual
-        allocation and may land a pinned choice pageable.
+        Memmap above ``HOST_SPILL_FRACTION`` of RAM, pinned within
+        ``pinned_max_bytes``, else pageable.
 
         Parameters
         ----------
         nbytes
             Size of the array in bytes.
-        host_spill_threshold
-            Disk-backing size in bytes; ``None`` = the RAM default.
         allow_pinned
             Permit the ``"pinned"`` choice; chunked staging passes
             ``False``.
@@ -1547,9 +1536,7 @@ class MemoryManager:
             If a pinned choice is reachable but no device answers
             the probe.
         """
-        threshold = host_spill_threshold
-        if threshold is None:
-            threshold = int(total_system_ram() * HOST_SPILL_FRACTION)
+        threshold = int(total_system_ram() * HOST_SPILL_FRACTION)
         if nbytes > threshold:
             return "memmap"
         if not allow_pinned:
@@ -1560,16 +1547,11 @@ class MemoryManager:
         return "host"
 
     def _create_spill_array(
-        self,
-        shape: tuple[int, ...],
-        dtype: DTypeLike,
-        directory: Optional[os.PathLike | str],
+        self, shape: tuple[int, ...], dtype: DTypeLike
     ) -> np_memmap:
-        """Create a disk-backed array in ``directory`` or the temp dir."""
-        if directory is None:
-            directory = gettempdir()
-        else:
-            directory = os.fspath(directory)
+        """Create a disk-backed array in the cache root."""
+        directory = os.fspath(get_cache_root())
+        os.makedirs(directory, exist_ok=True)
         handle, path = mkstemp(
             prefix="cubie-spill-", suffix=".dat", dir=directory
         )

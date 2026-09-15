@@ -139,6 +139,17 @@ class ERKStepConfig(ExplicitStepConfig):
 class ERKStep(ODEExplicitStep):
     """Generic explicit Runge--Kutta step with configurable tableaus."""
 
+    default_tableau = DEFAULT_ERK_TABLEAU
+
+    @classmethod
+    def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
+        """Adaptive or fixed defaults by the tableau's error estimate."""
+        if tableau is None:
+            tableau = cls.default_tableau
+        if tableau.has_error_estimate:
+            return ERK_ADAPTIVE_DEFAULTS.copy()
+        return ERK_FIXED_DEFAULTS.copy()
+
     def __init__(
         self,
         precision: PrecisionDType,
@@ -239,12 +250,7 @@ class ERKStep(ODEExplicitStep):
             **kwargs
         )
 
-        if tableau.has_error_estimate:
-            defaults = ERK_ADAPTIVE_DEFAULTS
-        else:
-            defaults = ERK_FIXED_DEFAULTS
-
-        super().__init__(config, defaults)
+        super().__init__(config, self.family_defaults(tableau))
         self.register_buffers()
 
     def register_buffers(self) -> None:

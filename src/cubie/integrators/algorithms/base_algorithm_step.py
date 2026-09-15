@@ -750,7 +750,38 @@ class BaseAlgorithmStep(CUDAFactory):
     #: Linearly-implicit steps own their linear solver directly.
     is_linear = False
 
+    #: Tableau a bare family alias builds on; ``None`` for fixed schemes.
+    default_tableau = None
+
     settings_keys = frozenset(ALL_ALGORITHM_STEP_PARAMETERS)
+
+    @classmethod
+    def system_inputs(
+        cls,
+        system: Any,
+        drivers_fn: Optional[Callable],
+        driver_derivative_fn: Optional[Callable],
+        is_adaptive: bool,
+    ) -> Dict[str, Any]:
+        """Return step settings from a system object and driver functions."""
+        return dict(
+            precision=system.precision,
+            n_states=system.sizes.states,
+            n_drivers=system.sizes.drivers,
+            dxdt_fn=system.dxdt_fn,
+            observables_fn=system.observables_fn,
+            get_solver_helper_fn=system.get_solver_helper,
+            drivers_fn=drivers_fn,
+            driver_derivative_fn=driver_derivative_fn,
+            is_adaptive=is_adaptive,
+        )
+
+    @classmethod
+    def family_defaults(
+        cls, tableau: Optional[ButcherTableau] = None
+    ) -> AlgorithmDefaults:
+        """Return the family's controller and solver defaults."""
+        raise NotImplementedError
 
     def __init__(
         self,

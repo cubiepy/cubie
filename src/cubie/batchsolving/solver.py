@@ -395,14 +395,8 @@ class Solver:
         be supplied as keyword arguments.
     memory_settings
         Memory configuration; each key may also be a keyword argument.
-        ``host_spill_threshold`` is the size in bytes above which host
-        result arrays are disk-backed instead of held in RAM; by
-        default only arrays larger than 80% of total system RAM spill
-        — everything smaller is pageable RAM the operating system
-        manages. Lower it to keep RAM free for other work, or raise it
-        to keep even larger results in RAM. ``spill_directory`` is an
-        existing directory for spill files (default: the system temp
-        directory); point it at a fast disk for large spilled runs.
+        Host result arrays above 80% of system RAM are disk-backed in
+        the cache root.
         An idle solver's completed device buffers are freed when
         another solver faces a genuine VRAM shortage; the evicted
         solver reallocates on its next solve.
@@ -567,12 +561,8 @@ class Solver:
             kernel_settings=kernel_settings,
         )
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
-        # Grids assemble into buffers per the kernel's spill settings.
         self.input_handler = BatchInputHandler(
-            interface,
-            memory_manager=self.kernel.memory_manager,
-            host_spill_threshold=self.kernel.host_spill_threshold,
-            spill_directory=self.kernel.spill_directory,
+            interface, memory_manager=self.kernel.memory_manager
         )
         self._solve_info_cache = None
         self._solve_info_key = None

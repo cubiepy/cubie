@@ -70,11 +70,9 @@ returns. Finalizers provide best-effort cleanup for abandoned solvers.
 
 Physical VRAM pressure evicts a completed solver's buffers (completion
 checked with a CUDA event); the evicted solver reallocates on its next
-run. Host arrays above `host_spill_threshold` use `numpy.memmap` and
-pooled pinned staging. Results keep disk backing and support close or
-context cleanup; `as_numpy`/`as_pandas` materialise in RAM on demand.
-Spill settings live on the kernel and are passed to the memory manager
-explicitly.
+run. Host arrays above `HOST_SPILL_FRACTION` of RAM are `numpy.memmap`
+in the cache root, staged through the pinned pool; results keep the disk
+backing until close, and `as_numpy`/`as_pandas` materialise in RAM.
 
 ### Grids
 `BatchInputHandler` converts user dicts/arrays into `(variable, run)` arrays via the

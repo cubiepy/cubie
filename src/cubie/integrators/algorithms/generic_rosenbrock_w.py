@@ -116,6 +116,17 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
 class GenericRosenbrockWStep(ODEImplicitStep):
     """Rosenbrock-W step with an embedded error estimate."""
 
+    default_tableau = DEFAULT_ROSENBROCK_TABLEAU
+
+    @classmethod
+    def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
+        """Adaptive or fixed defaults by the tableau's error estimate."""
+        if tableau is None:
+            tableau = cls.default_tableau
+        if tableau.has_error_estimate:
+            return ROSENBROCK_ADAPTIVE_DEFAULTS.copy()
+        return ROSENBROCK_FIXED_DEFAULTS.copy()
+
     is_linear = True
 
     def __init__(
@@ -200,13 +211,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             **kwargs,
         )
 
-        # Select defaults based on error estimate
-        if tableau_value.has_error_estimate:
-            defaults = ROSENBROCK_ADAPTIVE_DEFAULTS
-        else:
-            defaults = ROSENBROCK_FIXED_DEFAULTS
-
-        super().__init__(config, defaults, **kwargs)
+        super().__init__(
+            config, self.family_defaults(tableau_value), **kwargs
+        )
 
         self.register_buffers()
         self.build_implicit_helpers()

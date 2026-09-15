@@ -28,7 +28,6 @@ See Also
     Output array manager owned by the kernel.
 """
 
-import os
 import re
 from typing import (
     TYPE_CHECKING,
@@ -107,8 +106,6 @@ DEFAULT_MEMORY_SETTINGS = {
     "memory_manager": default_memmgr,
     "stream_group": "solver",
     "mem_proportion": None,
-    "host_spill_threshold": None,
-    "spill_directory": None,
 }
 
 
@@ -468,24 +465,6 @@ class BatchSolverKernel(CUDAFactory):
         memory_manager = merged_settings["memory_manager"]
         stream_group = merged_settings["stream_group"]
         mem_proportion = merged_settings["mem_proportion"]
-        threshold = merged_settings["host_spill_threshold"]
-        if threshold is not None and (
-            not isinstance(threshold, int) or threshold < 0
-        ):
-            raise ValueError(
-                f"host_spill_threshold must be an int >= 0, got "
-                f"{threshold!r}"
-            )
-        directory = merged_settings["spill_directory"]
-        if directory is not None:
-            directory = os.fspath(directory)
-            if not os.path.isdir(directory):
-                raise ValueError(
-                    f"spill_directory must be an existing directory, "
-                    f"got '{directory}'"
-                )
-        self.host_spill_threshold = threshold
-        self.spill_directory = directory
         memory_manager.register(
             self,
             stream_group=stream_group,
@@ -1557,8 +1536,6 @@ class BatchSolverKernel(CUDAFactory):
         settings.update(
             stream_group=self.stream_group,
             mem_proportion=self.mem_proportion,
-            host_spill_threshold=self.host_spill_threshold,
-            spill_directory=self.spill_directory,
         )
         return settings
 
@@ -1573,8 +1550,6 @@ class BatchSolverKernel(CUDAFactory):
                 "memory_manager": self.memory_manager,
                 "stream_group": self.stream_group,
                 "mem_proportion": self.mem_proportion,
-                "host_spill_threshold": self.host_spill_threshold,
-                "spill_directory": self.spill_directory,
             },
             cache=settings["cache"],
             kernel_settings={
