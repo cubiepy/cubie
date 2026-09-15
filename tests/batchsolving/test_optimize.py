@@ -365,7 +365,8 @@ def test_optimize_applies_the_fastest_launch(
         if launch.excluded:
             assert 1 <= len(launch.times_ms) <= 2
     assert result.runs > 0
-    assert 0.0 < result.duration <= 0.1
+    # A solve well under target_ms is timed at a longer duration.
+    assert result.duration > 0.1
     assert "best" in result.summary()
 
 

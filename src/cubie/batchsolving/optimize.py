@@ -31,6 +31,7 @@ from warnings import warn
 
 from attrs import define
 from numpy import arange as np_arange
+from numpy import ascontiguousarray as np_ascontiguousarray
 from numpy import take as np_take
 from numpy import zeros as np_zeros
 
@@ -422,11 +423,7 @@ def _compile_candidate(payload: Tuple) -> Tuple[str, str]:
 
 
 class _OptimizeRunner:
-    """Compile and time the candidate launches on solver copies.
-
-    One compiled copy per candidate; one copy rebuilt per switch when
-    the batch does not fit them all.
-    """
+    """Compile and time the candidate launches, one solver copy each."""
 
     def __init__(
         self,
@@ -456,8 +453,6 @@ class _OptimizeRunner:
         self._sized = False
         self._candidates = ()
         self._twins = []
-        self._live = True
-        self._current = None
         self._inits = None
         self._params = None
         self.runs = 0
@@ -499,9 +494,14 @@ class _OptimizeRunner:
         self.runs = runs
 
     def _compile(self, twin: Any) -> None:
-        """Compile ``twin`` for the staged batch."""
+        """Compile ``twin`` on a one-run stand-in of the grid."""
+        inits, params = self._grid
         twin.kernel.compile(
-            self._inits, self._params, self.duration, self.settling, self._t0
+            np_ascontiguousarray(inits[:, :1]),
+            np_ascontiguousarray(params[:, :1]),
+            self.duration,
+            self.settling,
+            self._t0,
         )
 
     def prewarm(self) -> None:
@@ -551,9 +551,7 @@ class _OptimizeRunner:
 
     def size_batch(self, waves: int) -> None:
         """Stage the batch filling ``waves`` at the first candidate."""
-        twin = self._twins[0]
-        self._compile(twin)
-        self.set_batch(sized_batch_runs(twin.kernel, waves))
+        self.set_batch(sized_batch_runs(self._twins[0].kernel, waves))
         self._sized = True
         self._emit(f"batch: {self.runs} runs fill {waves} waves")
 
@@ -578,10 +576,6 @@ class _OptimizeRunner:
                 trials.append(trial)
         return trials
 
-    def use_shortest_duration(self) -> None:
-        """Prepare the copies at the shortest probe duration."""
-        self._set_duration(self._trial_durations()[0])
-
     def probe_duration(self, target_ms: float) -> None:
         """Ramp :data:`PROBE_FRACTIONS` of the duration to ``target_ms``."""
         given = self._given_duration
@@ -596,10 +590,7 @@ class _OptimizeRunner:
             self._emit(f"  probe: duration {trial:g} -> {measured:.3f} ms")
             if measured >= target_ms:
                 break
-        if measured >= target_ms:
-            chosen = min(given, max(trial * target_ms / measured, floor))
-        else:
-            chosen = given
+        chosen = max(trial * target_ms / measured, floor)
         self._set_duration(chosen)
         self._emit(f"duration: {chosen:g} per timed solve")
 
@@ -611,30 +602,9 @@ class _OptimizeRunner:
         self.settling = self._given_settling * scale
 
     def compile_twins(self) -> None:
-        """Compile every copy; keep one if the batch chunks on any."""
+        """Compile every copy."""
         for twin in self._twins:
             self._compile(twin)
-        chunked = any(
-            twin.kernel.run_params.num_chunks > 1 for twin in self._twins
-        )
-        if chunked and len(self._twins) > 1:
-            self._emit("memory: candidates take turns on one solver copy")
-            for twin in self._twins[1:]:
-                twin.close()
-            del self._twins[1:]
-            self._live = False
-            self._current = 0
-
-    def _twin(self, index: int) -> Any:
-        """Return the compiled copy carrying candidate ``index``."""
-        if self._live:
-            return self._twins[index]
-        if self._current != index:
-            self._twins[0].close()
-            self._twins[0] = self._make_twin(self._candidates[index])
-            self._compile(self._twins[0])
-            self._current = index
-        return self._twins[0]
 
     def _solve_ms(
         self, twin: Any, blocksize: Optional[int]
@@ -665,7 +635,9 @@ class _OptimizeRunner:
         launches = []
         owners = {}
         for index, candidate in enumerate(self._candidates):
-            kernel = self._twin(index).kernel
+            # The launch shapes are typed on a resident stand-in batch.
+            self._compile(self._twins[index])
+            kernel = self._twins[index].kernel
             for blocksize, resident in launch_candidates(kernel, blocksizes):
                 launch = LaunchResult(
                     settings=dict(candidate),
@@ -679,9 +651,13 @@ class _OptimizeRunner:
             for launch in ordered:
                 if launch.excluded:
                     continue
-                twin = self._twin(owners[id(launch)])
+                twin = self._twins[owners[id(launch)]]
                 kernel = twin.kernel
                 kernel.resident_blocks = launch.resident_blocks
+                first = self._solve_ms(twin, launch.blocksize)
+                launch.times_ms += (first,)
+                solved = 1
+                # The solve allocates the batch the geometry is typed on.
                 if round_index == 0:
                     blocksize, dynamic = kernel.launch_geometry(
                         launch.blocksize
@@ -689,9 +665,6 @@ class _OptimizeRunner:
                     launch.blocks_per_sm = active_blocks_per_multiprocessor(
                         kernel.kernel, blocksize, dynamic
                     )
-                first = self._solve_ms(twin, launch.blocksize)
-                launch.times_ms += (first,)
-                solved = 1
                 if self.achieved_waves is None:
                     self._probe_waves(twin, launch.blocksize)
                 # A moderately slow first solve is repeated once.
@@ -819,7 +792,7 @@ def run_optimization(
         to fill.
     target_ms
         Target kernel runtime that ``auto_size`` sets your integration
-        duration to; the duration is only ever shortened.
+        duration to.
 
     Returns
     -------
@@ -865,12 +838,12 @@ def run_optimization(
         runner._emit(f"optimize: {len(candidates)} candidate kernels")
         runner.build_twins(candidates)
         runner.prewarm()
-        runner.set_batch(inits.shape[1])
+        runner.compile_twins()
         if auto_size:
-            runner.use_shortest_duration()
             runner.size_batch(waves)
             runner.probe_duration(target_ms)
-        runner.compile_twins()
+        else:
+            runner.set_batch(inits.shape[1])
         launches = runner.time_candidates(blocksizes)
     finally:
         runner.close()
