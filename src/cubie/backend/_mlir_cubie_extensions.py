@@ -104,8 +104,8 @@ class _UnrollIf(ast.NodeTransformer):
 
     def _hint(self, args):
         """Return ``(unroll, count)`` for one unroll_if argument list."""
-        # cuda_simsafe imports after the backend patches.
-        from cubie.cuda_simsafe import unroll_flag_converter
+        # CUDAFactory imports after the backend patches.
+        from cubie.CUDAFactory import unroll_flag_converter
 
         unroll, count = unroll_flag_converter(
             self._closure_value(args[1], "flag")

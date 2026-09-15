@@ -49,11 +49,13 @@ See Also
 """
 
 from abc import ABC, abstractmethod
+from enum import Enum
 from functools import cache
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Set, Tuple, Union
 
 from attrs import (
     Attribute,
+    Factory,
     asdict,
     define,
     evolve,
@@ -63,9 +65,15 @@ from attrs import (
     has,
 )
 from attrs import validators as attrs_validators
-from numpy import dtype as np_dtype
+from numpy import (
+    array_equal,
+    asarray,
+    dtype as np_dtype,
+    ndarray as np_ndarray,
+)
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 
+from cubie._env import lineinfo_default
 from cubie._serialize import canonical_digest
 from cubie._utils import (
     in_attr,
@@ -75,11 +83,9 @@ from cubie._utils import (
     precision_converter,
 )
 from cubie.cuda_simsafe import (
-    FrozenSettings,
-    JITFlags,
-    UnrollFlags,
+    JIT_FLAG_DEFAULTS,
+    UnrollFlag,
     get_jit_kwargs,
-    values_differ,
 )
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
 from cubie.buffer_registry import buffer_registry
@@ -130,6 +136,189 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
                 "the compile-critical data you're adding."
             )
     return field_map
+
+
+def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
+    """Compare by identity (device fns), value (arrays), else !=."""
+    if fld.metadata.get("device_function"):
+        return old is not new
+    if isinstance(old, np_ndarray) or isinstance(new, np_ndarray):
+        return not array_equal(asarray(old), asarray(new))
+    return bool(old != new)
+
+
+@frozen
+class FrozenSettings:
+    """Frozen attrs settings; :meth:`update` derives a replacement."""
+
+    def update(
+        self, updates_dict: dict = None, **kwargs
+    ) -> Tuple["FrozenSettings", Set[str], Set[str]]:
+        """Derive a replacement snapshot with new field values.
+
+        Parameters
+        ----------
+        updates_dict
+            Init names to new values; unknown keys are ignored.
+        **kwargs
+            Additional settings to update.
+
+        Returns
+        -------
+        tuple[FrozenSettings, set[str], set[str]]
+            Replacement (``self`` when unchanged), recognised names,
+            and the names whose converted value changed.
+        """
+        updates = {**(updates_dict or {}), **kwargs}
+        by_handle = {
+            (fld.alias or fld.name): fld
+            for fld in fields(type(self))
+            if fld.init
+        }
+        given = {
+            key: by_handle[key] for key in updates if key in by_handle
+        }
+        if not given:
+            return self, set(), set()
+        candidate = evolve(self, **{key: updates[key] for key in given})
+        changed = {
+            key
+            for key, fld in given.items()
+            if values_differ(
+                fld, getattr(self, fld.name), getattr(candidate, fld.name)
+            )
+        }
+        if not changed:
+            return self, set(given), set()
+        return candidate, set(given), changed
+
+
+def _jit_flag_field(name: str):
+    return field(
+        default=JIT_FLAG_DEFAULTS[name],
+        validator=attrs_validators.instance_of(bool),
+    )
+
+
+@frozen
+class JITFlags(FrozenSettings):
+    """Per-factory ``cuda.jit`` compile flags.
+
+    Every managed jit option travels the same path: stored on the
+    factory's compile settings (hashed into the config, so a change
+    triggers a rebuild), then rendered to decorator keyword arguments
+    by :func:`get_jit_kwargs`. New jit options are added here as new
+    fields.
+
+    Attributes
+    ----------
+    lineinfo
+        Compile with source-line correlation data. Defaults to the
+        ``CUBIE_LINEINFO`` environment variable.
+    nsz
+        Treat signed zero as insignificant in floating-point ops.
+    contract
+        Allow floating-point contraction (fused multiply-add).
+    arcp
+        Allow reciprocal approximation of division.
+    afn
+        Allow approximate transcendental functions (``LG2``/``EX2``
+        hardware paths for ``log``/``exp``/``pow``).
+    ftz
+        Flush denormal float results and inputs to zero.
+    lto
+        Enable link-time optimisation across device functions.
+    """
+
+    lineinfo: bool = field(
+        default=Factory(lineinfo_default),
+        validator=attrs_validators.instance_of(bool),
+    )
+    nsz: bool = _jit_flag_field("nsz")
+    contract: bool = _jit_flag_field("contract")
+    arcp: bool = _jit_flag_field("arcp")
+    afn: bool = _jit_flag_field("afn")
+    ftz: bool = _jit_flag_field("ftz")
+    lto: bool = _jit_flag_field("lto")
+
+    @property
+    def fastmath(self) -> set:
+        """Return the set of enabled LLVM fast-math flag names."""
+        enabled = {
+            "nsz": self.nsz,
+            "contract": self.contract,
+            "arcp": self.arcp,
+            "afn": self.afn,
+            "ftz": self.ftz,
+        }
+        return {name for name, on in enabled.items() if on}
+
+
+class UnrollChoice(Enum):
+    """Named ``(unroll, count)`` flags: fully unrolled or rolled."""
+
+    FULL = (True, None)
+    ROLLED = (True, 1)
+
+
+def unroll_flag_converter(
+    value: Union[bool, UnrollFlag, UnrollChoice],
+) -> UnrollFlag:
+    """Return a bool, pair or :class:`UnrollChoice` as ``(unroll, count)``."""
+    if isinstance(value, UnrollChoice):
+        value = value.value
+    if isinstance(value, bool):
+        return value, None
+    unroll, count = value
+    if count is not None and (count < 1 or not unroll):
+        raise ValueError(f"invalid unroll flag {value!r}")
+    return bool(unroll), None if count is None else int(count)
+
+
+def _unroll_flag_field():
+    return field(default=(True, None), converter=unroll_flag_converter)
+
+
+@frozen
+class UnrollFlags(FrozenSettings):
+    """Per-loop-group ``(unroll, count)`` flags read by ``unroll_if`` sites.
+
+    Attributes
+    ----------
+    unroll_stage
+        Loops over tableau stages.
+    unroll_step_element
+        Per-element loops in the step and the loop's accept-commit.
+    unroll_accumulator
+        Streamed stage-accumulator loops.
+    unroll_solver_element
+        Element loops in the nonlinear, linear and DAE-initialiser solvers.
+    unroll_norms
+        Norm loops.
+    unroll_other_small
+        Fills, counters, saves, interpolator and predictor loops.
+    unroll_newton_exits
+        Newton and DAE-initialiser iteration loops.
+    unroll_krylov_exits
+        Krylov iteration loops.
+    """
+
+    unroll_stage: UnrollFlag = _unroll_flag_field()
+    unroll_step_element: UnrollFlag = _unroll_flag_field()
+    unroll_accumulator: UnrollFlag = _unroll_flag_field()
+    unroll_solver_element: UnrollFlag = _unroll_flag_field()
+    unroll_norms: UnrollFlag = _unroll_flag_field()
+    unroll_other_small: UnrollFlag = _unroll_flag_field()
+    unroll_newton_exits: UnrollFlag = _unroll_flag_field()
+    unroll_krylov_exits: UnrollFlag = field(
+        default=UnrollChoice.ROLLED, converter=unroll_flag_converter
+    )
+
+
+ALL_UNROLL_PARAMETERS = frozenset(
+    fld.name for fld in fields(UnrollFlags)
+)
+"""Loose keyword names of the :class:`UnrollFlags` fields."""
 
 
 @frozen

@@ -27,7 +27,7 @@ Published Functions
 :func:`is_cudasim_enabled`
     Return whether the CUDA simulator is active.
 :func:`get_jit_kwargs`
-    Render a :class:`JITFlags` to ``cuda.jit`` keyword arguments.
+    Render a ``JITFlags`` to ``cuda.jit`` keyword arguments.
 
 Published Device Functions
 --------------------------
@@ -40,17 +40,7 @@ Published Device Functions
 ``consteval``: compile-time loop marker; MLIR unrolls, others pass through.
 ``unroll_if``: ``unroll_if(range(n), flag[, count])``; ``flag`` sets
     whether MLIR adds a loop-unroll hint, ``count`` its unroll count.
-:class:`UnrollFlags`: one ``(unroll, count)`` flag per loop group.
-
-Published Classes
------------------
-:class:`FrozenSettings`
-    Frozen attrs settings base; ``update`` derives a replacement
-    snapshot and reports the recognised and changed keys.
-:class:`JITFlags`
-    Managed ``cuda.jit`` compile options stored on every factory's
-    compile settings and rendered to decorator kwargs by
-    :func:`get_jit_kwargs`.
+:data:`UnrollFlag`: one ``(unroll, count)`` pair, the ``flag`` argument.
 
 Published Constants
 -------------------
@@ -59,6 +49,8 @@ Published Constants
     MLIR backend).
 :data:`compile_kwargs`
     Default keyword arguments for ``@cuda.jit`` decorators.
+:data:`JIT_FLAG_DEFAULTS`
+    Default value of every managed jit flag except ``lineinfo``.
 :data:`INLINE_ALWAYS`
     Backend-correct value for the ``cuda.jit`` ``inline`` argument
     (``"always"`` on numba-cuda, ``True`` on numba-cuda-mlir).
@@ -86,17 +78,11 @@ See Also
 from __future__ import annotations
 
 from ctypes import c_void_p
-from enum import Enum
 import os
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Optional, Set, Tuple, Union
+from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
-from attrs import Attribute, Factory, evolve, field, fields, frozen
-from attrs import fields as attrs_fields
-from attrs import validators as attrs_validators
 from numpy import (
-    array_equal,
-    asarray,
     dtype,
     empty as np_empty,
     fmax as np_fmax,
@@ -163,196 +149,10 @@ else:
     INLINE_ALWAYS = "always"
 
 
-def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
-    """Compare by identity (device fns), value (arrays), else !=."""
-    if fld.metadata.get("device_function"):
-        return old is not new
-    if isinstance(old, np_ndarray) or isinstance(new, np_ndarray):
-        return not array_equal(asarray(old), asarray(new))
-    return bool(old != new)
-
-
-@frozen
-class FrozenSettings:
-    """Frozen attrs settings; :meth:`update` derives a replacement."""
-
-    def update(
-        self, updates_dict: dict = None, **kwargs
-    ) -> Tuple["FrozenSettings", Set[str], Set[str]]:
-        """Derive a replacement snapshot with new field values.
-
-        Parameters
-        ----------
-        updates_dict
-            Init names to new values; unknown keys are ignored.
-        **kwargs
-            Additional settings to update.
-
-        Returns
-        -------
-        tuple[FrozenSettings, set[str], set[str]]
-            Replacement (``self`` when unchanged), recognised names,
-            and the names whose converted value changed.
-        """
-        updates = {**(updates_dict or {}), **kwargs}
-        by_handle = {
-            (fld.alias or fld.name): fld
-            for fld in fields(type(self))
-            if fld.init
-        }
-        given = {
-            key: by_handle[key] for key in updates if key in by_handle
-        }
-        if not given:
-            return self, set(), set()
-        candidate = evolve(self, **{key: updates[key] for key in given})
-        changed = {
-            key
-            for key, fld in given.items()
-            if values_differ(
-                fld, getattr(self, fld.name), getattr(candidate, fld.name)
-            )
-        }
-        if not changed:
-            return self, set(given), set()
-        return candidate, set(given), changed
-
-
-@frozen
-class JITFlags(FrozenSettings):
-    """Per-factory ``cuda.jit`` compile flags.
-
-    Every managed jit option travels the same path: stored on the
-    factory's compile settings (hashed into the config, so a change
-    triggers a rebuild), then rendered to decorator keyword arguments
-    by :func:`get_jit_kwargs`. New jit options are added here as new
-    fields.
-
-    Attributes
-    ----------
-    lineinfo
-        Compile with source-line correlation data. Defaults to the
-        ``CUBIE_LINEINFO`` environment variable.
-    nsz
-        Treat signed zero as insignificant in floating-point ops.
-    contract
-        Allow floating-point contraction (fused multiply-add).
-    arcp
-        Allow reciprocal approximation of division.
-    afn
-        Allow approximate transcendental functions (``LG2``/``EX2``
-        hardware paths for ``log``/``exp``/``pow``).
-    ftz
-        Flush denormal float results and inputs to zero.
-    lto
-        Enable link-time optimisation across device functions.
-    """
-
-    lineinfo: bool = field(
-        default=Factory(lineinfo_default),
-        validator=attrs_validators.instance_of(bool),
-    )
-    nsz: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    contract: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    arcp: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    afn: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    ftz: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-    lto: bool = field(
-        default=True, validator=attrs_validators.instance_of(bool)
-    )
-
-    @property
-    def fastmath(self) -> set:
-        """Return the set of enabled LLVM fast-math flag names."""
-        enabled = {
-            "nsz": self.nsz,
-            "contract": self.contract,
-            "arcp": self.arcp,
-            "afn": self.afn,
-            "ftz": self.ftz,
-        }
-        return {name for name, on in enabled.items() if on}
-
-
 UnrollFlag = Tuple[bool, Optional[int]]
 """Loop-group flag: ``(unroll, count)``."""
 
 
-class UnrollChoice(Enum):
-    """Named ``(unroll, count)`` flags: fully unrolled or rolled."""
-
-    FULL = (True, None)
-    ROLLED = (True, 1)
-
-
-def unroll_flag_converter(
-    value: Union[bool, UnrollFlag, UnrollChoice],
-) -> UnrollFlag:
-    """Return a bool, pair or :class:`UnrollChoice` as ``(unroll, count)``."""
-    if isinstance(value, UnrollChoice):
-        value = value.value
-    if isinstance(value, bool):
-        return value, None
-    unroll, count = value
-    if count is not None and (count < 1 or not unroll):
-        raise ValueError(f"invalid unroll flag {value!r}")
-    return bool(unroll), None if count is None else int(count)
-
-
-def _unroll_flag_field():
-    return field(default=(True, None), converter=unroll_flag_converter)
-
-
-@frozen
-class UnrollFlags(FrozenSettings):
-    """Per-loop-group ``(unroll, count)`` flags read by ``unroll_if`` sites.
-
-    Attributes
-    ----------
-    unroll_stage
-        Loops over tableau stages.
-    unroll_step_element
-        Per-element loops in the step and the loop's accept-commit.
-    unroll_accumulator
-        Streamed stage-accumulator loops.
-    unroll_solver_element
-        Element loops in the nonlinear, linear and DAE-initialiser solvers.
-    unroll_norms
-        Norm loops.
-    unroll_other_small
-        Fills, counters, saves, interpolator and predictor loops.
-    unroll_newton_exits
-        Newton and DAE-initialiser iteration loops.
-    unroll_krylov_exits
-        Krylov iteration loops.
-    """
-
-    unroll_stage: UnrollFlag = _unroll_flag_field()
-    unroll_step_element: UnrollFlag = _unroll_flag_field()
-    unroll_accumulator: UnrollFlag = _unroll_flag_field()
-    unroll_solver_element: UnrollFlag = _unroll_flag_field()
-    unroll_norms: UnrollFlag = _unroll_flag_field()
-    unroll_other_small: UnrollFlag = _unroll_flag_field()
-    unroll_newton_exits: UnrollFlag = _unroll_flag_field()
-    unroll_krylov_exits: UnrollFlag = field(
-        default=UnrollChoice.ROLLED, converter=unroll_flag_converter
-    )
-
-
-ALL_UNROLL_PARAMETERS = frozenset(
-    fld.name for fld in attrs_fields(UnrollFlags)
-)
-"""Loose keyword names of the :class:`UnrollFlags` fields."""
 
 
 # MLIR-only jit options carried by every compile.
@@ -360,31 +160,49 @@ _BACKEND_JIT_OPTIONS: Mapping[str, Any] = MappingProxyType(
     {"experimental_ast_transforms": True} if IS_MLIR else {}
 )
 
-# Defaults for import-time device functions; factory builds use get_jit_kwargs.
-compile_kwargs: Mapping[str, Any] = MappingProxyType(
-    {}
-    if CUDA_SIMULATION
-    else {
-        "fastmath": JITFlags().fastmath,
-        "lineinfo": lineinfo_default(),
-        "lto": JITFlags().lto,
+JIT_FLAG_DEFAULTS: Mapping[str, bool] = MappingProxyType(
+    {
+        "nsz": True,
+        "contract": True,
+        "arcp": True,
+        "afn": True,
+        "ftz": True,
+        "lto": True,
+    }
+)
+"""Default ``cuda.jit`` flags; ``lineinfo`` follows ``lineinfo_default``."""
+
+
+def _render_jit_kwargs(lineinfo: bool) -> dict[str, Any]:
+    """Return the default jit kwargs with ``lineinfo`` set."""
+    return {
+        "fastmath": {
+            name for name, on in JIT_FLAG_DEFAULTS.items()
+            if on and name != "lto"
+        },
+        "lineinfo": lineinfo,
+        "lto": JIT_FLAG_DEFAULTS["lto"],
         **_BACKEND_JIT_OPTIONS,
     }
+
+
+# Defaults for import-time device functions; factory builds use get_jit_kwargs.
+compile_kwargs: Mapping[str, Any] = MappingProxyType(
+    {} if CUDA_SIMULATION else _render_jit_kwargs(lineinfo_default())
 )
 
 
 def get_jit_kwargs(
-    jit_flags: Optional[Union["JITFlags", bool]] = None,
+    jit_flags: Optional[Union[Any, bool]] = None,
 ) -> dict[str, Any]:
     """Return per-build ``cuda.jit`` keyword arguments.
 
     Parameters
     ----------
     jit_flags
-        Flags for the build. A :class:`JITFlags` instance renders all
-        of its fields; a bare boolean is accepted as the ``lineinfo``
-        value with default fast-math flags (the form generated system
-        modules use); ``None`` uses the default flag set.
+        A ``JITFlags`` (any object with ``fastmath``, ``lineinfo`` and
+        ``lto``), a bool as ``lineinfo`` over the defaults, or ``None``
+        for the defaults.
 
     Returns
     -------
@@ -398,9 +216,9 @@ def get_jit_kwargs(
     if CUDA_SIMULATION:
         return {}
     if jit_flags is None:
-        jit_flags = JITFlags()
-    elif isinstance(jit_flags, bool):
-        jit_flags = JITFlags(lineinfo=jit_flags)
+        return _render_jit_kwargs(lineinfo_default())
+    if isinstance(jit_flags, bool):
+        return _render_jit_kwargs(jit_flags)
     return {
         "fastmath": jit_flags.fastmath,
         "lineinfo": jit_flags.lineinfo,
@@ -878,17 +696,15 @@ __all__ = [
     "all_sync",
     "any_sync",
     "bool_",
-    "UnrollChoice",
     "CacheImpl",
     "compile_kwargs",
+    "JIT_FLAG_DEFAULTS",
     "consteval",
     "cuda",
     "compute_capability_code",
     "get_jit_kwargs",
     "IndexDataCacheFile",
     "INLINE_ALWAYS",
-    "FrozenSettings",
-    "JITFlags",
     "CUDA_SIMULATION",
     "CUDACache",
     "cupy",
@@ -919,8 +735,4 @@ __all__ = [
     "syncwarp",
     "unroll_if",
     "UnrollFlag",
-    "UnrollFlags",
-    "values_differ",
-    "unroll_flag_converter",
-    "ALL_UNROLL_PARAMETERS",
 ]

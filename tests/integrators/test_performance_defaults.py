@@ -3,7 +3,7 @@
 import pytest
 
 from cubie.backend.utils import SASS_INSTRUCTION_BYTES, device_hardware
-from cubie.cuda_simsafe import UnrollChoice
+from cubie.CUDAFactory import UnrollChoice
 from cubie.integrators.algorithms.generic_firk import (
     SHARED_STAGE_INCREMENT_MIN_STATES,
 )

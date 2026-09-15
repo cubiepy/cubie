@@ -31,7 +31,7 @@ from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType, unpack_dict_values
 from cubie.buffer_registry import buffer_registry
 from cubie.backend.utils import SASS_INSTRUCTION_BYTES, device_hardware
-from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollChoice
+from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollChoice
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import get_algorithm_step
 from cubie.integrators.algorithms.base_algorithm_step import (
