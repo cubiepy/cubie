@@ -668,6 +668,19 @@ class BatchSolverKernel(CUDAFactory):
             counts[key] = entry
         return entry
 
+    def kernel_is_cached(self) -> bool:
+        """Whether the disk cache holds this configuration's kernel;
+        ``False`` when caching is off."""
+        if self._closed:
+            raise RuntimeError(
+                "This solver has been closed and its GPU resources "
+                "released; build a new Solver to run again."
+            )
+        # Building the dispatcher attaches the disk cache.
+        self.kernel
+        disk_cache = self._disk_cache
+        return disk_cache is not None and disk_cache.holds_kernel()
+
     def _kernel_launch_args(self, chunk_run_params: RunParams) -> Tuple:
         """Return the kernel's positional arguments for one chunk."""
         duration, warmup, t0 = chunk_run_params.time_scalars
@@ -937,10 +950,16 @@ class BatchSolverKernel(CUDAFactory):
         )
 
     def launchable_shapes(
-        self, blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES
+        self,
+        blocksizes: Sequence[int] = LAUNCH_BLOCKSIZES,
+        runs: Optional[int] = None,
     ) -> Dict[int, Tuple[int, int]]:
-        """Dynamic shared bytes and blocks per SM per launchable block size."""
-        runs = self.run_params[0].runs
+        """Dynamic shared bytes and blocks per SM per launchable block size.
+
+        ``runs`` types the shapes; ``None`` uses the staged batch.
+        """
+        if runs is None:
+            runs = self.run_params[0].runs
         shapes = {}
         for blocksize in blocksizes:
             actual, dynamic = self._launch_shape(blocksize, runs)
@@ -1287,6 +1306,25 @@ class BatchSolverKernel(CUDAFactory):
         if self.driver_interpolator.config_hash != known_hash:
             self.update(self._driver_settings())
 
+    def driver_inputs(self) -> Optional[Dict[str, Any]]:
+        """Drivers as passed to ``configure_drivers``; ``None`` when unset."""
+        interpolator = self.driver_interpolator
+        samples = interpolator.input_array
+        if samples.shape[0] == 0:
+            return None
+        names = list(self.system.indices.driver_names)
+        inputs = {
+            name: samples[:, index] for index, name in enumerate(names)
+        }
+        return {
+            **inputs,
+            "t0": interpolator.t0,
+            "driver_sample_period": interpolator.driver_sample_period,
+            "order": interpolator.order,
+            "wrap": interpolator.wrap,
+            "boundary_condition": interpolator.boundary_condition,
+        }
+
     def _driver_settings(self) -> Dict[str, Any]:
         """Return the interpolator's evaluators and coefficient layout."""
         interpolator = self.driver_interpolator
@@ -1492,7 +1530,7 @@ class BatchSolverKernel(CUDAFactory):
         settings.update(self.single_integrator.settings_dict)
         settings.update(
             stream_group=self.stream_group,
-            mem_proportion=self.mem_proportion,
+            mem_proportion=self.memory_manager.manual_proportion(self),
         )
         return settings
 

@@ -2,16 +2,28 @@
 
 import pytest
 
-from cubie.backend.utils import DeviceHardware
+from math import ceil
+
+import numpy as np
+
+from cubie.backend.utils import (
+    DeviceHardware,
+    active_blocks_per_multiprocessor,
+    device_hardware,
+)
 from cubie.batchsolving.optimize import (
     BUDGET_BLOCKSIZE,
     RESIDENCY_CUT_MIN_FRAME_BYTES,
     LaunchResult,
+    _OptimizeRunner,
     apply_launch,
     default_launch,
+    launch_candidates,
     resident_blocks_within_l2,
 )
+from cubie.cuda_simsafe import cupy
 from cubie.CUDAFactory import UnrollChoice
+from cubie.time_logger import default_timelogger
 from tests._utils import LARGE_FIRK
 
 FULL = UnrollChoice.FULL
@@ -272,7 +284,7 @@ def test_force_varies_user_fixed_axes(solver):
 @pytest.mark.parametrize(
     "solver_settings_override", [LARGE_FIRK], indirect=True
 )
-def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
+def test_derived_defaults_stay_free_axes_on_a_copy(solver):
     """Defaults the kernel derived are varied by the parent and its copy."""
     step = solver.kernel.single_integrator._algo_step.compile_settings
     assert step.stage_increment_location == "local"
@@ -287,10 +299,12 @@ def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
     assert _candidates(solver) == expected
     twin = solver.copy()
     try:
-        if driver_settings is not None:
-            twin._configure_drivers(driver_settings)
         assert _candidates(twin) == expected
         assert twin.kernel.config_hash == solver.kernel.config_hash
+        assert twin.kernel.driver_interpolator.config_hash == (
+            solver.kernel.driver_interpolator.config_hash
+        )
+        assert twin.given.time_logging_level == default_timelogger.verbosity
     finally:
         twin.close()
 
@@ -340,6 +354,7 @@ def test_optimize_applies_the_fastest_launch(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
     """The fastest timed launch is applied to the solver."""
+    verbosity = default_timelogger.verbosity
     result = solver_mutable.optimize(
         simple_initial_values,
         parameters=simple_parameters,
@@ -348,8 +363,11 @@ def test_optimize_applies_the_fastest_launch(
         grid_type="combinatorial",
         verbose=False,
     )
+    assert default_timelogger.verbosity == verbosity
     timed = [launch for launch in result.launches if launch.timed]
     assert timed
+    for launch in result.launches:
+        assert all(time_ms > 0.0 for time_ms in launch.times_ms)
     assert result.best is min(timed, key=lambda launch: launch.best_ms)
     assert result.ranking[0] is result.best
     assert result.applied_settings == {
@@ -369,5 +387,158 @@ def test_optimize_applies_the_fastest_launch(
     for launch in result.launches:
         assert len(launch.times_ms) >= 1
         if launch.excluded:
-            assert len(launch.times_ms) == 1
+            assert 1 <= len(launch.times_ms) <= 2
+    assert result.runs > 0
+    # A solve well under target_ms is timed at a longer duration.
+    assert result.duration > 0.1
     assert "best" in result.summary()
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"waves": 0}, "waves"),
+        ({"target_ms": 5.0}, "target_ms"),
+        ({"target_ms": float("inf")}, "target_ms"),
+    ],
+)
+def test_invalid_arguments_are_rejected(solver, kwargs, message):
+    """Bad waves or target_ms raise before anything is built."""
+    with pytest.raises(ValueError, match=message):
+        solver.optimize({}, {}, **kwargs)
+
+
+@pytest.mark.nocudasim
+def test_kernel_is_cached_reports_the_disk_cache(
+    solver_mutable, batch_input_arrays, driver_settings, tmp_path
+):
+    """A fresh cache directory holds nothing until the kernel compiles."""
+    inits, params = batch_input_arrays
+    kernel = solver_mutable.kernel
+    kernel.set_cache_dir(tmp_path / "fresh")
+    assert not kernel.kernel_is_cached()
+    solver_mutable.compile(
+        inits, params, drivers=driver_settings, duration=0.1
+    )
+    assert kernel.kernel_is_cached()
+
+
+def _runner(solver, inits, params):
+    """Return a runner on ``solver`` over a verbatim grid."""
+    grid_inits, grid_params = solver.build_grid(
+        inits, params, grid_type="combinatorial"
+    )
+    return _OptimizeRunner(
+        solver, grid_inits, grid_params, 0.1, 0.0, 0.0, False
+    )
+
+
+def test_twins_join_the_auto_pool(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """Twins of a manually budgeted parent reserve nothing themselves."""
+    solver_mutable.update(mem_proportion=0.6)
+    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
+    try:
+        candidates = solver_mutable.optimisation_candidates()
+        runner.build_twins(candidates)
+        assert len(runner._twins) == len(candidates)
+        manager = solver_mutable.memory_manager
+        for twin in runner._twins:
+            assert manager.manual_proportion(twin.kernel) is None
+        assert manager.manual_proportion(solver_mutable.kernel) == 0.6
+    finally:
+        runner.close()
+        solver_mutable.update(mem_proportion=None)
+
+
+def test_partial_twin_build_closes_the_built_twins(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """A failing candidate closes the twins built before it."""
+    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
+    manager = solver_mutable.memory_manager
+    registered = len(manager.registry)
+    with pytest.raises(ValueError):
+        runner.build_twins([{}, {"state_location": "nowhere"}])
+    assert runner._twins == []
+    assert len(manager.registry) == registered
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"algorithm": "vern7", "unroll_other_small": None}],
+    indirect=True,
+)
+def test_batch_fills_the_waves_at_every_launch(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """The sized batch fills the requested waves for every candidate."""
+    waves = 2
+    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
+    try:
+        runner.build_twins(solver_mutable.optimisation_candidates())
+        runner.compile_twins()
+        runner.size_batch(waves)
+        multiprocessors = device_hardware().multiprocessor_count
+        for twin in runner._twins:
+            kernel = twin.kernel
+            shapes = kernel.launchable_shapes(runs=runner.runs)
+            for blocksize, resident in launch_candidates(
+                kernel, runs=runner.runs
+            ):
+                dynamic, natural = shapes[blocksize]
+                blocks = natural if resident is None else resident
+                runs_per_block = blocksize // kernel.threads_per_loop
+                total_blocks = ceil(runner.runs / runs_per_block)
+                assert total_blocks / (blocks * multiprocessors) >= waves
+        runner.time_candidates(None)
+        assert runner.achieved_waves >= waves
+    finally:
+        runner.close()
+
+
+@pytest.mark.nocudasim
+@pytest.mark.cupy
+@pytest.mark.parametrize("auto_size", [True, False])
+def test_optimize_takes_device_grids(
+    solver_mutable, simple_initial_values, simple_parameters, auto_size
+):
+    """CuPy grids optimise with and without automatic sizing."""
+    inits, params = solver_mutable.build_grid(
+        simple_initial_values, simple_parameters, grid_type="combinatorial"
+    )
+    result = solver_mutable.optimize(
+        cupy.asarray(inits),
+        parameters=cupy.asarray(params),
+        duration=0.1,
+        verbose=False,
+        apply=False,
+        auto_size=auto_size,
+    )
+    assert result.best is not None
+    assert result.runs > 0
+
+
+def test_copy_registers_memory_like_its_parent(solver_mutable):
+    """A copy joins the auto pool, or reserves what its parent reserved."""
+    manager = solver_mutable.memory_manager
+    assert manager.manual_proportion(solver_mutable.kernel) is None
+    twin = solver_mutable.copy()
+    try:
+        manager = twin.kernel.memory_manager
+        assert manager.manual_proportion(twin.kernel) is None
+    finally:
+        twin.close()
+    solver_mutable.update(mem_proportion=0.2)
+    try:
+        assert solver_mutable.settings_dict["mem_proportion"] == 0.2
+        twin = solver_mutable.copy()
+        try:
+            manager = twin.kernel.memory_manager
+            assert manager.manual_proportion(twin.kernel) == 0.2
+        finally:
+            twin.close()
+    finally:
+        solver_mutable.update(mem_proportion=None)

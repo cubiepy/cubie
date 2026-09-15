@@ -338,5 +338,9 @@ Settings you gave, or an earlier ``optimize`` applied, stay fixed
 unless ``force=True``. The fastest configuration is applied in place;
 ``apply=False`` only reports.
 
+By default ``optimize`` times a small batch at a short duration.
+Pass ``auto_size=False`` only when you will run one grid size at one
+duration repeatedly; it spends longer optimising that exact solve.
+
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.

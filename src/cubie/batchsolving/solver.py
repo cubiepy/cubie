@@ -543,9 +543,25 @@ class Solver:
                 candidates.append(free)
         return tuple(candidates)
 
-    def copy(self) -> "Solver":
-        """Return a solver with these settings on a system copy; no drivers."""
-        return type(self)(self.system.copy(), **self.settings_dict)
+    def copy(self, **overrides: Any) -> "Solver":
+        """Return a copy: same settings and drivers, current log level.
+
+        Parameters
+        ----------
+        **overrides
+            Settings applied over this solver's; ``None`` leaves one
+            not given.
+        """
+        settings = {
+            **self.settings_dict,
+            "time_logging_level": default_timelogger.verbosity,
+            **overrides,
+        }
+        twin = type(self)(self.system.copy(), **settings)
+        drivers = self.kernel.driver_inputs()
+        if drivers is not None:
+            twin._configure_drivers(drivers)
+        return twin
 
     def _apply_performance_defaults(self) -> None:
         """Apply the auto-performance unroll and placement defaults."""
@@ -899,27 +915,25 @@ class Solver:
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
+        auto_size: bool = True,
+        waves: int = 5,
+        target_ms: float = 20.0,
     ) -> OptimizeResult:
-        """Find the fastest buffer placement, unrolling and launch.
+        """Time placement, unrolling and launch options; keep the fastest.
 
-        Tries a few configurations of where buffers sit in memory,
-        which loops get unrolled, and how many threads run at once on
-        the GPU, on a copy of this solver, and keeps the fastest.
         Settings you gave, or an earlier ``optimize`` applied, stay
-        fixed unless ``force=True``. Takes a few minutes.
+        fixed unless ``force=True``.
 
         Parameters
         ----------
         initial_values
-            Initial state values per run: a dict of state names to
-            values, or an (n_states, n_runs) array.
+            Dict of state names to values, or an (n_states, n_runs) array.
         parameters
-            Parameter values per run: a dict or an (n_params, n_runs)
-            array.
+            Dict of parameter names to values, or an (n_params, n_runs) array.
         drivers
             Time-domain sampled driver values.
         duration
-            Integration time of each timed solve. Default ``1.0``.
+            Integration time of your solves. Default ``1.0``.
         settling_time
             Warm-up period before outputs are recorded. Default ``0.0``.
         t0
@@ -932,6 +946,16 @@ class Solver:
             Print per-launch progress lines. Default ``True``.
         force
             Vary the settings you gave or applied earlier too.
+        auto_size
+            ``True`` optimizes at an automatically selected batch size
+            and duration to reduce runtime; ``False`` optimizes at your
+            given batch size and duration. Default ``True``.
+        waves
+            How many waves the ``auto_size`` setting sets your batch
+            size to fill. Default ``5``.
+        target_ms
+            Target kernel runtime that ``auto_size`` sets your
+            integration duration to. Default ``20.0``.
 
         Returns
         -------
@@ -941,12 +965,7 @@ class Solver:
         Raises
         ------
         ValueError
-            If the system declares drivers but none are supplied.
-
-        Notes
-        -----
-        Use a batch of the size you will run in practice; a warning
-        says how much larger it must be to fill the GPU.
+            ``waves`` under 1, or ``target_ms`` under 10 or not finite.
         """
         return run_optimization(
             self,
@@ -960,6 +979,9 @@ class Solver:
             apply=apply,
             verbose=verbose,
             force=force,
+            auto_size=auto_size,
+            waves=waves,
+            target_ms=target_ms,
         )
 
     def update(

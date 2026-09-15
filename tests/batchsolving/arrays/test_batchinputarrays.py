@@ -115,10 +115,9 @@ def test_update_includes_driver_coefficients(
     ia = sk.input_arrays
     n_states = system.sizes.states
     n_params = system.sizes.parameters
-    n_drivers = system.sizes.drivers
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.ones((n_params, 1), dtype=precision)
-    drivers = np.ones((4, n_drivers, 1), dtype=precision) * 3.0
+    drivers = np.ones(sk.coefficients_shape, dtype=precision) * 3.0
     ia.update(sk, inits, params, drivers)
 
     assert_array_equal(ia.driver_coefficients, drivers)
@@ -132,10 +131,9 @@ def test_update_fast_path_requeues_attached_inputs(
     ia = sk.input_arrays
     n_states = system.sizes.states
     n_params = system.sizes.parameters
-    n_drivers = system.sizes.drivers
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.full((n_params, 1), 2.0, dtype=precision)
-    drivers = np.ones((4, n_drivers, 1), dtype=precision) * 3.0
+    drivers = np.ones(sk.coefficients_shape, dtype=precision) * 3.0
     ia.update(sk, inits, params, drivers)
     attached_inits = ia.host.initial_values.array
     attached_params = ia.host.parameters.array
@@ -361,7 +359,7 @@ def test_none_driver_coefficients_leave_the_attached_table(
     """``None`` keeps the uploaded table and queues only the run inputs."""
     sk = solverkernel_mutable
     ia = sk.input_arrays
-    drivers = np.ones((4, system.sizes.drivers, 1), dtype=precision) * 3.0
+    drivers = np.ones(sk.coefficients_shape, dtype=precision) * 3.0
     _first_upload(sk, ia, system, precision, drivers)
 
     attached_inits, attached_params = _attached_run_inputs(ia)
@@ -377,7 +375,7 @@ def test_new_driver_coefficient_table_is_queued(
     """A different table object queues a coefficient upload."""
     sk = solverkernel_mutable
     ia = sk.input_arrays
-    drivers = np.ones((4, system.sizes.drivers, 1), dtype=precision) * 3.0
+    drivers = np.ones(sk.coefficients_shape, dtype=precision) * 3.0
     _first_upload(sk, ia, system, precision, drivers)
 
     replacement = drivers * 2.0
@@ -397,7 +395,7 @@ def test_invalidation_refills_every_attached_slot(
     """Rebuilt device buffers receive the attached host data again."""
     sk = solverkernel_mutable
     ia = sk.input_arrays
-    drivers = np.ones((4, system.sizes.drivers, 1), dtype=precision) * 3.0
+    drivers = np.ones(sk.coefficients_shape, dtype=precision) * 3.0
     _first_upload(sk, ia, system, precision, drivers)
 
     ia._invalidate_hook()

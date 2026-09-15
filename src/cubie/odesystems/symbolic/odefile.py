@@ -1,10 +1,12 @@
 """Store generated CUDA factory source on disk."""
 
 from importlib import util
+from pathlib import Path
 from typing import Callable, Optional, Tuple
 
 from cubie._utils import package_source_hash
 from cubie.cache_root import get_cache_root
+from cubie.cubie_cache import _CacheFileLock
 from cubie.time_logger import default_timelogger
 
 
@@ -44,7 +46,13 @@ class ODEFile:
         self.file_path = system_dir / f"{system_name}_{variant}.py"
         self.fn_hash = fn_hash
         self._cache_notification_printed = False
-        self._init_file(fn_hash)
+        with _CacheFileLock(self._lock_path):
+            self._init_file(fn_hash)
+
+    @property
+    def _lock_path(self) -> Path:
+        """Lock file guarding writes to the generated module."""
+        return self.file_path.with_suffix(".lock")
 
     def _init_file(self, fn_hash: int) -> bool:
         """Create a new generated file when the stored hash is stale.
@@ -52,12 +60,12 @@ class ODEFile:
         Parameters
         ----------
         fn_hash
-            Hash representing the symbolic system definition.
+            Hash of the symbolic system definition.
 
         Returns
         -------
         bool
-            ``True`` when the file was (re)created, ``False`` otherwise.
+            ``True`` when the file was created.
         """
         if not self.cached_file_valid(fn_hash):
             with open(self.file_path, "w", encoding="utf-8") as f:
@@ -193,27 +201,27 @@ class ODEFile:
             Raised when the function is absent from the cache and
             ``code_lines`` is ``None``.
         """
-        if not self.cached_file_valid(self.fn_hash):
-            self._init_file(self.fn_hash)
+        with _CacheFileLock(self._lock_path):
+            if not self.cached_file_valid(self.fn_hash):
+                self._init_file(self.fn_hash)
+            was_cached = self.function_is_cached(func_name)
+            if not was_cached:
+                if code_lines is None:
+                    raise ValueError(
+                        f"{func_name} not found in cache and no code "
+                        "provided."
+                    )
+                self.add_function(code_lines)
+            imported = self._import_function(func_name, injections)
 
-        was_cached = self.function_is_cached(func_name)
+        if was_cached and not self._cache_notification_printed:
+            default_timelogger.print_message(
+                f"Existing codegen file found at: {self.file_path}. "
+                f"Skipping steps that have functions already cached."
+            )
+            self._cache_notification_printed = True
 
-        if was_cached:
-            # Print one-time cache notification via TimeLogger
-            if not self._cache_notification_printed:
-                default_timelogger.print_message(
-                    f"Existing codegen file found at: {self.file_path}. "
-                    f"Skipping steps that have functions already cached."
-                )
-                self._cache_notification_printed = True
-        else:
-            if code_lines is None:
-                raise ValueError(
-                    f"{func_name} not found in cache and no code provided."
-                )
-            self.add_function(code_lines)
-
-        return self._import_function(func_name, injections), was_cached
+        return imported, was_cached
 
     def add_function(self, printed_code: str) -> None:
         """Append generated code to the cache file.

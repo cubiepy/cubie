@@ -5,6 +5,12 @@ Optimisation
 
 .. autofunction:: run_optimization
 
+.. autofunction:: sized_batch_runs
+
+.. autofunction:: launch_candidates
+
+.. autofunction:: apply_launch
+
 .. autoclass:: OptimizeResult
     :members:
     :show-inheritance:
