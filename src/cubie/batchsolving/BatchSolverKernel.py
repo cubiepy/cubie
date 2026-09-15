@@ -269,6 +269,7 @@ class BatchSolverCache(CUDADispatcherCache):
 
     solver_kernel: Union[int, Callable] = field(default=-1)
     signature: Optional[Tuple] = field(default=None)
+    specializations: Dict[Tuple, Tuple] = field(factory=dict)
     output_array_heights: Optional[OutputArrayHeights] = field(default=None)
     duration_counts: Dict[float, DurationCounts] = field(factory=dict)
     launch_geometries: Dict[Tuple, Tuple[int, int]] = field(factory=dict)
@@ -602,13 +603,29 @@ class BatchSolverKernel(CUDAFactory):
                 return dispatcher
             # Use a dummy allocation to avoid full host-device transfer.
             args = self._specialization_args()
-        self._cache.signature = compile_kernel_specialization(dispatcher, args)
+        if IS_MLIR or is_cudasim_enabled():
+            self._cache.signature = compile_kernel_specialization(
+                dispatcher, args
+            )
+            return dispatcher
+        # Array types are cached by Numba; scalar types are fixed per build.
+        array_types = tuple(
+            getattr(array, "_numba_type_", None)
+            or dispatcher.typeof_pyval(array)
+            for array in args[:9]
+        )
+        signature = self._cache.specializations.get(array_types)
+        if signature is None:
+            signature = compile_kernel_specialization(dispatcher, args)
+            self._cache.specializations[array_types] = signature
+        self._cache.signature = signature
         return dispatcher
 
     @property
     def signature(self) -> Tuple:
         """Signature used for launch sizing and resource queries."""
-        self._compile_specialization()
+        if not self._cache_valid or self._cache.signature is None:
+            self._compile_specialization()
         return self._cache.signature
 
     def _specialization_args(self) -> Tuple:
@@ -772,10 +789,9 @@ class BatchSolverKernel(CUDAFactory):
                     "batch size."
                 )
 
+        first_chunk_args = self._kernel_launch_args(self.run_params[0])
         if not IS_MLIR:
-            self._compile_specialization(
-                self._kernel_launch_args(self.run_params[0])
-            )
+            self._compile_specialization(first_chunk_args)
         blocksize, dynamic_sharedmem = self.launch_geometry(
             blocksize, runs=self.run_params[0].runs
         )
@@ -808,12 +824,17 @@ class BatchSolverKernel(CUDAFactory):
 
             # Kernel execution timing
             kernel_event.record_start(stream)
+            args = (
+                first_chunk_args
+                if i == 0
+                else self._kernel_launch_args(chunk_run_params)
+            )
             self.kernel[
                 chunk_blocks,
                 (threads_per_loop, runsperblock),
                 stream,
                 dynamic_sharedmem,
-            ](*self._kernel_launch_args(chunk_run_params))
+            ](*args)
             kernel_event.record_end(stream)
 
             # d2h transfer timing
