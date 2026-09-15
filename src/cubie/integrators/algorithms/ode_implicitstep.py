@@ -314,7 +314,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """
         super().__init__(config, _defaults)
 
-        # Dense-prediction subclasses build a DenseStagePredictor here.
         self.dense_predictor = None
 
         # Set by subclasses needing a separate solver for smoothing.
