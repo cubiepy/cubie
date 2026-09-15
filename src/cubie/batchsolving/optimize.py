@@ -433,7 +433,6 @@ class _OptimizeRunner:
         parent: Any,
         inits: Any,
         params: Any,
-        drivers: Optional[Dict[str, Any]],
         duration: float,
         settling_time: float,
         t0: float,
@@ -441,7 +440,6 @@ class _OptimizeRunner:
     ) -> None:
         self._parent = parent
         self._grid = (inits, params)
-        self._drivers = drivers
         self._given_duration = float(duration)
         self._given_settling = float(settling_time)
         # Pin an unset summary window so probe durations share a kernel.
@@ -480,10 +478,6 @@ class _OptimizeRunner:
     def _make_twin(self, candidate: Dict[str, Any]) -> Any:
         """Return a parent copy carrying ``candidate``."""
         twin = self._parent.copy()
-        # Kernel timing events exist only under the "silent" level.
-        twin.set_verbosity("silent")
-        if self._drivers is not None:
-            twin._configure_drivers(self._drivers)
         twin.update({**candidate, **self._pinned}, silent=True)
         return twin
 
@@ -531,6 +525,7 @@ class _OptimizeRunner:
             if key != "memory_manager"
         }
         system_bytes = pickle.dumps(parent.system)
+        drivers = parent.kernel.driver_inputs()
         # Workers compile on one run; the batch size is not in the key.
         payloads = [
             (
@@ -539,7 +534,7 @@ class _OptimizeRunner:
                 settings,
                 self._candidates[index],
                 1,
-                self._drivers,
+                drivers,
                 self._given_duration,
                 self._given_settling,
                 self._t0,
@@ -816,13 +811,12 @@ def run_optimization(
     force
         Vary the settings given explicitly or applied earlier too.
     auto_size
-        ``True``: a ``waves``-wave batch from the grid, duration cut
-        to ``target_ms`` per solve. ``False``: the whole grid at
-        ``duration``.
+        ``True`` picks the batch size and duration; ``False`` keeps
+        the given ones.
     waves
-        Occupancy waves the sized batch fills.
+        Occupancy waves ``auto_size`` sizes the batch to fill.
     target_ms
-        Kernel milliseconds one sized solve aims for.
+        Kernel milliseconds ``auto_size`` shortens the duration to.
 
     Returns
     -------
@@ -844,6 +838,8 @@ def run_optimization(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
+    if drivers is not None:
+        parent._configure_drivers(drivers)
     candidates = parent.optimisation_candidates(force=force)
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
@@ -854,7 +850,6 @@ def run_optimization(
         parent,
         inits,
         params,
-        drivers,
         duration,
         settling_time,
         t0,

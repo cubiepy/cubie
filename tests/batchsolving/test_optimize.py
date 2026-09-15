@@ -273,7 +273,7 @@ def test_force_varies_user_fixed_axes(solver):
 @pytest.mark.parametrize(
     "solver_settings_override", [LARGE_FIRK], indirect=True
 )
-def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
+def test_derived_defaults_stay_free_axes_on_a_copy(solver):
     """Defaults the kernel derived are varied by the parent and its copy."""
     step = solver.kernel.single_integrator._algo_step.compile_settings
     assert step.stage_increment_location == "local"
@@ -288,10 +288,12 @@ def test_derived_defaults_stay_free_axes_on_a_copy(solver, driver_settings):
     assert _candidates(solver) == expected
     twin = solver.copy()
     try:
-        if driver_settings is not None:
-            twin._configure_drivers(driver_settings)
         assert _candidates(twin) == expected
         assert twin.kernel.config_hash == solver.kernel.config_hash
+        assert twin.kernel.driver_interpolator.config_hash == (
+            solver.kernel.driver_interpolator.config_hash
+        )
+        assert twin.given.time_logging_level == default_timelogger.verbosity
     finally:
         twin.close()
 

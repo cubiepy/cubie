@@ -1,13 +1,12 @@
 """Store generated CUDA factory source on disk."""
 
-import os
 from importlib import util
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
 from cubie._utils import package_source_hash
 from cubie.cache_root import get_cache_root
-from cubie.cubie_cache import _CacheFileLock, _retry_transient_io
+from cubie.cubie_cache import _CacheFileLock
 from cubie.time_logger import default_timelogger
 
 
@@ -44,10 +43,8 @@ class ODEFile:
         system_dir = get_cache_root() / system_name
         system_dir.mkdir(parents=True, exist_ok=True)
         variant = str(fn_hash)[:10]
-        salt = package_source_hash()[:8]
-        self.file_path = system_dir / f"{system_name}_{variant}_{salt}.py"
+        self.file_path = system_dir / f"{system_name}_{variant}.py"
         self.fn_hash = fn_hash
-        self.salt = salt
         self._cache_notification_printed = False
         with _CacheFileLock(self._lock_path):
             self._init_file(fn_hash)
@@ -58,7 +55,7 @@ class ODEFile:
         return self.file_path.with_suffix(".lock")
 
     def _init_file(self, fn_hash: int) -> bool:
-        """Replace a stale generated file atomically.
+        """Create a new generated file when the stored hash is stale.
 
         Parameters
         ----------
@@ -68,15 +65,13 @@ class ODEFile:
         Returns
         -------
         bool
-            ``True`` when the file was replaced.
+            ``True`` when the file was created.
         """
         if not self.cached_file_valid(fn_hash):
-            staging = self.file_path.with_suffix(f".{os.getpid()}.tmp")
-            with open(staging, "w", encoding="utf-8") as f:
+            with open(self.file_path, "w", encoding="utf-8") as f:
                 f.write(f"#{_salted_hash(fn_hash)}")
                 f.write("\n")
                 f.write(HEADER)
-            _retry_transient_io(lambda: os.replace(staging, self.file_path))
             return True
         return False
 
@@ -180,7 +175,6 @@ class ODEFile:
         func_name: str,
         code_lines: Optional[str] = None,
         injections: Optional[dict[str, Callable]] = None,
-        generate: Optional[Callable[[], str]] = None,
     ) -> Tuple[Callable, bool]:
         """Import a generated function, generating it when absent.
 
@@ -189,30 +183,29 @@ class ODEFile:
         func_name
             Name of the factory function to import.
         code_lines
-            Source appended when the function is not cached.
+            Source code used to generate the function when it is not cached.
         injections
-            Callables set as module attributes for the factory to resolve.
-        generate
-            Returns the source; called only when the function is not
-            cached and ``code_lines`` is ``None``.
+            Callables set as attributes on the generated module so the
+            factory can resolve them by name, e.g. user device
+            functions called from the generated source.
 
         Returns
         -------
         Tuple[Callable, bool]
-            The imported factory and whether it was already cached.
+            Tuple of (imported factory function, was_cached). was_cached is
+            True if the function was found in cache, False if it was generated.
 
         Raises
         ------
         ValueError
-            The function is absent and no source is available.
+            Raised when the function is absent from the cache and
+            ``code_lines`` is ``None``.
         """
         with _CacheFileLock(self._lock_path):
             if not self.cached_file_valid(self.fn_hash):
                 self._init_file(self.fn_hash)
             was_cached = self.function_is_cached(func_name)
             if not was_cached:
-                if code_lines is None and generate is not None:
-                    code_lines = generate()
                 if code_lines is None:
                     raise ValueError(
                         f"{func_name} not found in cache and no code "

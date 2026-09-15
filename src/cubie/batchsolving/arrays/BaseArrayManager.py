@@ -1032,11 +1032,16 @@ class BaseArrayManager(ABC):
                 f"Host arrays '{badnames}' does not exist, ignoring update",
                 UserWarning,
             )
-        if not any([check for check in self.check_sizes(new_arrays).values()]):
-            warn(
-                "Provided arrays do not match the expected system "
-                "sizes, ignoring update",
-                UserWarning,
+        mismatched = [
+            f"{name}: got {tuple(new_arrays[name].shape)}, expected "
+            f"{tuple(getattr(self._sizes, name))}"
+            for name, matches in self.check_sizes(new_arrays).items()
+            if not matches
+        ]
+        if mismatched:
+            raise ValueError(
+                "Provided arrays do not match the expected system sizes: "
+                + "; ".join(mismatched)
             )
         for array_name in new_arrays:
             current_array = self.host.get_array(array_name)

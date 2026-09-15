@@ -544,8 +544,16 @@ class Solver:
         return tuple(candidates)
 
     def copy(self) -> "Solver":
-        """Return a solver with these settings on a system copy; no drivers."""
-        return type(self)(self.system.copy(), **self.settings_dict)
+        """Return a copy: same settings and drivers, current log level."""
+        settings = {
+            **self.settings_dict,
+            "time_logging_level": default_timelogger.verbosity,
+        }
+        twin = type(self)(self.system.copy(), **settings)
+        drivers = self.kernel.driver_inputs()
+        if drivers is not None:
+            twin._configure_drivers(drivers)
+        return twin
 
     def _apply_performance_defaults(self) -> None:
         """Apply the auto-performance unroll and placement defaults."""
@@ -931,12 +939,16 @@ class Solver:
         force
             Vary the settings you gave or applied earlier too.
         auto_size
-            ``True`` times a sized batch and duration; ``False`` times
-            your grid at ``duration``. Default ``True``.
+            ``True`` optimizes at an automatically selected batch size
+            and duration to reduce runtime; ``False`` optimizes at your
+            given batch size and duration. Default ``True``.
         waves
-            Occupancy waves the sized batch fills. Default ``5``.
+            How many occupancy waves ``auto_size`` sets your batch size
+            to fill. Default ``5``.
         target_ms
-            Kernel milliseconds per sized solve. Default ``20.0``.
+            Target kernel runtime in milliseconds that ``auto_size``
+            sets your integration duration to; the duration is only
+            ever shortened. Default ``20.0``.
 
         Returns
         -------

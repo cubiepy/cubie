@@ -2911,7 +2911,7 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
     solver, driver_settings
 ):
     """An empty kernel interpolator gains its evaluators on configure."""
-    twin = solver.copy()
+    twin = Solver(solver.system.copy(), **solver.settings_dict)
     try:
         interpolator = twin.kernel.driver_interpolator
         integrator = twin.kernel.single_integrator
@@ -2940,7 +2940,7 @@ def test_run_rejects_a_driver_system_without_driver_inputs(
     solver, simple_initial_values, simple_parameters
 ):
     """A driver system with no configured samples fails at solve."""
-    twin = solver.copy()
+    twin = Solver(solver.system.copy(), **solver.settings_dict)
     try:
         assert twin.system.num_drivers > 0
         assert twin.driver_interpolator.num_inputs == 0

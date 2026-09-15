@@ -967,6 +967,9 @@ class TestUpdateHostArrays:
         new_arrays = {
             "state": np.ones(new_shape, dtype=np.float32),  # Different shape
         }
+        test_manager_with_sizing._sizes = attrs.evolve(
+            test_manager_with_sizing._sizes, state=new_shape
+        )
 
         test_manager_with_sizing.update_host_arrays(new_arrays)
 
@@ -981,7 +984,7 @@ class TestUpdateHostArrays:
         self, test_manager_with_sizing, arraytest_settings
     ):
         """Test update_host_arrays with size mismatch"""
-        test_manager_with_sizing.host.state = np.zeros(
+        test_manager_with_sizing.host.state.array = np.zeros(
             arraytest_settings["hostshape1"], dtype=np.float32
         )
 
@@ -993,8 +996,8 @@ class TestUpdateHostArrays:
             "state": np.ones(wrong_shape, dtype=np.float32),  # Wrong shape
         }
 
-        with pytest.warns(
-            UserWarning, match="do not match the expected system sizes"
+        with pytest.raises(
+            ValueError, match="do not match the expected system sizes"
         ):
             test_manager_with_sizing.update_host_arrays(new_arrays)
 
