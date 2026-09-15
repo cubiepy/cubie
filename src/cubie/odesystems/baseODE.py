@@ -224,7 +224,25 @@ class BaseODE(CUDAFactory):
         # return ODECache(dxdt=dxdt)
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Apply compile settings, then constant values."""
+        """Apply compile settings, then constant values.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the settings and :meth:`set_constants` recognised.
+
+        Notes
+        -----
+        Constant values go through :meth:`set_constants`, which updates
+        a copy of the constants container.
+        """
         recognised = self.update_compile_settings(updates, silent=True)
         return recognised | self.set_constants(updates, silent=True)
 

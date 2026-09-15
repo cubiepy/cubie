@@ -1206,7 +1206,20 @@ class IVPLoop(CUDAFactory):
         return self.compile_settings.is_adaptive
 
     def _update(self, updates: dict[str, object], silent: bool) -> Set[str]:
-        """Apply the loop settings and the buffer locations."""
+        """Apply the loop settings and the buffer locations.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the loop settings and the buffer registry recognised.
+        """
         recognised = self.update_compile_settings(updates, silent=True)
         recognised |= buffer_registry.update(self, updates, silent=True)
         self.register_buffers()

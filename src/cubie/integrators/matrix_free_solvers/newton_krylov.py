@@ -509,7 +509,22 @@ class NewtonKrylov(MatrixFreeSolver):
         return NewtonKrylovCache(nonlinear_solver_fn=nonlinear_solver_fn)
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Update the linear solver, then Newton with its solver fn."""
+        """Update the linear solver, then Newton's settings and buffers.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values; gains
+            ``krylov_linear_solver_fn``.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the linear solver, norm, Newton settings and buffer
+            registry recognised.
+        """
         # Guard any swapped-in linear solver before it compiles.
         self._require_child_zero_guess()
         recognized = self.linear_solver.update(updates, silent=True)

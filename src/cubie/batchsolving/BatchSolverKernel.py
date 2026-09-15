@@ -1144,7 +1144,27 @@ class BatchSolverKernel(CUDAFactory):
         return integration_kernel
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Update the memory manager, interpolator, run, then the kernel."""
+        """Update the memory manager, interpolator, run and kernel.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values; gains the derived driver
+            settings after an interpolator change.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the memory manager, interpolator, run and kernel
+            settings recognised.
+
+        Notes
+        -----
+        The kernel settings take the run's ``loop_fn`` and output
+        compile flags last.
+        """
         recognised = self.memory_manager.update(self, updates, silent=True)
         interpolator_recognised = self.driver_interpolator.update(
             updates, silent=True

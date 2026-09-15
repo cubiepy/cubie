@@ -76,9 +76,10 @@ resolves a name or `ButcherTableau` to the right factory.
 
 - **Errorless tableaus must use a fixed controller** — constructors enforce this; never pair an adaptive controller with an errorless tableau.
 - **`update` additions:** new keywords must be added to `ALL_ALGORITHM_STEP_PARAMETERS`
-  (`base_algorithm_step.py`) or `update` rejects them; `_update` is `_update_step`
-  (settings and buffers), the owned solvers and predictor on `ODEImplicitStep`, then
-  `_inapplicable`, which accepts the set's keys no one took and warns unless `silent`.
+  (`base_algorithm_step.py`) or `update` rejects them. `BaseAlgorithmStep._update` runs
+  `_apply_updates` (settings and buffers), then counts unapplied names from that set as
+  recognised and warns unless `silent`. `ODEImplicitStep` extends `_apply_updates` with
+  its owned solvers and predictor.
 
 ### Tableaus
 - **Adding a tableau:** append to the relevant `*_tableaus.py` registry; `__init__.py`'s

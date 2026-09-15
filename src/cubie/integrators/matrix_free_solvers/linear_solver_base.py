@@ -296,7 +296,20 @@ class LinearSolverBase(MatrixFreeSolver):
         ...
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Update the solver, then the buffer locations."""
+        """Update the norm and solver settings, then the buffers.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the solver and the buffer registry recognised.
+        """
         recognized = super()._update(updates, silent)
         recognized |= buffer_registry.update(
             self, updates_dict=updates, silent=True

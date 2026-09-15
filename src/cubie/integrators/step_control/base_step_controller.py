@@ -612,7 +612,26 @@ class BaseStepController(CUDAFactory):
         return self.compile_settings.mass_flags
 
     def _update(self, updates: dict[str, object], silent: bool) -> set[str]:
-        """Translate filter coefficients, then apply the settings."""
+        """Apply the settings; accept other controllers' parameters.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Suppress the other-controller parameter warning.
+
+        Returns
+        -------
+        set[str]
+            Recognised names, including other controllers' parameters.
+
+        Notes
+        -----
+        Filter coefficient aliases are translated first. Unapplied names
+        in ``ALL_STEP_CONTROLLER_PARAMETERS`` count as recognised and
+        warn.
+        """
         recognised = self._apply_filter_coefficients(updates)
         recognised |= self.update_compile_settings(updates, silent=True)
 
