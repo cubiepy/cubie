@@ -2624,3 +2624,18 @@ MIXED_OUTPUTS_WINDOWED = {
     **MIXED_OUTPUTS_LAST,
     "summarise_every": 0.25,
 }
+
+# Sample schedule ends two steps short of t_end.
+MIXED_OUTPUTS_LAST_SHORT_SCHEDULE = {
+    **MIXED_OUTPUTS_LAST,
+    "sample_summaries_every": 0.75,
+}
+
+# Two windows whose sample schedule ends two steps short of t_end.
+MIXED_OUTPUTS_WINDOWED_SHORT_SCHEDULE = {
+    **MIXED_OUTPUTS_LAST,
+    "duration": 1.125,
+    "dt": 0.0625,
+    "summarise_every": 0.5,
+    "sample_summaries_every": 0.25,
+}

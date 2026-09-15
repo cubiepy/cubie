@@ -171,9 +171,11 @@ class IVPLoop(CUDAFactory):
     observable_summaries_buffer_height
         Height of observable summary buffer.
     save_every
-        Save interval; ``None`` saves the final state only.
+        Interval between accepted saves; ``None`` saves the final state
+        only.
     summarise_every
-        Summary window; ``None`` writes one summary at the end of the run.
+        Interval between summary accumulations; ``None`` summarises once
+        at the end of the run.
     sample_summaries_every
         Interval between summary metric updates. Must be an integer divisor
         of ``summarise_every``.
@@ -253,10 +255,11 @@ class IVPLoop(CUDAFactory):
         observable_summaries_buffer_height
             Height of observable summary buffer.
         save_every
-            Save interval; ``None`` saves the final state only.
+            Interval between accepted saves; ``None`` saves the final state
+            only.
         summarise_every
-            Summary window; ``None`` writes one summary at the end of the
-            run.
+            Interval between summary accumulations; ``None`` summarises
+            once at the end of the run.
         sample_summaries_every
             Interval between summary metric updates. Must be an integer divisor
             of ``summarise_every``.
@@ -780,9 +783,10 @@ class IVPLoop(CUDAFactory):
                     finished = bool_(t_next >= t_end)
 
                 if save_last or summarise_last:
-                    # Schedules done short of t_end: the next step lands on it.
-                    at_end = bool_(t_prec < t_end) & finished
-                    finished = finished & ~at_end
+                    # Schedules done: step on until a step reaches t_end.
+                    reaches_end = bool_(t_next >= t_end)
+                    at_end = bool_(t_prec < t_end) & finished & reaches_end
+                    finished = finished & bool_(t_prec >= t_end)
 
                 finished = finished or irrecoverable
 

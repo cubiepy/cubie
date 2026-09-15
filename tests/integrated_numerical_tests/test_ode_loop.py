@@ -13,7 +13,9 @@ from tests._utils import (
     ALGORITHM_CHAIN_CASES,
     ALGORITHM_CHAIN_SETS,
     MIXED_OUTPUTS_LAST,
+    MIXED_OUTPUTS_LAST_SHORT_SCHEDULE,
     MIXED_OUTPUTS_WINDOWED,
+    MIXED_OUTPUTS_WINDOWED_SHORT_SCHEDULE,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
     TINY_DT_ADAPTIVE_CN,
@@ -354,6 +356,41 @@ def test_summarise_every(
     for i in range(min(4, state_summaries.shape[0])):
         assert not np.isnan(state_summaries[i]).any(), \
             f"Summary {i} should not contain NaN"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [MIXED_OUTPUTS_LAST_SHORT_SCHEDULE, MIXED_OUTPUTS_WINDOWED_SHORT_SCHEDULE],
+    indirect=True,
+)
+def test_end_step_after_the_sample_schedule(
+    device_loop_outputs,
+    cpu_loop_outputs,
+    precision,
+    solver_settings,
+    tolerance,
+):
+    """A sample schedule ending short of t_end still integrates to it."""
+    end_time = precision(
+        float(solver_settings["t0"])
+        + float(solver_settings["warmup"])
+        + float(solver_settings["duration"])
+    )
+    state = device_loop_outputs.state
+    assert state.shape[0] == 2
+    assert state[-1, -1] == end_time
+    np.testing.assert_allclose(
+        state,
+        cpu_loop_outputs["state"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
+    np.testing.assert_allclose(
+        device_loop_outputs.state_summaries,
+        cpu_loop_outputs["state_summaries"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
 
 
 def test_finish_check_no_float32_stagnation():

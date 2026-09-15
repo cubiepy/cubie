@@ -39,6 +39,7 @@ from cubie._utils import (
 )
 from cubie.outputhandling.output_config import OutputCompileFlags
 
+
 @frozen
 class ODELoopConfig(CUDAFactoryConfig):
     """Compile-critical settings for an integrator loop.

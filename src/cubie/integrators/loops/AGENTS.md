@@ -75,8 +75,7 @@ or once at the end.
 Output calls are predicated on step acceptance (`do_save &= accept`,
 `do_update_summary &= accept`, `do_final_summary &= accept`); `save_regularly` /
 `summarise` gate whether the grids are active at all (vs. `save_last`-only). `at_end`
-is the step that lands on `t_end`: either the schedules finished short of it, or the
-step is clamped to an event at `t_end`.
+is the step that lands on `t_end`.
 
 ### Loop behaviour
 - **Termination:** the `while True` loop exits via `return status` gated by
