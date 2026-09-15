@@ -562,57 +562,45 @@ class DAEInitialiser(CUDAFactory):
         # no cover: end
         return DAEInitialiserCache(initialise_state_fn=initialise_state_fn)
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs,
-    ) -> Set[str]:
-        """Update initialiser and owned-component parameters.
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Update the owned solver and norm, then the initialiser.
 
         Parameters
         ----------
-        updates_dict
-            Mapping of parameter names to new values.
+        updates
+            Setting names to new values.
         silent
-            Unrecognised keys never raise here; parents filter.
-        **kwargs
-            Additional parameters to update.
+            Whether :meth:`update` ignores unrecognised names.
 
         Returns
         -------
-        set of str
-            Names of parameters that were recognised.
-        """
-        all_updates = {}
-        if updates_dict:
-            all_updates.update(updates_dict)
-        all_updates.update(kwargs)
-        if not all_updates:
-            return set()
+        set[str]
+            Names the solver, norm, initialiser settings and buffer
+            registry recognised.
 
+        Notes
+        -----
+        Children skip ``newton_max_iters`` and
+        ``linear_correction_type`` and take ``n_states`` as
+        ``solver_width``; a recognised update rebuilds the helpers.
+        """
         # Drop max iters and correction type; the initialiser is always LU.
         child_updates = {
             key: value
-            for key, value in all_updates.items()
+            for key, value in updates.items()
             if key not in ("newton_max_iters", "linear_correction_type")
         }
-        if "n_states" in all_updates:
-            child_updates["solver_width"] = all_updates["n_states"]
-        recognized = self.linear_solver.update(
-            child_updates, silent=True
-        )
+        if "n_states" in updates:
+            child_updates["solver_width"] = updates["n_states"]
+        recognized = self.linear_solver.update(child_updates, silent=True)
         recognized |= self.norm.update(child_updates, silent=True)
-        recognized |= self.update_compile_settings(
-            all_updates, silent=True
-        )
+        recognized |= self.update_compile_settings(updates, silent=True)
         recognized |= buffer_registry.update(
-            self, updates_dict=all_updates, silent=True
+            self, updates_dict=updates, silent=True
         )
         self.register_buffers()
         if recognized:
             self.build_solver_helpers()
-
         return recognized
 
     @property

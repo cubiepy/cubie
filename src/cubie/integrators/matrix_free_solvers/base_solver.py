@@ -125,50 +125,26 @@ class MatrixFreeSolver(MultipleInstanceCUDAFactory):
             )
         self.norm = norm
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs,
-    ) -> Set[str]:
-        """Update compile settings with tolerance extraction.
-
-        Handles common parameter processing for all matrix-free solvers:
-        1. Transforms prefixed keys using inherited transform_prefixed_keys
-        2. Extracts atol/rtol from transformed dict for norm factory
-        3. Updates norm and propagates device function to config
-        4. Forwards remaining parameters to update_compile_settings
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Update the owned norm, then the solver settings.
 
         Parameters
         ----------
-        updates_dict : dict, optional
-            Dictionary of settings to update.
-        silent : bool, default False
-            If True, suppress warnings about unrecognized keys.
-        **kwargs
-            Additional settings as keyword arguments.
+        updates
+            Setting names to new values; gains the prefixed ``norm_fn``.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
 
         Returns
         -------
-        set
-            Set of recognized parameter names (original prefixed forms).
+        set[str]
+            Names the norm and the solver settings recognised.
         """
-        # Merge updates into a copy
-        all_updates = {}
-        if updates_dict:
-            all_updates.update(updates_dict)
-        all_updates.update(kwargs)
-
-        if not all_updates:
-            return set()
-
-        recognized = set()
-
-        recognized |= self.norm.update(all_updates, silent=True)
-        all_updates[self.prefixed("norm_fn")] = self.norm.device_function
-        recognized |= self.update_compile_settings(all_updates, silent=True)
-
-        return recognized
+        recognized = self.norm.update(updates, silent=True)
+        updates[self.prefixed("norm_fn")] = self.norm.device_function
+        return recognized | self.update_compile_settings(
+            updates, silent=True
+        )
 
     @property
     def atol(self) -> ndarray:

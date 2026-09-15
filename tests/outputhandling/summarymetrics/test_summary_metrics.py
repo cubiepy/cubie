@@ -234,11 +234,40 @@ def test_summary_metric_save_device_func():
 # ── SummaryMetric.update ──────────────────────────────────────────── #
 
 
-def test_summary_metric_update_delegates():
-    """update() delegates to update_compile_settings with silent=True."""
+def test_summary_metric_update_kwargs():
+    """A keyword update reaches the settings and names the change."""
     m = _ConcreteMetric(precision=np.float32, sample_summaries_every=0.01)
-    m.update(sample_summaries_every=0.05)
+    _ = m.update_fn
+    recognised = m.update(sample_summaries_every=0.05)
+    assert recognised == {"sample_summaries_every"}
     assert m.compile_settings.sample_summaries_every == pytest.approx(0.05)
+    assert m.cache_valid is False
+
+
+def test_summary_metric_update_dict():
+    """A dict update reaches the settings like a keyword update."""
+    m = _ConcreteMetric(precision=np.float32, sample_summaries_every=0.01)
+    recognised = m.update({"sample_summaries_every": 0.04})
+    assert recognised == {"sample_summaries_every"}
+    assert m.compile_settings.sample_summaries_every == pytest.approx(0.04)
+
+
+def test_summary_metric_update_group():
+    """A dict value is a settings group applied in its place."""
+    m = _ConcreteMetric(precision=np.float32, sample_summaries_every=0.01)
+    recognised = m.update(group={"sample_summaries_every": 0.03})
+    assert recognised == {"group", "sample_summaries_every"}
+    assert m.compile_settings.sample_summaries_every == pytest.approx(0.03)
+
+
+def test_summary_metric_update_unknown_raises_unless_silent():
+    """An unknown name raises KeyError; silent=True ignores it."""
+    m = _ConcreteMetric(precision=np.float32, sample_summaries_every=0.01)
+    with pytest.raises(KeyError, match="bogus"):
+        m.update(bogus=1)
+    recognised = m.update(bogus=1, sample_summaries_every=0.02, silent=True)
+    assert recognised == {"sample_summaries_every"}
+    assert m.compile_settings.sample_summaries_every == pytest.approx(0.02)
 
 
 # ── SummaryMetric.build abstract ──────────────────────────────────── #
@@ -304,10 +333,22 @@ def test_summary_metrics_update_precision():
 def test_summary_metrics_update_propagates_to_all_metrics():
     """update() propagates kwargs to all registered metric objects."""
     reg = _make_registry(np.float32)
-    reg.update(sample_summaries_every=0.07)
+    recognised = reg.update(sample_summaries_every=0.07)
+    assert recognised == {"sample_summaries_every"}
     for metric in reg._metric_objects.values():
         assert metric.compile_settings.sample_summaries_every == (
             pytest.approx(0.07)
+        )
+
+
+def test_summary_metrics_update_ignores_names_no_metric_takes():
+    """The broadcast is silent: unknown names are dropped."""
+    reg = _make_registry(np.float32)
+    recognised = reg.update(sample_summaries_every=0.06, bogus=1)
+    assert recognised == {"sample_summaries_every"}
+    for metric in reg._metric_objects.values():
+        assert metric.compile_settings.sample_summaries_every == (
+            pytest.approx(0.06)
         )
 
 

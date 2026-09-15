@@ -811,74 +811,63 @@ class BaseAlgorithmStep(CUDAFactory):
         """Register buffers required by the algorithm step."""
         pass
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, object]] = None,
-        silent: bool = False,
-        **kwargs: object,
-    ) -> Set[str]:
-        """Apply configuration updates and invalidate caches when needed.
+    def _update(self, updates: Dict[str, object], silent: bool) -> Set[str]:
+        """Apply the updates, then accept other algorithms' parameters.
 
         Parameters
         ----------
-        updates_dict
-            Mapping of configuration keys to their new values.
+        updates
+            Setting names to new values.
         silent
-            When ``True``, suppress warnings about inapplicable keys.
-        **kwargs
-            Additional configuration updates supplied inline.
+            Suppress the other-algorithm parameter warning.
 
         Returns
         -------
-        set
-            Set of configuration keys that were recognized and updated.
+        set[str]
+            Recognised names, including other algorithms' parameters.
 
-        Raises
-        ------
-        KeyError
-            Raised when an unknown key is provided while ``silent`` is False.
+        Notes
+        -----
+        After :meth:`_apply_updates`, unapplied names in
+        ``ALL_ALGORITHM_STEP_PARAMETERS`` count as recognised and warn.
         """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        if kwargs:
-            updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
+        recognised = self._apply_updates(updates)
 
-        recognised = self.update_compile_settings(updates_dict, silent=True)
-
-        recognised |= buffer_registry.update(self, updates_dict, silent=True)
-        self.register_buffers()
-
-        unrecognised = set(updates_dict.keys()) - recognised
-
-        # Check if unrecognized parameters are valid algorithm step parameters
-        # but not applicable to this specific algorithm
-        valid_but_inapplicable = unrecognised & ALL_ALGORITHM_STEP_PARAMETERS
-        truly_invalid = unrecognised - ALL_ALGORITHM_STEP_PARAMETERS
-
-        # Mark valid algorithm parameters as recognized to prevent error
-        # propagation
-        recognised |= valid_but_inapplicable
-
-        if valid_but_inapplicable and not silent:
+        inapplicable = (
+            set(updates) - recognised
+        ) & ALL_ALGORITHM_STEP_PARAMETERS
+        if inapplicable and not silent:
             algorithm_type = self.__class__.__name__
-            params_str = ", ".join(sorted(valid_but_inapplicable))
+            params_str = ", ".join(sorted(inapplicable))
             warnings.warn(
                 f"Parameters {{{params_str}}} are not recognized by "
                 f"{algorithm_type}; "
                 "updates have been ignored.",
                 UserWarning,
-                stacklevel=2,
+                stacklevel=3,
             )
+        return recognised | inapplicable
 
-        if not silent and truly_invalid:
-            raise KeyError(
-                f"Unrecognized parameters in update: {truly_invalid}. "
-                "These parameters were not updated.",
-            )
+    def _apply_updates(self, updates: Dict[str, object]) -> Set[str]:
+        """Apply the step settings and buffer locations.
 
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+
+        Returns
+        -------
+        set[str]
+            Names the settings and the buffer registry took.
+
+        Notes
+        -----
+        Subclasses with child factories extend this method.
+        """
+        recognised = self.update_compile_settings(updates, silent=True)
+        recognised |= buffer_registry.update(self, updates, silent=True)
+        self.register_buffers()
         return recognised
 
     def build(self) -> StepCache:

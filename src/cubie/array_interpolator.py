@@ -620,58 +620,6 @@ class ArrayInterpolator(CUDAFactory):
         )
         return cache
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, object]] = None,
-        silent: bool = False,
-        **kwargs: object,
-    ) -> Set[str]:
-        """Apply configuration updates and invalidate caches when needed.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of configuration keys to their new values.
-        silent
-            When ``True``, suppress warnings about inapplicable keys.
-        **kwargs
-            Additional configuration updates supplied inline.
-
-        Returns
-        -------
-        set
-            Set of configuration keys that were recognized and updated.
-
-        Raises
-        ------
-        KeyError
-            Raised when an unknown key is provided while ``silent`` is False.
-
-        Notes
-        -----
-        ``num_segments`` derives from the resulting wrap and boundary
-        condition; absent keys keep their values. A change invalidates
-        the build, rebuilding coefficients and evaluators on next access.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        if kwargs:
-            updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
-
-        recognised = self.update_compile_settings(updates_dict, silent=True)
-        unrecognised = set(updates_dict.keys()) - recognised
-
-        if not silent and unrecognised:
-            raise KeyError(
-                f"Unrecognized parameters in update: {unrecognised}. "
-                "These parameters were not updated.",
-            )
-
-        return recognised
-
     @property
     def drivers_fn(self) -> Optional[Callable]:
         """Device function evaluating all inputs; ``None`` without inputs."""

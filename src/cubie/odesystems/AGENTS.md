@@ -40,14 +40,11 @@ therefore starts a fresh member map. The helper identity/reuse protocol
 (source and member hashes, factory naming, binding) is owned by
 `symbolic/AGENTS.md` and `symbolic/helper_registry.py`.
 
-### BaseODE.update() — additions over the base contract
-On top of the standard `CUDAFactory` update (non-underscored keys, `KeyError` on unknown unless
-`silent`, returns the recognised `set`), `BaseODE.update()` also routes constant-*value* changes
-through `set_constants()`, which derives a **copy** of the constants container, applies the
-values to the copy, and passes the copy through `update_compile_settings` (snapshot
-discipline — never mutate the instance a snapshot holds). A `precision` change
-re-materialises all four embedded `SystemValues` on the replacement snapshot through
-`ODEData.update`.
+### BaseODE._update() — additions over the base contract
+`BaseODE._update()` also routes constant-*value* changes through `set_constants()`, which
+applies them to a **copy** of the constants container and passes the copy through
+`update_compile_settings`; never mutate the instance a snapshot holds. A `precision` change
+re-materialises all four embedded `SystemValues` through `ODEData.update`.
 
 ### config_hash folds constant values
 `BaseODE.config_hash` extends the parent hash with a canonical digest over the

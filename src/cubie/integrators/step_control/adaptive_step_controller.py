@@ -235,23 +235,31 @@ class BaseAdaptiveStepController(BaseStepController):
             silent=True,
         )
 
-    def update(
-        self,
-        updates_dict: Optional[dict[str, object]] = None,
-        silent: bool = False,
-        **kwargs: object,
-    ) -> set[str]:
-        """Propagate updates to the owned norm and then the controller."""
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        updates_dict.update(kwargs)
-        norm_updates = dict(updates_dict)
+    def _update(self, updates: dict[str, object], silent: bool) -> set[str]:
+        """Update the owned norm, then the controller.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values; gains the norm's ``norm_fn``.
+        silent
+            Suppress the other-controller parameter warning.
+
+        Returns
+        -------
+        set[str]
+            Names the controller recognised.
+
+        Notes
+        -----
+        The norm's ``solver_width`` follows ``n_states``.
+        """
+        norm_updates = dict(updates)
         if "n_states" in norm_updates:
             norm_updates["solver_width"] = norm_updates["n_states"]
         self.norm.update(norm_updates, silent=True)
-        updates_dict["norm_fn"] = self.norm.device_function
-        return super().update(updates_dict, silent=silent)
+        updates["norm_fn"] = self.norm.device_function
+        return super()._update(updates, silent)
 
     def compile_controller(self) -> ControllerCache:
         """Construct the device function implementing the controller.

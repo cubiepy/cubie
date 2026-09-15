@@ -223,65 +223,28 @@ class BaseODE(CUDAFactory):
         """
         # return ODECache(dxdt=dxdt)
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, float]] = None,
-        silent: bool = False,
-        **kwargs: float,
-    ) -> Set[str]:
-        """Update compile settings through the :class:`CUDAFactory` interface.
-
-        Pass updates through the compile-settings interface, which invalidates
-        caches when an update succeeds.
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Apply compile settings, then constant values.
 
         Parameters
         ----------
-        updates_dict
-            Dictionary of updates to apply.
+        updates
+            Setting names to new values.
         silent
-            Set to ``True`` to suppress warnings about missing keys.
-        **kwargs
-            Additional updates specified as keyword arguments.
+            Whether :meth:`update` ignores unrecognised names.
 
         Returns
         -------
-        set of str
-            Labels that were recognized and updated.
+        set[str]
+            Names the settings and :meth:`set_constants` recognised.
 
         Notes
         -----
-        Pass ``silent=True`` when performing bulk updates that may include
-        values for other components to suppress warnings about missing keys.
+        Constant values go through :meth:`set_constants`, which updates
+        a copy of the constants container.
         """
-
-        if updates_dict is None:
-            updates_dict = {}
-        updates = updates_dict.copy()
-        if kwargs:
-            updates.update(kwargs)
-        if updates == {}:
-            return set()
-
-        recognised = self.update_compile_settings(
-            updates,
-            silent=True,
-        )
-        recognised_constants = self.set_constants(
-            updates,
-            silent=True,
-        )
-
-        recognised |= recognised_constants
-
-        if not silent:
-            unrecognised = set(updates.keys()) - recognised
-            if unrecognised:
-                raise KeyError(
-                    "Unrecognized parameters in update: "
-                    f"{unrecognised}. These parameters were not updated.",
-                )
-
-        return recognised
+        recognised = self.update_compile_settings(updates, silent=True)
+        return recognised | self.set_constants(updates, silent=True)
 
     def set_constants(
         self,
