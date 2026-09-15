@@ -210,7 +210,7 @@ def test_cache_setting_change_never_flushes_previous_cache(
     """Changing cache settings drops the attached cache unflushed."""
     old_dir = tmp_path / "artifact"
     kernel = BatchSolverKernel(
-        system, algorithm_settings={"algorithm": "euler"}, cache=old_dir
+        system, algorithm="euler", cache=old_dir
     )
     kernel.kernel
     cache_path = kernel._disk_cache.cache_path
@@ -229,9 +229,9 @@ def test_flush_on_change_flushes_the_attached_cache(system, tmp_path):
     """A compile-setting change flushes the cache in flush_on_change."""
     kernel = BatchSolverKernel(
         system,
-        algorithm_settings={"algorithm": "euler"},
+        algorithm="euler",
         cache=tmp_path / "cache",
-        kernel_settings={"cache_mode": "flush_on_change"},
+        cache_mode="flush_on_change",
     )
     kernel.kernel
     cache_path = kernel._disk_cache.cache_path
@@ -248,7 +248,7 @@ def test_equal_cache_settings_leave_the_build_valid(system, tmp_path):
     """Re-supplying equal cache settings does not invalidate the build."""
     cache_dir = tmp_path / "cache"
     kernel = BatchSolverKernel(
-        system, algorithm_settings={"algorithm": "euler"}, cache=cache_dir
+        system, algorithm="euler", cache=cache_dir
     )
     config = kernel.compile_settings.cache
     resupplied = dict(
@@ -474,7 +474,7 @@ def test_batch_solver_kernel_disk_cache_keys_on_system_hash(
     """The attached disk cache lives under the system's hash prefix."""
     kernel = BatchSolverKernel(
         system,
-        algorithm_settings={"algorithm": "euler"},
+        algorithm="euler",
         cache=tmp_path / "cache",
     )
     kernel.kernel
@@ -493,22 +493,11 @@ def test_batch_solver_kernel_uses_name_from_system(solverkernel, system):
 
 
 def test_batch_solver_kernel_disabled_cache_attaches_nothing(
-    system,
-    step_controller_settings,
-    algorithm_settings,
-    output_settings,
-    memory_settings,
-    loop_settings,
+    system, effective_settings
 ):
     """cache=False builds a kernel with no disk cache attached."""
     kernel = BatchSolverKernel(
-        system,
-        step_control_settings=step_controller_settings,
-        algorithm_settings=algorithm_settings,
-        output_settings=output_settings,
-        memory_settings=memory_settings,
-        loop_settings=loop_settings,
-        cache=False,
+        system, **{**effective_settings, "cache": False}
     )
     assert kernel.compile_settings.cache.cache_enabled is False
     kernel.kernel

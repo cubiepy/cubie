@@ -53,7 +53,7 @@ from tempfile import mkstemp
 from threading import Lock
 from types import TracebackType
 from functools import partial
-from typing import Any, Optional, Callable, Dict, Tuple, Union
+from typing import Any, Optional, Callable, Dict, Set, Tuple, Union
 from warnings import warn
 from copy import deepcopy
 from inspect import ismethod
@@ -802,6 +802,65 @@ class MemoryManager:
         else:
             self._add_auto_proportion(instance)
 
+    def update(
+        self,
+        instance: object,
+        updates_dict: Optional[Dict[str, Any]] = None,
+        silent: bool = False,
+        **kwargs: Any,
+    ) -> Set[str]:
+        """Update a registered instance's memory settings.
+
+        Parameters
+        ----------
+        instance
+            Registered instance to update.
+        updates_dict
+            Setting names to new values: ``stream_group``,
+            ``mem_proportion`` (``None`` selects the automatic limit)
+            and ``memory_manager`` (this manager only).
+        silent
+            Ignore unknown names instead of raising.
+        **kwargs
+            Further updates.
+
+        Returns
+        -------
+        Set[str]
+            The recognised names.
+
+        Raises
+        ------
+        KeyError
+            Unknown names when not ``silent``.
+        ValueError
+            A different memory manager.
+        """
+        updates = {**(updates_dict or {}), **kwargs}
+        recognised = set()
+        if "memory_manager" in updates:
+            if updates["memory_manager"] is not self:
+                raise ValueError(
+                    "A registered instance cannot change memory manager."
+                )
+            recognised.add("memory_manager")
+        if "stream_group" in updates:
+            group = updates["stream_group"]
+            if group is not None and group != self.get_stream_group(instance):
+                self.change_stream_group(instance, group)
+            recognised.add("stream_group")
+        if "mem_proportion" in updates:
+            proportion = updates["mem_proportion"]
+            if proportion is None:
+                self.set_auto_limit_mode(instance)
+            else:
+                self.set_manual_proportion(instance, proportion)
+            recognised.add("mem_proportion")
+        unrecognised = set(updates) - recognised
+        if unrecognised and not silent:
+            raise KeyError(f"Unrecognized parameters: {sorted(unrecognised)}")
+        return recognised
+
     def get_registration(self, instance: object) -> InstanceMemorySettings:
         """Return the registry entry for a registered instance.
 
@@ -872,8 +931,7 @@ class MemoryManager:
         return self.stream_groups.get_group_stream(group)
 
     def change_stream_group(self, instance: object, new_group: str) -> None:
-        """
-        Move instance to another stream group.
+        """Move the owner's registrations, queued requests and partition.
 
         Parameters
         ----------
@@ -881,9 +939,28 @@ class MemoryManager:
             Instance to move.
         new_group
             Name of the new stream group.
-
         """
-        self.stream_groups.change_group(instance, new_group)
+        old_group = self.get_stream_group(instance)
+        owner_id = self.registry[id(instance)].owner_id
+        queued = self._queued_allocations.get(old_group, {})
+        members = list(
+            self.stream_groups.get_instances_in_group(old_group)
+        )
+        for instance_id in members:
+            if not self._owned_by(instance_id, owner_id):
+                continue
+            self.stream_groups.change_group(instance_id, new_group)
+            if instance_id in queued:
+                self._queued_allocations.setdefault(new_group, {})[
+                    instance_id
+                ] = queued.pop(instance_id)
+        if not queued:
+            self._queued_allocations.pop(old_group, None)
+        partition = self._group_chunk_parameters.pop(
+            (old_group, owner_id), None
+        )
+        if partition is not None:
+            self._group_chunk_parameters[(new_group, owner_id)] = partition
 
     def reinit_streams(self) -> None:
         """

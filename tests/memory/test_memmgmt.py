@@ -680,6 +680,35 @@ class TestMemoryManager:
         # Should only have the latest request
         assert mgr._queued_allocations[stream_group][id(instance)] == requests2
 
+    @pytest.mark.parametrize("memory_clients", [2], indirect=True)
+    def test_change_stream_group_moves_the_owner_unit(
+        self, mgr, memory_clients
+    ):
+        """The owner's registrations and queued requests move together."""
+        owner, member = memory_clients
+        mgr.register(
+            owner,
+            stream_group="first",
+            invalidate_cache_hook=owner.notice_invalidate,
+        )
+        mgr.register(
+            member,
+            stream_group="first",
+            owner=owner,
+            invalidate_cache_hook=member.notice_invalidate,
+        )
+        requests = {
+            "arr1": ArrayRequest(
+                shape=(2, 2), dtype=np.float32, memory="device", total_runs=2
+            ),
+        }
+        mgr.queue_request(member, requests)
+        mgr.change_stream_group(owner, "second")
+        assert mgr.get_stream_group(owner) == "second"
+        assert mgr.get_stream_group(member) == "second"
+        assert mgr._queued_allocations["second"][id(member)] == requests
+        assert "first" not in mgr._queued_allocations
+
     def test_allocate_queue_single_instance(self, mgr, memory_client):
         """Test allocate_queue with single instance in queue."""
         instance = memory_client

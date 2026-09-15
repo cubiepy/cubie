@@ -21,8 +21,8 @@ each have their own `AGENTS.md`.
 | File | Description |
 |------|-------------|
 | `SingleIntegratorRun.py` | `SingleIntegratorRun(SingleIntegratorRunCore)`: read-only properties exposing compiled loop artifacts, memory sizing, controller bounds, and output metadata to `BatchSolverKernel`. No `build()` override. |
-| `SingleIntegratorRunCore.py` | `SingleIntegratorRunCore(CUDAFactory)`: owns `_output_functions`, `_algo_step`, `_step_controller`, `_dae_initialiser`, `_loop`; `update` writes each child, pushes the children's products into the loop and captures `loop_fn`. Defines `SingleIntegratorRunCache` (holds `loop_fn`). |
-| `IntegratorRunSettings.py` | `IntegratorRunSettings(CUDAFactoryConfig)`: `algorithm`, `step_controller`, `auto_performance`, `precision` and the captured `loop_fn`. |
+| `SingleIntegratorRunCore.py` | `SingleIntegratorRunCore(CUDAFactory)`: owns `_output_functions`, `_algo_step`, `_step_controller`, `_dae_initialiser`, `_loop`; `update` writes the flat settings it is passed into each child with the products that child consumes and recaptures `loop_fn`; `optimisation_candidates` is the step's. Defines `SingleIntegratorRunCache` (holds `loop_fn`). |
+| `IntegratorRunSettings.py` | `IntegratorRunSettings(CUDAFactoryConfig)`: `algorithm`, `step_controller`, `precision`, the driver functions and the captured `loop_fn`. |
 | `norms.py` | CUDA factories for scaled vector norms (`ScaledNorm`, `TiledScaledNorm`, `TwoRefMaskedScaledNorm`) and DIRK/FIRK Newton correction terms; every config floors `atol` at `ATOL_FLOOR` per entry on the host with a `UserWarning`. |
 | `stage_predictors.py` | `DenseStagePredictor(CUDAFactory)`: in-place read-ahead of a persistent stage-increment vector that warm-starts the next step's Newton solves; step-size-ratio polynomials precomputed from the tableau. FIRK and DIRK own one as a buffer-registry child. |
 | `dae_initialiser.py` | `DAEInitialiser(CUDAFactory)`: one-shot consistent-initialisation solve at loop entry before the t0 save, a damped Newton over a direct LU. Always constructed by the core from the algorithm step's `settings_dict`; non-DAE systems and mode `"none"` compile a no-op with zero-size buffers. Modes: `"brown"` (default; corrects only the algebraic components), `"shampine"` (one backward-Euler solve of the initial dt), `"none"`. A failed solve commits nothing and returns the solver bits with `DAE_INITIALISATION_FAILED` set; the loop ends the run at the t0 save. |
@@ -55,60 +55,27 @@ Iteration counts are returned separately via the
 `Solver.status_messages`).
 
 ### Component assembly (`SingleIntegratorRunCore.__init__`)
-Each child class declares `system_inputs(system, ...)`, what it takes from the system
-(sizes, precision, products, mass flags). Order matters — each component seeds the next:
-1. `OutputFunctions` first (its compile flags + summary buffer heights feed `IVPLoop`).
-2. `_algo_step = get_algorithm_step(precision, settings)` — supplies
-   `controller_defaults.step_controller`, seeding the controller settings before user
-   overrides merge in. `_apply_dae_linear_solve_defaults()` overlays
-   `ode_implicitstep.DAE_SOLVER_DEFAULTS` on unset keys for mass-matrix systems;
-   user-set keys survive hot-swaps; `neumann` is rejected.
-3. `_step_controller = get_controller(precision, controller_settings)` with the
-   system's `mass_diagonal_flags` injected as `mass_flags` (re-injected in `update()`).
-4. `check_compatibility()` — if the algorithm is errorless but the controller is
-   adaptive, the controller is **silently replaced with `FixedStepController`** and a
-   `UserWarning` is issued (an errorless algorithm gives no error signal to adapt on).
-   Happens before the loop is created.
-5. `_apply_performance_defaults()` on the built step.
-6. `DAEInitialiser` from the algorithm step's `settings_dict` and the system's sizes,
-   helper getter and `mass_diagonal_flags`; no-op configurations register zero-size
-   buffers.
-7. `IVPLoop` from `loop_settings` and the children's products (`_loop_inputs()`: sizes,
-   compile flags, `dt`, `is_adaptive`, `n_error` and the device functions); the step,
-   controller and initialiser (`aliases="algorithm_shared"`) register under it
-   (`_register_loop_children()`, re-run after every swap) and `loop_fn` is captured on
-   the run's config (`_sync_loop()`).
+`SingleIntegratorRunCore` resolves nothing; it takes one flat dict of settings. Each
+child class declares `system_inputs(system, ...)`, what it takes from the system
+(sizes, precision, products, mass flags). Order:
+1. `IntegratorRunSettings` (`algorithm`, `step_controller`, driver functions, compile
+   flags).
+2. `OutputFunctions` from the output keys and its system inputs.
+3. The algorithm step named by `algorithm`, from the settings, its system inputs,
+   the driver evaluators and `is_adaptive`; an explicit step on a mass-matrix system
+   raises.
+4. The controller named by `step_controller`, from the settings, its system inputs
+   and the step's order.
+5. `DAEInitialiser` from the step's `settings_dict`, the settings and its system
+   inputs; no-op configurations register zero-size buffers.
+6. `IVPLoop` from the loop keys plus `_loop_inputs()` (the children's products); the
+   step, controller and initialiser register under it and `loop_fn` is captured.
 
-`settings_dict` merges the children's `settings_dict`s minus the keys the core injects
-(`_INJECTED_KEYS`, the loop's `dt` and schedule); timing comes from `_user_timing`, inner
-tolerances only when in `_user_given_inner_tols`, performance defaults and unroll flags only
-when in `_user_given_keys` (all of them when `auto_performance` is off). `grouped_settings()`
-splits it by the children's `settings_keys`; `copy()` rebuilds on `system.copy()` from those
-groups. Hot swaps carry `settings_dict` plus the step's device functions; a controller swap
-drops `CONTROLLER_GAIN_PARAMETERS`.
-
-### update() feeds the children; build() reads the captured loop_fn
-`update()` runs the system, the outputs, the step (with the system's sizes and device
-functions, `_step_inputs()`), the controller, `check_compatibility()`, the derived
-defaults, the initialiser (`_initialiser_inputs()`), then `_process_loop_timing()` and
-`_sync_loop()`, which pushes the children's products into the loop and recaptures
-`loop_fn`. `build()` returns that `loop_fn`; a child changed outside `update()` is not
-seen until the next `update()`.
-
-### Two-phase timing
-`_process_loop_timing()` derives `save_every`, `summarise_every`,
-`sample_summaries_every`, and the `save_*`/`summarise_regularly` flags from user intent.
-If `summarise_every` is omitted, `is_duration_dependent=True` and
-`set_summary_timing_from_duration()` must be called later (done by `BatchSolverKernel`
-before each solve); it pushes the window to the outputs and loop and recaptures
-`loop_fn`.
-
-### Hot-swap
-A new `"algorithm"`/`"step_controller"` in `update()` routes through
-`_switch_algos()`/`_switch_controllers()`, which clear the old child's buffers, rebuild
-the sub-component from the old settings plus the system's device functions, and
-propagate defaults into `updates_dict`. Controller gains (`CONTROLLER_GAIN_PARAMETERS`) do not carry across a controller change; the new controller uses its own gain defaults unless the update supplies them. Gains or `filter_coefficients` without a `step_controller` (at construction or in `update()`) promote the controller in effect to the smallest `i`/`pi`/`pid` carrying them via `_resolve_controller_name`/`_promote_controller`; a named controller drops gains it lacks.
-Never call these directly — go through `update()`.
+`update()` writes this config, then each child with the same dict plus its inputs,
+and recaptures `loop_fn`; a new `algorithm` or `step_controller` swaps that child,
+built from this config's `init_kwargs` plus the update. The system is not a child:
+the Solver updates it before the chain runs. `build()` returns `loop_fn`.
+`settings_dict` merges the children's.
 
 ### Testing
 Top-level files are exercised via `tests/integrators/` integration tests and

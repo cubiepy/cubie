@@ -176,6 +176,17 @@ class DAEInitialiser(CUDAFactory):
         values, and unrecognised keys are ignored.
     """
 
+    settings_keys = frozenset(
+        {
+            "dae_initialisation",
+            "increment_location",
+            "newton_atol",
+            "newton_rtol",
+            "krylov_atol",
+            "krylov_rtol",
+        }
+    )
+
     @classmethod
     def system_inputs(cls, system: Any) -> Dict[str, Any]:
         """Return initialiser settings from a system object."""
@@ -200,15 +211,11 @@ class DAEInitialiser(CUDAFactory):
             for key, value in kwargs.items()
             if value is not None
         }
-        tolerance_kwargs = {
+        # Drop max iters and correction type; the initialiser is always LU.
+        child_kwargs = {
             key: value
             for key, value in kwargs.items()
-            if key in ("newton_atol", "newton_rtol")
-        }
-        lu_kwargs = {
-            key: value
-            for key, value in kwargs.items()
-            if key == "lu_factor_location"
+            if key not in ("newton_max_iters", "linear_correction_type")
         }
         self.linear_solver = ODEImplicitStep._construct_linear_solver(
             precision=precision,
@@ -216,14 +223,14 @@ class DAEInitialiser(CUDAFactory):
             norm=None,
             norm_reference="base_state",
             linear_correction_type="lu",
-            **lu_kwargs,
+            **child_kwargs,
         )
         self.norm = DIRKCorrectionNorm(
             precision=precision,
             solver_width=n_states,
             n_states=n_states,
             instance_label="newton",
-            **tolerance_kwargs,
+            **child_kwargs,
         )
 
         config = build_config(
@@ -584,7 +591,7 @@ class DAEInitialiser(CUDAFactory):
         if not all_updates:
             return set()
 
-        # The cap and correction type never follow the stage solver.
+        # Drop max iters and correction type; the initialiser is always LU.
         child_updates = {
             key: value
             for key, value in all_updates.items()

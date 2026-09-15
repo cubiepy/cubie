@@ -53,6 +53,7 @@ from cubie.odesystems.solver_helpers import (
     SolverHelperCache,
 )
 from cubie.odesystems.SystemValues import SystemValues
+from cubie.batchsolving.solver_settings import clashing_names
 
 
 @define
@@ -144,6 +145,14 @@ class BaseODE(CUDAFactory):
             Printable identifier for the system. Defaults to ``None``.
         """
         super().__init__()
+        clashes = clashing_names(
+            {**(default_constants or {}), **(constants or {})}
+        )
+        if clashes:
+            raise ValueError(
+                f"Constants {sorted(clashes)} share names with Solver "
+                "settings and could not be given by name; rename them."
+            )
         system_data = ODEData.from_BaseODE_initargs(
             initial_values=initial_values,
             parameters=parameters,

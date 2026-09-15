@@ -41,7 +41,12 @@ from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32, float32, float64, bool_
 from cubie.cuda_simsafe import unroll_if
 
-from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
+from cubie.CUDAFactory import (
+    ALL_JIT_PARAMETERS,
+    ALL_UNROLL_PARAMETERS,
+    CUDAFactory,
+    CUDADispatcherCache,
+)
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import (
     activemask,
@@ -92,7 +97,7 @@ ALL_LOOP_SETTINGS = {
     "dt_location",
     "accept_step_location",
     "proposed_counters_location",
-}
+} | ALL_UNROLL_PARAMETERS | ALL_JIT_PARAMETERS
 """Compile-critical loop configuration parameters accepted by
 :class:`IVPLoop`.
 

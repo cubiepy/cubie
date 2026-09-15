@@ -36,6 +36,7 @@ from cubie._utils import (
     inrangetype_validator,
 )
 from cubie.buffer_registry import buffer_registry
+from cubie.CUDAFactory import ALL_JIT_PARAMETERS, ALL_UNROLL_PARAMETERS
 from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
@@ -242,6 +243,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
         {
             "unroll",
             "jit_flags",
+            *ALL_UNROLL_PARAMETERS,
+            *ALL_JIT_PARAMETERS,
             "linear_correction_type",
             "krylov_atol",
             "krylov_rtol",
@@ -272,6 +275,8 @@ class ODEImplicitStep(BaseAlgorithmStep):
         {
             "unroll",
             "jit_flags",
+            *ALL_UNROLL_PARAMETERS,
+            *ALL_JIT_PARAMETERS,
             "newton_atol",
             "newton_rtol",
             "newton_max_iters",

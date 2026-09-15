@@ -96,6 +96,7 @@ def test_repeat_chunked_solve_matches_first(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
+        sample_summaries_every=None,
         save_every=0.01,
         dt=0.01,
     )
@@ -133,6 +134,7 @@ def test_chunked_results_match_unchunked(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
+        sample_summaries_every=None,
         save_every=0.01,
         dt=0.01,
     )
@@ -203,6 +205,7 @@ def test_chunked_solver_changes_to_unchunked_backing(
         drivers=driver_settings,
         duration=0.05,
         summarise_every=None,
+        sample_summaries_every=None,
         save_every=0.01,
         dt=0.01,
     )
