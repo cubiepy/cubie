@@ -110,6 +110,15 @@ default_timelogger.register_event(
 )
 
 
+def _unknown_names(
+    system: BaseODE, names: Set[str], recognised: Set[str]
+) -> Set[str]:
+    """Return the names neither a setting nor a constant of ``system``."""
+    constants = system.constants
+    constant_names = set(constants.names) if constants is not None else set()
+    return names - recognised - constant_names
+
+
 def _system_from_equations(
     dxdt: Union[str, Callable, Iterable[str]],
     y0: Optional[Union[ndarray, Dict[str, object]]],
@@ -399,9 +408,6 @@ class Solver:
         auto_performance: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
-        # Set global time logging level
-        default_timelogger.set_verbosity(time_logging_level)
-
         super().__init__()
         settings = {
             "step_control_settings": step_control_settings,
@@ -421,15 +427,18 @@ class Solver:
             key: value for key, value in settings.items() if value is not None
         }
         settings, _ = unpack_dict_values(settings)
-        self.system_interface = SystemInterface(system)
-        self.given, recognised, _ = SolverSettings().update(settings)
-        # Update the system first: the chain reads its precision.
-        recognised |= system.update(settings, silent=True)
-        unknown = set(settings) - recognised
+        given, recognised, _ = SolverSettings().update(settings)
+        unknown = _unknown_names(system, set(settings), recognised)
         if unknown:
             raise KeyError(
                 f"Unrecognized keyword arguments: {sorted(unknown)}"
             )
+        # Set global time logging level
+        default_timelogger.set_verbosity(time_logging_level)
+        self.given = given
+        self.system_interface = SystemInterface(system)
+        # Update the system first: the chain reads its precision.
+        system.update(settings, silent=True)
         self.effective = resolve(self.given, system, self.system_interface)
         self.kernel = BatchSolverKernel(system, **self.effective.as_kwargs())
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
@@ -937,17 +946,18 @@ class Solver:
         if not updates:
             return set()
         updates, groups = unpack_dict_values(updates)
+        given, recognised, changed = self.given.update(updates)
+        unknown = _unknown_names(self.system, set(updates), recognised)
+        if unknown and not silent:
+            raise KeyError(f"Unrecognized parameters: {sorted(unknown)}")
         if "time_logging_level" in updates:
             default_timelogger.set_verbosity(updates["time_logging_level"])
-        self.given, recognised, changed = self.given.update(updates)
+        self.given = given
         system = self.system
         recognised |= system.update(
             {key: val for key, val in updates.items() if val is not None},
             silent=True,
         )
-        unknown = set(updates) - recognised
-        if unknown and not silent:
-            raise KeyError(f"Unrecognized parameters: {sorted(unknown)}")
         recognised |= groups
         if not changed and not self.kernel.system_config_stale:
             return recognised
