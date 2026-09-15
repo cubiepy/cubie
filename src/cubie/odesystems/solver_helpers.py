@@ -280,10 +280,10 @@ class SolverHelperRequest:
         factorising per call; requires ``jacobian_at="step"``.
     stacked
         Emit one flattened ``s * n`` helper over all stages.
-    beta
+    operator_beta
         Shift scaling applied to the mass-matrix term, where the
         helper consumes it.
-    gamma
+    operator_gamma
         Weight applied to the Jacobian term, where the helper
         consumes it.
     a_ij
@@ -331,10 +331,10 @@ class SolverHelperRequest:
     stacked: bool = field(
         default=False, validator=validators.instance_of(bool)
     )
-    beta: float = field(
+    operator_beta: float = field(
         default=1.0, validator=validators.instance_of(float)
     )
-    gamma: float = field(
+    operator_gamma: float = field(
         default=1.0, validator=validators.instance_of(float)
     )
     a_ij: Optional[float] = field(
@@ -404,8 +404,8 @@ class SolverHelperRequest:
             "SolverHelperRequest",
             self.role.name,
             self.variant.value,
-            self.beta,
-            self.gamma,
+            self.operator_beta,
+            self.operator_gamma,
             self.a_ij,
             self.preconditioner_order,
             self.stage_coefficients,

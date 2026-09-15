@@ -1001,8 +1001,9 @@ class SymbolicODE(BaseODE):
             (``"neumann"``, ``"jacobi"``).
         **request_kwargs
             Remaining :class:`SolverHelperRequest` fields:
-            ``jacobian_at``, ``prefactored``, ``stacked``, ``beta``,
-            ``gamma``, ``preconditioner_order``, and stage data.
+            ``jacobian_at``, ``prefactored``, ``stacked``,
+            ``operator_beta``, ``operator_gamma``,
+            ``preconditioner_order``, and stage data.
 
         Returns
         -------

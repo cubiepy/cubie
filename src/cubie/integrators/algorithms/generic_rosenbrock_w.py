@@ -194,8 +194,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 "driver_derivative_fn": driver_derivative_fn,
                 "get_solver_helper_fn": get_solver_helper_fn,
                 "tableau": tableau_value,
-                "beta": 1.0,
-                "gamma": tableau_value.gamma,
+                "operator_beta": 1.0,
+                "operator_gamma": tableau_value.gamma,
             },
             **kwargs,
         )

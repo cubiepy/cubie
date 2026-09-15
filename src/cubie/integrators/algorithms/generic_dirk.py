@@ -256,8 +256,8 @@ class DIRKStep(ODEImplicitStep):
                 'get_solver_helper_fn': get_solver_helper_fn,
                 'tableau': tableau,
                 'attempt_dense_prediction': attempt_dense_prediction,
-                'beta': 1.0,
-                'gamma': 1.0,
+                'operator_beta': 1.0,
+                'operator_gamma': 1.0,
             },
             **kwargs
         )

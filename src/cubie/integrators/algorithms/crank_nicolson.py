@@ -36,8 +36,8 @@ from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
     AlgorithmDefaults
 from cubie.integrators.algorithms.ode_implicitstep import ODEImplicitStep
 
-ALGO_CONSTANTS = {'beta': 1.0,
-                  'gamma': 1.0}
+ALGO_CONSTANTS = {'operator_beta': 1.0,
+                  'operator_gamma': 1.0}
 
 CN_DEFAULTS = AlgorithmDefaults(
     settings={
@@ -98,8 +98,8 @@ class CrankNicolsonStep(ODEImplicitStep):
             CrankNicolsonStepConfig, ImplicitStepConfig, and solver config
             classes for available parameters. None values are ignored.
         """
-        beta = ALGO_CONSTANTS['beta']
-        gamma = ALGO_CONSTANTS['gamma']
+        beta = ALGO_CONSTANTS['operator_beta']
+        gamma = ALGO_CONSTANTS['operator_gamma']
 
         config = build_config(
             CrankNicolsonStepConfig,
@@ -107,8 +107,8 @@ class CrankNicolsonStep(ODEImplicitStep):
                 'precision': precision,
                 'n_states': n_states,
                 'get_solver_helper_fn': get_solver_helper_fn,
-                'beta': beta,
-                'gamma': gamma,
+                'operator_beta': beta,
+                'operator_gamma': gamma,
                 'dxdt_fn': dxdt_fn,
                 'observables_fn': observables_fn,
                 'drivers_fn': drivers_fn,

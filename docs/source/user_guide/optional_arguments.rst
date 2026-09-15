@@ -211,9 +211,9 @@ Preconditioner options:
     Each term costs one Jacobian-vector product per preconditioner
     application and cuts Krylov iterations only while the splitting
     converges, so a strongly off-diagonal operator is better served
-    by a low order.  ``"neumann"`` expands about ``beta*I`` and needs
-    at least one term; ``"jacobi"`` expands about the operator's own
-    diagonal, where order zero is the diagonal solve.
+    by a low order.  ``"neumann"`` expands about ``operator_beta*I``
+    and needs at least one term; ``"jacobi"`` expands about the
+    operator's own diagonal, where order zero is the diagonal solve.
 
     - Default: unset, taking the type's own default — ``2`` for
       ``"neumann"``, ``0`` for ``"jacobi"``.
@@ -250,9 +250,11 @@ Preconditioner options:
 
     - Default: ``"brown"``
 
-Advanced implicit options: **beta** and **gamma** (implicit-integration
-coefficients, default 1.0 each).  These change the equations being
-solved — leave them alone unless you know you need them.  The mass
+Advanced implicit options: **operator_beta** and **operator_gamma**
+(coefficients of the stage operator
+``operator_beta*M - operator_gamma*a_ij*h*J``, default 1.0 each).
+These change the equations being solved — leave them alone unless you
+know you need them.  The mass
 matrix is not a solver option: it is part of the system definition,
 derived by structural simplification (write implicit rows such as
 ``c*dx = f(...)`` to obtain one), and systems carrying one require

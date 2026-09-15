@@ -68,7 +68,7 @@ def test_algorithm_and_controller_names_only_share_identical_values():
     """Flat settings share only system precision and state count."""
     shared = ALL_ALGORITHM_STEP_PARAMETERS & ALL_STEP_CONTROLLER_PARAMETERS
     assert shared == {"precision", "n_states"}
-    assert "gamma" in ALL_ALGORITHM_STEP_PARAMETERS
+    assert "operator_gamma" in ALL_ALGORITHM_STEP_PARAMETERS
     assert "newton_max_iters" in ALL_ALGORITHM_STEP_PARAMETERS
     assert "newton_target_iters" in ALL_STEP_CONTROLLER_PARAMETERS
 

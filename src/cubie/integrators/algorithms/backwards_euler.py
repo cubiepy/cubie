@@ -12,7 +12,7 @@ Published Classes
 Constants
 ---------
 :data:`ALGO_CONSTANTS`
-    Beta and gamma values for backward Euler (unity).
+    Operator coefficients for backward Euler (unity).
 
 :data:`BE_DEFAULTS`
     Default step controller settings (fixed-step, dt=1e-3).
@@ -50,8 +50,8 @@ class BackwardsEulerStepConfig(ImplicitStepConfig):
     )
 
 
-ALGO_CONSTANTS = {'beta': 1.0,
-                  'gamma': 1.0}
+ALGO_CONSTANTS = {'operator_beta': 1.0,
+                  'operator_gamma': 1.0}
 
 BE_DEFAULTS = AlgorithmDefaults(
     settings={
@@ -99,8 +99,8 @@ class BackwardsEulerStep(ODEImplicitStep):
             BackwardsEulerStepConfig, ImplicitStepConfig, and solver config
             classes for available parameters. None values are ignored.
         """
-        beta = ALGO_CONSTANTS['beta']
-        gamma = ALGO_CONSTANTS['gamma']
+        beta = ALGO_CONSTANTS['operator_beta']
+        gamma = ALGO_CONSTANTS['operator_gamma']
 
         config = build_config(
             BackwardsEulerStepConfig,
@@ -111,8 +111,8 @@ class BackwardsEulerStep(ODEImplicitStep):
                 'observables_fn': observables_fn,
                 'drivers_fn': drivers_fn,
                 'get_solver_helper_fn': get_solver_helper_fn,
-                'beta': beta,
-                'gamma': gamma,
+                'operator_beta': beta,
+                'operator_gamma': gamma,
             },
             **kwargs
         )
