@@ -931,8 +931,7 @@ class MemoryManager:
         return self.stream_groups.get_group_stream(group)
 
     def change_stream_group(self, instance: object, new_group: str) -> None:
-        """
-        Move instance to another stream group.
+        """Move the owner's registrations, queued requests and partition.
 
         Parameters
         ----------
@@ -940,9 +939,28 @@ class MemoryManager:
             Instance to move.
         new_group
             Name of the new stream group.
-
         """
-        self.stream_groups.change_group(instance, new_group)
+        old_group = self.get_stream_group(instance)
+        owner_id = self.registry[id(instance)].owner_id
+        queued = self._queued_allocations.get(old_group, {})
+        members = list(
+            self.stream_groups.get_instances_in_group(old_group)
+        )
+        for instance_id in members:
+            if not self._owned_by(instance_id, owner_id):
+                continue
+            self.stream_groups.change_group(instance_id, new_group)
+            if instance_id in queued:
+                self._queued_allocations.setdefault(new_group, {})[
+                    instance_id
+                ] = queued.pop(instance_id)
+        if not queued:
+            self._queued_allocations.pop(old_group, None)
+        partition = self._group_chunk_parameters.pop(
+            (old_group, owner_id), None
+        )
+        if partition is not None:
+            self._group_chunk_parameters[(new_group, owner_id)] = partition
 
     def reinit_streams(self) -> None:
         """

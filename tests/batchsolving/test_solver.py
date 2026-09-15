@@ -269,6 +269,36 @@ def test_solve_basic(
     assert hasattr(result, "summaries_array")
 
 
+def test_stream_group_change_moves_the_arrays(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+):
+    """A stream-group update keeps the kernel and its arrays together."""
+    solve_kwargs = {
+        "initial_values": simple_initial_values,
+        "parameters": simple_parameters,
+        "drivers": driver_settings,
+        "duration": 0.05,
+        "settling_time": 0.0,
+        "grid_type": "combinatorial",
+    }
+    first = solver_mutable.solve(**solve_kwargs)
+    solver_mutable.update(stream_group="review_changed")
+    kernel = solver_mutable.kernel
+    manager = kernel.memory_manager
+    groups = {
+        manager.get_stream_group(instance)
+        for instance in (kernel, kernel.input_arrays, kernel.output_arrays)
+    }
+    assert groups == {"review_changed"}
+    second = solver_mutable.solve(**solve_kwargs)
+    np.testing.assert_array_equal(
+        second.time_domain_array, first.time_domain_array
+    )
+
+
 def test_compile_then_solve(
     solver_mutable,
     simple_initial_values,

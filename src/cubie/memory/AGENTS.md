@@ -88,6 +88,8 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   a full reallocation of the owner's registrations picks a new one. A
   cached partition is reused only when it covers the batch exactly
   (`partition_covers`), and it is dropped when its owner deregisters.
+- `change_stream_group(instance, group)` moves every registration of
+  the instance's owner, their queued requests and the cached partition.
 
 ### Single allocation provider
 CuPy's async pool is the only device allocator, reached through the EMM plugin; `cupy`/`cupyx`

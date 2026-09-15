@@ -46,7 +46,7 @@ from typing import (
     Union,
 )
 
-from attrs import evolve
+from attrs import NOTHING, Factory, evolve, fields
 from numpy import asarray, ndarray
 
 from cubie.outputhandling.output_config import OutputCompileFlags
@@ -54,7 +54,10 @@ from cubie._utils import PrecisionDType
 from cubie.result_codes import decode_status_codes
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
-from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
+from cubie.batchsolving.BatchSolverKernel import (
+    DEFAULT_MEMORY_SETTINGS,
+    BatchSolverKernel,
+)
 from cubie.batchsolving.calibration import (
     CalibrationResult,
     run_calibration,
@@ -108,6 +111,17 @@ def _finalize_solver(kernel: BatchSolverKernel) -> None:
 default_timelogger.register_event(
     "solver_solve", "runtime", "Wall-clock time for Solver.solve()"
 )
+
+
+def _differs(old: Any, new: Any) -> bool:
+    """Compare arrays elementwise with broadcasting, else by inequality."""
+    if isinstance(old, ndarray) or isinstance(new, ndarray):
+        new = asarray(new)
+        try:
+            return not bool((asarray(old, dtype=new.dtype) == new).all())
+        except (TypeError, ValueError):
+            return True
+    return bool(old != new)
 
 
 def _unknown_names(
@@ -468,10 +482,47 @@ class Solver:
     # ------------------------------------------------------------------
     # Settings
     # ------------------------------------------------------------------
+    def _child_defaults(self) -> Dict[str, Any]:
+        """Return the declared default of every child compile setting."""
+        defaults = dict(DEFAULT_MEMORY_SETTINGS)
+        pending = [self.kernel]
+        while pending:
+            factory = pending.pop()
+            pending.extend(factory._iter_child_factories())
+            config = factory.compile_settings
+            prefixed = getattr(config, "prefixed_attributes", frozenset())
+            for fld in fields(type(config)):
+                if not fld.init or fld.default is NOTHING:
+                    continue
+                key = fld.alias or fld.name
+                if key in prefixed:
+                    key = config.prefixed(key)
+                defaults.setdefault(key, fld.default)
+        return defaults
+
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the given settings, the kwargs that rebuild this solver."""
-        return self.given.as_kwargs()
+        """Return the given settings over the children's retained values."""
+        record_fields = [fld for fld in fields(SolverSettings) if fld.init]
+        names = {fld.name for fld in record_fields}
+        resolved = {
+            fld.name
+            for fld in record_fields
+            if fld.metadata.get("passes_none")
+            or self.effective.is_given(fld.name)
+        }
+        defaults = self._child_defaults()
+        settings = {}
+        for key, value in self.kernel.settings_dict.items():
+            if key not in names or key in resolved:
+                continue
+            default = defaults.get(key, NOTHING)
+            if isinstance(default, Factory):
+                continue
+            if default is NOTHING or _differs(default, value):
+                settings[key] = value
+        settings.update(self.given.as_kwargs())
+        return settings
 
     def is_given(self, name: str) -> bool:
         """Return whether the setting ``name`` was given."""
@@ -950,20 +1001,33 @@ class Solver:
         unknown = _unknown_names(self.system, set(updates), recognised)
         if unknown and not silent:
             raise KeyError(f"Unrecognized parameters: {sorted(unknown)}")
+        manager = updates.get("memory_manager")
+        if manager is not None and manager is not self.kernel.memory_manager:
+            raise ValueError(
+                "A registered instance cannot change memory manager."
+            )
+        system = self.system
+        rebuild = bool(changed)
+        effective = self.effective
+        # Resolve before committing; a rejected update changes nothing.
+        if rebuild:
+            effective = resolve(given, system, self.system_interface)
         if "time_logging_level" in updates:
             default_timelogger.set_verbosity(updates["time_logging_level"])
         self.given = given
-        system = self.system
         recognised |= system.update(
             {key: val for key, val in updates.items() if val is not None},
             silent=True,
         )
         recognised |= groups
-        if not changed and not self.kernel.system_config_stale:
+        if not rebuild and self.kernel.system_config_stale:
+            rebuild = True
+            effective = resolve(given, system, self.system_interface)
+        if not rebuild:
             return recognised
 
-        self.effective = resolve(self.given, system, self.system_interface)
-        self.kernel.update(self.effective.as_kwargs(), silent=True)
+        self.effective = effective
+        self.kernel.update(effective.as_kwargs(), silent=True)
         self._apply_performance_defaults()
         self._solve_info_key = None
         return recognised
@@ -1371,7 +1435,7 @@ class Solver:
         -----
         Invalidates the current cache, causing a rebuild on next access.
         """
-        self.kernel.set_cache_dir(path)
+        self.update(cache_dir=Path(path))
 
     def set_verbosity(self, verbosity: Optional[str]) -> None:
         """Set the time logging verbosity level.
@@ -1387,10 +1451,7 @@ class Solver:
         Updates the global time logger verbosity. This affects all
         timing events across the entire CuBIE package.
         """
-        default_timelogger.set_verbosity(verbosity)
-        self.given = evolve(
-            self.given, time_logging_level=default_timelogger.verbosity
-        )
+        self.update(time_logging_level=verbosity)
 
     @property
     def solve_info(self) -> SolveSpec:

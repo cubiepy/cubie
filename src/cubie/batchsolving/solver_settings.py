@@ -10,17 +10,38 @@ Published Classes
 
 from typing import Any, Dict, List, Optional, Set
 
-from attrs import field, fields, frozen
+from attrs import Attribute, field, fields, frozen
+from numpy import array as np_array
+from numpy import ndarray
 
 from cubie.CUDAFactory import _CubieConfigBase
 
 
 def _optional(**kwargs: Any) -> Any:
-    """Return a setting field whose ``None`` in effect is a value."""
-    return field(default=None, metadata={"none_in_effect": True}, **kwargs)
+    """Return a setting field whose ``None`` is passed to the children."""
+    return field(default=None, metadata={"passes_none": True}, **kwargs)
 
 
-@frozen
+def owned(value: Any) -> Any:
+    """Return arrays as read-only copies and lists as tuples."""
+    if isinstance(value, ndarray):
+        value = np_array(value)
+        value.setflags(write=False)
+        return value
+    if isinstance(value, list):
+        return tuple(value)
+    return value
+
+
+def _owned_fields(cls: type, attributes: List[Attribute]) -> List[Attribute]:
+    """Give every init field the ``owned`` converter."""
+    return [
+        attribute.evolve(converter=owned) if attribute.init else attribute
+        for attribute in attributes
+    ]
+
+
+@frozen(field_transformer=_owned_fields)
 class SolverSettings(_CubieConfigBase):
     """Every setting a Solver accepts; ``None`` means not given."""
 
@@ -188,7 +209,7 @@ class SolverSettings(_CubieConfigBase):
         }
 
 
-@frozen
+@frozen(field_transformer=_owned_fields)
 class EffectiveSettings(SolverSettings):
     """The settings in effect: the given ones plus the resolved ones."""
 
@@ -205,7 +226,7 @@ class EffectiveSettings(SolverSettings):
             if fld.init
             and (
                 getattr(self, fld.name) is not None
-                or fld.metadata.get("none_in_effect")
+                or fld.metadata.get("passes_none")
             )
         }
 

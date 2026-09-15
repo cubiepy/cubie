@@ -410,7 +410,7 @@ class SystemValues:
             Raised when the provided descriptors are of unsupported or mixed
             types.
         """
-        if isinstance(keys_or_indices, list):
+        if isinstance(keys_or_indices, (list, tuple)):
             if all(isinstance(item, str) for item in keys_or_indices):
                 # A list of strings
                 index_list = [

@@ -18,8 +18,15 @@ from typing import Any, Dict, List, Optional, Tuple
 from warnings import warn
 
 from attrs import field, fields, fields_dict, frozen, validators
-from numpy import asarray, finfo as np_finfo, int32 as np_int32, ndarray
+from numpy import (
+    asarray,
+    finfo as np_finfo,
+    full,
+    int32 as np_int32,
+    ndarray,
+)
 
+from cubie._utils import precision_converter
 from cubie.batchsolving.solver_settings import EffectiveSettings
 from cubie.integrators.algorithms import algorithm_facts
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -500,9 +507,12 @@ def _newton_rtol_inverted(
 ) -> bool:
     """Return whether the floored Newton rtol reaches the controller's."""
     floor = 4.0 * float(np_finfo(precision).eps)
-    newton = asarray(newton_rtol, dtype=float).copy()
+    controller = asarray(controller_rtol, dtype=float).reshape(-1)
+    newton = asarray(newton_rtol, dtype=float).reshape(-1)
+    if newton.size == 1:
+        newton = full(controller.size, newton[0])
+    newton = newton.copy()
     newton[(newton > 0.0) & (newton < floor)] = floor
-    controller = asarray(controller_rtol, dtype=float)
     newton = newton.reshape(-1, controller.size)
     return bool(((controller > 0.0) & (newton >= controller)).any())
 
@@ -531,6 +541,8 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
         with a filter, or an output index the system does not have.
     """
     precision = system.precision
+    if given.precision is not None:
+        precision = precision_converter(given.precision)
     resolved = {"precision": precision}
     sizes = system.sizes
     has_mass = system.mass is not None

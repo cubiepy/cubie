@@ -1,6 +1,7 @@
 """Tests for the solver-level settings record and its resolution."""
 
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -160,6 +161,19 @@ def test_update_records_and_none_makes_not_given():
     same, _, changed = later.update({"rtol": 1e-4})
     assert same is later
     assert changed == set()
+
+
+def test_record_owns_its_arrays_and_lists():
+    """Given arrays are read-only copies and lists are tuples."""
+    atol = np.array([1e-5, 1e-5], dtype=np.float32)
+    given = _given(atol=atol, save_variables=["x"])
+    assert given.atol is not atol
+    assert given.atol.flags.writeable is False
+    assert given.save_variables == ("x",)
+    atol[0] = 1e-2
+    assert given.atol[0] == np.float32(1e-5)
+    _, _, changed = given.update({"atol": atol})
+    assert changed == {"atol"}
 
 
 def test_update_compares_index_arrays_by_value():
@@ -325,14 +339,26 @@ def test_filter_coefficients_replace_the_family_gains(system):
     assert effective.proportional_gain is None
 
 
-def test_errorless_algorithm_replaces_an_adaptive_request(system):
+@pytest.mark.parametrize("algorithm", ["euler", "firk", "dirk"])
+def test_errorless_algorithm_replaces_an_adaptive_request(system, algorithm):
     """An adaptive request on an errorless step is fixed, with a warning."""
     with pytest.warns(UserWarning, match="cannot be used with"):
         effective = _effective(
-            system, algorithm="euler", step_controller="pid"
+            system, algorithm=algorithm, step_controller="pid"
         )
     assert effective.step_controller == "fixed"
     assert effective.is_adaptive is False
+
+
+def test_scalar_newton_rtol_with_array_rtol_resolves(system):
+    """A scalar Newton tolerance broadcasts against a per-state rtol."""
+    rtol = np.full(system.sizes.states, 1e-3, dtype=np.float32)
+    rtol[0] = 1e-4
+    effective = _effective(
+        system, algorithm="kvaerno3", rtol=rtol, newton_rtol=1e-5
+    )
+    assert effective.newton_rtol == 1e-5
+    np.testing.assert_array_equal(effective.rtol, rtol)
 
 
 # ── Step bounds and tolerances ──────────────────────────────────────── #
@@ -588,8 +614,11 @@ def test_variant_default_follows_a_solver_change(solver_mutable):
 def test_filter_after_gains_raises(solver_mutable):
     """A filter cannot join given gains without unsetting them."""
     solver_mutable.update(integral_gain=0.5)
+    given = solver_mutable.given
     with pytest.raises(ValueError, match="filter_coefficients"):
         solver_mutable.update(filter_coefficients="pi42")
+    assert solver_mutable.given is given
+    assert solver_mutable.is_given("filter_coefficients") is False
     solver_mutable.update(integral_gain=None, filter_coefficients="pi42")
     assert solver_mutable.settings_dict["filter_coefficients"] == "pi42"
 
@@ -601,6 +630,62 @@ def test_none_on_a_plain_setting_keeps_the_factory_value(solver_mutable):
     solver_mutable.update(max_registers=None)
     assert solver_mutable.is_given("max_registers") is False
     assert solver_mutable.kernel.compile_settings.max_registers == 96
+    assert solver_mutable.settings_dict["max_registers"] == 96
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"algorithm": "kvaerno3", "step_controller": "pid"}],
+    indirect=True,
+)
+def test_copy_carries_retained_and_recorded_settings(solver_mutable):
+    """A copy rebuilds retained child values and derives the rest."""
+    solver_mutable.update(max_registers=96)
+    solver_mutable.update(max_registers=None)
+    solver_mutable.set_cache_dir("review-cache-path")
+    settings = solver_mutable.settings_dict
+    assert settings["max_registers"] == 96
+    assert settings["cache_dir"] == Path("review-cache-path")
+    assert "integral_gain" not in settings
+    twin = solver_mutable.copy()
+    try:
+        assert twin.kernel.compile_settings.max_registers == 96
+        assert twin.cache_dir == Path("review-cache-path")
+        assert twin.is_given("integral_gain") is False
+        assert twin.effective.integral_gain == (
+            solver_mutable.effective.integral_gain
+        )
+    finally:
+        twin.close()
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"algorithm": "kvaerno3", "step_controller": "pid"}],
+    indirect=True,
+)
+def test_edited_given_array_reaches_the_controller(solver_mutable):
+    """Editing and resubmitting a given array updates the controller."""
+    n_states = solver_mutable.system.sizes.states
+    atol = np.full(n_states, 1e-5, dtype=np.float32)
+    solver_mutable.update(atol=atol)
+    np.testing.assert_array_equal(solver_mutable.atol, atol)
+    atol[:] = 1e-2
+    assert solver_mutable.update(atol=atol) == {"atol"}
+    np.testing.assert_array_equal(solver_mutable.given.atol, atol)
+    np.testing.assert_array_equal(solver_mutable.atol, atol)
+
+
+def test_set_verbosity_updates_both_records(solver_mutable):
+    """``set_verbosity`` reaches the logger and both records."""
+    previous = default_timelogger.verbosity
+    try:
+        solver_mutable.set_verbosity("silent")
+        assert default_timelogger.verbosity == "silent"
+        assert solver_mutable.given.time_logging_level == "silent"
+        assert solver_mutable.effective.time_logging_level == "silent"
+    finally:
+        default_timelogger.set_verbosity(previous)
 
 
 def test_none_on_an_interval_reaches_the_loop(solver_mutable):
@@ -644,9 +729,13 @@ def test_rejected_update_changes_nothing(solver_mutable):
 
 
 def test_memory_manager_cannot_change_on_a_live_solver(solver_mutable):
-    """A different memory manager is refused."""
+    """A different memory manager is refused and nothing is recorded."""
+    given = solver_mutable.given
     with pytest.raises(ValueError, match="memory manager"):
         solver_mutable.update(memory_manager=object())
+    assert solver_mutable.given is given
+    assert solver_mutable.update(dt=0.0123) == {"dt"}
+    assert solver_mutable.given.dt == pytest.approx(0.0123)
 
 
 @pytest.mark.parametrize(
