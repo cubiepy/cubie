@@ -80,7 +80,7 @@ from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
 from cubie._utils import merge_kwargs_into_settings
-from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS, UnrollFlags
+from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
 from cubie.outputhandling.output_functions import (
     ALL_OUTPUT_FUNCTION_PARAMETERS,
 )
@@ -379,7 +379,7 @@ class Solver:
         defers to the ``CUBIE_LINEINFO`` environment variable (default
         off). Changing it later via :meth:`update` triggers a rebuild.
     unroll
-        :class:`~cubie.cuda_simsafe.UnrollFlags` applied to every
+        :class:`~cubie.CUDAFactory.UnrollFlags` applied to every
         factory; loose ``unroll_*`` keywords override its fields.
     step_control_settings
         Explicit controller configuration that overrides solver defaults.

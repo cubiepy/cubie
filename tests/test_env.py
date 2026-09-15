@@ -9,7 +9,8 @@ from cubie._env import (
     max_cache_entries_default,
 )
 from cubie.CUDAFactory import CUDAFactoryConfig
-from cubie.cuda_simsafe import JITFlags, compile_kwargs, get_jit_kwargs
+from cubie.CUDAFactory import JITFlags
+from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
 
 
 class TestEnvBool:

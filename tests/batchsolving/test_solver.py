@@ -31,12 +31,8 @@ from cubie.backend.utils import (
 from cubie.batchsolving.BatchSolverKernel import (
     RESIDENT_FOOTPRINT_L2_FRACTION,
 )
-from cubie.cuda_simsafe import (
-    ALL_UNROLL_PARAMETERS,
-    UnrollFlags,
-    cuda,
-    is_device_array,
-)
+from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
+from cubie.cuda_simsafe import cuda, is_device_array
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
 )

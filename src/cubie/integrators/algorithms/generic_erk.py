@@ -55,7 +55,8 @@ See Also
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from cubie.cuda_simsafe import UnrollChoice, cuda, int32
+from cubie.cuda_simsafe import cuda, int32
+from cubie.CUDAFactory import UnrollChoice
 from cubie.cuda_simsafe import unroll_if
 
 from cubie._utils import PrecisionDType, build_config

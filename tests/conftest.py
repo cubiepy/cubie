@@ -34,7 +34,7 @@ from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
 from cubie.array_interpolator import ArrayInterpolator
-from cubie.cuda_simsafe import ALL_UNROLL_PARAMETERS
+from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS
 from cubie.odesystems.symbolic.parsing.cellml import load_cellml_model
 from cubie.vendored import cellmlmanip
 from cubie.memory import default_memmgr
