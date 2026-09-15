@@ -947,8 +947,7 @@ class Solver:
             size to fill. Default ``5``.
         target_ms
             Target kernel runtime that ``auto_size`` sets your
-            integration duration to; the duration is only ever
-            shortened. Default ``20.0``.
+            integration duration to. Default ``20.0``.
 
         Returns
         -------
