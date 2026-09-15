@@ -810,6 +810,7 @@ class IVPLoop(CUDAFactory):
                         )
                     else:
                         do_update_summary = False
+                    do_final_summary = False
 
                     # Clamp to the nearest due event; at_end is one at t_end.
                     dt_eff = dt_raw
@@ -852,14 +853,11 @@ class IVPLoop(CUDAFactory):
                             # A due event on t_end makes this the end step.
                             at_end |= bool_(next_event == t_end)
 
+                    # The end step saves the final state and its summary.
                     if save_last:
-                        # Save the final state on the end step.
                         do_save |= at_end
                     if summarise_last:
-                        # Write the one summary on the end step.
-                        do_final_summary = at_end
-                    else:
-                        do_final_summary = False
+                        do_final_summary |= at_end
 
                     # An unclamped step ends at t_next.
                     t_proposal = t_next64
