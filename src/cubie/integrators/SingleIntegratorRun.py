@@ -38,13 +38,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import only
 def regular_event_count(
     duration: float, interval: float, precision: type
 ) -> int:
-    """Count the scheduled events of ``interval`` inside ``duration``.
-
-    Both values are cast to ``precision`` before dividing; an
-    allowance of a few eps keeps a whole-number ratio that the casts
-    pushed just under a whole number, capped so a fractional ratio
-    never gains an event. Allocation, validation and the device's
-    event counts all read this count.
+    """Count the events of ``interval`` in ``duration`` at ``precision``.
 
     Parameters
     ----------

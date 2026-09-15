@@ -520,10 +520,7 @@ def _newton_rtol_inverted(
 def check_loop_timing(
     timing: Dict[str, Any], duration: Optional[float], precision: type
 ) -> None:
-    """Raise when a schedule would produce no output.
-
-    Each interval is checked by the event count the loop will run,
-    :func:`regular_event_count`.
+    """Raise when a schedule has no event inside the run.
 
     Raises
     ------
