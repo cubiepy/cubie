@@ -458,68 +458,28 @@ class ODEImplicitStep(BaseAlgorithmStep):
         buffer_registry.clear_parent(current)
         return replacement
 
-    def update(self, updates_dict=None, silent=False, **kwargs) -> Set[str]:
-        """Update algorithm and owned solver parameters.
-
-        Parameters
-        ----------
-        updates_dict : dict, optional
-            Mapping of parameter names to new values.
-        silent : bool, default=False
-            Suppress warnings for unrecognized parameters.
-        **kwargs
-            Additional parameters to update.
-
-        Returns
-        -------
-        set[str]
-            Names of parameters that were successfully recognized.
-
-        Notes
-        -----
-        Delegates solver parameters to the owned solver instance and,
-        when the algorithm owns a dense stage predictor, predictor
-        parameters to the predictor. A ``linear_correction_type``
-        value that implies a different linear-solver class replaces
-        the linear solver with an instance rebuilt from the old
-        solver's ``settings_dict``.
-        """
-        all_updates = {}
-        if updates_dict:
-            all_updates.update(updates_dict)
-        all_updates.update(kwargs)
-
-        if not all_updates:
-            return set()
-
-        recognized = set()
-
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Update the step, then the owned solvers and predictor."""
         # Step settings first; the solver reads refreshed solver_width.
-        recognized |= super().update(all_updates, silent=True)
+        recognized = self._update_step(updates)
 
-        # Swap the solver class first so pending parameters apply to
-        # the replacement.
-        if "linear_correction_type" in all_updates:
-            self._swap_linear_solver(all_updates["linear_correction_type"])
+        # Swap the solver class first so the updates reach the replacement.
+        if "linear_correction_type" in updates:
+            self._swap_linear_solver(updates["linear_correction_type"])
             recognized.add("linear_correction_type")
 
-        if "n_states" in all_updates or "tableau" in all_updates:
-            all_updates["solver_width"] = (
-                self.compile_settings.solver_width
-            )
+        if "n_states" in updates or "tableau" in updates:
+            updates["solver_width"] = self.compile_settings.solver_width
 
-        recognized |= self.solver.update(all_updates, silent=True)
+        recognized |= self.solver.update(updates, silent=True)
 
-        # Push the children's rebuilt device functions into the step
-        # settings.
+        # Push the children's rebuilt device functions into the step.
         compiled_functions = {
             self.solver_fn_key: self.solver.device_function
         }
 
         if self.dense_predictor is not None:
-            recognized |= self.dense_predictor.update(
-                all_updates, silent=True
-            )
+            recognized |= self.dense_predictor.update(updates, silent=True)
             compiled_functions["predictor_fn"] = (
                 self.dense_predictor.device_function
                 if self.dense_prediction
@@ -529,16 +489,15 @@ class ODEImplicitStep(BaseAlgorithmStep):
         if self.error_solver is not None:
             # The error solve is single-stage: width n, not s*n.
             recognized |= self.error_solver.update(
-                all_updates,
+                updates,
                 solver_width=self.compile_settings.n_states,
                 silent=True,
             )
 
-        recognized |= super().update(compiled_functions, silent=True)
+        recognized |= self._update_step(compiled_functions)
         if recognized:
             self.build_implicit_helpers()
-
-        return recognized
+        return recognized | self._inapplicable(updates, recognized, silent)
 
     @property
     def smooth_error(self) -> bool:

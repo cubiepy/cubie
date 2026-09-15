@@ -673,6 +673,70 @@ def test_update_settings_returns_recognized():
     assert "flag" in result
 
 
+# ── CUDAFactory.update / _update ───────────────────────────── #
+
+
+def test_update_empty_returns_empty_set():
+    """No updates leave the factory untouched and return an empty set."""
+    f = _make_factory_with_settings()
+    _ = f.device_function
+    assert f.update() == set()
+    assert f.update({}) == set()
+    assert f.cache_valid is True
+
+
+def test_update_merges_dict_and_kwargs_into_settings():
+    """Both the dict and the kwargs reach the compile settings."""
+    f = _make_factory_with_settings()
+    result = f.update({"flag": True}, precision=np.float64)
+    assert result == {"flag", "precision"}
+    assert f.compile_settings.flag is True
+    assert f.compile_settings.precision == np.float64
+    assert f.cache_valid is False
+
+
+def test_update_flattens_settings_groups():
+    """A dict value is a settings group applied in its place."""
+    f = _make_factory_with_settings()
+    result = f.update(step_settings={"flag": True})
+    assert result == {"step_settings", "flag"}
+    assert f.compile_settings.flag is True
+
+
+def test_update_raises_for_unrecognized():
+    """An unknown name raises KeyError naming it unless silent."""
+    f = _make_factory_with_settings()
+    with pytest.raises(KeyError, match="Unrecognized parameters.*bogus"):
+        f.update(flag=True, bogus=1)
+    result = f.update({"bogus": 1}, silent=True)
+    assert result == set()
+
+
+def test_update_passes_merged_updates_to_subclass_hook():
+    """``_update`` receives one merged, flattened dict and ``silent``."""
+    seen = {}
+
+    class _Child(CUDAFactory):
+        def build(self):
+            return _TestCache(device_function=lambda: 1.0)
+
+        def _update(self, updates, silent):
+            seen["updates"] = dict(updates)
+            seen["silent"] = silent
+            updates["derived"] = 1
+            return self.update_compile_settings(updates, silent=True) | {
+                "owned"
+            }
+
+    f = _Child()
+    f.setup_compile_settings(_make_config(precision=np.float32, flag=False))
+    result = f.update({"flag": True, "group": {"owned": 2}}, silent=True)
+    assert seen["updates"] == {"flag": True, "owned": 2}
+    assert seen["silent"] is True
+    assert result == {"flag", "owned", "group"}
+    assert f.compile_settings.flag is True
+
+
 # ── CUDAFactory._build / _invalidate_cache ─────────────────── #
 
 

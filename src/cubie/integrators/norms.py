@@ -251,35 +251,6 @@ class ScaledNorm(MultipleInstanceCUDAFactory):
         # no cover: end
         return ScaledNormCache(norm_fn=norm_fn)
 
-    def update(self, updates_dict=None, silent=False, **kwargs):
-        """Update compile settings and invalidate cache if changed.
-
-        Parameters
-        ----------
-        updates_dict : dict, optional
-            Dictionary of settings to update.
-        silent : bool, default False
-            If True, suppress warnings about unrecognized keys.
-        **kwargs
-            Additional settings as keyword arguments.
-
-        Returns
-        -------
-        set
-            Set of recognized parameter names that were updated.
-        """
-        all_updates = {}
-        if updates_dict:
-            all_updates.update(updates_dict)
-        all_updates.update(kwargs)
-
-        if not all_updates:
-            return set()
-
-        return self.update_compile_settings(
-            updates_dict=all_updates, silent=silent
-        )
-
     @property
     def device_function(self) -> Callable:
         """Return cached scaled norm device function."""

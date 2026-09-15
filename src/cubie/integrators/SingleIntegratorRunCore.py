@@ -129,38 +129,8 @@ class SingleIntegratorRunCore(CUDAFactory):
     # ------------------------------------------------------------------
     # Update
     # ------------------------------------------------------------------
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs: Any,
-    ) -> set[str]:
-        """Update every child and recapture ``loop_fn``.
-
-        Parameters
-        ----------
-        updates_dict
-            Setting names to new values.
-        silent
-            Ignore unrecognised names instead of raising.
-        **kwargs
-            Further updates.
-
-        Returns
-        -------
-        set[str]
-            The recognised names.
-
-        Raises
-        ------
-        KeyError
-            Unrecognised names when not ``silent``.
-        """
-        updates = {**(updates_dict or {}), **kwargs}
-        if not updates:
-            return set()
-        user_keys = set(updates)
-
+    def _update(self, updates: Dict[str, Any], silent: bool) -> set[str]:
+        """Update every child and recapture ``loop_fn``."""
         system = self._system
         recognised = self.update_compile_settings(updates, silent=True)
         recognised |= self._output_functions.update(
@@ -197,10 +167,6 @@ class SingleIntegratorRunCore(CUDAFactory):
         self.update_compile_settings(
             loop_fn=self._loop.device_function, silent=True
         )
-
-        unrecognised = user_keys - recognised
-        if unrecognised and not silent:
-            raise KeyError(f"Unrecognized parameters: {unrecognised}")
         return recognised
 
     # ------------------------------------------------------------------

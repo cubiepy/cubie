@@ -56,7 +56,7 @@ from cubie.cuda_simsafe import (
     selp,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES
-from cubie._utils import PrecisionDType, unpack_dict_values, build_config
+from cubie._utils import PrecisionDType, build_config
 from cubie.integrators.loops.ode_loop_config import ODELoopConfig
 from cubie.outputhandling import OutputCompileFlags
 
@@ -1205,54 +1205,9 @@ class IVPLoop(CUDAFactory):
 
         return self.compile_settings.is_adaptive
 
-    def update(
-        self,
-        updates_dict: Optional[dict[str, object]] = None,
-        silent: bool = False,
-        **kwargs: object,
-    ) -> Set[str]:
-        """Update compile settings through the CUDAFactory interface.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of configuration names to replacement values.
-        silent
-            When True, suppress warnings about unrecognized parameters.
-        **kwargs
-            Additional configuration updates applied as keyword arguments.
-
-        Returns
-        -------
-        set
-            Set of parameter names that were recognized and updated.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        if kwargs:
-            updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
-
-        # Flatten nested dict values (e.g., loop_settings={'save_every': 0.01})
-        # into top-level parameters before distributing to compile settings.
-        # This ensures all configuration options are recognized and updated.
-        # Example: {'loop_settings': {'save_every': 0.01}, 'other': 5}
-        #       -> {'save_every': 0.01, 'other': 5}
-        updates_dict, unpacked_keys = unpack_dict_values(updates_dict)
-
-        recognised = self.update_compile_settings(updates_dict, silent=True)
-
-        # Update buffer locations in registry
-        recognised |= buffer_registry.update(self, updates_dict, silent=True)
+    def _update(self, updates: dict[str, object], silent: bool) -> Set[str]:
+        """Apply the loop settings and the buffer locations."""
+        recognised = self.update_compile_settings(updates, silent=True)
+        recognised |= buffer_registry.update(self, updates, silent=True)
         self.register_buffers()
-
-        unrecognised = set(updates_dict.keys()) - recognised
-        if not silent and unrecognised:
-            raise KeyError(
-                f"Unrecognized parameters in update: {unrecognised}. "
-                "These parameters were not updated.",
-            )
-        # Include unpacked dict keys in recognized set
-        return recognised | unpacked_keys
+        return recognised

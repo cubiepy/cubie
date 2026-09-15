@@ -37,6 +37,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Set,
     Tuple,
     Union,
 )
@@ -1148,50 +1149,8 @@ class BatchSolverKernel(CUDAFactory):
             integration_kernel._cache = self._disk_cache
         return integration_kernel
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs: Any,
-    ) -> set[str]:
-        """Update solver configuration parameters.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of parameter updates forwarded to the single integrator and
-            compile settings.
-        silent
-            Flag suppressing errors when unrecognised parameters remain.
-        **kwargs
-            Additional parameter overrides merged into ``updates_dict``.
-
-        Returns
-        -------
-        set[str]
-            Names of parameters successfully applied.
-
-        Raises
-        ------
-        KeyError
-            Raised when unknown parameters persist and ``silent`` is ``False``.
-
-        Notes
-        -----
-        Order: memory manager, interpolator, run, then this kernel's
-        settings with the run's ``loop_fn`` and compile flags.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        if kwargs:
-            updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
-
-        updates = updates_dict
-        user_keys = set(updates)
-
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Update the memory manager, interpolator, run, then the kernel."""
         recognised = self.memory_manager.update(self, updates, silent=True)
         interpolator_recognised = self.driver_interpolator.update(
             updates, silent=True
@@ -1212,10 +1171,6 @@ class BatchSolverKernel(CUDAFactory):
             # A pinned residency belongs to the block size it was timed with.
             self.resident_blocks = None
         self._known_system_config = self.system.compile_settings
-
-        unrecognised = user_keys - recognised
-        if unrecognised and not silent:
-            raise KeyError(f"Unrecognized parameters: {unrecognised}")
         return recognised
 
     def configure_drivers(self, drivers: Dict[str, Any]) -> None:
