@@ -66,21 +66,20 @@ class ODELoopConfig(CUDAFactoryConfig):
     compile_flags
         Output configuration governing save and summary cadence.
     save_every
-        Interval between accepted saves, or ``None`` when auto-derived.
+        Save interval; ``None`` saves the final state only.
     summarise_every
-        Interval between summary accumulations, or ``None`` when
-        auto-derived.
+        Summary window; ``None`` writes one summary at the end of the run.
     sample_summaries_every
-        Interval between summary metric updates, or ``None`` when
-        auto-derived.
+        Interval between summary metric updates.
     save_last
         When ``True``, the loop saves the final state regardless of
         ``save_every`` alignment.
     save_regularly
         When ``True``, state saves occur at ``save_every`` intervals.
+    summarise_last
+        When ``True``, one summary is written at the end of the run.
     summarise_regularly
-        When ``True``, summary accumulations occur at
-        ``summarise_every`` intervals.
+        When ``True``, a summary is written every ``summarise_every``.
     save_state_fn
         Device function that records state and observable snapshots.
     update_summaries_fn
@@ -195,6 +194,9 @@ class ODELoopConfig(CUDAFactoryConfig):
     save_regularly: bool = field(
         default=False, validator=validators.instance_of(bool)
     )
+    summarise_last: bool = field(
+        default=False, validator=validators.instance_of(bool)
+    )
     summarise_regularly: bool = field(
         default=False, validator=validators.instance_of(bool)
     )
@@ -231,8 +233,7 @@ class ODELoopConfig(CUDAFactoryConfig):
         Returns
         -------
         int
-            Number of samples per summary, or ``0`` when either timing
-            parameter is ``None``.
+            Number of samples per summary, or ``0`` without a window.
 
         Raises
         ------
@@ -243,7 +244,7 @@ class ODELoopConfig(CUDAFactoryConfig):
         summarise_every = self.summarise_every
         sample_summaries_every = self.sample_summaries_every
 
-        if summarise_every is None or sample_summaries_every is None:
+        if not self.summarise_regularly:
             return 0
 
         raw_ratio = summarise_every / sample_summaries_every

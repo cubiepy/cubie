@@ -103,12 +103,12 @@ STATE_OBS_NO_TIMING = {
     "sample_summaries_every": None,
 }
 
-# Summary-only outputs with no timing (duration-dependent path).
-SUMMARY_ONLY_NO_TIMING = {
+# Summary-only outputs with no window: one summary at the end.
+SUMMARY_ONLY_LAST = {
     "output_types": ["mean"],
     "save_every": None,
     "summarise_every": None,
-    "sample_summaries_every": None,
+    "sample_summaries_every": 0.02,
 }
 
 # Summary-only outputs with explicit timing (no derivation needed).
@@ -2607,13 +2607,35 @@ WARMUP_SAVE_BOUNDARY = {
     "save_every": 0.1,
 }
 
-DURATION_ONLY_MIXED_OUTPUTS = {
-            "precision": np.float32,
-            "duration": 0.1,
-            "output_types": ["state", "time", "mean"],
-            "algorithm": "euler",
-            "dt": 0.01,
-            "save_every": None,
-            "summarise_every": None,
-            "sample_summaries_every": None,
-        }
+# Final save and one summary at the end on a grid exact in float32.
+MIXED_OUTPUTS_LAST = {
+    "precision": np.float32,
+    "duration": 1.0,
+    "output_types": ["state", "time", "mean"],
+    "algorithm": "euler",
+    "dt": 0.125,
+    "save_every": None,
+    "summarise_every": None,
+    "sample_summaries_every": 0.125,
+}
+
+# Final save and four summary windows on the same exact grid.
+MIXED_OUTPUTS_WINDOWED = {
+    **MIXED_OUTPUTS_LAST,
+    "summarise_every": 0.25,
+}
+
+# Sample schedule ends two steps short of t_end.
+MIXED_OUTPUTS_LAST_SHORT_SCHEDULE = {
+    **MIXED_OUTPUTS_LAST,
+    "sample_summaries_every": 0.75,
+}
+
+# Two windows whose sample schedule ends two steps short of t_end.
+MIXED_OUTPUTS_WINDOWED_SHORT_SCHEDULE = {
+    **MIXED_OUTPUTS_LAST,
+    "duration": 1.125,
+    "dt": 0.0625,
+    "summarise_every": 0.5,
+    "sample_summaries_every": 0.25,
+}

@@ -29,6 +29,7 @@ from numpy import (
 from cubie._utils import precision_converter
 from cubie.batchsolving.solver_settings import EffectiveSettings
 from cubie.integrators.algorithms import algorithm_facts
+from cubie.integrators.SingleIntegratorRun import regular_event_count
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
     LINEAR_SOLVER_VARIANT_PARAMETERS,
@@ -61,9 +62,6 @@ DEFAULT_TOLERANCE = float(
 
 STEP_BOUND_DECADES = 3
 """How many decades either side of dt to set the min and max step bounds."""
-
-DEFAULT_SAMPLES_PER_SUMMARY = 10
-"""Summary samples per ``summarise_every`` when no sample interval is given."""
 
 
 def given_or(given: Any, name: str, default: Any) -> Any:
@@ -458,7 +456,6 @@ def resolve_loop_timing(
     sample_summaries_every: Optional[float],
     has_time_domain_outputs: bool,
     has_summary_outputs: bool,
-    duration: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Return the save and summary intervals and the flags selecting them.
 
@@ -468,37 +465,40 @@ def resolve_loop_timing(
         The given intervals; ``None`` when not given.
     has_time_domain_outputs, has_summary_outputs
         Which output arrays are produced.
-    duration
-        The solve duration, if known.
 
     Returns
     -------
     dict
-        The intervals and ``save_last``, ``save_regularly`` and
-        ``summarise_regularly``.
+        The intervals and ``save_last``, ``save_regularly``,
+        ``summarise_last`` and ``summarise_regularly``.
+
+    Raises
+    ------
+    ValueError
+        Summary outputs requested without ``sample_summaries_every``.
     """
-    # Time-domain outputs with no interval save the final state only.
+    # Outputs with no interval fire once at the end of the run.
     save_last = has_time_domain_outputs and save_every is None
     save_regularly = has_time_domain_outputs and save_every is not None
+    summarise_last = has_summary_outputs and summarise_every is None
+    summarise_regularly = has_summary_outputs and summarise_every is not None
     if not has_summary_outputs:
         summarise_every = None
         sample_summaries_every = None
-    else:
-        # No summarise_every: summarise once over the whole duration.
-        if summarise_every is None:
-            summarise_every = duration
-        # No sample interval: sample ten times per summary.
-        if sample_summaries_every is None and summarise_every is not None:
-            sample_summaries_every = (
-                summarise_every / DEFAULT_SAMPLES_PER_SUMMARY
-            )
+    elif sample_summaries_every is None:
+        raise ValueError(
+            "When summary metrics are requested, you must provide a "
+            "sampling period for the loop to collect summary samples by "
+            "setting sample_summaries_every"
+        )
     return {
         "save_every": save_every,
         "summarise_every": summarise_every,
         "sample_summaries_every": sample_summaries_every,
         "save_last": save_last,
         "save_regularly": save_regularly,
-        "summarise_regularly": summarise_every is not None,
+        "summarise_last": summarise_last,
+        "summarise_regularly": summarise_regularly,
     }
 
 
@@ -515,6 +515,50 @@ def _newton_rtol_inverted(
     newton[(newton > 0.0) & (newton < floor)] = floor
     newton = newton.reshape(-1, controller.size)
     return bool(((controller > 0.0) & (newton >= controller)).any())
+
+
+def check_loop_timing(
+    timing: Dict[str, Any], duration: Optional[float], precision: type
+) -> None:
+    """Raise when a schedule has no event inside the run.
+
+    Raises
+    ------
+    ValueError
+        An interval with no event inside the run, or a sample
+        interval that is not shorter than its window.
+    """
+    save_every = timing["save_every"]
+    summarise_every = timing["summarise_every"]
+    sample_every = timing["sample_summaries_every"]
+    if timing["summarise_regularly"] and sample_every >= summarise_every:
+        raise ValueError(
+            f"sample_summaries_every ({sample_every}) >= summarise_every "
+            f"({summarise_every}); The saved summary will be based on 0 "
+            f"samples, so will result in 0/inf/NaN values."
+        )
+    if duration is None:
+        return
+
+    def events(interval: float) -> int:
+        return regular_event_count(duration, interval, precision)
+
+    if timing["save_regularly"] and events(save_every) == 0:
+        raise ValueError(
+            f"save_every ({save_every}) > duration ({duration}) so this "
+            f"loop will produce no outputs"
+        )
+    if timing["summarise_last"] and events(sample_every) == 0:
+        raise ValueError(
+            f"sample_summaries_every ({sample_every}) > duration "
+            f"({duration}), so the summary at the end will be based on 0 "
+            f"samples"
+        )
+    if timing["summarise_regularly"] and events(summarise_every) == 0:
+        raise ValueError(
+            f"summarise_every ({summarise_every}) > duration ({duration}), "
+            f"so this loop will produce no summary outputs"
+        )
 
 
 def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
@@ -538,7 +582,9 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     ------
     ValueError
         A Neumann preconditioner on a mass-matrix system, gains given
-        with a filter, or an output index the system does not have.
+        with a filter, an output index the system does not have, summary
+        metrics without ``sample_summaries_every``, or an output interval
+        the run cannot fit.
     """
     precision = system.precision
     if given.precision is not None:
@@ -610,14 +656,13 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
         int(sizes.observables),
         precision,
     )
-    resolved.update(
-        resolve_loop_timing(
-            given.save_every,
-            given.summarise_every,
-            given.sample_summaries_every,
-            time_domain,
-            summaries,
-            given.duration,
-        )
+    timing = resolve_loop_timing(
+        given.save_every,
+        given.summarise_every,
+        given.sample_summaries_every,
+        time_domain,
+        summaries,
     )
+    check_loop_timing(timing, given.duration, precision)
+    resolved.update(timing)
     return EffectiveSettings(**{**given.as_kwargs(), **resolved})

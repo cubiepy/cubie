@@ -1150,6 +1150,7 @@ def test_solve_ivp_function(
         save_every=0.02,
         duration=0.05,
         summarise_every=0.04,
+        sample_summaries_every=0.02,
         output_types=["state", "time", "observables", "mean"],
         method="euler",
         settling_time=0.0,
@@ -1386,7 +1387,12 @@ def test_solver_output_types(system, solver_settings):
             precision=solver_settings["precision"],
             memory_manager=solver_settings["memory_manager"],
             stream_group=solver_settings["stream_group"],
-            loop_settings={"save_every": solver_settings["save_every"]},
+            loop_settings={
+                "save_every": solver_settings["save_every"],
+                "sample_summaries_every": solver_settings[
+                    "sample_summaries_every"
+                ],
+            },
         )
 
         assert solver.output_types == tuple(output_types)
@@ -2128,6 +2134,7 @@ def test_solve_ivp_forwards_summarise_variables(system, driver_settings):
         summarise_variables=state_names,
         save_every=0.01,
         summarise_every=0.02,
+        sample_summaries_every=0.01,
         duration=0.02,
         dt=0.01,
         method="euler",

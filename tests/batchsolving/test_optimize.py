@@ -433,6 +433,28 @@ def _runner(solver, inits, params):
     )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"summarise_every": None, "sample_summaries_every": 0.03}],
+    indirect=True,
+)
+def test_duration_floor_holds_the_final_summary_sample(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """Probe durations under a final summary keep one sample inside."""
+    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
+    try:
+        runner.build_twins([{}])
+        floor = runner._duration_floor()
+        assert floor == pytest.approx(0.03)
+        trials = runner._trial_durations()
+        assert trials == sorted(trials)
+        assert min(trials) == floor
+        assert max(trials) == pytest.approx(0.1)
+    finally:
+        runner.close()
+
+
 def test_twins_join_the_auto_pool(
     solver_mutable, simple_initial_values, simple_parameters
 ):

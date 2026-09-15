@@ -217,8 +217,19 @@ def test_summaries_length_periodic(single_integrator_run, solver_settings):
     indirect=True,
 )
 def test_summaries_length_none(single_integrator_run):
-    """summaries_length returns 0 when summarise_every is None."""
+    """summaries_length returns 0 when no summaries are produced."""
     assert single_integrator_run.summaries_length(0.3) == 0
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{**SUMMARY_ONLY_TIMED, "summarise_every": None}],
+    indirect=True,
+)
+def test_summaries_length_last(single_integrator_run):
+    """An unset window is one summary row at any duration."""
+    assert single_integrator_run.summaries_length(0.3) == 1
+    assert single_integrator_run.summaries_length(7.0) == 1
 
 
 # ── device_function ──────────────────────────────────────────────────────── #

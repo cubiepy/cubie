@@ -659,6 +659,7 @@ def solved_summary_only_solver(system, driver_settings):
     solver = Solver(
         system,
         output_types=["mean", "max", "min"],
+        sample_summaries_every=0.01,
         stream_group="summary_only",
     )
 

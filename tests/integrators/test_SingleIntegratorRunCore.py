@@ -194,16 +194,20 @@ def test_save_last_when_no_save_every(single_integrator_run):
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    # Unique set: summarise_every given with the sample cadence unset
-    # is exactly the condition that triggers the /10 derivation.
-    [{**SUMMARY_ONLY_TIMED, "sample_summaries_every": None}],
+    # Unique set: window unset with the sample cadence given.
+    [{**SUMMARY_ONLY_TIMED, "summarise_every": None}],
     indirect=True,
 )
-def test_sample_summaries_auto_derived(single_integrator_run):
-    """sample_summaries_every = summarise_every / 10 when not provided."""
+def test_unset_window_summarises_last(single_integrator_run):
+    """An unset window keeps the sample cadence and summarises at the end."""
     run = single_integrator_run
-    expected = float(run.summarise_every) / 10.0
-    assert run.sample_summaries_every == pytest.approx(expected, rel=1e-5)
+    loop_cfg = run._loop.compile_settings
+    assert run.summarise_every is None
+    assert run.sample_summaries_every == pytest.approx(0.05)
+    assert run.summarise_last is True
+    assert loop_cfg.summarise_last is True
+    assert loop_cfg.summarise_regularly is False
+    assert run.has_summary_outputs is True
 
 
 @pytest.mark.parametrize(
@@ -603,12 +607,15 @@ def test_update_process_loop_timing_called(
     run.update({
         "output_types": ["state"],
         "save_every": 0.05,
+        "save_regularly": True,
         "summarise_every": None,
         "sample_summaries_every": None,
+        "summarise_regularly": False,
     })
     assert run.save_every == pytest.approx(0.05, rel=1e-3)
     loop_cfg = run._loop.compile_settings
     assert loop_cfg._summarise_every is None
+    assert loop_cfg.summarise_regularly is False
 
 
 # ── Computed properties ─────────────────────────────────────────────────── #
