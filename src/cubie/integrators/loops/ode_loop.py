@@ -174,8 +174,8 @@ class IVPLoop(CUDAFactory):
         Interval between accepted saves; ``None`` saves the final state
         only.
     summarise_every
-        Interval between summary accumulations; ``None`` summarises once
-        at the end of the run.
+        Interval between summary saves; ``None`` summarises once at the
+        end of the run.
     sample_summaries_every
         Interval between summary metric updates. Must be an integer divisor
         of ``summarise_every``.
@@ -258,8 +258,8 @@ class IVPLoop(CUDAFactory):
             Interval between accepted saves; ``None`` saves the final state
             only.
         summarise_every
-            Interval between summary accumulations; ``None`` summarises
-            once at the end of the run.
+            Interval between summary saves; ``None`` summarises once at
+            the end of the run.
         sample_summaries_every
             Interval between summary metric updates. Must be an integer divisor
             of ``summarise_every``.
@@ -783,7 +783,7 @@ class IVPLoop(CUDAFactory):
                     finished = bool_(t_next >= t_end)
 
                 if save_last or summarise_last:
-                    # Schedules done: step on until a step reaches t_end.
+                    # Keep stepping until a step reaches t_end.
                     reaches_end = bool_(t_next >= t_end)
                     at_end = bool_(t_prec < t_end) & finished & reaches_end
                     finished = finished & bool_(t_prec >= t_end)
@@ -853,7 +853,6 @@ class IVPLoop(CUDAFactory):
                             # A due event on t_end makes this the end step.
                             at_end |= bool_(next_event == t_end)
 
-                    # The end step saves the final state and its summary.
                     if save_last:
                         do_save |= at_end
                     if summarise_last:
@@ -1106,7 +1105,6 @@ class IVPLoop(CUDAFactory):
                                 summary_idx += int32(1)
 
                     if do_final_summary:
-                        # The one summary of every sample in the run.
                         statesumm_idx = summary_idx * summarise_state_bool
                         obssumm_idx = summary_idx * summarise_obs_bool
                         save_summaries(

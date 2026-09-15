@@ -119,8 +119,8 @@ Two more levers cut memory and time further:
 starts, so start-up transients do not pollute your statistics.
 Settling extends the run rather than eating into it: the solver
 integrates for ``settling_time + duration`` in total, so the
-recorded window is still the full 50 time-units and the unset
-``summarise_every`` produces exactly one summary per run.
+recorded window is still the full 50 time-units and a single summary
+is saved over the 20-70 time-unit window.
 
 When to use which output
 ------------------------

@@ -67,7 +67,6 @@ Three independent timing parameters drive what the loop emits and when; each has
   the accumulated window to the next summary row and reset, advancing `summary_idx`.
 - **`summarise_last`** — no window: samples run on the `sample_summaries_every` grid and
   one `save_summaries_fn` call lands on the `at_end` step with `update_idx` as its divisor.
-  The t0 reset call passes a literal divisor of 1.
 
 In short: `save_state_fn` fires on the `save_every` grid, `update_summaries_fn` on the
 `sample_summaries_every` grid, and `save_summaries_fn` once per `summarise_every` window

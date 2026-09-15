@@ -520,13 +520,14 @@ def _newton_rtol_inverted(
 def check_loop_timing(
     timing: Dict[str, Any], duration: Optional[float], precision: type
 ) -> None:
-    """Raise when a schedule has no event inside the run.
+    """Raise an error if requested save or summary timing is impossible
+    or returns zero samples.
 
     Raises
     ------
     ValueError
-        An interval with no event inside the run, or a sample
-        interval that is not shorter than its window.
+        Save or summary timing that cannot produce output in the
+        integration, or summary timing that would save zero samples.
     """
     save_every = timing["save_every"]
     summarise_every = timing["summarise_every"]
@@ -583,8 +584,8 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     ValueError
         A Neumann preconditioner on a mass-matrix system, gains given
         with a filter, an output index the system does not have, summary
-        metrics without ``sample_summaries_every``, or an output interval
-        the run cannot fit.
+        metrics without ``sample_summaries_every``, or save/summary
+        timing that cannot produce output in the integration.
     """
     precision = system.precision
     if given.precision is not None:
