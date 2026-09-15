@@ -209,56 +209,11 @@ class OutputFunctions(CUDAFactory):
         )
         self.setup_compile_settings(config)
 
-    def update(
-        self,
-        updates_dict: Union[dict[str, object], None] = None,
-        silent: bool = False,
-        **kwargs: object,
-    ) -> set[str]:
-        """Update compile settings through the factory interface.
-
-        Parameters
-        ----------
-        updates_dict
-            Dictionary of parameter updates to apply.
-        silent
-            When ``True``, suppress warnings about unrecognised parameters.
-        **kwargs
-            Additional parameter updates to apply.
-
-        Returns
-        -------
-        set[str]
-            Recognised parameter names that were successfully updated.
-
-        Raises
-        ------
-        KeyError
-            If unrecognised parameters are provided and ``silent`` is
-            ``False``.
-
-        Notes
-        -----
-        Use this method for coordinated configuration updates alongside other
-        components by passing ``silent=True`` so unrelated keys fall through
-        without raising.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        if kwargs:
-            updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
-        unrecognised = set(updates_dict.keys())
-
-        # Trim stored indices to shrinking maxima; explicit indices
-        # in the same update win.
+    def _update(self, updates: Dict[str, Any], silent: bool) -> set[str]:
+        """Trim stored indices to shrinking maxima, then apply."""
         config = self.compile_settings
-        new_n_states = updates_dict.get(
-            "n_states", config.n_states
-        )
-        new_n_observables = updates_dict.get(
+        new_n_states = updates.get("n_states", config.n_states)
+        new_n_observables = updates.get(
             "n_observables", config.n_observables
         )
         if (
@@ -269,20 +224,9 @@ class OutputFunctions(CUDAFactory):
                 new_n_states, new_n_observables
             )
             for key, indices in trimmed.items():
-                updates_dict.setdefault(key, indices)
-
-        recognised_params = set()
-        recognised_params |= self.update_compile_settings(
-            updates_dict, silent=True
-        )
-        unrecognised -= recognised_params
-
-        if not silent and unrecognised:
-            raise KeyError(
-                f"Unrecognized parameters in update: {unrecognised}. "
-                "These parameters were not updated.",
-            )
-        return set(recognised_params)
+                # Explicit indices in the same update win.
+                updates.setdefault(key, indices)
+        return self.update_compile_settings(updates, silent=True)
 
     def build(self) -> OutputFunctionCache:
         """Compile output functions and calculate memory requirements.

@@ -223,65 +223,10 @@ class BaseODE(CUDAFactory):
         """
         # return ODECache(dxdt=dxdt)
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, float]] = None,
-        silent: bool = False,
-        **kwargs: float,
-    ) -> Set[str]:
-        """Update compile settings through the :class:`CUDAFactory` interface.
-
-        Pass updates through the compile-settings interface, which invalidates
-        caches when an update succeeds.
-
-        Parameters
-        ----------
-        updates_dict
-            Dictionary of updates to apply.
-        silent
-            Set to ``True`` to suppress warnings about missing keys.
-        **kwargs
-            Additional updates specified as keyword arguments.
-
-        Returns
-        -------
-        set of str
-            Labels that were recognized and updated.
-
-        Notes
-        -----
-        Pass ``silent=True`` when performing bulk updates that may include
-        values for other components to suppress warnings about missing keys.
-        """
-
-        if updates_dict is None:
-            updates_dict = {}
-        updates = updates_dict.copy()
-        if kwargs:
-            updates.update(kwargs)
-        if updates == {}:
-            return set()
-
-        recognised = self.update_compile_settings(
-            updates,
-            silent=True,
-        )
-        recognised_constants = self.set_constants(
-            updates,
-            silent=True,
-        )
-
-        recognised |= recognised_constants
-
-        if not silent:
-            unrecognised = set(updates.keys()) - recognised
-            if unrecognised:
-                raise KeyError(
-                    "Unrecognized parameters in update: "
-                    f"{unrecognised}. These parameters were not updated.",
-                )
-
-        return recognised
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Apply compile settings, then constant values."""
+        recognised = self.update_compile_settings(updates, silent=True)
+        return recognised | self.set_constants(updates, silent=True)
 
     def set_constants(
         self,

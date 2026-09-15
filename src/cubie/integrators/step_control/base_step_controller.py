@@ -611,72 +611,26 @@ class BaseStepController(CUDAFactory):
 
         return self.compile_settings.mass_flags
 
-    def update(
-        self,
-        updates_dict: Optional[dict[str, object]] = None,
-        silent: bool = False,
-        **kwargs: object,
-    ) -> set[str]:
-        """Propagate configuration updates to the compiled controller.
+    def _update(self, updates: dict[str, object], silent: bool) -> set[str]:
+        """Translate filter coefficients, then apply the settings."""
+        recognised = self._apply_filter_coefficients(updates)
+        recognised |= self.update_compile_settings(updates, silent=True)
 
-        Parameters
-        ----------
-        updates_dict
-            Dictionary of configuration values to update.
-        silent
-            When ``True`` suppress warnings for recognised but unused
-            controller parameters.
-        **kwargs
-            Additional configuration key-value pairs to update.
-
-        Returns
-        -------
-        set[str]
-            Names of parameters that were applied successfully.
-
-        Raises
-        ------
-        KeyError
-            Raised when an update references parameters that are not defined
-            for any controller.
-        """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
-
-        recognised = self._apply_filter_coefficients(updates_dict)
-        recognised |= self.update_compile_settings(updates_dict, silent=True)
-        unrecognised = set(updates_dict.keys()) - recognised
-
-        # Check if unrecognized parameters are valid step controller parameters
-        # but not applicable to this specific controller
-        valid_but_inapplicable = unrecognised & ALL_STEP_CONTROLLER_PARAMETERS
-        truly_invalid = unrecognised - ALL_STEP_CONTROLLER_PARAMETERS
-
-        # Mark valid controller parameters as recognized to prevent error
-        # propagation
-        recognised |= valid_but_inapplicable
-
-        if valid_but_inapplicable and not silent:
+        # Other controllers' parameters count as recognised; warn.
+        inapplicable = (
+            set(updates) - recognised
+        ) & ALL_STEP_CONTROLLER_PARAMETERS
+        if inapplicable and not silent:
             controller_type = self.__class__.__name__
-            params_str = ", ".join(sorted(valid_but_inapplicable))
+            params_str = ", ".join(sorted(inapplicable))
             warnings.warn(
                 (
                     f"Parameters {{{params_str}}} are not recognized by "
                     f"{controller_type}; updates have been ignored."
                 ),
                 UserWarning,
-                stacklevel=2,
-            )
-
-        if not silent and truly_invalid:
-            raise KeyError(
-                f"Unrecognized parameters in update: {truly_invalid}. "
-                "These parameters were not updated.",
+                stacklevel=3,
             )
 
         self.register_buffers()
-        return recognised
+        return recognised | inapplicable

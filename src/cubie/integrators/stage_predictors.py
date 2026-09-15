@@ -461,25 +461,9 @@ class DenseStagePredictor(CUDAFactory):
             config.predictor_previous_values_location,
         )
 
-    def update(self, updates_dict=None, silent=False, **kwargs):
-        """Update compile settings and re-register buffers.
-
-        Returns
-        -------
-        set
-            Set of recognized parameter names that were updated.
-        """
-
-        all_updates = {}
-        if updates_dict:
-            all_updates.update(updates_dict)
-        all_updates.update(kwargs)
-        if not all_updates:
-            return set()
-
-        recognised = self.update_compile_settings(
-            updates_dict=all_updates, silent=silent
-        )
+    def _update(self, updates: dict, silent: bool) -> set:
+        """Apply the settings and re-register the buffers."""
+        recognised = self.update_compile_settings(updates, silent=True)
         if recognised:
             self.register_buffers()
         return recognised
