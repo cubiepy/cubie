@@ -688,10 +688,11 @@ def test_update_empty_returns_empty_set():
 def test_update_merges_dict_and_kwargs_into_settings():
     """Both the dict and the kwargs reach the compile settings."""
     f = _make_factory_with_settings()
-    result = f.update({"flag": True}, precision=np.float64)
+    _ = f.device_function
+    result = f.update({"precision": np.float32}, flag=True)
     assert result == {"flag", "precision"}
     assert f.compile_settings.flag is True
-    assert f.compile_settings.precision == np.float64
+    assert f.compile_settings.precision == np.float32
     assert f.cache_valid is False
 
 

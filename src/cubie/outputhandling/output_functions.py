@@ -210,7 +210,25 @@ class OutputFunctions(CUDAFactory):
         self.setup_compile_settings(config)
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> set[str]:
-        """Trim stored indices to shrinking maxima, then apply."""
+        """Trim stored indices to new maxima, then apply the settings.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values; gains trimmed index arrays
+            when ``n_states`` or ``n_observables`` changes.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the output settings recognised.
+
+        Notes
+        -----
+        Explicit indices in the same update win over trimmed ones.
+        """
         config = self.compile_settings
         new_n_states = updates.get("n_states", config.n_states)
         new_n_observables = updates.get(

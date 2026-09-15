@@ -458,12 +458,30 @@ class ODEImplicitStep(BaseAlgorithmStep):
         buffer_registry.clear_parent(current)
         return replacement
 
-    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Update the step, then the owned solvers and predictor."""
-        # Step settings first; the solver reads refreshed solver_width.
-        recognized = self._update_step(updates)
+    def _apply_updates(self, updates: Dict[str, Any]) -> Set[str]:
+        """Apply the step settings, then update the owned solvers.
 
-        # Swap the solver class first so the updates reach the replacement.
+        Parameters
+        ----------
+        updates
+            Setting names to new values; gains ``solver_width`` when
+            ``n_states`` or ``tableau`` changes.
+
+        Returns
+        -------
+        set[str]
+            Names the step, its solvers and its predictor recognised.
+
+        Notes
+        -----
+        Step settings first, then the solver, dense predictor and error
+        solver, then their device functions into the step settings and
+        the implicit helpers rebuilt. A ``linear_correction_type``
+        needing another solver class swaps the linear solver, rebuilt
+        from its ``settings_dict``, before the updates reach it.
+        """
+        recognized = super()._apply_updates(updates)
+
         if "linear_correction_type" in updates:
             self._swap_linear_solver(updates["linear_correction_type"])
             recognized.add("linear_correction_type")
@@ -473,7 +491,6 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         recognized |= self.solver.update(updates, silent=True)
 
-        # Push the children's rebuilt device functions into the step.
         compiled_functions = {
             self.solver_fn_key: self.solver.device_function
         }
@@ -494,10 +511,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 silent=True,
             )
 
-        recognized |= self._update_step(compiled_functions)
+        recognized |= super()._apply_updates(compiled_functions)
         if recognized:
             self.build_implicit_helpers()
-        return recognized | self._inapplicable(updates, recognized, silent)
+        return recognized
 
     @property
     def smooth_error(self) -> bool:

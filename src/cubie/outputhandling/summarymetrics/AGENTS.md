@@ -57,9 +57,8 @@ counter (it does not reset per window).
   and registers it **at import time**; `__init__.py` must create the singleton before the
   metric imports.
 - `summary_metrics.update(precision=…, sample_summaries_every=…)` propagates to every
-  registered metric. `SummaryMetric.update` uses `update_compile_settings(..., silent=True)`,
-  so kwargs a given metric doesn't recognise are dropped rather than raising — that is what
-  lets the registry broadcast one update to all metrics.
+  registered metric via `CUDAFactory.update(..., silent=True)`, so unrecognised kwargs are
+  dropped. A metric updated directly follows the uniform `update` contract.
 
 ### Combined-metric substitution
 `_combined_metrics` (metrics.py) maps a `frozenset` of individual names to one combined

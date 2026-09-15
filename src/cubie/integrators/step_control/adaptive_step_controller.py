@@ -236,7 +236,24 @@ class BaseAdaptiveStepController(BaseStepController):
         )
 
     def _update(self, updates: dict[str, object], silent: bool) -> set[str]:
-        """Update the owned norm, then the controller with its ``norm_fn``."""
+        """Update the owned norm, then the controller.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values; gains the norm's ``norm_fn``.
+        silent
+            Suppress the other-controller parameter warning.
+
+        Returns
+        -------
+        set[str]
+            Names the controller recognised.
+
+        Notes
+        -----
+        The norm's ``solver_width`` follows ``n_states``.
+        """
         norm_updates = dict(updates)
         if "n_states" in norm_updates:
             norm_updates["solver_width"] = norm_updates["n_states"]

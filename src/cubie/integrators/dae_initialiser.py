@@ -563,7 +563,27 @@ class DAEInitialiser(CUDAFactory):
         return DAEInitialiserCache(initialise_state_fn=initialise_state_fn)
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Update the owned solver and norm, then the initialiser."""
+        """Update the owned solver and norm, then the initialiser.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the solver, norm, initialiser settings and buffer
+            registry recognised.
+
+        Notes
+        -----
+        Children skip ``newton_max_iters`` and
+        ``linear_correction_type`` and take ``n_states`` as
+        ``solver_width``; a recognised update rebuilds the helpers.
+        """
         # Drop max iters and correction type; the initialiser is always LU.
         child_updates = {
             key: value

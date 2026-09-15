@@ -254,26 +254,6 @@ class SummaryMetric(CUDAFactory):
 
         return self.get_cached_output("save_fn")
 
-    def update(self, **kwargs) -> None:
-        """Update metric compile settings.
-
-        Parameters
-        ----------
-        **kwargs
-            Compile settings to update (e.g., sample_summaries_every=0.02).
-
-        Returns
-        -------
-        None
-            Returns None.
-
-        Notes
-        -----
-        Updates the MetricConfig and invalidates cache if values change.
-        Triggers recompilation on next device_function access.
-        """
-        self.update_compile_settings(kwargs, silent=True)
-
 
 @define
 class SummaryMetrics:
@@ -353,7 +333,7 @@ class SummaryMetrics:
             frozenset(["d2xdt2_max", "d2xdt2_min"]): "d2xdt2_extrema",
         }
 
-    def update(self, **kwargs) -> None:
+    def update(self, **kwargs) -> set[str]:
         """Update compile settings for all registered metrics.
 
         Parameters
@@ -364,18 +344,19 @@ class SummaryMetrics:
 
         Returns
         -------
-        None
-            Returns None.
+        set[str]
+            Names some registered metric recognised.
 
         Notes
         -----
-        Propagates updates to all registered metric objects.
-        Each metric invalidates its cache if values change.
+        Every metric is updated with ``silent=True``.
         """
         if "precision" in kwargs:
             self.precision = kwargs["precision"]
+        recognised = set()
         for metric in self._metric_objects.values():
-            metric.update(**kwargs)
+            recognised |= metric.update(kwargs, silent=True)
+        return recognised
 
     def register_metric(self, metric: SummaryMetric) -> None:
         """Register a new summary metric with the system.

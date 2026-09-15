@@ -130,7 +130,25 @@ class SingleIntegratorRunCore(CUDAFactory):
     # Update
     # ------------------------------------------------------------------
     def _update(self, updates: Dict[str, Any], silent: bool) -> set[str]:
-        """Update every child and recapture ``loop_fn``."""
+        """Update every child and recapture ``loop_fn``.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names this config and every child recognised.
+
+        Notes
+        -----
+        Each child gets the updates plus its system inputs; a new
+        ``algorithm`` or ``step_controller`` swaps that child first.
+        """
         system = self._system
         recognised = self.update_compile_settings(updates, silent=True)
         recognised |= self._output_functions.update(

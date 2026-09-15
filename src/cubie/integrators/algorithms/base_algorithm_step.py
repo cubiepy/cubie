@@ -815,21 +815,27 @@ class BaseAlgorithmStep(CUDAFactory):
         pass
 
     def _update(self, updates: Dict[str, object], silent: bool) -> Set[str]:
-        """Apply the step settings, then accept other algorithms' keys."""
-        recognised = self._update_step(updates)
-        return recognised | self._inapplicable(updates, recognised, silent)
+        """Apply the updates, then accept other algorithms' parameters.
 
-    def _update_step(self, updates: Dict[str, object]) -> Set[str]:
-        """Apply the step settings and the buffer locations."""
-        recognised = self.update_compile_settings(updates, silent=True)
-        recognised |= buffer_registry.update(self, updates, silent=True)
-        self.register_buffers()
-        return recognised
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Suppress the other-algorithm parameter warning.
 
-    def _inapplicable(
-        self, updates: Dict[str, object], recognised: Set[str], silent: bool
-    ) -> Set[str]:
-        """Return the given parameters of other algorithms; warn."""
+        Returns
+        -------
+        set[str]
+            Recognised names, including other algorithms' parameters.
+
+        Notes
+        -----
+        After :meth:`_apply_updates`, unapplied names in
+        ``ALL_ALGORITHM_STEP_PARAMETERS`` count as recognised and warn.
+        """
+        recognised = self._apply_updates(updates)
+
         inapplicable = (
             set(updates) - recognised
         ) & ALL_ALGORITHM_STEP_PARAMETERS
@@ -841,9 +847,31 @@ class BaseAlgorithmStep(CUDAFactory):
                 f"{algorithm_type}; "
                 "updates have been ignored.",
                 UserWarning,
-                stacklevel=4,
+                stacklevel=3,
             )
-        return inapplicable
+        return recognised | inapplicable
+
+    def _apply_updates(self, updates: Dict[str, object]) -> Set[str]:
+        """Apply the step settings and buffer locations.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+
+        Returns
+        -------
+        set[str]
+            Names the settings and the buffer registry took.
+
+        Notes
+        -----
+        Subclasses with child factories extend this method.
+        """
+        recognised = self.update_compile_settings(updates, silent=True)
+        recognised |= buffer_registry.update(self, updates, silent=True)
+        self.register_buffers()
+        return recognised
 
     def build(self) -> StepCache:
         """Compile the step and record its sizes, order and flags.

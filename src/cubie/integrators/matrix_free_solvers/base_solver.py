@@ -126,7 +126,20 @@ class MatrixFreeSolver(MultipleInstanceCUDAFactory):
         self.norm = norm
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Update the owned norm, then the solver with its ``norm_fn``."""
+        """Update the owned norm, then the solver settings.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values; gains the prefixed ``norm_fn``.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            Names the norm and the solver settings recognised.
+        """
         recognized = self.norm.update(updates, silent=True)
         updates[self.prefixed("norm_fn")] = self.norm.device_function
         return recognized | self.update_compile_settings(
