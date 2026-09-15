@@ -518,12 +518,8 @@ def _device_to_host(array: Any) -> ndarray:
     return asarray(array)
 
 
-def _candidate_base_kwargs(
-    parent: Any,
-    duration: float,
-) -> Dict[str, Any]:
-    """Return candidate solver kwargs copied from the parent; unset
-    summary cadences are pinned to ``duration``."""
+def _candidate_base_kwargs(parent: Any) -> Dict[str, Any]:
+    """Return candidate solver kwargs copied from the parent."""
     kwargs = {}
     for name in (
         "atol",
@@ -547,14 +543,6 @@ def _candidate_base_kwargs(
         value = getattr(parent, name)
         if value is not None:
             kwargs[name] = asarray(value)
-    integrator = parent.kernel.single_integrator
-    if integrator.has_summary_outputs:
-        if "summarise_every" not in kwargs:
-            kwargs["summarise_every"] = float(duration)
-        if "sample_summaries_every" not in kwargs:
-            kwargs["sample_summaries_every"] = (
-                float(duration) / 100.0
-            )
     if not parent.cache_enabled:
         kwargs["cache"] = False
     elif parent.cache_dir is not None:
@@ -763,6 +751,9 @@ class _CalibrationRunner:
                 solver = None
                 try:
                     solver = self._build_solver(spec)
+                    self._trials = _usable_trials(
+                        solver, self._trials, self._duration, self._settling
+                    )
                     # Compile overlaps solves queued on the stream.
                     self._compile(solver)
                     token = self._launch(solver, *self._trials[0])
@@ -1006,6 +997,28 @@ def _trial_durations(
     return tuple(trials)
 
 
+def _usable_trials(
+    solver: Any,
+    trials: Tuple[Tuple[float, float], ...],
+    duration: float,
+    settling_time: float,
+) -> Tuple[Tuple[float, float], ...]:
+    """Drop leading trials the sample interval rejects, else the full run."""
+    usable = list(trials)
+    while usable:
+        try:
+            solver.update(duration=usable[0][0], silent=True)
+        except ValueError as error:
+            if "sample_summaries_every" not in str(error):
+                raise
+            usable.pop(0)
+        else:
+            break
+    if not usable:
+        usable.append((float(duration), float(settling_time)))
+    return tuple(usable)
+
+
 def run_calibration(
     parent: Any,
     initial_values: Any,
@@ -1071,7 +1084,7 @@ def run_calibration(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    base_kwargs = _candidate_base_kwargs(parent, duration)
+    base_kwargs = _candidate_base_kwargs(parent)
     trials = _trial_durations(base_kwargs, duration, settling_time)
     features = _system_features(
         parent, t0, inits.shape[1], duration

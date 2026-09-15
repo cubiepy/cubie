@@ -12,7 +12,10 @@ import pytest
 from tests._utils import (
     ALGORITHM_CHAIN_CASES,
     ALGORITHM_CHAIN_SETS,
-    DURATION_ONLY_MIXED_OUTPUTS,
+    MIXED_OUTPUTS_LAST,
+    MIXED_OUTPUTS_LAST_SHORT_SCHEDULE,
+    MIXED_OUTPUTS_WINDOWED,
+    MIXED_OUTPUTS_WINDOWED_SHORT_SCHEDULE,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
     TINY_DT_ADAPTIVE_CN,
@@ -290,27 +293,30 @@ def test_save_at_settling_time_boundary(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [
-        DURATION_ONLY_MIXED_OUTPUTS
-    ],
+    [MIXED_OUTPUTS_LAST],
     indirect=True,
 )
 def test_final_summary(
     device_loop_outputs,
-    precision,
+    cpu_loop_outputs,
+    tolerance,
 ):
-    """Verify summaries collected at end of run with summaries unset.
-
-    When all timing parameters are None, the loop should collect a
-    summary at the end of the integration run.
-    """
+    """No window: one summary of every sample, written at the end."""
     state_summaries = device_loop_outputs.state_summaries
 
-    assert state_summaries is not None, (
-        "State summaries should be collected"
+    assert state_summaries.shape[0] == 1
+    np.testing.assert_allclose(
+        state_summaries,
+        cpu_loop_outputs["state_summaries"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
     )
-    assert state_summaries.shape[0] >= 1, (
-        "At least one summary should exist"
+    assert device_loop_outputs.state.shape[0] == 2
+    np.testing.assert_allclose(
+        device_loop_outputs.state,
+        cpu_loop_outputs["state"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
     )
 
     final_summary = state_summaries[0]
@@ -319,28 +325,72 @@ def test_final_summary(
     )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [MIXED_OUTPUTS_WINDOWED],
+    indirect=True,
+)
 def test_summarise_every(
     device_loop_outputs,
-    precision,
+    cpu_loop_outputs,
+    tolerance,
 ):
-    """Verify summarise_every works without double-write.
-
-    When both periodic summaries and summarise_last are enabled,
-    the loop should collect summaries at regular intervals and also
-    at the end.
-    """
+    """A set window writes one row per window and the final save lands."""
     state_summaries = device_loop_outputs.state_summaries
 
-    assert state_summaries is not None, (
-        "State summaries should be collected"
+    assert state_summaries.shape[0] == 4
+    np.testing.assert_allclose(
+        state_summaries,
+        cpu_loop_outputs["state_summaries"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
     )
-    assert state_summaries.shape[0] >= 3, (
-        "Multiple summaries expected"
+    assert device_loop_outputs.state.shape[0] == 2
+    np.testing.assert_allclose(
+        device_loop_outputs.state,
+        cpu_loop_outputs["state"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
     )
 
     for i in range(min(4, state_summaries.shape[0])):
         assert not np.isnan(state_summaries[i]).any(), \
             f"Summary {i} should not contain NaN"
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [MIXED_OUTPUTS_LAST_SHORT_SCHEDULE, MIXED_OUTPUTS_WINDOWED_SHORT_SCHEDULE],
+    indirect=True,
+)
+def test_end_step_after_the_sample_schedule(
+    device_loop_outputs,
+    cpu_loop_outputs,
+    precision,
+    solver_settings,
+    tolerance,
+):
+    """A sample schedule ending short of t_end still integrates to it."""
+    end_time = precision(
+        float(solver_settings["t0"])
+        + float(solver_settings["warmup"])
+        + float(solver_settings["duration"])
+    )
+    state = device_loop_outputs.state
+    assert state.shape[0] == 2
+    assert state[-1, -1] == end_time
+    np.testing.assert_allclose(
+        state,
+        cpu_loop_outputs["state"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
+    np.testing.assert_allclose(
+        device_loop_outputs.state_summaries,
+        cpu_loop_outputs["state_summaries"],
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
 
 
 def test_finish_check_no_float32_stagnation():

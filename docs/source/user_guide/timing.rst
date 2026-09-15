@@ -153,20 +153,25 @@ for summary statistics. At the end of each window, metrics (mean, max, RMS,
 etc.) are computed from all samples taken during that window, written to
 output, and the accumulator resets for the next window.
 
-- **Default**: If not specified but summary outputs are requested, defaults
-  to ``duration`` (one summary window covering the entire integration).
-  This default is derived from the duration, so CuBIE emits a
-  ``UserWarning``: if ``duration`` changes on a later solve, the kernel
-  must recompile once.  Set ``summarise_every`` explicitly to avoid it.
+- **Default**: If not specified but summary outputs are requested, one
+  summary is calculated and saved at the end of the integration.
 - **Type**: ``float`` (seconds of simulation time)
 
 .. code-block:: python
 
    # 10 summary windows, each 1 second long
-   solver.solve(..., summarise_every=1.0, duration=10.0, output_types=["mean"])
+   solver.solve(
+       ...,
+       summarise_every=1.0,
+       sample_summaries_every=0.1,
+       duration=10.0,
+       output_types=["mean"],
+   )
 
-   # No summarise_every: one summary over entire duration
-   solver.solve(..., duration=10.0, output_types=["mean"])
+   # No summarise_every: one summary at the end of the integration
+   solver.solve(
+       ..., sample_summaries_every=0.1, duration=10.0, output_types=["mean"]
+   )
 
 sample_summaries_every
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -177,12 +182,12 @@ the current state/observable values are fed into the running accumulator
 (e.g., added to a running sum for mean calculation, compared against
 current max, etc.).
 
-- **Default**: ``summarise_every / 10`` (10 samples per window) when
-  you set ``summarise_every``.  When you set neither,
-  ``duration / 100`` (100 samples in the single whole-run window).
+- **Required** whenever summary outputs are requested; a solve without
+  it raises ``ValueError``.
 - **Type**: ``float`` (seconds of simulation time)
-- **Constraint**: ``summarise_every`` must be an integer multiple of
-  ``sample_summaries_every``
+- **Constraint**: ``summarise_every``, when set, must be an integer
+  multiple of ``sample_summaries_every``; ``sample_summaries_every``
+  must fit inside ``duration``.
 
 .. code-block:: python
 

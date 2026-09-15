@@ -35,6 +35,34 @@ if TYPE_CHECKING:  # pragma: no cover - type checking import only
     from cubie.odesystems.baseODE import BaseODE
 
 
+def regular_event_count(
+    duration: float, interval: float, precision: type
+) -> int:
+    """Count the events of ``interval`` in ``duration`` at ``precision``.
+
+    Parameters
+    ----------
+    duration
+        Integration duration in time units.
+    interval
+        Scheduling interval in time units.
+    precision
+        Working float type of the run.
+
+    Returns
+    -------
+    int
+        Number of scheduled events, excluding the initial sample.
+    """
+    total_events = np_float64(precision(duration)) / np_float64(
+        precision(interval)
+    )
+    allowance = min(
+        4.0 * float(np_finfo(precision).eps) * total_events, 0.49
+    )
+    return int(np_floor(total_events + allowance))
+
+
 class SingleIntegratorRun(SingleIntegratorRunCore):
     """Expose aggregated read-only properties for integrator runs.
 
@@ -153,54 +181,20 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         """Return True if end-of-run-only state saving is configured."""
         return self._loop.compile_settings.save_last
 
-    def _regular_event_count(self, duration: float, interval: float) -> int:
-        """Count how many scheduled events fit inside a duration.
+    @property
+    def save_regularly(self) -> bool:
+        """Return True if states save every ``save_every``."""
+        return self._loop.compile_settings.save_regularly
 
-        Casting ``duration`` and ``interval`` to the working
-        precision rounds each of them slightly, so the division can
-        land just below a whole number when the user asked for a
-        whole number of events: float32 turns 10.0 / 0.001 into
-        9999.9993, which would floor to 9999 and lose the event at
-        the end time. A small allowance is added before flooring so
-        a result this close to a whole number counts as that whole
-        number.
+    @property
+    def summarise_last(self) -> bool:
+        """Return True if one summary over the whole run is configured."""
+        return self._loop.compile_settings.summarise_last
 
-        The allowance covers only the one-off rounding of the two
-        cast values. The allocation and the device's event counts
-        both come from this count, so the host and the device always
-        agree with each other; see :meth:`save_event_count` and
-        :meth:`summary_sample_count`.
-
-        Parameters
-        ----------
-        duration
-            Integration duration in time units.
-        interval
-            Scheduling interval in time units.
-
-        Returns
-        -------
-        int
-            Number of scheduled events, excluding the initial sample.
-        """
-        precision = self.precision
-        total_events = np_float64(precision(duration)) / np_float64(
-            precision(interval)
-        )
-        # Each cast moves its value by at most half a relative eps,
-        # so the ratio is off by at most about one eps of itself;
-        # allow four of them for headroom. The cap keeps the
-        # allowance below one half so a deliberately fractional
-        # duration (say 10.6 intervals) never gains an event. The
-        # cap engages beyond ~1e6 events in float32 (5e14 in
-        # float64), where the input rounding alone is worth a whole
-        # event and the count can be off by one in either
-        # direction; host and device still share whatever count
-        # this returns.
-        allowance = min(
-            4.0 * float(np_finfo(precision).eps) * total_events, 0.49
-        )
-        return int(np_floor(total_events + allowance))
+    @property
+    def summarise_regularly(self) -> bool:
+        """Return True if a summary is written every ``summarise_every``."""
+        return self._loop.compile_settings.summarise_regularly
 
     def output_length(self, duration: float) -> int:
         """Calculate number of time-domain output samples for a duration.
@@ -215,38 +209,39 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         int
             Number of output samples including initial and optionally final.
         """
-        save_every = self.save_every
-
         regular_samples = 0
         final_samples = 1 if self.save_last else 0
         initial_sample = 1
-        if save_every is not None:
-            regular_samples = self._regular_event_count(
-                duration, save_every
+        if self.save_regularly:
+            regular_samples = regular_event_count(
+                duration, self.save_every, self.precision
             )
         return regular_samples + initial_sample + final_samples
 
     def save_event_count(self, duration: float) -> int:
         """Return the number of scheduled save rows, initial included."""
-        save_every = self.save_every
-        if save_every is None:
+        if not self.save_regularly:
             return 1
-        return self._regular_event_count(duration, save_every) + 1
+        return regular_event_count(
+            duration, self.save_every, self.precision
+        ) + 1
 
     def summary_sample_count(self, duration: float) -> int:
         """Return the number of scheduled summary samples."""
-        sample_every = self.sample_summaries_every
-        if sample_every is None:
+        if not (self.summarise_regularly or self.summarise_last):
             return 0
-        return self._regular_event_count(duration, sample_every)
+        return regular_event_count(
+            duration, self.sample_summaries_every, self.precision
+        )
 
     def summaries_length(self, duration: float) -> int:
         """Calculate number of summary output rows for a duration.
 
-        The device writes one summary row after every
+        ``summarise_last`` is one row. Otherwise the device writes one
+        summary row after every
         ``samples_per_summary`` summary measurements. The number of
         measurements in a run follows the same counting rule as
-        saves (:meth:`_regular_event_count`), and only a complete
+        saves (:func:`regular_event_count`), and only a complete
         window produces a row, so the row count is the measurement
         count divided by the measurements per window, rounded down.
         The measurements-per-window value is read from the loop
@@ -262,12 +257,15 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
         int
             Number of summary rows.
         """
-        summarise_every = self.summarise_every
+        if self.summarise_last:
+            return 1
 
         regular_summaries = 0
-        if summarise_every is not None:
+        if self.summarise_regularly:
             sample_every = self.sample_summaries_every
-            updates = self._regular_event_count(duration, sample_every)
+            updates = regular_event_count(
+                duration, sample_every, self.precision
+            )
             samples_per_summary = (
                 self._loop.compile_settings.samples_per_summary
             )

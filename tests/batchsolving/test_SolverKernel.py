@@ -255,23 +255,6 @@ def test_shared_memory_needs_padding_matches_precision_and_parity(
     assert result == expected
 
 
-# NOTE: BatchSolverKernel._validate_timing_parameters lines 450-457
-# (the sample_summaries_every-is-None and summarise_every-is-None
-# ValueError branches) appear unreachable through the public update()
-# API. SingleIntegratorRunCore._process_loop_timing re-derives
-# sample_summaries_every from summarise_every whenever
-# has_summary_outputs is True and summarise_every is not None, and
-# flips has_summary_outputs to False (deferring to "duration
-# dependent" resolution) the moment summarise_every is cleared while
-# summary metrics are requested. In manual testing, clearing either
-# or both of these settings via kernel.update() on a summary-active
-# kernel always leaves has_summary_outputs False by the time
-# _validate_timing_parameters runs, so the guarded branch is never
-# entered from any code path reachable via update()/run(). See the
-# coverage report for details; not exercised here to avoid
-# constructing a stand-in object for the method's ``self``.
-
-
 def test_bogus_update_fails(solverkernel_mutable):
     solverkernel = solverkernel_mutable
     solverkernel.update(dt_min=0.0001)
@@ -342,6 +325,44 @@ class TestTimingParameterValidation:
                 params,
                 driver_settings,
                 summarise_every=0.6,
+                duration=0.5,
+            )
+
+    def test_sample_interval_longer_than_the_run_raises(
+        self, system, precision, driver_array, solver_mutable,
+        driver_settings
+    ):
+        """The summary at the end needs one sample inside the run."""
+        inits = np.ones((3, 1), dtype=precision)
+        params = np.ones((3, 1), dtype=precision)
+
+        with pytest.raises(
+            ValueError,
+            match=r"sample_summaries_every.*>.*duration.*0 samples",
+        ):
+            solver_mutable.solve(
+                inits,
+                params,
+                drivers=driver_settings,
+                summarise_every=None,
+                sample_summaries_every=0.6,
+                duration=0.5,
+            )
+
+    def test_summaries_without_a_sample_interval_raise(
+        self, system, precision, driver_array, solver_mutable,
+        driver_settings
+    ):
+        """Clearing the sample interval under summary outputs raises."""
+        inits = np.ones((3, 1), dtype=precision)
+        params = np.ones((3, 1), dtype=precision)
+
+        with pytest.raises(ValueError, match="sample_summaries_every"):
+            solver_mutable.solve(
+                inits,
+                params,
+                drivers=driver_settings,
+                sample_summaries_every=None,
                 duration=0.5,
             )
 

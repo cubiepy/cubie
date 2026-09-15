@@ -10,6 +10,7 @@ from attrs import evolve, fields, fields_dict
 from cubie.array_interpolator import ALL_INTERPOLATOR_PARAMETERS
 from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
 from cubie.batchsolving.resolve_defaults import (
+    check_loop_timing,
     resolve,
     resolve_inner_tolerances,
     resolve_loop_timing,
@@ -45,7 +46,7 @@ from cubie.outputhandling.output_functions import (
 from cubie.time_logger import default_timelogger
 from tests._utils import (
     LARGE_DIRK,
-    SUMMARY_ONLY_NO_TIMING,
+    SUMMARY_ONLY_LAST,
     TORN_NO_OBSERVABLES,
     _build_solver_instance,
 )
@@ -434,26 +435,66 @@ def test_save_last_without_save_every():
     assert timing["summarise_regularly"] is False
 
 
-def test_given_window_samples_a_tenth():
-    """A given window without a sample interval samples a tenth of it."""
-    timing = resolve_loop_timing(0.02, 0.1, None, True, True)
-    assert timing["sample_summaries_every"] == pytest.approx(0.01)
+def test_summaries_need_a_sample_interval():
+    """Summary outputs without a sample interval raise."""
+    with pytest.raises(ValueError, match="sample_summaries_every"):
+        resolve_loop_timing(0.02, 0.1, None, True, True)
+    with pytest.raises(ValueError, match="sample_summaries_every"):
+        resolve_loop_timing(None, None, None, False, True)
+
+
+def test_final_summary_needs_one_sample_in_the_run():
+    """A sample interval with no event inside the run raises."""
+    timing = resolve_loop_timing(None, None, 0.505, False, True)
+    with pytest.raises(ValueError, match="sample_summaries_every"):
+        check_loop_timing(timing, 0.5, np.float32)
+
+
+def test_sample_interval_equal_to_the_run_passes():
+    """One sample landing on t_end is a valid final summary."""
+    timing = resolve_loop_timing(None, None, 0.5, False, True)
+    check_loop_timing(timing, 0.5, np.float32)
+
+
+def test_whole_number_of_saves_passes_in_float32():
+    """A whole-number ratio the float32 casts push under passes."""
+    timing = resolve_loop_timing(0.001, None, None, True, False)
+    check_loop_timing(timing, 10.0, np.float32)
+
+
+def test_window_longer_than_the_run_raises():
+    """A summary window with no event inside the run raises."""
+    timing = resolve_loop_timing(None, 0.6, 0.1, False, True)
+    with pytest.raises(ValueError, match="summarise_every"):
+        check_loop_timing(timing, 0.5, np.float32)
+
+
+def test_given_window_summarises_regularly():
+    """A provided window with its sample interval summarises regularly."""
+    timing = resolve_loop_timing(0.02, 0.1, 0.01, True, True)
+    assert timing["summarise_every"] == 0.1
+    assert timing["sample_summaries_every"] == 0.01
     assert timing["save_regularly"] is True
     assert timing["summarise_regularly"] is True
+    assert timing["summarise_last"] is False
 
 
-def test_derived_window_is_the_duration():
-    """An unset window takes the duration and a tenth as the sample."""
-    timing = resolve_loop_timing(None, None, None, False, True, 2.0)
-    assert timing["summarise_every"] == 2.0
-    assert timing["sample_summaries_every"] == pytest.approx(0.2)
-
-
-def test_given_sample_interval_survives_a_derived_window():
-    """A given sample interval is kept under a duration-derived window."""
-    timing = resolve_loop_timing(None, None, 0.05, False, True, 2.0)
-    assert timing["summarise_every"] == 2.0
+def test_unset_window_summarises_last():
+    """An unset window is one summary at the end of the run."""
+    timing = resolve_loop_timing(None, None, 0.05, False, True)
+    assert timing["summarise_every"] is None
     assert timing["sample_summaries_every"] == 0.05
+    assert timing["summarise_last"] is True
+    assert timing["summarise_regularly"] is False
+
+
+def test_no_summaries_clears_the_summary_timing():
+    """Without summary outputs neither summary flag is set."""
+    timing = resolve_loop_timing(None, 0.1, 0.05, True, False)
+    assert timing["summarise_every"] is None
+    assert timing["sample_summaries_every"] is None
+    assert timing["summarise_last"] is False
+    assert timing["summarise_regularly"] is False
 
 
 # ── Outputs ─────────────────────────────────────────────────────────── #
@@ -739,41 +780,70 @@ def test_memory_manager_cannot_change_on_a_live_solver(solver_mutable):
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [SUMMARY_ONLY_NO_TIMING], indirect=True
+    "solver_settings_override", [SUMMARY_ONLY_LAST], indirect=True
 )
-def test_summary_window_follows_the_duration(
+def test_unset_window_keeps_the_build_across_durations(
     solver_mutable, batch_input_arrays, driver_settings
 ):
-    """An unset window takes each solve's duration."""
+    """One summary at the end per solve, whatever the duration."""
     initial_values, parameters = batch_input_arrays
-    solver_mutable.solve(
+    first = solver_mutable.solve(
         initial_values=initial_values,
         parameters=parameters,
         drivers=driver_settings,
         duration=0.5,
     )
-    assert solver_mutable.summarise_every == pytest.approx(0.5)
-    assert solver_mutable.sample_summaries_every == pytest.approx(0.05)
+    assert solver_mutable.summarise_every is None
+    assert solver_mutable.sample_summaries_every == pytest.approx(0.02)
+    assert solver_mutable.kernel.single_integrator.summarise_last is True
+    assert first.state_summaries.shape[0] == 1
+    assert solver_mutable.kernel._cache_valid
+    second = solver_mutable.solve(
+        initial_values=initial_values,
+        parameters=parameters,
+        drivers=driver_settings,
+        duration=0.9,
+    )
+    assert solver_mutable.kernel._cache_valid
+    assert second.state_summaries.shape[0] == 1
+
+
+def test_unsetting_the_intervals_at_solve_switches_to_last(
+    solver_mutable, batch_input_arrays, driver_settings
+):
+    """Unset intervals at solve time give a final save and one summary."""
+    initial_values, parameters = batch_input_arrays
+    result = solver_mutable.solve(
+        initial_values=initial_values,
+        parameters=parameters,
+        drivers=driver_settings,
+        duration=0.2,
+        save_every=None,
+        summarise_every=None,
+    )
+    integrator = solver_mutable.kernel.single_integrator
+    assert solver_mutable.save_every is None
+    assert solver_mutable.summarise_every is None
+    assert solver_mutable.solve_info.summarise_every is None
+    assert integrator.save_last is True
+    assert integrator.summarise_last is True
+    assert integrator.save_event_count(0.2) == 1
+    assert integrator.summaries_length(0.2) == 1
+    assert result.time_domain_array.shape[0] == 2
+    assert result.state_summaries.shape[0] == 1
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{**SUMMARY_ONLY_NO_TIMING, "sample_summaries_every": 0.01}],
+    [{**SUMMARY_ONLY_LAST, "sample_summaries_every": None}],
     indirect=True,
 )
-def test_given_sample_interval_is_kept_under_a_derived_window(
-    solver_mutable, batch_input_arrays, driver_settings
+def test_summaries_without_a_sample_interval_raise_at_construction(
+    system, solver_settings, driver_settings
 ):
-    """A given sample interval is honoured with a duration window."""
-    initial_values, parameters = batch_input_arrays
-    solver_mutable.solve(
-        initial_values=initial_values,
-        parameters=parameters,
-        drivers=driver_settings,
-        duration=0.5,
-    )
-    assert solver_mutable.summarise_every == pytest.approx(0.5)
-    assert solver_mutable.sample_summaries_every == pytest.approx(0.01)
+    """Summaries without a sample interval raise when the solver is built."""
+    with pytest.raises(ValueError, match="sample_summaries_every"):
+        _build_solver_instance(system, solver_settings, driver_settings)
 
 
 def test_duration_with_explicit_timing_keeps_the_build(solver_mutable):

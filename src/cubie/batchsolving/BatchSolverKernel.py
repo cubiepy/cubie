@@ -472,74 +472,6 @@ class BatchSolverKernel(CUDAFactory):
             self._cuda_events[base_idx + 2],
         )
 
-    def _validate_timing_parameters(self, duration: float) -> None:
-        """Validate timing parameters to prevent invalid array accesses.
-
-        Parameters
-        ----------
-        duration
-            Integration duration in time units.
-
-        Raises
-        ------
-        ValueError
-            When timing parameters would result in no outputs or invalid
-            sampling.
-
-        Notes
-        -----
-        Uses dt_min as an absolute tolerance when comparing floating
-        point timing parameters by adding dt_min to the requested
-        duration. Small in-loop timing oversteps smaller than dt_min
-        are treated as valid and do not trigger validation errors.
-        """
-        integrator = self.single_integrator
-        end_time = self.precision(duration) + self.dt_min
-
-        # Validate time-domain output timing parameters
-        if integrator.has_time_domain_outputs:
-            save_every = integrator.save_every
-            save_last = integrator.save_last
-            if (
-                save_every is not None
-                and save_every > end_time
-                and not save_last
-            ):
-                raise ValueError(
-                    f"save_every ({save_every}) > duration ({duration}) "
-                    f"so this loop will produce no outputs"
-                )
-
-        # Validate summary timing parameters
-        if integrator.has_summary_outputs:
-            sample_summaries_every = integrator.sample_summaries_every
-            summarise_every = integrator.summarise_every
-
-            if sample_summaries_every is None:
-                raise ValueError(
-                    "Summary outputs are enabled but sample_summaries_every "
-                    "is None"
-                )
-            if summarise_every is None:
-                raise ValueError(
-                    "Summary outputs are enabled but summarise_every is None"
-                )
-
-            if sample_summaries_every >= summarise_every:
-                raise ValueError(
-                    f"sample_summaries_every ({sample_summaries_every}) "
-                    f">= summarise_every ({summarise_every}); "
-                    f"The saved summary will be based on 0 samples, so will "
-                    f"result in 0/inf/NaN values."
-                )
-
-            if summarise_every > end_time:
-                raise ValueError(
-                    f"summarise_every ({summarise_every}) > duration "
-                    f"({duration}), so this loop will produce no summary "
-                    f"outputs"
-                )
-
     def run(
         self,
         inits: NDArray[floating],
@@ -727,9 +659,6 @@ class BatchSolverKernel(CUDAFactory):
             runs=inits.shape[1],
             precision=self.single_integrator.precision,
         )
-
-        # Validate timing parameters to prevent array index errors
-        self._validate_timing_parameters(duration)
 
         # An attached table is a cached build output: nothing to upload.
         driver_coefficients = self.driver_interpolator.coefficients

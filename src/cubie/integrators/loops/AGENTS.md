@@ -16,7 +16,7 @@ intervals, boolean control-flow constants, and device-function references).
 | File | Description |
 |------|-------------|
 | `ode_loop.py` | `IVPLoop(CUDAFactory)` — registers the loop's buffers and compiles the integration-loop closure in `build()`; `IVPLoopCache(CUDADispatcherCache)` holds `loop_fn`; exports `ALL_LOOP_SETTINGS`. |
-| `ode_loop_config.py` | `ODELoopConfig(CUDAFactoryConfig)` — system sizes, 14 buffer-location fields (default `'local'`), `OutputCompileFlags`, timing fields, mode flags (`save_last`, `save_regularly`, `summarise_regularly`, `is_adaptive`), and device-function references; `samples_per_summary` property with integer-multiple validation. |
+| `ode_loop_config.py` | `ODELoopConfig(CUDAFactoryConfig)` — system sizes, 14 buffer-location fields (default `'local'`), `OutputCompileFlags`, timing fields, mode flags (`save_last`, `save_regularly`, `summarise_last`, `summarise_regularly`, `is_adaptive`), and device-function references; `samples_per_summary` property with integer-multiple validation. |
 | `__init__.py` | Re-exports `IVPLoop`. |
 
 ## For AI Agents
@@ -65,12 +65,16 @@ Three independent timing parameters drive what the loop emits and when; each has
   (validated to be an integer multiple). After every `samples_per_summary` updates
   (`update_idx % samples_per_summary == 0`), the loop calls `save_summaries_fn` to flush
   the accumulated window to the next summary row and reset, advancing `summary_idx`.
+- **`summarise_last`** — no window: samples run on the `sample_summaries_every` grid and
+  one `save_summaries_fn` call lands on the `at_end` step with `update_idx` as its divisor.
 
 In short: `save_state_fn` fires on the `save_every` grid, `update_summaries_fn` on the
-`sample_summaries_every` grid, and `save_summaries_fn` once per `summarise_every` window.
+`sample_summaries_every` grid, and `save_summaries_fn` once per `summarise_every` window
+or once at the end.
 Output calls are predicated on step acceptance (`do_save &= accept`,
-`do_update_summary &= accept`); `save_regularly` / `summarise_regularly` gate whether the
-regular grids are active at all (vs. `save_last`-only).
+`do_update_summary &= accept`, `do_final_summary &= accept`); `save_regularly` /
+`summarise` gate whether the grids are active at all (vs. `save_last`-only). `at_end`
+is the step that lands on `t_end`.
 
 ### Loop behaviour
 - **Termination:** the `while True` loop exits via `return status` gated by

@@ -216,6 +216,7 @@ class EffectiveSettings(SolverSettings):
     is_adaptive: Optional[bool] = None
     save_last: Optional[bool] = None
     save_regularly: Optional[bool] = None
+    summarise_last: Optional[bool] = None
     summarise_regularly: Optional[bool] = None
 
     def as_kwargs(self) -> Dict[str, Any]:

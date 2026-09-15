@@ -119,6 +119,7 @@ def test_flag_defaults():
     cfg = ODELoopConfig(precision=np.float32)
     assert cfg.save_last is False
     assert cfg.save_regularly is False
+    assert cfg.summarise_last is False
     assert cfg.summarise_regularly is False
 
 
@@ -159,13 +160,19 @@ def test_is_adaptive_default():
 def test_samples_per_summary_returns_zero_when_none(
     summarise, sample, expected_zero,
 ):
-    """Returns 0 when either timing parameter is None."""
+    """Returns 0 without a regular summary window."""
     cfg = ODELoopConfig(
         precision=np.float32,
         summarise_every=summarise,
         sample_summaries_every=sample,
     )
     assert cfg.samples_per_summary == 0
+    windowed = ODELoopConfig(
+        precision=np.float32,
+        summarise_every=0.1,
+        sample_summaries_every=0.02,
+    )
+    assert windowed.samples_per_summary == 0
 
 
 def test_samples_per_summary_computes_ratio():
@@ -174,6 +181,7 @@ def test_samples_per_summary_computes_ratio():
         precision=np.float64,
         summarise_every=0.1,
         sample_summaries_every=0.02,
+        summarise_regularly=True,
     )
     expected = int(round(np.float64(0.1) / np.float64(0.02)))
     assert cfg.samples_per_summary == expected
@@ -189,6 +197,7 @@ def test_samples_per_summary_warns_on_slight_adjustment():
         precision=np.float64,
         summarise_every=0.1001,
         sample_summaries_every=0.02,
+        summarise_regularly=True,
     )
     # ratio = 0.1001/0.02 = 5.005; deviation 0.005 <= 0.01 -> snap to
     # 5 with a warning because 5 * 0.02 != 0.1001.
@@ -206,6 +215,7 @@ def test_samples_per_summary_raises_on_non_multiple():
         precision=np.float64,
         summarise_every=0.03,
         sample_summaries_every=0.02,
+        summarise_regularly=True,
     )
     # ratio = 1.5: not an integer multiple, deviation 0.5 > 0.01.
     with pytest.raises(ValueError, match="integer multiple"):
