@@ -652,8 +652,6 @@ class _CalibrationRunner:
     def _compile(self, solver: Any) -> None:
         """Compile the candidate's kernel without launching it."""
         solver.compile(
-            self._inits,
-            self._params,
             drivers=self._drivers,
             duration=self._trials[0][0],
             settling_time=self._trials[0][1],
@@ -952,9 +950,12 @@ def _achieved_waves(solver: Any, blocksize: int) -> float:
     """Return occupancy waves the batch fills at the actual geometry."""
     kernel_factory = solver.kernel
     runs = int(kernel_factory.run_params[0].runs)
-    actual_blocksize, dynshared = kernel_factory.launch_geometry(blocksize)
+    actual_blocksize, dynshared = kernel_factory.launch_geometry(
+        blocksize, runs=runs
+    )
     blocks_per_sm = active_blocks_per_multiprocessor(
-        kernel_factory.kernel, actual_blocksize, dynshared
+        kernel_factory.kernel, actual_blocksize, dynshared,
+        kernel_factory.signature,
     )
     device = cuda.get_current_device()
     threads_per_loop = (

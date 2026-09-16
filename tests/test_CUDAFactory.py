@@ -471,6 +471,26 @@ def test_update_reruns_converters_and_validators():
     assert "x" in changed
 
 
+def test_update_equal_nested_object_applies_loose_keys():
+    """Loose nested keys apply even when the supplied object is unchanged."""
+    @attrs.frozen
+    class _Inner(_CubieConfigBase):
+        x: int = 1
+
+    @attrs.frozen
+    class _Outer(_CubieConfigBase):
+        inner: _Inner = attrs.Factory(_Inner)
+
+    current = _Outer()
+    replacement, recognised, changed = current.update(
+        inner=current.inner, x=2
+    )
+    assert recognised == {"inner", "x"}
+    assert changed == {"inner", "x"}
+    assert replacement.inner.x == 2
+    assert current.inner.x == 1
+
+
 # ── _CubieConfigBase properties ───────────────────────────── #
 
 

@@ -410,7 +410,13 @@ class _CubieConfigBase(FrozenSettings):
 
         evolve_kwargs = {}
         for key, fld in direct.items():
-            evolve_kwargs[fld.alias or fld.name] = updates_dict[key]
+            value = updates_dict[key]
+            if (
+                fld.converter is not None
+                or fld.validator is not None
+                or values_differ(fld, getattr(self, fld.name), value)
+            ):
+                evolve_kwargs[fld.alias or fld.name] = value
 
         changed = set()
         for fld in nested_config_fields(cls):

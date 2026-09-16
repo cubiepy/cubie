@@ -38,6 +38,7 @@ from cubie.batchsolving.optimize import (
     resident_blocks_within_l2,
 )
 from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
+from cubie.cuda_backend import IS_MLIR
 from cubie.cuda_simsafe import cuda, is_device_array
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
@@ -307,36 +308,32 @@ def test_stream_group_change_moves_the_arrays(
     )
 
 
+def _batch_bytes(kernel):
+    """Return the device bytes the kernel's array managers hold."""
+    manager = kernel.memory_manager
+    return sum(
+        manager.get_registration(arrays).allocated_bytes
+        for arrays in (kernel.input_arrays, kernel.output_arrays)
+    )
+
+
 def test_compile_then_solve(
     solver_mutable,
     simple_initial_values,
     simple_parameters,
     driver_settings,
 ):
-    """Compile prepares the batch; a following solve is valid."""
+    """A compiled solver produces a valid batch result."""
     expected_inits, expected_params = solver_mutable.build_grid(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         grid_type="combinatorial",
     )
-    solver_mutable.compile(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        drivers=driver_settings,
-        duration=0.05,
-        grid_type="combinatorial",
-    )
+    solver_mutable.compile(drivers=driver_settings, duration=0.05)
     kernel = solver_mutable.kernel
     assert kernel.run_params.duration == 0.05
-    assert kernel.run_params.runs == expected_inits.shape[1]
-    assert (
-        kernel.input_arrays.device_initial_values.shape
-        == expected_inits.shape
-    )
-    assert (
-        kernel.input_arrays.device_parameters.shape
-        == expected_params.shape
-    )
+    assert kernel.run_params.runs == 1
+    assert _batch_bytes(kernel) == 0
     result = solver_mutable.solve(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
@@ -347,7 +344,89 @@ def test_compile_then_solve(
         grid_type="combinatorial",
     )
     assert isinstance(result, SolveResult)
+    assert kernel.run_params.runs == expected_inits.shape[1]
+    assert (
+        kernel.input_arrays.device_initial_values.shape
+        == expected_inits.shape
+    )
+    assert (
+        kernel.input_arrays.device_parameters.shape
+        == expected_params.shape
+    )
+    assert _batch_bytes(kernel) > 0
     assert np.all(np.isfinite(result.state))
+
+
+def test_compile_between_solves_keeps_the_batch_arrays(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+):
+    """A compile between solves leaves the batch arrays in place."""
+    solver = solver_mutable
+    kernel = solver.kernel
+    inputs = kernel.input_arrays
+    outputs = kernel.output_arrays
+    solve = dict(
+        initial_values=simple_initial_values,
+        parameters=simple_parameters,
+        drivers=driver_settings,
+        duration=0.05,
+        grid_type="combinatorial",
+    )
+    first = solver.solve(**solve)
+    assert np.all(np.isfinite(first.state))
+    del first
+    device_inits = inputs.device_initial_values
+    device_params = inputs.device_parameters
+    device_state = outputs.device_state
+    partition = kernel.run_params
+    compiled = kernel.kernel
+    batch_bytes = _batch_bytes(kernel)
+
+    solver.compile(drivers=driver_settings, duration=0.05)
+    kernel.launch_geometry()
+    kernel.launchable_shapes()
+    assert inputs.device_initial_values is device_inits
+    assert inputs.device_parameters is device_params
+    assert outputs.device_state is device_state
+    assert inputs._needs_reallocation == []
+    assert outputs._needs_reallocation == []
+    assert kernel.run_params == partition
+    assert kernel.kernel is compiled
+    assert _batch_bytes(kernel) == batch_bytes
+
+    result = solver.solve(**solve)
+    assert inputs.device_initial_values is device_inits
+    assert inputs.device_parameters is device_params
+    assert outputs.device_state is device_state
+    assert kernel.run_params == partition
+    assert kernel.kernel is compiled
+    assert np.all(np.isfinite(result.state))
+
+
+def test_launch_geometry_needs_no_batch(solver_mutable, driver_settings):
+    """A fresh kernel sizes full and partial blocks."""
+    solver = solver_mutable
+    kernel = solver.kernel
+    solver.compile(drivers=driver_settings, duration=0.05)
+    pad = 4 if kernel.shared_memory_needs_padding else 0
+    per_run = kernel.shared_memory_bytes + pad
+    shapes = kernel.launchable_shapes()
+    assert shapes
+    for candidate, (dynamic, blocks) in shapes.items():
+        assert dynamic >= max(4, per_run * candidate)
+        assert blocks >= 1
+    blocksize, dynamic = kernel.launch_geometry()
+    assert dynamic >= max(4, per_run * blocksize)
+    assert kernel.launch_geometry() == (blocksize, dynamic)
+    small_blocksize, small_dynamic = kernel.launch_geometry(
+        blocksize, runs=1
+    )
+    assert small_blocksize == blocksize
+    assert max(4, per_run) <= small_dynamic <= dynamic
+    assert _batch_bytes(kernel) == 0
 
 
 @pytest.mark.nocudasim
@@ -358,13 +437,7 @@ def test_compile_publishes_solve_specialization(
     driver_settings,
 ):
     """Compile publishes the exact specialization a solve reuses."""
-    solver_mutable.compile(
-        initial_values=simple_initial_values,
-        parameters=simple_parameters,
-        drivers=driver_settings,
-        duration=0.05,
-        grid_type="combinatorial",
-    )
+    solver_mutable.compile(drivers=driver_settings, duration=0.05)
     dispatcher = solver_mutable.kernel.kernel
     keys_after_compile = set(dispatcher.overloads)
     assert len(keys_after_compile) == 1
@@ -380,6 +453,79 @@ def test_compile_publishes_solve_specialization(
     assert solver_mutable.kernel.kernel is dispatcher
     assert set(dispatcher.overloads) == keys_after_compile
     assert np.all(np.isfinite(result.state))
+
+
+@pytest.mark.parametrize(
+    "input_layouts", [("C", "F"), ("F", "C"), ("F", "F"), ("A", "A")]
+)
+@pytest.mark.nocudasim
+def test_compile_and_solve_device_input_layouts(
+    solver_mutable,
+    simple_initial_values,
+    simple_parameters,
+    driver_settings,
+    input_layouts,
+):
+    """Device layouts preserve results across compilation and sizing."""
+    solver = solver_mutable
+    initial, parameters = solver.build_grid(
+        simple_initial_values, simple_parameters
+    )
+    solver.compile(drivers=driver_settings, duration=0.05)
+    for runs in (4, 8):
+        columns = np.arange(runs) % initial.shape[1]
+        inits = np.take(initial, columns, axis=1)
+        params = np.take(parameters, columns, axis=1)
+        expected = solver.solve(inits, params, duration=0.05)
+        expected_state = expected.state.copy()
+        device_inputs = []
+        for values, layout in zip((inits, params), input_layouts):
+            if layout == "A":
+                backing = cuda.to_device(np.repeat(values, 2, axis=1))
+                device_inputs.append(backing[:, ::2])
+            else:
+                device_inputs.append(
+                    cuda.to_device(np.array(values, order=layout))
+                )
+        actual = solver.solve(*device_inputs, duration=0.05)
+        np.testing.assert_array_equal(actual.state, expected_state)
+        blocksize, dynamic = solver.kernel.launch_geometry(runs=runs)
+        assert blocksize > 0
+        assert dynamic >= 4
+        assert active_blocks_per_multiprocessor(
+            solver.kernel.kernel, blocksize, dynamic,
+            solver.kernel.signature,
+        ) > 0
+        assert kernel_resources(
+            solver.kernel.kernel, solver.kernel.signature
+        ).registers_per_thread > 0
+        assert solver.kernel.launchable_shapes(runs=runs)
+        solver.compile(duration=0.05)
+        specializations = dict(solver.kernel._cache.specializations)
+        signature = solver.kernel.signature
+        repeated = solver.solve(*device_inputs, duration=0.05)
+        np.testing.assert_array_equal(repeated.state, expected_state)
+        assert solver.kernel.signature is signature
+        assert solver.kernel._cache.specializations == specializations
+        if not IS_MLIR:
+            assert specializations[signature[:9]] is signature
+
+
+@pytest.mark.nocudasim
+def test_signature_rebuilds_after_compile_setting_change(
+    solver_mutable,
+    driver_settings,
+):
+    solver = solver_mutable
+    solver.compile(drivers=driver_settings, duration=0.05)
+    original_cache = solver.kernel._cache
+    solver.update(max_registers=64)
+    signature = solver.kernel.signature
+    assert solver.kernel.cache_valid
+    assert solver.kernel._cache is not original_cache
+    assert signature == solver.kernel._cache.signature
+    if not IS_MLIR:
+        assert solver.kernel._cache.specializations[signature[:9]] is signature
 
 
 @pytest.mark.parametrize(
@@ -725,7 +871,7 @@ def test_device_inputs_match_host_inputs(
     [{**LORENZ_ITERATION_BASE, "duration": 0.05, "save_every": 0.01}],
     indirect=True,
 )
-def test_driverless_copy_compiles_device_inputs_without_warning(
+def test_driverless_copy_solves_device_inputs_without_warning(
     solver_mutable, system, precision
 ):
     """A copy staging device inputs attaches its empty driver table."""
@@ -736,7 +882,7 @@ def test_driverless_copy_compiles_device_inputs_without_warning(
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
-            twin.compile(
+            twin.solve(
                 cuda.to_device(inits), cuda.to_device(params), duration=0.05
             )
         input_arrays = twin.kernel.input_arrays
@@ -2582,10 +2728,9 @@ def test_copy_rederives_what_the_parent_derived(solver, driver_settings):
         twin.close()
 
 
-def _natural_dynamic_shared(kernel, blocksize):
+def _natural_dynamic_shared(kernel, blocksize, runs):
     """Return the unpadded dynamic shared bytes of a launch."""
     pad = 4 if kernel.shared_memory_needs_padding else 0
-    runs = kernel.run_params.runs
     return max(4, (kernel.shared_memory_bytes + pad) * min(runs, blocksize))
 
 
@@ -2603,8 +2748,9 @@ def test_pinned_resident_blocks_match_driver_block_count(
         grid_type="combinatorial",
     )
     kernel = solver_mutable.kernel
-    blocksize, dynamic_shared = kernel.launch_geometry()
-    assert dynamic_shared > _natural_dynamic_shared(kernel, blocksize)
+    runs = kernel.run_params[0].runs
+    blocksize, dynamic_shared = kernel.launch_geometry(runs=runs)
+    assert dynamic_shared > _natural_dynamic_shared(kernel, blocksize, runs)
     assert (
         active_blocks_per_multiprocessor(
             kernel.kernel, blocksize, dynamic_shared
@@ -2629,8 +2775,9 @@ def test_auto_performance_off_launches_at_natural_occupancy(
         grid_type="combinatorial",
     )
     kernel = solver_mutable.kernel
-    blocksize, dynamic_shared = kernel.launch_geometry()
-    assert dynamic_shared == _natural_dynamic_shared(kernel, blocksize)
+    runs = kernel.run_params[0].runs
+    blocksize, dynamic_shared = kernel.launch_geometry(runs=runs)
+    assert dynamic_shared == _natural_dynamic_shared(kernel, blocksize, runs)
 
 
 @pytest.mark.nocudasim
@@ -2685,9 +2832,8 @@ def test_auto_launch_of_a_local_kernel(solved_solver_simple):
         assert blocksize * blocks <= BUDGET_BLOCKSIZE * budget_blocks
     else:
         assert blocks == natural
-    runs = kernel.run_params[0].runs
     assert kernel.get_cached_output("default_launches") == {
-        runs: (blocksize, blocks)
+        (kernel.signature, None): (blocksize, blocks)
     }
     assert kernel.launch_geometry(64)[0] == 64
 
@@ -2796,10 +2942,12 @@ def test_timing_events_kept_while_timing_is_on(
 # ── Driver coefficient uploads ───────────────────────────── #
 
 
-def _compile_batch(solver, inits, params):
-    """Prepare and compile a batch without launching it."""
-    solver.compile(inits, params, duration=0.05)
-    return solver.kernel.input_arrays
+def _prepare_batch(solver, inits, params):
+    """Queue a batch's uploads and allocations without launching it."""
+    inits, params = solver.build_grid(inits, params)
+    kernel = solver.kernel
+    kernel._prepare_batch(inits, params, 0.05, 0.0, 0.0, kernel.stream)
+    return kernel.input_arrays
 
 
 def _upload_queued(arrays):
@@ -2837,14 +2985,14 @@ def test_driverless_batch_queues_only_the_run_inputs(
 ):
     """A driverless kernel attaches its empty table and never uploads it."""
     solver = solver_mutable
-    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    arrays = _prepare_batch(solver, simple_initial_values, simple_parameters)
     table = solver.driver_interpolator.coefficients
     assert arrays.host.driver_coefficients.array is table
     assert table.size == 0
     assert tuple(arrays.device_driver_coefficients.shape) == (1, 1, 1)
     _upload_queued(arrays)
 
-    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    arrays = _prepare_batch(solver, simple_initial_values, simple_parameters)
     assert arrays.host.driver_coefficients.array is table
     assert arrays._needs_overwrite == ["initial_values", "parameters"]
 
@@ -2859,13 +3007,13 @@ def test_unchanged_drivers_upload_once(
 ):
     """The table is queued after configure_drivers, not on a repeat."""
     solver = solver_mutable
-    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    arrays = _prepare_batch(solver, simple_initial_values, simple_parameters)
     uploaded = solver.driver_interpolator.coefficients
     assert arrays.host.driver_coefficients.array is uploaded
     assert "driver_coefficients" in arrays._needs_overwrite
     _upload_queued(arrays)
 
-    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    arrays = _prepare_batch(solver, simple_initial_values, simple_parameters)
     assert arrays.host.driver_coefficients.array is uploaded
     assert arrays._needs_overwrite == ["initial_values", "parameters"]
     _upload_queued(arrays)
@@ -2879,7 +3027,7 @@ def test_unchanged_drivers_upload_once(
     replacement = solver.driver_interpolator.coefficients
     assert replacement is not uploaded
 
-    arrays = _compile_batch(solver, simple_initial_values, simple_parameters)
+    arrays = _prepare_batch(solver, simple_initial_values, simple_parameters)
     assert arrays.host.driver_coefficients.array is replacement
     assert set(arrays._needs_overwrite) == {
         "initial_values", "parameters", "driver_coefficients"
