@@ -115,8 +115,7 @@ def warm_clocks(stream: Any) -> float:
 
 
 def validate_sizing(waves: int, target_ms: float) -> None:
-    """Raise ``ValueError`` for ``waves`` under 1 or not integral, or
-    ``target_ms`` under 10 or not finite."""
+    """Reject ``waves`` under 1 or fractional, ``target_ms`` under 10."""
     if int(waves) < 1 or waves != int(waves):
         raise ValueError(f"waves must be a positive integer, got {waves!r}")
     if not (isfinite(target_ms) and target_ms >= 10.0):
@@ -137,9 +136,8 @@ def warn_low_waves(fewest: float, advice: str = "") -> None:
 
 
 def unused_wave_share(runs: int, concurrent: Sequence[int]) -> float:
-    """Return the largest share of a last wave left empty over the
-    launches: ``(ceil(waves) - waves) / ceil(waves)`` with ``waves =
-    runs / count``, ``count`` the runs a launch executes at once."""
+    """Largest empty share of a last wave, ``(ceil(w) - w) / ceil(w)``
+    with ``w = runs / count``, over the launches' concurrent counts."""
     worst = 0.0
     for count in concurrent:
         waves = runs / count
@@ -684,8 +682,7 @@ class ComparisonRunner:
         return int(blocks), actual // kernel.threads_per_loop
 
     def concurrent_runs(self, blocksize: Optional[int] = None) -> int:
-        """Return the runs the current candidate's launch executes at
-        once: blocks per SM times SMs times runs per block."""
+        """Runs the current candidate's launch executes at once."""
         blocks, runs_per_block = self._launch_blocks(blocksize, None)
         multiprocessors = device_hardware().multiprocessor_count
         return blocks * multiprocessors * runs_per_block
@@ -698,8 +695,8 @@ class ComparisonRunner:
         return blocks, total_blocks / resident
 
     def size_batch(self, candidates: Sequence[Candidate], waves: int) -> None:
-        """Stage the tail-safe batch at ``waves`` of the candidate with
-        the most concurrent runs; keep the counts for :meth:`fit_batch`."""
+        """Stage the tail-safe batch at ``waves`` of the most concurrent
+        candidate; keep the counts for :meth:`fit_batch`."""
         concurrent = []
         for candidate in candidates:
             self.select(candidate)
@@ -732,10 +729,9 @@ class ComparisonRunner:
     def fit_batch(
         self, measured: float, target_ms: float, grow: bool, shrink: bool
     ) -> float:
-        """Move the sized batch once, linearly from ``measured`` toward
-        ``target_ms``: up within :meth:`batch_cap` when ``grow`` and
-        short, down to the floor when ``shrink`` and long; return the
-        kernel time at the staged batch."""
+        """Move the batch once toward ``target_ms``, up within
+        :meth:`batch_cap` if ``grow``, down to the floor if ``shrink``;
+        return the kernel time at the staged batch."""
         concurrent = self._concurrent
         if not concurrent:
             return measured

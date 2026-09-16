@@ -26,8 +26,7 @@ from cubie.time_logger import default_timelogger
 
 
 def test_tail_safe_runs_is_the_least_unused_wave_boundary():
-    """Within one wave of the launch with the most concurrent runs
-    above the wanted batch, the least unused share wins, exactly."""
+    """The least unused share within a wave above the wanted batch wins."""
     concurrent = [71680, 43008, 64512, 57344]
     floor = TIMED_WAVES_FLOOR * 71680
     runs = tail_safe_runs(concurrent, 5 * 71680, floor)

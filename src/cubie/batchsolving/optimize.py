@@ -516,11 +516,8 @@ def _size_batch(
     settling: float,
     target_ms: float,
 ) -> None:
-    """Stage the batch and duration ``auto_size`` times on: the runner's
-    tail-safe batch at ``waves``, the duration ramped toward
-    ``target_ms`` never past ``given``, then the runner's one batch
-    correction, up only at the given duration and down only at the
-    shortest."""
+    """Stage ``auto_size``'s batch at ``waves``, ramp the duration toward
+    ``target_ms`` never past ``given``, then correct the batch once."""
     runner.size_batch(launches, waves)
     if not launches:
         return

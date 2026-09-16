@@ -887,14 +887,13 @@ class Solver:
         verbose
             Print per-candidate progress lines. Default ``True``.
         auto_size
-            ``True`` races at a batch sized for ``target_ms`` solves
-            at your duration; ``False`` races your given batch.
-            Default ``True``.
+            Race a batch sized for ``target_ms`` solves at your
+            duration; ``False`` races your batch. Default ``True``.
         waves
-            Waves of the candidate with the most concurrent runs the
-            ``auto_size`` batch starts at. Default ``5``.
+            Waves of the most concurrent candidate the batch starts
+            at. Default ``5``.
         target_ms
-            Kernel milliseconds per timed solve ``auto_size`` aims
+            Kernel milliseconds per timed solve the batch is sized
             for. Default ``20.0``.
 
         Returns

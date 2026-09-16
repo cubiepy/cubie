@@ -314,9 +314,8 @@ few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
 and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
-count.  By default the batch timed is sized so a solve takes about
-20 ms, larger or smaller than yours; ``auto_size=False`` times your
-exact batch.  Candidates whose success rate is within 5% of the best are
+count.  The batch timed is sized for 20 ms solves; ``auto_size=False``
+times your exact batch.  Candidates whose success rate is within 5% of the best are
 ranked on time; the rest follow, ranked on time, with their failure
 rates shown.  By default the winning configuration is applied to the
 solver in place; pass ``apply=False`` to get the race results without

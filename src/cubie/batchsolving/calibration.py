@@ -536,9 +536,8 @@ class _CalibrationRace:
     """Race stages of candidate specs on one comparison runner.
 
     Timed configurations are recorded by key and recalled when a later
-    stage names the same one. With ``sizing`` (``waves``,
-    ``target_ms``) the first stage with an accepted candidate sizes
-    the batch through the runner before any timing.
+    stage names the same one; with ``sizing`` (``waves``, ``target_ms``)
+    the first accepted stage sizes the batch.
     """
 
     def __init__(
@@ -561,9 +560,8 @@ class _CalibrationRace:
         self._runner.emit(message)
 
     def _size(self, candidates: Sequence[Candidate]) -> None:
-        """Size the batch once on ``candidates`` at the given duration:
-        the runner's tail-safe batch, then one correction from the
-        first candidate's solve."""
+        """Size the batch on ``candidates`` at the given duration from
+        the first candidate's solve."""
         waves, target_ms = self._sizing
         self._sizing = None
         runner = self._runner
@@ -684,14 +682,12 @@ def run_calibration(
     verbose
         Print per-candidate progress lines.
     auto_size
-        ``True`` races at a batch the runner sizes for ``target_ms``
-        solves at ``duration``; ``False`` races your given batch.
+        Race a batch sized for ``target_ms`` solves at ``duration``;
+        ``False`` races the given batch.
     waves
-        Waves of the candidate with the most concurrent runs the
-        ``auto_size`` batch starts at.
+        Waves of the most concurrent candidate the batch starts at.
     target_ms
-        Kernel milliseconds per timed solve ``auto_size`` aims for by
-        moving the batch once.
+        Kernel milliseconds per timed solve the batch is sized for.
 
     Returns
     -------
