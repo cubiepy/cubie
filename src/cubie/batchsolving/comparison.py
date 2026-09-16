@@ -41,23 +41,19 @@ ROUNDS = 2
 """Timing rounds; the second visits the candidates in reverse order."""
 
 SOLVES_PER_ROUND = 3
-"""Timed solves per candidate per round, queued behind one busy launch."""
+"""Timed solves per candidate per round."""
 
 WARM_MS = 500.0
 """Busy-kernel milliseconds run before the first timed solve.
 
-Empirical: on the RTX 4070 SUPER the busy launch time steps down 11%
-after 210 to 230 ms of continuous load (from 1, 5 and 20 s idle) and
-holds that rate through host gaps of up to 1 s; 500 ms covers the
-step with margin.
+Empirical: RTX 4070 SUPER launches speed up 11% after 210 to 230 ms
+of load and hold that rate through host gaps of up to 1 s.
 """
 
 BUSY_CHAIN = 1 << 16
 """Dependent FMAs per thread in one busy launch.
 
-Empirical: 2.6 to 2.9 ms per launch on the RTX 4070 SUPER, so the
-warm-up overshoots :data:`WARM_MS` by at most one launch and a lead-in
-launch costs a few milliseconds.
+Empirical: 2.6 to 2.9 ms per launch on the RTX 4070 SUPER.
 """
 
 SUCCESS_TIER_FRACTION = 0.95
@@ -543,12 +539,8 @@ class ComparisonRunner:
         """Queue ``count`` solves of the staged batch behind one busy
         launch; synchronize once and return each solve's kernel ms.
 
-        The busy launch keeps the GPU busy while the solves are issued,
-        so every start event fires with its kernel already queued and
-        the bracket holds kernel time only. A queue whose busy launch
-        had finished before its last solve was issued (the first solve
-        allocated or rebuilt on the host) may have opened a bracket on
-        an idle GPU, so it is queued once more.
+        A queue whose busy launch finished before its last solve was
+        issued is queued once more.
         """
         solver = self._solver
         kernel = solver.kernel

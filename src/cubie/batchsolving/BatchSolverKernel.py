@@ -439,11 +439,10 @@ class BatchSolverKernel(CUDAFactory):
         Notes
         -----
         One workload event plus three per chunk. While timing is on
-        the event sets are kept between runs and rebuilt when the
-        chunk count or logger verbosity changes; a run queued before
-        :meth:`synchronize` takes a fresh set instead of reusing one
-        still pending, so back-to-back runs each keep their own times.
-        With timing off each run gets fresh no-op events.
+        the sets are kept between runs and rebuilt on a chunk-count or
+        verbosity change; a run queued before :meth:`synchronize`
+        takes its own set. With timing off each run gets fresh no-op
+        events.
         """
         verbosity = default_timelogger.verbosity
         key = (chunks, verbosity)
@@ -887,13 +886,9 @@ class BatchSolverKernel(CUDAFactory):
         self._gpu_workload_event.record_end(stream)
 
     def single_chunk_runs(self, runs: int) -> int:
-        """Most runs of a ``runs``-run batch, with the last run's array
-        shapes, the memory manager keeps in one chunk.
-
-        The managers' device requests at ``runs`` runs go through
-        :meth:`MemoryManager.get_chunk_parameters`, so the answer is
-        the chunk length an allocation of that batch would get.
-        """
+        """Chunk length :meth:`MemoryManager.get_chunk_parameters` gives
+        the managers' requests for ``runs`` runs, shaped like the last
+        run's arrays."""
         runs = int(runs)
         requests = {
             id(manager): manager.batch_requests(runs)

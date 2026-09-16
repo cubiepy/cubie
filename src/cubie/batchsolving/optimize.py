@@ -42,10 +42,7 @@ from cubie.batchsolving.comparison import (
 from cubie.CUDAFactory import UnrollChoice
 
 TIMED_WAVES_FLOOR = 2
-"""Fewest occupancy waves a timed batch fills at any launch.
-
-Protocol: the repository's minimum for a timing measurement.
-"""
+"""Fewest occupancy waves a timed batch fills at any launch."""
 
 LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
@@ -475,9 +472,8 @@ def _set_duration(
 
 
 def _ramp_start(solver: Any, given: float) -> float:
-    """Shortest duration the ramp may probe: the output cadence floor,
-    at least one step; ``given`` when the sample interval rejects a
-    shorter one."""
+    """The cadence floor, at least one step; ``given`` when the sample
+    interval rejects a shorter duration."""
     trial = max(_duration_floor(solver, given), float(solver.effective.dt))
     trial = min(trial, given)
     if trial < given and not _fits_sample_interval(solver, trial):
@@ -513,10 +509,8 @@ def _ramp_duration(
 
 
 def unused_wave_share(runs: int, resident: Sequence[int]) -> float:
-    """Return the largest share of a last wave ``runs`` leaves unused
-    over launches resident ``resident`` runs at once: a launch fills
-    ``runs / count`` waves, and its last one runs
-    ``ceil(waves) - waves`` of ``ceil(waves)`` empty."""
+    """Largest ``(ceil(waves) - waves) / ceil(waves)`` over launches
+    resident ``resident`` runs at once, ``waves = runs / count``."""
     worst = 0.0
     for count in resident:
         waves = runs / count
@@ -530,8 +524,7 @@ def tail_safe_runs(
     floor: int,
     cap: Optional[int] = None,
 ) -> int:
-    """Return the batch of about ``wanted`` runs whose last wave is the
-    fullest over every launch.
+    """Return the batch near ``wanted`` runs with the fullest last wave.
 
     Parameters
     ----------
@@ -547,12 +540,9 @@ def tail_safe_runs(
     Returns
     -------
     int
-        The wave boundary (a multiple of a launch's resident count)
-        or interval end with the least :func:`unused_wave_share` in
-        the interval one wave of the most resident launch wide that
-        starts at ``wanted``, clipped to ``[floor, cap]``; an interval
-        the cap cuts short ends at the cap instead. The smallest wins
-        a tie.
+        The wave boundary or interval end with the least
+        :func:`unused_wave_share` in the one-wave interval above
+        ``wanted``, clipped to ``[floor, cap]``; the smallest on a tie.
     """
     most = max(resident)
     low = max(int(wanted), int(floor))
@@ -603,14 +593,11 @@ def _size_batch(
 ) -> None:
     """Stage the batch and duration ``auto_size`` times on.
 
-    The batch starts at the tail-safe boundary above ``waves`` of the
-    most resident launch and the duration ramps from
-    :func:`_ramp_start` toward ``target_ms``, never past ``given``.
-    Then one linear correction of the batch: it grows toward the
-    target, within what the memory manager keeps in one chunk, when
-    the given duration is still short of it; it shrinks toward the
-    target, never under :data:`TIMED_WAVES_FLOOR` waves, when the
-    shortest duration is already over it.
+    Batch: the tail-safe boundary above ``waves`` of the most resident
+    launch. Duration: ramped toward ``target_ms``, never past
+    ``given``. Then one linear batch correction: up within one chunk
+    when the given duration is short, down to :data:`TIMED_WAVES_FLOOR`
+    waves when the shortest overshoots.
     """
     kernel = solver.kernel
     resident = _launch_resident_runs(runner, kernel, launches)
@@ -641,8 +628,7 @@ def _size_batch(
             partition = kernel.run_params
             if partition.num_chunks <= 1:
                 raise
-            # Memory moved between the query and the allocation: the
-            # batch takes the live partition's chunk length.
+            # The live partition is the fresh single-chunk fit.
             runs = tail_safe_runs(
                 resident,
                 partition.chunk_length,
