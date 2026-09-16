@@ -31,7 +31,7 @@ from cubie.backend.utils import (
     device_hardware,
 )
 from cubie.cache_root import get_cache_root_override, set_cache_root
-from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import cuda, float32
 from cubie.CUDAFactory import UnrollFlags
 from cubie.time_logger import default_timelogger
 
@@ -42,6 +42,19 @@ ROUNDS = 2
 
 SOLVES_PER_ROUND = 3
 """Timed solves per candidate per round."""
+
+WARM_MS = 500.0
+"""Busy-kernel milliseconds run before the first timed solve.
+
+Empirical: RTX 4070 SUPER launches speed up 11% after 210 to 230 ms
+of load and hold that rate through host gaps of up to 1 s.
+"""
+
+BUSY_CHAIN = 1 << 16
+"""Dependent FMAs per thread in one busy launch.
+
+Empirical: 2.6 to 2.9 ms per launch on the RTX 4070 SUPER.
+"""
 
 SUCCESS_TIER_FRACTION = 0.95
 """Share of the best success rate a candidate keeps to rank on time."""
@@ -55,6 +68,42 @@ WORKER_STARTUP_SECONDS = 12.0
 Empirical: a fresh ``import cubie`` in a spawned process on the
 development machine (mlir compat 6 s, odesystems 4.8 s, cupy 1.5 s).
 """
+
+
+@cuda.jit
+def _busy_kernel(sink, iterations):  # pragma: no cover - device code
+    """Run a dependent FMA chain for ``iterations`` steps."""
+    value = float32(cuda.grid(1))
+    for _ in range(iterations):
+        value = value * float32(0.999) + float32(0.001)
+    if value < float32(0.0):
+        sink[0] = value
+
+
+def busy_launch(stream: Any) -> None:
+    """Queue one busy launch on ``stream``: every SM at its block and
+    thread limits, :data:`BUSY_CHAIN` FMAs per thread."""
+    hardware = device_hardware()
+    blocks_per_sm = hardware.max_blocks_per_multiprocessor
+    threads = hardware.max_threads_per_multiprocessor // blocks_per_sm
+    blocks = blocks_per_sm * hardware.multiprocessor_count
+    sink = cuda.device_array(1, dtype="float32")
+    _busy_kernel[blocks, threads, stream](sink, BUSY_CHAIN)
+
+
+def warm_clocks(stream: Any) -> float:
+    """Busy-launch on ``stream`` until :data:`WARM_MS` of kernel time
+    has passed; return that time."""
+    total = 0.0
+    while total < WARM_MS:
+        start = cuda.event()
+        end = cuda.event()
+        start.record(stream)
+        busy_launch(stream)
+        end.record(stream)
+        end.synchronize()
+        total += float(cuda.event_elapsed_time(start, end))
+    return total
 
 
 def settings_label(settings: Dict[str, Any]) -> str:
@@ -366,6 +415,15 @@ class ComparisonRunner:
         self._codes = None
         self.runs = runs
 
+    @property
+    def staged_bytes(self) -> int:
+        """Device bytes of the staged grid."""
+        return sum(
+            grid.nbytes
+            for grid in (self._inits, self._params)
+            if grid is not None
+        )
+
     @staticmethod
     def _stage(grid: ndarray) -> Any:
         """Upload ``grid``; a grid with no variables is passed as None."""
@@ -505,6 +563,12 @@ class ComparisonRunner:
                 if event.name.startswith("kernel_chunk")
             )
         )
+
+    def warm(self) -> float:
+        """Lift the clocks with the busy kernel; return its milliseconds."""
+        measured = warm_clocks(self._solver.kernel.stream)
+        self.emit(f"warm: {measured:.1f} ms busy")
+        return measured
 
     def failures(self) -> int:
         """Return the failed-run count of the last solve."""

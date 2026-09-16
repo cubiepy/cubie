@@ -339,9 +339,10 @@ Settings you gave, or an earlier ``optimize`` applied, stay fixed
 unless ``force=True``. The fastest configuration is applied in place;
 ``apply=False`` only reports.
 
-By default ``optimize`` times a small batch at a short duration.
-Pass ``auto_size=False`` only when you will run one grid size at one
-duration repeatedly; it spends longer optimising that exact solve.
+By default ``optimize`` times a batch that takes about 20 ms to
+integrate, larger or smaller than yours. Pass ``auto_size=False`` to
+optimise on your exact batch and duration, for a batch whose parameter
+sets behave very differently and that you will run repeatedly.
 
 For the mathematical background behind these algorithms, see
 :doc:`/theory/numerical_integration`.

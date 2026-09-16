@@ -9,6 +9,7 @@ from cubie.batchsolving.comparison import (
     ROUNDS,
     SOLVES_PER_ROUND,
     SUCCESS_TIER_FRACTION,
+    WARM_MS,
     WORKER_STARTUP_SECONDS,
     Candidate,
     CandidateTiming,
@@ -237,15 +238,21 @@ def test_runner_times_candidates_on_one_buffer_set(
         for settings in solver.optimisation_candidates()
     ]
     runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
+    kernel = solver.kernel
     with runner:
         runner.compile(candidates)
+        assert runner.warm() >= WARM_MS
         runner.set_batch(4 * inits.shape[1])
         assert runner.runs == 4 * inits.shape[1]
         first = runner.solve_ms(None)
-        device_state = solver.kernel.device_state
+        assert runner.staged_bytes == (
+            kernel.input_arrays.device_initial_values.nbytes
+            + kernel.input_arrays.device_parameters.nbytes
+        )
+        device_state = kernel.device_state
         timings = runner.time(candidates)
-        assert solver.kernel.device_state is device_state
-        for _, slot in solver.kernel.output_arrays.host.iter_managed_arrays():
+        assert kernel.device_state is device_state
+        for _, slot in kernel.output_arrays.host.iter_managed_arrays():
             assert slot.array is None
     assert first > 0.0
     assert len(timings) == len(candidates)

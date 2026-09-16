@@ -20,7 +20,7 @@ Published Objects
     Time a solver's candidates.
 """
 
-from math import isfinite
+from math import ceil, isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from warnings import warn
 
@@ -41,8 +41,8 @@ from cubie.batchsolving.comparison import (
 )
 from cubie.CUDAFactory import UnrollChoice
 
-PROBE_FRACTIONS = (0.01, 0.1, 1.0)
-"""Fractions of the given duration the ``auto_size`` probe ramps through."""
+TIMED_WAVES_FLOOR = 2
+"""Fewest occupancy waves a timed batch fills at any launch."""
 
 LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
@@ -462,20 +462,6 @@ def _duration_floor(solver: Any, given: float) -> float:
     return min(floor, given)
 
 
-def _trial_durations(solver: Any, given: float) -> List[float]:
-    """Ascending probe durations the cadence and sample interval allow."""
-    floor = _duration_floor(solver, given)
-    trials = []
-    for fraction in PROBE_FRACTIONS:
-        trial = min(given, max(given * fraction, floor))
-        if trial in trials:
-            continue
-        if trial < given and not _fits_sample_interval(solver, trial):
-            continue
-        trials.append(trial)
-    return trials
-
-
 def _set_duration(
     runner: ComparisonRunner, duration: float, given: float, settling: float
 ) -> None:
@@ -485,26 +471,191 @@ def _set_duration(
     runner.settling = settling * scale
 
 
-def _probe_duration(
+def _ramp_start(solver: Any, given: float) -> float:
+    """Return the shortest duration to time: at least one save or
+    summary sample and at least one step, or ``given`` when the
+    sample interval rejects anything shorter."""
+    trial = max(_duration_floor(solver, given), float(solver.effective.dt))
+    trial = min(trial, given)
+    if trial < given and not _fits_sample_interval(solver, trial):
+        return given
+    return trial
+
+
+def _ramp_duration(
     runner: ComparisonRunner,
     solver: Any,
+    start: float,
+    given: float,
+    settling: float,
+    target_ms: float,
+) -> float:
+    """Double the timed duration from ``start`` while the kernel time
+    is under ``target_ms`` and the duration under ``given``; return
+    the last kernel time."""
+    trial = start
+    _set_duration(runner, trial, given, settling)
+    measured = runner.solve_ms(None)
+    runner.emit(f"  probe: duration {trial:g} -> {measured:.3f} ms")
+    while measured < target_ms and trial < given:
+        longer = min(trial * 2.0, given)
+        if longer < given and not _fits_sample_interval(solver, longer):
+            longer = given
+        _set_duration(runner, longer, given, settling)
+        measured = runner.solve_ms(None)
+        runner.emit(f"  probe: duration {longer:g} -> {measured:.3f} ms")
+        trial = longer
+    runner.emit(f"duration: {trial:g} per timed solve")
+    return measured
+
+
+def unused_wave_share(runs: int, concurrent: Sequence[int]) -> float:
+    """Return the largest share of a last wave left empty over the
+    launches: ``(ceil(waves) - waves) / ceil(waves)`` with ``waves =
+    runs / count``, ``count`` the runs a launch executes at once."""
+    worst = 0.0
+    for count in concurrent:
+        waves = runs / count
+        worst = max(worst, (ceil(waves) - waves) / ceil(waves))
+    return worst
+
+
+def tail_safe_runs(
+    concurrent: Sequence[int],
+    wanted: int,
+    floor: int,
+    cap: Optional[int] = None,
+) -> int:
+    """Return the batch near ``wanted`` runs with the fullest last wave.
+
+    Parameters
+    ----------
+    concurrent
+        Runs each launch executes at once.
+    wanted
+        Runs the batch should reach.
+    floor
+        Fewest runs allowed.
+    cap
+        Most runs allowed; ``None`` for no cap.
+
+    Returns
+    -------
+    int
+        The wave boundary or interval end with the least
+        :func:`unused_wave_share` in the one-wave interval above
+        ``wanted``, clipped to ``[floor, cap]``; the smallest on a tie.
+    """
+    most = max(concurrent)
+    low = max(int(wanted), int(floor))
+    high = low + most
+    if cap is not None:
+        high = min(high, int(cap))
+        low = max(int(floor), min(low, high - most))
+        if low > high:
+            return high
+    candidates = {low, high}
+    for count in concurrent:
+        first = -(-low // count)
+        candidates.update(
+            multiple * count for multiple in range(first, high // count + 1)
+        )
+    return min(
+        candidates,
+        key=lambda runs: (unused_wave_share(runs, concurrent), runs),
+    )
+
+
+def _launch_concurrent_runs(
+    runner: ComparisonRunner, kernel: Any, launches: Sequence[Candidate]
+) -> List[int]:
+    """Return the runs each launch executes at once (blocks per SM times
+    SMs times runs per block), in ``launches`` order."""
+    multiprocessors = device_hardware().multiprocessor_count
+    threads_per_loop = kernel.threads_per_loop
+    concurrent = []
+    for launch in launches:
+        runner.select(launch)
+        blocks = launch.resident_blocks
+        if blocks is None:
+            shapes = kernel.launchable_shapes((launch.blocksize,))
+            blocks = shapes[launch.blocksize][1]
+        concurrent.append(
+            blocks * multiprocessors * (launch.blocksize // threads_per_loop)
+        )
+    return concurrent
+
+
+def _batch_cap(runner: ComparisonRunner, kernel: Any) -> int:
+    """Runs that fit in memory at the staged batch's bytes per run."""
+    manager = kernel.memory_manager
+    allocated = sum(
+        manager.get_registration(arrays).allocated_bytes
+        for arrays in (kernel.input_arrays, kernel.output_arrays)
+    )
+    available = manager.get_available_memory(
+        manager.get_stream_group(kernel)
+    )
+    bytes_per_run = (allocated + runner.staged_bytes) / runner.runs
+    return int((available + allocated) // bytes_per_run)
+
+
+def _size_batch(
+    runner: ComparisonRunner,
+    solver: Any,
+    launches: Sequence[Candidate],
+    waves: int,
     given: float,
     settling: float,
     target_ms: float,
 ) -> None:
-    """Set the runner's duration so one solve takes about ``target_ms``."""
-    floor = _duration_floor(solver, given)
-    measured = 0.0
-    trial = given
-    for trial in _trial_durations(solver, given):
-        _set_duration(runner, trial, given, settling)
-        measured = runner.solve_ms(None)
-        runner.emit(f"  probe: duration {trial:g} -> {measured:.3f} ms")
-        if measured >= target_ms:
-            break
-    chosen = max(trial * target_ms / measured, floor)
-    _set_duration(runner, chosen, given, settling)
-    runner.emit(f"duration: {chosen:g} per timed solve")
+    """Stage the batch and duration ``auto_size`` times on.
+
+    Batch: the tail-safe boundary above ``waves`` of the launch with
+    the most concurrent runs. Duration: ramped toward ``target_ms``,
+    never past ``given``. Then one linear batch correction: up within
+    free memory when the given duration is short, down to
+    :data:`TIMED_WAVES_FLOOR` waves when the shortest overshoots.
+    """
+    kernel = solver.kernel
+    concurrent = _launch_concurrent_runs(runner, kernel, launches)
+    if not concurrent:
+        runner.set_batch()
+        return
+    most = max(concurrent)
+    floor = TIMED_WAVES_FLOOR * most
+    runs = tail_safe_runs(concurrent, int(waves) * most, floor)
+    runner.set_batch(runs)
+    runner.emit(f"batch: {runner.runs} runs")
+    runner.select(launches[0])
+    start = _ramp_start(solver, given)
+    measured = _ramp_duration(
+        runner, solver, start, given, settling, target_ms
+    )
+    wanted = int(runner.runs * target_ms / measured)
+    if measured < target_ms and runner.duration >= given:
+        cap = _batch_cap(runner, kernel)
+        runs = tail_safe_runs(concurrent, wanted, floor, cap)
+    elif measured > target_ms and runner.duration <= start:
+        runs = tail_safe_runs(concurrent, wanted, floor, runner.runs)
+    if runs != runner.runs:
+        runner.set_batch(runs)
+        try:
+            measured = runner.solve_ms(None)
+        except ValueError:
+            partition = kernel.run_params
+            if partition.num_chunks <= 1:
+                raise
+            # The live partition is the fresh single-chunk fit.
+            runs = tail_safe_runs(
+                concurrent,
+                partition.chunk_length,
+                floor,
+                partition.chunk_length,
+            )
+            runner.set_batch(runs)
+            measured = runner.solve_ms(None)
+        runner.emit(f"batch: {runner.runs} runs -> {measured:.3f} ms")
 
 
 def run_optimization(
@@ -556,11 +707,12 @@ def run_optimization(
         duration to reduce runtime; ``False`` optimizes at your given
         batch size and duration.
     waves
-        How many waves the ``auto_size`` setting sets your batch size
-        to fill.
+        Waves of the launch with the most concurrent runs the
+        ``auto_size`` batch starts at; the batch then moves to hit
+        ``target_ms``.
     target_ms
-        Target kernel runtime that ``auto_size`` sets your integration
-        duration to.
+        Kernel milliseconds per timed solve ``auto_size`` aims for by
+        raising the duration, never past yours, then the batch.
 
     Returns
     -------
@@ -600,25 +752,6 @@ def run_optimization(
     with runner:
         runner.emit(f"optimize: {len(candidates)} candidate kernels")
         accepted = runner.compile(candidates)
-        if auto_size and accepted:
-            resident = 0
-            for candidate in accepted:
-                runner.select(candidate)
-                resident = max(
-                    resident, most_resident_runs(kernel, blocksizes)
-                )
-            runner.set_batch(int(waves) * resident)
-            runner.emit(f"batch: {runner.runs} runs fill {waves} waves")
-            runner.select(accepted[0])
-            _probe_duration(
-                runner,
-                parent,
-                float(duration),
-                float(settling_time),
-                target_ms,
-            )
-        else:
-            runner.set_batch()
         launches = []
         for candidate in candidates:
             # A rejected candidate reports once, with no launch.
@@ -629,7 +762,7 @@ def run_optimization(
                 continue
             runner.select(candidate)
             for blocksize, resident in launch_candidates(
-                kernel, blocksizes, runs=runner.runs
+                kernel, blocksizes
             ):
                 launches.append(
                     Candidate(
@@ -641,19 +774,32 @@ def run_optimization(
                         resident,
                     )
                 )
+        runner.warm()
+        if auto_size and accepted:
+            _size_batch(
+                runner,
+                parent,
+                [launch for launch in launches if launch.blocksize],
+                int(waves),
+                float(duration),
+                float(settling_time),
+                target_ms,
+            )
+        else:
+            runner.set_batch()
         timings = runner.time(launches)
         runs = runner.runs
         timed_duration = runner.duration
     results = [LaunchResult.from_timing(timing) for timing in timings]
     achieved = [launch.waves for launch in results if launch.timed]
-    if not auto_size and achieved and min(achieved) < 2.0:
+    if not auto_size and achieved and min(achieved) < TIMED_WAVES_FLOOR:
         fewest = min(achieved)
         warn(
             f"The batch passed to optimize only fills {fewest:.2f} "
             "occupancy waves; the results might not represent the best "
-            f"timing for your system. Try again with {2.0 / fewest:.1f}x "
-            "more runs in the batch and force=True to get the fastest "
-            "full-GPU batch settings."
+            "timing for your system. Try again with "
+            f"{TIMED_WAVES_FLOOR / fewest:.1f}x more runs in the batch "
+            "and force=True to get the fastest full-GPU batch settings."
         )
     ranking = rank_timings(results)
     best = ranking[0] if ranking else None
