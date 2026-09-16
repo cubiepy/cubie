@@ -2175,98 +2175,6 @@ class MemoryManager:
         settings = self.registry.get(instance_id)
         return settings is not None and settings.owner_id == owner_id
 
-    def _allocatable_bytes(
-        self,
-        requests: Dict[str, Dict],
-        stream_group: str,
-        evict: bool = True,
-    ) -> Tuple[int, int, int]:
-        """Return ``(allocatable, available, free)`` bytes for
-        ``requests``; ``evict`` lets a physical shortage evict idle
-        owners."""
-        self._require_device()
-        free, _ = self.get_memory_info()
-        available_memory = self.get_available_memory(stream_group)
-        cap_headroom = None
-        if self._mode == "active":
-            members = self.stream_groups.get_instances_in_group(stream_group)
-            cap_headroom = sum(
-                self.registry[member].cap
-                - self.registry[member].allocated_bytes
-                for member in members
-            )
-        chunkable_size, unchunkable_size = get_portioned_request_size(
-            requests,
-        )
-        request_size = chunkable_size + unchunkable_size
-        # A requester's current device buffers are replaced by this
-        # allocation, so their bytes are usable for it.
-        own_reclaimable = sum(
-            self.registry[instance_id].allocated_bytes
-            for instance_id in requests
-            if instance_id in self.registry
-        )
-        free_effective = free + own_reclaimable
-        # Eviction only fixes a physical shortage the cap allows filling.
-        physical_shortage = request_size >= free_effective
-        cap_allows_request = (
-            cap_headroom is None or request_size < cap_headroom
-        )
-        if evict and physical_shortage and cap_allows_request:
-            released = self._evict_idle_owners(
-                set(requests.keys()), request_size - free_effective + 1
-            )
-            free_effective += released
-        physical_headroom = (
-            free_effective
-            if cap_headroom is None
-            else min(free_effective, cap_headroom)
-        )
-        # Pool-held blocks satisfy allocations without showing as free,
-        # so the larger of the two estimates is trusted.
-        available_memory = max(available_memory, physical_headroom)
-        fractional_headroom = int(available_memory * CHUNK_HEADROOM_FRACTION)
-        allocatable = min(
-            available_memory - fractional_headroom,
-            free_effective - self.allocation_granule_bytes,
-        )
-        return allocatable, available_memory, free
-
-    def max_single_chunk_runs(
-        self,
-        requests: Dict[str, Dict],
-        axis_length: int,
-        stream_group: str,
-    ) -> int:
-        """Return the most runs of ``requests`` one chunk holds.
-
-        Parameters
-        ----------
-        requests
-            Instance ids to their array requests at ``axis_length`` runs.
-        axis_length
-            Runs the requests are sized for.
-        stream_group
-            Stream group the requests belong to.
-
-        Returns
-        -------
-        int
-            Largest unchunked run count; 0 when one run does not fit.
-        """
-        allocatable, _, _ = self._allocatable_bytes(
-            requests, stream_group, evict=False
-        )
-        chunkable_size, unchunkable_size = get_portioned_request_size(
-            requests,
-        )
-        if chunkable_size + unchunkable_size < allocatable:
-            return int(axis_length)
-        available_to_chunk = allocatable - unchunkable_size
-        if chunkable_size == 0 or available_to_chunk <= 0:
-            return 0
-        return int(np_floor(axis_length * available_to_chunk / chunkable_size))
-
     def get_chunk_parameters(
         self,
         requests: Dict[str, Dict],
@@ -2308,13 +2216,62 @@ class MemoryManager:
         The request is offered ``min((1 - CHUNK_HEADROOM_FRACTION) ×
         available, free - allocation_granule_bytes)`` bytes.
         """
-        allocatable, available_memory, free = self._allocatable_bytes(
-            requests, stream_group
-        )
+        self._require_device()
+        free, _ = self.get_memory_info()
+        available_memory = self.get_available_memory(stream_group)
+        cap_headroom = None
+        if self._mode == "active":
+            members = self.stream_groups.get_instances_in_group(stream_group)
+            cap_headroom = sum(
+                self.registry[member].cap
+                - self.registry[member].allocated_bytes
+                for member in members
+            )
         chunkable_size, unchunkable_size = get_portioned_request_size(
             requests,
         )
+
         request_size = chunkable_size + unchunkable_size
+
+        # A requester's current device buffers are replaced by this
+        # allocation, so their bytes are usable for it: without this
+        # credit a same-size reallocation reads as a shortage of its
+        # own footprint.
+        own_reclaimable = sum(
+            self.registry[instance_id].allocated_bytes
+            for instance_id in requests
+            if instance_id in self.registry
+        )
+        free_effective = free + own_reclaimable
+
+        # Evict only for a genuine physical VRAM shortage that eviction
+        # can fix. A configured cap (active mode) is a policy limit:
+        # when the request exceeds cap headroom the run chunks anyway,
+        # and evicting peers cannot raise the cap.
+        physical_shortage = request_size >= free_effective
+        cap_allows_request = (
+            cap_headroom is None or request_size < cap_headroom
+        )
+        if physical_shortage and cap_allows_request:
+            released = self._evict_idle_owners(
+                set(requests.keys()), request_size - free_effective + 1
+            )
+            free_effective += released
+        physical_headroom = (
+            free_effective
+            if cap_headroom is None
+            else min(free_effective, cap_headroom)
+        )
+        # Group accounting and the physical probe are both estimates;
+        # trust whichever allows more, since pool-held blocks satisfy
+        # allocations without showing up as free device memory.
+        available_memory = max(available_memory, physical_headroom)
+        # The granule floor applies to physical free memory only.
+        fractional_headroom = int(available_memory * CHUNK_HEADROOM_FRACTION)
+        allocatable = min(
+            available_memory - fractional_headroom,
+            free_effective - self.allocation_granule_bytes,
+        )
         headroom = available_memory - allocatable
         if request_size < allocatable:
             return axis_length, 1  # No chunking needed

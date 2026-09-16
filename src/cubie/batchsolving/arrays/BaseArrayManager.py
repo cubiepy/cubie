@@ -1062,12 +1062,16 @@ class BaseArrayManager(ABC):
         )
 
     def batch_requests(self, runs: int) -> dict[str, ArrayRequest]:
-        """Return every device request resized to ``runs``, unqueued."""
+        """Return every device request for a batch of ``runs`` runs.
+
+        Shapes come from the sizes the last solve set, with the run
+        axis of each chunked array at ``runs``; nothing is queued. An
+        input attached as a device array is requested like any other,
+        since a batch of another size needs a new one.
+        """
         requests = {}
         for label in self.device.array_names():
-            shape = self._request_shape(label)
-            if shape is None:
-                continue
+            shape = ensure_nonzero_size(tuple(getattr(self._sizes, label)))
             host_array_object = self.host.get_managed_array(label)
             if host_array_object.is_chunked:
                 shape = list(shape)

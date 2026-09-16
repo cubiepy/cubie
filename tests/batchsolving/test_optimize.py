@@ -1,7 +1,5 @@
 """Tests for the per-solver unroll, placement and launch optimisation."""
 
-import math
-
 import pytest
 
 from cubie.backend.utils import DeviceHardware
@@ -13,15 +11,16 @@ from cubie.batchsolving.comparison import (
 from cubie.batchsolving.optimize import (
     BUDGET_BLOCKSIZE,
     RESIDENCY_CUT_MIN_FRAME_BYTES,
+    TIMED_WAVES_FLOOR,
     LaunchResult,
     _duration_floor,
     _ramp_start,
-    most_resident_runs,
-    _timing_plan,
-    tail_safe_runs,
     apply_launch,
     default_launch,
+    most_resident_runs,
     resident_blocks_within_l2,
+    tail_safe_runs,
+    unused_wave_share,
 )
 from cubie.cuda_simsafe import cupy
 from cubie.CUDAFactory import UnrollChoice
@@ -398,13 +397,12 @@ def test_optimize_applies_the_fastest_launch(
         assert launch.failures == 0
         assert launch.runs == result.runs
     assert result.runs > 0
-    # Duration stays at the given; a short launch grows the batch.
+    # The duration ramps to the given; a batch still short of the
+    # target there grows toward it.
     assert result.duration == pytest.approx(0.1)
     most = most_resident_runs(solver_mutable.kernel)
     assert result.runs >= waves * most
-    assert result.sized_ms > 0.0
-    if result.sized_ms < 20.0:
-        assert result.runs > waves * most
+    assert result.runs > waves * most or result.best.best_ms >= 20.0
     assert "best" in result.summary()
 
 
@@ -450,60 +448,52 @@ def _runner(solver, inits, params):
 def test_duration_floor_holds_the_final_summary_sample(
     solver_mutable, simple_initial_values, simple_parameters
 ):
-    """The ramp starts on the cadence floor, keeping one sample inside."""
+    """The ramp starts on the cadence floor, keeping one sample inside,
+    whatever the given duration."""
     runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
     with runner:
         floor = _duration_floor(solver_mutable, 0.1)
         assert floor == pytest.approx(0.03)
         assert _ramp_start(solver_mutable, 0.1) == pytest.approx(floor)
-        assert _ramp_start(solver_mutable, 1000.0) == pytest.approx(1.0)
+        assert _ramp_start(solver_mutable, 1000.0) == pytest.approx(floor)
 
 
-def test_tail_safe_runs_fills_the_last_wave_of_every_launch():
-    """The batch lands where every launch's last wave is nearly full."""
+def test_tail_safe_runs_is_the_least_unused_wave_boundary():
+    """Within one wave of the most resident launch above the wanted
+    batch, the least unused share over every launch wins, exactly."""
     resident = [71680, 43008, 64512, 57344]
-    runs = tail_safe_runs(resident, 5 * 71680)
-    assert runs >= 5 * 71680
-    for count in resident:
-        waves = runs / count
-        assert math.ceil(waves) / waves - 1 <= 0.05
-    assert tail_safe_runs([14336], 5 * 14336) == 5 * 14336
+    floor = TIMED_WAVES_FLOOR * 71680
+    runs = tail_safe_runs(resident, 5 * 71680, floor)
+    assert 5 * 71680 <= runs <= 6 * 71680
+    exhaustive = min(
+        range(5 * 71680, 6 * 71680 + 1),
+        key=lambda batch: (unused_wave_share(batch, resident), batch),
+    )
+    assert runs == exhaustive
+    assert runs % 43008 == 0
+    assert unused_wave_share(runs, resident) == pytest.approx(0.0625)
+    assert tail_safe_runs([14336], 5 * 14336, 2 * 14336) == 5 * 14336
 
 
-def test_tail_safe_runs_takes_the_smallest_tail_when_none_fits():
-    """Without a fitting batch the least partial wave wins, first on a tie."""
-    assert tail_safe_runs([1000, 1700], 1000) == 1000
-    assert tail_safe_runs([1000, 3000], 1000) == 2000
+def test_tail_safe_runs_reaches_the_exact_boundary():
+    """A wave boundary beats any batch nearer the wanted count."""
+    assert tail_safe_runs([640], 650, 640) == 1280
+    assert unused_wave_share(650, [640]) == pytest.approx(0.4921875)
+    assert unused_wave_share(1280, [640]) == 0.0
+    assert tail_safe_runs([1000, 1700], 1000, 1000) == 1700
+    assert unused_wave_share(1000, [1000, 1700]) == pytest.approx(7 / 17)
+    assert unused_wave_share(1700, [1000, 1700]) == pytest.approx(0.15)
 
 
-def test_tail_safe_runs_respects_the_cap():
-    """The cap bounds both the minimum and the search."""
-    assert tail_safe_runs([14336], 5 * 14336, cap=20000) == 20000
-    assert tail_safe_runs([], 100, cap=50) == 50
-    assert tail_safe_runs([4096], 4096, cap=100000) == 4096
-
-
-def test_timing_plan_follows_the_launch_length():
-    """Short launches get a lead-in; long launches solve once a round."""
-    assert _timing_plan(0.3) == (3, True)
-    assert _timing_plan(150.0) == (3, False)
-    assert _timing_plan(2000.0) == (1, False)
-
-
-@pytest.mark.nocudasim
-def test_single_chunk_runs_caps_a_batch_that_overfills_memory(
-    solver_mutable, simple_initial_values, simple_parameters
-):
-    """A staged batch fits whole; an absurd one is cut to what fits."""
-    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
-    with runner:
-        runner.set_batch()
-        runner.solve_ms(None)
-        kernel = solver_mutable.kernel
-        assert kernel.single_chunk_runs(runner.runs) == runner.runs
-        huge = 1 << 40
-        capped = kernel.single_chunk_runs(huge)
-        assert 0 < capped < huge
+def test_tail_safe_runs_keeps_the_floor_and_the_cap():
+    """The search moves down to end at a cap and never leaves the floor."""
+    assert tail_safe_runs([14336], 5 * 14336, 2 * 14336, cap=80000) == (
+        5 * 14336
+    )
+    assert tail_safe_runs([14336], 10000, 2 * 14336, cap=5 * 14336) == (
+        2 * 14336
+    )
+    assert tail_safe_runs([14336], 5 * 14336, 2 * 14336, cap=20000) == 20000
 
 
 @pytest.mark.nocudasim

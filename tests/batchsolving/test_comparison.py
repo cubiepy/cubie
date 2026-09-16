@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 
 from cubie.batchsolving.comparison import (
-    warm_clocks,
     ROUNDS,
     SOLVES_PER_ROUND,
     SUCCESS_TIER_FRACTION,
+    WARM_MS,
     WORKER_STARTUP_SECONDS,
     Candidate,
     CandidateTiming,
@@ -238,15 +238,52 @@ def test_runner_times_candidates_on_one_buffer_set(
         for settings in solver.optimisation_candidates()
     ]
     runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
+    kernel = solver.kernel
     with runner:
         runner.compile(candidates)
+        assert runner.warm() >= WARM_MS
         runner.set_batch(4 * inits.shape[1])
         assert runner.runs == 4 * inits.shape[1]
         first = runner.solve_ms(None)
-        device_state = solver.kernel.device_state
+        assert len(kernel._cuda_event_sets) == 1
+        # Requests for another batch carry the staged device inputs'
+        # shapes and the sized outputs, not a host slot's.
+        inputs = kernel.input_arrays.batch_requests(runner.runs)
+        assert inputs["initial_values"].shape == (
+            kernel.input_arrays.device_initial_values.shape
+        )
+        assert inputs["parameters"].shape == (
+            kernel.input_arrays.device_parameters.shape
+        )
+        outputs = kernel.output_arrays.batch_requests(runner.runs)
+        assert outputs["state"].shape == kernel.device_state.shape
+        assert outputs["status_codes"].shape == (runner.runs,)
+        assert kernel.single_chunk_runs(runner.runs) == runner.runs
+        huge = 1 << 40
+        manager = kernel.memory_manager
+        with pytest.warns(UserWarning, match="exceeds available VRAM"):
+            capped = kernel.single_chunk_runs(huge)
+        with pytest.warns(UserWarning, match="exceeds available VRAM"):
+            chunk_length, chunks = manager.get_chunk_parameters(
+                {
+                    id(kernel.input_arrays): (
+                        kernel.input_arrays.batch_requests(huge)
+                    ),
+                    id(kernel.output_arrays): (
+                        kernel.output_arrays.batch_requests(huge)
+                    ),
+                },
+                huge,
+                manager.get_stream_group(kernel),
+            )
+        assert chunks > 1
+        assert capped == chunk_length
+        device_state = kernel.device_state
         timings = runner.time(candidates)
-        assert solver.kernel.device_state is device_state
-        for _, slot in solver.kernel.output_arrays.host.iter_managed_arrays():
+        assert kernel.device_state is device_state
+        # One event set per solve queued behind a round's busy launch.
+        assert len(kernel._cuda_event_sets) == SOLVES_PER_ROUND
+        for _, slot in kernel.output_arrays.host.iter_managed_arrays():
             assert slot.array is None
     assert first > 0.0
     assert len(timings) == len(candidates)
@@ -259,34 +296,3 @@ def test_runner_times_candidates_on_one_buffer_set(
         assert timing.blocks_per_sm >= 1
         assert timing.waves > 0.0
 
-
-@pytest.mark.nocudasim
-def test_queued_solves_time_each_solve_and_restore_the_depth(
-    solver_mutable, simple_initial_values, simple_parameters
-):
-    """Back-to-back solves return one kernel time each, lead-in excluded."""
-    solver = solver_mutable
-    inits, params = _device_grid(
-        solver, simple_initial_values, simple_parameters
-    )
-    depth = solver.kernel.timing_depth
-    runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
-    with runner:
-        runner.set_batch()
-        with_lead = runner.solve_times(3, None, lead_in=True)
-        assert solver.kernel.timing_depth == 4
-        without = runner.solve_times(2, None, lead_in=False)
-        assert solver.kernel.timing_depth == 2
-    assert len(with_lead) == 3
-    assert len(without) == 2
-    assert all(time_ms > 0.0 for time_ms in with_lead + without)
-    assert solver.kernel.timing_depth == depth
-
-
-@pytest.mark.nocudasim
-def test_warm_clocks_runs_the_busy_kernel_for_about_the_target(
-    solver_mutable,
-):
-    """The busy launch lands near its target milliseconds."""
-    measured = warm_clocks(solver_mutable.kernel.stream, target_ms=50.0)
-    assert 25.0 < measured < 200.0

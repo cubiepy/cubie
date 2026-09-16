@@ -31,7 +31,7 @@ from cubie.backend.utils import (
     device_hardware,
 )
 from cubie.cache_root import get_cache_root_override, set_cache_root
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda, float32
+from cubie.cuda_simsafe import cuda, float32
 from cubie.CUDAFactory import UnrollFlags
 from cubie.time_logger import default_timelogger
 
@@ -41,28 +41,24 @@ ROUNDS = 2
 """Timing rounds; the second visits the candidates in reverse order."""
 
 SOLVES_PER_ROUND = 3
-"""Timed solves per candidate per round."""
+"""Timed solves per candidate per round, queued behind one busy launch."""
 
-LEAD_IN_MS = 100.0
-"""Solves under this are timed behind an untimed lead-in solve."""
+WARM_MS = 500.0
+"""Busy-kernel milliseconds run before the first timed solve.
 
-LONG_LAUNCH_MS = 1000.0
-"""Solves over this are timed once per round."""
+Empirical: on the RTX 4070 SUPER the busy launch time steps down 11%
+after 210 to 230 ms of continuous load (from 1, 5 and 20 s idle) and
+holds that rate through host gaps of up to 1 s; 500 ms covers the
+step with margin.
+"""
 
-WARM_MS = 100.0
-"""Busy-kernel milliseconds that lift the GPU clocks before timing."""
+BUSY_CHAIN = 1 << 16
+"""Dependent FMAs per thread in one busy launch.
 
-WARM_ITERATIONS = 1 << 16
-"""Chain length of one busy-kernel launch."""
-
-WARM_MAX_LAUNCHES = 64
-"""Most busy-kernel launches the warm-up makes."""
-
-WARM_THREADS_PER_BLOCK = 256
-"""Threads per block of the busy kernel."""
-
-WARM_BLOCKS_PER_SM = 4
-"""Blocks per SM of the busy kernel."""
+Empirical: 2.6 to 2.9 ms per launch on the RTX 4070 SUPER, so the
+warm-up overshoots :data:`WARM_MS` by at most one launch and a lead-in
+launch costs a few milliseconds.
+"""
 
 SUCCESS_TIER_FRACTION = 0.95
 """Share of the best success rate a candidate keeps to rank on time."""
@@ -78,38 +74,39 @@ development machine (mlir compat 6 s, odesystems 4.8 s, cupy 1.5 s).
 """
 
 
-if not CUDA_SIMULATION:  # pragma: no cover - relies on GPU runtime
-
-    @cuda.jit
-    def _busy_kernel(sink, iterations):
-        """Run a dependent FMA chain for ``iterations`` steps."""
-        value = float32(cuda.grid(1))
-        for _ in range(iterations):
-            value = value * float32(0.999) + float32(0.001)
-        if value < float32(0.0):
-            sink[0] = value
+@cuda.jit
+def _busy_kernel(sink, iterations):  # pragma: no cover - device code
+    """Run a dependent FMA chain for ``iterations`` steps."""
+    value = float32(cuda.grid(1))
+    for _ in range(iterations):
+        value = value * float32(0.999) + float32(0.001)
+    if value < float32(0.0):
+        sink[0] = value
 
 
-def warm_clocks(stream: Any, target_ms: float = WARM_MS) -> float:
-    """Run the busy kernel on ``stream`` until ``target_ms`` of kernel
-    time has passed; return that time, 0.0 under the simulator."""
-    if CUDA_SIMULATION:  # pragma: no cover - simulated
-        return 0.0
-    blocks = WARM_BLOCKS_PER_SM * device_hardware().multiprocessor_count
+def busy_launch(stream: Any) -> None:
+    """Queue one busy launch on ``stream``: every SM at its block and
+    thread limits, :data:`BUSY_CHAIN` FMAs per thread."""
+    hardware = device_hardware()
+    blocks_per_sm = hardware.max_blocks_per_multiprocessor
+    threads = hardware.max_threads_per_multiprocessor // blocks_per_sm
+    blocks = blocks_per_sm * hardware.multiprocessor_count
     sink = cuda.device_array(1, dtype="float32")
+    _busy_kernel[blocks, threads, stream](sink, BUSY_CHAIN)
+
+
+def warm_clocks(stream: Any) -> float:
+    """Busy-launch on ``stream`` until :data:`WARM_MS` of kernel time
+    has passed; return that time."""
     total = 0.0
-    for _ in range(WARM_MAX_LAUNCHES):
+    while total < WARM_MS:
         start = cuda.event()
         end = cuda.event()
         start.record(stream)
-        _busy_kernel[blocks, WARM_THREADS_PER_BLOCK, stream](
-            sink, WARM_ITERATIONS
-        )
+        busy_launch(stream)
         end.record(stream)
         end.synchronize()
         total += float(cuda.event_elapsed_time(start, end))
-        if total >= target_ms:
-            break
     return total
 
 
@@ -300,7 +297,6 @@ class ComparisonRunner:
         self._touched = set()
         self._rejected = {}
         self._resident_blocks = solver.kernel.resident_blocks
-        self._timing_depth = solver.kernel.timing_depth
         self._verbosity = default_timelogger.verbosity
         self._inits = None
         self._params = None
@@ -361,7 +357,6 @@ class ComparisonRunner:
                 silent=True,
             )
             solver.kernel.resident_blocks = self._resident_blocks
-            solver.kernel.timing_depth = self._timing_depth
         finally:
             self._touched = set()
             self._inits = None
@@ -542,50 +537,46 @@ class ComparisonRunner:
                         f"{config_hash[:12]}"
                     )
 
+    def solve_times(
+        self, count: int, blocksize: Optional[int] = None
+    ) -> Tuple[float, ...]:
+        """Queue ``count`` solves of the staged batch behind one busy
+        launch; synchronize once and return each solve's kernel ms.
+
+        The busy launch keeps the GPU busy while the solves are issued,
+        so every start event fires with its kernel already queued and
+        the bracket holds kernel time only. A queue whose busy launch
+        had finished before its last solve was issued (the first solve
+        allocated or rebuilt on the host) may have opened a bracket on
+        an idle GPU, so it is queued once more.
+        """
+        solver = self._solver
+        kernel = solver.kernel
+        stream = kernel.stream
+        for _ in range(2):
+            busy_launch(stream)
+            busy_done = cuda.event()
+            busy_done.record(stream)
+            for _ in range(int(count)):
+                solver.solve(
+                    self._inits,
+                    self._params,
+                    duration=self.duration,
+                    settling_time=self.settling,
+                    t0=self._t0,
+                    blocksize=blocksize,
+                    on_device=True,
+                )
+            idled = busy_done.query()
+            kernel.synchronize()
+            if not idled:
+                break
+        return tuple(kernel.recent_kernel_ms(int(count)))
+
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""
-        solver = self._solver
-        solver.solve(
-            self._inits,
-            self._params,
-            duration=self.duration,
-            settling_time=self.settling,
-            t0=self._t0,
-            blocksize=blocksize,
-            on_device=True,
-        )
-        kernel = solver.kernel
-        kernel.synchronize()
-        return float(
-            sum(
-                event.elapsed_time_ms()
-                for event in kernel._cuda_events
-                if event.name.startswith("kernel_chunk")
-            )
-        )
-
-    def solve_times(
-        self, count: int, blocksize: Optional[int] = None,
-        lead_in: bool = True,
-    ) -> Tuple[float, ...]:
-        """Queue ``count`` solves, one untimed lead-in first when
-        ``lead_in``; synchronize once and return each kernel ms."""
-        solver = self._solver
-        kernel = solver.kernel
-        total = int(count) + (1 if lead_in else 0)
-        kernel.timing_depth = total
-        for _ in range(total):
-            solver.solve(
-                self._inits,
-                self._params,
-                duration=self.duration,
-                settling_time=self.settling,
-                t0=self._t0,
-                blocksize=blocksize,
-                on_device=True,
-            )
-        kernel.synchronize()
-        return tuple(kernel.recent_kernel_ms(int(count)))
+        (measured,) = self.solve_times(1, blocksize)
+        return measured
 
     def warm(self) -> float:
         """Lift the clocks with the busy kernel; return its milliseconds."""
@@ -618,17 +609,13 @@ class ComparisonRunner:
         resident = blocks * device_hardware().multiprocessor_count
         return int(blocks), total_blocks / resident
 
-    def time(
-        self,
-        candidates: Sequence[Candidate],
-        solves_per_round: int = SOLVES_PER_ROUND,
-        lead_in: bool = True,
-    ) -> List[CandidateTiming]:
+    def time(self, candidates: Sequence[Candidate]) -> List[CandidateTiming]:
         """Time every candidate on the staged batch, forward then back.
 
-        Each candidate makes ``solves_per_round`` queued solves per
-        round, behind a lead-in solve when ``lead_in``; a rejected or
-        failing candidate carries the error and no times.
+        Every candidate makes :data:`SOLVES_PER_ROUND` queued solves in
+        each of :data:`ROUNDS` rounds; the second round reverses the
+        order. A rejected or failing candidate carries the error and no
+        times.
         """
         timings = [
             CandidateTiming(
@@ -647,7 +634,7 @@ class ComparisonRunner:
                 try:
                     self.select(candidate)
                     timing.times_ms += self.solve_times(
-                        solves_per_round, candidate.blocksize, lead_in
+                        SOLVES_PER_ROUND, candidate.blocksize
                     )
                     if round_index == 0:
                         timing.failures = self.failures()
