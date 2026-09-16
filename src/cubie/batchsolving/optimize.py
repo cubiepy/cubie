@@ -1,5 +1,4 @@
-"""Backend of :meth:`cubie.Solver.optimize`: time unroll, placement and
-launch candidates on the solver itself and apply the fastest.
+"""Backend of :meth:`cubie.Solver.optimize`: time launches, apply the best.
 
 Published Objects
 -----------------
