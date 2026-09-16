@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.13.1](https://github.com/cubiepy/cubie/compare/v0.13.0...v0.13.1) (2026-09-16)
+
+
+### Bug Fixes
+
+* **batchsolving:** a device-only solve leaves a collected result's buffer loan for the next host solve, so its host output slots stay empty ([#964](https://github.com/cubiepy/cubie/issues/964)) ([4fc2fe4](https://github.com/cubiepy/cubie/commit/4fc2fe4269ef1e1565407d461cbeea4a78717c6d))
+* **batchsolving:** optimize and calibrate time candidates on the solver itself through a shared comparison runner; device-only solves create no host output buffers ([#962](https://github.com/cubiepy/cubie/issues/962)) ([df7f7c2](https://github.com/cubiepy/cubie/commit/df7f7c2994d309308baeb5a485a27de260cf64e6))
+* **batchsolving:** optimize's auto_size sets duration by modifying batch size or reducing duration only ([f28421c](https://github.com/cubiepy/cubie/commit/f28421c153261af31e49db41761d3f8b368f4fc5))
+* **batchsolving:** separate kernel compilation from batch allocation ([#958](https://github.com/cubiepy/cubie/issues/958)) ([5573d4f](https://github.com/cubiepy/cubie/commit/5573d4fca5ca8cee548c29c665dabdcc680cdd68))
+* **integrators:** `summarise_every=None` with summaries active triggers summarise-last, handled like save-last ([#950](https://github.com/cubiepy/cubie/issues/950)) ([844dbf5](https://github.com/cubiepy/cubie/commit/844dbf5f5249f2e7fa02f8e8b6eac67dbc3cc57e))
+
 ## [0.13.0](https://github.com/cubiepy/cubie/compare/v0.12.0...v0.13.0) (2026-09-15)
 
 
