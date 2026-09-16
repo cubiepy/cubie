@@ -50,7 +50,7 @@ reallocation), and calls `allocate()`. `OutputArrays.update(solver, transfer_out
 refreshes the sizes and, when they changed, drops host buffers of another shape and queues
 every device output for reallocation. `allocate()` queues `ArrayRequest`s with the memory
 manager, shaped by `_request_shape(label)` (the host array for inputs, `_sizes` for outputs),
-and drops the device reference of every requested slot. The memory manager later drives
+and drops the device reference of every requested slot; `batch_requests(runs)` returns the requests for `runs` runs from `_sizes`, unqueued. The memory manager later drives
 `_on_allocation_complete(response)`: attach device arrays, record
 `chunked_shape`/`chunk_length`/`num_chunks`, set `_chunks`, then the `_after_allocation`
 hook. `_invalidate_hook` drops device refs and re-marks everything for reallocation.
