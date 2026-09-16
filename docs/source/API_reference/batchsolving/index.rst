@@ -17,6 +17,7 @@ Batch solving
    solve_spec
    calibration
    optimize
+   comparison
    batch_solver_config
    batch_solver_kernel
    system_interface
@@ -46,6 +47,8 @@ Core API
 * :doc:`Optimisation <optimize>` – times buffer placement, loop unrolling
   and launch shape for one configuration and keeps the fastest
   (:meth:`Solver.optimize`).
+* :doc:`Candidate comparison <comparison>` – the runner both race
+  entry points time their candidates with, and the ranking they share.
 
 Supporting infrastructure
 -------------------------

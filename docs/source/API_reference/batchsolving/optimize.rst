@@ -5,7 +5,7 @@ Optimisation
 
 .. autofunction:: run_optimization
 
-.. autofunction:: sized_batch_runs
+.. autofunction:: most_resident_runs
 
 .. autofunction:: launch_candidates
 

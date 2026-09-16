@@ -312,12 +312,13 @@ the solver can measure them directly:
 races different solver configurations on your problem: it compares a
 few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
-and dense-predictor settings.  Candidates that fail to integrate the
-grid are dropped before timing; survivors are ranked on a few
-full-length solves, and the leaders are returned with solve times
-and failure counts.  By default the winning configuration is applied
-to the solver in place; pass ``apply=False`` to get the race results
-without modifying the solver.
+and dense-predictor settings.  Every candidate is timed on a few
+full-length solves and reported with its solve times and failed-run
+count.  Candidates whose success rate is within 5% of the best are
+ranked on time; the rest follow, ranked on time, with their failure
+rates shown.  By default the winning configuration is applied to the
+solver in place; pass ``apply=False`` to get the race results without
+modifying the solver.
 
 With the algorithm settled, :meth:`Solver.optimize
 <cubie.batchsolving.solver.Solver.optimize>` tries a few different
