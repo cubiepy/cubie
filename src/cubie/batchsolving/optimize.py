@@ -452,6 +452,8 @@ def _duration_floor(solver: Any, given: float) -> float:
         floor = max(floor, float(effective.save_every))
     if effective.summarise_regularly:
         floor = max(floor, float(effective.summarise_every))
+    if effective.summarise_last:
+        floor = max(floor, float(effective.sample_summaries_every))
     return min(floor, given)
 
 

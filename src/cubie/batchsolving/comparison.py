@@ -230,7 +230,6 @@ class ComparisonRunner:
         self._t0 = float(t0)
         self._verbose = bool(verbose)
         self._original = {}
-        self._pinned = {}
         self._resident_blocks = solver.kernel.resident_blocks
         self._verbosity = default_timelogger.verbosity
         self._inits = None
@@ -253,26 +252,17 @@ class ComparisonRunner:
             print(message, flush=True)
 
     def open(self) -> None:
-        """Arm event timing and pin an unset summary window."""
+        """Arm event timing and remember the given duration."""
         if self._open:
             return
         self._open = True
         # "silent" records the kernel events the timings read.
         self._verbosity = default_timelogger.verbosity
         default_timelogger.set_verbosity("silent")
-        solver = self._solver
         # Every timed solve records its duration; close puts it back.
-        self._original["duration"] = solver.given.as_kwargs().get(
+        self._original["duration"] = self._solver.given.as_kwargs().get(
             "duration"
         )
-        if (
-            solver.kernel.single_integrator.summary_outputs_requested
-            and not solver.given.is_given("summarise_every")
-        ):
-            # An unset window follows the duration; pin it so probe
-            # durations share one kernel.
-            self._pinned = {"summarise_every": self.duration}
-            self.apply(self._pinned)
 
     def close(self) -> None:
         """Restore the solver's settings and release the batch."""
@@ -395,7 +385,6 @@ class ComparisonRunner:
                 if value is not None
             }
         )
-        settings.update(self._pinned)
         system_bytes = pickle.dumps(solver.system)
         drivers = solver.kernel.driver_inputs()
         payloads = [
