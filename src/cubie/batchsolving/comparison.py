@@ -18,7 +18,7 @@ import pickle
 from math import ceil
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from attrs import define, field
+from attrs import define, field, fields
 from numpy import arange as np_arange
 from numpy import asarray as np_asarray
 from numpy import count_nonzero as np_count_nonzero
@@ -32,6 +32,7 @@ from cubie.backend.utils import (
 )
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from cubie.cuda_simsafe import cuda
+from cubie.CUDAFactory import UnrollFlags
 from cubie.time_logger import default_timelogger
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,11 @@ def device_to_host(array: Any) -> ndarray:
     if hasattr(array, "get"):
         return array.get()
     return np_asarray(array)
+
+
+def _settings_key(settings: Dict[str, Any]) -> Tuple:
+    """Return the identity of a settings dict."""
+    return tuple(sorted(settings.items()))
 
 
 @define
@@ -164,10 +170,10 @@ def rank_timings(timings: Sequence[CandidateTiming]) -> List[CandidateTiming]:
     return sorted(top, key=key) + sorted(rest, key=key)
 
 
-def _compile_candidate(payload: Tuple) -> Tuple[str, str]:
-    """Compile one candidate in a worker process; return its hash."""
+def _compile_candidate(payload: Tuple) -> Tuple[int, str, str]:
+    """Compile one candidate in a worker; return (index, hash, error)."""
     (
-        label,
+        index,
         system_bytes,
         settings,
         drivers,
@@ -181,25 +187,28 @@ def _compile_candidate(payload: Tuple) -> Tuple[str, str]:
     from cubie.batchsolving.solver import Solver
 
     system = pickle.loads(system_bytes)
-    solver = Solver(system, **settings)
+    solver = None
     try:
+        solver = Solver(system, **settings)
         solver.compile(
             drivers=drivers,
             duration=duration,
             settling_time=settling_time,
             t0=t0,
         )
-        return label, solver.kernel.config_hash
+        return index, solver.kernel.config_hash, ""
+    except Exception as exc:
+        return index, "", f"{type(exc).__name__}: {exc}"
     finally:
-        solver.close()
+        if solver is not None:
+            solver.close()
 
 
 class ComparisonRunner:
     """Switch one solver between candidates and time each on one batch.
 
-    The batch lives on the device once; every candidate solves it in
-    place with no host output buffers. The solver's given settings and
-    residency are restored on :meth:`close`.
+    The batch stays on the device; candidates apply over the
+    configuration at :meth:`open`, which :meth:`close` restores.
 
     Parameters
     ----------
@@ -229,7 +238,11 @@ class ComparisonRunner:
         self.settling = float(settling_time)
         self._t0 = float(t0)
         self._verbose = bool(verbose)
-        self._original = {}
+        self._given = {}
+        self._baseline = {}
+        self._settings = {}
+        self._touched = set()
+        self._rejected = {}
         self._resident_blocks = solver.kernel.resident_blocks
         self._verbosity = default_timelogger.verbosity
         self._inits = None
@@ -252,47 +265,93 @@ class ComparisonRunner:
             print(message, flush=True)
 
     def open(self) -> None:
-        """Arm event timing and remember the given duration."""
+        """Arm event timing and record the solver's configuration."""
         if self._open:
             return
         self._open = True
         # "silent" records the kernel events the timings read.
         self._verbosity = default_timelogger.verbosity
         default_timelogger.set_verbosity("silent")
-        # Every timed solve records its duration; close puts it back.
-        self._original["duration"] = self._solver.given.as_kwargs().get(
-            "duration"
-        )
+        solver = self._solver
+        self._given = dict(solver.given.as_kwargs())
+        self._baseline = self.settings_in_effect()
+        # The record a worker rebuilds the solver from.
+        self._settings = {
+            key: value
+            for key, value in solver.settings_dict.items()
+            if key != "memory_manager"
+        }
+        self._touched = set()
 
     def close(self) -> None:
-        """Restore the solver's settings and release the batch."""
+        """Restore the solver's configuration and release the batch."""
         if not self._open:
             return
         self._open = False
         try:
             solver = self._solver
-            if self._original:
-                solver.update(dict(self._original), silent=True)
-                self._original = {}
+            touched = set(self._touched)
+            if touched:
+                # Opening values back first, then the given record.
+                solver.update(
+                    {key: self._baseline.get(key) for key in touched},
+                    silent=True,
+                )
+            # Every timed solve records its duration.
+            touched.add("duration")
+            solver.update(
+                {key: self._given.get(key) for key in touched},
+                silent=True,
+            )
             solver.kernel.resident_blocks = self._resident_blocks
         finally:
+            self._touched = set()
             self._inits = None
             self._params = None
             self._codes = None
             default_timelogger.set_verbosity(self._verbosity)
 
-    def apply(self, settings: Dict[str, Any]) -> None:
-        """Apply ``settings`` to the solver, remembering the given values."""
-        given = self._solver.given.as_kwargs()
-        for key in settings:
-            if key not in self._original:
-                self._original[key] = given.get(key)
-        self._solver.update(dict(settings), silent=True)
+    def settings_in_effect(self) -> Dict[str, Any]:
+        """Return every setting in effect, unroll flags included."""
+        solver = self._solver
+        unroll = solver.system.compile_settings.unroll
+        values = dict(solver.kernel.settings_dict)
+        values.update(
+            {
+                fld.name: getattr(unroll, fld.name)
+                for fld in fields(UnrollFlags)
+            }
+        )
+        values.update(
+            {
+                key: value
+                for key, value in solver.effective.as_kwargs().items()
+                if value is not None
+            }
+        )
+        return values
 
     def select(self, candidate: Candidate) -> None:
-        """Make ``candidate`` the solver's configuration and residency."""
-        self.apply(candidate.settings)
+        """Apply ``candidate`` over the opening configuration."""
+        settings = {
+            key: self._baseline.get(key)
+            for key in self._touched
+            if key not in candidate.settings
+        }
+        settings.update(candidate.settings)
+        self._touched.update(candidate.settings)
+        self._solver.update(settings, silent=True)
         self._solver.kernel.resident_blocks = candidate.resident_blocks
+
+    def rejection(self, candidate: Candidate) -> str:
+        """Return why ``candidate`` was rejected; empty when it was not."""
+        return self._rejected.get(_settings_key(candidate.settings), "")
+
+    def _reject(self, candidate: Candidate, exc: Exception) -> None:
+        """Record ``candidate`` as rejected with ``exc``."""
+        error = f"{type(exc).__name__}: {exc}"
+        self._rejected[_settings_key(candidate.settings)] = error
+        self.emit(f"  {candidate.label}: rejected ({error})")
 
     def set_batch(self, runs: Optional[int] = None) -> None:
         """Stage ``runs`` grid columns on the device, cycling if short."""
@@ -302,51 +361,74 @@ class ComparisonRunner:
             columns = np_arange(runs) % inits.shape[1]
             inits = np_take(inits, columns, axis=1)
             params = np_take(params, columns, axis=1)
-        self._inits = cuda.to_device(inits)
-        self._params = cuda.to_device(params)
+        self._inits = self._stage(inits)
+        self._params = self._stage(params)
         self._codes = None
         self.runs = runs
 
-    def compile(self, candidates: Sequence[Candidate]) -> None:
-        """Compile every candidate, in workers when that pays.
+    @staticmethod
+    def _stage(grid: ndarray) -> Any:
+        """Upload ``grid``; a grid with no variables is passed as None."""
+        if grid.shape[0] == 0:
+            return None
+        return cuda.to_device(grid)
 
-        The first uncached candidate compiles in this process and its
-        measured time decides whether the remaining misses go to a
-        spawn pool.
-        """
+    def compile(self, candidates: Sequence[Candidate]) -> List[Candidate]:
+        """Compile and return the accepted candidates; a rejected one
+        keeps its error for :meth:`time`, and the first miss's compile
+        time decides whether the rest go to a spawn pool."""
         solver = self._solver
         missing = []
         seen = set()
         for candidate in candidates:
-            key = tuple(sorted(candidate.settings.items()))
-            if key in seen:
+            key = _settings_key(candidate.settings)
+            if key in seen or key in self._rejected:
                 continue
             seen.add(key)
-            self.select(candidate)
-            if solver.cache_enabled and solver.kernel.kernel_is_cached():
+            try:
+                self.select(candidate)
+                cached = (
+                    solver.cache_enabled and solver.kernel.kernel_is_cached()
+                )
+            except Exception as exc:
+                self._reject(candidate, exc)
+                continue
+            if cached:
                 self.emit(f"  {candidate.label}: cached")
             else:
                 missing.append(candidate)
-        if not missing:
-            return
-        first = missing.pop(0)
-        self.select(first)
-        self._compile_current()
-        compile_seconds = default_timelogger.get_event_duration(
-            "compile_cuda_kernel"
-        )
-        self.emit(f"  {first.label}: compiled")
-        if not missing:
-            return
-        if solver.cache_enabled and self._pool_pays(
+        compile_seconds = None
+        while missing:
+            first = missing.pop(0)
+            try:
+                self.select(first)
+                self._compile_current()
+            except Exception as exc:
+                self._reject(first, exc)
+                continue
+            compile_seconds = default_timelogger.get_event_duration(
+                "compile_cuda_kernel"
+            )
+            self.emit(f"  {first.label}: compiled")
+            break
+        if missing and solver.cache_enabled and self._pool_pays(
             compile_seconds, len(missing)
         ):
             self._compile_in_pool(missing)
-            return
-        for candidate in missing:
-            self.select(candidate)
-            self._compile_current()
-            self.emit(f"  {candidate.label}: compiled")
+        else:
+            for candidate in missing:
+                try:
+                    self.select(candidate)
+                    self._compile_current()
+                except Exception as exc:
+                    self._reject(candidate, exc)
+                    continue
+                self.emit(f"  {candidate.label}: compiled")
+        return [
+            candidate
+            for candidate in candidates
+            if _settings_key(candidate.settings) not in self._rejected
+        ]
 
     def _compile_current(self) -> None:
         """Compile the solver's current configuration."""
@@ -372,40 +454,35 @@ class ComparisonRunner:
         """Compile ``candidates`` into the kernel cache in spawned workers."""
         solver = self._solver
         # Pickled into spawned workers; the manager holds CUDA state.
-        # Keys a candidate touched go back to their given values.
-        settings = {
-            key: value
-            for key, value in solver.settings_dict.items()
-            if key != "memory_manager" and key not in self._original
-        }
-        settings.update(
-            {
-                key: value
-                for key, value in self._original.items()
-                if value is not None
-            }
-        )
         system_bytes = pickle.dumps(solver.system)
         drivers = solver.kernel.driver_inputs()
         payloads = [
             (
-                candidate.label,
+                index,
                 system_bytes,
-                {**settings, **candidate.settings},
+                {**self._settings, **candidate.settings},
                 drivers,
                 self.duration,
                 self.settling,
                 self._t0,
                 get_cache_root_override(),
             )
-            for candidate in candidates
+            for index, candidate in enumerate(candidates)
         ]
         context = multiprocessing.get_context("spawn")
         with context.Pool(min(WORKERS, len(payloads))) as pool:
-            for label, config_hash in pool.imap_unordered(
+            for index, config_hash, error in pool.imap_unordered(
                 _compile_candidate, payloads
             ):
-                self.emit(f"  {label}: worker compiled {config_hash[:12]}")
+                candidate = candidates[index]
+                if error:
+                    self._rejected[_settings_key(candidate.settings)] = error
+                    self.emit(f"  {candidate.label}: rejected ({error})")
+                else:
+                    self.emit(
+                        f"  {candidate.label}: worker compiled "
+                        f"{config_hash[:12]}"
+                    )
 
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""
@@ -459,11 +536,14 @@ class ComparisonRunner:
 
         Every candidate solves :data:`SOLVES_PER_ROUND` times in each of
         :data:`ROUNDS` rounds; the second round reverses the order. A
-        candidate that fails to switch or solve carries the error and
-        no times.
+        rejected or failing candidate carries the error and no times.
         """
         timings = [
-            CandidateTiming(candidate=candidate, runs=self.runs)
+            CandidateTiming(
+                candidate=candidate,
+                runs=self.runs,
+                error=self.rejection(candidate),
+            )
             for candidate in candidates
         ]
         for round_index in range(ROUNDS):

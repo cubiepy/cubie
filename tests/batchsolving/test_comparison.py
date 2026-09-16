@@ -81,15 +81,19 @@ def _device_grid(solver, simple_initial_values, simple_parameters):
     )
 
 
-def test_runner_restores_given_settings_and_residency(
+def test_runner_isolates_candidates_and_restores_the_solver(
     solver_mutable, simple_initial_values, simple_parameters
 ):
-    """Closing the runner puts back every setting a candidate touched."""
+    """Candidates isolate, a rejection is recorded, close restores."""
     solver = solver_mutable
     inits, params = _device_grid(
         solver, simple_initial_values, simple_parameters
     )
     given = dict(solver.given.as_kwargs())
+    loop = solver.kernel.single_integrator._loop
+    state_location = loop.compile_settings.state_location
+    observables_location = loop.compile_settings.observables_location
+    assert not solver.given.is_given("observables_location")
     solver.kernel.resident_blocks = 3
     verbosity = default_timelogger.verbosity
     runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
@@ -98,70 +102,86 @@ def test_runner_restores_given_settings_and_residency(
         runner.select(
             Candidate(
                 "shared",
-                {"state_location": "shared", "dt": given["dt"] / 2},
+                {
+                    "state_location": "shared",
+                    "observables_location": "shared",
+                    "dt": given["dt"] / 2,
+                },
                 resident_blocks=1,
             )
         )
         loop = solver.kernel.single_integrator._loop
         assert loop.compile_settings.state_location == "shared"
+        assert loop.compile_settings.observables_location == "shared"
         assert solver.given.is_given("state_location")
         assert solver.kernel.resident_blocks == 1
+        # An unset key goes back to its opening value.
+        runner.select(Candidate("local", {"state_location": "local"}))
+        loop = solver.kernel.single_integrator._loop
+        assert loop.compile_settings.state_location == "local"
+        assert (
+            loop.compile_settings.observables_location
+            == observables_location
+        )
+        assert solver.dt == given["dt"]
+        assert solver.kernel.resident_blocks is None
+        bogus = Candidate("bogus", {"state_location": "nowhere"})
+        assert runner.compile([bogus]) == []
+        assert "nowhere" in runner.rejection(bogus)
+        timings = runner.time([bogus])
+        assert timings[0].error == runner.rejection(bogus)
+        assert timings[0].times_ms == ()
+        runner.select(Candidate("shared", {"state_location": "shared"}))
+        loop = solver.kernel.single_integrator._loop
+        assert loop.compile_settings.state_location == "shared"
     assert default_timelogger.verbosity == verbosity
     assert dict(solver.given.as_kwargs()) == given
     assert not solver.given.is_given("state_location")
+    assert not solver.given.is_given("observables_location")
+    loop = solver.kernel.single_integrator._loop
+    assert loop.compile_settings.state_location == state_location
+    assert loop.compile_settings.observables_location == observables_location
+    assert solver.dt == given["dt"]
     assert solver.kernel.resident_blocks == 3
+    # A grid with no variables stages as None, the host-path default.
+    runner = ComparisonRunner(solver, inits, params[:0], 0.1, 0.0, 0.0)
+    runner.set_batch(2 * inits.shape[1])
+    assert runner._params is None
+    assert runner._inits.shape == (inits.shape[0], 2 * inits.shape[1])
 
 
-def test_device_only_solve_creates_no_host_output_buffers(
-    solver_mutable, batch_input_arrays, driver_settings
+def test_device_only_solves_share_the_host_solves_device_buffers(
+    unchunked_solved_solver, system, precision, driver_settings
 ):
-    """A device-only solve touches no host output buffer."""
-    solver = solver_mutable
-    inits, params = batch_input_arrays
-    solver.solve(
-        inits, params, drivers=driver_settings, duration=0.1, on_device=True
+    """Device-only solves make no host buffer; host solves still match."""
+    solver, first = unchunked_solved_solver
+    inits = np.ones((system.sizes.states, 5), dtype=precision)
+    params = np.ones((system.sizes.parameters, 5), dtype=precision)
+    kwargs = dict(
+        drivers=driver_settings,
+        duration=0.05,
+        summarise_every=None,
+        save_every=0.01,
+        dt=0.01,
     )
+    expected = np.array(first.time_domain_array)
+    codes = np.array(first.status_codes)
+    first_state = first.state
+    first_state_copy = np.array(first_state)
+    device_state = solver.kernel.device_state
+    solver.solve(inits, params, on_device=True, **kwargs)
     solver.kernel.synchronize()
     outputs = solver.kernel.output_arrays
     for _, slot in outputs.host.iter_managed_arrays():
         assert slot.array is None
-    assert outputs.device_state is not None
-
-
-def test_host_solve_after_device_solve_returns_the_same_results(
-    solver_mutable, batch_input_arrays, driver_settings
-):
-    """Host buffers are built by the transfer that first needs them."""
-    solver = solver_mutable
-    inits, params = batch_input_arrays
-    kwargs = dict(drivers=driver_settings, duration=0.1)
-    reference = solver.solve(inits, params, **kwargs)
-    expected = np.array(reference.time_domain_array)
-    codes = np.array(reference.status_codes)
-    device_state = solver.kernel.device_state
-    solver.solve(inits, params, on_device=True, **kwargs)
-    solver.kernel.synchronize()
     assert solver.kernel.device_state is device_state
-    result = solver.solve(inits, params, **kwargs)
-    np.testing.assert_array_equal(result.time_domain_array, expected)
-    np.testing.assert_array_equal(result.status_codes, codes)
-
-
-def test_live_result_keeps_its_buffers_without_device_reallocation(
-    solver_mutable, batch_input_arrays, driver_settings
-):
-    """A held result keeps its host buffers; the device set is reused."""
-    solver = solver_mutable
-    inits, params = batch_input_arrays
-    kwargs = dict(drivers=driver_settings, duration=0.1)
-    first = solver.solve(inits, params, **kwargs)
-    first_state = first.state
-    device_state = solver.kernel.device_state
     second = solver.solve(inits, params, **kwargs)
     assert solver.kernel.device_state is device_state
     assert second.state is not first_state
-    np.testing.assert_array_equal(first.state, first_state)
-    np.testing.assert_array_equal(second.state, first.state)
+    assert first.state is first_state
+    np.testing.assert_array_equal(first.state, first_state_copy)
+    np.testing.assert_array_equal(second.time_domain_array, expected)
+    np.testing.assert_array_equal(second.status_codes, codes)
 
 
 @pytest.mark.nocudasim

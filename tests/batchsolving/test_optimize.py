@@ -2,15 +2,11 @@
 
 import pytest
 
-from math import ceil
-
-from cubie.backend.utils import DeviceHardware, device_hardware
+from cubie.backend.utils import DeviceHardware
 from cubie.batchsolving.comparison import (
     ROUNDS,
     SOLVES_PER_ROUND,
-    Candidate,
     ComparisonRunner,
-    settings_label,
 )
 from cubie.batchsolving.optimize import (
     BUDGET_BLOCKSIZE,
@@ -20,8 +16,6 @@ from cubie.batchsolving.optimize import (
     _trial_durations,
     apply_launch,
     default_launch,
-    launch_candidates,
-    most_resident_runs,
     resident_blocks_within_l2,
 )
 from cubie.cuda_simsafe import cupy
@@ -356,8 +350,9 @@ def test_block_size_change_clears_the_pinned_residency(solver_mutable):
 def test_optimize_applies_the_fastest_launch(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
-    """The fastest timed launch is applied to the solver."""
+    """The fastest launch is applied; waves fill; no host buffers."""
     verbosity = default_timelogger.verbosity
+    waves = 2
     result = solver_mutable.optimize(
         simple_initial_values,
         parameters=simple_parameters,
@@ -365,10 +360,15 @@ def test_optimize_applies_the_fastest_launch(
         duration=0.1,
         grid_type="combinatorial",
         verbose=False,
+        waves=waves,
     )
     assert default_timelogger.verbosity == verbosity
     timed = [launch for launch in result.launches if launch.timed]
     assert timed
+    assert min(launch.waves for launch in timed) >= waves
+    outputs = solver_mutable.kernel.output_arrays
+    for _, slot in outputs.host.iter_managed_arrays():
+        assert slot.array is None
     for launch in result.launches:
         assert all(time_ms > 0.0 for time_ms in launch.times_ms)
     assert result.best is min(timed, key=lambda launch: launch.best_ms)
@@ -449,55 +449,6 @@ def test_duration_floor_holds_the_final_summary_sample(
         assert trials == sorted(trials)
         assert min(trials) == floor
         assert max(trials) == pytest.approx(0.1)
-
-
-@pytest.mark.nocudasim
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"algorithm": "vern7", "unroll_other_small": None}],
-    indirect=True,
-)
-def test_batch_fills_the_waves_at_every_launch(
-    solver_mutable, simple_initial_values, simple_parameters
-):
-    """The sized batch fills the requested waves for every candidate."""
-    waves = 2
-    candidates = [
-        Candidate(settings_label(settings), dict(settings))
-        for settings in solver_mutable.optimisation_candidates()
-    ]
-    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
-    kernel = solver_mutable.kernel
-    with runner:
-        runner.compile(candidates)
-        resident = 0
-        for candidate in candidates:
-            runner.select(candidate)
-            resident = max(resident, most_resident_runs(kernel))
-        runner.set_batch(waves * resident)
-        multiprocessors = device_hardware().multiprocessor_count
-        launches = []
-        for candidate in candidates:
-            runner.select(candidate)
-            shapes = kernel.launchable_shapes(runs=runner.runs)
-            for blocksize, resident in launch_candidates(
-                kernel, runs=runner.runs
-            ):
-                dynamic, natural = shapes[blocksize]
-                blocks = natural if resident is None else resident
-                runs_per_block = blocksize // kernel.threads_per_loop
-                total_blocks = ceil(runner.runs / runs_per_block)
-                assert total_blocks / (blocks * multiprocessors) >= waves
-                launches.append(
-                    Candidate(
-                        candidate.label,
-                        dict(candidate.settings),
-                        blocksize,
-                        resident,
-                    )
-                )
-        timings = runner.time(launches)
-    assert min(timing.waves for timing in timings) >= waves
 
 
 @pytest.mark.nocudasim

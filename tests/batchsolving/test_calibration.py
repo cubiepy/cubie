@@ -255,7 +255,7 @@ class TestCandidateSpecs:
 def test_erk_stage_times_every_order_on_the_solver(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
-    """An order stage times each tableau on the solver and records it."""
+    """Orders are timed and recalled; a rejected spec drops."""
     solver = solver_mutable
     inits, params = solver.build_grid(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
@@ -263,12 +263,26 @@ def test_erk_stage_times_every_order_on_the_solver(
     if driver_settings is not None:
         solver._configure_drivers(driver_settings)
     given = dict(solver.given.as_kwargs())
+    algorithm = solver.kernel.settings_dict["algorithm"]
+    rejected = CandidateSpec(
+        label="tsit5 nowhere",
+        family="erk",
+        algorithm="tsit5",
+        settings=(("state_location", "nowhere"),),
+    )
     runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
     with runner:
         runner.set_batch()
         race = _CalibrationRace(runner)
-        results, pool = race.run_stage(erk_specs(), "erk:orders")
+        results, pool = race.run_stage(
+            [rejected] + erk_specs(), "erk:orders"
+        )
         again, recalled = race.run_stage(erk_specs(), "erk:orders")
+    dropped, results = results[0], results[1:]
+    assert dropped.spec is rejected
+    assert dropped.dropped
+    assert "nowhere" in dropped.reason
+    assert dropped.times_ms == ()
     assert [result.spec.algorithm for result in results] == list(
         FAMILY_ORDERS["erk"]
     )
@@ -283,6 +297,7 @@ def test_erk_stage_times_every_order_on_the_solver(
     assert race.stage_winner(pool) is race.ranking()[0]
     assert race.ranking()[0].best_ms == min(r.best_ms for r in results)
     assert dict(solver.given.as_kwargs()) == given
+    assert solver.kernel.settings_dict["algorithm"] == algorithm
 
 
 class TestCalibrateGuards:

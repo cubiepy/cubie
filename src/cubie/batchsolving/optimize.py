@@ -89,7 +89,7 @@ class LaunchResult:
     settings
         The candidate's unroll and placement settings.
     blocksize
-        Threads per block of the launch.
+        Threads per block; ``None`` for a rejected candidate.
     resident_blocks
         Blocks per SM held resident; ``None`` = the default residency.
     blocks_per_sm
@@ -107,7 +107,7 @@ class LaunchResult:
     """
 
     settings: Dict[str, Any]
-    blocksize: int
+    blocksize: Optional[int]
     resident_blocks: Optional[int]
     blocks_per_sm: int = 0
     times_ms: Tuple[float, ...] = ()
@@ -158,11 +158,16 @@ class LaunchResult:
 
 
 def _launch_label(
-    settings: Dict[str, Any], blocksize: int, resident_blocks: Optional[int]
+    settings: Dict[str, Any],
+    blocksize: Optional[int],
+    resident_blocks: Optional[int],
 ) -> str:
     """Return the one-line name of a launch."""
+    label = settings_label(settings)
+    if blocksize is None:
+        return label
     resident = "" if resident_blocks is None else f" x{resident_blocks}"
-    return f"{settings_label(settings)} @bs{blocksize}{resident}"
+    return f"{label} @bs{blocksize}{resident}"
 
 
 @define
@@ -594,17 +599,17 @@ def run_optimization(
     kernel = parent.kernel
     with runner:
         runner.emit(f"optimize: {len(candidates)} candidate kernels")
-        runner.compile(candidates)
-        if auto_size:
+        accepted = runner.compile(candidates)
+        if auto_size and accepted:
             resident = 0
-            for candidate in candidates:
+            for candidate in accepted:
                 runner.select(candidate)
                 resident = max(
                     resident, most_resident_runs(kernel, blocksizes)
                 )
             runner.set_batch(int(waves) * resident)
             runner.emit(f"batch: {runner.runs} runs fill {waves} waves")
-            runner.select(candidates[0])
+            runner.select(accepted[0])
             _probe_duration(
                 runner,
                 parent,
@@ -616,6 +621,12 @@ def run_optimization(
             runner.set_batch()
         launches = []
         for candidate in candidates:
+            # A rejected candidate reports once, with no launch.
+            if runner.rejection(candidate):
+                launches.append(
+                    Candidate(candidate.label, dict(candidate.settings))
+                )
+                continue
             runner.select(candidate)
             for blocksize, resident in launch_candidates(
                 kernel, blocksizes, runs=runner.runs
