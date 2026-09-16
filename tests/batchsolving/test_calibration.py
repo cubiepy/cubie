@@ -17,6 +17,8 @@ from cubie.batchsolving.calibration import (
 from cubie.batchsolving.comparison import (
     ROUNDS,
     SOLVES_PER_ROUND,
+    TIMED_WAVES_FLOOR,
+    Candidate,
     ComparisonRunner,
 )
 
@@ -272,12 +274,20 @@ def test_erk_stage_times_every_order_on_the_solver(
     )
     runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
     with runner:
-        runner.set_batch()
-        race = _CalibrationRace(runner)
+        # The first stage with an accepted spec sizes the batch on it.
+        race = _CalibrationRace(runner, (TIMED_WAVES_FLOOR, 20.0))
         results, pool = race.run_stage(
             [rejected] + erk_specs(), "erk:orders"
         )
+        sized = runner.runs
+        concurrent = []
+        for alias in FAMILY_ORDERS["erk"]:
+            runner.select(Candidate(alias, {"algorithm": alias}))
+            concurrent.append(runner.concurrent_runs(None))
+        assert sized >= TIMED_WAVES_FLOOR * max(concurrent)
         again, recalled = race.run_stage(erk_specs(), "erk:orders")
+        assert runner.runs == sized
+    assert race.waves >= TIMED_WAVES_FLOOR
     dropped, results = results[0], results[1:]
     assert dropped.spec is rejected
     assert dropped.dropped
@@ -289,7 +299,7 @@ def test_erk_stage_times_every_order_on_the_solver(
     for result in results:
         assert result.reason == ""
         assert len(result.times_ms) == ROUNDS * SOLVES_PER_ROUND
-        assert result.runs == inits.shape[1]
+        assert result.runs == sized
         assert result.success_rate == 1.0
     assert pool == results
     assert again == []

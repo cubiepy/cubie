@@ -20,9 +20,7 @@ Published Objects
     Time a solver's candidates.
 """
 
-from math import ceil, isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from warnings import warn
 
 from attrs import define
 
@@ -33,16 +31,16 @@ from cubie.backend.utils import (
     kernel_resources,
 )
 from cubie.batchsolving.comparison import (
+    TIMED_WAVES_FLOOR,
     Candidate,
     CandidateTiming,
     ComparisonRunner,
     rank_timings,
     settings_label,
+    validate_sizing,
+    warn_low_waves,
 )
 from cubie.CUDAFactory import UnrollChoice
-
-TIMED_WAVES_FLOOR = 2
-"""Fewest occupancy waves a timed batch fills at any launch."""
 
 LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
@@ -509,97 +507,6 @@ def _ramp_duration(
     return measured
 
 
-def unused_wave_share(runs: int, concurrent: Sequence[int]) -> float:
-    """Return the largest share of a last wave left empty over the
-    launches: ``(ceil(waves) - waves) / ceil(waves)`` with ``waves =
-    runs / count``, ``count`` the runs a launch executes at once."""
-    worst = 0.0
-    for count in concurrent:
-        waves = runs / count
-        worst = max(worst, (ceil(waves) - waves) / ceil(waves))
-    return worst
-
-
-def tail_safe_runs(
-    concurrent: Sequence[int],
-    wanted: int,
-    floor: int,
-    cap: Optional[int] = None,
-) -> int:
-    """Return the batch near ``wanted`` runs with the fullest last wave.
-
-    Parameters
-    ----------
-    concurrent
-        Runs each launch executes at once.
-    wanted
-        Runs the batch should reach.
-    floor
-        Fewest runs allowed.
-    cap
-        Most runs allowed; ``None`` for no cap.
-
-    Returns
-    -------
-    int
-        The wave boundary or interval end with the least
-        :func:`unused_wave_share` in the one-wave interval above
-        ``wanted``, clipped to ``[floor, cap]``; the smallest on a tie.
-    """
-    most = max(concurrent)
-    low = max(int(wanted), int(floor))
-    high = low + most
-    if cap is not None:
-        high = min(high, int(cap))
-        low = max(int(floor), min(low, high - most))
-        if low > high:
-            return high
-    candidates = {low, high}
-    for count in concurrent:
-        first = -(-low // count)
-        candidates.update(
-            multiple * count for multiple in range(first, high // count + 1)
-        )
-    return min(
-        candidates,
-        key=lambda runs: (unused_wave_share(runs, concurrent), runs),
-    )
-
-
-def _launch_concurrent_runs(
-    runner: ComparisonRunner, kernel: Any, launches: Sequence[Candidate]
-) -> List[int]:
-    """Return the runs each launch executes at once (blocks per SM times
-    SMs times runs per block), in ``launches`` order."""
-    multiprocessors = device_hardware().multiprocessor_count
-    threads_per_loop = kernel.threads_per_loop
-    concurrent = []
-    for launch in launches:
-        runner.select(launch)
-        blocks = launch.resident_blocks
-        if blocks is None:
-            shapes = kernel.launchable_shapes((launch.blocksize,))
-            blocks = shapes[launch.blocksize][1]
-        concurrent.append(
-            blocks * multiprocessors * (launch.blocksize // threads_per_loop)
-        )
-    return concurrent
-
-
-def _batch_cap(runner: ComparisonRunner, kernel: Any) -> int:
-    """Runs that fit in memory at the staged batch's bytes per run."""
-    manager = kernel.memory_manager
-    allocated = sum(
-        manager.get_registration(arrays).allocated_bytes
-        for arrays in (kernel.input_arrays, kernel.output_arrays)
-    )
-    available = manager.get_available_memory(
-        manager.get_stream_group(kernel)
-    )
-    bytes_per_run = (allocated + runner.staged_bytes) / runner.runs
-    return int((available + allocated) // bytes_per_run)
-
-
 def _size_batch(
     runner: ComparisonRunner,
     solver: Any,
@@ -609,53 +516,25 @@ def _size_batch(
     settling: float,
     target_ms: float,
 ) -> None:
-    """Stage the batch and duration ``auto_size`` times on.
-
-    Batch: the tail-safe boundary above ``waves`` of the launch with
-    the most concurrent runs. Duration: ramped toward ``target_ms``,
-    never past ``given``. Then one linear batch correction: up within
-    free memory when the given duration is short, down to
-    :data:`TIMED_WAVES_FLOOR` waves when the shortest overshoots.
-    """
-    kernel = solver.kernel
-    concurrent = _launch_concurrent_runs(runner, kernel, launches)
-    if not concurrent:
-        runner.set_batch()
+    """Stage the batch and duration ``auto_size`` times on: the runner's
+    tail-safe batch at ``waves``, the duration ramped toward
+    ``target_ms`` never past ``given``, then the runner's one batch
+    correction, up only at the given duration and down only at the
+    shortest."""
+    runner.size_batch(launches, waves)
+    if not launches:
         return
-    most = max(concurrent)
-    floor = TIMED_WAVES_FLOOR * most
-    runs = tail_safe_runs(concurrent, int(waves) * most, floor)
-    runner.set_batch(runs)
-    runner.emit(f"batch: {runner.runs} runs")
     runner.select(launches[0])
     start = _ramp_start(solver, given)
     measured = _ramp_duration(
         runner, solver, start, given, settling, target_ms
     )
-    wanted = int(runner.runs * target_ms / measured)
-    if measured < target_ms and runner.duration >= given:
-        cap = _batch_cap(runner, kernel)
-        runs = tail_safe_runs(concurrent, wanted, floor, cap)
-    elif measured > target_ms and runner.duration <= start:
-        runs = tail_safe_runs(concurrent, wanted, floor, runner.runs)
-    if runs != runner.runs:
-        runner.set_batch(runs)
-        try:
-            measured = runner.solve_ms(None)
-        except ValueError:
-            partition = kernel.run_params
-            if partition.num_chunks <= 1:
-                raise
-            # The live partition is the fresh single-chunk fit.
-            runs = tail_safe_runs(
-                concurrent,
-                partition.chunk_length,
-                floor,
-                partition.chunk_length,
-            )
-            runner.set_batch(runs)
-            measured = runner.solve_ms(None)
-        runner.emit(f"batch: {runner.runs} runs -> {measured:.3f} ms")
+    runner.fit_batch(
+        measured,
+        target_ms,
+        grow=runner.duration >= given,
+        shrink=runner.duration <= start,
+    )
 
 
 def run_optimization(
@@ -724,13 +603,7 @@ def run_optimization(
     ValueError
         ``waves`` under 1, or ``target_ms`` under 10 or not finite.
     """
-    if int(waves) < 1 or waves != int(waves):
-        raise ValueError(f"waves must be a positive integer, got {waves!r}")
-    if not (isfinite(target_ms) and target_ms >= 10.0):
-        raise ValueError(
-            f"target_ms must be a finite number of at least 10, "
-            f"got {target_ms!r}"
-        )
+    validate_sizing(waves, target_ms)
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
@@ -793,13 +666,9 @@ def run_optimization(
     results = [LaunchResult.from_timing(timing) for timing in timings]
     achieved = [launch.waves for launch in results if launch.timed]
     if not auto_size and achieved and min(achieved) < TIMED_WAVES_FLOOR:
-        fewest = min(achieved)
-        warn(
-            f"The batch passed to optimize only fills {fewest:.2f} "
-            "occupancy waves; the results might not represent the best "
-            "timing for your system. Try again with "
-            f"{TIMED_WAVES_FLOOR / fewest:.1f}x more runs in the batch "
-            "and force=True to get the fastest full-GPU batch settings."
+        warn_low_waves(
+            min(achieved),
+            " and force=True to get the fastest full-GPU batch settings",
         )
     ranking = rank_timings(results)
     best = ranking[0] if ranking else None

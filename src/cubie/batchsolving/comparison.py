@@ -10,13 +10,18 @@ Published Objects
     Switches one solver between candidates and times each one.
 :func:`rank_timings`
     Order timings by success tier, then time.
+:func:`tail_safe_runs`
+    The batch near a wanted size whose last wave is fullest.
+:func:`validate_sizing`
+    Reject a ``waves`` or ``target_ms`` sizing argument out of range.
 """
 
 import logging
 import multiprocessing
 import pickle
-from math import ceil
+from math import ceil, isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from warnings import warn
 
 from attrs import define, field, fields
 from numpy import arange as np_arange
@@ -58,6 +63,9 @@ Empirical: 2.6 to 2.9 ms per launch on the RTX 4070 SUPER.
 
 SUCCESS_TIER_FRACTION = 0.95
 """Share of the best success rate a candidate keeps to rank on time."""
+
+TIMED_WAVES_FLOOR = 2
+"""Fewest occupancy waves a timed batch fills at any launch."""
 
 WORKERS = 4
 """Compile processes the pool spawns."""
@@ -104,6 +112,85 @@ def warm_clocks(stream: Any) -> float:
         end.synchronize()
         total += float(cuda.event_elapsed_time(start, end))
     return total
+
+
+def validate_sizing(waves: int, target_ms: float) -> None:
+    """Raise ``ValueError`` for ``waves`` under 1 or not integral, or
+    ``target_ms`` under 10 or not finite."""
+    if int(waves) < 1 or waves != int(waves):
+        raise ValueError(f"waves must be a positive integer, got {waves!r}")
+    if not (isfinite(target_ms) and target_ms >= 10.0):
+        raise ValueError(
+            f"target_ms must be a finite number of at least 10, "
+            f"got {target_ms!r}"
+        )
+
+
+def warn_low_waves(fewest: float, advice: str = "") -> None:
+    """Warn that a given batch fills ``fewest`` waves, under the floor."""
+    warn(
+        f"The batch passed only fills {fewest:.2f} occupancy waves; the "
+        "results might not represent the best timing for your system. "
+        f"Try again with {TIMED_WAVES_FLOOR / fewest:.1f}x more runs in "
+        f"the batch{advice}."
+    )
+
+
+def unused_wave_share(runs: int, concurrent: Sequence[int]) -> float:
+    """Return the largest share of a last wave left empty over the
+    launches: ``(ceil(waves) - waves) / ceil(waves)`` with ``waves =
+    runs / count``, ``count`` the runs a launch executes at once."""
+    worst = 0.0
+    for count in concurrent:
+        waves = runs / count
+        worst = max(worst, (ceil(waves) - waves) / ceil(waves))
+    return worst
+
+
+def tail_safe_runs(
+    concurrent: Sequence[int],
+    wanted: int,
+    floor: int,
+    cap: Optional[int] = None,
+) -> int:
+    """Return the batch near ``wanted`` runs with the fullest last wave.
+
+    Parameters
+    ----------
+    concurrent
+        Runs each launch executes at once.
+    wanted
+        Runs the batch should reach.
+    floor
+        Fewest runs allowed.
+    cap
+        Most runs allowed; ``None`` for no cap.
+
+    Returns
+    -------
+    int
+        The wave boundary or interval end with the least
+        :func:`unused_wave_share` in the one-wave interval above
+        ``wanted``, clipped to ``[floor, cap]``; the smallest on a tie.
+    """
+    most = max(concurrent)
+    low = max(int(wanted), int(floor))
+    high = low + most
+    if cap is not None:
+        high = min(high, int(cap))
+        low = max(int(floor), min(low, high - most))
+        if low > high:
+            return high
+    candidates = {low, high}
+    for count in concurrent:
+        first = -(-low // count)
+        candidates.update(
+            multiple * count for multiple in range(first, high // count + 1)
+        )
+    return min(
+        candidates,
+        key=lambda runs: (unused_wave_share(runs, concurrent), runs),
+    )
 
 
 def settings_label(settings: Dict[str, Any]) -> str:
@@ -298,6 +385,8 @@ class ComparisonRunner:
         self._params = None
         self._codes = None
         self.runs = 0
+        self._concurrent = []
+        self._floor = 0
         self._open = False
 
     def __enter__(self) -> "ComparisonRunner":
@@ -583,17 +672,101 @@ class ComparisonRunner:
         stream.synchronize()
         return int(np_count_nonzero(self._codes))
 
-    def geometry(self, blocksize: Optional[int]) -> Tuple[int, float]:
-        """Return blocks per SM and waves of the current launch."""
+    def _launch_blocks(
+        self, blocksize: Optional[int], runs: Optional[int]
+    ) -> Tuple[int, int]:
+        """Return blocks per SM and runs per block of the current launch."""
         kernel = self._solver.kernel
-        actual, dynamic = kernel.launch_geometry(blocksize, runs=self.runs)
+        actual, dynamic = kernel.launch_geometry(blocksize, runs=runs)
         blocks = active_blocks_per_multiprocessor(
             kernel.kernel, actual, dynamic, kernel.signature
         )
-        runs_per_block = actual // kernel.threads_per_loop
+        return int(blocks), actual // kernel.threads_per_loop
+
+    def concurrent_runs(self, blocksize: Optional[int] = None) -> int:
+        """Return the runs the current candidate's launch executes at
+        once: blocks per SM times SMs times runs per block."""
+        blocks, runs_per_block = self._launch_blocks(blocksize, None)
+        multiprocessors = device_hardware().multiprocessor_count
+        return blocks * multiprocessors * runs_per_block
+
+    def geometry(self, blocksize: Optional[int]) -> Tuple[int, float]:
+        """Return blocks per SM and waves of the current launch."""
+        blocks, runs_per_block = self._launch_blocks(blocksize, self.runs)
         total_blocks = ceil(self.runs / runs_per_block)
         resident = blocks * device_hardware().multiprocessor_count
-        return int(blocks), total_blocks / resident
+        return blocks, total_blocks / resident
+
+    def size_batch(self, candidates: Sequence[Candidate], waves: int) -> None:
+        """Stage the tail-safe batch at ``waves`` of the candidate with
+        the most concurrent runs; keep the counts for :meth:`fit_batch`."""
+        concurrent = []
+        for candidate in candidates:
+            self.select(candidate)
+            concurrent.append(self.concurrent_runs(candidate.blocksize))
+        self._concurrent = concurrent
+        if not concurrent:
+            self.set_batch()
+            return
+        most = max(concurrent)
+        self._floor = TIMED_WAVES_FLOOR * most
+        self.set_batch(
+            tail_safe_runs(concurrent, int(waves) * most, self._floor)
+        )
+        self.emit(f"batch: {self.runs} runs")
+
+    def batch_cap(self) -> int:
+        """Runs that fit in memory at the staged batch's bytes per run."""
+        kernel = self._solver.kernel
+        manager = kernel.memory_manager
+        allocated = sum(
+            manager.get_registration(arrays).allocated_bytes
+            for arrays in (kernel.input_arrays, kernel.output_arrays)
+        )
+        available = manager.get_available_memory(
+            manager.get_stream_group(kernel)
+        )
+        bytes_per_run = (allocated + self.staged_bytes) / self.runs
+        return int((available + allocated) // bytes_per_run)
+
+    def fit_batch(
+        self, measured: float, target_ms: float, grow: bool, shrink: bool
+    ) -> float:
+        """Move the sized batch once, linearly from ``measured`` toward
+        ``target_ms``: up within :meth:`batch_cap` when ``grow`` and
+        short, down to the floor when ``shrink`` and long; return the
+        kernel time at the staged batch."""
+        concurrent = self._concurrent
+        if not concurrent:
+            return measured
+        runs = self.runs
+        wanted = int(runs * target_ms / measured)
+        if grow and measured < target_ms:
+            runs = tail_safe_runs(
+                concurrent, wanted, self._floor, self.batch_cap()
+            )
+        elif shrink and measured > target_ms:
+            runs = tail_safe_runs(concurrent, wanted, self._floor, self.runs)
+        if runs == self.runs:
+            return measured
+        self.set_batch(runs)
+        try:
+            measured = self.solve_ms(None)
+        except ValueError:
+            partition = self._solver.kernel.run_params
+            if partition.num_chunks <= 1:
+                raise
+            # The live partition is the fresh single-chunk fit.
+            runs = tail_safe_runs(
+                concurrent,
+                partition.chunk_length,
+                self._floor,
+                partition.chunk_length,
+            )
+            self.set_batch(runs)
+            measured = self.solve_ms(None)
+        self.emit(f"batch: {self.runs} runs -> {measured:.3f} ms")
+        return measured
 
     def time(self, candidates: Sequence[Candidate]) -> List[CandidateTiming]:
         """Time every candidate on the staged batch, forward then back.
