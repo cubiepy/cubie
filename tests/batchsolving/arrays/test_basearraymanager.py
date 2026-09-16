@@ -595,19 +595,6 @@ class TestBaseArrayManager:
         assert "arr1" in test_arrmgr._needs_reallocation
         assert "arr1" in test_arrmgr._needs_overwrite
 
-    def test_update_host_array_zero_shape_output_placeholder(
-        self, test_arrmgr
-    ):
-        """A zero-size output slot keeps a unit placeholder buffer."""
-        current = np.array([[[1, 2], [3, 4]], [[1, 2], [3, 4]]])
-        new = np.zeros((3, 5, 0))
-
-        test_arrmgr._update_host_array(new, current, "arr1", shape_only=True)
-
-        assert test_arrmgr.host.arr1.shape == (1, 1, 1)
-        assert test_arrmgr.host.arr1.dtype == test_arrmgr._precision
-        assert "arr1" in test_arrmgr._needs_reallocation
-
     def test_update_host_array_value_change(self, test_arrmgr):
         """A same-size resubmission attaches the new array verbatim."""
         test_arrmgr._needs_reallocation = []

@@ -512,9 +512,9 @@ class BatchSolverKernel(CUDAFactory):
             Initial integration time.
         transfer_outputs
             When ``True`` (default), output arrays are copied
-            device-to-host after each chunk. ``False`` skips the copy
-            so results stay in the device output buffers; the run must
-            fit in a single chunk.
+            device-to-host after each chunk. ``False`` leaves results
+            in the device output buffers and touches no host output
+            buffer; the run must fit in a single chunk.
 
         Notes
         -----
@@ -721,6 +721,7 @@ class BatchSolverKernel(CUDAFactory):
         warmup: float,
         t0: float,
         stream: Optional[Any],
+        transfer_outputs: bool = True,
     ) -> None:
         """Set run parameters, refresh settings, and queue allocations."""
         # Time parameters always use float64 for accumulation accuracy
@@ -742,7 +743,7 @@ class BatchSolverKernel(CUDAFactory):
         if driver_coefficients is attached:
             driver_coefficients = None
         self.input_arrays.update(self, inits, params, driver_coefficients)
-        self.output_arrays.update(self)
+        self.output_arrays.update(self, transfer_outputs)
 
         # Process allocations into chunks
         self.memory_manager.allocate_queue(self, stream=stream)
@@ -762,7 +763,9 @@ class BatchSolverKernel(CUDAFactory):
         self._last_stream = stream
         self._work_complete = False
 
-        self._prepare_batch(inits, params, duration, warmup, t0, stream)
+        self._prepare_batch(
+            inits, params, duration, warmup, t0, stream, transfer_outputs
+        )
 
         # ------------ from here on dimensions are "chunked" -----------------
         # self.run_params is updated in the on_allocation callback.

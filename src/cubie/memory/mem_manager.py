@@ -1488,12 +1488,25 @@ class MemoryManager:
             budget = self.pinned_budget_bytes
             held = self._pinned_live_bytes + self._pinned_retained_bytes
             if held + nbytes > budget:
-                free_all_pinned_blocks()
-                self._pinned_retained_bytes = 0
+                self._flush_retained_pinned()
             if not force and self._pinned_live_bytes + nbytes > budget:
                 return False
             self._pinned_live_bytes += nbytes
             return True
+
+    def _flush_retained_pinned(self) -> None:
+        """Return the pool's page-locked blocks to the OS; lock held."""
+        free_all_pinned_blocks()
+        self._pinned_retained_bytes = 0
+
+    def flush_pinned_pool(self) -> None:
+        """Release every page-locked block CuPy's pinned pool retains.
+
+        Freeing page-locked memory synchronizes the whole device.
+        """
+        with self._pinned_lock:
+            self._apply_pinned_releases()
+            self._flush_retained_pinned()
 
     def _on_pinned_released(self, nbytes: int) -> None:
         """Queue a collected pinned array's bytes without locking."""

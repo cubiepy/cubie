@@ -2512,6 +2512,18 @@ def test_forced_pinned_reservation_exceeds_budget(mgr):
     assert mgr.pinned_live_bytes == 768
 
 
+def test_flush_pinned_pool_returns_retained_bytes(mgr):
+    """An explicit flush empties the retained ledger."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    assert array is not None
+    del array
+    gc.collect()
+    assert mgr.pinned_retained_bytes == 768
+    mgr.flush_pinned_pool()
+    assert mgr.pinned_retained_bytes == 0
+    assert mgr.pinned_live_bytes == 0
+
+
 def test_pinned_budget_capped_by_ram_fraction(mgr):
     """The enforced budget never exceeds the spill fraction of RAM."""
     mgr.pinned_max_bytes = 2**62
