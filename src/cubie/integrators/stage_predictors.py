@@ -50,7 +50,7 @@ See Also
     Owns a predictor and applies it to its stage-increment history.
 """
 
-from typing import Callable
+from typing import Any, Callable, Dict, Set
 
 from attrs import define, field, validators, frozen
 from numpy import asarray as np_asarray
@@ -461,25 +461,22 @@ class DenseStagePredictor(CUDAFactory):
             config.predictor_previous_values_location,
         )
 
-    def update(self, updates_dict=None, silent=False, **kwargs):
-        """Update compile settings and re-register buffers.
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Apply the settings and re-register the buffers.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
 
         Returns
         -------
-        set
-            Set of recognized parameter names that were updated.
+        set[str]
+            Names the predictor settings recognised.
         """
-
-        all_updates = {}
-        if updates_dict:
-            all_updates.update(updates_dict)
-        all_updates.update(kwargs)
-        if not all_updates:
-            return set()
-
-        recognised = self.update_compile_settings(
-            updates_dict=all_updates, silent=silent
-        )
+        recognised = self.update_compile_settings(updates, silent=True)
         if recognised:
             self.register_buffers()
         return recognised

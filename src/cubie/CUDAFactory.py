@@ -78,6 +78,7 @@ from cubie._serialize import canonical_digest
 from cubie._utils import (
     in_attr,
     nested_config_fields,
+    unpack_dict_values,
     PrecisionDType,
     precision_validator,
     precision_converter,
@@ -765,6 +766,65 @@ class CUDAFactory(ABC):
             self._invalidate_cache()
 
         return recognized
+
+    def update(
+        self,
+        updates_dict: Optional[Dict[str, Any]] = None,
+        silent: bool = False,
+        **kwargs: Any,
+    ) -> Set[str]:
+        """Apply settings updates through :meth:`_update`.
+
+        Parameters
+        ----------
+        updates_dict
+            Setting names to new values; a dict value is a group.
+        silent
+            Ignore unrecognised names instead of raising.
+        **kwargs
+            Further updates.
+
+        Returns
+        -------
+        set[str]
+            The recognised names, group names included.
+
+        Raises
+        ------
+        KeyError
+            Unrecognised names when not ``silent``.
+        """
+        updates, groups = unpack_dict_values(
+            {**(updates_dict or {}), **kwargs}
+        )
+        if not updates:
+            return groups
+        given = set(updates)
+        recognised = self._update(updates, silent)
+        unrecognised = given - recognised
+        if unrecognised and not silent:
+            raise KeyError(
+                f"Unrecognized parameters in update: {unrecognised}. "
+                "These parameters were not updated.",
+            )
+        return recognised | groups
+
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Apply the merged updates; subclasses add their children.
+
+        Parameters
+        ----------
+        updates
+            Setting names to new values; a private, flat copy.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
+
+        Returns
+        -------
+        set[str]
+            The recognised names.
+        """
+        return self.update_compile_settings(updates, silent=True)
 
     def _invalidate_cache(self):
         """Mark cached Dispatchers as invalid."""

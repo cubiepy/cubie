@@ -508,54 +508,34 @@ class NewtonKrylov(MatrixFreeSolver):
         # no cover: end
         return NewtonKrylovCache(nonlinear_solver_fn=nonlinear_solver_fn)
 
-    def update(
-        self,
-        updates_dict: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs,
-    ) -> Set[str]:
-        """Update compile settings and invalidate cache if changed.
+    def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
+        """Update the linear solver, then Newton's settings and buffers.
 
         Parameters
         ----------
-        updates_dict : dict, optional
-            Dictionary of settings to update.
-        silent : bool, default False
-            If True, suppress warnings about unrecognized keys.
-        **kwargs
-            Additional settings as keyword arguments.
+        updates
+            Setting names to new values; gains
+            ``krylov_linear_solver_fn``.
+        silent
+            Whether :meth:`update` ignores unrecognised names.
 
         Returns
         -------
-        set
-            Set of recognized parameter names that were updated.
+        set[str]
+            Names the linear solver, norm, Newton settings and buffer
+            registry recognised.
         """
-        all_updates = {}
-        if updates_dict:
-            all_updates.update(updates_dict)
-        all_updates.update(kwargs)
-
-        if not all_updates:
-            return set()
-
-        recognized = set()
-
         # Guard any swapped-in linear solver before it compiles.
         self._require_child_zero_guess()
-
-        # Forward krylov-prefixed params to linear solver
-        recognized |= self.linear_solver.update(all_updates, silent=True)
-        all_updates["krylov_linear_solver_fn"] = (
+        recognized = self.linear_solver.update(updates, silent=True)
+        updates["krylov_linear_solver_fn"] = (
             self.linear_solver.device_function
         )
-        recognized |= super().update(all_updates, silent=True)
-
-        # Buffer locations handled by registry
+        recognized |= super()._update(updates, silent)
         recognized |= buffer_registry.update(
-            self, updates_dict=all_updates, silent=True
+            self, updates_dict=updates, silent=True
         )
         self.register_buffers()
-
         return recognized
 
     @property
