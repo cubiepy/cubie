@@ -536,8 +536,8 @@ class ComparisonRunner:
     def solve_times(
         self, count: int, blocksize: Optional[int] = None
     ) -> Tuple[float, ...]:
-        """Queue ``count`` solves of the staged batch behind one busy
-        launch; synchronize once and return each solve's kernel ms."""
+        """Queue ``count`` solves behind one busy launch; return each
+        solve's kernel ms after one synchronize."""
         solver = self._solver
         kernel = solver.kernel
         busy_launch(kernel.stream)
