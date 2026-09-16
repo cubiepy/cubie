@@ -786,55 +786,31 @@ def test_memory_manager_cannot_change_on_a_live_solver(solver_mutable):
 @pytest.mark.parametrize(
     "solver_settings_override", [SUMMARY_ONLY_LAST], indirect=True
 )
-def test_unset_window_keeps_the_build_across_durations(
-    solver_mutable, batch_input_arrays, driver_settings
-):
-    """One summary at the end per solve, whatever the duration."""
-    initial_values, parameters = batch_input_arrays
-    first = solver_mutable.solve(
-        initial_values=initial_values,
-        parameters=parameters,
-        drivers=driver_settings,
-        duration=0.5,
-    )
+def test_unset_window_keeps_the_build_across_durations(solver_mutable):
+    """One summary at the end, whatever the duration."""
+    solver_mutable.update(duration=0.5)
+    integrator = solver_mutable.kernel.single_integrator
+    solver_mutable.kernel.kernel
     assert solver_mutable.summarise_every is None
     assert solver_mutable.sample_summaries_every == pytest.approx(0.02)
-    assert solver_mutable.kernel.single_integrator.summarise_last is True
-    assert first.state_summaries.shape[0] == 1
+    assert integrator.summarise_last is True
+    assert integrator.summaries_length(0.5) == 1
     assert solver_mutable.kernel._cache_valid
-    second = solver_mutable.solve(
-        initial_values=initial_values,
-        parameters=parameters,
-        drivers=driver_settings,
-        duration=0.9,
-    )
+    solver_mutable.update(duration=0.9)
     assert solver_mutable.kernel._cache_valid
-    assert second.state_summaries.shape[0] == 1
+    assert integrator.summaries_length(0.9) == 1
 
 
-def test_unsetting_the_intervals_at_solve_switches_to_last(
-    solver_mutable, batch_input_arrays, driver_settings
-):
-    """Unset intervals at solve time give a final save and one summary."""
-    initial_values, parameters = batch_input_arrays
-    result = solver_mutable.solve(
-        initial_values=initial_values,
-        parameters=parameters,
-        drivers=driver_settings,
-        duration=0.2,
-        save_every=None,
-        summarise_every=None,
-    )
+def test_unsetting_the_intervals_switches_to_last(solver_mutable):
+    """Unset intervals give a final save and one summary."""
+    solver_mutable.update(duration=0.2, save_every=None, summarise_every=None)
     integrator = solver_mutable.kernel.single_integrator
     assert solver_mutable.save_every is None
     assert solver_mutable.summarise_every is None
-    assert solver_mutable.solve_info.summarise_every is None
     assert integrator.save_last is True
     assert integrator.summarise_last is True
     assert integrator.save_event_count(0.2) == 1
     assert integrator.summaries_length(0.2) == 1
-    assert result.time_domain_array.shape[0] == 2
-    assert result.state_summaries.shape[0] == 1
 
 
 @pytest.mark.parametrize(

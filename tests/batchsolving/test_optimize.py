@@ -348,13 +348,17 @@ def test_block_size_change_clears_the_pinned_residency(solver_mutable):
 @pytest.mark.nocudasim
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"algorithm": "vern7", "unroll_other_small": None}],
+    [{"algorithm": "bogacki-shampine-32", "stage_rhs_location": "local"}],
     indirect=True,
 )
-def test_optimize_applies_the_fastest_launch(
+def test_optimize_times_candidates_and_applies_the_fastest(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
-    """The fastest launch is applied; waves fill; no host buffers."""
+    """Both placements are timed; the fastest launch is applied."""
+    assert solver_mutable.optimisation_candidates() == (
+        {"state_location": "local"},
+        {"state_location": "shared"},
+    )
     verbosity = default_timelogger.verbosity
     waves = 2
     result = solver_mutable.optimize(
@@ -369,12 +373,18 @@ def test_optimize_applies_the_fastest_launch(
     assert default_timelogger.verbosity == verbosity
     timed = [launch for launch in result.launches if launch.timed]
     assert timed
+    assert {launch.settings["state_location"] for launch in timed} == {
+        "local",
+        "shared",
+    }
     assert min(launch.waves for launch in timed) >= waves
     outputs = solver_mutable.kernel.output_arrays
     for _, slot in outputs.host.iter_managed_arrays():
         assert slot.array is None
     for launch in result.launches:
         assert all(time_ms > 0.0 for time_ms in launch.times_ms)
+        assert launch.blocks_per_sm >= 1
+        assert launch.waves > 0.0
     assert result.best is min(timed, key=lambda launch: launch.best_ms)
     assert result.ranking[0] is result.best
     assert result.applied_settings == {
@@ -387,9 +397,6 @@ def test_optimize_applies_the_fastest_launch(
     loop = kernel.single_integrator._loop
     assert loop.compile_settings.state_location == (
         result.best.settings["state_location"]
-    )
-    assert loop.compile_settings.unroll.unroll_other_small == (
-        result.best.settings["unroll_other_small"].value
     )
     for launch in result.launches:
         assert launch.error == ""
@@ -421,15 +428,19 @@ def test_invalid_arguments_are_rejected(solver, kwargs, message):
 
 
 @pytest.mark.nocudasim
-def test_kernel_is_cached_reports_the_disk_cache(
+def test_kernel_is_cached_follows_the_cache_directory(
     solver_mutable, driver_settings, tmp_path
 ):
-    """A fresh cache directory holds nothing until the kernel compiles."""
+    """kernel_is_cached reads whichever directory the kernel points at."""
     kernel = solver_mutable.kernel
+    kernel.kernel
+    cache_root = kernel._disk_cache.cache_path.parent
     kernel.set_cache_dir(tmp_path / "fresh")
     assert not kernel.kernel_is_cached()
+    kernel.set_cache_dir(cache_root)
     solver_mutable.compile(drivers=driver_settings, duration=0.1)
     assert kernel.kernel_is_cached()
+    assert kernel._disk_cache.cache_path.parent == cache_root
 
 
 def _runner(solver, inits, params):

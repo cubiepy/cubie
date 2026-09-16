@@ -631,12 +631,31 @@ if POPULATION:
     import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
 
     _real_pinned_pointer = _cuda_simsafe.cupy.cuda.PinnedMemoryPointer
+    # ``asarray`` stands in for the cupy grids tests hand to optimize.
     _cuda_simsafe.cupy = SimpleNamespace(
+        asarray=lambda a: _fake_device_array(np.array(a, copy=True)),
         cuda=SimpleNamespace(
             Stream=lambda non_blocking=False: SimpleNamespace(ptr=0),
             PinnedMemoryPointer=_real_pinned_pointer,
         ),
     )
+
+    # Fake device arrays take the device-input path, keeping their layout.
+    _real_is_device_array = _cuda_simsafe.is_device_array
+
+    def _population_is_device_array(value):
+        if isinstance(value, _FakeDeviceArray):
+            return True
+        return _real_is_device_array(value)
+
+    for _module_name in (
+        "cubie.cuda_simsafe",
+        "cubie.batchsolving.BatchInputHandler",
+        "cubie.batchsolving.arrays.BatchInputArrays",
+    ):
+        importlib.import_module(_module_name).is_device_array = (
+            _population_is_device_array
+        )
 
 
 # CuBIE creates a few dispatchers while importing its cache module. Finish
@@ -644,6 +663,23 @@ if POPULATION:
 import cubie  # noqa: E402, F401
 
 _attach_pending()
+
+# Candidate kernels compile in this process, never in spawned workers.
+from cubie.batchsolving.comparison import ComparisonRunner  # noqa: E402
+
+
+def _compile_candidates_in_process(self, candidates):
+    for candidate in candidates:
+        try:
+            self.select(candidate)
+            self._compile_current()
+        except Exception as exc:
+            self._reject(candidate, exc)
+            continue
+        self.emit(f"  {candidate.label}: compiled")
+
+
+ComparisonRunner._compile_in_pool = _compile_candidates_in_process
 
 
 def pytest_configure(config):
