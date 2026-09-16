@@ -957,8 +957,8 @@ class Solver:
             and duration to reduce runtime; ``False`` optimizes at your
             given batch size and duration. Default ``True``.
         waves
-            Waves of the most resident launch the ``auto_size`` batch
-            starts at. Default ``5``.
+            Waves of the launch with the most concurrent runs the
+            ``auto_size`` batch starts at. Default ``5``.
         target_ms
             Kernel milliseconds per timed solve ``auto_size`` aims for.
             Default ``20.0``.

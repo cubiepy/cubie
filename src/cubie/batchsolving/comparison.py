@@ -415,6 +415,15 @@ class ComparisonRunner:
         self._codes = None
         self.runs = runs
 
+    @property
+    def staged_bytes(self) -> int:
+        """Device bytes of the staged grid."""
+        return sum(
+            grid.nbytes
+            for grid in (self._inits, self._params)
+            if grid is not None
+        )
+
     @staticmethod
     def _stage(grid: ndarray) -> Any:
         """Upload ``grid``; a grid with no variables is passed as None."""
@@ -533,31 +542,27 @@ class ComparisonRunner:
                         f"{config_hash[:12]}"
                     )
 
-    def solve_times(
-        self, count: int, blocksize: Optional[int] = None
-    ) -> Tuple[float, ...]:
-        """Queue ``count`` solves behind one busy launch; return each
-        solve's kernel ms after one synchronize."""
-        solver = self._solver
-        kernel = solver.kernel
-        busy_launch(kernel.stream)
-        for _ in range(int(count)):
-            solver.solve(
-                self._inits,
-                self._params,
-                duration=self.duration,
-                settling_time=self.settling,
-                t0=self._t0,
-                blocksize=blocksize,
-                on_device=True,
-            )
-        kernel.synchronize()
-        return tuple(kernel.recent_kernel_ms(int(count)))
-
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""
-        (measured,) = self.solve_times(1, blocksize)
-        return measured
+        solver = self._solver
+        solver.solve(
+            self._inits,
+            self._params,
+            duration=self.duration,
+            settling_time=self.settling,
+            t0=self._t0,
+            blocksize=blocksize,
+            on_device=True,
+        )
+        kernel = solver.kernel
+        kernel.synchronize()
+        return float(
+            sum(
+                event.elapsed_time_ms()
+                for event in kernel._cuda_events
+                if event.name.startswith("kernel_chunk")
+            )
+        )
 
     def warm(self) -> float:
         """Lift the clocks with the busy kernel; return its milliseconds."""
@@ -593,10 +598,9 @@ class ComparisonRunner:
     def time(self, candidates: Sequence[Candidate]) -> List[CandidateTiming]:
         """Time every candidate on the staged batch, forward then back.
 
-        Every candidate makes :data:`SOLVES_PER_ROUND` queued solves in
-        each of :data:`ROUNDS` rounds; the second round reverses the
-        order. A rejected or failing candidate carries the error and no
-        times.
+        Every candidate solves :data:`SOLVES_PER_ROUND` times in each of
+        :data:`ROUNDS` rounds; the second round reverses the order. A
+        rejected or failing candidate carries the error and no times.
         """
         timings = [
             CandidateTiming(
@@ -614,9 +618,10 @@ class ComparisonRunner:
                 candidate = timing.candidate
                 try:
                     self.select(candidate)
-                    timing.times_ms += self.solve_times(
-                        SOLVES_PER_ROUND, candidate.blocksize
-                    )
+                    for _ in range(SOLVES_PER_ROUND):
+                        timing.times_ms += (
+                            self.solve_ms(candidate.blocksize),
+                        )
                     if round_index == 0:
                         timing.failures = self.failures()
                         timing.blocks_per_sm, timing.waves = self.geometry(

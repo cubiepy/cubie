@@ -335,8 +335,6 @@ class BatchSolverKernel(CUDAFactory):
 
         # CUDA event tracking for timing
         self._cuda_events: List = []
-        self._cuda_event_sets: List = []
-        self._queued_event_sets = 0
         self._gpu_workload_event: Optional[CUDAEvent] = None
         self._cuda_events_key = None
 
@@ -439,57 +437,25 @@ class BatchSolverKernel(CUDAFactory):
         Notes
         -----
         One workload event plus three per chunk. While timing is on
-        the sets are kept between runs and rebuilt on a chunk-count or
-        verbosity change; a run queued before :meth:`synchronize`
-        takes its own set. With timing off each run gets fresh no-op
-        events.
+        they are kept between runs and rebuilt when the chunk count or
+        logger verbosity changes; with timing off each run gets fresh
+        no-op events.
         """
         verbosity = default_timelogger.verbosity
         key = (chunks, verbosity)
         if verbosity is not None and key == self._cuda_events_key:
-            if self._queued_event_sets < len(self._cuda_event_sets):
-                events = self._cuda_event_sets.pop(0)
-                for event in events:
-                    event.register()
-            else:
-                events = self._chunk_events(chunks)
-            self._cuda_event_sets.append(events)
-            self._cuda_events = events
-            self._queued_event_sets += 1
             self._gpu_workload_event.register()
+            for event in self._cuda_events:
+                event.register()
             return
         self._gpu_workload_event = CUDAEvent("gpu_workload")
-        self._cuda_events = self._chunk_events(chunks)
-        self._cuda_event_sets = [self._cuda_events]
-        self._queued_event_sets = 1
-        self._cuda_events_key = key
-
-    @staticmethod
-    def _chunk_events(chunks: int) -> List:
-        """Return three new events per chunk."""
-        events = []
+        self._cuda_events = []
         for i in range(chunks):
             h2d_event = CUDAEvent(f"h2d_transfer_chunk_{i}")
             kernel_event = CUDAEvent(f"kernel_chunk_{i}")
             d2h_event = CUDAEvent(f"d2h_transfer_chunk_{i}")
-            events.extend([h2d_event, kernel_event, d2h_event])
-        return events
-
-    def recent_kernel_ms(self, count: int) -> List[float]:
-        """Kernel milliseconds of the last ``count`` runs, oldest first;
-        read after :meth:`synchronize`."""
-        sets = self._cuda_event_sets
-        count = min(int(count), len(sets))
-        return [
-            float(
-                sum(
-                    event.elapsed_time_ms()
-                    for event in events
-                    if event.name.startswith("kernel_chunk")
-                )
-            )
-            for events in sets[len(sets) - count:]
-        ]
+            self._cuda_events.extend([h2d_event, kernel_event, d2h_event])
+        self._cuda_events_key = key
 
     def _get_chunk_events(self, chunk_idx: int) -> Tuple:
         """Get the three CUDA events for a specific chunk.
@@ -884,20 +850,6 @@ class BatchSolverKernel(CUDAFactory):
 
         # Finalize GPU workload timing
         self._gpu_workload_event.record_end(stream)
-
-    def single_chunk_runs(self, runs: int) -> int:
-        """Chunk length :meth:`MemoryManager.get_chunk_parameters` gives
-        the managers' requests for ``runs`` runs, shaped like the last
-        run's arrays."""
-        runs = int(runs)
-        requests = {
-            id(manager): manager.batch_requests(runs)
-            for manager in (self.input_arrays, self.output_arrays)
-        }
-        chunk_length, _ = self.memory_manager.get_chunk_parameters(
-            requests, runs, self.memory_manager.get_stream_group(self)
-        )
-        return int(chunk_length)
 
     def limit_blocksize(
         self,
@@ -1396,7 +1348,6 @@ class BatchSolverKernel(CUDAFactory):
 
     def synchronize(self) -> None:
         """Wait for this kernel's last run stream."""
-        self._queued_event_sets = 0
         if self._work_complete or self._last_stream is None:
             return
         self.memory_manager.sync_stream(self, stream=self._last_stream)

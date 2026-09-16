@@ -472,8 +472,9 @@ def _set_duration(
 
 
 def _ramp_start(solver: Any, given: float) -> float:
-    """The cadence floor, at least one step; ``given`` when the sample
-    interval rejects a shorter duration."""
+    """Return the shortest duration to time: at least one save or
+    summary sample and at least one step, or ``given`` when the
+    sample interval rejects anything shorter."""
     trial = max(_duration_floor(solver, given), float(solver.effective.dt))
     trial = min(trial, given)
     if trial < given and not _fits_sample_interval(solver, trial):
@@ -508,18 +509,19 @@ def _ramp_duration(
     return measured
 
 
-def unused_wave_share(runs: int, resident: Sequence[int]) -> float:
-    """Largest ``(ceil(waves) - waves) / ceil(waves)`` over launches
-    resident ``resident`` runs at once, ``waves = runs / count``."""
+def unused_wave_share(runs: int, concurrent: Sequence[int]) -> float:
+    """Return the largest share of a last wave left empty over the
+    launches: ``(ceil(waves) - waves) / ceil(waves)`` with ``waves =
+    runs / count``, ``count`` the runs a launch executes at once."""
     worst = 0.0
-    for count in resident:
+    for count in concurrent:
         waves = runs / count
         worst = max(worst, (ceil(waves) - waves) / ceil(waves))
     return worst
 
 
 def tail_safe_runs(
-    resident: Sequence[int],
+    concurrent: Sequence[int],
     wanted: int,
     floor: int,
     cap: Optional[int] = None,
@@ -528,8 +530,8 @@ def tail_safe_runs(
 
     Parameters
     ----------
-    resident
-        Runs resident at once at each launch.
+    concurrent
+        Runs each launch executes at once.
     wanted
         Runs the batch should reach.
     floor
@@ -544,7 +546,7 @@ def tail_safe_runs(
         :func:`unused_wave_share` in the one-wave interval above
         ``wanted``, clipped to ``[floor, cap]``; the smallest on a tie.
     """
-    most = max(resident)
+    most = max(concurrent)
     low = max(int(wanted), int(floor))
     high = low + most
     if cap is not None:
@@ -553,33 +555,49 @@ def tail_safe_runs(
         if low > high:
             return high
     candidates = {low, high}
-    for count in resident:
+    for count in concurrent:
         first = -(-low // count)
         candidates.update(
             multiple * count for multiple in range(first, high // count + 1)
         )
     return min(
-        candidates, key=lambda runs: (unused_wave_share(runs, resident), runs)
+        candidates,
+        key=lambda runs: (unused_wave_share(runs, concurrent), runs),
     )
 
 
-def _launch_resident_runs(
+def _launch_concurrent_runs(
     runner: ComparisonRunner, kernel: Any, launches: Sequence[Candidate]
 ) -> List[int]:
-    """Runs resident at once at each launch, in ``launches`` order."""
+    """Return the runs each launch executes at once (blocks per SM times
+    SMs times runs per block), in ``launches`` order."""
     multiprocessors = device_hardware().multiprocessor_count
     threads_per_loop = kernel.threads_per_loop
-    resident = []
+    concurrent = []
     for launch in launches:
         runner.select(launch)
         blocks = launch.resident_blocks
         if blocks is None:
             shapes = kernel.launchable_shapes((launch.blocksize,))
             blocks = shapes[launch.blocksize][1]
-        resident.append(
+        concurrent.append(
             blocks * multiprocessors * (launch.blocksize // threads_per_loop)
         )
-    return resident
+    return concurrent
+
+
+def _batch_cap(runner: ComparisonRunner, kernel: Any) -> int:
+    """Runs that fit in memory at the staged batch's bytes per run."""
+    manager = kernel.memory_manager
+    allocated = sum(
+        manager.get_registration(arrays).allocated_bytes
+        for arrays in (kernel.input_arrays, kernel.output_arrays)
+    )
+    available = manager.get_available_memory(
+        manager.get_stream_group(kernel)
+    )
+    bytes_per_run = (allocated + runner.staged_bytes) / runner.runs
+    return int((available + allocated) // bytes_per_run)
 
 
 def _size_batch(
@@ -593,20 +611,20 @@ def _size_batch(
 ) -> None:
     """Stage the batch and duration ``auto_size`` times on.
 
-    Batch: the tail-safe boundary above ``waves`` of the most resident
-    launch. Duration: ramped toward ``target_ms``, never past
-    ``given``. Then one linear batch correction: up within one chunk
-    when the given duration is short, down to :data:`TIMED_WAVES_FLOOR`
-    waves when the shortest overshoots.
+    Batch: the tail-safe boundary above ``waves`` of the launch with
+    the most concurrent runs. Duration: ramped toward ``target_ms``,
+    never past ``given``. Then one linear batch correction: up within
+    free memory when the given duration is short, down to
+    :data:`TIMED_WAVES_FLOOR` waves when the shortest overshoots.
     """
     kernel = solver.kernel
-    resident = _launch_resident_runs(runner, kernel, launches)
-    if not resident:
+    concurrent = _launch_concurrent_runs(runner, kernel, launches)
+    if not concurrent:
         runner.set_batch()
         return
-    most = max(resident)
+    most = max(concurrent)
     floor = TIMED_WAVES_FLOOR * most
-    runs = tail_safe_runs(resident, int(waves) * most, floor)
+    runs = tail_safe_runs(concurrent, int(waves) * most, floor)
     runner.set_batch(runs)
     runner.emit(f"batch: {runner.runs} runs")
     runner.select(launches[0])
@@ -616,10 +634,10 @@ def _size_batch(
     )
     wanted = int(runner.runs * target_ms / measured)
     if measured < target_ms and runner.duration >= given:
-        cap = kernel.single_chunk_runs(wanted)
-        runs = tail_safe_runs(resident, wanted, floor, cap)
+        cap = _batch_cap(runner, kernel)
+        runs = tail_safe_runs(concurrent, wanted, floor, cap)
     elif measured > target_ms and runner.duration <= start:
-        runs = tail_safe_runs(resident, wanted, floor, runner.runs)
+        runs = tail_safe_runs(concurrent, wanted, floor, runner.runs)
     if runs != runner.runs:
         runner.set_batch(runs)
         try:
@@ -630,7 +648,7 @@ def _size_batch(
                 raise
             # The live partition is the fresh single-chunk fit.
             runs = tail_safe_runs(
-                resident,
+                concurrent,
                 partition.chunk_length,
                 floor,
                 partition.chunk_length,
@@ -689,8 +707,9 @@ def run_optimization(
         duration to reduce runtime; ``False`` optimizes at your given
         batch size and duration.
     waves
-        Occupancy waves of the most resident launch the ``auto_size``
-        batch starts at; the batch then moves to hit ``target_ms``.
+        Waves of the launch with the most concurrent runs the
+        ``auto_size`` batch starts at; the batch then moves to hit
+        ``target_ms``.
     target_ms
         Kernel milliseconds per timed solve ``auto_size`` aims for by
         raising the duration, never past yours, then the batch.
