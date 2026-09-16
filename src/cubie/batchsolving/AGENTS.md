@@ -133,8 +133,8 @@ removed device-wide syncs for concurrent/multiprocess operation). `SolveResult.s
 
 ### Device-resident results and inputs
 `Solver.solve(on_device=True)` skips the per-chunk `output_arrays.finalise` D2H
-(`kernel.run(transfer_outputs=False)`), creates no host output buffers, skips the
-end-of-solve sync/writeback wait, and
+(`kernel.run(transfer_outputs=False)`), creates no host output buffers, leaves any result
+loan untouched, skips the end-of-solve sync/writeback wait, and
 returns a `DeviceSolveResult`: the kernel's device output buffers plus `kernel.stream`.
 Contents are valid once that stream is synchronized; work queued on it executes in order
 after the solve. The handles are views the next `solve()` overwrites (and a reallocation

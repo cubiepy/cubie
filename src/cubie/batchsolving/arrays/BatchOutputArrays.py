@@ -357,8 +357,9 @@ class OutputArrays(BaseArrayManager):
             ``True`` when the sizes changed and every device output is
             queued for reallocation, ``None`` when they are unchanged.
         """
-        # Buffers loaned to a collected result come back for reuse.
-        self.reclaim_or_release_loan()
+        # Only a transferring run takes a dead result's buffers back.
+        if self._transfer:
+            self.reclaim_or_release_loan()
         # Output sizes depend on num_runs, precision, the time dimensions
         # (output_length / summaries_length, which fold in duration and the
         # save/summarise intervals), the per-variable heights (which fold
