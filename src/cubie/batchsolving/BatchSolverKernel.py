@@ -335,6 +335,9 @@ class BatchSolverKernel(CUDAFactory):
 
         # CUDA event tracking for timing
         self._cuda_events: List = []
+        self._cuda_event_sets: List = []
+        self._cuda_event_slot = 0
+        self.timing_depth = 1
         self._gpu_workload_event: Optional[CUDAEvent] = None
         self._cuda_events_key = None
 
@@ -442,20 +445,49 @@ class BatchSolverKernel(CUDAFactory):
         no-op events.
         """
         verbosity = default_timelogger.verbosity
-        key = (chunks, verbosity)
+        depth = max(1, int(self.timing_depth))
+        key = (chunks, verbosity, depth)
         if verbosity is not None and key == self._cuda_events_key:
+            self._cuda_event_slot = (self._cuda_event_slot + 1) % depth
+            self._cuda_events = self._cuda_event_sets[self._cuda_event_slot]
             self._gpu_workload_event.register()
             for event in self._cuda_events:
                 event.register()
             return
         self._gpu_workload_event = CUDAEvent("gpu_workload")
-        self._cuda_events = []
-        for i in range(chunks):
-            h2d_event = CUDAEvent(f"h2d_transfer_chunk_{i}")
-            kernel_event = CUDAEvent(f"kernel_chunk_{i}")
-            d2h_event = CUDAEvent(f"d2h_transfer_chunk_{i}")
-            self._cuda_events.extend([h2d_event, kernel_event, d2h_event])
+        self._cuda_event_sets = []
+        for _ in range(depth):
+            events = []
+            for i in range(chunks):
+                h2d_event = CUDAEvent(f"h2d_transfer_chunk_{i}")
+                kernel_event = CUDAEvent(f"kernel_chunk_{i}")
+                d2h_event = CUDAEvent(f"d2h_transfer_chunk_{i}")
+                events.extend([h2d_event, kernel_event, d2h_event])
+            self._cuda_event_sets.append(events)
+        self._cuda_event_slot = 0
+        self._cuda_events = self._cuda_event_sets[0]
         self._cuda_events_key = key
+
+    def recent_kernel_ms(self, count: int) -> List[float]:
+        """Kernel milliseconds of the last ``count`` runs, oldest first;
+        read after synchronizing the stream."""
+        depth = len(self._cuda_event_sets)
+        count = min(int(count), depth)
+        times = []
+        for back in range(count - 1, -1, -1):
+            events = self._cuda_event_sets[
+                (self._cuda_event_slot - back) % depth
+            ]
+            times.append(
+                float(
+                    sum(
+                        event.elapsed_time_ms()
+                        for event in events
+                        if event.name.startswith("kernel_chunk")
+                    )
+                )
+            )
+        return times
 
     def _get_chunk_events(self, chunk_idx: int) -> Tuple:
         """Get the three CUDA events for a specific chunk.
@@ -850,6 +882,20 @@ class BatchSolverKernel(CUDAFactory):
 
         # Finalize GPU workload timing
         self._gpu_workload_event.record_end(stream)
+
+    def single_chunk_runs(self, runs: int) -> int:
+        """Most runs of a ``runs``-sized batch one chunk holds, without
+        allocating; ``runs`` when it fits, 0 when one run does not."""
+        requests = {
+            id(self.input_arrays): self.input_arrays.batch_requests(runs),
+            id(self.output_arrays): self.output_arrays.batch_requests(runs),
+        }
+        requests = {key: value for key, value in requests.items() if value}
+        if not requests:
+            return int(runs)
+        return self.memory_manager.max_single_chunk_runs(
+            requests, int(runs), self.memory_manager.get_stream_group(self)
+        )
 
     def limit_blocksize(
         self,

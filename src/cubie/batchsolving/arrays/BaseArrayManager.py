@@ -1037,23 +1037,44 @@ class BaseArrayManager(ABC):
             if shape is None:
                 # Pending data; requested once it arrives.
                 continue
-            host_array_object = self.host.get_managed_array(array_label)
-            device_array_object = self.device.get_managed_array(array_label)
-            total_runs = self.num_runs
-            request = ArrayRequest(
-                shape=shape,
-                dtype=device_array_object.dtype,
-                memory=device_array_object.memory_type,
-                chunk_axis_index=host_array_object._chunk_axis_index,
-                unchunkable=not host_array_object.is_chunked,
-                total_runs=total_runs,
+            requests[array_label] = self._build_request(
+                array_label, shape, self.num_runs
             )
-            requests[array_label] = request
             # Drop the buffer this request replaces.
-            device_array_object.array = None
+            self.device.get_managed_array(array_label).array = None
         self._requested_labels = set(requests)
         if requests:
             self.request_allocation(requests)
+
+    def _build_request(
+        self, label: str, shape: tuple, total_runs: int
+    ) -> ArrayRequest:
+        """Return the device request for ``label`` at ``shape``."""
+        host_array_object = self.host.get_managed_array(label)
+        device_array_object = self.device.get_managed_array(label)
+        return ArrayRequest(
+            shape=shape,
+            dtype=device_array_object.dtype,
+            memory=device_array_object.memory_type,
+            chunk_axis_index=host_array_object._chunk_axis_index,
+            unchunkable=not host_array_object.is_chunked,
+            total_runs=total_runs,
+        )
+
+    def batch_requests(self, runs: int) -> dict[str, ArrayRequest]:
+        """Return every device request resized to ``runs``, unqueued."""
+        requests = {}
+        for label in self.device.array_names():
+            shape = self._request_shape(label)
+            if shape is None:
+                continue
+            host_array_object = self.host.get_managed_array(label)
+            if host_array_object.is_chunked:
+                shape = list(shape)
+                shape[host_array_object._chunk_axis_index] = int(runs)
+                shape = tuple(shape)
+            requests[label] = self._build_request(label, shape, int(runs))
+        return requests
 
     def reset(self) -> None:
         """Clear cached arrays and allocation tracking."""

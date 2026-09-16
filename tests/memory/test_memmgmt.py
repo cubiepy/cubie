@@ -1017,6 +1017,58 @@ def test_ensure_cuda_context_simulation():
 class TestGetChunkParameters:
     """Tests for get_chunk_parameters method."""
 
+    def test_max_single_chunk_runs_matches_the_partition(
+        self, mgr, memory_client
+    ):
+        """The cap is the partition's single-chunk length; no allocation."""
+        inst = memory_client
+        mgr.register(
+            inst,
+            stream_group="test",
+            invalidate_cache_hook=inst.notice_invalidate,
+        )
+        runs = 1 << 20
+        # 4 KiB per run over 2^20 runs: 4 GiB, four times the 1 GiB free.
+        requests = {
+            id(inst): {
+                "state": ArrayRequest(
+                    shape=(1024, runs),
+                    dtype=np.float32,
+                    memory="device",
+                    chunk_axis_index=1,
+                    unchunkable=False,
+                    total_runs=runs,
+                ),
+                "table": ArrayRequest(
+                    shape=(256, 256),
+                    dtype=np.float32,
+                    memory="device",
+                    unchunkable=True,
+                    total_runs=runs,
+                ),
+            }
+        }
+        cap = mgr.max_single_chunk_runs(requests, runs, "test")
+        chunk_length, chunks = mgr.get_chunk_parameters(
+            requests, runs, "test"
+        )
+        assert chunks > 1
+        assert chunk_length <= cap < runs
+        assert mgr.registry[id(inst)].allocated_bytes == 0
+        small = {
+            id(inst): {
+                "state": ArrayRequest(
+                    shape=(1024, 64),
+                    dtype=np.float32,
+                    memory="device",
+                    chunk_axis_index=1,
+                    unchunkable=False,
+                    total_runs=64,
+                )
+            }
+        }
+        assert mgr.max_single_chunk_runs(small, 64, "test") == 64
+
     def test_get_chunk_parameters_unchunkable_exceeds_memory(
         self, mgr, memory_client
     ):

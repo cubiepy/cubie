@@ -957,11 +957,11 @@ class Solver:
             and duration to reduce runtime; ``False`` optimizes at your
             given batch size and duration. Default ``True``.
         waves
-            How many waves the ``auto_size`` setting sets your batch
-            size to fill. Default ``5``.
+            Waves of the most resident launch the ``auto_size`` batch
+            starts at. Default ``5``.
         target_ms
-            Target kernel runtime that ``auto_size`` sets your
-            integration duration to. Default ``20.0``.
+            Kernel milliseconds per timed solve ``auto_size`` aims for.
+            Default ``20.0``.
 
         Returns
         -------

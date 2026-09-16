@@ -1,5 +1,7 @@
 """Tests for the per-solver unroll, placement and launch optimisation."""
 
+import math
+
 import pytest
 
 from cubie.backend.utils import DeviceHardware
@@ -13,7 +15,10 @@ from cubie.batchsolving.optimize import (
     RESIDENCY_CUT_MIN_FRAME_BYTES,
     LaunchResult,
     _duration_floor,
-    _trial_durations,
+    _ramp_start,
+    most_resident_runs,
+    _timing_plan,
+    tail_safe_runs,
     apply_launch,
     default_launch,
     resident_blocks_within_l2,
@@ -393,8 +398,13 @@ def test_optimize_applies_the_fastest_launch(
         assert launch.failures == 0
         assert launch.runs == result.runs
     assert result.runs > 0
-    # A solve well under target_ms is timed at a longer duration.
-    assert result.duration > 0.1
+    # Duration stays at the given; a short launch grows the batch.
+    assert result.duration == pytest.approx(0.1)
+    most = most_resident_runs(solver_mutable.kernel)
+    assert result.runs >= waves * most
+    assert result.sized_ms > 0.0
+    if result.sized_ms < 20.0:
+        assert result.runs > waves * most
     assert "best" in result.summary()
 
 
@@ -440,15 +450,60 @@ def _runner(solver, inits, params):
 def test_duration_floor_holds_the_final_summary_sample(
     solver_mutable, simple_initial_values, simple_parameters
 ):
-    """Probe durations under a final summary keep one sample inside."""
+    """The ramp starts on the cadence floor, keeping one sample inside."""
     runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
     with runner:
         floor = _duration_floor(solver_mutable, 0.1)
         assert floor == pytest.approx(0.03)
-        trials = _trial_durations(solver_mutable, 0.1)
-        assert trials == sorted(trials)
-        assert min(trials) == floor
-        assert max(trials) == pytest.approx(0.1)
+        assert _ramp_start(solver_mutable, 0.1) == pytest.approx(floor)
+        assert _ramp_start(solver_mutable, 1000.0) == pytest.approx(1.0)
+
+
+def test_tail_safe_runs_fills_the_last_wave_of_every_launch():
+    """The batch lands where every launch's last wave is nearly full."""
+    resident = [71680, 43008, 64512, 57344]
+    runs = tail_safe_runs(resident, 5 * 71680)
+    assert runs >= 5 * 71680
+    for count in resident:
+        waves = runs / count
+        assert math.ceil(waves) / waves - 1 <= 0.05
+    assert tail_safe_runs([14336], 5 * 14336) == 5 * 14336
+
+
+def test_tail_safe_runs_takes_the_smallest_tail_when_none_fits():
+    """Without a fitting batch the least partial wave wins, first on a tie."""
+    assert tail_safe_runs([1000, 1700], 1000) == 1000
+    assert tail_safe_runs([1000, 3000], 1000) == 2000
+
+
+def test_tail_safe_runs_respects_the_cap():
+    """The cap bounds both the minimum and the search."""
+    assert tail_safe_runs([14336], 5 * 14336, cap=20000) == 20000
+    assert tail_safe_runs([], 100, cap=50) == 50
+    assert tail_safe_runs([4096], 4096, cap=100000) == 4096
+
+
+def test_timing_plan_follows_the_launch_length():
+    """Short launches get a lead-in; long launches solve once a round."""
+    assert _timing_plan(0.3) == (3, True)
+    assert _timing_plan(150.0) == (3, False)
+    assert _timing_plan(2000.0) == (1, False)
+
+
+@pytest.mark.nocudasim
+def test_single_chunk_runs_caps_a_batch_that_overfills_memory(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """A staged batch fits whole; an absurd one is cut to what fits."""
+    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
+    with runner:
+        runner.set_batch()
+        runner.solve_ms(None)
+        kernel = solver_mutable.kernel
+        assert kernel.single_chunk_runs(runner.runs) == runner.runs
+        huge = 1 << 40
+        capped = kernel.single_chunk_runs(huge)
+        assert 0 < capped < huge
 
 
 @pytest.mark.nocudasim

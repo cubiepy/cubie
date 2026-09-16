@@ -31,7 +31,7 @@ from cubie.backend.utils import (
     device_hardware,
 )
 from cubie.cache_root import get_cache_root_override, set_cache_root
-from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import CUDA_SIMULATION, cuda, float32
 from cubie.CUDAFactory import UnrollFlags
 from cubie.time_logger import default_timelogger
 
@@ -42,6 +42,27 @@ ROUNDS = 2
 
 SOLVES_PER_ROUND = 3
 """Timed solves per candidate per round."""
+
+LEAD_IN_MS = 100.0
+"""Solves under this are timed behind an untimed lead-in solve."""
+
+LONG_LAUNCH_MS = 1000.0
+"""Solves over this are timed once per round."""
+
+WARM_MS = 100.0
+"""Busy-kernel milliseconds that lift the GPU clocks before timing."""
+
+WARM_ITERATIONS = 1 << 16
+"""Chain length of one busy-kernel launch."""
+
+WARM_MAX_LAUNCHES = 64
+"""Most busy-kernel launches the warm-up makes."""
+
+WARM_THREADS_PER_BLOCK = 256
+"""Threads per block of the busy kernel."""
+
+WARM_BLOCKS_PER_SM = 4
+"""Blocks per SM of the busy kernel."""
 
 SUCCESS_TIER_FRACTION = 0.95
 """Share of the best success rate a candidate keeps to rank on time."""
@@ -55,6 +76,41 @@ WORKER_STARTUP_SECONDS = 12.0
 Empirical: a fresh ``import cubie`` in a spawned process on the
 development machine (mlir compat 6 s, odesystems 4.8 s, cupy 1.5 s).
 """
+
+
+if not CUDA_SIMULATION:  # pragma: no cover - relies on GPU runtime
+
+    @cuda.jit
+    def _busy_kernel(sink, iterations):
+        """Run a dependent FMA chain for ``iterations`` steps."""
+        value = float32(cuda.grid(1))
+        for _ in range(iterations):
+            value = value * float32(0.999) + float32(0.001)
+        if value < float32(0.0):
+            sink[0] = value
+
+
+def warm_clocks(stream: Any, target_ms: float = WARM_MS) -> float:
+    """Run the busy kernel on ``stream`` until ``target_ms`` of kernel
+    time has passed; return that time, 0.0 under the simulator."""
+    if CUDA_SIMULATION:  # pragma: no cover - simulated
+        return 0.0
+    blocks = WARM_BLOCKS_PER_SM * device_hardware().multiprocessor_count
+    sink = cuda.device_array(1, dtype="float32")
+    total = 0.0
+    for _ in range(WARM_MAX_LAUNCHES):
+        start = cuda.event()
+        end = cuda.event()
+        start.record(stream)
+        _busy_kernel[blocks, WARM_THREADS_PER_BLOCK, stream](
+            sink, WARM_ITERATIONS
+        )
+        end.record(stream)
+        end.synchronize()
+        total += float(cuda.event_elapsed_time(start, end))
+        if total >= target_ms:
+            break
+    return total
 
 
 def settings_label(settings: Dict[str, Any]) -> str:
@@ -244,6 +300,7 @@ class ComparisonRunner:
         self._touched = set()
         self._rejected = {}
         self._resident_blocks = solver.kernel.resident_blocks
+        self._timing_depth = solver.kernel.timing_depth
         self._verbosity = default_timelogger.verbosity
         self._inits = None
         self._params = None
@@ -304,6 +361,7 @@ class ComparisonRunner:
                 silent=True,
             )
             solver.kernel.resident_blocks = self._resident_blocks
+            solver.kernel.timing_depth = self._timing_depth
         finally:
             self._touched = set()
             self._inits = None
@@ -506,6 +564,35 @@ class ComparisonRunner:
             )
         )
 
+    def solve_times(
+        self, count: int, blocksize: Optional[int] = None,
+        lead_in: bool = True,
+    ) -> Tuple[float, ...]:
+        """Queue ``count`` solves, one untimed lead-in first when
+        ``lead_in``; synchronize once and return each kernel ms."""
+        solver = self._solver
+        kernel = solver.kernel
+        total = int(count) + (1 if lead_in else 0)
+        kernel.timing_depth = total
+        for _ in range(total):
+            solver.solve(
+                self._inits,
+                self._params,
+                duration=self.duration,
+                settling_time=self.settling,
+                t0=self._t0,
+                blocksize=blocksize,
+                on_device=True,
+            )
+        kernel.synchronize()
+        return tuple(kernel.recent_kernel_ms(int(count)))
+
+    def warm(self) -> float:
+        """Lift the clocks with the busy kernel; return its milliseconds."""
+        measured = warm_clocks(self._solver.kernel.stream)
+        self.emit(f"warm: {measured:.1f} ms busy")
+        return measured
+
     def failures(self) -> int:
         """Return the failed-run count of the last solve."""
         kernel = self._solver.kernel
@@ -531,12 +618,17 @@ class ComparisonRunner:
         resident = blocks * device_hardware().multiprocessor_count
         return int(blocks), total_blocks / resident
 
-    def time(self, candidates: Sequence[Candidate]) -> List[CandidateTiming]:
+    def time(
+        self,
+        candidates: Sequence[Candidate],
+        solves_per_round: int = SOLVES_PER_ROUND,
+        lead_in: bool = True,
+    ) -> List[CandidateTiming]:
         """Time every candidate on the staged batch, forward then back.
 
-        Every candidate solves :data:`SOLVES_PER_ROUND` times in each of
-        :data:`ROUNDS` rounds; the second round reverses the order. A
-        rejected or failing candidate carries the error and no times.
+        Each candidate makes ``solves_per_round`` queued solves per
+        round, behind a lead-in solve when ``lead_in``; a rejected or
+        failing candidate carries the error and no times.
         """
         timings = [
             CandidateTiming(
@@ -554,10 +646,9 @@ class ComparisonRunner:
                 candidate = timing.candidate
                 try:
                     self.select(candidate)
-                    for _ in range(SOLVES_PER_ROUND):
-                        timing.times_ms += (
-                            self.solve_ms(candidate.blocksize),
-                        )
+                    timing.times_ms += self.solve_times(
+                        solves_per_round, candidate.blocksize, lead_in
+                    )
                     if round_index == 0:
                         timing.failures = self.failures()
                         timing.blocks_per_sm, timing.waves = self.geometry(

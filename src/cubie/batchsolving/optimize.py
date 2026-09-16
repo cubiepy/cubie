@@ -20,7 +20,7 @@ Published Objects
     Time a solver's candidates.
 """
 
-from math import isfinite
+from math import ceil, isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from warnings import warn
 
@@ -33,6 +33,9 @@ from cubie.backend.utils import (
     kernel_resources,
 )
 from cubie.batchsolving.comparison import (
+    LEAD_IN_MS,
+    LONG_LAUNCH_MS,
+    SOLVES_PER_ROUND,
     Candidate,
     CandidateTiming,
     ComparisonRunner,
@@ -41,8 +44,23 @@ from cubie.batchsolving.comparison import (
 )
 from cubie.CUDAFactory import UnrollChoice
 
-PROBE_FRACTIONS = (0.01, 0.1, 1.0)
-"""Fractions of the given duration the ``auto_size`` probe ramps through."""
+RAMP_START_FRACTION = 1e-3
+"""Fraction of the given duration the ``auto_size`` ramp starts at."""
+
+TAIL_FRACTION = 0.05
+"""Largest partial-wave overhead the batch search accepts at any launch."""
+
+BATCH_SEARCH_SPAN = 2.0
+"""Multiple of the minimum batch the tail-safe search looks up to."""
+
+BATCH_SEARCH_STEP = 1024
+"""Run granularity of the tail-safe batch search."""
+
+OVERSHOOT_FACTOR = 4.0
+"""First-probe time over the target, in multiples, that shrinks the batch."""
+
+CORRECTION_FACTOR = 2.0
+"""Grown-batch time over the target, in multiples, corrected once."""
 
 LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
@@ -187,6 +205,8 @@ class OptimizeResult:
         Trajectories each timed solve integrated.
     duration
         Integration time each timed solve ran.
+    sized_ms
+        Kernel milliseconds of the sizing solve.
     """
 
     launches: List[LaunchResult]
@@ -194,6 +214,7 @@ class OptimizeResult:
     applied_settings: Dict[str, Any]
     runs: int = 0
     duration: float = 0.0
+    sized_ms: float = 0.0
 
     @property
     def ranking(self) -> List[LaunchResult]:
@@ -462,20 +483,6 @@ def _duration_floor(solver: Any, given: float) -> float:
     return min(floor, given)
 
 
-def _trial_durations(solver: Any, given: float) -> List[float]:
-    """Ascending probe durations the cadence and sample interval allow."""
-    floor = _duration_floor(solver, given)
-    trials = []
-    for fraction in PROBE_FRACTIONS:
-        trial = min(given, max(given * fraction, floor))
-        if trial in trials:
-            continue
-        if trial < given and not _fits_sample_interval(solver, trial):
-            continue
-        trials.append(trial)
-    return trials
-
-
 def _set_duration(
     runner: ComparisonRunner, duration: float, given: float, settling: float
 ) -> None:
@@ -485,26 +492,179 @@ def _set_duration(
     runner.settling = settling * scale
 
 
-def _probe_duration(
+def _measure(runner: ComparisonRunner, previous_ms: float) -> float:
+    """One kernel time, behind a lead-in solve when the last was short."""
+    (measured,) = runner.solve_times(1, None, previous_ms < LEAD_IN_MS)
+    return measured
+
+
+def _ramp_start(solver: Any, given: float) -> float:
+    """First probe duration; ``given`` when the sample interval rejects
+    a shorter one."""
+    floor = _duration_floor(solver, given)
+    trial = max(floor, given * RAMP_START_FRACTION)
+    if trial < given and not _fits_sample_interval(solver, trial):
+        return given
+    return trial
+
+
+def _ramp_duration(
     runner: ComparisonRunner,
     solver: Any,
     given: float,
     settling: float,
     target_ms: float,
-) -> None:
-    """Set the runner's duration so one solve takes about ``target_ms``."""
-    floor = _duration_floor(solver, given)
-    measured = 0.0
-    trial = given
-    for trial in _trial_durations(solver, given):
-        _set_duration(runner, trial, given, settling)
-        measured = runner.solve_ms(None)
-        runner.emit(f"  probe: duration {trial:g} -> {measured:.3f} ms")
-        if measured >= target_ms:
-            break
-    chosen = max(trial * target_ms / measured, floor)
-    _set_duration(runner, chosen, given, settling)
-    runner.emit(f"duration: {chosen:g} per timed solve")
+) -> float:
+    """Double the timed duration from :func:`_ramp_start` while the
+    kernel time is under ``target_ms`` and the duration under
+    ``given``; return the last kernel time."""
+    trial = _ramp_start(solver, given)
+    _set_duration(runner, trial, given, settling)
+    measured = _measure(runner, 0.0)
+    runner.emit(f"  probe: duration {trial:g} -> {measured:.3f} ms")
+    while measured < target_ms and trial < given:
+        longer = min(trial * 2.0, given)
+        if longer < given and not _fits_sample_interval(solver, longer):
+            longer = given
+        _set_duration(runner, longer, given, settling)
+        measured = _measure(runner, measured)
+        runner.emit(f"  probe: duration {longer:g} -> {measured:.3f} ms")
+        trial = longer
+    runner.emit(f"duration: {trial:g} per timed solve")
+    return measured
+
+
+def tail_safe_runs(
+    resident: Sequence[int], minimum: int, cap: Optional[int] = None
+) -> int:
+    """Return a batch near ``minimum`` whose last wave is nearly full
+    at every launch.
+
+    Parameters
+    ----------
+    resident
+        Runs resident at once at each launch.
+    minimum
+        Fewest runs wanted.
+    cap
+        Most runs allowed; ``None`` for no cap.
+
+    Returns
+    -------
+    int
+        The first batch in ``[minimum, BATCH_SEARCH_SPAN x minimum]``
+        whose worst ``ceil(waves)/waves - 1`` is within
+        :data:`TAIL_FRACTION`, else the one with the smallest.
+    """
+    counts = [int(count) for count in resident if count > 0]
+    minimum = max(1, int(minimum))
+    if cap is not None:
+        minimum = min(minimum, int(cap))
+    if not counts:
+        return minimum
+    top = int(minimum * BATCH_SEARCH_SPAN)
+    if cap is not None:
+        top = min(top, int(cap))
+    candidates = list(range(minimum, top + 1, BATCH_SEARCH_STEP))
+    if candidates[-1] != top:
+        candidates.append(top)
+
+    def tail(runs):
+        worst = 0.0
+        for count in counts:
+            waves = runs / count
+            worst = max(worst, ceil(waves) / waves - 1.0)
+        return worst
+
+    best = candidates[0]
+    best_tail = tail(best)
+    for runs in candidates:
+        overhead = tail(runs)
+        if overhead <= TAIL_FRACTION:
+            return runs
+        if overhead < best_tail:
+            best, best_tail = runs, overhead
+    return best
+
+
+def _launch_resident_runs(
+    runner: ComparisonRunner, kernel: Any, launches: Sequence[Candidate]
+) -> List[int]:
+    """Runs resident at once at each launch, in ``launches`` order."""
+    multiprocessors = device_hardware().multiprocessor_count
+    threads_per_loop = kernel.threads_per_loop
+    resident = []
+    for launch in launches:
+        if launch.blocksize is None:
+            continue
+        runner.select(launch)
+        blocks = launch.resident_blocks
+        if blocks is None:
+            shapes = kernel.launchable_shapes((launch.blocksize,))
+            blocks = shapes[launch.blocksize][1]
+        resident.append(
+            blocks * multiprocessors * (launch.blocksize // threads_per_loop)
+        )
+    return resident
+
+
+def _size_batch(
+    runner: ComparisonRunner,
+    solver: Any,
+    launches: Sequence[Candidate],
+    waves: int,
+    given: float,
+    settling: float,
+    target_ms: float,
+) -> float:
+    """Stage the batch and duration ``auto_size`` times on; return the
+    last kernel time.
+
+    Batch: ``waves`` of the most resident launch, tail-safe. Duration:
+    ramped toward ``target_ms``, never past ``given``. Then the batch
+    grows toward the single-chunk cap if still short, shrinks toward
+    one wave if the first probe overshoots, and is corrected once if
+    the grown batch overshoots.
+    """
+    kernel = solver.kernel
+    resident = _launch_resident_runs(runner, kernel, launches)
+    most = max(resident, default=0)
+    if most == 0:
+        runner.set_batch()
+        return _measure(runner, 0.0)
+    runs = tail_safe_runs(resident, int(waves) * most)
+    runner.set_batch(runs)
+    runner.emit(f"batch: {runner.runs} runs")
+    runner.select(launches[0])
+    measured = _ramp_duration(runner, solver, given, settling, target_ms)
+    if measured < target_ms:
+        wanted = int(runner.runs * target_ms / measured)
+        cap = kernel.single_chunk_runs(wanted)
+        runs = tail_safe_runs(resident, max(runner.runs, wanted), cap)
+    elif (
+        measured > OVERSHOOT_FACTOR * target_ms
+        and runner.duration <= _ramp_start(solver, given)
+    ):
+        wanted = max(most, int(runner.runs * target_ms / measured))
+        runs = min(runner.runs, tail_safe_runs(resident, wanted))
+    if runs != runner.runs:
+        runner.set_batch(runs)
+        measured = _measure(runner, measured)
+        runner.emit(f"batch: {runner.runs} runs -> {measured:.3f} ms")
+    if measured > CORRECTION_FACTOR * target_ms and runner.runs > most:
+        wanted = max(most, int(runner.runs * target_ms / measured))
+        runs = min(runner.runs, tail_safe_runs(resident, wanted))
+        if runs != runner.runs:
+            runner.set_batch(runs)
+            measured = _measure(runner, measured)
+            runner.emit(f"batch: {runner.runs} runs -> {measured:.3f} ms")
+    return measured
+
+
+def _timing_plan(measured_ms: float) -> Tuple[int, bool]:
+    """Solves per round and lead-in for a launch of ``measured_ms``."""
+    solves = 1 if measured_ms >= LONG_LAUNCH_MS else SOLVES_PER_ROUND
+    return solves, measured_ms < LEAD_IN_MS
 
 
 def run_optimization(
@@ -556,11 +716,11 @@ def run_optimization(
         duration to reduce runtime; ``False`` optimizes at your given
         batch size and duration.
     waves
-        How many waves the ``auto_size`` setting sets your batch size
-        to fill.
+        Occupancy waves of the most resident launch the ``auto_size``
+        batch starts at; the batch then moves to hit ``target_ms``.
     target_ms
-        Target kernel runtime that ``auto_size`` sets your integration
-        duration to.
+        Kernel milliseconds per timed solve ``auto_size`` aims for by
+        raising the duration, never past yours, then the batch.
 
     Returns
     -------
@@ -600,25 +760,6 @@ def run_optimization(
     with runner:
         runner.emit(f"optimize: {len(candidates)} candidate kernels")
         accepted = runner.compile(candidates)
-        if auto_size and accepted:
-            resident = 0
-            for candidate in accepted:
-                runner.select(candidate)
-                resident = max(
-                    resident, most_resident_runs(kernel, blocksizes)
-                )
-            runner.set_batch(int(waves) * resident)
-            runner.emit(f"batch: {runner.runs} runs fill {waves} waves")
-            runner.select(accepted[0])
-            _probe_duration(
-                runner,
-                parent,
-                float(duration),
-                float(settling_time),
-                target_ms,
-            )
-        else:
-            runner.set_batch()
         launches = []
         for candidate in candidates:
             # A rejected candidate reports once, with no launch.
@@ -629,7 +770,7 @@ def run_optimization(
                 continue
             runner.select(candidate)
             for blocksize, resident in launch_candidates(
-                kernel, blocksizes, runs=runner.runs
+                kernel, blocksizes
             ):
                 launches.append(
                     Candidate(
@@ -641,7 +782,28 @@ def run_optimization(
                         resident,
                     )
                 )
-        timings = runner.time(launches)
+        timed_launches = [
+            launch for launch in launches if launch.blocksize is not None
+        ]
+        runner.warm()
+        if auto_size and accepted:
+            measured = _size_batch(
+                runner,
+                parent,
+                timed_launches,
+                int(waves),
+                float(duration),
+                float(settling_time),
+                target_ms,
+            )
+        else:
+            runner.set_batch()
+            measured = 0.0
+            if timed_launches:
+                runner.select(timed_launches[0])
+                measured = _measure(runner, 0.0)
+        solves_per_round, lead_in = _timing_plan(measured)
+        timings = runner.time(launches, solves_per_round, lead_in)
         runs = runner.runs
         timed_duration = runner.duration
     results = [LaunchResult.from_timing(timing) for timing in timings]
@@ -667,4 +829,5 @@ def run_optimization(
         applied_settings=applied_settings,
         runs=runs,
         duration=timed_duration,
+        sized_ms=measured,
     )

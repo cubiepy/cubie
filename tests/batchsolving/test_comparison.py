@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from cubie.batchsolving.comparison import (
+    warm_clocks,
     ROUNDS,
     SOLVES_PER_ROUND,
     SUCCESS_TIER_FRACTION,
@@ -257,3 +258,35 @@ def test_runner_times_candidates_on_one_buffer_set(
         assert timing.failures == 0
         assert timing.blocks_per_sm >= 1
         assert timing.waves > 0.0
+
+
+@pytest.mark.nocudasim
+def test_queued_solves_time_each_solve_and_restore_the_depth(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """Back-to-back solves return one kernel time each, lead-in excluded."""
+    solver = solver_mutable
+    inits, params = _device_grid(
+        solver, simple_initial_values, simple_parameters
+    )
+    depth = solver.kernel.timing_depth
+    runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
+    with runner:
+        runner.set_batch()
+        with_lead = runner.solve_times(3, None, lead_in=True)
+        assert solver.kernel.timing_depth == 4
+        without = runner.solve_times(2, None, lead_in=False)
+        assert solver.kernel.timing_depth == 2
+    assert len(with_lead) == 3
+    assert len(without) == 2
+    assert all(time_ms > 0.0 for time_ms in with_lead + without)
+    assert solver.kernel.timing_depth == depth
+
+
+@pytest.mark.nocudasim
+def test_warm_clocks_runs_the_busy_kernel_for_about_the_target(
+    solver_mutable,
+):
+    """The busy launch lands near its target milliseconds."""
+    measured = warm_clocks(solver_mutable.kernel.stream, target_ms=50.0)
+    assert 25.0 < measured < 200.0
