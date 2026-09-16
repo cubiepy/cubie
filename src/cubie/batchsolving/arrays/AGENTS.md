@@ -107,10 +107,11 @@ registered host backing policy. Staging blocks are capped by
 ### Result buffer loans
 After a solve, `loan_host_arrays(result)` empties every host slot into
 the returned `SolveResult`. `reclaim_or_release_loan()` runs in
-`update_from_solver` and in `SolveResult.from_solver`: a collected
-owner's buffers return to their slots (with their memory types) for
-reuse; a live owner keeps them and the next transfer builds fresh
-host backing while the device outputs stay allocated.
+`update_from_solver` for a transferring run and in
+`SolveResult.from_solver`: a collected owner's buffers return to their
+slots (with their memory types) for reuse; a live owner keeps them and
+the next transfer builds fresh host backing while the device outputs
+stay allocated. A device-only run leaves the loan record untouched.
 
 ### Async writeback
 Transfer watchers release pinned buffers after their CUDA event completes.

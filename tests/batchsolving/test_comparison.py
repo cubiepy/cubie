@@ -1,5 +1,7 @@
 """Tests for the shared candidate comparison runner."""
 
+import gc
+
 import numpy as np
 import pytest
 
@@ -182,6 +184,38 @@ def test_device_only_solves_share_the_host_solves_device_buffers(
     np.testing.assert_array_equal(first.state, first_state_copy)
     np.testing.assert_array_equal(second.time_domain_array, expected)
     np.testing.assert_array_equal(second.status_codes, codes)
+
+
+def test_device_only_solve_keeps_a_dead_result_loan_for_the_next_host_solve(
+    unchunked_solved_solver, system, precision, driver_settings
+):
+    """A dead result's buffers return on the next host solve only."""
+    solver, _ = unchunked_solved_solver
+    rng = np.random.default_rng(99)
+    inits = rng.uniform(0.5, 1.5, (system.sizes.states, 5)).astype(precision)
+    params = rng.uniform(
+        0.5, 1.5, (system.sizes.parameters, 5)
+    ).astype(precision)
+    kwargs = dict(
+        drivers=driver_settings,
+        duration=0.05,
+        summarise_every=None,
+        save_every=0.01,
+        dt=0.01,
+    )
+    outputs = solver.kernel.output_arrays
+    dropped = solver.solve(inits, params, **kwargs)
+    loaned_state = dropped.state
+    expected = np.array(dropped.time_domain_array)
+    del dropped
+    gc.collect()
+    solver.solve(inits, params, on_device=True, **kwargs)
+    solver.kernel.synchronize()
+    for _, slot in outputs.host.iter_managed_arrays():
+        assert slot.array is None
+    second = solver.solve(inits, params, **kwargs)
+    assert second.state is loaned_state
+    np.testing.assert_array_equal(second.time_domain_array, expected)
 
 
 @pytest.mark.nocudasim
