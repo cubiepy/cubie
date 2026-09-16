@@ -12,7 +12,12 @@ from cubie.batchsolving.calibration import (
     linear_solver_specs,
     order_specs,
     preconditioner_specs,
-    _trial_durations,
+    _CalibrationRace,
+)
+from cubie.batchsolving.comparison import (
+    ROUNDS,
+    SOLVES_PER_ROUND,
+    ComparisonRunner,
 )
 
 
@@ -246,16 +251,53 @@ class TestCandidateSpecs:
         assert specs[0].key == winner.key
 
 
-class TestTrialDurations:
-    """Ascending trial-length construction."""
-
-    def test_trials_ascend_short_then_long(self):
-        trials = _trial_durations({}, 16.0, 4.0)
-        assert trials == ((0.0625, 0.015625), (1.0, 0.25))
-
-    def test_trials_collapse_when_intervals_clamp(self):
-        trials = _trial_durations({"save_every": 8.0}, 16.0, 0.0)
-        assert trials == ((8.0, 0.0),)
+@pytest.mark.nocudasim
+def test_erk_stage_times_every_order_on_the_solver(
+    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+):
+    """Orders are timed and recalled; a rejected spec drops."""
+    solver = solver_mutable
+    inits, params = solver.build_grid(
+        simple_initial_values, simple_parameters, grid_type="combinatorial"
+    )
+    if driver_settings is not None:
+        solver._configure_drivers(driver_settings)
+    given = dict(solver.given.as_kwargs())
+    algorithm = solver.kernel.settings_dict["algorithm"]
+    rejected = CandidateSpec(
+        label="tsit5 nowhere",
+        family="erk",
+        algorithm="tsit5",
+        settings=(("state_location", "nowhere"),),
+    )
+    runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
+    with runner:
+        runner.set_batch()
+        race = _CalibrationRace(runner)
+        results, pool = race.run_stage(
+            [rejected] + erk_specs(), "erk:orders"
+        )
+        again, recalled = race.run_stage(erk_specs(), "erk:orders")
+    dropped, results = results[0], results[1:]
+    assert dropped.spec is rejected
+    assert dropped.dropped
+    assert "nowhere" in dropped.reason
+    assert dropped.times_ms == ()
+    assert [result.spec.algorithm for result in results] == list(
+        FAMILY_ORDERS["erk"]
+    )
+    for result in results:
+        assert result.reason == ""
+        assert len(result.times_ms) == ROUNDS * SOLVES_PER_ROUND
+        assert result.runs == inits.shape[1]
+        assert result.success_rate == 1.0
+    assert pool == results
+    assert again == []
+    assert recalled == results
+    assert race.stage_winner(pool) is race.ranking()[0]
+    assert race.ranking()[0].best_ms == min(r.best_ms for r in results)
+    assert dict(solver.given.as_kwargs()) == given
+    assert solver.kernel.settings_dict["algorithm"] == algorithm
 
 
 class TestCalibrateGuards:

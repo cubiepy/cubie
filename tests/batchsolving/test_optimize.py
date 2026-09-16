@@ -2,23 +2,20 @@
 
 import pytest
 
-from math import ceil
-
-import numpy as np
-
-from cubie.backend.utils import (
-    DeviceHardware,
-    active_blocks_per_multiprocessor,
-    device_hardware,
+from cubie.backend.utils import DeviceHardware
+from cubie.batchsolving.comparison import (
+    ROUNDS,
+    SOLVES_PER_ROUND,
+    ComparisonRunner,
 )
 from cubie.batchsolving.optimize import (
     BUDGET_BLOCKSIZE,
     RESIDENCY_CUT_MIN_FRAME_BYTES,
     LaunchResult,
-    _OptimizeRunner,
+    _duration_floor,
+    _trial_durations,
     apply_launch,
     default_launch,
-    launch_candidates,
     resident_blocks_within_l2,
 )
 from cubie.cuda_simsafe import cupy
@@ -353,8 +350,9 @@ def test_block_size_change_clears_the_pinned_residency(solver_mutable):
 def test_optimize_applies_the_fastest_launch(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
-    """The fastest timed launch is applied to the solver."""
+    """The fastest launch is applied; waves fill; no host buffers."""
     verbosity = default_timelogger.verbosity
+    waves = 2
     result = solver_mutable.optimize(
         simple_initial_values,
         parameters=simple_parameters,
@@ -362,10 +360,15 @@ def test_optimize_applies_the_fastest_launch(
         duration=0.1,
         grid_type="combinatorial",
         verbose=False,
+        waves=waves,
     )
     assert default_timelogger.verbosity == verbosity
     timed = [launch for launch in result.launches if launch.timed]
     assert timed
+    assert min(launch.waves for launch in timed) >= waves
+    outputs = solver_mutable.kernel.output_arrays
+    for _, slot in outputs.host.iter_managed_arrays():
+        assert slot.array is None
     for launch in result.launches:
         assert all(time_ms > 0.0 for time_ms in launch.times_ms)
     assert result.best is min(timed, key=lambda launch: launch.best_ms)
@@ -385,9 +388,10 @@ def test_optimize_applies_the_fastest_launch(
         result.best.settings["unroll_other_small"].value
     )
     for launch in result.launches:
-        assert len(launch.times_ms) >= 1
-        if launch.excluded:
-            assert 1 <= len(launch.times_ms) <= 2
+        assert launch.error == ""
+        assert len(launch.times_ms) == ROUNDS * SOLVES_PER_ROUND
+        assert launch.failures == 0
+        assert launch.runs == result.runs
     assert result.runs > 0
     # A solve well under target_ms is timed at a longer duration.
     assert result.duration > 0.1
@@ -421,13 +425,11 @@ def test_kernel_is_cached_reports_the_disk_cache(
 
 
 def _runner(solver, inits, params):
-    """Return a runner on ``solver`` over a verbatim grid."""
+    """Return a runner on ``solver`` over a combinatorial grid."""
     grid_inits, grid_params = solver.build_grid(
         inits, params, grid_type="combinatorial"
     )
-    return _OptimizeRunner(
-        solver, grid_inits, grid_params, 0.1, 0.0, 0.0, False
-    )
+    return ComparisonRunner(solver, grid_inits, grid_params, 0.1, 0.0, 0.0)
 
 
 @pytest.mark.parametrize(
@@ -440,82 +442,13 @@ def test_duration_floor_holds_the_final_summary_sample(
 ):
     """Probe durations under a final summary keep one sample inside."""
     runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
-    try:
-        runner.build_twins([{}])
-        floor = runner._duration_floor()
+    with runner:
+        floor = _duration_floor(solver_mutable, 0.1)
         assert floor == pytest.approx(0.03)
-        trials = runner._trial_durations()
+        trials = _trial_durations(solver_mutable, 0.1)
         assert trials == sorted(trials)
         assert min(trials) == floor
         assert max(trials) == pytest.approx(0.1)
-    finally:
-        runner.close()
-
-
-def test_twins_join_the_auto_pool(
-    solver_mutable, simple_initial_values, simple_parameters
-):
-    """Twins of a manually budgeted parent reserve nothing themselves."""
-    solver_mutable.update(mem_proportion=0.6)
-    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
-    try:
-        candidates = solver_mutable.optimisation_candidates()
-        runner.build_twins(candidates)
-        assert len(runner._twins) == len(candidates)
-        manager = solver_mutable.memory_manager
-        for twin in runner._twins:
-            assert manager.manual_proportion(twin.kernel) is None
-        assert manager.manual_proportion(solver_mutable.kernel) == 0.6
-    finally:
-        runner.close()
-        solver_mutable.update(mem_proportion=None)
-
-
-def test_partial_twin_build_closes_the_built_twins(
-    solver_mutable, simple_initial_values, simple_parameters
-):
-    """A failing candidate closes the twins built before it."""
-    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
-    manager = solver_mutable.memory_manager
-    registered = len(manager.registry)
-    with pytest.raises(ValueError):
-        runner.build_twins([{}, {"state_location": "nowhere"}])
-    assert runner._twins == []
-    assert len(manager.registry) == registered
-
-
-@pytest.mark.nocudasim
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"algorithm": "vern7", "unroll_other_small": None}],
-    indirect=True,
-)
-def test_batch_fills_the_waves_at_every_launch(
-    solver_mutable, simple_initial_values, simple_parameters
-):
-    """The sized batch fills the requested waves for every candidate."""
-    waves = 2
-    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
-    try:
-        runner.build_twins(solver_mutable.optimisation_candidates())
-        runner.compile_twins()
-        runner.size_batch(waves)
-        multiprocessors = device_hardware().multiprocessor_count
-        for twin in runner._twins:
-            kernel = twin.kernel
-            shapes = kernel.launchable_shapes(runs=runner.runs)
-            for blocksize, resident in launch_candidates(
-                kernel, runs=runner.runs
-            ):
-                dynamic, natural = shapes[blocksize]
-                blocks = natural if resident is None else resident
-                runs_per_block = blocksize // kernel.threads_per_loop
-                total_blocks = ceil(runner.runs / runs_per_block)
-                assert total_blocks / (blocks * multiprocessors) >= waves
-        runner.time_candidates(None)
-        assert runner.achieved_waves >= waves
-    finally:
-        runner.close()
 
 
 @pytest.mark.nocudasim

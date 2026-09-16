@@ -307,9 +307,13 @@ def test_reset_clears_pool_and_buffers(solverkernel_mutable):
     ia = solverkernel_mutable.input_arrays
     ia.reset()
     assert ia._buffer_pool._buffers == {}
-    # super().reset() clears host/device and tracking lists
-    assert ia._needs_reallocation == []
-    assert ia._needs_overwrite == []
+    # Every array is dropped and queued to be rebuilt by the next run.
+    for _, slot in ia.host.iter_managed_arrays():
+        assert slot.array is None
+    for _, slot in ia.device.iter_managed_arrays():
+        assert slot.array is None
+    assert sorted(ia._needs_reallocation) == sorted(ia.device.array_names())
+    assert sorted(ia._needs_overwrite) == sorted(ia.host.array_names())
 
 
 # ── Staging failure ─────────────────────────────────────── #

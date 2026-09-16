@@ -22,7 +22,7 @@ See Also
     Primary consumer that owns output array instances.
 """
 
-from typing import TYPE_CHECKING, Dict, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
     from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
@@ -203,6 +203,8 @@ class OutputArrays(BaseArrayManager):
     _watcher: WritebackWatcher = field(factory=WritebackWatcher, init=False)
     # Outputs the kernel writes this run; None means transfer all.
     _active_names: Optional[frozenset] = field(default=None, init=False)
+    # Whether this run copies its outputs to the host.
+    _transfer: bool = field(default=True, init=False)
 
     def __attrs_post_init__(self) -> None:
         """
@@ -217,14 +219,20 @@ class OutputArrays(BaseArrayManager):
         self.host.set_memory_type("pinned")
         self.device.set_memory_type("device")
 
-    def update(self, solver_instance: "BatchSolverKernel") -> None:
+    def update(
+        self,
+        solver_instance: "BatchSolverKernel",
+        transfer_outputs: bool = True,
+    ) -> None:
         """
-        Update output arrays from solver instance.
+        Size the device outputs for a run and queue their allocation.
 
         Parameters
         ----------
         solver_instance
             The solver instance providing configuration and sizing information.
+        transfer_outputs
+            Whether the run copies its outputs to host buffers.
 
         """
         cf = solver_instance.compile_flags
@@ -240,13 +248,8 @@ class OutputArrays(BaseArrayManager):
         if cf.save_counters:
             active.add("iteration_counters")
         self._active_names = frozenset(active)
-        new_arrays = self.update_from_solver(solver_instance)
-        if new_arrays is None:
-            # Sizes unchanged; reallocate only after an invalidation.
-            if self._needs_reallocation:
-                self.allocate()
-            return
-        self.update_host_arrays(new_arrays, shape_only=True)
+        self._transfer = bool(transfer_outputs)
+        self.update_from_solver(solver_instance)
         self.allocate()
 
     @property
@@ -339,13 +342,9 @@ class OutputArrays(BaseArrayManager):
 
     def update_from_solver(
         self, solver_instance: "BatchSolverKernel"
-    ) -> Dict[str, NDArray[np_floating]]:
+    ) -> Optional[bool]:
         """
-        Update sizes and precision from solver, returning new host arrays.
-
-        Only creates new pinned arrays when existing arrays do not match
-        the expected shape and dtype. This avoids expensive pinned memory
-        allocation on repeated solver runs with identical configurations.
+        Refresh sizes and precision from the solver.
 
         Parameters
         ----------
@@ -354,21 +353,17 @@ class OutputArrays(BaseArrayManager):
 
         Returns
         -------
-        dict[str, numpy.ndarray] or None
-            Host arrays with updated shapes for ``update_host_arrays``,
-            or ``None`` when sizes are unchanged and the current host
-            arrays already match.
+        bool or None
+            ``True`` when the sizes changed and every device output is
+            queued for reallocation, ``None`` when they are unchanged.
         """
-        # Buffers loaned to a collected result come back for reuse
-        # before sizes are compared; a live result keeps its buffers
-        # and fresh ones are allocated below.
+        # Buffers loaned to a collected result come back for reuse.
         self.reclaim_or_release_loan()
         # Output sizes depend on num_runs, precision, the time dimensions
         # (output_length / summaries_length, which fold in duration and the
         # save/summarise intervals), the per-variable heights (which fold
         # in the output selection), and whether iteration counters are
-        # saved. Skip the rebuild when all are unchanged; the current
-        # host arrays already match.
+        # saved.
         h = solver_instance.output_array_heights
         sig = (
             solver_instance.num_runs,
@@ -387,44 +382,76 @@ class OutputArrays(BaseArrayManager):
         self._sizes = BatchOutputSizes.from_solver(solver_instance).nonzero
         self._precision = solver_instance.precision
         self.set_array_runs(solver_instance.num_runs)
-        new_arrays = {}
         for name, slot in self.host.iter_managed_arrays():
-            newshape = getattr(self._sizes, name)
-            dtype = slot.dtype
-            if np_issubdtype(dtype, np_floating):
+            if np_issubdtype(slot.dtype, np_floating):
                 slot.dtype = self._precision
-                dtype = slot.dtype
-            # Fast path: skip allocation if existing array matches
             current = slot.array
-            if (
-                current is not None
-                and current.shape == newshape
-                and current.dtype == dtype
-            ):
-                new_arrays[name] = current
-            else:
-                # This runs before the chunk decision, so pinning is
-                # deferred: a chunked solve must not hold full-size
-                # pinned buffers. _convert_host_to_pinned repins small
-                # unchunked slots once the decision lands; chunked and
-                # oversized slots stay pageable (or disk-backed above
-                # the spill policy) and D2H stays asynchronous by
-                # staging through the pooled pinned buffers.
-                nbytes = int(prod(newshape)) * np_dtype(dtype).itemsize
-                base_type = self._memory_manager.choose_host_memory_type(
-                    nbytes, allow_pinned=False
-                )
-                new_array = self._memory_manager.create_host_array(
-                    newshape, dtype, base_type
-                )
-                slot.memory_type = base_type
-                new_arrays[name] = new_array
+            if current is not None and not self._host_fits(name, slot):
+                # A host buffer of another shape is dropped here.
+                self._memory_manager.release_host_array(current)
+                slot.array = None
         for name, slot in self.device.iter_managed_arrays():
-            dtype = slot.dtype
-            if np_issubdtype(dtype, np_floating):
+            if np_issubdtype(slot.dtype, np_floating):
                 slot.dtype = self._precision
+            if name not in self._needs_reallocation:
+                self._needs_reallocation.append(name)
         self._size_sig = sig
-        return new_arrays
+        return True
+
+    def _request_shape(self, label: str) -> tuple:
+        """Device shape of ``label`` from the sizes, never a host array."""
+        return tuple(getattr(self._sizes, label))
+
+    def _host_fits(self, label: str, slot: ManagedArray) -> bool:
+        """Whether the slot's host array has the sized shape and dtype."""
+        array = slot.array
+        return (
+            array is not None
+            and array.shape == tuple(getattr(self._sizes, label))
+            and array.dtype == slot.dtype
+        )
+
+    def _after_allocation(self) -> None:
+        """Back the host outputs once the run is known to transfer."""
+        if self._transfer:
+            self._ensure_host_arrays()
+
+    def _ensure_host_arrays(self) -> None:
+        """Give every output a host buffer the transfer can land in.
+
+        A buffer is kept when it has the sized shape and dtype and a
+        backing the run partition accepts: pinned only unchunked,
+        pageable only when the policy would not pin it, memmap always.
+        """
+        allow_pinned = not self.is_chunked
+        manager = self._memory_manager
+        for name, slot in self.host.iter_managed_arrays():
+            shape = tuple(getattr(self._sizes, name))
+            dtype = slot.dtype
+            nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
+            wanted = manager.choose_host_memory_type(
+                nbytes, allow_pinned=allow_pinned
+            )
+            if self._host_fits(name, slot):
+                backing = slot.memory_type
+                if backing == "memmap" or backing == wanted:
+                    continue
+                if backing == "host" and wanted != "pinned":
+                    continue
+            backing = wanted
+            array = None
+            if wanted == "pinned":
+                array = manager.allocate_pinned_array(shape, dtype)
+                if array is None:
+                    # The pinned budget refused; stage through the pool.
+                    backing = "host"
+                else:
+                    array.fill(0)
+            if array is None:
+                array = manager.create_host_array(shape, dtype, backing)
+            manager.release_host_array(slot.array)
+            slot.array = array
+            slot.memory_type = backing
 
     def finalise(self, chunk_index: int, stream=None) -> None:
         """Queue device-to-host transfers for a chunk.
@@ -447,6 +474,8 @@ class OutputArrays(BaseArrayManager):
         to_ = []
         if stream is None:
             stream = self._memory_manager.get_stream(self)
+        if chunk_index == 0:
+            self._ensure_host_arrays()
         active = self._active_names
 
         for array_name, slot in self.host.iter_managed_arrays():

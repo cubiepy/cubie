@@ -52,7 +52,8 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 ### Deregistration & teardown
 - Registry allocations keep device arrays alive until deregistration.
 - `release_instance` removes one exact registry entry. The identity check
-  protects against reused object IDs.
+  protects against reused object IDs. Close never flushes the pinned
+  pool: freeing page-locked memory synchronizes the whole device.
 - Explicit close reports cleanup failures and can be retried. Finalizers are
   best effort and do not raise during interpreter shutdown.
 - Allocation, copies, launch, and release use the run's stream. Memory caps
@@ -74,7 +75,8 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   against `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in
   an atomic ledger of live plus pool-retained bytes. Ambient RAM use
   by other processes is never consulted. Release is finalizer-driven;
-  retained bytes are reclaimed via `free_all_blocks` under pressure.
+  retained bytes are reclaimed by `flush_pinned_pool` under pressure
+  (a device-wide synchronization) or on explicit request.
 - `create_host_array` allocates the requested type; a `"pinned"`
   request whose reservation or `cudaHostAlloc` fails lands pageable.
   `"memmap"` arrays land in the cache root.

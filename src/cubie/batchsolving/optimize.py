@@ -1,5 +1,4 @@
-"""Backend of :meth:`cubie.Solver.optimize`: time unroll, placement and
-launch candidates on solver copies and apply the fastest.
+"""Backend of :meth:`cubie.Solver.optimize`: time launches, apply the best.
 
 Published Objects
 -----------------
@@ -21,47 +20,26 @@ Published Objects
     Time a solver's candidates.
 """
 
-import logging
-import multiprocessing
-import pickle
-from enum import Enum
 from math import isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from warnings import warn
 
 from attrs import define
-from numpy import arange as np_arange
-from numpy import take as np_take
 
 from cubie.backend.utils import (
     DeviceHardware,
     SASS_INSTRUCTION_BYTES,
-    active_blocks_per_multiprocessor,
     device_hardware,
     kernel_resources,
 )
-from cubie.batchsolving.calibration import _achieved_waves, _device_to_host
-from cubie.cache_root import get_cache_root_override, set_cache_root
+from cubie.batchsolving.comparison import (
+    Candidate,
+    CandidateTiming,
+    ComparisonRunner,
+    rank_timings,
+    settings_label,
+)
 from cubie.CUDAFactory import UnrollChoice
-from cubie.cuda_simsafe import cuda
-from cubie.time_logger import default_timelogger
-
-logger = logging.getLogger(__name__)
-
-WORKERS = 4
-"""Parallel compile processes pre-warming the kernel cache."""
-
-TIMED_SOLVES = 3
-"""Timed solves per launch per round."""
-
-ROUNDS = 2
-"""Timing rounds; the second visits the launches in reverse order."""
-
-EXCLUSION_RATIO = 2.0
-"""Launches slower than this multiple of the fastest are dropped."""
-
-CONFIRMATION_RATIO = 3.0
-"""Slow first solves under this multiple of the fastest are repeated."""
 
 PROBE_FRACTIONS = (0.01, 0.1, 1.0)
 """Fractions of the given duration the ``auto_size`` probe ramps through."""
@@ -102,17 +80,6 @@ on the RTX 4070 SUPER; the band width is fitted to those records.
 """
 
 
-def _label(settings: Dict[str, Any]) -> str:
-    """Return a short name for a candidate's settings."""
-    parts = []
-    for key, value in settings.items():
-        if isinstance(value, Enum):
-            value = value.name.lower()
-        name = key.removeprefix("unroll_").removesuffix("_location")
-        parts.append(f"{name}={value}")
-    return " ".join(parts) or "current"
-
-
 @define
 class LaunchResult:
     """Timings of one candidate at one launch.
@@ -122,28 +89,53 @@ class LaunchResult:
     settings
         The candidate's unroll and placement settings.
     blocksize
-        Threads per block of the launch.
+        Threads per block; ``None`` for a rejected candidate.
     resident_blocks
         Blocks per SM held resident; ``None`` = the default residency.
     blocks_per_sm
         Resident blocks per SM the driver reported.
     times_ms
         Timed solve times in milliseconds.
-    excluded
-        Whether the launch was dropped as slow.
+    failures
+        Runs with a nonzero status code.
+    runs
+        Trajectories each solve integrated.
+    waves
+        Occupancy waves the batch filled at the launch.
+    error
+        Why the launch could not be timed, empty when it was.
     """
 
     settings: Dict[str, Any]
-    blocksize: int
+    blocksize: Optional[int]
     resident_blocks: Optional[int]
     blocks_per_sm: int = 0
     times_ms: Tuple[float, ...] = ()
-    excluded: bool = False
+    failures: int = 0
+    runs: int = 0
+    waves: float = 0.0
+    error: str = ""
+
+    @classmethod
+    def from_timing(cls, timing: CandidateTiming) -> "LaunchResult":
+        """Build the launch record of one candidate timing."""
+        candidate = timing.candidate
+        return cls(
+            settings=dict(candidate.settings),
+            blocksize=candidate.blocksize,
+            resident_blocks=candidate.resident_blocks,
+            blocks_per_sm=timing.blocks_per_sm,
+            times_ms=timing.times_ms,
+            failures=timing.failures,
+            runs=timing.runs,
+            waves=timing.waves,
+            error=timing.error,
+        )
 
     @property
     def timed(self) -> bool:
-        """Whether the launch has a ranking time."""
-        return bool(self.times_ms) and not self.excluded
+        """Whether the launch has a time."""
+        return bool(self.times_ms)
 
     @property
     def best_ms(self) -> float:
@@ -151,12 +143,31 @@ class LaunchResult:
         return min(self.times_ms) if self.times_ms else float("inf")
 
     @property
+    def success_rate(self) -> float:
+        """Share of the batch that integrated without a status flag."""
+        if self.runs == 0:
+            return 0.0
+        return (self.runs - self.failures) / self.runs
+
+    @property
     def label(self) -> str:
         """Candidate settings and launch as one line."""
-        resident = "" if self.resident_blocks is None else (
-            f" x{self.resident_blocks}"
+        return _launch_label(
+            self.settings, self.blocksize, self.resident_blocks
         )
-        return f"{_label(self.settings)} @bs{self.blocksize}{resident}"
+
+
+def _launch_label(
+    settings: Dict[str, Any],
+    blocksize: Optional[int],
+    resident_blocks: Optional[int],
+) -> str:
+    """Return the one-line name of a launch."""
+    label = settings_label(settings)
+    if blocksize is None:
+        return label
+    resident = "" if resident_blocks is None else f" x{resident_blocks}"
+    return f"{label} @bs{blocksize}{resident}"
 
 
 @define
@@ -168,7 +179,8 @@ class OptimizeResult:
     launches
         Every launch measured, in run order.
     best
-        Fastest launch, or ``None`` when nothing was timed.
+        Fastest launch of the top success tier, or ``None`` when
+        nothing was timed.
     applied_settings
         Settings applied to the calling solver, empty when none.
     runs
@@ -185,13 +197,14 @@ class OptimizeResult:
 
     @property
     def ranking(self) -> List[LaunchResult]:
-        """Every timed launch, fastest first."""
-        timed = [launch for launch in self.launches if launch.timed]
-        return sorted(timed, key=lambda launch: launch.best_ms)
+        """Every timed launch: the top success tier by time, then the rest."""
+        return rank_timings(self.launches)
 
     def summary(self) -> str:
         """Return a formatted table of every launch measurement."""
-        header = f"{'launch':<48}{'blk/SM':>8}{'best ms':>10}  note"
+        header = (
+            f"{'launch':<48}{'blk/SM':>8}{'best ms':>10}{'failed':>8}  note"
+        )
         lines = [
             f"{self.runs} runs x {self.duration:g} time units per solve",
             header,
@@ -202,15 +215,16 @@ class OptimizeResult:
             for position, launch in enumerate(self.ranking)
         }
         for launch in self.launches:
-            best = f"{launch.best_ms:.3f}"
-            if launch.excluded:
-                note = "excluded"
+            if launch.error:
+                best = ""
+                note = f"failed: {launch.error}"
             else:
+                best = f"{launch.best_ms:.3f}"
                 rank = ranks.get(id(launch))
                 note = "best" if rank == 1 else f"rank {rank}"
             lines.append(
                 f"{launch.label:<48}{launch.blocks_per_sm:>8}"
-                f"{best:>10}  {note}"
+                f"{best:>10}{launch.failures:>8}  {note}"
             )
         return "\n".join(lines)
 
@@ -363,7 +377,7 @@ def most_resident_runs(
 ) -> int:
     """Return the most runs resident at once over ``kernel``'s launches."""
     blocksizes = launch_blocksizes(kernel, blocksizes)
-    shapes = kernel.launchable_shapes(blocksizes, runs=max(blocksizes))
+    shapes = kernel.launchable_shapes(blocksizes)
     multiprocessors = device_hardware().multiprocessor_count
     threads_per_loop = kernel.threads_per_loop
     return max(
@@ -387,331 +401,6 @@ def apply_launch(parent: Any, launch: LaunchResult) -> Dict[str, Any]:
     parent.update(settings)
     parent.kernel.resident_blocks = launch.resident_blocks
     return settings
-
-
-def _compile_candidate(payload: Tuple) -> Tuple[str, str]:
-    """Compile one candidate in a worker process; return its hash."""
-    (
-        label,
-        system_bytes,
-        settings,
-        candidate,
-        drivers,
-        duration,
-        settling_time,
-        t0,
-        cache_root,
-    ) = payload
-    if cache_root is not None:
-        set_cache_root(cache_root)
-    from cubie.batchsolving.solver import Solver
-
-    system = pickle.loads(system_bytes)
-    solver = Solver(system, **{**settings, **candidate})
-    try:
-        solver.compile(
-            drivers=drivers,
-            duration=duration,
-            settling_time=settling_time,
-            t0=t0,
-        )
-        return label, solver.kernel.config_hash
-    finally:
-        solver.close()
-
-
-class _OptimizeRunner:
-    """Compile and time the candidate launches, one solver copy each."""
-
-    def __init__(
-        self,
-        parent: Any,
-        inits: Any,
-        params: Any,
-        duration: float,
-        settling_time: float,
-        t0: float,
-        verbose: bool,
-    ) -> None:
-        self._parent = parent
-        self._grid = (_device_to_host(inits), _device_to_host(params))
-        self._given_duration = float(duration)
-        self._given_settling = float(settling_time)
-        self.duration = float(duration)
-        self.settling = float(settling_time)
-        self._t0 = float(t0)
-        self._verbose = bool(verbose)
-        self._sized = False
-        self._candidates = ()
-        self._twins = []
-        self._inits = None
-        self._params = None
-        self.runs = 0
-        self._fastest_ms = float("inf")
-        self.achieved_waves = None
-
-    def _emit(self, message: str) -> None:
-        logger.debug(message)
-        if self._verbose:
-            print(message, flush=True)
-
-    def close(self) -> None:
-        """Release every solver copy."""
-        for twin in self._twins:
-            twin.close()
-        self._twins = []
-
-    def _make_twin(self, candidate: Dict[str, Any]) -> Any:
-        """Return a parent copy carrying ``candidate`` in the auto pool."""
-        twin = self._parent.copy(mem_proportion=None)
-        try:
-            twin.update(candidate, silent=True)
-        except BaseException:
-            twin.close()
-            raise
-        return twin
-
-    def build_twins(self, candidates: Sequence[Dict[str, Any]]) -> None:
-        """Create one solver copy per candidate; close them on failure."""
-        self._candidates = tuple(dict(c) for c in candidates)
-        self._twins = []
-        try:
-            for candidate in self._candidates:
-                self._twins.append(self._make_twin(candidate))
-        except BaseException:
-            self.close()
-            raise
-
-    def set_batch(self, runs: int) -> None:
-        """Stage ``runs`` grid columns on the device, cycling if short."""
-        inits, params = self._grid
-        runs = int(runs)
-        if runs != inits.shape[1]:
-            columns = np_arange(runs) % inits.shape[1]
-            inits = np_take(inits, columns, axis=1)
-            params = np_take(params, columns, axis=1)
-        self._inits = cuda.to_device(inits)
-        self._params = cuda.to_device(params)
-        self.runs = runs
-
-    def _compile(self, twin: Any) -> None:
-        """Compile ``twin``'s kernel at the timed duration."""
-        twin.kernel.compile(self.duration, self.settling, self._t0)
-
-    def prewarm(self) -> None:
-        """Compile the uncached candidates in workers; one miss waits."""
-        parent = self._parent
-        if not parent.cache_enabled:
-            return
-        missing = []
-        for index, twin in enumerate(self._twins):
-            label = _label(self._candidates[index])
-            if twin.kernel.kernel_is_cached():
-                self._emit(f"  {label}: cached")
-            else:
-                missing.append(index)
-        if len(missing) < 2:
-            return
-        # Pickled into spawned workers; the manager holds CUDA state.
-        settings = {
-            key: value
-            for key, value in parent.settings_dict.items()
-            if key != "memory_manager"
-        }
-        system_bytes = pickle.dumps(parent.system)
-        drivers = parent.kernel.driver_inputs()
-        payloads = [
-            (
-                _label(self._candidates[index]),
-                system_bytes,
-                settings,
-                self._candidates[index],
-                drivers,
-                self._given_duration,
-                self._given_settling,
-                self._t0,
-                get_cache_root_override(),
-            )
-            for index in missing
-        ]
-        context = multiprocessing.get_context("spawn")
-        with context.Pool(min(WORKERS, len(missing))) as pool:
-            for label, config_hash in pool.imap_unordered(
-                _compile_candidate, payloads
-            ):
-                self._emit(f"  {label}: worker compiled {config_hash[:12]}")
-
-    def size_batch(
-        self, waves: int, blocksizes: Optional[Sequence[int]] = None
-    ) -> None:
-        """Stage the batch filling ``waves`` at every candidate's launches."""
-        resident = max(
-            most_resident_runs(twin.kernel, blocksizes)
-            for twin in self._twins
-        )
-        self.set_batch(int(waves) * resident)
-        self._sized = True
-        self._emit(f"batch: {self.runs} runs fill {waves} waves")
-
-    def _duration_floor(self) -> float:
-        """Shortest duration the configured output cadence allows."""
-        effective = self._twins[0].effective
-        floor = 0.0
-        if effective.save_regularly:
-            floor = max(floor, float(effective.save_every))
-        if effective.summarise_regularly:
-            floor = max(floor, float(effective.summarise_every))
-        if effective.summarise_last:
-            floor = max(floor, float(effective.sample_summaries_every))
-        return min(floor, self._given_duration)
-
-    def _trial_durations(self) -> List[float]:
-        """Ascending probe durations within the cadence and the given."""
-        given = self._given_duration
-        floor = self._duration_floor()
-        trials = []
-        for fraction in PROBE_FRACTIONS:
-            trial = min(given, max(given * fraction, floor))
-            if trial not in trials:
-                trials.append(trial)
-        return trials
-
-    def probe_duration(self, target_ms: float) -> None:
-        """Ramp :data:`PROBE_FRACTIONS` of the duration to ``target_ms``."""
-        given = self._given_duration
-        floor = self._duration_floor()
-        trials = self._trial_durations()
-        twin = self._twins[0]
-        measured = 0.0
-        trial = given
-        for trial in trials:
-            self._set_duration(trial)
-            measured = self._solve_ms(twin, None)
-            self._emit(f"  probe: duration {trial:g} -> {measured:.3f} ms")
-            if measured >= target_ms:
-                break
-        chosen = max(trial * target_ms / measured, floor)
-        self._set_duration(chosen)
-        self._emit(f"duration: {chosen:g} per timed solve")
-
-    def _set_duration(self, duration: float) -> None:
-        """Set the timed duration, scaling the settling time with it."""
-        given = self._given_duration
-        scale = duration / given if given else 1.0
-        self.duration = float(duration)
-        self.settling = self._given_settling * scale
-
-    def compile_twins(self) -> None:
-        """Compile every copy."""
-        for twin in self._twins:
-            self._compile(twin)
-
-    def _solve_ms(
-        self, twin: Any, blocksize: Optional[int]
-    ) -> float:
-        """Run one solve on ``twin`` and return its kernel milliseconds."""
-        twin.solve(
-            self._inits,
-            self._params,
-            duration=self.duration,
-            settling_time=self.settling,
-            t0=self._t0,
-            blocksize=blocksize,
-            on_device=True,
-        )
-        twin.kernel.synchronize()
-        return float(
-            sum(
-                event.elapsed_time_ms()
-                for event in twin.kernel._cuda_events
-                if event.name.startswith("kernel_chunk")
-            )
-        )
-
-    def time_candidates(
-        self, blocksizes: Optional[Sequence[int]]
-    ) -> List[LaunchResult]:
-        """Time every launch of every candidate in ABBA order."""
-        launches = []
-        owners = {}
-        for index, candidate in enumerate(self._candidates):
-            # The launch shapes are sized at the staged batch.
-            self._compile(self._twins[index])
-            kernel = self._twins[index].kernel
-            for blocksize, resident in launch_candidates(
-                kernel, blocksizes, runs=self.runs
-            ):
-                launch = LaunchResult(
-                    settings=dict(candidate),
-                    blocksize=blocksize,
-                    resident_blocks=resident,
-                )
-                launches.append(launch)
-                owners[id(launch)] = index
-        for round_index in range(ROUNDS):
-            ordered = launches if round_index % 2 == 0 else launches[::-1]
-            for launch in ordered:
-                if launch.excluded:
-                    continue
-                twin = self._twins[owners[id(launch)]]
-                kernel = twin.kernel
-                kernel.resident_blocks = launch.resident_blocks
-                first = self._solve_ms(twin, launch.blocksize)
-                launch.times_ms += (first,)
-                solved = 1
-                # The geometry of the solve's launch.
-                if round_index == 0:
-                    blocksize, dynamic = kernel.launch_geometry(
-                        launch.blocksize, runs=kernel.run_params[0].runs
-                    )
-                    launch.blocks_per_sm = active_blocks_per_multiprocessor(
-                        kernel.kernel, blocksize, dynamic, kernel.signature
-                    )
-                if round_index == 0:
-                    self._record_waves(twin, launch.blocksize)
-                # A moderately slow first solve is repeated once.
-                limit = EXCLUSION_RATIO * self._fastest_ms
-                if round_index == 0 and first > limit:
-                    if first <= CONFIRMATION_RATIO * self._fastest_ms:
-                        launch.times_ms += (
-                            self._solve_ms(twin, launch.blocksize),
-                        )
-                        solved += 1
-                    if launch.best_ms > limit:
-                        launch.excluded = True
-                        self._emit(
-                            f"  {launch.label}: excluded, "
-                            f"{launch.best_ms:.3f} ms"
-                        )
-                        continue
-                for _ in range(TIMED_SOLVES - solved):
-                    launch.times_ms += (
-                        self._solve_ms(twin, launch.blocksize),
-                    )
-                self._fastest_ms = min(self._fastest_ms, launch.best_ms)
-                self._emit(f"  {launch.label}: {launch.best_ms:.3f} ms")
-        self._warn_under_two_waves()
-        return launches
-
-    def _record_waves(self, twin: Any, blocksize: int) -> None:
-        """Keep the fewest occupancy waves any launch achieves."""
-        waves = _achieved_waves(twin, blocksize)
-        if self.achieved_waves is None or waves < self.achieved_waves:
-            self.achieved_waves = waves
-
-    def _warn_under_two_waves(self) -> None:
-        """Warn once when a given batch fills under two waves."""
-        if self._sized or self.achieved_waves is None:
-            return
-        if self.achieved_waves < 2.0:
-            more = 2.0 / self.achieved_waves
-            warn(
-                f"The batch passed to optimize only fills "
-                f"{self.achieved_waves:.2f} occupancy waves; the results "
-                "might not represent the best timing for your system. "
-                f"Try again with {more:.1f}x more runs in the batch and "
-                "force=True to get the fastest full-GPU batch settings."
-            )
 
 
 def performance_defaults(given: Any, step: Any, system: Any) -> Dict[str, Any]:
@@ -749,6 +438,75 @@ def performance_defaults(given: Any, step: Any, system: Any) -> Dict[str, Any]:
     }
 
 
+def _fits_sample_interval(solver: Any, duration: float) -> bool:
+    """Whether ``solver`` accepts ``duration`` under its sample interval."""
+    try:
+        solver.update(duration=duration, silent=True)
+    except ValueError as error:
+        if "sample_summaries_every" in str(error):
+            return False
+        raise
+    return True
+
+
+def _duration_floor(solver: Any, given: float) -> float:
+    """Shortest duration the configured output cadence allows."""
+    effective = solver.effective
+    floor = 0.0
+    if effective.save_regularly:
+        floor = max(floor, float(effective.save_every))
+    if effective.summarise_regularly:
+        floor = max(floor, float(effective.summarise_every))
+    if effective.summarise_last:
+        floor = max(floor, float(effective.sample_summaries_every))
+    return min(floor, given)
+
+
+def _trial_durations(solver: Any, given: float) -> List[float]:
+    """Ascending probe durations the cadence and sample interval allow."""
+    floor = _duration_floor(solver, given)
+    trials = []
+    for fraction in PROBE_FRACTIONS:
+        trial = min(given, max(given * fraction, floor))
+        if trial in trials:
+            continue
+        if trial < given and not _fits_sample_interval(solver, trial):
+            continue
+        trials.append(trial)
+    return trials
+
+
+def _set_duration(
+    runner: ComparisonRunner, duration: float, given: float, settling: float
+) -> None:
+    """Set the timed duration, scaling the settling time with it."""
+    scale = duration / given if given else 1.0
+    runner.duration = float(duration)
+    runner.settling = settling * scale
+
+
+def _probe_duration(
+    runner: ComparisonRunner,
+    solver: Any,
+    given: float,
+    settling: float,
+    target_ms: float,
+) -> None:
+    """Set the runner's duration so one solve takes about ``target_ms``."""
+    floor = _duration_floor(solver, given)
+    measured = 0.0
+    trial = given
+    for trial in _trial_durations(solver, given):
+        _set_duration(runner, trial, given, settling)
+        measured = runner.solve_ms(None)
+        runner.emit(f"  probe: duration {trial:g} -> {measured:.3f} ms")
+        if measured >= target_ms:
+            break
+    chosen = max(trial * target_ms / measured, floor)
+    _set_duration(runner, chosen, given, settling)
+    runner.emit(f"duration: {chosen:g} per timed solve")
+
+
 def run_optimization(
     parent: Any,
     initial_values: Any,
@@ -765,7 +523,7 @@ def run_optimization(
     waves: int = 5,
     target_ms: float = 20.0,
 ) -> OptimizeResult:
-    """Time the solver's candidate kernels on copies; apply the fastest.
+    """Time the solver's candidate kernels on itself; apply the fastest.
 
     Parameters
     ----------
@@ -826,51 +584,87 @@ def run_optimization(
     )
     if drivers is not None:
         parent._configure_drivers(drivers)
-    candidates = parent.optimisation_candidates(force=force)
+    candidates = [
+        Candidate(settings_label(settings), dict(settings))
+        for settings in parent.optimisation_candidates(force=force)
+    ]
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
         if parent.given.is_given("blocksize") and not force
         else None
     )
-    runner = _OptimizeRunner(
-        parent,
-        inits,
-        params,
-        duration,
-        settling_time,
-        t0,
-        verbose,
+    runner = ComparisonRunner(
+        parent, inits, params, duration, settling_time, t0, verbose
     )
-    # "silent" records the kernel events the timings read.
-    verbosity = default_timelogger.verbosity
-    default_timelogger.set_verbosity("silent")
-    try:
-        runner._emit(f"optimize: {len(candidates)} candidate kernels")
-        runner.build_twins(candidates)
-        runner.prewarm()
-        runner.compile_twins()
-        if auto_size:
-            runner.size_batch(waves, blocksizes)
-            runner.probe_duration(target_ms)
+    kernel = parent.kernel
+    with runner:
+        runner.emit(f"optimize: {len(candidates)} candidate kernels")
+        accepted = runner.compile(candidates)
+        if auto_size and accepted:
+            resident = 0
+            for candidate in accepted:
+                runner.select(candidate)
+                resident = max(
+                    resident, most_resident_runs(kernel, blocksizes)
+                )
+            runner.set_batch(int(waves) * resident)
+            runner.emit(f"batch: {runner.runs} runs fill {waves} waves")
+            runner.select(accepted[0])
+            _probe_duration(
+                runner,
+                parent,
+                float(duration),
+                float(settling_time),
+                target_ms,
+            )
         else:
-            runner.set_batch(inits.shape[1])
-        launches = runner.time_candidates(blocksizes)
-    finally:
-        runner.close()
-        default_timelogger.set_verbosity(verbosity)
-    ranking = sorted(
-        (launch for launch in launches if launch.timed),
-        key=lambda launch: launch.best_ms,
-    )
+            runner.set_batch()
+        launches = []
+        for candidate in candidates:
+            # A rejected candidate reports once, with no launch.
+            if runner.rejection(candidate):
+                launches.append(
+                    Candidate(candidate.label, dict(candidate.settings))
+                )
+                continue
+            runner.select(candidate)
+            for blocksize, resident in launch_candidates(
+                kernel, blocksizes, runs=runner.runs
+            ):
+                launches.append(
+                    Candidate(
+                        _launch_label(
+                            candidate.settings, blocksize, resident
+                        ),
+                        dict(candidate.settings),
+                        blocksize,
+                        resident,
+                    )
+                )
+        timings = runner.time(launches)
+        runs = runner.runs
+        timed_duration = runner.duration
+    results = [LaunchResult.from_timing(timing) for timing in timings]
+    achieved = [launch.waves for launch in results if launch.timed]
+    if not auto_size and achieved and min(achieved) < 2.0:
+        fewest = min(achieved)
+        warn(
+            f"The batch passed to optimize only fills {fewest:.2f} "
+            "occupancy waves; the results might not represent the best "
+            f"timing for your system. Try again with {2.0 / fewest:.1f}x "
+            "more runs in the batch and force=True to get the fastest "
+            "full-GPU batch settings."
+        )
+    ranking = rank_timings(results)
     best = ranking[0] if ranking else None
     applied_settings = {}
     if best is not None and apply:
         applied_settings = apply_launch(parent, best)
-        runner._emit(f"applied: {best.label} -> parent solver")
+        runner.emit(f"applied: {best.label} -> parent solver")
     return OptimizeResult(
-        launches=launches,
+        launches=results,
         best=best,
         applied_settings=applied_settings,
-        runs=runner.runs,
-        duration=runner.duration,
+        runs=runs,
+        duration=timed_duration,
     )

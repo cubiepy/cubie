@@ -437,21 +437,6 @@ class InputArrays(BaseArrayManager):
                 arr_obj.dtype = self._precision
         self._size_sig = sig
 
-    def _convert_host_to_pinned(self) -> None:
-        """Input slots hold caller-supplied arrays verbatim.
-
-        Their backing is classified at attach time and never
-        converted; non-pinned sources stage through the bounded
-        pinned pool instead.
-        """
-
-    def _convert_host_to_numpy(self) -> None:
-        """Input slots hold caller-supplied arrays verbatim.
-
-        Chunked transfers stage slices straight from the attached
-        array, so no conversion is needed.
-        """
-
     def finalise(self, chunk_index: int, stream=None) -> None:
         """Finish input handling for a chunk."""
 

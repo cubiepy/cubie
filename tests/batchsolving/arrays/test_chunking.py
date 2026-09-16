@@ -8,6 +8,7 @@ import pytest
 
 from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrayContainer,
+    OutputArrays,
 )
 from cubie.batchsolving.arrays.BatchInputArrays import InputArrayContainer
 from cubie.batchsolving.arrays.BaseArrayManager import (
@@ -252,27 +253,31 @@ def test_chunked_solver_changes_to_unchunked_backing(
         solver.close()
 
 
-def test_output_allocation_keeps_disk_backing():
-    """Pinned conversion after chunking leaves a memmap slot alone."""
-    manager = _make_test_array_manager()
-    array = manager._memory_manager.create_host_array(
-        (10, 3, 100), np.float32, "memmap"
-    )
-    slot = manager.host.get_managed_array("state")
-    slot.array = array
-    slot.memory_type = "memmap"
+def test_output_allocation_keeps_disk_backing(solver):
+    """Host backing for an unchunked run leaves a memmap slot alone."""
+    manager = OutputArrays.from_solver(solver.kernel)
+    try:
+        manager.update_from_solver(solver.kernel)
+        slot = manager.host.get_managed_array("state")
+        array = manager._memory_manager.create_host_array(
+            tuple(manager._sizes.state), slot.dtype, "memmap"
+        )
+        slot.array = array
+        slot.memory_type = "memmap"
+        manager._chunks = 1
 
-    manager._convert_host_to_pinned()
+        manager._ensure_host_arrays()
 
-    slot = manager.host.get_managed_array("state")
-    assert slot.array is array
-    assert slot.memory_type == "memmap"
-    assert manager._requires_staging(slot.array, slot.memory_type)
-    path = Path(slot.array._cubie_spill_path)
-    assert path.exists()
-    manager._memory_manager.release_host_array(slot.array)
-    slot.array = None
-    assert not path.exists()
+        assert slot.array is array
+        assert slot.memory_type == "memmap"
+        assert manager._requires_staging(slot.array, slot.memory_type)
+        path = Path(slot.array._cubie_spill_path)
+        assert path.exists()
+        manager._memory_manager.release_host_array(slot.array)
+        slot.array = None
+        assert not path.exists()
+    finally:
+        manager.close()
 
 
 def test_pinned_buffers_created(chunked_solved_solver):

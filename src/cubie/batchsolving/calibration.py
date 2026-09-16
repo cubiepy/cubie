@@ -2,12 +2,11 @@
 
 :func:`run_calibration` (exposed as :meth:`cubie.Solver.calibrate`)
 races candidate solver configurations on one representative batch
-and reports the fastest one that integrates it acceptably. Each
-family runs in stages: preconditioners, linear solvers, error
-options, tableau order. Short trial solves drop failing or slow
-candidates before full-length timing; full-length measurements are
-recorded per configuration and reused. The winner is applied to the
-calling solver by default.
+and reports the fastest one in the top success tier. Each family runs
+in stages: preconditioners, linear solvers, error options, tableau
+order. Every candidate is timed on the solver itself; measurements
+are recorded per configuration and reused. The winner is applied to
+the calling solver by default.
 
 Published Objects
 -----------------
@@ -21,22 +20,20 @@ Published Objects
     Race the candidate configurations for a configured solver.
 """
 
-import logging
-from math import ceil
-from warnings import warn
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from attrs import define, frozen
-from numpy import asarray, count_nonzero, ndarray
+from numpy import asarray
 
-from cubie.backend.utils import active_blocks_per_multiprocessor
-from cubie.cuda_simsafe import cuda
+from cubie.batchsolving.comparison import (
+    Candidate,
+    ComparisonRunner,
+    rank_timings,
+)
 from cubie.integrators.algorithms import resolve_alias
 from cubie.integrators.stage_predictors import (
     tableau_supports_dense_prediction,
 )
-
-logger = logging.getLogger(__name__)
 
 
 CALIBRATION_FAMILIES = ("erk", "dirk", "firk", "rosenbrock")
@@ -67,24 +64,6 @@ PRECONDITIONERS = (
     ("none", 0),
 )
 """(type, order) pairs raced in each implicit family's first stage."""
-
-TRIAL_FRACTION = 0.0625
-"""Trial-solve length as a fraction of the calibration duration."""
-
-TRIAL_BUDGET_FACTOR = 3.0
-"""Trial budget as a multiple of the fastest candidate's trial."""
-
-FAILURE_TOLERANCE = 0.01
-"""Allowed failed-run fraction above the best candidate's."""
-
-N_REPEATS = 3
-"""Timed full-duration solves per surviving candidate."""
-
-BLOCKSIZE = 256
-"""CUDA block size the races launch with."""
-
-BLOCKSIZES = (64, 128, 256)
-"""Block sizes the winner is re-timed across."""
 
 _SETTING_FIELDS = (
     "linear_correction_type",
@@ -129,6 +108,11 @@ class CandidateSpec:
         """Identity of the configuration, independent of its label."""
         return (self.algorithm, tuple(sorted(self.settings)))
 
+    @property
+    def solver_settings(self) -> Dict[str, Any]:
+        """The algorithm and settings as one ``Solver.update`` dict."""
+        return {"algorithm": self.algorithm, **self.settings_dict}
+
 
 @define
 class CandidateResult:
@@ -141,16 +125,13 @@ class CandidateResult:
     stage
         Name of the race stage the measurement belongs to.
     times_ms
-        Per-solve times in milliseconds for the full-length solves.
-    trial_ms
-        Time of the last short trial solve in milliseconds; ``None``
-        when the candidate never ran one.
+        Kernel milliseconds of every timed solve.
     failures
-        Failed-run count from the last solve inspected.
+        Runs with a nonzero status code.
     runs
         Trajectory count each solve integrated.
     dropped
-        Whether the candidate was removed before full-length timing.
+        Whether the candidate could not be timed.
     reason
         Why the candidate was dropped, empty otherwise.
     """
@@ -158,11 +139,15 @@ class CandidateResult:
     spec: CandidateSpec
     stage: str
     times_ms: Tuple[float, ...] = ()
-    trial_ms: Optional[float] = None
     failures: int = 0
     runs: int = 0
     dropped: bool = False
     reason: str = ""
+
+    @property
+    def timed(self) -> bool:
+        """Whether the candidate has a time."""
+        return bool(self.times_ms) and not self.dropped
 
     @property
     def best_ms(self) -> float:
@@ -176,6 +161,11 @@ class CandidateResult:
             return 0.0
         return self.failures / self.runs
 
+    @property
+    def success_rate(self) -> float:
+        """Share of the batch that integrated without a status flag."""
+        return 1.0 - self.failure_fraction
+
 
 @define
 class CalibrationResult:
@@ -186,11 +176,11 @@ class CalibrationResult:
     candidates
         Every candidate measurement from every stage, in run order.
     winner
-        Fastest candidate that integrated the batch acceptably, or
-        ``None`` when no candidate did.
+        Fastest candidate of the top success tier, or ``None`` when no
+        candidate was timed.
     ranking
-        Every configuration that survived full-length timing,
-        fastest first.
+        Every timed configuration: the top success tier by time, then
+        the rest by time.
     features
         System description (sizes, precision, tolerances, ...)
         accompanying the measurements.
@@ -247,7 +237,6 @@ class CalibrationResult:
                 family=result.spec.family,
                 algorithm=result.spec.algorithm,
                 best_ms=result.best_ms,
-                trial_ms=result.trial_ms,
                 times_ms=";".join(
                     f"{value:.4f}" for value in result.times_ms
                 ),
@@ -509,52 +498,6 @@ def erk_specs() -> List[CandidateSpec]:
     ]
 
 
-def _device_to_host(array: Any) -> ndarray:
-    """Copy a device array to the host, whatever its container."""
-    if hasattr(array, "copy_to_host"):
-        return array.copy_to_host()
-    if hasattr(array, "get"):
-        return array.get()
-    return asarray(array)
-
-
-def _candidate_base_kwargs(parent: Any) -> Dict[str, Any]:
-    """Return candidate solver kwargs copied from the parent."""
-    kwargs = {}
-    for name in (
-        "atol",
-        "rtol",
-        "dt_min",
-        "dt_max",
-        "save_every",
-        "summarise_every",
-        "sample_summaries_every",
-    ):
-        value = getattr(parent, name)
-        if value is not None:
-            kwargs[name] = value
-    kwargs["output_types"] = list(parent.output_types)
-    for name in (
-        "saved_state_indices",
-        "saved_observable_indices",
-        "summarised_state_indices",
-        "summarised_observable_indices",
-    ):
-        value = getattr(parent, name)
-        if value is not None:
-            kwargs[name] = asarray(value)
-    if not parent.cache_enabled:
-        kwargs["cache"] = False
-    elif parent.cache_dir is not None:
-        kwargs["cache"] = parent.cache_dir
-    # Candidates join the parent's stream group: one shared stream.
-    kwargs["memory_settings"] = {
-        "memory_manager": parent.kernel.memory_manager,
-        "stream_group": parent.stream_group,
-    }
-    return kwargs
-
-
 def _system_features(
     parent: Any, t0: float, n_runs: int, duration: float
 ) -> Dict[str, Any]:
@@ -586,141 +529,31 @@ def _scalar_or_none(value: Any) -> Optional[float]:
     return float(array.min())
 
 
-class _CalibrationRunner:
-    """Build, trial, and time candidate solvers for one calibration.
+class _CalibrationRace:
+    """Race stages of candidate specs on one comparison runner.
 
-    Candidates share the parent's stream group; a candidate's host
-    build and kernel compile overlap the solves queued before it.
-    Full-length measurements are recorded per configuration and
-    reused when a later stage names the same configuration.
+    Timed configurations are recorded by key and recalled when a later
+    stage names the same one.
     """
 
-    def __init__(
-        self,
-        parent: Any,
-        inits: ndarray,
-        params: ndarray,
-        drivers: Optional[Dict[str, Any]],
-        base_kwargs: Dict[str, Any],
-        duration: float,
-        settling_time: float,
-        t0: float,
-        trials: Sequence[Tuple[float, float]],
-        verbose: bool,
-    ) -> None:
-        self._parent = parent
-        self._solver_class = type(parent)
-        self._system = parent.system
-        self._drivers = drivers
-        self._base_kwargs = base_kwargs
-        self._duration = float(duration)
-        self._settling = float(settling_time)
-        self._t0 = float(t0)
-        self._trials = tuple(trials)
-        self._verbose = bool(verbose)
-        self._n_runs = int(inits.shape[1])
-        self._inits = cuda.to_device(inits)
-        self._params = cuda.to_device(params)
-        # Configuration key -> fully timed CandidateResult.
+    def __init__(self, runner: ComparisonRunner) -> None:
+        self._runner = runner
         self._recorded: Dict[Any, CandidateResult] = {}
-        self.achieved_waves = None
-
-    @property
-    def n_runs(self) -> int:
-        """Trajectory count of the calibration batch."""
-        return self._n_runs
+        self.waves: Optional[float] = None
 
     @property
     def precision(self) -> type:
-        """Solve precision of the parent solver."""
-        return self._parent.precision
+        """Solve precision of the solver."""
+        return self._runner._solver.precision
 
-    def _emit(self, message: str) -> None:
-        """Print progress when verbose; always log at debug level."""
-        logger.debug(message)
-        if self._verbose:
-            print(message, flush=True)
-
-    def _build_solver(self, spec: CandidateSpec) -> Any:
-        """Construct the candidate solver for ``spec``."""
-        kwargs = dict(self._base_kwargs)
-        kwargs.update(spec.settings_dict)
-        return self._solver_class(
-            self._system, algorithm=spec.algorithm, **kwargs
-        )
-
-    def _compile(self, solver: Any) -> None:
-        """Compile the candidate's kernel without launching it."""
-        solver.compile(
-            drivers=self._drivers,
-            duration=self._trials[0][0],
-            settling_time=self._trials[0][1],
-            t0=self._t0,
-        )
-
-    def _launch(
-        self,
-        solver: Any,
-        duration: float,
-        settling_time: float,
-        blocksize: int = BLOCKSIZE,
-    ) -> Tuple[Any, Any]:
-        """Enqueue one solve, no sync; return its CUDA event pair."""
-        stream = solver.stream
-        start_event = cuda.event()
-        end_event = cuda.event()
-        start_event.record(stream)
-        solver.solve(
-            self._inits,
-            self._params,
-            duration=duration,
-            settling_time=settling_time,
-            t0=self._t0,
-            blocksize=blocksize,
-            on_device=True,
-        )
-        end_event.record(stream)
-        return (start_event, end_event)
-
-    def _elapsed_ms(self, token: Tuple[Any, Any]) -> float:
-        """Return the elapsed milliseconds of a synced event pair."""
-        return float(cuda.event_elapsed_time(*token))
-
-    def _read_failures(self, solver: Any) -> int:
-        """Return the failed-run count of the candidate's last solve."""
-        codes = _device_to_host(solver.kernel.device_status_codes)
-        return int(count_nonzero(asarray(codes).ravel()))
-
-    def _sync(self, solver: Any) -> None:
-        """Wait for every launch queued on the shared stream."""
-        solver.kernel.synchronize()
-
-    def _probe_waves(self, solver: Any) -> None:
-        """Record achieved occupancy waves; warn once when under two."""
-        if self.achieved_waves is not None:
-            return
-        try:
-            waves = _achieved_waves(solver, BLOCKSIZE)
-        except Exception:
-            logger.debug("Occupancy probe failed", exc_info=True)
-            return
-        self.achieved_waves = waves
-        if waves < 2.0:
-            warn(
-                f"Calibration batch fills {waves:.2f} occupancy "
-                "waves at the first candidate's kernel; below two "
-                "waves timings may not rank configurations reliably."
-            )
+    def emit(self, message: str) -> None:
+        """Log ``message``; print it when verbose."""
+        self._runner.emit(message)
 
     def run_stage(
         self, specs: Sequence[CandidateSpec], stage: str
     ) -> Tuple[List[CandidateResult], List[CandidateResult]]:
-        """Measure one stage of candidates.
-
-        Fresh configurations pass the ascending trial gates, then
-        run ``N_REPEATS`` full-length solves queued round-robin and
-        read after one synchronize. Recorded configurations are not
-        solved again.
+        """Time one stage's fresh configurations.
 
         Returns
         -------
@@ -728,296 +561,56 @@ class _CalibrationRunner:
             New measurements, and the comparison pool including
             recalled results.
         """
-        results = []
+        runner = self._runner
         recalled = []
-        live = []
+        fresh = []
         seen = set()
-        timed = []
-        try:
-            for spec in specs:
-                if spec.key in seen:
-                    continue
-                seen.add(spec.key)
-                previous = self._recorded.get(spec.key)
-                if previous is not None:
-                    recalled.append(previous)
-                    continue
+        for spec in specs:
+            if spec.key in seen:
+                continue
+            seen.add(spec.key)
+            previous = self._recorded.get(spec.key)
+            if previous is not None:
+                recalled.append(previous)
+            else:
+                fresh.append(spec)
+        results = []
+        if fresh:
+            candidates = [
+                Candidate(spec.label, spec.solver_settings)
+                for spec in fresh
+            ]
+            runner.compile(candidates)
+            timings = runner.time(candidates)
+            for spec, timing in zip(fresh, timings):
                 result = CandidateResult(
-                    spec=spec, stage=stage, runs=self._n_runs
+                    spec=spec,
+                    stage=stage,
+                    times_ms=timing.times_ms,
+                    failures=timing.failures,
+                    runs=timing.runs,
+                    dropped=bool(timing.error),
+                    reason=timing.error,
                 )
                 results.append(result)
-                solver = None
-                try:
-                    solver = self._build_solver(spec)
-                    self._trials = _usable_trials(
-                        solver, self._trials, self._duration, self._settling
-                    )
-                    # Compile overlaps solves queued on the stream.
-                    self._compile(solver)
-                    token = self._launch(solver, *self._trials[0])
-                except Exception as exc:
-                    result.dropped = True
-                    result.reason = f"{type(exc).__name__}: {exc}"
-                    self._emit(
-                        f"  {spec.label}: failed ({result.reason})"
-                    )
-                    if solver is not None:
-                        solver.close()
-                    continue
-                live.append([result, solver, token])
-
-            for index, trial in enumerate(self._trials):
-                if not live:
-                    break
-                if index > 0:
-                    for entry in live:
-                        entry[2] = self._launch(entry[1], *trial)
-                self._sync(live[0][1])
-                for result, solver, token in live:
-                    result.trial_ms = self._elapsed_ms(token)
-                    result.failures = self._read_failures(solver)
-                self._probe_waves(live[0][1])
-                live = self._gate_trials(live, recalled)
-
-            # Queue all full-length solves; read after one sync.
-            tokens = {id(entry[0]): [] for entry in live}
-            for _ in range(N_REPEATS):
-                for result, solver, _ in live:
-                    tokens[id(result)].append(
-                        self._launch(
-                            solver, self._duration, self._settling
-                        )
-                    )
-            if live:
-                self._sync(live[0][1])
-            for result, solver, _ in live:
-                result.times_ms = tuple(
-                    self._elapsed_ms(token)
-                    for token in tokens[id(result)]
-                )
-                result.failures = self._read_failures(solver)
-                self._emit(
-                    f"  {result.spec.label}: "
-                    f"{result.best_ms:.3f} ms "
-                    f"({result.failures} failed)"
-                )
-            timed = [entry[0] for entry in live]
-            self._gate_failures(timed, recalled)
-            for result in timed:
-                if not result.dropped:
-                    self._recorded[result.spec.key] = result
-        finally:
-            for _, solver, _ in live:
-                solver.close()
-        pool = recalled + [
-            result for result in timed if not result.dropped
-        ]
+                if result.timed:
+                    self._recorded[spec.key] = result
+                    if self.waves is None or timing.waves < self.waves:
+                        self.waves = timing.waves
+        pool = recalled + [result for result in results if result.timed]
         return results, pool
 
-    def _gate_trials(
-        self,
-        live: List[List[Any]],
-        recalled: Sequence[CandidateResult],
-    ) -> List[List[Any]]:
-        """Drop candidates that fail or far exceed the trial budget."""
-        fractions = [
-            entry[0].failure_fraction for entry in live
-        ] + [result.failure_fraction for result in recalled]
-        floor = min(fractions) if fractions else 0.0
-        times = [entry[0].trial_ms for entry in live]
-        budget = (
-            min(times) * TRIAL_BUDGET_FACTOR if times else None
-        )
-        survivors = []
-        for entry in live:
-            result, solver, _ = entry
-            if result.failure_fraction > floor + FAILURE_TOLERANCE:
-                result.dropped = True
-                result.reason = (
-                    f"trial failures {result.failures}/"
-                    f"{result.runs}"
-                )
-            elif budget is not None and result.trial_ms > budget:
-                result.dropped = True
-                result.reason = (
-                    f"trial {result.trial_ms:.1f} ms over budget "
-                    f"{budget:.1f} ms"
-                )
-            else:
-                survivors.append(entry)
-                continue
-            self._emit(f"  {result.spec.label}: {result.reason}")
-            solver.close()
-        return survivors
-
-    def _gate_failures(
-        self,
-        timed: Sequence[CandidateResult],
-        recalled: Sequence[CandidateResult],
-    ) -> None:
-        """Drop timed candidates on their full-length failure counts."""
-        fractions = [
-            result.failure_fraction for result in timed
-        ] + [result.failure_fraction for result in recalled]
-        floor = min(fractions) if fractions else 0.0
-        for result in timed:
-            if result.failure_fraction > floor + FAILURE_TOLERANCE:
-                result.dropped = True
-                result.reason = (
-                    f"failures {result.failures}/{result.runs}"
-                )
-                self._emit(
-                    f"  {result.spec.label}: {result.reason}"
-                )
-
+    @staticmethod
     def stage_winner(
-        self, pool: Sequence[CandidateResult]
+        pool: Sequence[CandidateResult],
     ) -> Optional[CandidateResult]:
-        """Return the fastest viable candidate in ``pool``, if any."""
-        viable = [
-            result
-            for result in pool
-            if not result.dropped and result.times_ms
-        ]
-        if not viable:
-            return None
-        return min(viable, key=lambda result: result.best_ms)
+        """Return the top-ranked candidate in ``pool``, if any."""
+        ranking = rank_timings(pool)
+        return ranking[0] if ranking else None
 
     def ranking(self) -> List[CandidateResult]:
-        """Return every recorded configuration, fastest first."""
-        return sorted(
-            self._recorded.values(),
-            key=lambda result: result.best_ms,
-        )
-
-    def sweep_blocksize(
-        self, winner: CandidateResult
-    ) -> List[CandidateResult]:
-        """Re-time the winner across block sizes; the race block
-        size reuses the winner's recorded solves."""
-        rows = []
-        fresh = []
-        for size in BLOCKSIZES:
-            spec = CandidateSpec(
-                label=f"{winner.spec.label} blocksize {size}",
-                family=winner.spec.family,
-                algorithm=winner.spec.algorithm,
-                settings=winner.spec.settings,
-            )
-            result = CandidateResult(
-                spec=spec, stage="blocksize", runs=self._n_runs
-            )
-            rows.append(result)
-            if size == BLOCKSIZE:
-                result.times_ms = winner.times_ms
-                result.failures = winner.failures
-            else:
-                fresh.append((size, result))
-        if fresh:
-            solver = self._build_solver(winner.spec)
-            try:
-                self._compile(solver)
-                tokens = {id(result): [] for _, result in fresh}
-                for _ in range(N_REPEATS):
-                    for size, result in fresh:
-                        tokens[id(result)].append(
-                            self._launch(
-                                solver,
-                                self._duration,
-                                self._settling,
-                                blocksize=size,
-                            )
-                        )
-                self._sync(solver)
-                failures = self._read_failures(solver)
-                for size, result in fresh:
-                    result.times_ms = tuple(
-                        self._elapsed_ms(token)
-                        for token in tokens[id(result)]
-                    )
-                    result.failures = failures
-            finally:
-                solver.close()
-        for result in rows:
-            self._emit(
-                f"  {result.spec.label}: {result.best_ms:.3f} ms "
-                f"({result.failures} failed)"
-            )
-        return rows
-
-
-def _achieved_waves(solver: Any, blocksize: int) -> float:
-    """Return occupancy waves the batch fills at the actual geometry."""
-    kernel_factory = solver.kernel
-    runs = int(kernel_factory.run_params[0].runs)
-    actual_blocksize, dynshared = kernel_factory.launch_geometry(
-        blocksize, runs=runs
-    )
-    blocks_per_sm = active_blocks_per_multiprocessor(
-        kernel_factory.kernel, actual_blocksize, dynshared,
-        kernel_factory.signature,
-    )
-    device = cuda.get_current_device()
-    threads_per_loop = (
-        kernel_factory.single_integrator.threads_per_step
-    )
-    runs_per_block = actual_blocksize // threads_per_loop
-    total_blocks = ceil(runs / runs_per_block)
-    resident = blocks_per_sm * device.MULTIPROCESSOR_COUNT
-    return total_blocks / resident
-
-
-def _trial_durations(
-    base_kwargs: Dict[str, Any],
-    duration: float,
-    settling_time: float,
-) -> Tuple[Tuple[float, float], ...]:
-    """Return the ascending (duration, settling) trial lengths.
-
-    A short trial at ``TRIAL_FRACTION**2`` of the duration precedes
-    one at ``TRIAL_FRACTION``; each is raised to every configured
-    output interval and capped at the full duration, and coinciding
-    lengths collapse into one.
-    """
-    fraction = TRIAL_FRACTION
-    trials = []
-    for trial_fraction in (fraction * fraction, fraction):
-        trial_duration = float(duration) * trial_fraction
-        for name in ("save_every", "summarise_every"):
-            value = base_kwargs.get(name)
-            if value is not None:
-                trial_duration = max(trial_duration, float(value))
-        trial_duration = min(trial_duration, float(duration))
-        if duration > 0.0:
-            scale = trial_duration / float(duration)
-        else:
-            scale = 1.0
-        trial = (trial_duration, float(settling_time) * scale)
-        if not trials or trials[-1] != trial:
-            trials.append(trial)
-    return tuple(trials)
-
-
-def _usable_trials(
-    solver: Any,
-    trials: Tuple[Tuple[float, float], ...],
-    duration: float,
-    settling_time: float,
-) -> Tuple[Tuple[float, float], ...]:
-    """Drop leading trials the sample interval rejects, else the full run."""
-    usable = list(trials)
-    while usable:
-        try:
-            solver.update(duration=usable[0][0], silent=True)
-        except ValueError as error:
-            if "sample_summaries_every" not in str(error):
-                raise
-            usable.pop(0)
-        else:
-            break
-    if not usable:
-        usable.append((float(duration), float(settling_time)))
-    return tuple(usable)
+        """Return every recorded configuration, ranked."""
+        return rank_timings(list(self._recorded.values()))
 
 
 def run_calibration(
@@ -1039,7 +632,7 @@ def run_calibration(
     parent
         The configured :class:`~cubie.batchsolving.solver.Solver`
         whose system, tolerances, and output configuration every
-        candidate replicates.
+        candidate shares.
     initial_values
         Initial state values for each integration run, as accepted
         by :meth:`Solver.solve`.
@@ -1085,47 +678,31 @@ def run_calibration(
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    base_kwargs = _candidate_base_kwargs(parent)
-    trials = _trial_durations(base_kwargs, duration, settling_time)
+    if drivers is not None:
+        parent._configure_drivers(drivers)
     features = _system_features(
         parent, t0, inits.shape[1], duration
     )
-
-    runner = _CalibrationRunner(
-        parent=parent,
-        inits=inits,
-        params=params,
-        drivers=drivers,
-        base_kwargs=base_kwargs,
-        duration=duration,
-        settling_time=settling_time,
-        t0=t0,
-        trials=trials,
-        verbose=verbose,
+    runner = ComparisonRunner(
+        parent, inits, params, duration, settling_time, t0, verbose
     )
-
+    race = _CalibrationRace(runner)
     all_results = []
-    for family in CALIBRATION_FAMILIES:
-        _run_family(runner, family, all_results)
+    with runner:
+        runner.set_batch()
+        for family in CALIBRATION_FAMILIES:
+            _run_family(race, family, all_results)
 
-    ranking = runner.ranking()
+    ranking = race.ranking()
     winner = ranking[0] if ranking else None
-    if winner is not None:
-        runner._emit("blocksize: winner re-timed")
-        all_results.extend(runner.sweep_blocksize(winner))
 
     applied_settings = {}
     if winner is not None and apply:
-        applied_settings = {
-            "algorithm": winner.spec.algorithm,
-            **winner.spec.settings_dict,
-        }
+        applied_settings = winner.spec.solver_settings
         parent.update(dict(applied_settings))
-        runner._emit(
-            f"applied: {winner.spec.label} -> parent solver"
-        )
+        runner.emit(f"applied: {winner.spec.label} -> parent solver")
 
-    features["achieved_waves"] = runner.achieved_waves
+    features["achieved_waves"] = race.waves
     return CalibrationResult(
         candidates=all_results,
         winner=winner,
@@ -1136,7 +713,7 @@ def run_calibration(
 
 
 def _run_family(
-    runner: _CalibrationRunner,
+    race: _CalibrationRace,
     family: str,
     all_results: List[CandidateResult],
 ) -> None:
@@ -1144,19 +721,19 @@ def _run_family(
     forward. Candidates the system cannot build drop individually
     with the error message."""
     if family == "erk":
-        runner._emit("erk: orders")
-        results, _ = runner.run_stage(erk_specs(), "erk:orders")
+        race.emit("erk: orders")
+        results, _ = race.run_stage(erk_specs(), "erk:orders")
         all_results.extend(results)
         return
 
     representative = FAMILY_REPRESENTATIVES[family]
-    runner._emit(f"{family}: preconditioners")
-    results, pool = runner.run_stage(
+    race.emit(f"{family}: preconditioners")
+    results, pool = race.run_stage(
         preconditioner_specs(family, representative),
         f"{family}:preconditioners",
     )
     all_results.extend(results)
-    best = runner.stage_winner(pool)
+    best = race.stage_winner(pool)
     if best is None:
         # No viable iterative candidate; race stage 2 with jacobi-0.
         preconditioner = ("jacobi", 0)
@@ -1167,32 +744,32 @@ def _run_family(
             settings["preconditioner_order"],
         )
 
-    runner._emit(f"{family}: linear solvers")
-    results, pool = runner.run_stage(
+    race.emit(f"{family}: linear solvers")
+    results, pool = race.run_stage(
         linear_solver_specs(family, representative, preconditioner),
         f"{family}:linear-solvers",
     )
     all_results.extend(results)
-    best = runner.stage_winner(pool)
+    best = race.stage_winner(pool)
     if best is None:
-        runner._emit(f"{family}: no viable configuration")
+        race.emit(f"{family}: no viable configuration")
         return
 
     option_specs = error_option_specs(
-        family, representative, best.spec.settings, runner.precision
+        family, representative, best.spec.settings, race.precision
     )
     if option_specs:
-        runner._emit(f"{family}: error options")
-        results, pool = runner.run_stage(
+        race.emit(f"{family}: error options")
+        results, pool = race.run_stage(
             option_specs, f"{family}:error-options"
         )
         all_results.extend(results)
-        option_best = runner.stage_winner(pool)
+        option_best = race.stage_winner(pool)
         if option_best is not None:
             best = option_best
 
-    runner._emit(f"{family}: orders")
-    results, _ = runner.run_stage(
+    race.emit(f"{family}: orders")
+    results, _ = race.run_stage(
         order_specs(family, best.spec.settings, representative),
         f"{family}:orders",
     )
