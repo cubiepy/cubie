@@ -537,32 +537,21 @@ class ComparisonRunner:
         self, count: int, blocksize: Optional[int] = None
     ) -> Tuple[float, ...]:
         """Queue ``count`` solves of the staged batch behind one busy
-        launch; synchronize once and return each solve's kernel ms.
-
-        A queue whose busy launch finished before its last solve was
-        issued is queued once more.
-        """
+        launch; synchronize once and return each solve's kernel ms."""
         solver = self._solver
         kernel = solver.kernel
-        stream = kernel.stream
-        for _ in range(2):
-            busy_launch(stream)
-            busy_done = cuda.event()
-            busy_done.record(stream)
-            for _ in range(int(count)):
-                solver.solve(
-                    self._inits,
-                    self._params,
-                    duration=self.duration,
-                    settling_time=self.settling,
-                    t0=self._t0,
-                    blocksize=blocksize,
-                    on_device=True,
-                )
-            idled = busy_done.query()
-            kernel.synchronize()
-            if not idled:
-                break
+        busy_launch(kernel.stream)
+        for _ in range(int(count)):
+            solver.solve(
+                self._inits,
+                self._params,
+                duration=self.duration,
+                settling_time=self.settling,
+                t0=self._t0,
+                blocksize=blocksize,
+                on_device=True,
+            )
+        kernel.synchronize()
         return tuple(kernel.recent_kernel_ms(int(count)))
 
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
