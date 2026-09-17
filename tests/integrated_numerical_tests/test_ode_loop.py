@@ -444,7 +444,7 @@ def test_finish_check_no_float32_stagnation():
         "warmup": np.float64(0.0),
         "duration": np.float64(1e-6),
         "t0": np.float64(1000.0),
-        "driverspline_order": 3,
+        "order": 3,
     }
     result = run_device_loop(
         singleintegratorrun=sir,

@@ -159,9 +159,8 @@ refreshed through `kernel.update` wherever the interpolator's
 evaluators change, so shape checks compare against the layout the kernel was compiled for.
 A driverless kernel's layout has a zero first dimension. The kernel hands `InputArrays`
 its interpolator's `coefficients` only when the slot does not already hold that table.
-The `drivers` setting is a `DriverSamples`; `resolve` orders its columns to the
-system's declared drivers. `driver_sample_period` is its sample spacing; `dt` is the
-integrator timestep.
+The `drivers` setting is a `DriverSamples`. `driver_sample_period` is its sample
+spacing; `dt` is the integrator timestep.
 
 ### Candidate comparisons (`Solver.calibrate`, `Solver.optimize`)
 - Both run on the solver itself through `comparison.ComparisonRunner`: one device input pair, one device output set, no host output buffers, candidates switched by `Solver.update`.

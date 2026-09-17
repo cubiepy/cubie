@@ -112,9 +112,9 @@ def build_solver_settings(precision: type[np.floating[Any]]) -> Dict[str, Any]:
         "mem_proportion": None,
         "step_controller": "fixed",
         "precision": precision,
-        "driverspline_order": 3,
-        "driverspline_wrap": False,
-        "driverspline_boundary_condition": "clamped",
+        "order": 3,
+        "wrap": False,
+        "boundary_condition": "clamped",
         "krylov_atol": precision(1e-7),
         "krylov_rtol": precision(1e-7),
         "linear_correction_type": "minimal_residual",
@@ -265,7 +265,7 @@ def build_driver_settings(
     dt_sample = precision(solver_settings["save_every"]) / 2.0
     total_span = precision(solver_settings["duration"])  # match test fixtures
     t0 = precision(solver_settings["warmup"])  # align with conftest driver t0
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
 
     samples = int(np.ceil(total_span / dt_sample)) + 1
     samples = max(samples, order + 1)
@@ -411,12 +411,12 @@ def create_driver_evaluator(
     """
 
     width = system.num_drivers
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
     if driver_array is None or width == 0:
         coeffs = np.zeros((1, width, order + 1), dtype=precision)
         dt_value = precision(solver_settings["save_every"]) / 2.0
         t0_value = precision(0.0)
-        wrap_value = bool(solver_settings["driverspline_wrap"])
+        wrap_value = bool(solver_settings["wrap"])
         boundary = None
     else:
         coeffs = np.array(
@@ -478,7 +478,7 @@ def generate_inputs(
         ).copy()
     else:
         width = system.num_drivers
-        order = int(solver_settings["driverspline_order"])
+        order = int(solver_settings["order"])
         inputs["driver_coefficients"] = np.zeros(
             (1, width, order + 1), dtype=precision
         )

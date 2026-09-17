@@ -966,7 +966,7 @@ def run_device_loop(
     d_init = cuda.to_device(init_state)
     d_params = cuda.to_device(params)
     if driver_array is None:
-        order = int(solver_config["driverspline_order"])
+        order = int(solver_config["order"])
         width = min(system.num_drivers, 1)
         coeff_shape = (1, width, order + 1)
         driver_coefficients = np.zeros(coeff_shape, dtype=precision)
@@ -1332,9 +1332,7 @@ def _driver_sequence(
 # Keys in the shared solver_settings dict that are not Solver
 # constructor settings: solve-time arguments, system-construction
 # options (fix_singularities/voltage_variable feed
-# load_cellml_model), driver-interpolation settings (driverspline_*
-# are read by the conftest driver fixtures to configure the
-# ArrayInterpolator), and test-harness metadata. Solver rejects
+# load_cellml_model), and test-harness metadata. Solver rejects
 # unconsumed kwargs, so these are stripped before construction.
 NON_SOLVER_SETTINGS = {
     "warmup",
@@ -1348,9 +1346,6 @@ NON_SOLVER_SETTINGS = {
     "n_observables",
     "fix_singularities",
     "voltage_variable",
-    "driverspline_order",
-    "driverspline_wrap",
-    "driverspline_boundary_condition",
 }
 
 
@@ -1369,14 +1364,7 @@ def _build_solver_instance(
     if memory_manager:
         settings.update(memory_manager=memory_manager)
     if driver_settings is not None:
-        settings.update(
-            drivers=driver_settings,
-            order=int(solver_settings["driverspline_order"]),
-            wrap=bool(solver_settings["driverspline_wrap"]),
-            boundary_condition=solver_settings[
-                "driverspline_boundary_condition"
-            ],
-        )
+        settings.update(drivers=driver_settings)
     return Solver(system, **settings)
 
 
@@ -2422,8 +2410,8 @@ TIME_DRIVER_SETTINGS = {
     "summarised_state_indices": [0],
     "summarised_observable_indices": [0],
     "output_types": ["state", "observables", "time"],
-    "driverspline_wrap": True,
-    "driverspline_boundary_condition": "periodic",
+    "wrap": True,
+    "boundary_condition": "periodic",
 }
 
 SINUSOID_DRIVER_SAMPLES = DriverSamples(

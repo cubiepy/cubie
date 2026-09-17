@@ -703,9 +703,9 @@ def solver_settings(solver_settings_override, system, precision):
         "mem_proportion": None,
         "step_controller": "fixed",
         "precision": precision,
-        "driverspline_order": 3,
-        "driverspline_wrap": False,
-        "driverspline_boundary_condition": "clamped",
+        "order": 3,
+        "wrap": False,
+        "boundary_condition": "clamped",
         "krylov_atol": precision(1e-7),
         "krylov_rtol": precision(1e-7),
         "krylov_residual_reduction": None,
@@ -839,7 +839,7 @@ def driver_settings(
     total_span = precision(solver_settings["duration"])
     t0 = precision(solver_settings["warmup"])
 
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
 
     samples = int(np.ceil(total_span / dt_sample)) + 1
     samples = max(samples, order + 1)
@@ -875,11 +875,9 @@ def driver_array(
     return ArrayInterpolator(
         precision=precision,
         drivers=driver_settings,
-        order=int(solver_settings["driverspline_order"]),
-        wrap=bool(solver_settings["driverspline_wrap"]),
-        boundary_condition=solver_settings[
-            "driverspline_boundary_condition"
-        ],
+        order=int(solver_settings["order"]),
+        wrap=bool(solver_settings["wrap"]),
+        boundary_condition=solver_settings["boundary_condition"],
     )
 
 
@@ -894,12 +892,12 @@ def cpu_driver_evaluator(
     """Return a CPU evaluator configured from the driver fixtures."""
 
     width = system.num_drivers
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
     if driver_settings is None or width == 0 or driver_array is None:
         coeffs = np.zeros((1, width, order + 1), dtype=precision)
         dt_value = precision(solver_settings["save_every"]) / 2.0
         t0_value = 0.0
-        wrap_value = bool(solver_settings["driverspline_wrap"])
+        wrap_value = bool(solver_settings["wrap"])
     else:
         coeffs = np.array(
             driver_array.coefficients,

@@ -294,9 +294,7 @@ class BatchSolverKernel(CUDAFactory):
         ODE system describing the problem to integrate.
     **settings
         Loop, step, controller, algorithm, output, memory, cache and
-        kernel settings as one flat dict; the driver samples,
-        interpolation settings and compile flags reach the driver
-        interpolator.
+        kernel settings as one flat dict.
 
     Attributes
     ----------
@@ -346,7 +344,6 @@ class BatchSolverKernel(CUDAFactory):
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
 
-        # Child factory; the ``drivers`` setting fills it.
         self.driver_interpolator = ArrayInterpolator(
             precision=precision,
             memory_manager=self._memory_manager,

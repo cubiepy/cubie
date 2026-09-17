@@ -710,7 +710,6 @@ class Solver:
 
     def compile(
         self,
-        drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
@@ -718,13 +717,10 @@ class Solver:
         max_parallel: int = 4,
         **kwargs: Any,
     ) -> None:
-        """Apply settings and drivers and compile the kernel.
+        """Apply settings and compile the kernel.
 
         Parameters
         ----------
-        drivers
-            The :class:`~cubie.array_interpolator.DriverSamples` to
-            interpolate; ``None`` keeps the current ones.
         duration
             Total integration time. Default is ``1.0``.
         settling_time
@@ -738,8 +734,6 @@ class Solver:
         **kwargs
             Additional options forwarded to :meth:`update`.
         """
-        if drivers is not None:
-            kwargs["drivers"] = drivers
         self.update(duration=duration, **kwargs)
 
         if optimize_candidates:

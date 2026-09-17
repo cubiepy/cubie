@@ -94,6 +94,7 @@ an example of how to do this:
     # Create a measured signal as a driver
     t_driver = np.linspace(0, 1.0, 1000)
     signal = np.sin(2 * np.pi * 5 * t_driver) * np.exp(-t_driver)
+    drive = qb.DriverSamples({"drive_signal": signal}, time=t_driver)
 
     def driven(t, y, p):
         dx = -p.k * y.x + p.amplitude * drive_signal
@@ -112,7 +113,7 @@ an example of how to do this:
         sys,
         y0={"x": np.array([0.0])},
         parameters={"amplitude": np.linspace(0.1, 2.0, 100)},
-        drivers=qb.DriverSamples({"drive_signal": signal}, time=t_driver),
+        drivers=drive,
         method="dormand-prince-54",
         duration=1.0,
     )
@@ -121,11 +122,12 @@ Note how the driver appears: it is declared in ``drivers`` when the
 system is created, and referenced by its bare name inside the function
 body, since drivers are not part of the state or parameter containers.
 
-``DriverSamples`` takes a dictionary of driver name to 1-D sample
-array plus the sample times: ``time=`` (an array of the same length)
-or ``driver_sample_period=`` with optional ``t0=``.  It is a solver
-setting, so ``Solver`` and ``Solver.update`` accept it too, and a
-``solve`` without ``drivers`` reuses the last ones given.
+Sampled forcing data is defined using a ``DriverSamples`` object.
+It takes a ``dict`` of ``"[driver name]": [sampled data]`` pairs, with
+either the sample time vector given as ``time``, or a starting time
+and sample spacing given as ``t0`` and ``driver_sample_period``. It is
+a solver setting, so ``Solver`` and ``Solver.update`` accept it too,
+and a ``solve`` without ``drivers`` reuses the last ones given.
 
 Interpolation Options
 ---------------------
@@ -158,7 +160,7 @@ your samples:
         sys,
         y0={"x": np.array([0.0])},
         parameters={"amplitude": np.linspace(0.1, 2.0, 100)},
-        drivers=qb.DriverSamples({"drive_signal": signal}, time=t_driver),
+        drivers=drive,
         order=3,
         wrap=True,
         method="dormand-prince-54",

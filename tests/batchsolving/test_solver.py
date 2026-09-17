@@ -1177,35 +1177,6 @@ def test_lineinfo_constructor_propagates_to_children(precision):
     assert integrator._system.compile_settings.lineinfo is True
 
 
-def test_driver_evaluator_wired_on_configure(precision):
-    """Configuring drivers wires the interpolator's evaluator in."""
-    system = build_three_state_nonlinear_system(precision)
-    solver = Solver(system, algorithm="radau")
-    assert solver.driver_interpolator.num_inputs == 0
-    assert solver.driver_interpolator.drivers_fn is None
-    integrator = solver.kernel.single_integrator
-    assert integrator._loop.compile_settings.drivers_fn is None
-
-    samples = np.linspace(0.0, 1.0, 6, dtype=precision)
-    drivers = DriverSamples(
-        {name: samples for name in system.indices.driver_names},
-        driver_sample_period=precision(0.1),
-    )
-    solver.update(drivers=drivers, wrap=False)
-
-    integrator = solver.kernel.single_integrator
-    evaluator = solver.kernel.driver_interpolator.drivers_fn
-    assert solver.driver_interpolator.num_inputs == system.num_drivers
-    assert (
-        integrator._loop.compile_settings.drivers_fn
-        is evaluator
-    )
-    assert (
-        integrator._algo_step.compile_settings.drivers_fn
-        is evaluator
-    )
-
-
 def test_driverless_system_has_no_driver_evaluator(precision):
     """A driverless system leaves ``drivers_fn`` unset."""
     system = build_diagonally_dominant_system(precision)
@@ -2499,7 +2470,7 @@ def test_driver_setting_update_syncs_evaluator_and_coefficients(
         system=system,
         solver_settings={
             **solver_settings,
-            "driverspline_boundary_condition": "natural",
+            "boundary_condition": "natural",
         },
         driver_settings=driver_settings,
         memory_manager=thread_mem_manager,

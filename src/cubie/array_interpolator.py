@@ -150,13 +150,13 @@ class DriverSamples(FrozenSettings):
     Parameters
     ----------
     samples
-        Driver name to its 1-D sample array, all of one length.
+        Dict mapping each driver's name to its 1-D sample array.
     time
-        Uniformly spaced sample times; give this or the period.
+        Uniformly spaced sample times, or give the period instead.
     driver_sample_period
         Spacing between samples.
     t0
-        Time of the first sample; ``0.0`` unless given.
+        Time of the first sample, set to ``0.0`` when not given.
 
     Attributes
     ----------
@@ -319,7 +319,6 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
     )
     _boundary_condition: Optional[str] = field(
         default=None,
-        alias="boundary_condition",
         validator=validators.optional(
             validators.in_({"natural", "periodic", "not-a-knot", "clamped"})
         ),
