@@ -509,9 +509,7 @@ class Solver:
         Parameters
         ----------
         for_new_process
-            Leave out the memory manager, which belongs to this
-            process; the settings then build a solver on the default
-            manager of the process that receives them.
+            Leave out this process's memory manager.
         """
         settings = self.given.as_kwargs()
         settings["time_logging_level"] = default_timelogger.verbosity
