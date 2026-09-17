@@ -450,19 +450,19 @@ def test_final_summary_needs_one_sample_in_the_run():
     timing = resolve_loop_timing(None, None, 0.505, False, True)
     check_loop_timing(timing)
     with pytest.raises(ValueError, match="sample_summaries_every"):
-        check_duration(timing, 0.5, np.float32)
+        check_duration(EffectiveSettings(**timing), 0.5, np.float32)
 
 
 def test_sample_interval_equal_to_the_run_passes():
     """One sample landing on t_end is a valid final summary."""
     timing = resolve_loop_timing(None, None, 0.5, False, True)
-    check_duration(timing, 0.5, np.float32)
+    check_duration(EffectiveSettings(**timing), 0.5, np.float32)
 
 
 def test_whole_number_of_saves_passes_in_float32():
     """A whole-number ratio the float32 casts push under passes."""
     timing = resolve_loop_timing(0.001, None, None, True, False)
-    check_duration(timing, 10.0, np.float32)
+    check_duration(EffectiveSettings(**timing), 10.0, np.float32)
 
 
 def test_window_longer_than_the_run_raises():
@@ -470,7 +470,7 @@ def test_window_longer_than_the_run_raises():
     timing = resolve_loop_timing(None, 0.6, 0.1, False, True)
     check_loop_timing(timing)
     with pytest.raises(ValueError, match="summarise_every"):
-        check_duration(timing, 0.5, np.float32)
+        check_duration(EffectiveSettings(**timing), 0.5, np.float32)
 
 
 def test_sample_at_or_past_the_window_raises_at_resolution():

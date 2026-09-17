@@ -670,7 +670,7 @@ class Solver:
         if drivers is not None:
             kwargs["drivers"] = drivers
         self.update(**kwargs)
-        check_duration(self.effective.as_kwargs(), duration, self.precision)
+        check_duration(self.effective, duration, self.precision)
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")

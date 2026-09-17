@@ -530,38 +530,38 @@ def check_loop_timing(timing: Dict[str, Any]) -> None:
 
 
 def check_duration(
-    timing: Dict[str, Any], duration: float, precision: type
+    effective: EffectiveSettings, duration: float, precision: type
 ) -> None:
     """Raise ``ValueError`` when a solve of ``duration`` saves nothing.
 
     Parameters
     ----------
-    timing
-        Loop intervals and flags from :func:`resolve_loop_timing`.
+    effective
+        The settings in effect.
     duration
         Integration time of the solve.
     precision
         Floating-point type of the solve.
     """
-    save_every = timing["save_every"]
-    summarise_every = timing["summarise_every"]
-    sample_every = timing["sample_summaries_every"]
+    save_every = effective.save_every
+    summarise_every = effective.summarise_every
+    sample_every = effective.sample_summaries_every
 
     def events(interval: float) -> int:
         return regular_event_count(duration, interval, precision)
 
-    if timing["save_regularly"] and events(save_every) == 0:
+    if effective.save_regularly and events(save_every) == 0:
         raise ValueError(
             f"save_every ({save_every}) > duration ({duration}) so this "
             f"loop will produce no outputs"
         )
-    if timing["summarise_last"] and events(sample_every) == 0:
+    if effective.summarise_last and events(sample_every) == 0:
         raise ValueError(
             f"sample_summaries_every ({sample_every}) > duration "
             f"({duration}), so the summary at the end will be based on 0 "
             f"samples"
         )
-    if timing["summarise_regularly"] and events(summarise_every) == 0:
+    if effective.summarise_regularly and events(summarise_every) == 0:
         raise ValueError(
             f"summarise_every ({summarise_every}) > duration ({duration}), "
             f"so this loop will produce no summary outputs"
