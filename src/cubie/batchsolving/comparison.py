@@ -417,7 +417,8 @@ def compile_kernels(
             except Exception as exc:
                 errors[index] = f"{type(exc).__name__}: {exc}"
                 continue
-            if not solver.kernel.kernel_is_cached():
+            # Without the disk cache a compile is lost at the next switch.
+            if solver.cache_enabled and not solver.kernel.kernel_is_cached():
                 missing.append(index)
         # The first miss's compile time decides whether the rest pool.
         compile_seconds = None
@@ -427,9 +428,7 @@ def compile_kernels(
             compile_seconds = default_timelogger.get_event_duration(
                 "compile_cuda_kernel"
             )
-        if missing and solver.cache_enabled and _pool_pays(
-            compile_seconds, len(missing), max_parallel
-        ):
+        if missing and _pool_pays(compile_seconds, len(missing), max_parallel):
             pooled = _compile_in_pool(
                 solver,
                 [settings_sets[index] for index in missing],
