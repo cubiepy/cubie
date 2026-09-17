@@ -381,6 +381,31 @@ def test_update_no_change_when_same_value():
     assert replacement is c
 
 
+def test_update_none_sets_the_declared_default():
+    """``None`` sets a field, direct or nested, to its declared default."""
+    config = _SettingsConfig(value=7, flag=False)
+    replacement, recognized, changed = config.update(
+        {"value": None, "flag": None}
+    )
+    assert recognized == {"value", "flag"}
+    assert changed == {"value", "flag"}
+    assert replacement._value == 1
+    assert replacement.flag is True
+
+    @attrs.frozen
+    class _Inner(_CubieConfigBase):
+        x: int = 1
+
+    @attrs.frozen
+    class _Outer(_CubieConfigBase):
+        inner: _Inner = attrs.Factory(_Inner)
+
+    outer = _Outer(inner=_Inner(x=5))
+    replacement, recognized, changed = outer.update({"x": None})
+    assert "x" in recognized and "x" in changed
+    assert replacement.inner.x == 1
+
+
 def test_update_delegates_to_nested():
     """Delegates to nested attrs objects, evolving parent and child."""
     @attrs.frozen

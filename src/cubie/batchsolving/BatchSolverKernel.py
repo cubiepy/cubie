@@ -1247,6 +1247,8 @@ class BatchSolverKernel(CUDAFactory):
         The kernel settings take the run's ``loop_fn`` and output
         compile flags last.
         """
+        if updates.get("stream_group", "") is None:
+            updates["stream_group"] = DEFAULT_MEMORY_SETTINGS["stream_group"]
         recognised = self.memory_manager.update(self, updates, silent=True)
         interpolator = self.driver_interpolator
         known_hash = interpolator.config_hash

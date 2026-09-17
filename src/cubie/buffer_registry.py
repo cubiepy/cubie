@@ -993,6 +993,10 @@ class BufferRegistry:
 
             buffer_name = key.removesuffix("_location")
 
+            # None keeps the location the parent's config registers.
+            if value is None:
+                recognized.add(key)
+                continue
             if value not in ('shared', 'local'):
                 raise ValueError(
                     f"Invalid location '{value}' for buffer "

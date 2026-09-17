@@ -46,7 +46,7 @@ from typing import (
     Union,
 )
 
-from attrs import NOTHING, Factory, evolve, fields, has
+from attrs import evolve
 from numpy import asarray, ndarray
 
 from cubie.outputhandling.output_config import OutputCompileFlags
@@ -54,10 +54,7 @@ from cubie._utils import PrecisionDType
 from cubie.result_codes import decode_status_codes
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
-from cubie.batchsolving.BatchSolverKernel import (
-    DEFAULT_MEMORY_SETTINGS,
-    BatchSolverKernel,
-)
+from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.batchsolving.calibration import (
     CalibrationResult,
     run_calibration,
@@ -74,9 +71,6 @@ from cubie.batchsolving.solveresult import (
     SolveSpec,
 )
 from cubie.batchsolving.SystemInterface import SystemInterface
-from cubie.integrators.step_control.base_step_controller import (
-    CONTROLLER_GAIN_NAMES,
-)
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.symbolic import create_ODE_system
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples
@@ -474,33 +468,6 @@ class Solver:
     # ------------------------------------------------------------------
     # Settings
     # ------------------------------------------------------------------
-    def _declared_defaults(self) -> Dict[str, Any]:
-        """Return the declared default of every compile setting."""
-        defaults = dict(DEFAULT_MEMORY_SETTINGS)
-        pending = [self.system, self.kernel]
-        while pending:
-            factory = pending.pop()
-            pending.extend(factory._iter_child_factories())
-            config = factory.compile_settings
-            prefixed = getattr(config, "prefixed_attributes", frozenset())
-            for fld in fields(type(config)):
-                if not fld.init or fld.default is NOTHING:
-                    continue
-                default = fld.default
-                if isinstance(default, Factory):
-                    nested = default.factory
-                    # Here unroll and jit flags default field by field.
-                    if isinstance(nested, type) and has(nested):
-                        for nested_field in fields(nested):
-                            key = nested_field.alias or nested_field.name
-                            defaults.setdefault(key, nested_field.default)
-                    continue
-                key = fld.alias or fld.name
-                if key in prefixed:
-                    key = config.prefixed(key)
-                defaults.setdefault(key, default)
-        return defaults
-
     def settings_dict(
         self, for_new_process: bool = False
     ) -> Dict[str, Any]:
@@ -1047,25 +1014,15 @@ class Solver:
 
         self.effective = effective
         kernel_updates = effective.as_kwargs()
-        # Here a name given None goes back to its declared default.
-        defaults = self._declared_defaults()
-        if given.filter_coefficients is not None:
-            # In this case the controller derives its gains from the filter.
-            defaults = {
-                key: value
-                for key, value in defaults.items()
-                if key not in CONTROLLER_GAIN_NAMES
-            }
-        resets = {
-            name: defaults[name]
+        # A cleared name the resolver leaves alone goes down as None.
+        cleared = {
+            name: None
             for name in changed
-            if getattr(given, name) is None
-            and name in defaults
-            and name not in kernel_updates
+            if getattr(given, name) is None and name not in kernel_updates
         }
-        if resets:
-            system.update(resets, silent=True)
-            kernel_updates.update(resets)
+        if cleared:
+            system.update(cleared, silent=True)
+            kernel_updates.update(cleared)
         self.kernel.update(kernel_updates, silent=True)
         self._apply_performance_defaults()
         self._solve_info_key = None

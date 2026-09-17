@@ -809,11 +809,11 @@ def build_config(
         external_handle = f"{prefix}{handle}" if is_prefixed else handle
         field_to_external[external_handle] = handle
 
-    # Keep the provided fields, keyed by init handle.
+    # Keep the provided fields, keyed by init handle; None means default.
     final = {
         field_to_external[k]: v
         for k, v in merged.items()
-        if k in field_to_external
+        if k in field_to_external and v is not None
     }
 
     config = config_class(**final)
