@@ -26,7 +26,6 @@ from attrs import define
 
 from cubie.backend.utils import (
     DeviceHardware,
-    SASS_INSTRUCTION_BYTES,
     device_hardware,
     kernel_resources,
 )
@@ -42,7 +41,6 @@ from cubie.batchsolving.comparison import (
     warn_low_waves,
 )
 from cubie.batchsolving.resolve_defaults import check_duration
-from cubie.CUDAFactory import UnrollChoice
 
 LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
 """Block sizes timed for local-only kernels."""
@@ -401,41 +399,6 @@ def apply_launch(parent: Any, launch: LaunchResult) -> Dict[str, Any]:
     parent.update(settings)
     parent.kernel.resident_blocks = launch.resident_blocks
     return settings
-
-
-def performance_defaults(given: Any, step: Any, system: Any) -> Dict[str, Any]:
-    """Return the unroll and placement settings for a built solver.
-
-    Parameters
-    ----------
-    given
-        The given settings; a given setting is never overridden.
-    step
-        The built algorithm step.
-    system
-        The system being solved.
-
-    Returns
-    -------
-    dict
-        The settings ``auto_performance`` applies; empty when it is off.
-    """
-    if given.auto_performance is False:
-        return {}
-    hardware = device_hardware()
-    defaults = dict(step.performance_defaults(hardware))
-    # A Newton loop that overflows the instruction cache stays rolled.
-    if step.is_implicit and step.newton_solves_per_step > 0:
-        unrolled = system.operation_count + step.step_operation_count
-        capacity = hardware.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
-        defaults["unroll_newton_exits"] = (
-            UnrollChoice.ROLLED if unrolled > capacity else UnrollChoice.FULL
-        )
-    return {
-        key: value
-        for key, value in defaults.items()
-        if not given.is_given(key)
-    }
 
 
 def _fits_sample_interval(solver: Any, duration: float) -> bool:

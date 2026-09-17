@@ -220,15 +220,11 @@ class EffectiveSettings(SolverSettings):
     summarise_regularly: Optional[bool] = None
 
     def as_kwargs(self) -> Dict[str, Any]:
-        """Return the settings in effect, ``None`` intervals included."""
+        """Return every setting; ``None`` where nothing is in effect."""
         return {
             fld.name: getattr(self, fld.name)
             for fld in fields(type(self))
             if fld.init
-            and (
-                getattr(self, fld.name) is not None
-                or fld.metadata.get("passes_none")
-            )
         }
 
 

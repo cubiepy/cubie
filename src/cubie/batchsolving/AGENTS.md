@@ -26,7 +26,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's `SystemValues`; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
 | `comparison.py` | `ComparisonRunner(solver, inits, params, duration, settling_time, t0)`: the candidate-timing runner `calibrate` and `optimize` share. Stages the batch on the device once, switches the solver itself between `Candidate`s through `Solver.update` (plus block size and residency) and times each with device-only solves. `compile(candidates)` returns the accepted candidates (a rejected one keeps its error, no time); `time(candidates)` runs the fixed protocol and returns `CandidateTiming`s; `warm()`, `size_batch(candidates, waves)` and `fit_batch(measured, target_ms, grow, shrink)` are the shared warm-up and batch sizing; `rank_timings` ranks by success tier then time; `close` restores the configuration at `open`. |
 | `calibration.py` | `Solver.calibrate` backend: `run_calibration` races `CandidateSpec`s (`algorithm` plus settings) in stages through a `ComparisonRunner` and returns a `CalibrationResult` (winner, ranking, per-candidate `CandidateResult`). Each stage's winner is the top of `rank_timings`; a configuration timed once is recalled by later stages. Sizes the batch at the given duration. |
-| `optimize.py` | `Solver.optimize` backend: `run_optimization` times the solver's `optimisation_candidates(force)` at `launch_candidates(kernel, runs=)` through a `ComparisonRunner` and applies the best `LaunchResult` through `apply_launch`. Ramps the duration toward `target_ms` before sizing the batch. `performance_defaults(given, step, system)` returns the built step's placement and unroll settings under `auto_performance`, never a given one. |
+| `optimize.py` | `Solver.optimize` backend: `run_optimization` times the solver's `optimisation_candidates(force)` at `launch_candidates(kernel, runs=)` through a `ComparisonRunner` and applies the best `LaunchResult` through `apply_launch`. Ramps the duration toward `target_ms` before sizing the batch. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
 | `writeback_watcher.py` | `WritebackWatcher` (daemon thread) + `WritebackTask` — polls CUDA events via `event.query()`, copies completed pinned-buffer data into host arrays (D2H writeback) or just releases H2D staging buffers. |
 | `_utils.py` | Docstring only — no exports (dead validators removed). |
@@ -50,8 +50,10 @@ launching the compiled kernel. Results flow back through `OutputArrays` →
 
 ### Solver: settings
 `__init__` and `update` flatten the settings groups, record `given`, update the
-system (settings and constants by name), resolve, pass `effective.as_kwargs()` to
-`kernel.update`, then apply `optimize.performance_defaults` from the built step.
+system (settings and constants by name), resolve, and pass `effective.as_kwargs()`,
+`None` for every name not in effect, to `kernel.update`. The kernel fills a placement
+or unroll key given `None` from `kernel.performance_defaults()` under
+`auto_performance`, and lets it fall to its declared default otherwise.
 `duration`, `settling_time` and `t0` are per-solve arguments, never settings:
 `solve` checks them against the effective timing (`check_duration`) and
 `compile` takes none of them. `update` returns early when nothing

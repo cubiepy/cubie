@@ -29,7 +29,10 @@ from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import build_config, merge_kwargs_into_settings
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
-from cubie.integrators.algorithms import get_algorithm_step
+from cubie.integrators.algorithms import (
+    algorithm_facts,
+    get_algorithm_step,
+)
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
 )
@@ -71,6 +74,11 @@ def _controller_name(controller: BaseStepController) -> str:
         if type(controller) is cls:
             return name
     raise ValueError(f"{type(controller).__name__} is not registered.")
+
+
+def _given(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Return ``settings`` without the ``None`` entries."""
+    return {key: value for key, value in settings.items() if value is not None}
 
 
 class SingleIntegratorRunCore(CUDAFactory):
@@ -158,6 +166,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         config = self.compile_settings
         if config.algorithm != self._algo_step_algorithm:
             self._swap_step(updates)
+        if "tableau" in updates and updates["tableau"] is None:
+            # The algorithm names its own tableau.
+            updates["tableau"] = algorithm_facts(config.algorithm).tableau
         recognised |= self._algo_step.update(
             {**updates, **self._step_inputs()}, silent=True
         )
@@ -208,7 +219,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """Replace the step with one built from ``updates``."""
         buffer_registry.clear_parent(self._algo_step)
         self._algo_step = self._new_step(
-            {**self.compile_settings.init_kwargs, **updates}
+            {**self.compile_settings.init_kwargs, **_given(updates)}
         )
 
     def _step_inputs(self) -> Dict[str, Any]:
@@ -242,7 +253,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """Replace the controller with one built from ``updates``."""
         buffer_registry.clear_parent(self._step_controller)
         self._step_controller = self._new_controller(
-            {**self.compile_settings.init_kwargs, **updates}
+            {**self.compile_settings.init_kwargs, **_given(updates)}
         )
 
     def _new_initialiser(self, settings: Dict[str, Any]) -> DAEInitialiser:
@@ -250,7 +261,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return DAEInitialiser(
             **{
                 **self._algo_step.settings_dict,
-                **settings,
+                **_given(settings),
                 **DAEInitialiser.system_inputs(self._system),
             }
         )

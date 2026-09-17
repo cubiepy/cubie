@@ -455,8 +455,12 @@ class _CubieConfigBase(FrozenSettings):
                 nested_obj = fld.converter(nested_obj)
             if nested_obj is None:
                 continue
+            loose = updates_dict
+            if handle in evolve_kwargs:
+                # A supplied object keeps its values where a loose key is None.
+                loose = {k: v for k, v in loose.items() if v is not None}
             new_nested, nested_recognized, nested_changed = nested_obj.update(
-                updates_dict
+                loose
             )
             recognized.update(nested_recognized)
             if nested_changed:

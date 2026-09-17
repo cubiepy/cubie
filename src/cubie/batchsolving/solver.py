@@ -46,7 +46,6 @@ from typing import (
     Union,
 )
 
-from attrs import evolve
 from numpy import asarray, ndarray
 
 from cubie.outputhandling.output_config import OutputCompileFlags
@@ -61,7 +60,6 @@ from cubie.batchsolving.calibration import (
 )
 from cubie.batchsolving.optimize import (
     OptimizeResult,
-    performance_defaults,
     run_optimization,
 )
 from cubie.batchsolving.resolve_defaults import check_duration, resolve
@@ -362,7 +360,7 @@ class Solver:
         Set buffer locations, loop unrolling and launch residency
         from your hardware and CuBIE's best guess. Never overrides
         explicit ``unroll_*`` or ``*_location`` arguments. Turning it
-        off on a built solver keeps the last derived values.
+        off returns the derived values to their defaults.
     **kwargs
         Any setting named in
         :class:`~cubie.batchsolving.solver_settings.SolverSettings` and
@@ -442,7 +440,6 @@ class Solver:
         self.effective = resolve(self.given, system, self.system_interface)
         self.kernel = BatchSolverKernel(system, **self.effective.as_kwargs())
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
-        self._apply_performance_defaults()
         self.input_handler = BatchInputHandler(
             self.system_interface,
             memory_manager=self.kernel.memory_manager,
@@ -506,16 +503,6 @@ class Solver:
     def copy(self) -> "Solver":
         """Return a copy: same given settings, current log level."""
         return type(self)(self.system.copy(), **self.settings_dict())
-
-    def _apply_performance_defaults(self) -> None:
-        """Apply the auto-performance unroll and placement defaults."""
-        defaults = performance_defaults(
-            self.given, self.kernel.single_integrator._algo_step, self.system
-        )
-        if defaults:
-            self.system.update(defaults, silent=True)
-            self.kernel.update(defaults, silent=True)
-            self.effective = evolve(self.effective, **defaults)
 
     def __enter__(self) -> "Solver":
         """Return self so the solver can be used as a context manager."""
@@ -1002,7 +989,11 @@ class Solver:
         ):
             return recognised | groups
         recognised |= system.update(
-            {key: val for key, val in updates.items() if val is not None},
+            {
+                key: val
+                for key, val in updates.items()
+                if val is not None or key in recognised
+            },
             silent=True,
         )
         recognised |= groups
@@ -1013,18 +1004,7 @@ class Solver:
             return recognised
 
         self.effective = effective
-        kernel_updates = effective.as_kwargs()
-        # A cleared name the resolver leaves alone goes down as None.
-        cleared = {
-            name: None
-            for name in changed
-            if getattr(given, name) is None and name not in kernel_updates
-        }
-        if cleared:
-            system.update(cleared, silent=True)
-            kernel_updates.update(cleared)
-        self.kernel.update(kernel_updates, silent=True)
-        self._apply_performance_defaults()
+        self.kernel.update(effective.as_kwargs(), silent=True)
         self._solve_info_key = None
         return recognised
 

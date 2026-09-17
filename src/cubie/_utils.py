@@ -818,7 +818,11 @@ def build_config(
 
     config = config_class(**final)
     # Remaining keys name fields of nested settings (unroll_*, lineinfo).
-    loose = {k: v for k, v in merged.items() if k not in field_to_external}
+    loose = {
+        k: v
+        for k, v in merged.items()
+        if k not in field_to_external and v is not None
+    }
     nested = {}
     for fld in nested_config_fields(config_class) if loose else ():
         current = getattr(config, fld.name)

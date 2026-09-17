@@ -482,12 +482,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
         """
         recognized = super()._apply_updates(updates)
 
-        if "linear_correction_type" in updates:
+        if updates.get("linear_correction_type") is not None:
             self._swap_linear_solver(updates["linear_correction_type"])
             recognized.add("linear_correction_type")
 
         if "n_states" in updates or "tableau" in updates:
             updates["solver_width"] = self.compile_settings.solver_width
+        # The children take this step's tableau.
+        updates["tableau"] = self.compile_settings.tableau
 
         recognized |= self.solver.update(updates, silent=True)
 

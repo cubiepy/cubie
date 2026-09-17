@@ -54,12 +54,13 @@ from numpy import (
 from cubie.cuda_simsafe import cuda, float64
 from cubie.cuda_simsafe import int32
 
-from attrs import define, field, evolve
+from attrs import define, field, evolve, fields
 
 from cubie.odesystems import SymbolicODE
 from cubie.cuda_backend import IS_MLIR
 from cubie.backend.utils import (
     LAUNCH_BLOCKSIZES,
+    SASS_INSTRUCTION_BYTES,
     SHARED_SKEW_BYTES,
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
@@ -84,7 +85,12 @@ from cubie.memory.mem_manager import (
     defer_instance_teardown,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
+from cubie.CUDAFactory import (
+    ALL_UNROLL_PARAMETERS,
+    CUDAFactory,
+    CUDADispatcherCache,
+    UnrollChoice,
+)
 from cubie.batchsolving.arrays.BatchInputArrays import InputArrays
 from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrays,
@@ -115,6 +121,14 @@ from cubie._utils import (
 if TYPE_CHECKING:
     from cubie.memory import MemoryManager
     from cubie.memory.array_requests import ArrayResponse
+
+
+def _performance_keys(settings: Dict[str, Any]) -> Set[str]:
+    """Return the placement and unroll keys in ``settings``."""
+    return {
+        key for key in settings
+        if key.endswith("_location") or key in ALL_UNROLL_PARAMETERS
+    }
 
 
 DEFAULT_MEMORY_SETTINGS = {
@@ -362,6 +376,11 @@ class BatchSolverKernel(CUDAFactory):
             driver_derivative_fn=self.driver_interpolator.driver_derivative_fn,
             **settings,
         )
+        pending = {
+            key for key in _performance_keys(settings)
+            if settings.get(key) is None
+        }
+        settings.update(self._auto_defaults(pending, settings))
         run = self.single_integrator
         self.setup_compile_settings(
             build_config(
@@ -1249,6 +1268,8 @@ class BatchSolverKernel(CUDAFactory):
         """
         if updates.get("stream_group", "") is None:
             updates["stream_group"] = DEFAULT_MEMORY_SETTINGS["stream_group"]
+        if updates.get("memory_manager", "") is None:
+            del updates["memory_manager"]
         recognised = self.memory_manager.update(self, updates, silent=True)
         interpolator = self.driver_interpolator
         known_hash = interpolator.config_hash
@@ -1256,7 +1277,16 @@ class BatchSolverKernel(CUDAFactory):
         # New sample values alone keep the compiled evaluators.
         if interpolator.config_hash != known_hash:
             updates.update(self._driver_settings())
+        # Performance keys given None wait for the updated step.
+        pending = {
+            key for key in _performance_keys(updates)
+            if updates[key] is None
+        }
+        for key in pending:
+            del updates[key]
         recognised |= self.single_integrator.update(updates, silent=True)
+        recognised |= pending
+        updates.update(self._auto_defaults(pending, updates))
         run = self.single_integrator
         kernel_updates = {
             **updates,
@@ -1270,6 +1300,42 @@ class BatchSolverKernel(CUDAFactory):
             self.resident_blocks = None
         self._known_system_config = self.system.compile_settings
         return recognised
+
+    def _auto_defaults(
+        self, pending: Set[str], settings: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Apply and return the ``pending`` performance keys' values.
+
+        ``auto_performance`` picks them from the built step; off, they
+        are ``None`` and fall to their declared defaults.
+        """
+        if not pending:
+            return {}
+        enabled = settings.get("auto_performance")
+        if enabled is None:
+            enabled = fields(BatchSolverConfig).auto_performance.default
+        derived = self.performance_defaults() if enabled else {}
+        values = {key: derived.get(key) for key in pending}
+        self.system.update(values, silent=True)
+        self.single_integrator.update(values, silent=True)
+        return values
+
+    def performance_defaults(self) -> Dict[str, Any]:
+        """Return the placements and unroll flags the built step picks."""
+        hardware = device_hardware()
+        step = self.single_integrator._algo_step
+        defaults = dict(step.performance_defaults(hardware))
+        if step.is_implicit and step.newton_solves_per_step > 0:
+            unrolled = self.system.operation_count + step.step_operation_count
+            capacity = (
+                hardware.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
+            )
+            # A Newton loop that overflows the instruction cache stays rolled.
+            defaults["unroll_newton_exits"] = (
+                UnrollChoice.ROLLED if unrolled > capacity
+                else UnrollChoice.FULL
+            )
+        return defaults
 
     def _driver_settings(self) -> Dict[str, Any]:
         """Return the interpolator's evaluators and coefficient layout."""
