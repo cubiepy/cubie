@@ -2996,7 +2996,7 @@ def _driverless(solver):
     """Return ``solver``'s given settings without its driver samples."""
     return {
         key: value
-        for key, value in solver.settings_dict.items()
+        for key, value in solver.settings_dict().items()
         if key != "drivers"
     }
 

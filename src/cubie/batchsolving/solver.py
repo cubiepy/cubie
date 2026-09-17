@@ -501,11 +501,22 @@ class Solver:
                 defaults.setdefault(key, default)
         return defaults
 
-    @property
-    def settings_dict(self) -> Dict[str, Any]:
-        """Return the given settings with the logger's current level."""
+    def settings_dict(
+        self, for_new_process: bool = False
+    ) -> Dict[str, Any]:
+        """Return the given settings with the logger's current level.
+
+        Parameters
+        ----------
+        for_new_process
+            Leave out the memory manager, which belongs to this
+            process; the settings then build a solver on the default
+            manager of the process that receives them.
+        """
         settings = self.given.as_kwargs()
         settings["time_logging_level"] = default_timelogger.verbosity
+        if for_new_process:
+            settings.pop("memory_manager", None)
         return settings
 
     def is_given(self, name: str) -> bool:
@@ -529,7 +540,7 @@ class Solver:
 
     def copy(self) -> "Solver":
         """Return a copy: same given settings, current log level."""
-        return type(self)(self.system.copy(), **self.settings_dict)
+        return type(self)(self.system.copy(), **self.settings_dict())
 
     def _apply_performance_defaults(self) -> None:
         """Apply the auto-performance unroll and placement defaults."""
