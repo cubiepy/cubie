@@ -758,7 +758,6 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         optimize_candidates: bool = False,
-        calibrate_candidates: bool = False,
         max_parallel: int = 4,
         **kwargs: Any,
     ) -> None:
@@ -777,8 +776,6 @@ class Solver:
             Initial integration time. Default ``0.0``.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
-        calibrate_candidates
-            Also compile the candidate kernels for :meth:`calibrate`.
         max_parallel
             Maximum compilations to run in parallel.
         **kwargs
@@ -789,17 +786,17 @@ class Solver:
         if drivers is not None:
             self._configure_drivers(drivers)
 
-        candidates = dict(
-            duration=duration,
-            settling_time=settling_time,
-            t0=t0,
-            compile_only=True,
-            max_parallel=max_parallel,
-        )
         if optimize_candidates:
-            run_optimization(self, None, None, **candidates)
-        if calibrate_candidates:
-            run_calibration(self, None, None, drivers=drivers, **candidates)
+            run_optimization(
+                self,
+                None,
+                None,
+                duration=duration,
+                settling_time=settling_time,
+                t0=t0,
+                compile_only=True,
+                max_parallel=max_parallel,
+            )
 
         self.kernel.compile(
             duration=duration,

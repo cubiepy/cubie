@@ -399,22 +399,7 @@ def compile_kernels(
     solver: Any, settings_sets: Sequence[Dict[str, Any]], max_parallel: int
 ) -> Tuple[str, ...]:
     """Compile a kernel per set of settings in ``max_parallel`` threads
-    if cheaper than serial.
-
-    Parameters
-    ----------
-    solver
-        The solver each set applies over; restored on return.
-    settings_sets
-        One ``Solver.update`` dict per kernel.
-    max_parallel
-        Maximum compilations to run in parallel.
-
-    Returns
-    -------
-    tuple of str
-        The error that rejected each set, empty when compiled.
-    """
+    if cheaper than serial."""
     given = dict(solver.given.as_kwargs())
     baseline = settings_in_effect(solver)
     keys = set()
@@ -468,12 +453,9 @@ def compile_kernels(
             except Exception as exc:
                 errors[index] = _error(exc)
     if keys:
-        # Every value in effect back, then the given record.
-        solver.update(baseline, silent=True)
-        solver.update(
-            {key: given.get(key) for key in keys | set(baseline)},
-            silent=True,
-        )
+        # Opening values back first, then the given record.
+        solver.update(opening, silent=True)
+        solver.update({key: given.get(key) for key in keys}, silent=True)
     return tuple(errors)
 
 
