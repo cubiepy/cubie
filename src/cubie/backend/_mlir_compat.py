@@ -66,12 +66,9 @@ calling kernel's options, and fills emptied statement bodies with
 ``pass``.
 
 numba-cuda-mlir also keeps every ``MLIRDispatcher`` alive for the
-life of the process: the native ``KernelDispatcher`` holds the
-dispatcher's bound ``_compile`` without reporting it to the cycle
-collector. This module hands the native object a weak callback
-instead and leaks one reference to each native dispatcher, because
-the wheel's native teardown releases a kernel family twice (branch
-fix/20-kernel-dispatcher-gc carries both fixes natively).
+life of the process. This module gives each native
+``KernelDispatcher`` a weak compile callback and pins the native
+object itself, so dropped dispatchers are collected.
 
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
@@ -1441,9 +1438,7 @@ _Py_TPFLAGS_HAVE_GC = 1 << 14
 
 
 class _WeakCompileCallback:
-    """Compile callback for a native ``KernelDispatcher`` that holds
-    its ``MLIRDispatcher`` weakly, in place of the bound ``_compile``.
-    """
+    """Compile callback that holds its ``MLIRDispatcher`` weakly."""
 
     __slots__ = ("_dispatcher_ref",)
 
@@ -1462,15 +1457,8 @@ class _WeakCompileCallback:
 def _patch_dispatcher_lifetime() -> None:
     """Let dropped ``MLIRDispatcher`` objects be collected.
 
-    The native ``KernelDispatcher`` keeps the dispatcher's bound
-    ``_compile`` without a ``tp_traverse``, so the dispatcher, its
-    overloads and typing entries form a cycle the collector never
-    sees. A weak callback breaks that edge. The same wheel releases
-    a kernel family twice when a native dispatcher that has launched
-    is torn down, so each native dispatcher keeps one extra reference
-    for good; the CUlibrary behind it stays loaded while the Python
-    side is freed. Wheels whose native types participate in garbage
-    collection carry both fixes and are left alone.
+    Each native ``KernelDispatcher`` gets a weak compile callback and
+    one permanent reference. No-op when the native type is a GC type.
     """
     if _cext.KernelDispatcher.__flags__ & _Py_TPFLAGS_HAVE_GC:
         return
