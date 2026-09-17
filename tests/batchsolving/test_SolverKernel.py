@@ -150,7 +150,6 @@ def test_all_lower_plumbing(
             ),
         },
     )
-    freshsolver.configure_drivers(driver_settings)
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.ones((system.sizes.parameters, 1), dtype=precision)
     freshsolver.run(inits=inits, params=params, duration=0.1)

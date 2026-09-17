@@ -584,8 +584,9 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     ValueError
         A Neumann preconditioner on a mass-matrix system, gains given
         with a filter, an output index the system does not have, summary
-        metrics without ``sample_summaries_every``, or save/summary
-        timing that cannot produce output in the integration.
+        metrics without ``sample_summaries_every``, save/summary timing
+        that cannot produce output in the integration, or driver
+        samples that do not name the system's drivers.
     """
     precision = system.precision
     if given.precision is not None:
@@ -666,4 +667,9 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     )
     check_loop_timing(timing, given.duration, precision)
     resolved.update(timing)
+    if given.drivers is not None:
+        # The kernel reads driver columns in the system's declared order.
+        resolved["drivers"] = given.drivers.ordered(
+            system.indices.driver_names
+        )
     return EffectiveSettings(**{**given.as_kwargs(), **resolved})

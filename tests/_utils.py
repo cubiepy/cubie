@@ -21,7 +21,7 @@ from cubie.integrators.step_control import (
 from cubie.odesystems.symbolic import SymbolicODE
 from cubie.batchsolving.solver import Solver
 from cubie.outputhandling import OutputFunctions
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 from cubie.odesystems.baseODE import BaseODE
 from numpy.typing import NDArray
 from tests.integrators.cpu_reference import CPUAdaptiveController
@@ -1368,10 +1368,16 @@ def _build_solver_instance(
     }
     if memory_manager:
         settings.update(memory_manager=memory_manager)
-    solver = Solver(system, **settings)
     if driver_settings is not None:
-        solver._configure_drivers(driver_settings)
-    return solver
+        settings.update(
+            drivers=driver_settings,
+            order=int(solver_settings["driverspline_order"]),
+            wrap=bool(solver_settings["driverspline_wrap"]),
+            boundary_condition=solver_settings[
+                "driverspline_boundary_condition"
+            ],
+        )
+    return Solver(system, **settings)
 
 
 def _resolved_controller_gains(controller) -> Dict[str, float]:
@@ -2420,10 +2426,9 @@ TIME_DRIVER_SETTINGS = {
     "driverspline_boundary_condition": "periodic",
 }
 
-SINUSOID_DRIVER_SAMPLES = {
-    "drive": _DRIVER_VALUES,
-    "driver_sample_period": _DRIVER_SAMPLE_PERIOD,
-}
+SINUSOID_DRIVER_SAMPLES = DriverSamples(
+    {"drive": _DRIVER_VALUES}, driver_sample_period=_DRIVER_SAMPLE_PERIOD
+)
 
 
 # Bicgstab on both implicit step families, one preconditioner each.

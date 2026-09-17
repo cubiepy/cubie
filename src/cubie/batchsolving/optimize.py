@@ -539,7 +539,7 @@ def run_optimization(
     parent: Any,
     initial_values: Any,
     parameters: Any,
-    drivers: Optional[Dict[str, Any]] = None,
+    drivers: Optional[Any] = None,
     duration: float = 1.0,
     settling_time: float = 0.0,
     t0: float = 0.0,
@@ -609,7 +609,7 @@ def run_optimization(
     """
     validate_sizing(waves, target_ms)
     if drivers is not None:
-        parent._configure_drivers(drivers)
+        parent.update(drivers=drivers)
     candidates = [
         Candidate(settings_label(settings), dict(settings))
         for settings in parent.optimisation_candidates(force=force)

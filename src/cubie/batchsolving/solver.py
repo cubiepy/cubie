@@ -79,7 +79,7 @@ from cubie.integrators.step_control.base_step_controller import (
 )
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.symbolic import create_ODE_system
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 from cubie._utils import unpack_dict_values
 from cubie.batchsolving.solver_settings import SolverSettings
 from cubie.time_logger import default_timelogger
@@ -129,7 +129,7 @@ def _system_from_equations(
     dxdt: Union[str, Callable, Iterable[str]],
     y0: Optional[Union[ndarray, Dict[str, object]]],
     parameters: Optional[Union[ndarray, Dict[str, object]]],
-    drivers: Optional[Dict[str, object]],
+    drivers: Optional[DriverSamples],
     precision: Optional[PrecisionDType] = None,
 ) -> BaseODE:
     """Build a :class:`SymbolicODE` from equations passed to solve_ivp.
@@ -147,7 +147,7 @@ def _system_from_equations(
         values (the first value of each entry). Arrays are rejected
         because they carry no names to declare.
     drivers
-        Driver configuration forwarded to system creation.
+        The sampled drivers; their names declare the system's drivers.
     precision
         Optional precision override for the created system.
 
@@ -187,7 +187,7 @@ def _system_from_equations(
         dxdt=dxdt,
         states=states,
         parameters=parameter_defaults,
-        drivers=drivers,
+        drivers=None if drivers is None else list(drivers.names),
         **create_kwargs,
     )
 
@@ -196,7 +196,7 @@ def solve_ivp(
     system: Union[BaseODE, str, Callable, Iterable[str]],
     y0: Union[ndarray, Dict[str, ndarray]],
     parameters: Optional[Union[ndarray, Dict[str, ndarray]]] = None,
-    drivers: Optional[Dict[str, object]] = None,
+    drivers: Optional[DriverSamples] = None,
     method: str = "euler",
     duration: float = 1.0,
     settling_time: float = 0.0,
@@ -229,7 +229,8 @@ def solve_ivp(
         Parameter values for each run as arrays or dictionaries mapping labels
         to arrays.
     drivers
-        Driver configuration to interpolate during integration.
+        The :class:`~cubie.array_interpolator.DriverSamples` to
+        interpolate during integration.
     method
         Integration algorithm to use. Default is ``"euler"``.
     duration
@@ -528,12 +529,8 @@ class Solver:
         return tuple(candidates)
 
     def copy(self) -> "Solver":
-        """Return a copy: same settings and drivers, current log level."""
-        twin = type(self)(self.system.copy(), **self.settings_dict)
-        drivers = self.kernel.driver_inputs()
-        if drivers is not None:
-            twin._configure_drivers(drivers)
-        return twin
+        """Return a copy: same given settings, current log level."""
+        return type(self)(self.system.copy(), **self.settings_dict)
 
     def _apply_performance_defaults(self) -> None:
         """Apply the auto-performance unroll and placement defaults."""
@@ -579,22 +576,11 @@ class Solver:
         """The kernel-owned driver interpolator."""
         return self.kernel.driver_interpolator
 
-    def _configure_drivers(self, drivers: Dict[str, Any]) -> None:
-        """Update the kernel-owned driver interpolator as one unit.
-
-        Parameters
-        ----------
-        drivers
-            Driver samples plus interpolation settings, as accepted by
-            :meth:`ArrayInterpolator.update_from_dict`.
-        """
-        self.kernel.configure_drivers(drivers)
-
     def solve(
         self,
         initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
         parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
-        drivers: Optional[Dict[str, Any]] = None,
+        drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
@@ -682,6 +668,8 @@ class Solver:
         and the next ``solve()`` on this solver overwrites them. A
         chunked run raises ``ValueError``.
         """
+        if drivers is not None:
+            kwargs["drivers"] = drivers
         self.update(duration=duration, **kwargs)
 
         # Start wall-clock timing for solve
@@ -690,9 +678,6 @@ class Solver:
         inits, params = self.input_handler(
             states=initial_values, params=parameters, kind=grid_type
         )
-
-        if drivers is not None:
-            self._configure_drivers(drivers)
 
         self.kernel.run(
             inits=inits,
@@ -725,7 +710,7 @@ class Solver:
 
     def compile(
         self,
-        drivers: Optional[Dict[str, Any]] = None,
+        drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
@@ -738,8 +723,8 @@ class Solver:
         Parameters
         ----------
         drivers
-            Driver samples or configuration matching
-            :class:`cubie.array_interpolator.ArrayInterpolator`.
+            The :class:`~cubie.array_interpolator.DriverSamples` to
+            interpolate; ``None`` keeps the current ones.
         duration
             Total integration time. Default is ``1.0``.
         settling_time
@@ -753,10 +738,9 @@ class Solver:
         **kwargs
             Additional options forwarded to :meth:`update`.
         """
-        self.update(duration=duration, **kwargs)
-
         if drivers is not None:
-            self._configure_drivers(drivers)
+            kwargs["drivers"] = drivers
+        self.update(duration=duration, **kwargs)
 
         if optimize_candidates:
             run_optimization(

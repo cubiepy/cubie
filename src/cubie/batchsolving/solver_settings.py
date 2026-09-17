@@ -173,6 +173,7 @@ class SolverSettings(_CubieConfigBase):
     mem_proportion: Optional[float] = _optional()
 
     # -- Driver interpolation -----------------------------------------
+    drivers: Any = None
     order: Optional[int] = None
     wrap: Optional[bool] = None
     boundary_condition: Any = None

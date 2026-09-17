@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 from cubie.memory import default_memmgr
 from cubie.outputhandling.output_functions import OutputFunctions
 from tests._utils import _driver_sequence
@@ -255,9 +255,8 @@ def build_driver_settings(
 
     Returns
     -------
-    dict or None
-        Dictionary consumed by :class:`ArrayInterpolator`, or ``None`` when the
-        system has no drivers.
+    DriverSamples or None
+        The sampled drivers, or ``None`` when the system has no drivers.
     """
 
     if system.num_drivers == 0:
@@ -281,20 +280,13 @@ def build_driver_settings(
     )
 
     driver_names = list(system.indices.driver_names)
-    drivers_dict: Dict[str, Any] = {
+    samples = {
         name: np.array(driver_matrix[:, idx], dtype=precision, copy=True)
         for idx, name in enumerate(driver_names)
     }
-    drivers_dict["driver_sample_period"] = precision(dt_sample)
-    drivers_dict["wrap"] = bool(solver_settings["driverspline_wrap"])
-    drivers_dict["boundary_condition"] = solver_settings.get(
-        "driverspline_boundary_condition",
-        solver_settings.get("driverspline_end_condition", "clamped"),
+    return DriverSamples(
+        samples, driver_sample_period=precision(dt_sample), t0=t0
     )
-    drivers_dict["order"] = order
-    drivers_dict["t0"] = t0
-
-    return drivers_dict
 
 
 def create_output_functions(

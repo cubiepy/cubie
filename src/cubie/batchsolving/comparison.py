@@ -340,7 +340,7 @@ def _pool_pays(
 
 def _compile_candidate(payload: Tuple) -> Tuple[int, str]:
     """Compile one settings set in a worker; return (index, error)."""
-    index, system_bytes, settings, drivers, cache_root = payload
+    index, system_bytes, settings, cache_root = payload
     if cache_root is not None:
         set_cache_root(cache_root)
     from cubie.batchsolving.solver import Solver
@@ -349,8 +349,6 @@ def _compile_candidate(payload: Tuple) -> Tuple[int, str]:
     solver = None
     try:
         solver = Solver(system, **settings)
-        if drivers is not None:
-            solver._configure_drivers(drivers)
         _compile_solver(solver)
         return index, ""
     except Exception as exc:
@@ -366,7 +364,6 @@ def _compile_in_pool(
     """Compile each set in a spawned worker; return one error per set."""
     # Pickled into spawned workers; the manager holds CUDA state.
     system_bytes = pickle.dumps(solver.system)
-    drivers = solver.kernel.driver_inputs()
     record = {
         key: value
         for key, value in solver.settings_dict.items()
@@ -377,7 +374,6 @@ def _compile_in_pool(
             index,
             system_bytes,
             {**record, **settings},
-            drivers,
             get_cache_root_override(),
         )
         for index, settings in enumerate(settings_sets)

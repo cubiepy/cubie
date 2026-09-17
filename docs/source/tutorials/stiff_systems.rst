@@ -140,7 +140,7 @@ length:
        forced,
        y0={"x": 2.0, "v": 0.0},
        parameters={"mu": np.linspace(20.0, 80.0, 16)},
-       drivers={"forcing": signal, "time": t_samples},
+       drivers=qb.DriverSamples({"forcing": signal}, time=t_samples),
        method="rosenbrock",
        duration=20.0,
        save_every=0.05,
@@ -192,5 +192,6 @@ Recap
   ``atol``/``rtol`` (or supplying a per-state ``atol`` vector), and
   by lowering ``dt_min`` if the dynamics truly need smaller steps.
 - Sampled forcing data enters as a driver, declared on the system
-  and passed as ``{"name": values, "time": times}``; forcing with a
-  closed form is written into the equations using ``t``.
+  and passed as ``DriverSamples({"name": values}, time=times)``;
+  forcing with a closed form is written into the equations using
+  ``t``.

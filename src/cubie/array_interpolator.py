@@ -2,9 +2,13 @@
 
 Published Classes
 -----------------
+:class:`DriverSamples`
+    Uniformly sampled driver series with their time base; the
+    ``drivers`` setting of a Solver.
+
 :class:`ArrayInterpolatorConfig`
     Configuration container describing an input-array interpolation
-    problem (order, wrap, boundary condition, timing).
+    problem (order, wrap, boundary condition, samples).
 
 :class:`ArrayInterpolator`
     CUDAFactory that computes spline coefficients from sampled driver
@@ -12,9 +16,8 @@ Published Classes
 
     >>> from numpy import float64, linspace, sin
     >>> times = linspace(0, 1, 11)
-    >>> inputs = {"driver_0": sin(times)}
-    >>> inputs["driver_sample_period"] = times[1] - times[0]
-    >>> interp = ArrayInterpolator(precision=float64, input_dict=inputs)
+    >>> drivers = DriverSamples({"driver_0": sin(times)}, time=times)
+    >>> interp = ArrayInterpolator(precision=float64, drivers=drivers)
     >>> interp.num_inputs
     1
 
@@ -28,13 +31,13 @@ See Also
 """
 
 import math
+from types import MappingProxyType
 from typing import (
     Callable,
-    Dict,
+    Iterable,
+    Mapping,
     Optional,
-    Set,
     TYPE_CHECKING,
-    Union,
     Any,
     Tuple,
 )
@@ -43,6 +46,7 @@ from numpy import (
     allclose,
     any as np_any,
     arange,
+    array_equal,
     asarray,
     column_stack,
     concatenate,
@@ -55,7 +59,7 @@ from numpy import (
     vstack,
 )
 from numpy.linalg import solve as np_solve
-from attrs import define, field, validators, frozen
+from attrs import cmp_using, define, field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 from numpy.typing import NDArray
@@ -65,17 +69,16 @@ from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
     CUDADispatcherCache,
+    FrozenSettings,
 )
 from cubie._utils import (
     PrecisionDType,
-    getype_validator,
     gttype_validator,
 )
 from cubie.memory import current_cupy_stream, default_memmgr
 
 if TYPE_CHECKING:
     from cubie.memory.mem_manager import MemoryManager
-    from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 
 
 FloatArray = NDArray[floating]
@@ -104,16 +107,184 @@ class InterpolatorCache(CUDADispatcherCache):
 
 
 ALL_INTERPOLATOR_PARAMETERS = frozenset(
-    {"order", "wrap", "boundary_condition"}
+    {"drivers", "order", "wrap", "boundary_condition"}
 )
-"""Keyword args for interpolation settings passed to the solver."""
+"""Keyword args for the driver samples and interpolation settings."""
 
 
-def _input_array_converter(value: Any) -> FloatArray:
-    """Copy sampled inputs into an owned read-only 2-D array."""
-    array = asarray(value).copy()
+def _sample_converter(
+    samples: Mapping[str, Any],
+) -> Mapping[str, FloatArray]:
+    """Return ``samples`` as a read-only mapping of owned 1-D arrays."""
+    owned = {}
+    for name, values in samples.items():
+        try:
+            array = asarray(values, dtype=float).copy()
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Forcing array {name} could not be converted to a NumPy "
+                "array."
+            )
+        if array.ndim != 1:
+            raise ValueError(f"Forcing array {name} must be one-dimensional.")
+        array.setflags(write=False)
+        owned[str(name)] = array
+    return MappingProxyType(owned)
+
+
+def _optional_time_converter(value: Any) -> Optional[FloatArray]:
+    """Return ``value`` as an owned 1-D float array, or ``None``."""
+    if value is None:
+        return None
+    array = asarray(value, dtype=float).copy()
+    if array.ndim != 1:
+        raise ValueError("Time array must be one-dimensional.")
     array.setflags(write=False)
     return array
+
+
+@frozen
+class DriverSamples(FrozenSettings):
+    """Uniformly sampled driver series and their time base.
+
+    Parameters
+    ----------
+    samples
+        Driver name to its 1-D sample array; every array has the same
+        length.
+    time
+        Sample times, strictly increasing and uniformly spaced. Give
+        this or ``driver_sample_period``.
+    driver_sample_period
+        Spacing between consecutive samples.
+    t0
+        Time of the first sample; ``0.0`` when only the period is
+        given.
+
+    Attributes
+    ----------
+    names
+        The driver names in column order.
+    input_array
+        Sample columns ``(num_samples, num_inputs)``.
+    """
+
+    samples: Mapping[str, FloatArray] = field(
+        converter=_sample_converter, eq=False
+    )
+    time: Optional[FloatArray] = field(
+        default=None, converter=_optional_time_converter, eq=False
+    )
+    driver_sample_period: Optional[float] = field(default=None)
+    t0: Optional[float] = field(default=None)
+    names: Tuple[str, ...] = field(init=False)
+    input_array: FloatArray = field(
+        init=False, eq=cmp_using(eq=array_equal)
+    )
+
+    def __attrs_post_init__(self):
+        if not self.samples:
+            raise ValueError("DriverSamples needs at least one driver.")
+        columns = list(self.samples.values())
+        if any(col.shape[0] != columns[0].shape[0] for col in columns):
+            raise ValueError(
+                "All forcing vectors must have the same length / be "
+                "sampled on the same grid"
+            )
+        input_array = column_stack(columns)
+        input_array.setflags(write=False)
+        object.__setattr__(self, "names", tuple(self.samples))
+        object.__setattr__(self, "input_array", input_array)
+        period, t0 = self._resolve_time_base(input_array.shape[0])
+        object.__setattr__(self, "driver_sample_period", period)
+        object.__setattr__(self, "t0", t0)
+
+    def _resolve_time_base(self, num_samples: int) -> Tuple[float, float]:
+        """Return ``(driver_sample_period, t0)`` from the given time base."""
+        if self.time is None:
+            if self.driver_sample_period is None:
+                raise ValueError(
+                    "Either a time array or driver_sample_period must be "
+                    "provided."
+                )
+            period = float(self.driver_sample_period)
+            t0 = 0.0 if self.t0 is None else float(self.t0)
+        else:
+            if self.driver_sample_period is not None or self.t0 is not None:
+                raise ValueError(
+                    "Only one of driver_sample_period or time should be "
+                    "provided."
+                )
+            if self.time.shape[0] != num_samples:
+                raise ValueError(
+                    "Time array length must match the number of samples "
+                    "in provided input vectors."
+                )
+            differences = diff(self.time)
+            if np_any(differences <= 0.0):
+                raise ValueError("Time array must be strictly increasing.")
+            if not allclose(
+                differences,
+                full_like(differences, differences[0]),
+                rtol=1e-6,
+                atol=1e-6,
+            ):
+                raise ValueError("Time array must be uniformly spaced.")
+            period = float(differences[0])
+            t0 = float(self.time[0])
+        if period <= 0.0:
+            raise ValueError("driver_sample_period must be positive.")
+        return period, t0
+
+    def _cubie_canonical_(self) -> Tuple[Any, ...]:
+        """Identity by names, time base and sample count, not values."""
+        return (
+            self.names,
+            self.t0,
+            self.driver_sample_period,
+            self.num_samples,
+        )
+
+    @property
+    def num_samples(self) -> int:
+        """Samples per driver."""
+        return int(self.input_array.shape[0])
+
+    @property
+    def num_inputs(self) -> int:
+        """Number of drivers."""
+        return int(self.input_array.shape[1])
+
+    def ordered(self, names: Iterable[str]) -> "DriverSamples":
+        """Return these samples with columns in the order of ``names``.
+
+        Raises
+        ------
+        ValueError
+            ``names`` and the sampled drivers differ in count or
+            spelling.
+        """
+        names = tuple(names)
+        if len(names) != len(self.names):
+            raise ValueError(
+                f"Number of sampled drivers ({len(self.names)}) does not "
+                f"match number of drivers in system ({len(names)})."
+            )
+        if set(names) != set(self.names):
+            raise ValueError(
+                f"Sampled driver names ({set(self.names)}) do not match "
+                f"drivers symbols in system ({set(names)})."
+            )
+        if names == self.names:
+            return self
+        # The time base was given one way; hand it on the same way.
+        timed = self.time is not None
+        return DriverSamples(
+            {name: self.samples[name] for name in names},
+            time=self.time,
+            driver_sample_period=None if timed else self.driver_sample_period,
+            t0=None if timed else self.t0,
+        )
 
 
 @frozen
@@ -129,17 +300,13 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
     wrap : bool
         Whether the vector should repeat or provide zero values
         outside of the sampled range.
-    boundary_condition : {"natural", "periodic", "clamped", "not-a-knot"},
-        optional boundary condition for the spline interpolation.
-        defaults to 'not-a-knot' to match Scipy's CubicSpline.
-    t0 : float
-        start time of input samples
-    driver_sample_period : float
-        Temporal spacing between consecutive driver samples.
-    input_array : numpy.ndarray
-        Sample columns ``(num_samples, num_inputs)``; not hashed.
+    boundary_condition : {"natural", "periodic", "clamped", "not-a-knot"}
+        Boundary condition for the spline interpolation; ``None``
+        selects ``"periodic"`` when wrapping, else ``"clamped"``.
+    drivers : DriverSamples, optional
+        The sampled drivers; ``None`` interpolates nothing.
     num_inputs : int
-        Column count of ``input_array``.
+        Column count of the sample table.
     num_segments : int
         Polynomial segments in the table: samples minus one, plus two
         ghost segments for clamped non-wrapping inputs, zero with no
@@ -154,28 +321,24 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         default=True,
         validator=validators.instance_of(bool),
     )
-    boundary_condition: str = field(
-        default="not-a-knot",
+    _boundary_condition: Optional[str] = field(
+        default=None,
+        alias="boundary_condition",
         validator=validators.optional(
             validators.in_({"natural", "periodic", "not-a-knot", "clamped"})
         ),
     )
-    driver_sample_period: float = field(
-        default=1e-16, validator=getype_validator(float, 0)
-    )
-    t0: float = field(default=0.0, validator=getype_validator(float, 0))
-    input_array: FloatArray = field(
-        factory=lambda: _input_array_converter(empty((0, 0))),
-        converter=_input_array_converter,
-        eq=False,
+    drivers: Optional[DriverSamples] = field(
+        default=None,
+        validator=validators.optional(
+            validators.instance_of(DriverSamples)
+        ),
     )
     num_inputs: int = field(default=0, init=False)
     num_segments: int = field(default=0, init=False)
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-        if self.input_array.ndim != 2:
-            raise ValueError("input_array must be two-dimensional.")
         num_samples, num_inputs = self.input_array.shape
         if num_inputs and num_samples < self.order + 1:
             raise ValueError(
@@ -215,23 +378,47 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         return num_samples - 1 + (2 if pad_clamped else 0)
 
     @property
+    def boundary_condition(self) -> str:
+        """The boundary condition; derived from ``wrap`` when not given."""
+        if self._boundary_condition is None:
+            return "periodic" if self.wrap else "clamped"
+        return self._boundary_condition
+
+    @property
+    def input_array(self) -> FloatArray:
+        """Sample columns ``(num_samples, num_inputs)``; empty with none."""
+        if self.drivers is None:
+            return empty((0, 0))
+        return self.drivers.input_array
+
+    @property
     def num_samples(self) -> int:
         """Number of samples per input."""
         return int(self.input_array.shape[0])
+
+    @property
+    def t0(self) -> float:
+        """Time of the first sample."""
+        return 0.0 if self.drivers is None else self.drivers.t0
+
+    @property
+    def driver_sample_period(self) -> float:
+        """Spacing between consecutive samples."""
+        if self.drivers is None:
+            return 1e-16
+        return self.drivers.driver_sample_period
 
 
 class ArrayInterpolator(CUDAFactory):
     """Factory emitting CUDA device functions for interpolating array-driven
     forcing terms."""
 
-    config_keys = ("wrap", "order", "boundary_condition")
-    time_info = ("time", "driver_sample_period", "t0")
-
     def __init__(
         self,
         precision: PrecisionDType,
-        input_dict: Dict[str, FloatArray],
+        drivers: Optional[DriverSamples] = None,
         memory_manager: "MemoryManager" = default_memmgr,
+        **settings: Any,
     ) -> None:
         """Initialize the array interpolator factory.
 
@@ -239,242 +426,20 @@ class ArrayInterpolator(CUDAFactory):
         ----------
         precision : PrecisionDType
             Numerical precision for coefficients and evaluation.
-        input_dict : dict
-            Dictionary containing input arrays and configuration. See
-            :meth:`update_from_dict` for required and optional fields.
+        drivers : DriverSamples, optional
+            The sampled drivers; ``None`` interpolates nothing.
         memory_manager : MemoryManager
             Manager whose policy sizes the pinned coefficients buffer.
+        **settings
+            ``order``, ``wrap`` and ``boundary_condition``.
         """
         super().__init__()
-        config = ArrayInterpolatorConfig(
-            precision=precision,
+        self.setup_compile_settings(
+            ArrayInterpolatorConfig(
+                precision=precision, drivers=drivers, **settings
+            )
         )
-        self.setup_compile_settings(config)
         self._memory_manager = memory_manager
-        self.update_from_dict(input_dict)
-
-    def update_from_dict(self, input_dict: Dict[str, Any]) -> Set[str]:
-        """Update the factory configuration from a user-supplied dictionary.
-
-        Parameters
-        ----------
-        input_dict
-            Dictionary containing input arrays and configuration options
-            for the interpolated inputs.
-
-        Returns
-        -------
-        set
-            Recognised keys.
-
-        Notes
-        -----
-        ## Input dictionary
-        input_dict fields must include:
-
-            - ``"time"``: 1D float array of sample times corresponding to
-            input array values, or
-                - ``"driver_sample_period"``: uniform spacing between
-                  samples, and
-                - ``"t0"``: starting time of the input samples.
-            - ``[input_name]``: one-dimensional float array of samples for
-            each input, where ``input_name`` is the name of the input signal
-            as entered in the system definition.
-
-            Fields may optionally include:
-
-            - ``"order"``: polynomial order for spline interpolation,
-            default 3.
-            - ``"wrap"``: whether the input should wrap past the final
-            value when the last time index is exceeded. When False the
-            interpolator clamps to zero before ``t0`` and after the final
-            sample.
-            - ``"boundary_condition"``: boundary condition for splines.
-            Defaults to ``"clamped"`` when ``"wrap"`` is False and to
-            ``"periodic"`` when wrapping is enabled.
-
-        The input arrays must all be one-dimensional and of the same length.
-        No input arrays gives an empty interpolator with a zero-sized
-        table; timing entries are then optional.
-
-        The final interpolation result is an array of polynomial
-        coefficients with shape (num_segments, num_inputs, order + 1),
-        where num_segments is one less than the number of samples provided.
-
-        ## Interpolation behaviour
-        If ``"boundary_condition"`` is None, then spline coefficients are
-        calculated in segments, with no continuity constraints. Otherwise,
-        the spline coefficients are fit simultaneously for all segments,
-        and end conditions are enforced according to the boundary condition:
-
-        - ``"natural"``: second derivative at the ends of the curve is set
-        to zero.
-        - ``"periodic"``: the first and last segments are identical. For
-        this condition, the first and last samples must match. This is the
-        default when "wrap" is True, to avoid introducing a discontinuity on
-        wrap.
-
-        These boundary conditions are identical to those in [SciPy's
-        CubicSpline interpolator]<https://docs.scipy.org/doc/scipy/reference
-        /generated/scipy.interpolate.CubicSpline.html>
-        """
-
-        config = {k: v for k, v in input_dict.items() if k in self.config_keys}
-        inputs = {
-            k: v
-            for k, v in input_dict.items()
-            if k not in self.config_keys and k not in self.time_info
-        }
-        time = {k: v for k, v in input_dict.items() if k in self.time_info}
-
-        input_array = self._normalise_input_array(inputs)
-        sample_period, t0 = self._validate_time_inputs(
-            time, input_array.shape[0]
-        )
-        config.update(
-            {
-                "t0": t0,
-                "driver_sample_period": sample_period,
-                "input_array": input_array,
-            }
-        )
-        self._default_boundary_condition(config)
-        return self.update_compile_settings(config)
-
-    def _default_boundary_condition(self, config: Dict[str, Any]) -> None:
-        """Default an absent boundary condition from the wrap setting.
-
-        Parameters
-        ----------
-        config
-            Pending updates, modified in place: ``"periodic"`` when
-            wrapping, else ``"clamped"``.
-        """
-        if "boundary_condition" in config:
-            return
-        wrap_setting = config.get("wrap", self.wrap)
-        config["boundary_condition"] = (
-            "periodic" if wrap_setting else "clamped"
-        )
-
-    def _normalise_input_array(
-        self, input_dict: Dict[str, FloatArray]
-    ) -> FloatArray:
-        """Construct inputs array and check sizes.
-
-        Parameters
-        ----------
-        input_dict
-            Input names to 1d sample arrays; empty gives ``(0, 0)``.
-
-        Returns
-        -------
-        np.ndarray of floats
-            Input vectors stacked into a single array.
-
-        Raises
-        ------
-        ValueError
-            Raised when the input array is the wrong shape, type,
-            or multiple arrays have different lengths.
-        """
-        if not input_dict:
-            return empty((0, 0), dtype=self.precision)
-
-        for key, array in input_dict.items():
-            try:
-                array = asarray(array, dtype=self.precision)
-            except ValueError:
-                raise ValueError(
-                    f"Forcing array {key} could not be converted "
-                    f"to a NumPy array."
-                )
-            if array.ndim != 1:
-                raise ValueError(
-                    f"Forcing array {key} must be one-dimensional."
-                )
-            input_dict[key] = array
-        input_vectors = list(input_dict.values())
-        if not all(
-            array.shape[0] == input_vectors[0].shape[0]
-            for array in input_vectors
-        ):
-            raise ValueError(
-                "All forcing vectors must have the same length / be sampled "
-                "on the same grid",
-            )
-        return column_stack(input_vectors)
-
-    def _validate_time_inputs(
-        self, time_dict: Dict[str, Any], num_samples: int
-    ) -> Tuple[float, float]:
-        """Process and check time inputs.
-
-        Parameters
-        ----------
-        time_dict
-            Dictionary of time-related user inputs. If
-            "driver_sample_period" is provided, then this will be used
-            and "t0" will be fetched from the dict or default to 0.0.
-            If "time" is provided, the sample period will be calculated
-            as the difference between samples, and t0 as
-            time_dict['time'][0]. Empty with no samples keeps the
-            current timing.
-        num_samples
-            Sample count of the input arrays being configured.
-        Returns
-        -------
-        tuple (float, float)
-            Sample period and t0, either obtained directly from
-            time_dict or computed from a "time" array.
-        Raises
-        ------
-        ValueError
-            Raised if the time array is not strictly increasing or the
-            spacing between samples is non-uniform.
-        """
-
-        if ("driver_sample_period" in time_dict) and (
-            "time" in time_dict
-        ):
-            raise ValueError(
-                "Only one of driver_sample_period or time should be "
-                "provided."
-            )
-        if "driver_sample_period" in time_dict:
-            sample_period = time_dict["driver_sample_period"]
-            t0 = time_dict.get("t0", 0.0)
-        elif "time" in time_dict:
-            timeArray = time_dict["time"]
-            if timeArray.ndim != 1:
-                raise ValueError("Time array must be one-dimensional.")
-            if timeArray.shape[0] != num_samples:
-                raise ValueError(
-                    "Time array length must match the number of"
-                    " samples in provided input vectors."
-                )
-            t0 = timeArray[0]
-            time_differences = diff(timeArray)
-            if np_any(time_differences <= 0.0):
-                raise ValueError("Time array must be strictly increasing.")
-            if not allclose(
-                time_differences,
-                full_like(time_differences, time_differences[0]),
-                rtol=1e-6,
-                atol=1e-6,
-            ):
-                raise ValueError("Time array must be uniformly spaced.")
-            sample_period = time_differences[0]
-        elif num_samples == 0:
-            sample_period = self.driver_sample_period
-            t0 = self.t0
-        else:
-            raise ValueError(
-                "Either a time array or driver_sample_period must be "
-                "provided."
-            )
-
-        return sample_period, t0
 
     # ---------------------------------------------------------------------- #
     # Evaluation function machinery
@@ -643,10 +608,6 @@ class ArrayInterpolator(CUDAFactory):
     # ---------------------------------------------------------------------- #
     # Inspection interface
     # ---------------------------------------------------------------------- #
-    def get_input_array(self) -> FloatArray:
-        """Return the input array."""
-        return self.input_array
-
     def get_interpolated(
         self,
         eval_times: NDArray[floating],
@@ -819,71 +780,6 @@ class ArrayInterpolator(CUDAFactory):
             ax.legend()
         plt.show()
         return fig, ax
-
-    # ---------------------------------------------------------------------- #
-    # System-specific interface
-    # ---------------------------------------------------------------------- #
-    @staticmethod
-    def check_against_system_drivers(
-        inputs_dict: Dict[str, Union[float, bool, FloatArray]],
-        system: "SymbolicODE",
-    ) -> Dict[str, Union[float, bool, FloatArray]]:
-        """Validate input keys and order driver columns by declared order.
-
-        The interpolator stacks driver arrays into columns in dictionary
-        insertion order and the compiled kernel reads those columns
-        positionally against the system's declared driver order, so the
-        driver entries are reordered to match the system before the
-        interpolator consumes them.
-
-        Parameters
-        ----------
-        inputs_dict
-            Dictionary of input arrays to validate against the system.
-        system
-            SymbolicODE instance defining the expected driver symbols.
-
-        Returns
-        -------
-        dict
-            Copy of ``inputs_dict`` with driver entries reordered to the
-            system's declared driver order, followed by the remaining
-            configuration and timing entries in their original order.
-
-        Raises
-        ------
-        ValueError
-            Raised when the number of inputs does not match the number of
-            drivers, or when input symbols do not match driver symbols.
-        """
-        input_keys = [
-            key
-            for key in inputs_dict
-            if key
-            not in (
-                ArrayInterpolator.config_keys + ArrayInterpolator.time_info
-            )
-        ]
-        driver_order = list(system.indices.driver_names)
-        system_driver_keys = set(driver_order)
-        if len(input_keys) != system.num_drivers:
-            raise ValueError(
-                f"Number of inputs in inputs_dict "
-                f"({len(input_keys)}) does not match number of "
-                f"drivers in system ({system.num_drivers})."
-            )
-        if set(input_keys) != system_driver_keys:
-            raise ValueError(
-                f"input symbols in inputs_dict ("
-                f"{set(input_keys)}) do not match drivers "
-                f"symbols in system ({system_driver_keys})."
-            )
-
-        ordered = {name: inputs_dict[name] for name in driver_order}
-        for key, value in inputs_dict.items():
-            if key not in ordered:
-                ordered[key] = value
-        return ordered
 
     # ---------------------------------------------------------------------- #
     # Spline coefficient generation

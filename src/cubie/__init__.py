@@ -46,10 +46,12 @@ from cubie.odesystems import (  # noqa: E402
     load_cellml_model,
 )
 from cubie.outputhandling import summary_metrics  # noqa: E402
+from cubie.array_interpolator import DriverSamples  # noqa: E402
 from cubie.time_logger import TimeLogger, default_timelogger  # noqa: E402
 
 __all__ = [
     "summary_metrics",
+    "DriverSamples",
     "default_memmgr",
     "ArrayTypes",
     "Solver",

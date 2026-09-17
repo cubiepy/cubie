@@ -9,7 +9,7 @@ from scipy.interpolate import CubicSpline
 from cubie.cuda_simsafe import cuda, is_pinned_array
 from cubie.memory import default_memmgr
 
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 from tests._utils import run_driver_device_eval
 from tests.integrators.cpu_reference.cpu_utils import DriverEvaluator
@@ -24,12 +24,12 @@ def quadratic_input(precision) -> ArrayInterpolator:
 
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
     values = times**2
-    input_dict = {"values": values, "time": times, "order": 2, "wrap": False}
-    input = ArrayInterpolator(
+    return ArrayInterpolator(
         precision=precision,
-        input_dict=input_dict,
+        drivers=DriverSamples({"values": values}, time=times),
+        order=2,
+        wrap=False,
     )
-    return input
 
 
 @pytest.fixture(scope="session")
@@ -38,20 +38,17 @@ def cubic_inputs(precision) -> ArrayInterpolator:
 
     times = np.linspace(0.0, 5.0, 11, dtype=precision)
     t = times
-    input_dict = {
+    samples = {
         "cubic1": t**3 - 2.0 * t,
         "cubic2": 0.5 * t**3 + 2 * t**2 + t,
-        "time": times,
-        "order": 3,
-        "boundary_condition": "not-a-knot",
-        "wrap": False,
     }
-    input = ArrayInterpolator(
+    return ArrayInterpolator(
         precision=precision,
-        input_dict=input_dict,
+        drivers=DriverSamples(samples, time=times),
+        order=3,
+        boundary_condition="not-a-knot",
+        wrap=False,
     )
-    # Evaluation times avoid the final endpoint to prevent wrap behaviour.
-    return input
 
 
 @pytest.fixture(scope="session")
@@ -60,18 +57,20 @@ def wrapping_inputs(precision) -> Tuple[ArrayInterpolator, ArrayInterpolator]:
 
     times = np.linspace(0.0, 4.0, 6, dtype=precision)
     values = np.array([0.0, 1.5, -0.75, 2.25, -3.0, 0.0], dtype=precision)
-    clamp_input_dict = {"values": values, "time": times, "order": 3,
-                        'wrap': False, 'boundary_condition': 'clamped'}
-    wrap_input_dict = {"values": values, "time": times, "order": 3,
-                       'wrap': True,
-                       'boundary_condition': 'periodic'}
+    drivers = DriverSamples({"values": values}, time=times)
     clamp = ArrayInterpolator(
         precision=precision,
-        input_dict=clamp_input_dict,
+        drivers=drivers,
+        order=3,
+        wrap=False,
+        boundary_condition="clamped",
     )
     wrap = ArrayInterpolator(
         precision=precision,
-        input_dict=wrap_input_dict,
+        drivers=drivers,
+        order=3,
+        wrap=True,
+        boundary_condition="periodic",
     )
     return clamp, wrap
 
@@ -663,12 +662,11 @@ def test_polynomial_samples_are_reproduced(
     values = np.zeros_like(times)
     for power, coef in enumerate(coeffs):
         values += coef * times**power
-    input_dict = {
-        "values": values, "time": times, "order": order, "wrap": False,
-    }
     input = ArrayInterpolator(
         precision=precision,
-        input_dict=input_dict,
+        drivers=DriverSamples({"values": values}, time=times),
+        order=order,
+        wrap=False,
     )
     gpu_samples = run_driver_device_eval(
         input.drivers_fn,
@@ -702,16 +700,12 @@ def test_order_three_matches_scipy_reference(precision, bc, tolerance) -> None:
     wrap = bc == "periodic"
     if wrap:
         samples[-1] = samples[0]
-    input_dict = {
-        "drive": samples,
-        "time": times,
-        "order": 3,
-        "wrap": wrap,
-        "boundary_condition": bc,
-    }
     input = ArrayInterpolator(
         precision=precision,
-        input_dict=input_dict,
+        drivers=DriverSamples({"drive": samples}, time=times),
+        order=3,
+        wrap=wrap,
+        boundary_condition=bc,
     )
     query = np.linspace(times[0], times[-1], 257, dtype=precision)
     gpu = run_driver_device_eval(
@@ -775,16 +769,12 @@ def test_natural_boundary_supports_higher_orders(precision, tolerance) -> None:
     order = 4
     times = np.linspace(0.0, 3.0, 9, dtype=precision)
     samples = np.sin(times) + 0.25 * times**2
-    input_dict = {
-        "drive": samples,
-        "time": times,
-        "order": order,
-        "wrap": False,
-        "boundary_condition": "natural",
-    }
     input = ArrayInterpolator(
         precision=precision,
-        input_dict=input_dict,
+        drivers=DriverSamples({"drive": samples}, time=times),
+        order=order,
+        wrap=False,
+        boundary_condition="natural",
     )
 
     coefficients = input.coefficients
@@ -851,17 +841,14 @@ def test_periodic_boundary_respects_general_order(
     )
     values = values.astype(precision)
     values[0] = values[-1]
-    input_dict = {
-        "s": values[:, 0],
-        "c": values[:, 1],
-        "time": times,
-        "order": order,
-        "wrap": True,
-        "boundary_condition": "periodic",
-    }
     input = ArrayInterpolator(
         precision=precision,
-        input_dict=input_dict,
+        drivers=DriverSamples(
+            {"s": values[:, 0], "c": values[:, 1]}, time=times
+        ),
+        order=order,
+        wrap=True,
+        boundary_condition="periodic",
     )
 
     coefficients = input.coefficients
@@ -974,27 +961,26 @@ def test_cubic_interpolation_matches_analytic(
     [TWO_DRIVER_SYSTEM],
     indirect=True,
 )
-def test_check_against_system_drivers_orders_by_declared_order(
+def test_ordered_samples_follow_the_declared_order(
     system, precision
 ) -> None:
-    """Driver entries are reordered to the system's declared order."""
+    """Driver columns are reordered to the system's declared order."""
 
     samples_a = np.full(6, 2.0, dtype=precision)
     samples_b = np.full(6, 5.0, dtype=precision)
-    shuffled = {
-        "d_b": samples_b,
-        "d_a": samples_a,
-        "driver_sample_period": precision(0.1),
-        "wrap": False,
-    }
+    shuffled = DriverSamples(
+        {"d_b": samples_b, "d_a": samples_a},
+        driver_sample_period=precision(0.1),
+        t0=precision(0.5),
+    )
 
-    ordered = ArrayInterpolator.check_against_system_drivers(shuffled, system)
+    ordered = shuffled.ordered(system.indices.driver_names)
 
-    driver_keys = [key for key in ordered if key in ("d_a", "d_b")]
-    assert driver_keys == list(system.indices.driver_names)
-    # Non-driver configuration/timing entries are preserved.
-    assert ordered["driver_sample_period"] == precision(0.1)
-    assert ordered["wrap"] is False
+    assert ordered.names == tuple(system.indices.driver_names)
+    assert ordered.driver_sample_period == precision(0.1)
+    assert ordered.t0 == precision(0.5)
+    np.testing.assert_array_equal(ordered.input_array[:, 0], samples_a)
+    np.testing.assert_array_equal(ordered.input_array[:, 1], samples_b)
 
 
 @pytest.mark.parametrize(
@@ -1010,28 +996,21 @@ def test_interpolator_columns_track_declared_driver_order(
     samples_a = np.full(6, 2.0, dtype=precision)
     samples_b = np.full(6, 5.0, dtype=precision)
 
-    forward = {
-        "d_a": samples_a,
-        "d_b": samples_b,
-        "driver_sample_period": precision(0.1),
-    }
-    reversed_dict = {
-        "d_b": samples_b,
-        "d_a": samples_a,
-        "driver_sample_period": precision(0.1),
-    }
+    forward = DriverSamples(
+        {"d_a": samples_a, "d_b": samples_b},
+        driver_sample_period=precision(0.1),
+    )
+    reversed_samples = DriverSamples(
+        {"d_b": samples_b, "d_a": samples_a},
+        driver_sample_period=precision(0.1),
+    )
+    names = system.indices.driver_names
 
     forward_interp = ArrayInterpolator(
-        precision=precision,
-        input_dict=ArrayInterpolator.check_against_system_drivers(
-            forward, system
-        ),
+        precision=precision, drivers=forward.ordered(names)
     )
     reversed_interp = ArrayInterpolator(
-        precision=precision,
-        input_dict=ArrayInterpolator.check_against_system_drivers(
-            reversed_dict, system
-        ),
+        precision=precision, drivers=reversed_samples.ordered(names)
     )
 
     # Column 0 holds d_a (constant 2.0), column 1 holds d_b (constant 5.0)
@@ -1055,37 +1034,30 @@ def test_construction_rejects_non_convertible_array(precision):
     ValueError naming the offending key.
     """
     with pytest.raises(ValueError, match="could not be converted"):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
-                "values": ["a", "b", "c"],
-                "driver_sample_period": precision(0.1),
-            },
+        DriverSamples(
+            {"values": ["a", "b", "c"]},
+            driver_sample_period=precision(0.1),
         )
 
 
 def test_construction_rejects_multidimensional_input(precision):
     """A two-dimensional input array raises ValueError."""
     with pytest.raises(ValueError, match="must be one-dimensional"):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
-                "values": np.zeros((3, 2), dtype=precision),
-                "driver_sample_period": precision(0.1),
-            },
+        DriverSamples(
+            {"values": np.zeros((3, 2), dtype=precision)},
+            driver_sample_period=precision(0.1),
         )
 
 
 def test_construction_rejects_mismatched_input_lengths(precision):
     """Input vectors of differing lengths raise ValueError."""
     with pytest.raises(ValueError, match="same length"):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
+        DriverSamples(
+            {
                 "a": np.zeros(5, dtype=precision),
                 "b": np.zeros(4, dtype=precision),
-                "driver_sample_period": precision(0.1),
             },
+            driver_sample_period=precision(0.1),
         )
 
 
@@ -1094,15 +1066,15 @@ def test_construction_rejects_too_few_samples(precision):
     with pytest.raises(ValueError, match="At least order \\+ 1 samples"):
         ArrayInterpolator(
             precision=precision,
-            input_dict={
-                "values": np.array([1.0, 2.0], dtype=precision),
-                "order": 3,
-                "driver_sample_period": precision(0.1),
-            },
+            drivers=DriverSamples(
+                {"values": np.array([1.0, 2.0], dtype=precision)},
+                driver_sample_period=precision(0.1),
+            ),
+            order=3,
         )
 
 
-# ── _validate_time_inputs ───────────────────────────────────────────── #
+# ── DriverSamples time base ─────────────────────────────────────────── #
 
 
 def test_construction_rejects_both_dt_and_time(precision):
@@ -1110,25 +1082,19 @@ def test_construction_rejects_both_dt_and_time(precision):
     with pytest.raises(
         ValueError, match="Only one of driver_sample_period or time"
     ):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
-                "values": np.arange(4, dtype=precision),
-                "driver_sample_period": precision(0.1),
-                "time": np.arange(4, dtype=precision),
-            },
+        DriverSamples(
+            {"values": np.arange(4, dtype=precision)},
+            driver_sample_period=precision(0.1),
+            time=np.arange(4, dtype=precision),
         )
 
 
 def test_construction_rejects_multidimensional_time(precision):
     """A two-dimensional time array raises ValueError."""
     with pytest.raises(ValueError, match="Time array must be"):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
-                "values": np.arange(4, dtype=precision),
-                "time": np.zeros((4, 1), dtype=precision),
-            },
+        DriverSamples(
+            {"values": np.arange(4, dtype=precision)},
+            time=np.zeros((4, 1), dtype=precision),
         )
 
 
@@ -1138,36 +1104,27 @@ def test_construction_rejects_time_length_mismatch(precision):
     ValueError.
     """
     with pytest.raises(ValueError, match="must match the number"):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
-                "values": np.arange(4, dtype=precision),
-                "time": np.arange(5, dtype=precision),
-            },
+        DriverSamples(
+            {"values": np.arange(4, dtype=precision)},
+            time=np.arange(5, dtype=precision),
         )
 
 
 def test_construction_rejects_non_increasing_time(precision):
     """A non-strictly-increasing time array raises ValueError."""
     with pytest.raises(ValueError, match="strictly increasing"):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
-                "values": np.array([1.0, 2.0, 3.0, 4.0], dtype=precision),
-                "time": np.array([0.0, 1.0, 1.0, 2.0], dtype=precision),
-            },
+        DriverSamples(
+            {"values": np.array([1.0, 2.0, 3.0, 4.0], dtype=precision)},
+            time=np.array([0.0, 1.0, 1.0, 2.0], dtype=precision),
         )
 
 
 def test_construction_rejects_non_uniform_time(precision):
     """A non-uniformly-spaced time array raises ValueError."""
     with pytest.raises(ValueError, match="uniformly spaced"):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={
-                "values": np.array([1.0, 2.0, 3.0, 4.0], dtype=precision),
-                "time": np.array([0.0, 1.0, 3.0, 4.0], dtype=precision),
-            },
+        DriverSamples(
+            {"values": np.array([1.0, 2.0, 3.0, 4.0], dtype=precision)},
+            time=np.array([0.0, 1.0, 3.0, 4.0], dtype=precision),
         )
 
 
@@ -1176,10 +1133,7 @@ def test_construction_rejects_neither_dt_nor_time(precision):
     with pytest.raises(
         ValueError, match="time array or driver_sample_period"
     ):
-        ArrayInterpolator(
-            precision=precision,
-            input_dict={"values": np.arange(4, dtype=precision)},
-        )
+        DriverSamples({"values": np.arange(4, dtype=precision)})
 
 
 # ── update() ─────────────────────────────────────────────────────────── #
@@ -1195,12 +1149,12 @@ def test_update_accepts_kwargs(precision):
     """kwargs passed to update() are merged and recognised."""
     interp = ArrayInterpolator(
         precision=precision,
-        input_dict={
-            "values": np.arange(6, dtype=precision),
-            "driver_sample_period": precision(0.1),
-            "order": 2,
-            "wrap": False,
-        },
+        drivers=DriverSamples(
+            {"values": np.arange(6, dtype=precision)},
+            driver_sample_period=precision(0.1),
+        ),
+        order=2,
+        wrap=False,
     )
     recognised = interp.update(order=1)
     assert "order" in recognised
@@ -1213,13 +1167,13 @@ def test_update_raises_on_unrecognised_parameter(quadratic_input):
         quadratic_input.update(not_a_real_parameter=1)
 
 
-# ── get_input_array / get_interpolated ──────────────────────────────── #
+# ── input_array / get_interpolated ──────────────────────────────────── #
 
 
-def test_get_input_array_returns_normalised_array(quadratic_input):
-    """get_input_array returns the stored normalised input array."""
-    array = quadratic_input.get_input_array()
-    assert array is quadratic_input.input_array
+def test_input_array_is_the_samples_table(quadratic_input):
+    """The interpolator's input array is its drivers' sample table."""
+    drivers = quadratic_input.compile_settings.drivers
+    assert quadratic_input.input_array is drivers.input_array
 
 
 def test_get_interpolated_empty_times_returns_empty_array(quadratic_input):
@@ -1230,18 +1184,18 @@ def test_get_interpolated_empty_times_returns_empty_array(quadratic_input):
 
 def test_get_interpolated_with_no_inputs_returns_empty_columns(precision):
     """An empty interpolator evaluates to a (times, 0) array."""
-    interp = ArrayInterpolator(precision=precision, input_dict={})
+    interp = ArrayInterpolator(precision=precision)
     result = interp.get_interpolated(np.array([0.5, 1.5], dtype=precision))
     assert result.shape == (2, 0)
     assert result.dtype == precision
 
 
-# ── Empty input set ─────────────────────────────────────────────────── #
+# ── No drivers ──────────────────────────────────────────────────────── #
 
 
-def test_empty_input_dict_configures_empty_interpolator(precision):
-    """No inputs means no segments and a zero-sized coefficient table."""
-    interp = ArrayInterpolator(precision=precision, input_dict={})
+def test_no_drivers_configures_empty_interpolator(precision):
+    """No drivers means no segments and a zero-sized coefficient table."""
+    interp = ArrayInterpolator(precision=precision)
     assert interp.num_inputs == 0
     assert interp.num_samples == 0
     assert interp.num_segments == 0
@@ -1256,24 +1210,26 @@ def test_empty_input_dict_configures_empty_interpolator(precision):
 def test_empty_interpolator_keeps_its_identity_across_empty_updates(
     precision,
 ):
-    """Re-applying an empty input set changes nothing."""
-    interp = ArrayInterpolator(precision=precision, input_dict={})
+    """Re-applying no drivers changes nothing."""
+    interp = ArrayInterpolator(precision=precision)
     identity = interp.compile_settings.values_hash
     coefficients = interp.coefficients
-    interp.update_from_dict({})
+    interp.update(drivers=None)
     assert interp.compile_settings.values_hash == identity
     assert interp.coefficients is coefficients
 
 
 def test_empty_interpolator_populates_from_samples(precision):
     """Samples supplied later build a full table and a new identity."""
-    interp = ArrayInterpolator(precision=precision, input_dict={})
+    interp = ArrayInterpolator(precision=precision)
     identity = interp.compile_settings.values_hash
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    recognised = interp.update_from_dict(
-        {"values": times**2, "time": times, "order": 2, "wrap": False}
+    recognised = interp.update(
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
     )
-    assert {"input_array", "order", "wrap"} <= recognised
+    assert {"drivers", "order", "wrap"} <= recognised
     assert interp.compile_settings.values_hash != identity
     assert callable(interp.drivers_fn)
     assert callable(interp.driver_derivative_fn)
@@ -1285,7 +1241,7 @@ def test_empty_interpolator_populates_from_samples(precision):
     assert np.all(np.isfinite(evaluated))
 
 
-# ── check_against_system_drivers ────────────────────────────────────── #
+# ── DriverSamples.ordered ───────────────────────────────────────────── #
 
 
 @pytest.mark.parametrize(
@@ -1293,16 +1249,14 @@ def test_empty_interpolator_populates_from_samples(precision):
     [TWO_DRIVER_SYSTEM],
     indirect=True,
 )
-def test_check_against_system_drivers_rejects_wrong_count(system, precision):
+def test_ordered_rejects_wrong_count(system, precision):
     """A driver-count mismatch raises ValueError."""
+    samples = DriverSamples(
+        {"d_a": np.zeros(4, dtype=precision)},
+        driver_sample_period=precision(0.1),
+    )
     with pytest.raises(ValueError, match="does not match number of"):
-        ArrayInterpolator.check_against_system_drivers(
-            {
-                "d_a": np.zeros(4, dtype=precision),
-                "driver_sample_period": precision(0.1),
-            },
-            system,
-        )
+        samples.ordered(system.indices.driver_names)
 
 
 @pytest.mark.parametrize(
@@ -1310,19 +1264,17 @@ def test_check_against_system_drivers_rejects_wrong_count(system, precision):
     [TWO_DRIVER_SYSTEM],
     indirect=True,
 )
-def test_check_against_system_drivers_rejects_wrong_symbols(
-    system, precision,
-):
+def test_ordered_rejects_wrong_symbols(system, precision):
     """A driver-name mismatch raises ValueError."""
+    samples = DriverSamples(
+        {
+            "d_a": np.zeros(4, dtype=precision),
+            "not_a_driver": np.zeros(4, dtype=precision),
+        },
+        driver_sample_period=precision(0.1),
+    )
     with pytest.raises(ValueError, match="do not match drivers"):
-        ArrayInterpolator.check_against_system_drivers(
-            {
-                "d_a": np.zeros(4, dtype=precision),
-                "not_a_driver": np.zeros(4, dtype=precision),
-                "driver_sample_period": precision(0.1),
-            },
-            system,
-        )
+        samples.ordered(system.indices.driver_names)
 
 
 # ── _compute_coefficients: periodic-boundary guards ─────────────────── #
@@ -1336,12 +1288,12 @@ def test_periodic_boundary_requires_wrap(precision):
     with pytest.raises(ValueError, match="require wrap=True"):
         ArrayInterpolator(
             precision=precision,
-            input_dict={
-                "values": np.arange(6, dtype=precision),
-                "driver_sample_period": precision(0.1),
-                "wrap": False,
-                "boundary_condition": "periodic",
-            },
+            drivers=DriverSamples(
+                {"values": np.arange(6, dtype=precision)},
+                driver_sample_period=precision(0.1),
+            ),
+            wrap=False,
+            boundary_condition="periodic",
         )
 
 
@@ -1354,11 +1306,10 @@ def test_periodic_boundary_requires_matching_endpoints(precision):
     with pytest.raises(ValueError, match="first and last samples"):
         ArrayInterpolator(
             precision=precision,
-            input_dict={
-                "values": values,
-                "driver_sample_period": precision(0.1),
-                "wrap": True,
-            },
+            drivers=DriverSamples(
+                {"values": values}, driver_sample_period=precision(0.1)
+            ),
+            wrap=True,
         )
 
 
@@ -1375,13 +1326,10 @@ def test_not_a_knot_order_two_uses_single_start_constraint(precision):
     values = times**2
     interp = ArrayInterpolator(
         precision=precision,
-        input_dict={
-            "values": values,
-            "time": times,
-            "order": 2,
-            "wrap": False,
-            "boundary_condition": "not-a-knot",
-        },
+        drivers=DriverSamples({"values": values}, time=times),
+        order=2,
+        wrap=False,
+        boundary_condition="not-a-knot",
     )
     assert interp.coefficients is not None
 
@@ -1394,13 +1342,10 @@ def test_settings_only_update_recomputes_coefficients(precision):
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
     interp = ArrayInterpolator(
         precision=precision,
-        input_dict={
-            "values": times**2,
-            "time": times,
-            "order": 2,
-            "wrap": False,
-            "boundary_condition": "clamped",
-        },
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
+        boundary_condition="clamped",
     )
     base_segments = interp.num_samples - 1
     assert interp.num_segments == base_segments + 2
@@ -1422,26 +1367,25 @@ def test_settings_only_update_recomputes_coefficients(precision):
     assert np.all(np.isfinite(evaluated))
 
 
-def test_update_from_dict_applies_config_change_with_equal_arrays(
-    precision,
-):
-    """Equal arrays with new settings still refresh the evaluator."""
+def test_update_applies_config_change_with_equal_samples(precision):
+    """Equal samples with new settings still refresh the evaluator."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    input_dict = {
-        "values": times**2,
-        "time": times,
-        "order": 2,
-        "wrap": False,
-        "boundary_condition": "clamped",
-    }
-    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    settings = {"order": 2, "wrap": False, "boundary_condition": "clamped"}
+    interp = ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples({"values": times**2}, time=times),
+        **settings,
+    )
     identity = interp.compile_settings.values_hash
-    interp.update_from_dict(dict(input_dict))
+    interp.update(
+        drivers=DriverSamples({"values": times**2}, time=times), **settings
+    )
     assert interp.compile_settings.values_hash == identity
 
-    changed_dict = dict(input_dict)
-    changed_dict["order"] = 3
-    interp.update_from_dict(changed_dict)
+    interp.update(
+        drivers=DriverSamples({"values": times**2}, time=times),
+        **{**settings, "order": 3},
+    )
     assert interp.compile_settings.values_hash != identity
     assert interp.order == 3
     assert interp.coefficients_shape[2] == 4
@@ -1454,9 +1398,12 @@ def test_update_from_dict_applies_config_change_with_equal_arrays(
 def test_coefficients_are_a_cached_build_output(precision):
     """The table is read from the build cache and rebuilt with it."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    input_dict = {"values": times**2, "time": times, "order": 2,
-                  "wrap": False}
-    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    interp = ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
+    )
     first = interp.coefficients
     assert interp.cache_valid
     assert interp.get_cached_output("coefficients") is first
@@ -1475,15 +1422,18 @@ def test_value_update_rebuilds_the_table_without_changing_identity(
 ):
     """New sample values yield a new table under the same settings hash."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    input_dict = {"values": times**2, "time": times, "order": 2,
-                  "wrap": False}
-    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    interp = ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
+    )
     first = interp.coefficients
     identity = interp.compile_settings.values_hash
 
-    changed = dict(input_dict)
-    changed["values"] = times**2 + 1.0
-    interp.update_from_dict(changed)
+    interp.update(
+        drivers=DriverSamples({"values": times**2 + 1.0}, time=times)
+    )
 
     rebuilt = interp.coefficients
     assert interp.compile_settings.values_hash == identity
@@ -1501,42 +1451,51 @@ def test_value_update_rebuilds_the_table_without_changing_identity(
 def test_equal_sample_values_keep_the_same_table(precision):
     """Re-supplying identical samples neither rebuilds nor rehashes."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    input_dict = {"values": times**2, "time": times, "order": 2,
-                  "wrap": False}
-    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    interp = ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
+    )
     first = interp.coefficients
     identity = interp.compile_settings.values_hash
 
-    interp.update_from_dict(dict(input_dict))
+    interp.update(drivers=DriverSamples({"values": times**2}, time=times))
     assert interp.coefficients is first
     assert interp.compile_settings.values_hash == identity
 
 
-def test_update_rejects_an_undersized_input_array(precision):
-    """A raw table with fewer than order + 1 samples is refused."""
+def test_update_rejects_undersized_samples(precision):
+    """Samples with fewer than order + 1 rows are refused."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    input_dict = {"values": times**2, "time": times, "order": 2,
-                  "wrap": False}
-    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    interp = ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
+    )
+    short = DriverSamples(
+        {"values": np.ones(2, dtype=precision)},
+        driver_sample_period=precision(1.0),
+    )
     with pytest.raises(ValueError, match=r"order \+ 1 samples"):
-        interp.update(input_array=np.ones((2, 1), dtype=precision))
-    with pytest.raises(ValueError, match="two-dimensional"):
-        interp.update(input_array=np.ones(6, dtype=precision))
+        interp.update(drivers=short)
     assert interp.input_array.shape == (6, 1)
 
 
 def test_coefficients_buffer_reallocated_on_shape_change(precision):
     """A segment-count change produces a new coefficients array."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    input_dict = {"values": times**2, "time": times, "order": 2,
-                  "wrap": False}
-    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    interp = ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
+    )
     first = interp.coefficients
 
     longer = np.arange(0.0, 9.0, 1.0, dtype=precision)
-    interp.update_from_dict(
-        {"values": longer**2, "time": longer, "order": 2, "wrap": False}
-    )
+    interp.update(drivers=DriverSamples({"values": longer**2}, time=longer))
 
     assert interp.coefficients is not first
     assert interp.coefficients.shape == interp.coefficients_shape
@@ -1546,7 +1505,10 @@ def test_coefficients_buffer_reallocated_on_shape_change(precision):
 def test_coefficients_land_pinned_below_ceiling(precision):
     """Coefficients are page-locked for direct async transfer."""
     times = np.arange(0.0, 6.0, 1.0, dtype=precision)
-    input_dict = {"values": times**2, "time": times, "order": 2,
-                  "wrap": False}
-    interp = ArrayInterpolator(precision=precision, input_dict=input_dict)
+    interp = ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples({"values": times**2}, time=times),
+        order=2,
+        wrap=False,
+    )
     assert is_pinned_array(interp.coefficients)

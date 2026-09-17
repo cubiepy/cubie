@@ -74,10 +74,10 @@ is what makes it hold.
 only defines the container and its derived metadata; treat its `_*` fields as `init=False` computed
 state set in `__attrs_post_init__` (never set them directly).
 
-### Driver settings
-Keys in `DRIVER_SETTING_KEYS` (`time`, `driver_sample_period`, `wrap`, `order`) are configuration, not driver
-symbols; they're stripped before building driver names and reattached via
-`drivers.set_passthrough_defaults`.
+### Driver declarations
+A driver dict maps driver symbols to default values, attached via
+`drivers.set_passthrough_defaults`. Sampled driver data is a Solver setting
+(`DriverSamples`), never part of the system declaration.
 
 ### CellML (optional)
 `cellmlmanip` is imported in a `try/except` and may be `None`; `load_cellml_model` raises
