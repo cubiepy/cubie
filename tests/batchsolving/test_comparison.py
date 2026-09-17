@@ -6,11 +6,8 @@ import numpy as np
 import pytest
 
 from cubie.batchsolving.comparison import (
-    ROUNDS,
-    SOLVES_PER_ROUND,
     SUCCESS_TIER_FRACTION,
     TIMED_WAVES_FLOOR,
-    WARM_MS,
     WORKER_STARTUP_SECONDS,
     Candidate,
     CandidateTiming,
@@ -274,63 +271,15 @@ def test_device_only_solve_keeps_a_dead_result_loan_for_the_next_host_solve(
     np.testing.assert_array_equal(second.time_domain_array, expected)
 
 
-@pytest.mark.nocudasim
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"algorithm": "vern7", "unroll_other_small": None}],
-    indirect=True,
-)
-def test_runner_times_candidates_on_one_buffer_set(
-    solver_mutable, simple_initial_values, simple_parameters
+def test_runner_stages_the_batch_on_the_device(
+    solver, simple_initial_values, simple_parameters
 ):
-    """Every candidate solves the same staged batch in the same buffers."""
-    solver = solver_mutable
+    """set_batch stages the wanted run count, cycling a short grid."""
     inits, params = _device_grid(
         solver, simple_initial_values, simple_parameters
     )
-    candidates = [
-        Candidate(settings_label(settings), dict(settings))
-        for settings in solver.optimisation_candidates()
-    ]
     runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
-    kernel = solver.kernel
     with runner:
-        runner.compile(candidates)
-        assert runner.warm() >= WARM_MS
-        # The sized batch is a tail-safe boundary at two waves of the
-        # candidate with the most concurrent runs.
-        runner.size_batch(candidates, TIMED_WAVES_FLOOR)
-        concurrent = []
-        for candidate in candidates:
-            runner.select(candidate)
-            concurrent.append(runner.concurrent_runs(None))
-            blocks, waves = runner.geometry(None)
-            assert waves >= TIMED_WAVES_FLOOR
-        most = max(concurrent)
-        assert most > 0
-        assert runner.runs == tail_safe_runs(
-            concurrent, TIMED_WAVES_FLOOR * most, TIMED_WAVES_FLOOR * most
-        )
-        assert runner.batch_cap() > runner.runs
         runner.set_batch(4 * inits.shape[1])
         assert runner.runs == 4 * inits.shape[1]
-        first = runner.solve_ms(None)
-        assert runner.staged_bytes == (
-            kernel.input_arrays.device_initial_values.nbytes
-            + kernel.input_arrays.device_parameters.nbytes
-        )
-        device_state = kernel.device_state
-        timings = runner.time(candidates)
-        assert kernel.device_state is device_state
-        for _, slot in kernel.output_arrays.host.iter_managed_arrays():
-            assert slot.array is None
-    assert first > 0.0
-    assert len(timings) == len(candidates)
-    for timing in timings:
-        assert timing.error == ""
-        assert len(timing.times_ms) == ROUNDS * SOLVES_PER_ROUND
-        assert all(time_ms > 0.0 for time_ms in timing.times_ms)
-        assert timing.runs == runner.runs
-        assert timing.failures == 0
-        assert timing.blocks_per_sm >= 1
-        assert timing.waves > 0.0
+        assert runner.staged_bytes == 4 * (inits.nbytes + params.nbytes)

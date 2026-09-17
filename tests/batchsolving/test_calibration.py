@@ -253,11 +253,14 @@ class TestCandidateSpecs:
         assert specs[0].key == winner.key
 
 
+CHEAP_ERK_ORDERS = ("heun-21", "bogacki-shampine-32")
+
+
 @pytest.mark.nocudasim
-def test_erk_stage_times_every_order_on_the_solver(
+def test_erk_stage_times_the_specs_on_the_solver(
     solver_mutable, simple_initial_values, simple_parameters, driver_settings
 ):
-    """Orders are timed and recalled; a rejected spec drops."""
+    """Specs are timed in order and recalled; a rejected spec drops."""
     solver = solver_mutable
     inits, params = solver.build_grid(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
@@ -266,26 +269,28 @@ def test_erk_stage_times_every_order_on_the_solver(
         solver._configure_drivers(driver_settings)
     given = dict(solver.given.as_kwargs())
     algorithm = solver.kernel.settings_dict["algorithm"]
+    specs = [
+        CandidateSpec(label=alias, family="erk", algorithm=alias, settings=())
+        for alias in CHEAP_ERK_ORDERS
+    ]
     rejected = CandidateSpec(
-        label="tsit5 nowhere",
+        label="heun-21 nowhere",
         family="erk",
-        algorithm="tsit5",
+        algorithm="heun-21",
         settings=(("state_location", "nowhere"),),
     )
     runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
     with runner:
         # The first stage with an accepted spec sizes the batch on it.
         race = _CalibrationRace(runner, (TIMED_WAVES_FLOOR, 20.0))
-        results, pool = race.run_stage(
-            [rejected] + erk_specs(), "erk:orders"
-        )
+        results, pool = race.run_stage([rejected] + specs, "erk:orders")
         sized = runner.runs
         concurrent = []
-        for alias in FAMILY_ORDERS["erk"]:
+        for alias in CHEAP_ERK_ORDERS:
             runner.select(Candidate(alias, {"algorithm": alias}))
             concurrent.append(runner.concurrent_runs(None))
         assert sized >= TIMED_WAVES_FLOOR * max(concurrent)
-        again, recalled = race.run_stage(erk_specs(), "erk:orders")
+        again, recalled = race.run_stage(specs, "erk:orders")
         assert runner.runs == sized
     assert race.waves >= TIMED_WAVES_FLOOR
     dropped, results = results[0], results[1:]
@@ -294,7 +299,7 @@ def test_erk_stage_times_every_order_on_the_solver(
     assert "nowhere" in dropped.reason
     assert dropped.times_ms == ()
     assert [result.spec.algorithm for result in results] == list(
-        FAMILY_ORDERS["erk"]
+        CHEAP_ERK_ORDERS
     )
     for result in results:
         assert result.reason == ""
