@@ -414,11 +414,10 @@ def compile_kernels(
         for index, settings in enumerate(settings_sets):
             try:
                 select(settings)
-                cached = solver.kernel.kernel_is_cached()
             except Exception as exc:
                 errors[index] = f"{type(exc).__name__}: {exc}"
                 continue
-            if not cached:
+            if not solver.kernel.kernel_is_cached():
                 missing.append(index)
         # The first miss's compile time decides whether the rest pool.
         compile_seconds = None
