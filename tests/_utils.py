@@ -1335,6 +1335,7 @@ def _driver_sequence(
 # load_cellml_model), and test-harness metadata. Solver rejects
 # unconsumed kwargs, so these are stripped before construction.
 NON_SOLVER_SETTINGS = {
+    "duration",
     "warmup",
     "t0",
     "blocksize",

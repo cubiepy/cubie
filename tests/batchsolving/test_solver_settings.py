@@ -10,6 +10,7 @@ from attrs import evolve, fields, fields_dict
 from cubie.array_interpolator import ALL_INTERPOLATOR_PARAMETERS
 from cubie.batchsolving.BatchSolverConfig import ALL_KERNEL_PARAMETERS
 from cubie.batchsolving.resolve_defaults import (
+    check_duration,
     check_loop_timing,
     resolve,
     resolve_inner_tolerances,
@@ -104,7 +105,6 @@ def test_record_matches_the_children_settings(system):
         | set(OutputFunctions.system_inputs(system))
     )
     solver_own = {
-        "duration",
         "tableau",
         "save_variables",
         "summarise_variables",
@@ -448,27 +448,36 @@ def test_summaries_need_a_sample_interval():
 def test_final_summary_needs_one_sample_in_the_run():
     """A sample interval with no event inside the run raises."""
     timing = resolve_loop_timing(None, None, 0.505, False, True)
+    check_loop_timing(timing)
     with pytest.raises(ValueError, match="sample_summaries_every"):
-        check_loop_timing(timing, 0.5, np.float32)
+        check_duration(timing, 0.5, np.float32)
 
 
 def test_sample_interval_equal_to_the_run_passes():
     """One sample landing on t_end is a valid final summary."""
     timing = resolve_loop_timing(None, None, 0.5, False, True)
-    check_loop_timing(timing, 0.5, np.float32)
+    check_duration(timing, 0.5, np.float32)
 
 
 def test_whole_number_of_saves_passes_in_float32():
     """A whole-number ratio the float32 casts push under passes."""
     timing = resolve_loop_timing(0.001, None, None, True, False)
-    check_loop_timing(timing, 10.0, np.float32)
+    check_duration(timing, 10.0, np.float32)
 
 
 def test_window_longer_than_the_run_raises():
     """A summary window with no event inside the run raises."""
     timing = resolve_loop_timing(None, 0.6, 0.1, False, True)
+    check_loop_timing(timing)
     with pytest.raises(ValueError, match="summarise_every"):
-        check_loop_timing(timing, 0.5, np.float32)
+        check_duration(timing, 0.5, np.float32)
+
+
+def test_sample_at_or_past_the_window_raises_at_resolution():
+    """A sample interval reaching the window raises before any solve."""
+    timing = resolve_loop_timing(None, 0.1, 0.1, False, True)
+    with pytest.raises(ValueError, match="sample_summaries_every"):
+        check_loop_timing(timing)
 
 
 def test_given_window_summarises_regularly():
@@ -809,7 +818,6 @@ def test_memory_manager_cannot_change_on_a_live_solver(solver_mutable):
 )
 def test_unset_window_keeps_the_build_across_durations(solver_mutable):
     """One summary at the end, whatever the duration."""
-    solver_mutable.update(duration=0.5)
     integrator = solver_mutable.kernel.single_integrator
     solver_mutable.kernel.kernel
     assert solver_mutable.summarise_every is None
@@ -817,14 +825,12 @@ def test_unset_window_keeps_the_build_across_durations(solver_mutable):
     assert integrator.summarise_last is True
     assert integrator.summaries_length(0.5) == 1
     assert solver_mutable.kernel._cache_valid
-    solver_mutable.update(duration=0.9)
-    assert solver_mutable.kernel._cache_valid
     assert integrator.summaries_length(0.9) == 1
 
 
 def test_unsetting_the_intervals_switches_to_last(solver_mutable):
     """Unset intervals give a final save and one summary."""
-    solver_mutable.update(duration=0.2, save_every=None, summarise_every=None)
+    solver_mutable.update(save_every=None, summarise_every=None)
     integrator = solver_mutable.kernel.single_integrator
     assert solver_mutable.save_every is None
     assert solver_mutable.summarise_every is None
@@ -847,21 +853,13 @@ def test_summaries_without_a_sample_interval_raise_at_construction(
         _build_solver_instance(system, solver_settings, driver_settings)
 
 
-def test_duration_with_explicit_timing_keeps_the_build(solver_mutable):
-    """A new duration under explicit timing changes nothing below."""
-    solver_mutable.kernel.kernel
-    assert solver_mutable.kernel._cache_valid
-    solver_mutable.update(duration=0.9)
-    assert solver_mutable.kernel._cache_valid
-
-
-def test_unchanged_duration_keeps_resolved_settings(solver_mutable):
-    """A repeated grouped duration keeps the resolved settings snapshot."""
-    solver_mutable.update(duration=0.9)
+def test_unchanged_setting_keeps_resolved_settings(solver_mutable):
+    """A repeated grouped setting keeps the resolved settings snapshot."""
+    solver_mutable.update(dt=0.009)
     given = solver_mutable.given
     effective = solver_mutable.effective
-    recognised = solver_mutable.update({"loop": {"duration": 0.9}})
-    assert recognised == {"loop", "duration"}
+    recognised = solver_mutable.update({"loop": {"dt": 0.009}})
+    assert recognised == {"loop", "dt"}
     assert solver_mutable.given is given
     assert solver_mutable.effective is effective
 

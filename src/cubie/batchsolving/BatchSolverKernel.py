@@ -560,35 +560,19 @@ class BatchSolverKernel(CUDAFactory):
         finally:
             self._memory_manager.end_work(self, stream)
 
-    def compile(
-        self,
-        duration: float,
-        warmup: float = 0.0,
-        t0: float = 0.0,
-    ) -> None:
-        """Record the time parameters and compile the kernel.
+    def compile(self) -> None:
+        """Compile the kernel.
 
-        Parameters
-        ----------
-        duration
-            Duration of the simulation window.
-        warmup
-            Warmup time before the main simulation.
-        t0
-            Initial integration time.
+        Raises
+        ------
+        RuntimeError
+            If the kernel has been closed.
         """
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "
                 "released; build a new Solver to run again."
             )
-        self.run_params = evolve(
-            self.run_params,
-            duration=np_float64(duration),
-            warmup=np_float64(warmup),
-            t0=np_float64(t0),
-            precision=self.single_integrator.precision,
-        )
         self._compile_specialization()
 
     def _compile_specialization(

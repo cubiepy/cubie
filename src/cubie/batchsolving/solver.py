@@ -67,7 +67,7 @@ from cubie.batchsolving.optimize import (
     performance_defaults,
     run_optimization,
 )
-from cubie.batchsolving.resolve_defaults import resolve
+from cubie.batchsolving.resolve_defaults import check_duration, resolve
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -299,7 +299,6 @@ def solve_ivp(
         system,
         algorithm=method,
         time_logging_level=time_logging_level,
-        duration=duration,
         **kwargs,
     )
 
@@ -670,7 +669,8 @@ class Solver:
         """
         if drivers is not None:
             kwargs["drivers"] = drivers
-        self.update(duration=duration, **kwargs)
+        self.update(**kwargs)
+        check_duration(self.effective.as_kwargs(), duration, self.precision)
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
@@ -710,9 +710,6 @@ class Solver:
 
     def compile(
         self,
-        duration: float = 1.0,
-        settling_time: float = 0.0,
-        t0: float = 0.0,
         optimize_candidates: bool = False,
         max_parallel: int = 4,
         **kwargs: Any,
@@ -721,12 +718,6 @@ class Solver:
 
         Parameters
         ----------
-        duration
-            Total integration time. Default is ``1.0``.
-        settling_time
-            Warm-up period before recording outputs. Default ``0.0``.
-        t0
-            Initial integration time. Default ``0.0``.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
@@ -734,25 +725,18 @@ class Solver:
         **kwargs
             Additional options forwarded to :meth:`update`.
         """
-        self.update(duration=duration, **kwargs)
+        self.update(**kwargs)
 
         if optimize_candidates:
             run_optimization(
                 self,
                 None,
                 None,
-                duration=duration,
-                settling_time=settling_time,
-                t0=t0,
                 compile_only=True,
                 max_parallel=max_parallel,
             )
 
-        self.kernel.compile(
-            duration=duration,
-            warmup=settling_time,
-            t0=t0,
-        )
+        self.kernel.compile()
 
     def build_grid(
         self,
@@ -1014,7 +998,7 @@ class Solver:
             Unknown names when not ``silent``.
         """
         updates = {**(updates_dict or {}), **kwargs}
-        if not updates:
+        if not updates and not self.kernel.system_config_stale:
             return set()
         updates, groups = unpack_dict_values(updates)
         given, recognised, changed = self.given.update(updates)

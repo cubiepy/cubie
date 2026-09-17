@@ -48,7 +48,6 @@ class SolverSettings(_CubieConfigBase):
     # -- Solver -------------------------------------------------------
     algorithm: Any = None
     tableau: Any = None
-    duration: Optional[float] = None
     time_logging_level: Optional[str] = None
     save_variables: Optional[List[str]] = None
     summarise_variables: Optional[List[str]] = None

@@ -517,19 +517,14 @@ def _newton_rtol_inverted(
     return bool(((controller > 0.0) & (newton >= controller)).any())
 
 
-def check_loop_timing(
-    timing: Dict[str, Any], duration: Optional[float], precision: type
-) -> None:
-    """Raise an error if requested save or summary timing is impossible
-    or returns zero samples.
+def check_loop_timing(timing: Dict[str, Any]) -> None:
+    """Raise an error if the summary window holds no sample.
 
     Raises
     ------
     ValueError
-        Save or summary timing that cannot produce output in the
-        integration, or summary timing that would save zero samples.
+        Summary timing that would save zero samples per window.
     """
-    save_every = timing["save_every"]
     summarise_every = timing["summarise_every"]
     sample_every = timing["sample_summaries_every"]
     if timing["summarise_regularly"] and sample_every >= summarise_every:
@@ -538,8 +533,31 @@ def check_loop_timing(
             f"({summarise_every}); The saved summary will be based on 0 "
             f"samples, so will result in 0/inf/NaN values."
         )
-    if duration is None:
-        return
+
+
+def check_duration(
+    timing: Dict[str, Any], duration: float, precision: type
+) -> None:
+    """Raise an error if a solve of ``duration`` produces no output.
+
+    Parameters
+    ----------
+    timing
+        The loop intervals and flags in effect, as
+        :func:`resolve_loop_timing` returns them.
+    duration
+        Integration time of the solve.
+    precision
+        Floating-point type the solve runs in.
+
+    Raises
+    ------
+    ValueError
+        Save or summary timing with no event inside ``duration``.
+    """
+    save_every = timing["save_every"]
+    summarise_every = timing["summarise_every"]
+    sample_every = timing["sample_summaries_every"]
 
     def events(interval: float) -> int:
         return regular_event_count(duration, interval, precision)
@@ -665,7 +683,7 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
         time_domain,
         summaries,
     )
-    check_loop_timing(timing, given.duration, precision)
+    check_loop_timing(timing)
     resolved.update(timing)
     if given.drivers is not None:
         # The kernel reads driver columns in the system's declared order.

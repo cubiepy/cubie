@@ -334,9 +334,8 @@ def test_compile_then_solve(
         parameters=simple_parameters,
         grid_type="combinatorial",
     )
-    solver_mutable.compile(drivers=driver_settings, duration=0.05)
+    solver_mutable.compile(drivers=driver_settings)
     kernel = solver_mutable.kernel
-    assert kernel.run_params.duration == 0.05
     assert kernel.run_params.runs == 1
     assert _batch_bytes(kernel) == 0
     result = solver_mutable.solve(
@@ -390,7 +389,7 @@ def test_compile_between_solves_keeps_the_batch_arrays(
     compiled = kernel.kernel
     batch_bytes = _batch_bytes(kernel)
 
-    solver.compile(drivers=driver_settings, duration=0.05)
+    solver.compile(drivers=driver_settings)
     kernel.launch_geometry()
     kernel.launchable_shapes()
     assert inputs.device_initial_values is device_inits
@@ -415,7 +414,7 @@ def test_launch_geometry_needs_no_batch(solver_mutable, driver_settings):
     """A fresh kernel sizes full and partial blocks."""
     solver = solver_mutable
     kernel = solver.kernel
-    solver.compile(drivers=driver_settings, duration=0.05)
+    solver.compile(drivers=driver_settings)
     pad = 4 if kernel.shared_memory_needs_padding else 0
     per_run = kernel.shared_memory_bytes + pad
     shapes = kernel.launchable_shapes()
@@ -442,7 +441,7 @@ def test_compile_publishes_solve_specialization(
     driver_settings,
 ):
     """Compile publishes the exact specialization a solve reuses."""
-    solver_mutable.compile(drivers=driver_settings, duration=0.05)
+    solver_mutable.compile(drivers=driver_settings)
     dispatcher = solver_mutable.kernel.kernel
     keys_after_compile = set(dispatcher.overloads)
     assert len(keys_after_compile) == 1
@@ -476,7 +475,7 @@ def test_compile_and_solve_device_input_layouts(
     initial, parameters = solver.build_grid(
         simple_initial_values, simple_parameters
     )
-    solver.compile(drivers=driver_settings, duration=0.05)
+    solver.compile(drivers=driver_settings)
     for runs in (4, 8):
         columns = np.arange(runs) % initial.shape[1]
         inits = np.take(initial, columns, axis=1)
@@ -505,7 +504,7 @@ def test_compile_and_solve_device_input_layouts(
             solver.kernel.kernel, solver.kernel.signature
         ).registers_per_thread > 0
         assert solver.kernel.launchable_shapes(runs=runs)
-        solver.compile(duration=0.05)
+        solver.compile()
         specializations = dict(solver.kernel._cache.specializations)
         signature = solver.kernel.signature
         repeated = solver.solve(*device_inputs, duration=0.05)
@@ -522,7 +521,7 @@ def test_signature_rebuilds_after_compile_setting_change(
     driver_settings,
 ):
     solver = solver_mutable
-    solver.compile(drivers=driver_settings, duration=0.05)
+    solver.compile(drivers=driver_settings)
     original_cache = solver.kernel._cache
     solver.update(max_registers=64)
     signature = solver.kernel.signature
