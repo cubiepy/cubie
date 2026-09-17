@@ -22,6 +22,7 @@ import logging
 import multiprocessing
 import pickle
 from math import ceil, isfinite
+from time import perf_counter
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from warnings import warn
 
@@ -320,11 +321,6 @@ def settings_in_effect(solver: Any) -> Dict[str, Any]:
     return values
 
 
-def _error(exc: Exception) -> str:
-    """Return the one-line record of ``exc``."""
-    return f"{type(exc).__name__}: {exc}"
-
-
 def _compile_solver(solver: Any) -> None:
     """Compile the solver's current configuration."""
     kernel = solver.kernel
@@ -332,10 +328,10 @@ def _compile_solver(solver: Any) -> None:
 
 
 def _pool_pays(
-    compile_seconds: Optional[float], misses: int, max_parallel: int
+    compile_seconds: float, misses: int, max_parallel: int
 ) -> bool:
     """Whether spawning workers beats compiling ``misses`` in turn."""
-    if compile_seconds is None or misses < 2 or max_parallel < 2:
+    if misses < 2 or max_parallel < 2:
         return False
     serial = compile_seconds * misses
     workers = min(max_parallel, misses)
@@ -359,7 +355,7 @@ def _compile_candidate(payload: Tuple) -> Tuple[int, str]:
         _compile_solver(solver)
         return index, ""
     except Exception as exc:
-        return index, _error(exc)
+        return index, f"{type(exc).__name__}: {exc}"
     finally:
         if solver is not None:
             solver.close()
@@ -419,23 +415,22 @@ def compile_kernels(
                 solver.cache_enabled and solver.kernel.kernel_is_cached()
             )
         except Exception as exc:
-            errors[index] = _error(exc)
+            errors[index] = f"{type(exc).__name__}: {exc}"
             continue
         if not cached:
             missing.append(index)
     # The first miss's compile time decides whether the rest pool.
-    compile_seconds = None
+    compile_seconds = 0.0
     while missing:
         index = missing.pop(0)
+        started = perf_counter()
         try:
             select(settings_sets[index])
             _compile_solver(solver)
         except Exception as exc:
-            errors[index] = _error(exc)
+            errors[index] = f"{type(exc).__name__}: {exc}"
             continue
-        compile_seconds = default_timelogger.get_event_duration(
-            "compile_cuda_kernel"
-        )
+        compile_seconds = perf_counter() - started
         break
     if missing and solver.cache_enabled and _pool_pays(
         compile_seconds, len(missing), max_parallel
@@ -451,11 +446,10 @@ def compile_kernels(
                 select(settings_sets[index])
                 _compile_solver(solver)
             except Exception as exc:
-                errors[index] = _error(exc)
-    if keys:
-        # Opening values back first, then the given record.
-        solver.update(opening, silent=True)
-        solver.update({key: given.get(key) for key in keys}, silent=True)
+                errors[index] = f"{type(exc).__name__}: {exc}"
+    # Opening values back first, then the given record.
+    solver.update(opening, silent=True)
+    solver.update({key: given.get(key) for key in keys}, silent=True)
     return tuple(errors)
 
 

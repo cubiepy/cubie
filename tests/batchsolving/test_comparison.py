@@ -111,7 +111,6 @@ def test_rank_timings_empty_without_timed_candidates():
 def test_pool_pays_only_when_serial_compiles_cost_more():
     """Spawning workers is chosen from the measured compile time."""
     pays = _pool_pays
-    assert pays(None, 5, 4) is False
     assert pays(80.0, 1, 4) is False
     assert pays(1.0, 5, 4) is False
     assert pays(80.0, 5, 4) is True
