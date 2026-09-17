@@ -549,6 +549,7 @@ def run_optimization(
     auto_size: bool = True,
     waves: int = 5,
     target_ms: float = 20.0,
+    max_parallel: int = 4,
 ) -> OptimizeResult:
     """Time the solver's candidate kernels on itself; apply the fastest.
 
@@ -589,6 +590,8 @@ def run_optimization(
     target_ms
         Kernel milliseconds per timed solve ``auto_size`` aims for by
         raising the duration, never past yours, then the batch.
+    max_parallel
+        Maximum compilations to run in parallel.
 
     Returns
     -------
@@ -616,7 +619,14 @@ def run_optimization(
         else None
     )
     runner = ComparisonRunner(
-        parent, inits, params, duration, settling_time, t0, verbose
+        parent,
+        inits,
+        params,
+        duration,
+        settling_time,
+        t0,
+        verbose,
+        max_parallel=max_parallel,
     )
     kernel = parent.kernel
     with runner:

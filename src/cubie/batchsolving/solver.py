@@ -844,6 +844,7 @@ class Solver:
         auto_size: bool = True,
         waves: int = 5,
         target_ms: float = 20.0,
+        max_parallel: int = 4,
     ) -> CalibrationResult:
         """Race solver configurations and pick the fastest.
 
@@ -895,6 +896,8 @@ class Solver:
         target_ms
             Kernel milliseconds per timed solve the batch is sized
             for. Default ``20.0``.
+        max_parallel
+            Maximum compilations to run in parallel.
 
         Returns
         -------
@@ -923,6 +926,7 @@ class Solver:
             auto_size=auto_size,
             waves=waves,
             target_ms=target_ms,
+            max_parallel=max_parallel,
         )
 
     def optimize(
@@ -940,6 +944,7 @@ class Solver:
         auto_size: bool = True,
         waves: int = 5,
         target_ms: float = 20.0,
+        max_parallel: int = 4,
     ) -> OptimizeResult:
         """Time placement, unrolling and launch options; keep the fastest.
 
@@ -978,6 +983,8 @@ class Solver:
         target_ms
             Kernel milliseconds per timed solve ``auto_size`` aims for.
             Default ``20.0``.
+        max_parallel
+            Maximum compilations to run in parallel.
 
         Returns
         -------
@@ -1004,6 +1011,7 @@ class Solver:
             auto_size=auto_size,
             waves=waves,
             target_ms=target_ms,
+            max_parallel=max_parallel,
         )
 
     def update(

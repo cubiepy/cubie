@@ -371,6 +371,7 @@ def test_optimize_times_candidates_and_applies_the_fastest(
         grid_type="combinatorial",
         verbose=False,
         waves=waves,
+        max_parallel=1,
     )
     assert default_timelogger.verbosity == verbosity
     timed = [launch for launch in result.launches if launch.timed]
@@ -460,7 +461,7 @@ def test_optimize_times_candidates_and_applies_the_fastest(
 def test_invalid_arguments_are_rejected(solver, kwargs, message):
     """Bad waves or target_ms raise before anything is built."""
     with pytest.raises(ValueError, match=message):
-        solver.optimize({}, {}, **kwargs)
+        solver.optimize({}, {}, max_parallel=1, **kwargs)
 
 
 @pytest.mark.nocudasim
@@ -484,7 +485,9 @@ def _runner(solver, inits, params):
     grid_inits, grid_params = solver.build_grid(
         inits, params, grid_type="combinatorial"
     )
-    return ComparisonRunner(solver, grid_inits, grid_params, 0.1, 0.0, 0.0)
+    return ComparisonRunner(
+        solver, grid_inits, grid_params, 0.1, 0.0, 0.0, max_parallel=1
+    )
 
 
 @pytest.mark.parametrize(
@@ -522,6 +525,7 @@ def test_optimize_takes_device_grids(
         verbose=False,
         apply=False,
         auto_size=auto_size,
+        max_parallel=1,
     )
     assert result.best is not None
     assert result.runs > 0
