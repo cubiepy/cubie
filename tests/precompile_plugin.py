@@ -664,8 +664,7 @@ import cubie  # noqa: E402, F401
 
 _attach_pending()
 
-# Candidate kernels compile in this process, never in spawned workers:
-# a pool that never pays keeps ``compile_kernels`` serial.
+# A pool that never pays keeps candidate compiles in this process.
 import cubie.batchsolving.comparison as _comparison  # noqa: E402
 
 _comparison.WORKER_STARTUP_SECONDS = float("inf")

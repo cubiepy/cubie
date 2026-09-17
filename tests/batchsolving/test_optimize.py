@@ -490,8 +490,7 @@ def test_kernel_is_cached_follows_the_cache_directory(
 def test_compile_caches_the_optimize_candidates_without_a_solve(
     solver_mutable, driver_settings
 ):
-    """Every candidate kernel is on disk, nothing launched, the
-    configuration is as given."""
+    """Every candidate kernel is on disk; nothing launched or changed."""
     solver = solver_mutable
     solver.update(duration=0.1)
     if driver_settings is not None:

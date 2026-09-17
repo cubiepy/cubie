@@ -368,8 +368,7 @@ def _compile_candidate(payload: Tuple) -> Tuple[int, str]:
 def _compile_in_pool(
     solver: Any, settings_sets: Sequence[Dict[str, Any]], max_parallel: int
 ) -> Tuple[str, ...]:
-    """Compile ``settings_sets`` over the solver's given record into the
-    kernel cache in spawned workers; return one error per set."""
+    """Compile each set in a spawned worker; return one error per set."""
     # Pickled into spawned workers; the manager holds CUDA state.
     system_bytes = pickle.dumps(solver.system)
     drivers = solver.kernel.driver_inputs()
@@ -405,17 +404,16 @@ def compile_kernels(
     Parameters
     ----------
     solver
-        The solver each set applies over; its configuration is
-        restored on return.
+        The solver each set applies over; restored on return.
     settings_sets
-        Settings applied through ``Solver.update``, one dict per kernel.
+        One ``Solver.update`` dict per kernel.
     max_parallel
         Maximum compilations to run in parallel.
 
     Returns
     -------
     tuple of str
-        One entry per set: the error that rejected it, or empty.
+        The error that rejected each set, empty when compiled.
     """
     given = dict(solver.given.as_kwargs())
     baseline = settings_in_effect(solver)
@@ -470,8 +468,7 @@ def compile_kernels(
             except Exception as exc:
                 errors[index] = _error(exc)
     if keys:
-        # Every value in effect back first, then the given record: a
-        # resolved value one candidate's family set outlives the keys.
+        # Every value in effect back, then the given record.
         solver.update(baseline, silent=True)
         solver.update(
             {key: given.get(key) for key in keys | set(baseline)},
