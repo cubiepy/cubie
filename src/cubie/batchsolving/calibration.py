@@ -26,9 +26,12 @@ from attrs import define, frozen
 from numpy import asarray
 
 from cubie.batchsolving.comparison import (
+    TIMED_WAVES_FLOOR,
     Candidate,
     ComparisonRunner,
     rank_timings,
+    validate_sizing,
+    warn_low_waves,
 )
 from cubie.integrators.algorithms import resolve_alias
 from cubie.integrators.stage_predictors import (
@@ -533,12 +536,18 @@ class _CalibrationRace:
     """Race stages of candidate specs on one comparison runner.
 
     Timed configurations are recorded by key and recalled when a later
-    stage names the same one.
+    stage names the same one; with ``sizing`` (``waves``, ``target_ms``)
+    the first accepted stage sizes the batch.
     """
 
-    def __init__(self, runner: ComparisonRunner) -> None:
+    def __init__(
+        self,
+        runner: ComparisonRunner,
+        sizing: Optional[Tuple[int, float]] = None,
+    ) -> None:
         self._runner = runner
         self._recorded: Dict[Any, CandidateResult] = {}
+        self._sizing = sizing
         self.waves: Optional[float] = None
 
     @property
@@ -549,6 +558,18 @@ class _CalibrationRace:
     def emit(self, message: str) -> None:
         """Log ``message``; print it when verbose."""
         self._runner.emit(message)
+
+    def _size(self, candidates: Sequence[Candidate]) -> None:
+        """Size the batch on ``candidates`` at the given duration from
+        the first candidate's solve."""
+        waves, target_ms = self._sizing
+        self._sizing = None
+        runner = self._runner
+        runner.size_batch(candidates, waves)
+        runner.select(candidates[0])
+        measured = runner.solve_ms(None)
+        self.emit(f"  probe: {measured:.3f} ms")
+        runner.fit_batch(measured, target_ms, grow=True, shrink=True)
 
     def run_stage(
         self, specs: Sequence[CandidateSpec], stage: str
@@ -580,7 +601,9 @@ class _CalibrationRace:
                 Candidate(spec.label, spec.solver_settings)
                 for spec in fresh
             ]
-            runner.compile(candidates)
+            accepted = runner.compile(candidates)
+            if self._sizing is not None and accepted:
+                self._size(accepted)
             timings = runner.time(candidates)
             for spec, timing in zip(fresh, timings):
                 result = CandidateResult(
@@ -624,6 +647,9 @@ def run_calibration(
     grid_type: str = "verbatim",
     apply: bool = True,
     verbose: bool = True,
+    auto_size: bool = True,
+    waves: int = 5,
+    target_ms: float = 20.0,
 ) -> CalibrationResult:
     """Race solver configurations for a solver and pick the fastest.
 
@@ -655,6 +681,13 @@ def run_calibration(
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
         Print per-candidate progress lines.
+    auto_size
+        Race a batch sized for ``target_ms`` solves at ``duration``;
+        ``False`` races the given batch.
+    waves
+        Waves of the most concurrent candidate the batch starts at.
+    target_ms
+        Kernel milliseconds per timed solve the batch is sized for.
 
     Returns
     -------
@@ -666,8 +699,10 @@ def run_calibration(
     Raises
     ------
     ValueError
-        If the system declares drivers but none are supplied.
+        The system declares drivers but none are supplied; ``waves``
+        under 1; ``target_ms`` under 10 or not finite.
     """
+    validate_sizing(waves, target_ms)
     system = parent.system
     if system.sizes.drivers > 0 and drivers is None:
         raise ValueError(
@@ -686,12 +721,21 @@ def run_calibration(
     runner = ComparisonRunner(
         parent, inits, params, duration, settling_time, t0, verbose
     )
-    race = _CalibrationRace(runner)
+    sizing = (int(waves), float(target_ms)) if auto_size else None
+    race = _CalibrationRace(runner, sizing)
     all_results = []
     with runner:
-        runner.set_batch()
+        runner.warm()
+        if not auto_size:
+            runner.set_batch()
         for family in CALIBRATION_FAMILIES:
             _run_family(race, family, all_results)
+    if (
+        not auto_size
+        and race.waves is not None
+        and race.waves < TIMED_WAVES_FLOOR
+    ):
+        warn_low_waves(race.waves)
 
     ranking = race.ranking()
     winner = ranking[0] if ranking else None

@@ -3,18 +3,74 @@
 import gc
 
 import numpy as np
+import pytest
 
 from cubie.batchsolving.comparison import (
     SUCCESS_TIER_FRACTION,
+    TIMED_WAVES_FLOOR,
     WORKER_STARTUP_SECONDS,
     Candidate,
     CandidateTiming,
     ComparisonRunner,
     rank_timings,
     settings_label,
+    tail_safe_runs,
+    unused_wave_share,
+    validate_sizing,
 )
 from cubie.CUDAFactory import UnrollChoice
 from cubie.time_logger import default_timelogger
+
+
+def test_tail_safe_runs_is_the_least_unused_wave_boundary():
+    """The least unused share within a wave above the wanted batch wins."""
+    concurrent = [71680, 43008, 64512, 57344]
+    floor = TIMED_WAVES_FLOOR * 71680
+    runs = tail_safe_runs(concurrent, 5 * 71680, floor)
+    assert 5 * 71680 <= runs <= 6 * 71680
+    exhaustive = min(
+        range(5 * 71680, 6 * 71680 + 1),
+        key=lambda batch: (unused_wave_share(batch, concurrent), batch),
+    )
+    assert runs == exhaustive
+    assert runs % 43008 == 0
+    assert unused_wave_share(runs, concurrent) == pytest.approx(0.0625)
+    assert tail_safe_runs([14336], 5 * 14336, 2 * 14336) == 5 * 14336
+
+
+def test_tail_safe_runs_reaches_the_exact_boundary():
+    """A wave boundary beats any batch nearer the wanted count."""
+    assert tail_safe_runs([640], 650, 640) == 1280
+    assert unused_wave_share(650, [640]) == pytest.approx(0.4921875)
+    assert unused_wave_share(1280, [640]) == 0.0
+    assert tail_safe_runs([1000, 1700], 1000, 1000) == 1700
+    assert unused_wave_share(1000, [1000, 1700]) == pytest.approx(7 / 17)
+    assert unused_wave_share(1700, [1000, 1700]) == pytest.approx(0.15)
+
+
+def test_tail_safe_runs_keeps_the_floor_and_the_cap():
+    """The search moves down to end at a cap and never leaves the floor."""
+    assert tail_safe_runs([14336], 5 * 14336, 2 * 14336, cap=80000) == (
+        5 * 14336
+    )
+    assert tail_safe_runs([14336], 10000, 2 * 14336, cap=5 * 14336) == (
+        2 * 14336
+    )
+    assert tail_safe_runs([14336], 5 * 14336, 2 * 14336, cap=20000) == 20000
+    assert tail_safe_runs([14336], 79644, 2 * 14336, cap=1 << 30) == 86016
+
+
+def test_validate_sizing_rejects_out_of_range_arguments():
+    validate_sizing(1, 10.0)
+    validate_sizing(5, 20.0)
+    with pytest.raises(ValueError, match="waves"):
+        validate_sizing(0, 20.0)
+    with pytest.raises(ValueError, match="waves"):
+        validate_sizing(2.5, 20.0)
+    with pytest.raises(ValueError, match="target_ms"):
+        validate_sizing(5, 9.9)
+    with pytest.raises(ValueError, match="target_ms"):
+        validate_sizing(5, float("inf"))
 
 
 def _timing(label, times, failures, runs=100):

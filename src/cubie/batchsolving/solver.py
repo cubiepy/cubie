@@ -841,6 +841,9 @@ class Solver:
         grid_type: str = "verbatim",
         apply: bool = True,
         verbose: bool = True,
+        auto_size: bool = True,
+        waves: int = 5,
+        target_ms: float = 20.0,
     ) -> CalibrationResult:
         """Race solver configurations and pick the fastest.
 
@@ -883,6 +886,15 @@ class Solver:
             ``True`` (default). Pass ``False`` to only report.
         verbose
             Print per-candidate progress lines. Default ``True``.
+        auto_size
+            Race a batch sized for ``target_ms`` solves at your
+            duration; ``False`` races your batch. Default ``True``.
+        waves
+            Waves of the most concurrent candidate the batch starts
+            at. Default ``5``.
+        target_ms
+            Kernel milliseconds per timed solve the batch is sized
+            for. Default ``20.0``.
 
         Returns
         -------
@@ -894,7 +906,8 @@ class Solver:
         Raises
         ------
         ValueError
-            If the system declares drivers but none are supplied.
+            The system declares drivers but none are supplied;
+            ``waves`` under 1; ``target_ms`` under 10 or not finite.
         """
         return run_calibration(
             self,
@@ -907,6 +920,9 @@ class Solver:
             grid_type=grid_type,
             apply=apply,
             verbose=verbose,
+            auto_size=auto_size,
+            waves=waves,
+            target_ms=target_ms,
         )
 
     def optimize(
