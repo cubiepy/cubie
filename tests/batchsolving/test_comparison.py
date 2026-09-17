@@ -110,12 +110,12 @@ def test_rank_timings_empty_without_timed_candidates():
 def test_pool_pays_only_when_serial_compiles_cost_more():
     """Spawning workers is chosen from the measured compile time."""
     pays = ComparisonRunner._pool_pays
-    assert pays(None, 5) is False
-    assert pays(80.0, 1) is False
-    assert pays(1.0, 5) is False
-    assert pays(80.0, 5) is True
-    assert pays(WORKER_STARTUP_SECONDS, 2) is False
-    assert pays(WORKER_STARTUP_SECONDS + 1.0, 2) is True
+    assert pays(None, 5, 4) is False
+    assert pays(80.0, 1, 4) is False
+    assert pays(1.0, 5, 4) is False
+    assert pays(80.0, 5, 4) is True
+    assert pays(WORKER_STARTUP_SECONDS, 2, 4) is False
+    assert pays(WORKER_STARTUP_SECONDS + 1.0, 2, 4) is True
 
 
 def test_settings_label_names_enums_and_placements():
@@ -269,6 +269,30 @@ def test_device_only_solve_keeps_a_dead_result_loan_for_the_next_host_solve(
     second = solver.solve(inits, params, **kwargs)
     assert second.state is loaned_state
     np.testing.assert_array_equal(second.time_domain_array, expected)
+
+
+@pytest.mark.nocudasim
+def test_max_parallel_one_compiles_every_candidate_in_turn(
+    solver_mutable, simple_initial_values, simple_parameters
+):
+    """max_parallel=1 never pays for a pool; both candidates compile."""
+    solver = solver_mutable
+    inits, params = _device_grid(
+        solver, simple_initial_values, simple_parameters
+    )
+    runner = ComparisonRunner(
+        solver, inits, params, 0.1, 0.0, 0.0, max_parallel=1
+    )
+    assert runner._pool_pays(1e6, 2, runner._max_parallel) is False
+    candidates = [
+        Candidate("local", {"state_location": "local"}),
+        Candidate("shared", {"state_location": "shared"}),
+    ]
+    with runner:
+        assert runner.compile(candidates) == candidates
+        for candidate in candidates:
+            runner.select(candidate)
+            assert solver.kernel.kernel_is_cached()
 
 
 def test_runner_stages_the_batch_on_the_device(

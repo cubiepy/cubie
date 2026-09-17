@@ -650,6 +650,7 @@ def run_calibration(
     auto_size: bool = True,
     waves: int = 5,
     target_ms: float = 20.0,
+    max_parallel: int = 4,
 ) -> CalibrationResult:
     """Race solver configurations for a solver and pick the fastest.
 
@@ -688,6 +689,8 @@ def run_calibration(
         Waves of the most concurrent candidate the batch starts at.
     target_ms
         Kernel milliseconds per timed solve the batch is sized for.
+    max_parallel
+        Maximum compilations to run in parallel.
 
     Returns
     -------
@@ -719,7 +722,14 @@ def run_calibration(
         parent, t0, inits.shape[1], duration
     )
     runner = ComparisonRunner(
-        parent, inits, params, duration, settling_time, t0, verbose
+        parent,
+        inits,
+        params,
+        duration,
+        settling_time,
+        t0,
+        verbose,
+        max_parallel=max_parallel,
     )
     sizing = (int(waves), float(target_ms)) if auto_size else None
     race = _CalibrationRace(runner, sizing)

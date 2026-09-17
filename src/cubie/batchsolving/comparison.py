@@ -67,9 +67,6 @@ SUCCESS_TIER_FRACTION = 0.95
 TIMED_WAVES_FLOOR = 2
 """Fewest occupancy waves a timed batch fills at any launch."""
 
-WORKERS = 4
-"""Compile processes the pool spawns."""
-
 WORKER_STARTUP_SECONDS = 12.0
 """Wall seconds a spawned worker spends importing cubie.
 
@@ -354,6 +351,8 @@ class ComparisonRunner:
         Integration window of the timed solves.
     verbose
         Print progress lines.
+    max_parallel
+        Maximum compilations to run in parallel.
     """
 
     def __init__(
@@ -365,8 +364,10 @@ class ComparisonRunner:
         settling_time: float,
         t0: float,
         verbose: bool = False,
+        max_parallel: int = 4,
     ) -> None:
         self._solver = solver
+        self._max_parallel = int(max_parallel)
         self._grid = (device_to_host(inits), device_to_host(params))
         self.duration = float(duration)
         self.settling = float(settling_time)
@@ -557,7 +558,7 @@ class ComparisonRunner:
             self.emit(f"  {first.label}: compiled")
             break
         if missing and solver.cache_enabled and self._pool_pays(
-            compile_seconds, len(missing)
+            compile_seconds, len(missing), self._max_parallel
         ):
             self._compile_in_pool(missing)
         else:
@@ -584,12 +585,14 @@ class ComparisonRunner:
         )
 
     @staticmethod
-    def _pool_pays(compile_seconds: Optional[float], misses: int) -> bool:
+    def _pool_pays(
+        compile_seconds: Optional[float], misses: int, max_parallel: int
+    ) -> bool:
         """Whether spawning workers beats compiling ``misses`` in turn."""
-        if compile_seconds is None or misses < 2:
+        if compile_seconds is None or misses < 2 or max_parallel < 2:
             return False
         serial = compile_seconds * misses
-        workers = min(WORKERS, misses)
+        workers = min(max_parallel, misses)
         pooled = WORKER_STARTUP_SECONDS + compile_seconds * ceil(
             misses / workers
         )
@@ -615,7 +618,7 @@ class ComparisonRunner:
             for index, candidate in enumerate(candidates)
         ]
         context = multiprocessing.get_context("spawn")
-        with context.Pool(min(WORKERS, len(payloads))) as pool:
+        with context.Pool(min(self._max_parallel, len(payloads))) as pool:
             for index, config_hash, error in pool.imap_unordered(
                 _compile_candidate, payloads
             ):
