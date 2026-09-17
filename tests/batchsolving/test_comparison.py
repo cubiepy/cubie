@@ -151,7 +151,9 @@ def test_runner_isolates_candidates_and_restores_the_solver(
     assert not solver.given.is_given("observables_location")
     solver.kernel.resident_blocks = 3
     verbosity = default_timelogger.verbosity
-    runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
+    runner = ComparisonRunner(
+        solver, inits, params, 0.1, 0.0, 0.0, max_parallel=1
+    )
     with runner:
         assert default_timelogger.verbosity == "silent"
         runner.select(
@@ -199,7 +201,9 @@ def test_runner_isolates_candidates_and_restores_the_solver(
     assert solver.dt == given["dt"]
     assert solver.kernel.resident_blocks == 3
     # A grid with no variables stages as None, the host-path default.
-    runner = ComparisonRunner(solver, inits, params[:0], 0.1, 0.0, 0.0)
+    runner = ComparisonRunner(
+        solver, inits, params[:0], 0.1, 0.0, 0.0, max_parallel=1
+    )
     runner.set_batch(2 * inits.shape[1])
     assert runner._params is None
     assert runner._inits.shape == (inits.shape[0], 2 * inits.shape[1])
@@ -302,7 +306,9 @@ def test_runner_stages_the_batch_on_the_device(
     inits, params = _device_grid(
         solver, simple_initial_values, simple_parameters
     )
-    runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
+    runner = ComparisonRunner(
+        solver, inits, params, 0.1, 0.0, 0.0, max_parallel=1
+    )
     with runner:
         runner.set_batch(4 * inits.shape[1])
         assert runner.runs == 4 * inits.shape[1]

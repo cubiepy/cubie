@@ -279,7 +279,9 @@ def test_erk_stage_times_the_specs_on_the_solver(
         algorithm="heun-21",
         settings=(("state_location", "nowhere"),),
     )
-    runner = ComparisonRunner(solver, inits, params, 0.1, 0.0, 0.0)
+    runner = ComparisonRunner(
+        solver, inits, params, 0.1, 0.0, 0.0, max_parallel=1
+    )
     with runner:
         # The first stage with an accepted spec sizes the batch on it.
         race = _CalibrationRace(runner, (TIMED_WAVES_FLOOR, 20.0))
@@ -328,4 +330,5 @@ class TestCalibrateGuards:
                 {"p0": [0.7], "p1": [0.9], "p2": [1.1]},
                 duration=0.2,
                 verbose=False,
+                max_parallel=1,
             )
