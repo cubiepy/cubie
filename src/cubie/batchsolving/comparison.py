@@ -22,7 +22,6 @@ import logging
 import multiprocessing
 import pickle
 from math import ceil, isfinite
-from time import perf_counter
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from warnings import warn
 
@@ -328,10 +327,10 @@ def _compile_solver(solver: Any) -> None:
 
 
 def _pool_pays(
-    compile_seconds: float, misses: int, max_parallel: int
+    compile_seconds: Optional[float], misses: int, max_parallel: int
 ) -> bool:
     """Whether spawning workers beats compiling ``misses`` in turn."""
-    if misses < 2 or max_parallel < 2:
+    if compile_seconds is None or misses < 2 or max_parallel < 2:
         return False
     serial = compile_seconds * misses
     workers = min(max_parallel, misses)
@@ -396,60 +395,67 @@ def compile_kernels(
 ) -> Tuple[str, ...]:
     """Compile a kernel per set of settings in ``max_parallel`` threads
     if cheaper than serial."""
-    given = dict(solver.given.as_kwargs())
-    baseline = settings_in_effect(solver)
-    keys = set()
-    for settings in settings_sets:
-        keys.update(settings)
-    opening = {key: baseline.get(key) for key in keys}
+    # "silent" records the compile event the pool decision reads.
+    verbosity = default_timelogger.verbosity
+    default_timelogger.set_verbosity("silent")
+    try:
+        given = dict(solver.given.as_kwargs())
+        baseline = settings_in_effect(solver)
+        keys = set()
+        for settings in settings_sets:
+            keys.update(settings)
+        opening = {key: baseline.get(key) for key in keys}
 
-    def select(settings):
-        solver.update({**opening, **settings}, silent=True)
+        def select(settings):
+            solver.update({**opening, **settings}, silent=True)
 
-    errors = [""] * len(settings_sets)
-    missing = []
-    for index, settings in enumerate(settings_sets):
-        try:
-            select(settings)
-            cached = (
-                solver.cache_enabled and solver.kernel.kernel_is_cached()
-            )
-        except Exception as exc:
-            errors[index] = f"{type(exc).__name__}: {exc}"
-            continue
-        if not cached:
-            missing.append(index)
-    # The first miss's compile time decides whether the rest pool.
-    compile_seconds = 0.0
-    while missing:
-        index = missing.pop(0)
-        started = perf_counter()
-        try:
-            select(settings_sets[index])
-            _compile_solver(solver)
-        except Exception as exc:
-            errors[index] = f"{type(exc).__name__}: {exc}"
-            continue
-        compile_seconds = perf_counter() - started
-        break
-    if missing and solver.cache_enabled and _pool_pays(
-        compile_seconds, len(missing), max_parallel
-    ):
-        pooled = _compile_in_pool(
-            solver, [settings_sets[index] for index in missing], max_parallel
-        )
-        for index, error in zip(missing, pooled):
-            errors[index] = error
-    else:
-        for index in missing:
+        errors = [""] * len(settings_sets)
+        missing = []
+        for index, settings in enumerate(settings_sets):
+            try:
+                select(settings)
+                cached = solver.kernel.kernel_is_cached()
+            except Exception as exc:
+                errors[index] = f"{type(exc).__name__}: {exc}"
+                continue
+            if not cached:
+                missing.append(index)
+        # The first miss's compile time decides whether the rest pool.
+        compile_seconds = None
+        while missing:
+            index = missing.pop(0)
             try:
                 select(settings_sets[index])
                 _compile_solver(solver)
             except Exception as exc:
                 errors[index] = f"{type(exc).__name__}: {exc}"
-    # Opening values back first, then the given record.
-    solver.update(opening, silent=True)
-    solver.update({key: given.get(key) for key in keys}, silent=True)
+                continue
+            compile_seconds = default_timelogger.get_event_duration(
+                "compile_cuda_kernel"
+            )
+            break
+        if missing and solver.cache_enabled and _pool_pays(
+            compile_seconds, len(missing), max_parallel
+        ):
+            pooled = _compile_in_pool(
+                solver,
+                [settings_sets[index] for index in missing],
+                max_parallel,
+            )
+            for index, error in zip(missing, pooled):
+                errors[index] = error
+        else:
+            for index in missing:
+                try:
+                    select(settings_sets[index])
+                    _compile_solver(solver)
+                except Exception as exc:
+                    errors[index] = f"{type(exc).__name__}: {exc}"
+        # Opening values back first, then the given record.
+        solver.update(opening, silent=True)
+        solver.update({key: given.get(key) for key in keys}, silent=True)
+    finally:
+        default_timelogger.set_verbosity(verbosity)
     return tuple(errors)
 
 
@@ -615,8 +621,11 @@ class ComparisonRunner:
                 continue
             seen.add(key)
             fresh.append(candidate)
-        # Sets apply over the opening configuration.
-        self.select(Candidate("opening"))
+        # Back to the opening configuration before the sets apply.
+        self._solver.update(
+            {key: self._baseline.get(key) for key in self._touched},
+            silent=True,
+        )
         errors = compile_kernels(
             self._solver,
             tuple(candidate.settings for candidate in fresh),
