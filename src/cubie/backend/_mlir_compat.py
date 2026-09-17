@@ -65,11 +65,20 @@ inlined callee whose decorator enables the transforms, under the
 calling kernel's options, and fills emptied statement bodies with
 ``pass``.
 
+numba-cuda-mlir also keeps every ``MLIRDispatcher`` alive for the
+life of the process: the native ``KernelDispatcher`` holds the
+dispatcher's bound ``_compile`` without reporting it to the cycle
+collector. This module hands the native object a weak callback
+instead and leaks one reference to each native dispatcher, because
+the wheel's native teardown releases a kernel family twice (branch
+fix/20-kernel-dispatcher-gc carries both fixes natively).
+
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
 
 import ast
 import copy
+import ctypes
 import functools
 import inspect
 import operator
@@ -77,7 +86,9 @@ import warnings
 import weakref
 from collections import defaultdict
 
+from numba_cuda_mlir import _cext
 from numba_cuda_mlir import ast_transforms as _ast_transforms
+from numba_cuda_mlir import descriptor as _descriptor
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_lowering as _mlir_lowering
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
@@ -1424,6 +1435,59 @@ def _patch_empty_body_repair() -> None:
 
 
 _patch_empty_body_repair()
+
+
+_Py_TPFLAGS_HAVE_GC = 1 << 14
+
+
+class _WeakCompileCallback:
+    """Compile callback for a native ``KernelDispatcher`` that holds
+    its ``MLIRDispatcher`` weakly, in place of the bound ``_compile``.
+    """
+
+    __slots__ = ("_dispatcher_ref",)
+
+    def __init__(self, dispatcher):
+        self._dispatcher_ref = weakref.ref(dispatcher)
+
+    def __call__(self, args):
+        dispatcher = self._dispatcher_ref()
+        if dispatcher is None:
+            raise RuntimeError(
+                "MLIRDispatcher was collected before its compile callback"
+            )
+        return dispatcher._compile(args)
+
+
+def _patch_dispatcher_lifetime() -> None:
+    """Let dropped ``MLIRDispatcher`` objects be collected.
+
+    The native ``KernelDispatcher`` keeps the dispatcher's bound
+    ``_compile`` without a ``tp_traverse``, so the dispatcher, its
+    overloads and typing entries form a cycle the collector never
+    sees. A weak callback breaks that edge. The same wheel releases
+    a kernel family twice when a native dispatcher that has launched
+    is torn down, so each native dispatcher keeps one extra reference
+    for good; the CUlibrary behind it stays loaded while the Python
+    side is freed. Wheels whose native types participate in garbage
+    collection carry both fixes and are left alone.
+    """
+    if _cext.KernelDispatcher.__flags__ & _Py_TPFLAGS_HAVE_GC:
+        return
+    stock_kernel_dispatcher = _cext.KernelDispatcher
+
+    def kernel_dispatcher(compile_func, *args, **kwargs):
+        owner = getattr(compile_func, "__self__", None)
+        if isinstance(owner, _descriptor.MLIRDispatcher):
+            compile_func = _WeakCompileCallback(owner)
+        native = stock_kernel_dispatcher(compile_func, *args, **kwargs)
+        ctypes.pythonapi.Py_IncRef(ctypes.py_object(native))
+        return native
+
+    _cext.KernelDispatcher = kernel_dispatcher
+
+
+_patch_dispatcher_lifetime()
 
 
 def _recompile_function_on_file_lines(stock_recompile_function):
