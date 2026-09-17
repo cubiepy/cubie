@@ -422,18 +422,12 @@ def compile_kernels(
                 missing.append(index)
         # The first miss's compile time decides whether the rest pool.
         compile_seconds = None
-        while missing:
-            index = missing.pop(0)
-            try:
-                select(settings_sets[index])
-                _compile_solver(solver)
-            except Exception as exc:
-                errors[index] = f"{type(exc).__name__}: {exc}"
-                continue
+        if missing:
+            select(settings_sets[missing.pop(0)])
+            _compile_solver(solver)
             compile_seconds = default_timelogger.get_event_duration(
                 "compile_cuda_kernel"
             )
-            break
         if missing and solver.cache_enabled and _pool_pays(
             compile_seconds, len(missing), max_parallel
         ):
@@ -446,11 +440,8 @@ def compile_kernels(
                 errors[index] = error
         else:
             for index in missing:
-                try:
-                    select(settings_sets[index])
-                    _compile_solver(solver)
-                except Exception as exc:
-                    errors[index] = f"{type(exc).__name__}: {exc}"
+                select(settings_sets[index])
+                _compile_solver(solver)
         # Opening values back first, then the given record.
         solver.update(opening, silent=True)
         solver.update({key: given.get(key) for key in keys}, silent=True)
