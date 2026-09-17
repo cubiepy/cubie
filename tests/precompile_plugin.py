@@ -664,22 +664,11 @@ import cubie  # noqa: E402, F401
 
 _attach_pending()
 
-# Candidate kernels compile in this process, never in spawned workers.
-from cubie.batchsolving.comparison import ComparisonRunner  # noqa: E402
+# Candidate kernels compile in this process, never in spawned workers:
+# a pool that never pays keeps ``compile_kernels`` serial.
+import cubie.batchsolving.comparison as _comparison  # noqa: E402
 
-
-def _compile_candidates_in_process(self, candidates):
-    for candidate in candidates:
-        try:
-            self.select(candidate)
-            self._compile_current()
-        except Exception as exc:
-            self._reject(candidate, exc)
-            continue
-        self.emit(f"  {candidate.label}: compiled")
-
-
-ComparisonRunner._compile_in_pool = _compile_candidates_in_process
+_comparison.WORKER_STARTUP_SECONDS = float("inf")
 
 
 def pytest_configure(config):

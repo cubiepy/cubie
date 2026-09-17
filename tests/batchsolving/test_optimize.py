@@ -10,6 +10,7 @@ from cubie.batchsolving.comparison import (
     WARM_MS,
     Candidate,
     ComparisonRunner,
+    settings_in_effect,
     settings_label,
     tail_safe_runs,
 )
@@ -478,6 +479,46 @@ def test_kernel_is_cached_follows_the_cache_directory(
     solver_mutable.compile(drivers=driver_settings, duration=0.1)
     assert kernel.kernel_is_cached()
     assert kernel._disk_cache.cache_path.parent == cache_root
+
+
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"algorithm": "bogacki-shampine-32", "stage_rhs_location": "local"}],
+    indirect=True,
+)
+def test_compile_caches_the_optimize_candidates_without_a_solve(
+    solver_mutable, driver_settings
+):
+    """Every candidate kernel is on disk, nothing launched, the
+    configuration is as given."""
+    solver = solver_mutable
+    solver.update(duration=0.1)
+    if driver_settings is not None:
+        solver._configure_drivers(driver_settings)
+    given = dict(solver.given.as_kwargs())
+    baseline = settings_in_effect(solver)
+    config_hash = solver.kernel.config_hash
+    candidates = solver.optimisation_candidates()
+    assert len(candidates) == 2
+    solver.compile(
+        drivers=driver_settings,
+        duration=0.1,
+        optimize_candidates=True,
+        max_parallel=1,
+    )
+    assert solver.kernel._cuda_events == []
+    assert dict(solver.given.as_kwargs()) == given
+    assert solver.kernel.config_hash == config_hash
+    keys = set().union(*candidates)
+    restored = settings_in_effect(solver)
+    assert {key: restored[key] for key in keys} == {
+        key: baseline[key] for key in keys
+    }
+    for settings in candidates:
+        solver.update({key: baseline[key] for key in keys}, **settings)
+        assert solver.kernel.kernel_is_cached()
+    assert solver.kernel._cuda_events == []
 
 
 def _runner(solver, inits, params):

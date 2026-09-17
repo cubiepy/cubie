@@ -164,6 +164,7 @@ timestep and never reaches the interpolator.
 - Both run on the solver itself through `comparison.ComparisonRunner`: one device input pair, one device output set, no host output buffers, candidates switched by `Solver.update`.
 - The timing protocol, the success-tier ranking, the warm-up and the batch sizing are fixed in `comparison.py` and shared; both entry points take `auto_size`, `waves` and `target_ms`, neither takes protocol parameters.
 - Candidates the package rejects drop individually with the package's error message and keep no time.
+- `compile_only=True` on either entry point compiles the candidate kernels through `comparison.compile_kernels(solver, settings_sets, max_parallel)` and runs nothing; `Solver.compile(optimize_candidates=, calibrate_candidates=)` calls them that way.
 
 ### Testing
 `tests/batchsolving/` (`test_solver.py`, `test_BatchSolverKernel.py`, input-handler/result tests,

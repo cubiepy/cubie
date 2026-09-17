@@ -35,6 +35,7 @@ from cubie.batchsolving.comparison import (
     Candidate,
     CandidateTiming,
     ComparisonRunner,
+    compile_kernels,
     rank_timings,
     settings_label,
     validate_sizing,
@@ -550,6 +551,7 @@ def run_optimization(
     waves: int = 5,
     target_ms: float = 20.0,
     max_parallel: int = 4,
+    compile_only: bool = False,
 ) -> OptimizeResult:
     """Time the solver's candidate kernels on itself; apply the fastest.
 
@@ -592,6 +594,8 @@ def run_optimization(
         raising the duration, never past yours, then the batch.
     max_parallel
         Maximum compilations to run in parallel.
+    compile_only
+        Compile the kernels but do not run them.
 
     Returns
     -------
@@ -604,15 +608,29 @@ def run_optimization(
         ``waves`` under 1, or ``target_ms`` under 10 or not finite.
     """
     validate_sizing(waves, target_ms)
-    inits, params = parent.build_grid(
-        initial_values, parameters, grid_type=grid_type
-    )
     if drivers is not None:
         parent._configure_drivers(drivers)
     candidates = [
         Candidate(settings_label(settings), dict(settings))
         for settings in parent.optimisation_candidates(force=force)
     ]
+    if compile_only:
+        errors = compile_kernels(
+            parent,
+            tuple(candidate.settings for candidate in candidates),
+            max_parallel,
+        )
+        return OptimizeResult(
+            launches=[
+                LaunchResult(dict(candidate.settings), None, None, error=error)
+                for candidate, error in zip(candidates, errors)
+            ],
+            best=None,
+            applied_settings={},
+        )
+    inits, params = parent.build_grid(
+        initial_values, parameters, grid_type=grid_type
+    )
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
         if parent.given.is_given("blocksize") and not force

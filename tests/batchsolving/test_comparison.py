@@ -12,6 +12,7 @@ from cubie.batchsolving.comparison import (
     Candidate,
     CandidateTiming,
     ComparisonRunner,
+    _pool_pays,
     rank_timings,
     settings_label,
     tail_safe_runs,
@@ -109,7 +110,7 @@ def test_rank_timings_empty_without_timed_candidates():
 
 def test_pool_pays_only_when_serial_compiles_cost_more():
     """Spawning workers is chosen from the measured compile time."""
-    pays = ComparisonRunner._pool_pays
+    pays = _pool_pays
     assert pays(None, 5, 4) is False
     assert pays(80.0, 1, 4) is False
     assert pays(1.0, 5, 4) is False
@@ -287,7 +288,7 @@ def test_max_parallel_one_compiles_every_candidate_in_turn(
     runner = ComparisonRunner(
         solver, inits, params, 0.1, 0.0, 0.0, max_parallel=1
     )
-    assert runner._pool_pays(1e6, 2, runner._max_parallel) is False
+    assert _pool_pays(1e6, 2, runner._max_parallel) is False
     candidates = [
         Candidate("local", {"state_location": "local"}),
         Candidate("shared", {"state_location": "shared"}),

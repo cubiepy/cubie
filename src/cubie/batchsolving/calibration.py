@@ -29,6 +29,7 @@ from cubie.batchsolving.comparison import (
     TIMED_WAVES_FLOOR,
     Candidate,
     ComparisonRunner,
+    compile_kernels,
     rank_timings,
     validate_sizing,
     warn_low_waves,
@@ -651,6 +652,7 @@ def run_calibration(
     waves: int = 5,
     target_ms: float = 20.0,
     max_parallel: int = 4,
+    compile_only: bool = False,
 ) -> CalibrationResult:
     """Race solver configurations for a solver and pick the fastest.
 
@@ -691,6 +693,8 @@ def run_calibration(
         Kernel milliseconds per timed solve the batch is sized for.
     max_parallel
         Maximum compilations to run in parallel.
+    compile_only
+        Compile the kernels but do not run them.
 
     Returns
     -------
@@ -713,11 +717,39 @@ def run_calibration(
             "driver samples that solves will use."
         )
 
+    if drivers is not None:
+        parent._configure_drivers(drivers)
+    if compile_only:
+        # Every family's first stage; later stages follow winners.
+        staged = [(spec, "erk:orders") for spec in erk_specs()]
+        for family, representative in FAMILY_REPRESENTATIVES.items():
+            staged.extend(
+                (spec, f"{family}:preconditioners")
+                for spec in preconditioner_specs(family, representative)
+            )
+        errors = compile_kernels(
+            parent,
+            tuple(spec.solver_settings for spec, _ in staged),
+            max_parallel,
+        )
+        return CalibrationResult(
+            candidates=[
+                CandidateResult(
+                    spec=spec,
+                    stage=stage,
+                    dropped=bool(error),
+                    reason=error,
+                )
+                for (spec, stage), error in zip(staged, errors)
+            ],
+            winner=None,
+            ranking=[],
+            features=_system_features(parent, t0, 0, duration),
+            applied_settings={},
+        )
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
     )
-    if drivers is not None:
-        parent._configure_drivers(drivers)
     features = _system_features(
         parent, t0, inits.shape[1], duration
     )
