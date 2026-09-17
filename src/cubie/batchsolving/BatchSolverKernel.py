@@ -561,13 +561,7 @@ class BatchSolverKernel(CUDAFactory):
             self._memory_manager.end_work(self, stream)
 
     def compile(self) -> None:
-        """Compile the kernel.
-
-        Raises
-        ------
-        RuntimeError
-            If the kernel has been closed.
-        """
+        """Compile the kernel; ``RuntimeError`` once closed."""
         if self._closed:
             raise RuntimeError(
                 "This solver has been closed and its GPU resources "

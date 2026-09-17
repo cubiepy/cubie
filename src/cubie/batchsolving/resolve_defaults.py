@@ -518,13 +518,7 @@ def _newton_rtol_inverted(
 
 
 def check_loop_timing(timing: Dict[str, Any]) -> None:
-    """Raise an error if the summary window holds no sample.
-
-    Raises
-    ------
-    ValueError
-        Summary timing that would save zero samples per window.
-    """
+    """Raise ``ValueError`` when the summary window holds no sample."""
     summarise_every = timing["summarise_every"]
     sample_every = timing["sample_summaries_every"]
     if timing["summarise_regularly"] and sample_every >= summarise_every:
@@ -538,22 +532,16 @@ def check_loop_timing(timing: Dict[str, Any]) -> None:
 def check_duration(
     timing: Dict[str, Any], duration: float, precision: type
 ) -> None:
-    """Raise an error if a solve of ``duration`` produces no output.
+    """Raise ``ValueError`` when a solve of ``duration`` saves nothing.
 
     Parameters
     ----------
     timing
-        The loop intervals and flags in effect, as
-        :func:`resolve_loop_timing` returns them.
+        Loop intervals and flags from :func:`resolve_loop_timing`.
     duration
         Integration time of the solve.
     precision
-        Floating-point type the solve runs in.
-
-    Raises
-    ------
-    ValueError
-        Save or summary timing with no event inside ``duration``.
+        Floating-point type of the solve.
     """
     save_every = timing["save_every"]
     summarise_every = timing["summarise_every"]

@@ -723,7 +723,7 @@ class Solver:
         max_parallel
             Maximum compilations to run in parallel.
         **kwargs
-            Additional options forwarded to :meth:`update`.
+            Options forwarded to :meth:`update`.
         """
         self.update(**kwargs)
 
