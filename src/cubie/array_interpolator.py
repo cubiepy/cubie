@@ -150,21 +150,18 @@ class DriverSamples(FrozenSettings):
     Parameters
     ----------
     samples
-        Driver name to its 1-D sample array; every array has the same
-        length.
+        Driver name to its 1-D sample array, all of one length.
     time
-        Sample times, strictly increasing and uniformly spaced. Give
-        this or ``driver_sample_period``.
+        Uniformly spaced sample times; give this or the period.
     driver_sample_period
-        Spacing between consecutive samples.
+        Spacing between samples.
     t0
-        Time of the first sample; ``0.0`` when only the period is
-        given.
+        Time of the first sample; ``0.0`` unless given.
 
     Attributes
     ----------
     names
-        The driver names in column order.
+        Driver names in column order.
     input_array
         Sample columns ``(num_samples, num_inputs)``.
     """
@@ -237,7 +234,7 @@ class DriverSamples(FrozenSettings):
         return period, t0
 
     def _cubie_canonical_(self) -> Tuple[Any, ...]:
-        """Identity by names, time base and sample count, not values."""
+        """Identity: names, time base and sample count."""
         return (
             self.names,
             self.t0,
@@ -261,8 +258,7 @@ class DriverSamples(FrozenSettings):
         Raises
         ------
         ValueError
-            ``names`` and the sampled drivers differ in count or
-            spelling.
+            ``names`` differ from the sampled drivers.
         """
         names = tuple(names)
         if len(names) != len(self.names):
@@ -277,7 +273,7 @@ class DriverSamples(FrozenSettings):
             )
         if names == self.names:
             return self
-        # The time base was given one way; hand it on the same way.
+        # Pass the time base on as it was given.
         timed = self.time is not None
         return DriverSamples(
             {name: self.samples[name] for name in names},

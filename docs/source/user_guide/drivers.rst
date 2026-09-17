@@ -121,13 +121,11 @@ Note how the driver appears: it is declared in ``drivers`` when the
 system is created, and referenced by its bare name inside the function
 body, since drivers are not part of the state or parameter containers.
 
-``DriverSamples`` takes a dictionary mapping each driver name to a 1-D
-array of sampled values, and the sample times alongside: either
-``time=``, an array of the same length, or ``driver_sample_period=``
-(and optionally ``t0=``) when the samples are evenly spaced.  It is a
-setting of the solver, so it can also be given to ``Solver`` itself or
-to ``Solver.update``; a ``solve`` without ``drivers`` reuses the last
-ones given.
+``DriverSamples`` takes a dictionary of driver name to 1-D sample
+array plus the sample times: ``time=`` (an array of the same length)
+or ``driver_sample_period=`` with optional ``t0=``.  It is a solver
+setting, so ``Solver`` and ``Solver.update`` accept it too, and a
+``solve`` without ``drivers`` reuses the last ones given.
 
 Interpolation Options
 ---------------------
