@@ -505,9 +505,7 @@ class Solver:
     def settings_dict(self) -> Dict[str, Any]:
         """Return the given settings with the logger's current level."""
         settings = self.given.as_kwargs()
-        settings.pop("time_logging_level", None)
-        if default_timelogger.verbosity is not None:
-            settings["time_logging_level"] = default_timelogger.verbosity
+        settings["time_logging_level"] = default_timelogger.verbosity
         return settings
 
     def is_given(self, name: str) -> bool:

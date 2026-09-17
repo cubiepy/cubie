@@ -133,7 +133,9 @@ def test_grouped_dicts_flatten_and_unknown_names_raise(system):
 def test_signature_defaults_are_not_given(system):
     """A Solver given nothing records nothing and resolves euler."""
     built = Solver(system)
-    assert built.settings_dict == {}
+    assert built.settings_dict == {
+        "time_logging_level": default_timelogger.verbosity
+    }
     assert built.effective.algorithm == "euler"
     assert built.effective.step_controller == "fixed"
     assert built.kernel.compile_settings.auto_performance is True
@@ -676,7 +678,10 @@ def test_none_returns_a_plain_setting_to_its_default(solver_mutable):
     solver_mutable.update(max_registers=None)
     assert solver_mutable.is_given("max_registers") is False
     assert solver_mutable.kernel.compile_settings.max_registers is None
-    assert solver_mutable.settings_dict == solver_mutable.given.as_kwargs()
+    assert solver_mutable.settings_dict == {
+        **solver_mutable.given.as_kwargs(),
+        "time_logging_level": default_timelogger.verbosity,
+    }
 
 
 def test_none_returns_a_nested_flag_to_its_default(solver_mutable):
@@ -704,7 +709,10 @@ def test_copy_carries_the_given_settings(solver_mutable):
     solver_mutable.set_cache_dir("review-cache-path")
     settings = solver_mutable.settings_dict
     assert settings["cache_dir"] == Path("review-cache-path")
-    assert settings == solver_mutable.given.as_kwargs()
+    assert settings == {
+        **solver_mutable.given.as_kwargs(),
+        "time_logging_level": default_timelogger.verbosity,
+    }
     twin = solver_mutable.copy()
     try:
         assert twin.kernel.compile_settings.max_registers is None
