@@ -60,6 +60,7 @@ from cubie.odesystems import SymbolicODE
 from cubie.cuda_backend import IS_MLIR
 from cubie.backend.utils import (
     LAUNCH_BLOCKSIZES,
+    SASS_INSTRUCTION_BYTES,
     SHARED_SKEW_BYTES,
     active_blocks_per_multiprocessor,
     compile_kernel_specialization,
@@ -84,7 +85,11 @@ from cubie.memory.mem_manager import (
     defer_instance_teardown,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
+from cubie.CUDAFactory import (
+    CUDAFactory,
+    CUDADispatcherCache,
+    UnrollChoice,
+)
 from cubie.batchsolving.arrays.BatchInputArrays import InputArrays
 from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrays,
@@ -377,6 +382,11 @@ class BatchSolverKernel(CUDAFactory):
                 **settings,
             )
         )
+        derived = self._auto_defaults(settings)
+        if derived:
+            self.update_compile_settings(
+                {**derived, "loop_fn": run.device_function}, silent=True
+            )
 
         self.input_arrays = InputArrays.from_solver(self)
         self.output_arrays = OutputArrays.from_solver(self)
@@ -1254,20 +1264,55 @@ class BatchSolverKernel(CUDAFactory):
         # New sample values alone keep the compiled evaluators.
         if interpolator.config_hash != known_hash:
             updates.update(self._driver_settings())
-        recognised |= self.single_integrator.update(updates, silent=True)
-        run = self.single_integrator
-        kernel_updates = {
-            **updates,
-            "loop_fn": run.device_function,
-            "compile_flags": run.output_compile_flags,
-        }
         blocksize = self.compile_settings.blocksize
-        recognised |= self.update_compile_settings(kernel_updates, silent=True)
+        recognised |= self.update_compile_settings(updates, silent=True)
         if self.compile_settings.blocksize != blocksize:
             # A pinned residency belongs to the block size it was timed with.
             self.resident_blocks = None
+        recognised |= self.single_integrator.update(updates, silent=True)
+        updates.update(self._auto_defaults(updates))
+        run = self.single_integrator
+        self.update_compile_settings(
+            {
+                **updates,
+                "loop_fn": run.device_function,
+                "compile_flags": run.output_compile_flags,
+            },
+            silent=True,
+        )
         self._known_system_config = self.system.compile_settings
         return recognised
+
+    def _auto_defaults(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply and return the built step's values for the placement
+        and unroll keys ``settings`` leaves ``None``."""
+        if not self.compile_settings.auto_performance:
+            return {}
+        derived = {
+            key: value
+            for key, value in self.performance_defaults().items()
+            if settings.get(key) is None
+        }
+        self.system.update(derived, silent=True)
+        self.single_integrator.update(derived, silent=True)
+        return derived
+
+    def performance_defaults(self) -> Dict[str, Any]:
+        """Return the placements and unroll flags the built step picks."""
+        hardware = device_hardware()
+        step = self.single_integrator._algo_step
+        defaults = dict(step.performance_defaults(hardware))
+        if step.is_implicit and step.newton_solves_per_step > 0:
+            unrolled = self.system.operation_count + step.step_operation_count
+            capacity = (
+                hardware.instruction_cache_bytes // SASS_INSTRUCTION_BYTES
+            )
+            # A Newton loop that overflows the instruction cache stays rolled.
+            defaults["unroll_newton_exits"] = (
+                UnrollChoice.ROLLED if unrolled > capacity
+                else UnrollChoice.FULL
+            )
+        return defaults
 
     def _driver_settings(self) -> Dict[str, Any]:
         """Return the interpolator's evaluators and coefficient layout."""

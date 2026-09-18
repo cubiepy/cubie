@@ -168,7 +168,7 @@ into the step's config; `build()` reads that config only.
 `ODEImplicitStep.update` adds `solver_width` (the coupled all-stages length
 for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change.
 `performance_defaults` (the step's own placement values) and
-`step_operation_count` feed `optimize.performance_defaults`.
+`step_operation_count` feed `BatchSolverKernel.performance_defaults`.
 `optimisation_candidates` lists the combinations `Solver.optimize` times.
 
 When `linear_correction_type="lu"` (`uses_direct_solver`), steps request

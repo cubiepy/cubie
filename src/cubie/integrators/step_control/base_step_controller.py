@@ -490,6 +490,10 @@ class BaseStepController(CUDAFactory):
         if value is None:
             return {"filter_coefficients"}
         gains = filter_coefficients_to_gains(value)
+        # A None gain is not a conflict with the filter.
+        for key in gains:
+            if key in params and params[key] is None:
+                del params[key]
         conflicts = set(gains) & set(params)
         if conflicts:
             conflict_str = ", ".join(sorted(conflicts))

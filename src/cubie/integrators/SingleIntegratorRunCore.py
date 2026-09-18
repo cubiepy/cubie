@@ -29,7 +29,10 @@ from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import build_config, merge_kwargs_into_settings
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
-from cubie.integrators.algorithms import get_algorithm_step
+from cubie.integrators.algorithms import (
+    algorithm_facts,
+    get_algorithm_step,
+)
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
 )
@@ -158,6 +161,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         config = self.compile_settings
         if config.algorithm != self._algo_step_algorithm:
             self._swap_step(updates)
+        if "tableau" in updates and updates["tableau"] is None:
+            # The algorithm names its own tableau.
+            updates["tableau"] = algorithm_facts(config.algorithm).tableau
         recognised |= self._algo_step.update(
             {**updates, **self._step_inputs()}, silent=True
         )

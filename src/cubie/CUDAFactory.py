@@ -54,6 +54,7 @@ from functools import cache
 from typing import Any, Dict, Optional, Set, Tuple, Union
 
 from attrs import (
+    NOTHING,
     Attribute,
     Factory,
     asdict,
@@ -139,6 +140,29 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
     return field_map
 
 
+def declared_default(fld: Attribute) -> Any:
+    """Return the field's declared default; ``NOTHING`` when required."""
+    default = fld.default
+    if isinstance(default, Factory):
+        return default.factory()
+    return default
+
+
+def with_defaults_for_none(
+    updates: Dict[str, Any], by_handle: Dict[str, Attribute]
+) -> Dict[str, Any]:
+    """Return ``updates`` with ``None`` replaced by the field's default."""
+    resolved = {}
+    for key, value in updates.items():
+        fld = by_handle.get(key)
+        if value is None and fld is not None:
+            value = declared_default(fld)
+            if value is NOTHING:
+                continue
+        resolved[key] = value
+    return resolved
+
+
 def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
     """Compare by identity (device fns), value (arrays), else !=."""
     if fld.metadata.get("device_function"):
@@ -176,6 +200,7 @@ class FrozenSettings:
             for fld in fields(type(self))
             if fld.init
         }
+        updates = with_defaults_for_none(updates, by_handle)
         given = {
             key: by_handle[key] for key in updates if key in by_handle
         }
@@ -386,7 +411,8 @@ class _CubieConfigBase(FrozenSettings):
         their keys as unrecognised. Nested attrs-class fields are
         updated recursively:
         the nested object derives its own replacement, which is folded
-        into this snapshot's replacement.
+        into this snapshot's replacement. A value of ``None`` sets the
+        field to its declared default.
         """
         if updates_dict is None:
             updates_dict = {}
@@ -397,6 +423,7 @@ class _CubieConfigBase(FrozenSettings):
 
         cls = type(self)
         field_map = _config_field_map(cls)
+        updates_dict = with_defaults_for_none(updates_dict, field_map)
 
         recognized = set()
         direct = {}
@@ -428,8 +455,12 @@ class _CubieConfigBase(FrozenSettings):
                 nested_obj = fld.converter(nested_obj)
             if nested_obj is None:
                 continue
+            loose = updates_dict
+            if handle in evolve_kwargs:
+                # Loose None keys do not override an object supplied here.
+                loose = {k: v for k, v in loose.items() if v is not None}
             new_nested, nested_recognized, nested_changed = nested_obj.update(
-                updates_dict
+                loose
             )
             recognized.update(nested_recognized)
             if nested_changed:

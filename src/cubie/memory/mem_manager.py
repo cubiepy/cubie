@@ -818,7 +818,8 @@ class MemoryManager:
         updates_dict
             Setting names to new values: ``stream_group``,
             ``mem_proportion`` (``None`` selects the automatic limit)
-            and ``memory_manager`` (this manager only).
+            and ``memory_manager`` (this manager only); ``None`` for
+            the other two changes nothing.
         silent
             Ignore unknown names instead of raising.
         **kwargs
@@ -839,7 +840,8 @@ class MemoryManager:
         updates = {**(updates_dict or {}), **kwargs}
         recognised = set()
         if "memory_manager" in updates:
-            if updates["memory_manager"] is not self:
+            manager = updates["memory_manager"]
+            if manager is not None and manager is not self:
                 raise ValueError(
                     "A registered instance cannot change memory manager."
                 )

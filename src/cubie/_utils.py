@@ -809,16 +809,20 @@ def build_config(
         external_handle = f"{prefix}{handle}" if is_prefixed else handle
         field_to_external[external_handle] = handle
 
-    # Keep the provided fields, keyed by init handle.
+    # Keep the provided fields, keyed by init handle; None means default.
     final = {
         field_to_external[k]: v
         for k, v in merged.items()
-        if k in field_to_external
+        if k in field_to_external and v is not None
     }
 
     config = config_class(**final)
     # Remaining keys name fields of nested settings (unroll_*, lineinfo).
-    loose = {k: v for k, v in merged.items() if k not in field_to_external}
+    loose = {
+        k: v
+        for k, v in merged.items()
+        if k not in field_to_external and v is not None
+    }
     nested = {}
     for fld in nested_config_fields(config_class) if loose else ():
         current = getattr(config, fld.name)

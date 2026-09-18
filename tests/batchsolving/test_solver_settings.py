@@ -321,7 +321,7 @@ def test_named_controller_is_not_promoted(system):
 def test_fixed_controller_resolves_no_gains(system):
     """A fixed controller resolves neither gains nor adaptive limits."""
     effective = _effective(system, algorithm="euler")
-    kwargs = effective.as_kwargs()
+    kwargs = {k: v for k, v in effective.as_kwargs().items() if v is not None}
     assert effective.step_controller == "fixed"
     assert set(kwargs) & {
         "integral_gain",
@@ -901,14 +901,18 @@ def test_newton_rtol_inversion_warns(system, solver_settings, driver_settings):
 @pytest.mark.parametrize(
     "solver_settings_override", [LARGE_DIRK], indirect=True
 )
-def test_auto_performance_off_keeps_the_derived_values(solver_mutable):
-    """Turning auto_performance off leaves the last derived flags."""
+def test_auto_performance_off_returns_flags_to_their_defaults(
+    solver_mutable,
+):
+    """Turning auto_performance off drops the derived flags."""
     step = solver_mutable.kernel.single_integrator._algo_step
-    rolled = step.compile_settings.unroll.unroll_newton_exits
-    assert rolled == (True, 1)
+    assert step.compile_settings.unroll.unroll_newton_exits == (True, 1)
     solver_mutable.update(auto_performance=False)
     step = solver_mutable.kernel.single_integrator._algo_step
-    assert step.compile_settings.unroll.unroll_newton_exits == rolled
+    assert step.compile_settings.unroll.unroll_newton_exits == (True, None)
+    solver_mutable.update(auto_performance=None)
+    step = solver_mutable.kernel.single_integrator._algo_step
+    assert step.compile_settings.unroll.unroll_newton_exits == (True, 1)
 
 
 def test_precision_reaches_every_factory(
