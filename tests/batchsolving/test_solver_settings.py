@@ -133,7 +133,7 @@ def test_grouped_dicts_flatten_and_unknown_names_raise(system):
 def test_signature_defaults_are_not_given(system):
     """A Solver given nothing records nothing and resolves euler."""
     built = Solver(system)
-    assert built.settings_dict == {
+    assert built.settings_dict() == {
         "time_logging_level": default_timelogger.verbosity
     }
     assert built.effective.algorithm == "euler"
@@ -566,11 +566,24 @@ def test_default_constant_named_as_a_setting_is_rejected():
 
 def test_settings_dict_is_the_given_settings(solver, solver_settings):
     """The solver reports what it was given, not what it derived."""
-    settings = solver.settings_dict
+    settings = solver.settings_dict()
     assert settings["algorithm"] == solver_settings["algorithm"]
     assert settings["dt"] == solver_settings["dt"]
     assert set(settings) <= _names(SolverSettings)
     assert solver.effective.save_regularly is True
+
+
+def test_settings_dict_for_a_new_process_leaves_the_memory_manager(solver):
+    """The record for a spawned process is the given record without
+    this process's memory manager."""
+    settings = solver.settings_dict()
+    assert settings["memory_manager"] is solver.kernel.memory_manager
+    spawned = solver.settings_dict(for_new_process=True)
+    assert spawned == {
+        key: value
+        for key, value in settings.items()
+        if key != "memory_manager"
+    }
 
 
 def test_is_given_reads_the_record(solver, solver_settings):
@@ -586,7 +599,7 @@ def test_time_logging_level_applies_on_update(solver_mutable):
     try:
         solver_mutable.update(time_logging_level="silent")
         assert default_timelogger.verbosity == "silent"
-        assert solver_mutable.settings_dict["time_logging_level"] == "silent"
+        assert solver_mutable.settings_dict()["time_logging_level"] == "silent"
         default_timelogger.set_verbosity(None)
         recognised = solver_mutable.update(time_logging_level="silent")
         assert recognised == {"time_logging_level"}
@@ -622,7 +635,7 @@ def test_errorless_algorithm_warns_and_replaces_on_update(solver_mutable):
     assert run._algo_step.is_adaptive is False
     assert run.n_error == 0
     assert run._loop.compile_settings.n_error == 0
-    assert solver_mutable.settings_dict["step_controller"] == "pid"
+    assert solver_mutable.settings_dict()["step_controller"] == "pid"
 
 
 @pytest.mark.parametrize(
@@ -637,7 +650,7 @@ def test_derived_tolerances_follow_a_tolerance_update(solver_mutable):
     assert np.allclose(step.newton_atol, 1e-6)
     assert np.allclose(step.newton_rtol, 1e-4)
     assert np.allclose(
-        step.krylov_atol, solver_mutable.settings_dict["krylov_atol"]
+        step.krylov_atol, solver_mutable.settings_dict()["krylov_atol"]
     )
 
 
@@ -676,18 +689,18 @@ def test_filter_after_gains_raises(solver_mutable):
     assert solver_mutable.given is given
     assert solver_mutable.is_given("filter_coefficients") is False
     solver_mutable.update(integral_gain=None, filter_coefficients="pi42")
-    assert solver_mutable.settings_dict["filter_coefficients"] == "pi42"
+    assert solver_mutable.settings_dict()["filter_coefficients"] == "pi42"
 
 
 def test_none_returns_a_plain_setting_to_its_default(solver_mutable):
     """A plain setting given None goes back to its declared default."""
     solver_mutable.update(max_registers=96)
     assert solver_mutable.kernel.compile_settings.max_registers == 96
-    assert solver_mutable.settings_dict["max_registers"] == 96
+    assert solver_mutable.settings_dict()["max_registers"] == 96
     solver_mutable.update(max_registers=None)
     assert solver_mutable.is_given("max_registers") is False
     assert solver_mutable.kernel.compile_settings.max_registers is None
-    assert solver_mutable.settings_dict == {
+    assert solver_mutable.settings_dict() == {
         **solver_mutable.given.as_kwargs(),
         "time_logging_level": default_timelogger.verbosity,
     }
@@ -716,7 +729,7 @@ def test_copy_carries_the_given_settings(solver_mutable):
     solver_mutable.update(max_registers=96)
     solver_mutable.update(max_registers=None)
     solver_mutable.set_cache_dir("review-cache-path")
-    settings = solver_mutable.settings_dict
+    settings = solver_mutable.settings_dict()
     assert settings["cache_dir"] == Path("review-cache-path")
     assert settings == {
         **solver_mutable.given.as_kwargs(),
@@ -949,7 +962,7 @@ def test_constants_reach_the_system_by_name(
     assert float(built.system.constants.values_dict[name]) == (
         pytest.approx(value)
     )
-    assert set(built.settings_dict) <= _names(SolverSettings)
+    assert set(built.settings_dict()) <= _names(SolverSettings)
     recognised = built.update(**{name: value * 2.0})
     assert recognised == {name}
     assert float(built.system.constants.values_dict[name]) == (

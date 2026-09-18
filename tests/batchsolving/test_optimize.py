@@ -332,7 +332,7 @@ def test_apply_launch_sets_settings_blocksize_and_residency(solver_mutable):
     loop = kernel.single_integrator._loop
     assert loop.compile_settings.state_location == "shared"
     assert loop.compile_settings.unroll.unroll_other_small == ROLLED.value
-    settings = solver_mutable.settings_dict
+    settings = solver_mutable.settings_dict()
     assert settings["unroll_other_small"] is ROLLED
     assert settings["state_location"] == "shared"
     assert settings["blocksize"] == 128
@@ -574,7 +574,7 @@ def test_copy_registers_memory_like_its_parent(solver_mutable):
         twin.close()
     solver_mutable.update(mem_proportion=0.2)
     try:
-        assert solver_mutable.settings_dict["mem_proportion"] == 0.2
+        assert solver_mutable.settings_dict()["mem_proportion"] == 0.2
         twin = solver_mutable.copy()
         try:
             manager = twin.kernel.memory_manager

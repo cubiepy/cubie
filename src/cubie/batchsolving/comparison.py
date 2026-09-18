@@ -363,11 +363,7 @@ def _compile_in_pool(
     """Compile each set in a spawned worker; return one error per set."""
     # Pickled into spawned workers; the manager holds CUDA state.
     system_bytes = pickle.dumps(solver.system)
-    record = {
-        key: value
-        for key, value in solver.settings_dict.items()
-        if key != "memory_manager"
-    }
+    record = solver.settings_dict(for_new_process=True)
     payloads = [
         (
             index,
