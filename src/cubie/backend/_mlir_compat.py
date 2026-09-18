@@ -1066,7 +1066,7 @@ def _patch_liveness_set_copies():
         )
 
 
-_callee_ir_cache = weakref.WeakKeyDictionary()
+_PIPELINE_CALLEE_IR_CACHE_ATTR = "_numba_cuda_callee_ir_cache"
 
 
 def _clone_callee_ir(func_ir):
@@ -1265,7 +1265,6 @@ def _patch_inline_worker():
     if hasattr(_nb_icc, "_clone_callee_ir"):
         return
     _nb_icc._clone_callee_ir = _clone_callee_ir
-    _nb_icc._callee_ir_cache = _callee_ir_cache
 
     worker = _nb_icc.InlineWorker
     if "preserve_ir" not in inspect.signature(worker.inline_ir).parameters:
@@ -1292,19 +1291,22 @@ def _patch_inline_worker():
     def _fresh_callee_ir(self, function, enable_ssa=False):
         """Return callee IR that is safe for ``inline_ir`` to mutate.
 
-        The canonical IR produced by the untyped pipeline for a given
-        function and flags configuration is cached, and each call
-        site receives a structural clone of it. Running the untyped
-        pipeline is far more expensive than cloning, and deeply
-        nested inline='always' functions otherwise recompile their
-        whole subtree at every transitive call site.
+        The canonical IR for a function and flags configuration is
+        cached on the current compiler pipeline and each call site
+        receives a structural clone of it.
         """
-        per_func = _callee_ir_cache.setdefault(function, {})
-        key = (str(self.flags), enable_ssa)
-        canonical_ir = per_func.get(key)
+        # enable_ssa is rewritten by the pipeline; pin it so keys match.
+        self.flags.enable_ssa = enable_ssa
+        holder = self.pipeline if self.pipeline is not None else self
+        cache = getattr(holder, _PIPELINE_CALLEE_IR_CACHE_ATTR, None)
+        if cache is None:
+            cache = {}
+            setattr(holder, _PIPELINE_CALLEE_IR_CACHE_ATTR, cache)
+        key = (function, str(self.flags), enable_ssa)
+        canonical_ir = cache.get(key)
         if canonical_ir is None:
             canonical_ir = self.run_untyped_passes(function, enable_ssa)
-            per_func[key] = canonical_ir
+            cache[key] = canonical_ir
         return _clone_callee_ir(canonical_ir)
 
     worker.inline_function = inline_function
