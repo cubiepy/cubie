@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.14.0](https://github.com/cubiepy/cubie/compare/v0.13.1...v0.14.0) (2026-09-18)
+
+
+### Features
+
+* **batchsolving:** compile_kernels compiles candidate sets; Solver.compile takes optimize_candidates and calibrate_candidates ([#971](https://github.com/cubiepy/cubie/issues/971)) ([9155cfa](https://github.com/cubiepy/cubie/commit/9155cfa42e90b8660e188fdc204c2af06de9e321))
+* **batchsolving:** drivers are now a DriverSamples setting that doesn't need special handling ([#973](https://github.com/cubiepy/cubie/issues/973)) ([cc762b6](https://github.com/cubiepy/cubie/commit/cc762b6e28f824b90c68d00bd85e4337acfd9a76))
+* **batchsolving:** optimize and calibrate take max_parallel ([d678811](https://github.com/cubiepy/cubie/commit/d678811d077241e68f7c46f2c3588256d82b7850))
+* **batchsolving:** settings_dict is a method; for_new_process=True makes it thread-safe ([#975](https://github.com/cubiepy/cubie/issues/975)) ([dcc2080](https://github.com/cubiepy/cubie/commit/dcc208076db50bc60cc70e4659264957ca921485))
+
+
+### Bug Fixes
+
+* **batchsolving:** algorithm defaults resolve in resolve(); DriverSamples pickles; calibrate accepts configured drivers ([#979](https://github.com/cubiepy/cubie/issues/979)) ([71f29f9](https://github.com/cubiepy/cubie/commit/71f29f968f7ee660558e2fd69f1adc7067ee110e))
+* **batchsolving:** duration, settling_time and t0 are no longer considered compile-sensitive ([#974](https://github.com/cubiepy/cubie/issues/974)) ([e1a4311](https://github.com/cubiepy/cubie/commit/e1a431155731fdcf69b99e0a35e53e49bf54a8b8))
+* **batchsolving:** settings_dict returns the fields required for reconstruction, None updates set defaults ([#972](https://github.com/cubiepy/cubie/issues/972)) ([e39e2a5](https://github.com/cubiepy/cubie/commit/e39e2a5ed1ae45983082b6aa532a764bbbd389c4))
+* **CUDAFactory:** a config given None for a field sets its declared default ([#976](https://github.com/cubiepy/cubie/issues/976)) ([3d8d8a2](https://github.com/cubiepy/cubie/commit/3d8d8a20c95328169dd06267f6ffbdba2991c79f))
+
 ## [0.13.1](https://github.com/cubiepy/cubie/compare/v0.13.0...v0.13.1) (2026-09-16)
 
 
