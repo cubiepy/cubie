@@ -480,6 +480,34 @@ def test_kernel_is_cached_follows_the_cache_directory(
     assert kernel._disk_cache.cache_path.parent == cache_root
 
 
+@pytest.mark.nocudasim
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"algorithm": "bogacki-shampine-32", "stage_rhs_location": "local"}],
+    indirect=True,
+)
+def test_compile_caches_the_optimize_candidates_without_a_solve(
+    solver_mutable, driver_settings
+):
+    """Every candidate kernel is on disk; nothing launched."""
+    solver = solver_mutable
+    candidates = solver.optimisation_candidates()
+    assert candidates == (
+        {"state_location": "local"},
+        {"state_location": "shared"},
+    )
+    solver.compile(
+        drivers=driver_settings,
+        duration=0.1,
+        optimize_candidates=True,
+        max_parallel=1,
+    )
+    for settings in candidates:
+        solver.update(settings)
+        assert solver.kernel.kernel_is_cached()
+    assert solver.kernel._cuda_events == []
+
+
 def _runner(solver, inits, params):
     """Return a runner on ``solver`` over a combinatorial grid."""
     grid_inits, grid_params = solver.build_grid(

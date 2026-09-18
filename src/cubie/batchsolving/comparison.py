@@ -8,6 +8,8 @@ Published Objects
     One candidate's kernel times and failed-run count.
 :class:`ComparisonRunner`
     Switches one solver between candidates and times each one.
+:func:`compile_kernels`
+    Compile one kernel per settings set, in parallel when cheaper.
 :func:`rank_timings`
     Order timings by success tier, then time.
 :func:`tail_safe_runs`
@@ -301,18 +303,44 @@ def rank_timings(timings: Sequence[CandidateTiming]) -> List[CandidateTiming]:
     return sorted(top, key=key) + sorted(rest, key=key)
 
 
-def _compile_candidate(payload: Tuple) -> Tuple[int, str, str]:
-    """Compile one candidate in a worker; return (index, hash, error)."""
-    (
-        index,
-        system_bytes,
-        settings,
-        drivers,
-        duration,
-        settling_time,
-        t0,
-        cache_root,
-    ) = payload
+def settings_in_effect(solver: Any) -> Dict[str, Any]:
+    """Return every setting in effect on ``solver``, unroll flags included."""
+    unroll = solver.system.compile_settings.unroll
+    values = dict(solver.kernel.settings_dict)
+    values.update(
+        {fld.name: getattr(unroll, fld.name) for fld in fields(UnrollFlags)}
+    )
+    values.update(
+        {
+            key: value
+            for key, value in solver.effective.as_kwargs().items()
+            if value is not None
+        }
+    )
+    return values
+
+
+def _compile_solver(solver: Any) -> None:
+    """Compile the solver's current configuration."""
+    kernel = solver.kernel
+    kernel.compile(kernel.duration, kernel.warmup, kernel.t0)
+
+
+def _pool_pays(
+    compile_seconds: Optional[float], misses: int, max_parallel: int
+) -> bool:
+    """Whether spawning workers beats compiling ``misses`` in turn."""
+    if compile_seconds is None or misses < 2 or max_parallel < 2:
+        return False
+    serial = compile_seconds * misses
+    workers = min(max_parallel, misses)
+    pooled = WORKER_STARTUP_SECONDS + compile_seconds * ceil(misses / workers)
+    return serial > pooled
+
+
+def _compile_candidate(payload: Tuple) -> Tuple[int, str]:
+    """Compile one settings set in a worker; return (index, error)."""
+    index, system_bytes, settings, drivers, cache_root = payload
     if cache_root is not None:
         set_cache_root(cache_root)
     from cubie.batchsolving.solver import Solver
@@ -321,18 +349,103 @@ def _compile_candidate(payload: Tuple) -> Tuple[int, str, str]:
     solver = None
     try:
         solver = Solver(system, **settings)
-        solver.compile(
-            drivers=drivers,
-            duration=duration,
-            settling_time=settling_time,
-            t0=t0,
-        )
-        return index, solver.kernel.config_hash, ""
+        if drivers is not None:
+            solver._configure_drivers(drivers)
+        _compile_solver(solver)
+        return index, ""
     except Exception as exc:
-        return index, "", f"{type(exc).__name__}: {exc}"
+        return index, f"{type(exc).__name__}: {exc}"
     finally:
         if solver is not None:
             solver.close()
+
+
+def _compile_in_pool(
+    solver: Any, settings_sets: Sequence[Dict[str, Any]], max_parallel: int
+) -> Tuple[str, ...]:
+    """Compile each set in a spawned worker; return one error per set."""
+    # Pickled into spawned workers; the manager holds CUDA state.
+    system_bytes = pickle.dumps(solver.system)
+    drivers = solver.kernel.driver_inputs()
+    record = {
+        key: value
+        for key, value in solver.settings_dict.items()
+        if key != "memory_manager"
+    }
+    payloads = [
+        (
+            index,
+            system_bytes,
+            {**record, **settings},
+            drivers,
+            get_cache_root_override(),
+        )
+        for index, settings in enumerate(settings_sets)
+    ]
+    errors = [""] * len(payloads)
+    context = multiprocessing.get_context("spawn")
+    with context.Pool(min(max_parallel, len(payloads))) as pool:
+        for index, error in pool.imap_unordered(_compile_candidate, payloads):
+            errors[index] = error
+    return tuple(errors)
+
+
+def compile_kernels(
+    solver: Any, settings_sets: Sequence[Dict[str, Any]], max_parallel: int
+) -> Tuple[str, ...]:
+    """Compile a kernel per set of settings in ``max_parallel`` threads
+    if cheaper than serial."""
+    # "silent" records the compile event the pool decision reads.
+    verbosity = default_timelogger.verbosity
+    default_timelogger.set_verbosity("silent")
+    try:
+        given = dict(solver.given.as_kwargs())
+        baseline = settings_in_effect(solver)
+        keys = set()
+        for settings in settings_sets:
+            keys.update(settings)
+        opening = {key: baseline.get(key) for key in keys}
+
+        def select(settings):
+            solver.update({**opening, **settings}, silent=True)
+
+        errors = [""] * len(settings_sets)
+        missing = []
+        for index, settings in enumerate(settings_sets):
+            try:
+                select(settings)
+            except Exception as exc:
+                errors[index] = f"{type(exc).__name__}: {exc}"
+                continue
+            # Without the disk cache a compile is lost at the next switch.
+            if solver.cache_enabled and not solver.kernel.kernel_is_cached():
+                missing.append(index)
+        # The first miss's compile time decides whether the rest pool.
+        compile_seconds = None
+        if missing:
+            select(settings_sets[missing.pop(0)])
+            _compile_solver(solver)
+            compile_seconds = default_timelogger.get_event_duration(
+                "compile_cuda_kernel"
+            )
+        if missing and _pool_pays(compile_seconds, len(missing), max_parallel):
+            pooled = _compile_in_pool(
+                solver,
+                [settings_sets[index] for index in missing],
+                max_parallel,
+            )
+            for index, error in zip(missing, pooled):
+                errors[index] = error
+        else:
+            for index in missing:
+                select(settings_sets[index])
+                _compile_solver(solver)
+        # Opening values back first, then the given record.
+        solver.update(opening, silent=True)
+        solver.update({key: given.get(key) for key in keys}, silent=True)
+    finally:
+        default_timelogger.set_verbosity(verbosity)
+    return tuple(errors)
 
 
 class ComparisonRunner:
@@ -375,7 +488,6 @@ class ComparisonRunner:
         self._verbose = bool(verbose)
         self._given = {}
         self._baseline = {}
-        self._settings = {}
         self._touched = set()
         self._rejected = {}
         self._resident_blocks = solver.kernel.resident_blocks
@@ -411,13 +523,7 @@ class ComparisonRunner:
         default_timelogger.set_verbosity("silent")
         solver = self._solver
         self._given = dict(solver.given.as_kwargs())
-        self._baseline = self.settings_in_effect()
-        # The record a worker rebuilds the solver from.
-        self._settings = {
-            key: value
-            for key, value in solver.settings_dict.items()
-            if key != "memory_manager"
-        }
+        self._baseline = settings_in_effect(solver)
         self._touched = set()
 
     def close(self) -> None:
@@ -448,26 +554,6 @@ class ComparisonRunner:
             self._codes = None
             default_timelogger.set_verbosity(self._verbosity)
 
-    def settings_in_effect(self) -> Dict[str, Any]:
-        """Return every setting in effect, unroll flags included."""
-        solver = self._solver
-        unroll = solver.system.compile_settings.unroll
-        values = dict(solver.kernel.settings_dict)
-        values.update(
-            {
-                fld.name: getattr(unroll, fld.name)
-                for fld in fields(UnrollFlags)
-            }
-        )
-        values.update(
-            {
-                key: value
-                for key, value in solver.effective.as_kwargs().items()
-                if value is not None
-            }
-        )
-        return values
-
     def select(self, candidate: Candidate) -> None:
         """Apply ``candidate`` over the opening configuration."""
         settings = {
@@ -483,12 +569,6 @@ class ComparisonRunner:
     def rejection(self, candidate: Candidate) -> str:
         """Return why ``candidate`` was rejected; empty when it was not."""
         return self._rejected.get(_settings_key(candidate.settings), "")
-
-    def _reject(self, candidate: Candidate, exc: Exception) -> None:
-        """Record ``candidate`` as rejected with ``exc``."""
-        error = f"{type(exc).__name__}: {exc}"
-        self._rejected[_settings_key(candidate.settings)] = error
-        self.emit(f"  {candidate.label}: rejected ({error})")
 
     def set_batch(self, runs: Optional[int] = None) -> None:
         """Stage ``runs`` grid columns on the device, cycling if short."""
@@ -521,116 +601,36 @@ class ComparisonRunner:
 
     def compile(self, candidates: Sequence[Candidate]) -> List[Candidate]:
         """Compile and return the accepted candidates; a rejected one
-        keeps its error for :meth:`time`, and the first miss's compile
-        time decides whether the rest go to a spawn pool."""
-        solver = self._solver
-        missing = []
+        keeps its error for :meth:`time`."""
+        fresh = []
         seen = set()
         for candidate in candidates:
             key = _settings_key(candidate.settings)
             if key in seen or key in self._rejected:
                 continue
             seen.add(key)
-            try:
-                self.select(candidate)
-                cached = (
-                    solver.cache_enabled and solver.kernel.kernel_is_cached()
-                )
-            except Exception as exc:
-                self._reject(candidate, exc)
-                continue
-            if cached:
-                self.emit(f"  {candidate.label}: cached")
+            fresh.append(candidate)
+        # Back to the opening configuration before the sets apply.
+        self._solver.update(
+            {key: self._baseline.get(key) for key in self._touched},
+            silent=True,
+        )
+        errors = compile_kernels(
+            self._solver,
+            tuple(candidate.settings for candidate in fresh),
+            self._max_parallel,
+        )
+        for candidate, error in zip(fresh, errors):
+            if error:
+                self._rejected[_settings_key(candidate.settings)] = error
+                self.emit(f"  {candidate.label}: rejected ({error})")
             else:
-                missing.append(candidate)
-        compile_seconds = None
-        while missing:
-            first = missing.pop(0)
-            try:
-                self.select(first)
-                self._compile_current()
-            except Exception as exc:
-                self._reject(first, exc)
-                continue
-            compile_seconds = default_timelogger.get_event_duration(
-                "compile_cuda_kernel"
-            )
-            self.emit(f"  {first.label}: compiled")
-            break
-        if missing and solver.cache_enabled and self._pool_pays(
-            compile_seconds, len(missing), self._max_parallel
-        ):
-            self._compile_in_pool(missing)
-        else:
-            for candidate in missing:
-                try:
-                    self.select(candidate)
-                    self._compile_current()
-                except Exception as exc:
-                    self._reject(candidate, exc)
-                    continue
                 self.emit(f"  {candidate.label}: compiled")
         return [
             candidate
             for candidate in candidates
             if _settings_key(candidate.settings) not in self._rejected
         ]
-
-    def _compile_current(self) -> None:
-        """Compile the solver's current configuration."""
-        self._solver.compile(
-            duration=self.duration,
-            settling_time=self.settling,
-            t0=self._t0,
-        )
-
-    @staticmethod
-    def _pool_pays(
-        compile_seconds: Optional[float], misses: int, max_parallel: int
-    ) -> bool:
-        """Whether spawning workers beats compiling ``misses`` in turn."""
-        if compile_seconds is None or misses < 2 or max_parallel < 2:
-            return False
-        serial = compile_seconds * misses
-        workers = min(max_parallel, misses)
-        pooled = WORKER_STARTUP_SECONDS + compile_seconds * ceil(
-            misses / workers
-        )
-        return serial > pooled
-
-    def _compile_in_pool(self, candidates: Sequence[Candidate]) -> None:
-        """Compile ``candidates`` into the kernel cache in spawned workers."""
-        solver = self._solver
-        # Pickled into spawned workers; the manager holds CUDA state.
-        system_bytes = pickle.dumps(solver.system)
-        drivers = solver.kernel.driver_inputs()
-        payloads = [
-            (
-                index,
-                system_bytes,
-                {**self._settings, **candidate.settings},
-                drivers,
-                self.duration,
-                self.settling,
-                self._t0,
-                get_cache_root_override(),
-            )
-            for index, candidate in enumerate(candidates)
-        ]
-        context = multiprocessing.get_context("spawn")
-        with context.Pool(min(self._max_parallel, len(payloads))) as pool:
-            for index, config_hash, error in pool.imap_unordered(
-                _compile_candidate, payloads
-            ):
-                candidate = candidates[index]
-                if error:
-                    self._rejected[_settings_key(candidate.settings)] = error
-                    self.emit(f"  {candidate.label}: rejected ({error})")
-                else:
-                    self.emit(
-                        f"  {candidate.label}: worker compiled "
-                        f"{config_hash[:12]}"
-                    )
 
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""

@@ -757,6 +757,8 @@ class Solver:
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
+        optimize_candidates: bool = False,
+        max_parallel: int = 4,
         **kwargs: Any,
     ) -> None:
         """Apply settings and drivers and compile the kernel.
@@ -772,6 +774,10 @@ class Solver:
             Warm-up period before recording outputs. Default ``0.0``.
         t0
             Initial integration time. Default ``0.0``.
+        optimize_candidates
+            Also compile the candidate kernels for :meth:`optimize`.
+        max_parallel
+            Maximum compilations to run in parallel.
         **kwargs
             Additional options forwarded to :meth:`update`.
         """
@@ -779,6 +785,18 @@ class Solver:
 
         if drivers is not None:
             self._configure_drivers(drivers)
+
+        if optimize_candidates:
+            run_optimization(
+                self,
+                None,
+                None,
+                duration=duration,
+                settling_time=settling_time,
+                t0=t0,
+                compile_only=True,
+                max_parallel=max_parallel,
+            )
 
         self.kernel.compile(
             duration=duration,
