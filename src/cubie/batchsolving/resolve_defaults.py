@@ -348,7 +348,7 @@ def resolve_inner_tolerances(
     Returns
     -------
     dict
-        The Krylov and Newton tolerances and the Krylov reduction.
+        The Krylov, Newton and error-smoothing solver settings.
     """
     atol = asarray(atol, dtype=float)
     rtol = asarray(rtol, dtype=float)
@@ -367,9 +367,22 @@ def resolve_inner_tolerances(
         derived["krylov_residual_reduction"] = rtol_floor
     else:
         derived["krylov_residual_reduction"] = float(np_finfo(precision).eps)
-    return {
+    resolved = {
         key: given_or(given, key, value) for key, value in derived.items()
     }
+    # Error settings default to the Krylov ones.
+    for name in (
+        "atol",
+        "rtol",
+        "residual_reduction",
+        "max_iters",
+        "residual_floor",
+    ):
+        krylov = resolved.get(
+            f"krylov_{name}", getattr(given, f"krylov_{name}")
+        )
+        resolved[f"error_{name}"] = given_or(given, f"error_{name}", krylov)
+    return resolved
 
 
 def resolve_output_selection(

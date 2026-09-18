@@ -113,6 +113,13 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     )
     apply_mass_fn: Optional[Callable] = device_function_field()
 
+    def __attrs_post_init__(self) -> None:
+        """Take the operator coefficient from the tableau."""
+        object.__setattr__(
+            self, "_operator_gamma", float(self.tableau.gamma)
+        )
+        super().__attrs_post_init__()
+
 
 class GenericRosenbrockWStep(ODEImplicitStep):
     """Rosenbrock-W step with an embedded error estimate."""
@@ -207,7 +214,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 "get_solver_helper_fn": get_solver_helper_fn,
                 "tableau": tableau_value,
                 "operator_beta": 1.0,
-                "operator_gamma": tableau_value.gamma,
             },
             **kwargs,
         )

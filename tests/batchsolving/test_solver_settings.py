@@ -425,6 +425,60 @@ def test_given_inner_tolerance_survives_derivation():
     assert tolerances["newton_atol"] == 3e-9
 
 
+def test_error_settings_take_the_krylov_settings():
+    """Error tolerances follow Krylov's; cap and floor stay unset."""
+    tolerances = resolve_inner_tolerances(
+        SolverSettings(), 1e-6, 1e-4, True, False, np.float32
+    )
+    assert tolerances["error_atol"] == pytest.approx(1e-6)
+    assert tolerances["error_rtol"] == pytest.approx(1e-4)
+    assert tolerances["error_residual_reduction"] == pytest.approx(1e-4)
+    assert tolerances["error_max_iters"] is None
+    assert tolerances["error_residual_floor"] is None
+
+
+def test_given_krylov_settings_reach_the_error_settings():
+    """Given Krylov settings carry to the unset error settings."""
+    tolerances = resolve_inner_tolerances(
+        _given(
+            krylov_atol=2e-8, krylov_max_iters=9, krylov_residual_floor=1e-3
+        ),
+        1e-6,
+        1e-4,
+        True,
+        False,
+        np.float32,
+    )
+    assert tolerances["error_atol"] == 2e-8
+    assert tolerances["error_max_iters"] == 9
+    assert tolerances["error_residual_floor"] == 1e-3
+
+
+def test_given_error_setting_survives_derivation():
+    """A given error setting wins over the Krylov one."""
+    tolerances = resolve_inner_tolerances(
+        _given(krylov_max_iters=9, error_max_iters=11, error_rtol=3e-3),
+        1e-6,
+        1e-4,
+        True,
+        False,
+        np.float32,
+    )
+    assert tolerances["error_max_iters"] == 11
+    assert tolerances["error_rtol"] == 3e-3
+
+
+def test_radau_smoothing_resolves_on_by_default(system):
+    """Radau resolves smoothing on unless given off."""
+    assert _effective(system, algorithm="radau").use_smoothed_error is True
+    assert (
+        _effective(
+            system, algorithm="radau", use_smoothed_error=False
+        ).use_smoothed_error
+        is False
+    )
+
+
 # ── Timing ──────────────────────────────────────────────────────────── #
 
 
@@ -690,6 +744,51 @@ def test_filter_after_gains_raises(solver_mutable):
     assert solver_mutable.is_given("filter_coefficients") is False
     solver_mutable.update(integral_gain=None, filter_coefficients="pi42")
     assert solver_mutable.settings_dict()["filter_coefficients"] == "pi42"
+
+
+def test_radau_smoothing_default_survives_an_update(system):
+    """The resolved smoothing default holds through an update."""
+    built = Solver(system, algorithm="radau")
+    step = built.kernel.single_integrator._algo_step
+    assert step.smooth_error
+    built.update(max_registers=64)
+    assert built.effective.use_smoothed_error is True
+    assert step.compile_settings.use_smoothed_error is True
+    assert step.smooth_error
+
+
+def test_error_solver_settings_resolve_and_survive_an_update(system):
+    """Error settings: given, else Krylov's, else the width-n cap."""
+    n = system.sizes.states
+    explicit = Solver(
+        system,
+        algorithm="radau",
+        linear_correction_type="bicgstab",
+        krylov_max_iters=9,
+        error_max_iters=11,
+    )
+    inherited = Solver(
+        system,
+        algorithm="radau",
+        linear_correction_type="bicgstab",
+        krylov_max_iters=9,
+    )
+    unset = Solver(
+        system, algorithm="radau", linear_correction_type="bicgstab"
+    )
+    expected = {explicit: 11, inherited: 9, unset: (3 * n + 1) // 2}
+    for built, cap in expected.items():
+        step = built.kernel.single_integrator._algo_step
+        assert step.error_solver.compile_settings.max_iters == cap
+        assert built.effective.error_max_iters == (
+            None if built is unset else cap
+        )
+        built.update(max_registers=64)
+        step = built.kernel.single_integrator._algo_step
+        assert step.error_solver.compile_settings.max_iters == cap
+        np.testing.assert_array_equal(
+            step.error_solver.norm.atol, step.krylov_atol
+        )
 
 
 def test_none_returns_a_plain_setting_to_its_default(solver_mutable):

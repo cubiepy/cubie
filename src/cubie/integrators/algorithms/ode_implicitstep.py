@@ -270,6 +270,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
         }
     )
 
+    # Separate width-n error solver, and whether it starts from zero.
+    owns_error_solver = False
+    error_solver_zero_initial_guess = True
+
     # Parameters accepted by NewtonKrylov
     _NEWTON_KRYLOV_PARAMS = frozenset(
         {
@@ -304,25 +308,24 @@ class ODEImplicitStep(BaseAlgorithmStep):
             other solver components.
         **kwargs
             Optional solver parameters (krylov_atol, krylov_max_iters,
-            newton_rtol, etc.). None values are ignored and defaults
-            from solver config classes are used. ``newton_norm``
-            supplies a :class:`CorrectionNorm` for Newton solves;
-            ``krylov_norm`` supplies a :class:`ScaledNorm` for the
-            linear solver's convergence weighting; when absent each
-            solver builds its default.
+            newton_rtol, error_atol, etc.). None values are ignored and
+            defaults from solver config classes are used.
+            ``newton_norm`` supplies a :class:`CorrectionNorm` for
+            Newton solves; ``krylov_norm`` supplies a
+            :class:`ScaledNorm` for the linear solver's convergence
+            weighting; when absent each solver builds its default.
 
         Notes
         -----
         The class attribute ``is_linear`` selects the solver
         arrangement: linearly-implicit steps own their linear solver
-        directly, all others wrap it in a :class:`NewtonKrylov`.
+        directly, all others wrap it in a :class:`NewtonKrylov`. A
+        smoothing-capable tableau also gets the width-``n_states``
+        ``error_solver``, registered only while smoothing is on.
         """
         super().__init__(config, _defaults)
 
         self.dense_predictor = None
-
-        # Set by subclasses needing a separate solver for smoothing.
-        self.error_solver = None
 
         newton_norm = kwargs.pop("newton_norm", None)
         krylov_norm = kwargs.pop("krylov_norm", None)
@@ -364,6 +367,38 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 norm=newton_norm,
                 **newton_kwargs,
             )
+
+        self.error_solver = None
+        if self.owns_error_solver and config.smoothed_error_capable:
+            self.error_solver = self._build_error_solver(linear_kwargs)
+
+    def _build_error_solver(
+        self, settings: Dict[str, Any]
+    ) -> LinearSolverBase:
+        """Return the width-n smoothing solver reading ``error_*`` keys.
+
+        Parameters
+        ----------
+        settings
+            Setting names to values; linear-solver names apply.
+        """
+        config = self.compile_settings
+        linear_kwargs = {
+            key: value
+            for key, value in settings.items()
+            if key in self._LINEAR_SOLVER_PARAMS and value is not None
+        }
+        # Single-stage solve: width n.
+        return self._construct_linear_solver(
+            precision=config.precision,
+            solver_width=config.n_states,
+            norm=None,
+            norm_reference="base_state",
+            instance_label="error",
+            zero_initial_guess=self.error_solver_zero_initial_guess,
+            n_states=config.n_states,
+            **linear_kwargs,
+        )
 
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
@@ -478,8 +513,22 @@ class ODEImplicitStep(BaseAlgorithmStep):
         solver, then their device functions into the step settings and
         the implicit helpers rebuilt. A ``linear_correction_type``
         needing another solver class swaps the linear solver, rebuilt
-        from its ``settings_dict``, before the updates reach it.
+        from its ``settings_dict``, before the updates reach it. A
+        newly smoothing-capable tableau builds the error solver first.
         """
+        tableau = updates.get("tableau")
+        if (
+            self.owns_error_solver
+            and self.error_solver is None
+            and tableau is not None
+            and tableau.supports_smoothed_error
+        ):
+            correction_type = updates.get("linear_correction_type")
+            if correction_type is None:
+                correction_type = self.linear_correction_type
+            self.error_solver = self._build_error_solver(
+                {**updates, "linear_correction_type": correction_type}
+            )
         recognized = super()._apply_updates(updates)
 
         if updates.get("linear_correction_type") is not None:

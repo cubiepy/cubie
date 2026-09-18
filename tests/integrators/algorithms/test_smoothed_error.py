@@ -150,28 +150,18 @@ def test_unsupported_request_warns_and_stays_off(system):
 
 
 def test_smoothing_default_follows_tableau_capability(system):
-    """Radau defaults smoothing on; DIRK and gauss-legendre stay off."""
+    """FIRK defaults smoothing on for capable radau tableaus only."""
 
-    assert FIRKStep(
-        get_solver_helper_fn=system.get_solver_helper,
-        precision=np.float64, n_states=2, tableau=RADAU_IIA_5_TABLEAU
-    ).smooth_error
-    assert FIRKStep(
-        get_solver_helper_fn=system.get_solver_helper,
-        precision=np.float64, n_states=2, tableau=RADAU_IIA_9_TABLEAU
-    ).smooth_error
-    assert not FIRKStep(
-        get_solver_helper_fn=system.get_solver_helper,
-        precision=np.float64, n_states=2, tableau=RADAU_IIA_3_TABLEAU
-    ).smooth_error
-    assert not FIRKStep(
-        get_solver_helper_fn=system.get_solver_helper,
-        precision=np.float64, n_states=2, tableau=GAUSS_LEGENDRE_2_TABLEAU
-    ).smooth_error
-    assert not FIRKStep(
-        get_solver_helper_fn=system.get_solver_helper,
-        precision=np.float64, n_states=2, tableau=GAUSS_LEGENDRE_4_TABLEAU
-    ).smooth_error
+    def firk_default(tableau):
+        return FIRKStep.family_defaults(tableau).settings[
+            "use_smoothed_error"
+        ]
+
+    assert firk_default(RADAU_IIA_5_TABLEAU) is True
+    assert firk_default(RADAU_IIA_9_TABLEAU) is True
+    assert firk_default(RADAU_IIA_3_TABLEAU) is False
+    assert firk_default(GAUSS_LEGENDRE_2_TABLEAU) is False
+    assert firk_default(GAUSS_LEGENDRE_4_TABLEAU) is False
     assert not DIRKStep(
         get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64, n_states=2, tableau=KVAERNO3_TABLEAU
@@ -212,15 +202,13 @@ def test_firk_error_solver_costs_nothing_when_disabled(system, enabled):
     )
     registered = buffer_registry._groups[step].entries
     assert ("error_solver_shared" in registered) is enabled
-    assert (step.error_solver is not None) is enabled
     assert step.smooth_error is enabled
-    if enabled:
-        assert step.error_solver.instance_label == "error"
-        assert step.error_solver.norm.instance_label == "error"
-        assert "error_linear_solver_fn" in step.error_solver.products
-        assert step.update({"error_atol": 1e-4}) >= {"error_atol"}
-        assert float(step.error_solver.norm.atol[0]) == 1e-4
-        assert (step.settings_dict["error_atol"] == 1e-4).all()
+    assert step.error_solver.instance_label == "error"
+    assert step.error_solver.norm.instance_label == "error"
+    assert "error_linear_solver_fn" in step.error_solver.products
+    assert step.update({"error_atol": 1e-4}) >= {"error_atol"}
+    assert float(step.error_solver.norm.atol[0]) == 1e-4
+    assert (step.settings_dict["error_atol"] == 1e-4).all()
 
 
 def test_dirk_error_solver_and_rhs_alias_the_newton_window(system):
@@ -289,7 +277,7 @@ def test_firk_error_solver_aliases_the_coupled_solver_window(system):
     [(FIRKStep, RADAU_IIA_5_TABLEAU), (DIRKStep, KVAERNO3_TABLEAU)],
 )
 def test_toggle_survives_update(system, step_class, tableau):
-    """``update`` builds the gated solver and registers its buffers."""
+    """``update`` registers the error solver's buffers once on."""
 
     step = step_class(
         get_solver_helper_fn=system.get_solver_helper,
@@ -299,12 +287,38 @@ def test_toggle_survives_update(system, step_class, tableau):
         use_smoothed_error=False,
     )
     assert not step.smooth_error
-    assert step.error_solver is None
+    entries = buffer_registry._groups[step].entries
+    assert entries["error_solve_iters"].size == 0
     step.update(use_smoothed_error=True)
     assert step.smooth_error
-    assert step.error_solver is not None
     entries = buffer_registry._groups[step].entries
     assert entries["error_solve_iters"].size == 1
+    assert "error_solver_shared" in entries
+
+
+@pytest.mark.parametrize(
+    "step_class, tableau",
+    [(FIRKStep, RADAU_IIA_5_TABLEAU), (DIRKStep, KVAERNO3_TABLEAU)],
+)
+def test_error_solver_reads_its_own_settings(system, step_class, tableau):
+    """Given ``error_*`` settings reach the error solver."""
+
+    step = step_class(
+        get_solver_helper_fn=system.get_solver_helper,
+        precision=np.float64,
+        n_states=2,
+        tableau=tableau,
+        use_smoothed_error=True,
+        linear_correction_type="bicgstab",
+        krylov_max_iters=9,
+        krylov_atol=1e-5,
+        error_max_iters=11,
+        error_atol=1e-4,
+    )
+    assert step.error_solver.compile_settings.max_iters == 11
+    assert float(step.error_solver.norm.atol[0]) == 1e-4
+    assert step.linear_solver.compile_settings.max_iters == 9
+    assert float(step.linear_solver.norm.atol[0]) == 1e-5
 
 
 # Dense numpy oracles for the at-state helper family.

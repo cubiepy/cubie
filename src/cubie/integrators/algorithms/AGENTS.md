@@ -136,8 +136,8 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 - `use_smoothed_error` filters the embedded estimate through
   `(M - smoothing_gamma * h * J)^-1`: one extra linear solve per step.
 - `smooth_error` = request AND `tableau.supports_smoothed_error` AND adaptive;
-  off compiles the smoothing out, an unsupported request warns. FIRK defaults
-  the request on for smoothing-capable tableaus (radau).
+  off compiles the smoothing out, an unsupported request warns.
+  `FIRKStep.family_defaults(tableau)` defaults the request on for radau.
 - `smoothing_gamma`: `a[-1][-1]` on `ButcherTableau`; the sole real
   eigenvalue of `a` on `RadauIIATableau`, solved exactly and rounded once
   so it is identical on every host. The tableau also derives the
@@ -145,10 +145,12 @@ smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
 - DIRK and FIRK own width-`n_states` `error_solver` children on the `AT_STATE`
   helper family (J at the `state` argument, `a_ij` scales the matrix only),
   aliased into `solver_shared`; Rosenbrock-W reuses its cached-Jacobian
-  solver. The error solver carries `instance_label="error"`: it is seeded from
-  the linear solver's `krylov_*` settings and thereafter reads `error_*` keys
-  (`error_atol`, `error_rtol`, `error_max_iters`, `error_residual_reduction`,
-  `error_residual_floor`); its product is `error_linear_solver_fn`.
+  solver. `ODEImplicitStep` builds it for a smoothing-capable tableau when
+  `owns_error_solver` (DIRK, FIRK), registering it only while smoothing is
+  on. It carries `instance_label="error"` and reads `error_atol`,
+  `error_rtol`, `error_max_iters`, `error_residual_reduction` and
+  `error_residual_floor`, which `resolve()` fills from the `krylov_*`
+  settings when not given; its product is `error_linear_solver_fn`.
 - Rhs via generated `apply_mass`: DIRK and Rosenbrock-W `M @ raw_error`
   (DIRK solves at the final stage state/time/drivers, rhs in `error_rhs`);
   FIRK `M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` at the step-start state.

@@ -21,6 +21,7 @@ from cubie.batchsolving.comparison import (
     Candidate,
     ComparisonRunner,
 )
+from cubie.batchsolving.solver import Solver
 
 
 class TestCandidateSpecs:
@@ -319,14 +320,28 @@ class TestCalibrateGuards:
     """Input validation on the shared three-state system."""
 
     @pytest.mark.nocudasim
-    def test_calibrate_requires_drivers_for_driver_systems(
-        self, solver_mutable
-    ):
-        with pytest.raises(ValueError, match="drivers"):
+    def test_calibrate_requires_drivers_for_driver_systems(self, system):
+        """No configured or supplied samples is rejected."""
+        undriven = Solver(system)
+        with pytest.raises(ValueError, match="driver samples"):
+            undriven.calibrate(
+                {"x0": [0.5], "x1": [-0.25], "x2": [1.2]},
+                {"p0": [0.7], "p1": [0.9], "p2": [1.1]},
+                duration=0.2,
+                verbose=False,
+                max_parallel=1,
+            )
+
+    @pytest.mark.nocudasim
+    def test_calibrate_accepts_the_configured_drivers(self, solver_mutable):
+        """Configured samples pass the guard; the grid type raises."""
+        assert solver_mutable.given.drivers is not None
+        with pytest.raises(ValueError, match="grid type"):
             solver_mutable.calibrate(
                 {"x0": [0.5], "x1": [-0.25], "x2": [1.2]},
                 {"p0": [0.7], "p1": [0.9], "p2": [1.1]},
                 duration=0.2,
+                grid_type="nowhere",
                 verbose=False,
                 max_parallel=1,
             )

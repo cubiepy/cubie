@@ -65,7 +65,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
 from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.norms import (
     FIRKCorrectionNorm,
-    ScaledNorm,
     TiledScaledNorm,
 )
 from cubie.integrators.stage_predictors import DenseStagePredictor
@@ -170,15 +169,21 @@ class FIRKStep(ODEImplicitStep):
     """Fully implicit Runge--Kutta step with an embedded error estimate."""
 
     default_tableau = DEFAULT_FIRK_TABLEAU
+    owns_error_solver = True
 
     @classmethod
     def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
-        """Adaptive or fixed defaults by the tableau's error estimate."""
+        """Adaptive or fixed defaults; smoothing on when supported."""
         if tableau is None:
             tableau = cls.default_tableau
         if tableau.has_error_estimate:
-            return FIRK_ADAPTIVE_DEFAULTS.copy()
-        return FIRK_FIXED_DEFAULTS.copy()
+            defaults = FIRK_ADAPTIVE_DEFAULTS.copy()
+        else:
+            defaults = FIRK_FIXED_DEFAULTS.copy()
+        defaults.settings["use_smoothed_error"] = (
+            tableau.supports_smoothed_error
+        )
+        return defaults
 
     def __init__(
         self,
@@ -243,16 +248,8 @@ class FIRKStep(ODEImplicitStep):
         FIRK methods require solving a coupled system of all stages
         simultaneously, which is more computationally expensive than DIRK
         methods but can achieve higher orders of accuracy for stiff systems.
-
-        ``use_smoothed_error`` defaults on when the tableau supports it.
         """
 
-        # Default to smoothed error true if the tableau supports it.
-        if (
-            kwargs.get("use_smoothed_error") is None
-            and tableau.supports_smoothed_error
-        ):
-            kwargs["use_smoothed_error"] = True
         config = build_config(
             FIRKStepConfig,
             required={
@@ -306,44 +303,11 @@ class FIRKStep(ODEImplicitStep):
         self.register_buffers()
         self.build_implicit_helpers()
 
-    def _build_error_solver(self) -> None:
-        """Construct the width-n smoothing solver from live settings."""
-        config = self.compile_settings
-        # Build a second, n-wide solver for the smoothed error
-        # estimation.
-        carried = {
-            key.replace("krylov_", "error_", 1): value
-            for key, value in self.linear_solver.settings_dict.items()
-            if key in self._LINEAR_SOLVER_PARAMS and value is not None
-        }
-        norm_kwargs = {
-            key: carried[key]
-            for key in ("error_atol", "error_rtol")
-            if key in carried
-        }
-        self.error_solver = self._construct_linear_solver(
-            precision=config.precision,
-            solver_width=config.n_states,
-            norm=ScaledNorm(
-                precision=config.precision,
-                solver_width=config.n_states,
-                n_states=config.n_states,
-                instance_label="error",
-                **norm_kwargs,
-            ),
-            norm_reference="base_state",
-            instance_label="error",
-            **carried,
-        )
-
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
         n = config.n_states
         tableau = config.tableau
-
-        if self.smooth_error and self.error_solver is None:
-            self._build_error_solver()
 
         # Clear this step's own registrations only: child factories
         # keep their still-valid declarations, and register_child
