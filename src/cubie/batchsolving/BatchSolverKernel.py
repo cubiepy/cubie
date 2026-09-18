@@ -54,7 +54,7 @@ from numpy import (
 from cubie.cuda_simsafe import cuda, float64
 from cubie.cuda_simsafe import int32
 
-from attrs import define, field, evolve, fields
+from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
 from cubie.cuda_backend import IS_MLIR
@@ -367,7 +367,6 @@ class BatchSolverKernel(CUDAFactory):
             driver_derivative_fn=self.driver_interpolator.driver_derivative_fn,
             **settings,
         )
-        settings.update(self._auto_defaults(settings))
         run = self.single_integrator
         self.setup_compile_settings(
             build_config(
@@ -383,6 +382,11 @@ class BatchSolverKernel(CUDAFactory):
                 **settings,
             )
         )
+        derived = self._auto_defaults(settings)
+        if derived:
+            self.update_compile_settings(
+                {**derived, "loop_fn": run.device_function}, silent=True
+            )
 
         self.input_arrays = InputArrays.from_solver(self)
         self.output_arrays = OutputArrays.from_solver(self)
@@ -1253,10 +1257,6 @@ class BatchSolverKernel(CUDAFactory):
         The kernel settings take the run's ``loop_fn`` and output
         compile flags last.
         """
-        if updates.get("stream_group", "") is None:
-            updates["stream_group"] = DEFAULT_MEMORY_SETTINGS["stream_group"]
-        if updates.get("memory_manager", "") is None:
-            del updates["memory_manager"]
         recognised = self.memory_manager.update(self, updates, silent=True)
         interpolator = self.driver_interpolator
         known_hash = interpolator.config_hash
@@ -1264,29 +1264,29 @@ class BatchSolverKernel(CUDAFactory):
         # New sample values alone keep the compiled evaluators.
         if interpolator.config_hash != known_hash:
             updates.update(self._driver_settings())
-        recognised |= self.single_integrator.update(updates, silent=True)
-        updates.update(self._auto_defaults(updates))
-        run = self.single_integrator
-        kernel_updates = {
-            **updates,
-            "loop_fn": run.device_function,
-            "compile_flags": run.output_compile_flags,
-        }
         blocksize = self.compile_settings.blocksize
-        recognised |= self.update_compile_settings(kernel_updates, silent=True)
+        recognised |= self.update_compile_settings(updates, silent=True)
         if self.compile_settings.blocksize != blocksize:
             # A pinned residency belongs to the block size it was timed with.
             self.resident_blocks = None
+        recognised |= self.single_integrator.update(updates, silent=True)
+        updates.update(self._auto_defaults(updates))
+        run = self.single_integrator
+        self.update_compile_settings(
+            {
+                **updates,
+                "loop_fn": run.device_function,
+                "compile_flags": run.output_compile_flags,
+            },
+            silent=True,
+        )
         self._known_system_config = self.system.compile_settings
         return recognised
 
     def _auto_defaults(self, settings: Dict[str, Any]) -> Dict[str, Any]:
         """Apply and return the built step's values for the placement
         and unroll keys ``settings`` leaves ``None``."""
-        enabled = settings.get("auto_performance")
-        if enabled is None:
-            enabled = fields(BatchSolverConfig).auto_performance.default
-        if not enabled:
+        if not self.compile_settings.auto_performance:
             return {}
         derived = {
             key: value
