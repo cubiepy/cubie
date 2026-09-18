@@ -86,7 +86,6 @@ from cubie.memory.mem_manager import (
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import (
-    ALL_UNROLL_PARAMETERS,
     CUDAFactory,
     CUDADispatcherCache,
     UnrollChoice,
@@ -121,14 +120,6 @@ from cubie._utils import (
 if TYPE_CHECKING:
     from cubie.memory import MemoryManager
     from cubie.memory.array_requests import ArrayResponse
-
-
-def _performance_keys(settings: Dict[str, Any]) -> Set[str]:
-    """Return the placement and unroll keys in ``settings``."""
-    return {
-        key for key in settings
-        if key.endswith("_location") or key in ALL_UNROLL_PARAMETERS
-    }
 
 
 DEFAULT_MEMORY_SETTINGS = {
@@ -376,11 +367,7 @@ class BatchSolverKernel(CUDAFactory):
             driver_derivative_fn=self.driver_interpolator.driver_derivative_fn,
             **settings,
         )
-        pending = {
-            key for key in _performance_keys(settings)
-            if settings.get(key) is None
-        }
-        settings.update(self._auto_defaults(pending, settings))
+        settings.update(self._auto_defaults(settings))
         run = self.single_integrator
         self.setup_compile_settings(
             build_config(
@@ -1277,16 +1264,8 @@ class BatchSolverKernel(CUDAFactory):
         # New sample values alone keep the compiled evaluators.
         if interpolator.config_hash != known_hash:
             updates.update(self._driver_settings())
-        # Performance keys given None wait for the updated step.
-        pending = {
-            key for key in _performance_keys(updates)
-            if updates[key] is None
-        }
-        for key in pending:
-            del updates[key]
         recognised |= self.single_integrator.update(updates, silent=True)
-        recognised |= pending
-        updates.update(self._auto_defaults(pending, updates))
+        updates.update(self._auto_defaults(updates))
         run = self.single_integrator
         kernel_updates = {
             **updates,
@@ -1301,24 +1280,22 @@ class BatchSolverKernel(CUDAFactory):
         self._known_system_config = self.system.compile_settings
         return recognised
 
-    def _auto_defaults(
-        self, pending: Set[str], settings: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Apply and return the ``pending`` performance keys' values.
-
-        ``auto_performance`` picks them from the built step; off, they
-        are ``None`` and fall to their declared defaults.
-        """
-        if not pending:
-            return {}
+    def _auto_defaults(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply and return the built step's values for the placement
+        and unroll keys ``settings`` leaves ``None``."""
         enabled = settings.get("auto_performance")
         if enabled is None:
             enabled = fields(BatchSolverConfig).auto_performance.default
-        derived = self.performance_defaults() if enabled else {}
-        values = {key: derived.get(key) for key in pending}
-        self.system.update(values, silent=True)
-        self.single_integrator.update(values, silent=True)
-        return values
+        if not enabled:
+            return {}
+        derived = {
+            key: value
+            for key, value in self.performance_defaults().items()
+            if settings.get(key) is None
+        }
+        self.system.update(derived, silent=True)
+        self.single_integrator.update(derived, silent=True)
+        return derived
 
     def performance_defaults(self) -> Dict[str, Any]:
         """Return the placements and unroll flags the built step picks."""
