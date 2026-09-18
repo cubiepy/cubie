@@ -301,14 +301,32 @@ def rank_timings(timings: Sequence[CandidateTiming]) -> List[CandidateTiming]:
 
 
 def worth_parallelising(
-    compile_seconds: Optional[float], misses: int, max_parallel: int
+    compile_seconds: Optional[float],
+    misses: int,
+    max_parallel: int,
+    startup_seconds: Optional[float] = None,
 ) -> bool:
-    """Whether spawning workers beats compiling ``misses`` serially."""
+    """Whether spawning workers beats compiling ``misses`` serially.
+
+    Parameters
+    ----------
+    compile_seconds
+        Measured seconds of one compile; ``None`` when unmeasured.
+    misses
+        Candidates left to compile.
+    max_parallel
+        Most workers a pool may hold.
+    startup_seconds
+        Seconds a worker spends importing cubie; the module's
+        :data:`WORKER_STARTUP_SECONDS` when not given.
+    """
     if compile_seconds is None or misses < 2 or max_parallel < 2:
         return False
+    if startup_seconds is None:
+        startup_seconds = WORKER_STARTUP_SECONDS
     serial = compile_seconds * misses
     workers = min(max_parallel, misses)
-    pooled = WORKER_STARTUP_SECONDS + compile_seconds * ceil(misses / workers)
+    pooled = startup_seconds + compile_seconds * ceil(misses / workers)
     return serial > pooled
 
 

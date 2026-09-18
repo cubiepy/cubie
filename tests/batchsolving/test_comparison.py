@@ -8,7 +8,6 @@ import pytest
 from cubie.batchsolving.comparison import (
     SUCCESS_TIER_FRACTION,
     TIMED_WAVES_FLOOR,
-    WORKER_STARTUP_SECONDS,
     Candidate,
     CandidateTiming,
     ComparisonRunner,
@@ -110,13 +109,18 @@ def test_rank_timings_empty_without_timed_candidates():
 
 def test_parallel_worth_only_when_serial_compiles_cost_more():
     """Spawning workers is chosen from the measured compile time."""
-    pays = worth_parallelising
+
+    def pays(compile_seconds, misses, max_parallel):
+        return worth_parallelising(
+            compile_seconds, misses, max_parallel, startup_seconds=12.0
+        )
+
     assert pays(None, 5, 4) is False
     assert pays(80.0, 1, 4) is False
     assert pays(1.0, 5, 4) is False
     assert pays(80.0, 5, 4) is True
-    assert pays(WORKER_STARTUP_SECONDS, 2, 4) is False
-    assert pays(WORKER_STARTUP_SECONDS + 1.0, 2, 4) is True
+    assert pays(12.0, 2, 4) is False
+    assert pays(13.0, 2, 4) is True
 
 
 def test_settings_label_names_enums_and_placements():
