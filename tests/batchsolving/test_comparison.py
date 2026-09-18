@@ -8,7 +8,6 @@ import pytest
 from cubie.batchsolving.comparison import (
     SUCCESS_TIER_FRACTION,
     TIMED_WAVES_FLOOR,
-    WORKER_STARTUP_SECONDS,
     Candidate,
     CandidateTiming,
     ComparisonRunner,
@@ -110,13 +109,18 @@ def test_rank_timings_empty_without_timed_candidates():
 
 def test_parallel_worth_only_when_serial_compiles_cost_more():
     """Spawning workers is chosen from the measured compile time."""
-    pays = worth_parallelising
+
+    def pays(compile_seconds, misses, max_parallel):
+        return worth_parallelising(
+            compile_seconds, misses, max_parallel, startup_seconds=12.0
+        )
+
     assert pays(None, 5, 4) is False
     assert pays(80.0, 1, 4) is False
     assert pays(1.0, 5, 4) is False
     assert pays(80.0, 5, 4) is True
-    assert pays(WORKER_STARTUP_SECONDS, 2, 4) is False
-    assert pays(WORKER_STARTUP_SECONDS + 1.0, 2, 4) is True
+    assert pays(12.0, 2, 4) is False
+    assert pays(13.0, 2, 4) is True
 
 
 def test_settings_label_names_enums_and_placements():
@@ -184,7 +188,8 @@ def test_runner_isolates_candidates_and_restores_the_solver(
         assert solver.dt == given["dt"]
         assert solver.kernel.resident_blocks is None
         bogus = Candidate("bogus", {"state_location": "nowhere"})
-        assert runner.compile([bogus]) == []
+        accepted = runner.compile([bogus])
+        assert accepted == []
         assert "nowhere" in runner.rejection(bogus)
         timings = runner.time([bogus])
         assert timings[0].error == runner.rejection(bogus)
@@ -294,10 +299,12 @@ def test_max_parallel_one_compiles_every_candidate_in_turn(
         Candidate("shared", {"state_location": "shared"}),
     ]
     with runner:
-        assert runner.compile(candidates) == candidates
+        accepted = runner.compile(candidates)
+        assert accepted == candidates
         for candidate in candidates:
             runner.select(candidate)
-            assert solver.kernel.kernel_is_cached()
+            cached = solver.kernel.kernel_is_cached()
+            assert cached
 
 
 def test_runner_stages_the_batch_on_the_device(
