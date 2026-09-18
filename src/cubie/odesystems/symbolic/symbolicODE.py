@@ -311,7 +311,6 @@ class SymbolicODE(BaseODE):
         self.fn_hash = fn_hash
         self.user_functions = user_functions
         self.driver_defaults = all_indexed_bases.drivers.default_values
-        self.registered_helper_events = set()
 
         super().__init__(
             initial_values=all_indexed_bases.state_values,
@@ -1018,14 +1017,12 @@ class SymbolicODE(BaseODE):
         event_name = (
             f"solver_helper_{role.name}_{request.variant.value}"
         )
-        if event_name not in self.registered_helper_events:
-            default_timelogger.register_event(
-                event_name,
-                "codegen",
-                f"Codegen time for solver helper {role.name} "
-                f"({request.variant.value})",
-            )
-            self.registered_helper_events.add(event_name)
+        default_timelogger.register_event(
+            event_name,
+            "codegen",
+            f"Codegen time for solver helper {role.name} "
+            f"({request.variant.value})",
+        )
 
         # Validation hooks run on every request, cache hits included.
         role.validate(self, request)
