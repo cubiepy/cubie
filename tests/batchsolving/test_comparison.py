@@ -188,7 +188,8 @@ def test_runner_isolates_candidates_and_restores_the_solver(
         assert solver.dt == given["dt"]
         assert solver.kernel.resident_blocks is None
         bogus = Candidate("bogus", {"state_location": "nowhere"})
-        assert runner.compile([bogus]) == []
+        accepted = runner.compile([bogus])
+        assert accepted == []
         assert "nowhere" in runner.rejection(bogus)
         timings = runner.time([bogus])
         assert timings[0].error == runner.rejection(bogus)
@@ -298,10 +299,12 @@ def test_max_parallel_one_compiles_every_candidate_in_turn(
         Candidate("shared", {"state_location": "shared"}),
     ]
     with runner:
-        assert runner.compile(candidates) == candidates
+        accepted = runner.compile(candidates)
+        assert accepted == candidates
         for candidate in candidates:
             runner.select(candidate)
-            assert solver.kernel.kernel_is_cached()
+            cached = solver.kernel.kernel_is_cached()
+            assert cached
 
 
 def test_runner_stages_the_batch_on_the_device(
