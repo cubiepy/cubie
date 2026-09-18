@@ -21,24 +21,6 @@ def _helper_fn(system, role, **kwargs):
     return system.get_solver_helper(role=role, **kwargs).device_function
 
 
-def test_create_with_driver_array_dict(precision):
-    """Driver-array dicts pass interpolator validation at create time."""
-    t_samples = np.linspace(0.0, 1.0, 11)
-    ode = create_ODE_system(
-        dxdt=["dx = -k * x + d1"],
-        states={"x": 1.0},
-        parameters={"k": 0.5},
-        drivers={
-            "d1": np.sin(t_samples),
-            "time": t_samples,
-            "wrap": False,
-        },
-        precision=precision,
-        name="test_driver_array_create",
-    )
-    assert ode.num_drivers == 1
-
-
 @pytest.fixture(scope="session")
 def symbolic_input_simple():
     return {

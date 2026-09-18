@@ -20,6 +20,7 @@ if os.environ.get("NUMBA_ENABLE_CUDASIM", "0") == "1":
 
 import cubie as qb  # noqa: E402
 from cubie.cuda_simsafe import cuda  # noqa: E402
+from cubie.array_interpolator import DriverSamples  # noqa: E402
 from cubie.time_logger import default_timelogger  # noqa: E402
 from tests.system_fixtures import (  # noqa: E402
     build_lorenz_julia_system,
@@ -106,10 +107,10 @@ def inputs_for(solver, problem: str, n: int):
             "n2": np.full(n, 20.0, dtype=PRECISION),
         },
     )
-    drivers = {
-        "d0": np.zeros(4, dtype=PRECISION),
-        "driver_sample_period": PRECISION(1.0 / 3.0),
-    }
+    drivers = DriverSamples(
+        {"d0": np.zeros(4, dtype=PRECISION)},
+        driver_sample_period=PRECISION(1.0 / 3.0),
+    )
     return inits, params, drivers
 
 

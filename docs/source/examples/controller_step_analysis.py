@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 from cubie.memory import default_memmgr
 from cubie.outputhandling.output_functions import OutputFunctions
 from tests._utils import _driver_sequence
@@ -112,9 +112,9 @@ def build_solver_settings(precision: type[np.floating[Any]]) -> Dict[str, Any]:
         "mem_proportion": None,
         "step_controller": "fixed",
         "precision": precision,
-        "driverspline_order": 3,
-        "driverspline_wrap": False,
-        "driverspline_boundary_condition": "clamped",
+        "order": 3,
+        "wrap": False,
+        "boundary_condition": "clamped",
         "krylov_atol": precision(1e-7),
         "krylov_rtol": precision(1e-7),
         "linear_correction_type": "minimal_residual",
@@ -255,9 +255,8 @@ def build_driver_settings(
 
     Returns
     -------
-    dict or None
-        Dictionary consumed by :class:`ArrayInterpolator`, or ``None`` when the
-        system has no drivers.
+    DriverSamples or None
+        The sampled drivers, or ``None`` when the system has no drivers.
     """
 
     if system.num_drivers == 0:
@@ -266,7 +265,7 @@ def build_driver_settings(
     dt_sample = precision(solver_settings["save_every"]) / 2.0
     total_span = precision(solver_settings["duration"])  # match test fixtures
     t0 = precision(solver_settings["warmup"])  # align with conftest driver t0
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
 
     samples = int(np.ceil(total_span / dt_sample)) + 1
     samples = max(samples, order + 1)
@@ -281,20 +280,13 @@ def build_driver_settings(
     )
 
     driver_names = list(system.indices.driver_names)
-    drivers_dict: Dict[str, Any] = {
+    samples = {
         name: np.array(driver_matrix[:, idx], dtype=precision, copy=True)
         for idx, name in enumerate(driver_names)
     }
-    drivers_dict["driver_sample_period"] = precision(dt_sample)
-    drivers_dict["wrap"] = bool(solver_settings["driverspline_wrap"])
-    drivers_dict["boundary_condition"] = solver_settings.get(
-        "driverspline_boundary_condition",
-        solver_settings.get("driverspline_end_condition", "clamped"),
+    return DriverSamples(
+        samples, driver_sample_period=precision(dt_sample), t0=t0
     )
-    drivers_dict["order"] = order
-    drivers_dict["t0"] = t0
-
-    return drivers_dict
 
 
 def create_output_functions(
@@ -419,12 +411,12 @@ def create_driver_evaluator(
     """
 
     width = system.num_drivers
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
     if driver_array is None or width == 0:
         coeffs = np.zeros((1, width, order + 1), dtype=precision)
         dt_value = precision(solver_settings["save_every"]) / 2.0
         t0_value = precision(0.0)
-        wrap_value = bool(solver_settings["driverspline_wrap"])
+        wrap_value = bool(solver_settings["wrap"])
         boundary = None
     else:
         coeffs = np.array(
@@ -486,7 +478,7 @@ def generate_inputs(
         ).copy()
     else:
         width = system.num_drivers
-        order = int(solver_settings["driverspline_order"])
+        order = int(solver_settings["order"])
         inputs["driver_coefficients"] = np.zeros(
             (1, width, order + 1), dtype=precision
         )

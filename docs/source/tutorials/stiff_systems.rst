@@ -135,12 +135,13 @@ length:
 
    t_samples = np.linspace(0.0, 20.0, 400)
    signal = 5.0 * np.sin(2.0 * np.pi * 0.25 * t_samples)
+   forcing = qb.DriverSamples({"forcing": signal}, time=t_samples)
 
    result = qb.solve_ivp(
        forced,
        y0={"x": 2.0, "v": 0.0},
        parameters={"mu": np.linspace(20.0, 80.0, 16)},
-       drivers={"forcing": signal, "time": t_samples},
+       drivers=forcing,
        method="rosenbrock",
        duration=20.0,
        save_every=0.05,
@@ -191,6 +192,10 @@ Recap
 - Runs that fail with ``STEP_TOO_SMALL`` are fixed by loosening
   ``atol``/``rtol`` (or supplying a per-state ``atol`` vector), and
   by lowering ``dt_min`` if the dynamics truly need smaller steps.
-- Sampled forcing data enters as a driver, declared on the system
-  and passed as ``{"name": values, "time": times}``; forcing with a
-  closed form is written into the equations using ``t``.
+- Sampled forcing data is defined using a ``DriverSamples`` object.
+  It takes a ``dict`` of ``"[driver name]": [sampled data]`` pairs,
+  with either the sample time vector given as ``time``, or a starting
+  time and sample spacing given as ``t0`` and
+  ``driver_sample_period``. Alternatively, if you can define your
+  forcing term as a function of time, just include it in the system's
+  equations with time as the variable ``t`` and CuBIE will handle it.

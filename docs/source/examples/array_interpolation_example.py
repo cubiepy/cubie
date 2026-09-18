@@ -15,7 +15,7 @@ import numpy as np
 from cubie.cuda_simsafe import cuda
 from scipy.interpolate import CubicSpline
 
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 
 
 def build_wiggly_driver(
@@ -99,13 +99,10 @@ def main() -> None:
     for boundary_condition in boundary_conditions:
         interp = ArrayInterpolator(
             precision=precision,
-            input_dict={
-                'wiggler': samples,
-                'time': times,
-                'order': 3,
-                'wrap': True,
-                'boundary_condition': boundary_condition
-            },
+            drivers=DriverSamples({"wiggler": samples}, time=times),
+            order=3,
+            wrap=True,
+            boundary_condition=boundary_condition,
         )
 
         device_values[boundary_condition] = evaluate_on_device(

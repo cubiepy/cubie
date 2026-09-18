@@ -29,9 +29,6 @@ from .normalise import normalise_input
 from .parse_primitives import TIME_SYMBOL
 from .parsed_system import ParsedSystem
 
-DRIVER_SETTING_KEYS = {"time", "driver_sample_period", "wrap", "order"}
-
-
 def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
     """Detect whether dxdt contains strings, SymPy expressions, or a callable.
 
@@ -291,9 +288,7 @@ def parse_input(
         driver_names = []
     elif isinstance(drivers, dict):
         driver_dict = drivers
-        driver_names = [
-            key for key in drivers.keys() if key not in DRIVER_SETTING_KEYS
-        ]
+        driver_names = list(drivers.keys())
         if not driver_names:
             raise ValueError(
                 "Driver dictionary must include at least one driver symbol."
@@ -394,9 +389,7 @@ def _parse_function_path(
         drivers = []
     elif isinstance(drivers, dict):
         driver_dict = drivers
-        drivers = [
-            key for key in drivers.keys() if key not in DRIVER_SETTING_KEYS
-        ]
+        drivers = list(drivers.keys())
         if len(drivers) == 0:
             raise ValueError(
                 "Driver dictionary must include at least one driver symbol."

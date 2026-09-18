@@ -94,6 +94,7 @@ an example of how to do this:
     # Create a measured signal as a driver
     t_driver = np.linspace(0, 1.0, 1000)
     signal = np.sin(2 * np.pi * 5 * t_driver) * np.exp(-t_driver)
+    drive = qb.DriverSamples({"drive_signal": signal}, time=t_driver)
 
     def driven(t, y, p):
         dx = -p.k * y.x + p.amplitude * drive_signal
@@ -112,7 +113,7 @@ an example of how to do this:
         sys,
         y0={"x": np.array([0.0])},
         parameters={"amplitude": np.linspace(0.1, 2.0, 100)},
-        drivers={"drive_signal": signal, "time": t_driver},
+        drivers=drive,
         method="dormand-prince-54",
         duration=1.0,
     )
@@ -121,16 +122,18 @@ Note how the driver appears: it is declared in ``drivers`` when the
 system is created, and referenced by its bare name inside the function
 body, since drivers are not part of the state or parameter containers.
 
-The ``drivers`` dictionary maps each driver name to a 1-D array of
-sampled values.  The sample times are supplied alongside them, either
-as a ``"time"`` array of the same length, or as scalar ``"dt"`` (and
-optionally ``"t0"``) keys when the samples are evenly spaced.
+Sampled forcing data is defined using a ``DriverSamples`` object.
+It takes a ``dict`` of ``"[driver name]": [sampled data]`` pairs, with
+either the sample time vector given as ``time``, or a starting time
+and sample spacing given as ``t0`` and ``driver_sample_period``. It is
+a solver setting, so ``Solver`` and ``Solver.update`` accept it too,
+and a ``solve`` without ``drivers`` reuses the last ones given.
 
 Interpolation Options
 ---------------------
 
-The remaining keys of the ``drivers`` dictionary control how CuBIE
-interpolates between your samples:
+Three further solver settings control how CuBIE interpolates between
+your samples:
 
 **order** (default ``3``)
    Polynomial degree of the spline fitted over each sample segment.
@@ -153,12 +156,16 @@ interpolates between your samples:
 
 .. code-block:: python
 
-    drivers={
-        "drive_signal": signal,
-        "time": t_driver,
-        "order": 3,
-        "wrap": True,
-    }
+    result = qb.solve_ivp(
+        sys,
+        y0={"x": np.array([0.0])},
+        parameters={"amplitude": np.linspace(0.1, 2.0, 100)},
+        drivers=drive,
+        order=3,
+        wrap=True,
+        method="dormand-prince-54",
+        duration=1.0,
+    )
 
 A worked example, including a sanity-check plot of the interpolated
 driver, lives in ``docs/source/examples/array_interpolation_example.py``.

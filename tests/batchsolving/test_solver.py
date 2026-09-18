@@ -15,7 +15,12 @@ from tests.system_fixtures import (
 )
 
 from cubie import create_ODE_system
-from cubie.batchsolving.solver import Solver, solve_ivp
+from cubie.array_interpolator import DriverSamples
+from cubie.batchsolving.solver import (
+    Solver,
+    _system_from_equations,
+    solve_ivp,
+)
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -1172,36 +1177,6 @@ def test_lineinfo_constructor_propagates_to_children(precision):
     assert integrator._system.compile_settings.lineinfo is True
 
 
-def test_driver_evaluator_wired_on_configure(precision):
-    """Configuring drivers wires the interpolator's evaluator in."""
-    system = build_three_state_nonlinear_system(precision)
-    solver = Solver(system, algorithm="radau")
-    assert solver.driver_interpolator.num_inputs == 0
-    assert solver.driver_interpolator.drivers_fn is None
-    integrator = solver.kernel.single_integrator
-    assert integrator._loop.compile_settings.drivers_fn is None
-
-    samples = np.linspace(0.0, 1.0, 6, dtype=precision)
-    drivers = {
-        name: samples for name in system.indices.driver_names
-    }
-    drivers["driver_sample_period"] = precision(0.1)
-    drivers["wrap"] = False
-    solver._configure_drivers(drivers)
-
-    integrator = solver.kernel.single_integrator
-    evaluator = solver.kernel.driver_interpolator.drivers_fn
-    assert solver.driver_interpolator.num_inputs == system.num_drivers
-    assert (
-        integrator._loop.compile_settings.drivers_fn
-        is evaluator
-    )
-    assert (
-        integrator._algo_step.compile_settings.drivers_fn
-        is evaluator
-    )
-
-
 def test_driverless_system_has_no_driver_evaluator(precision):
     """A driverless system leaves ``drivers_fn`` unset."""
     system = build_diagonally_dominant_system(precision)
@@ -1403,6 +1378,20 @@ def test_solve_ivp_accepts_equation_strings():
     assert isinstance(result, SolveResult)
     values = np.asarray(result.as_numpy["time_domain_array"])
     assert np.all(np.isfinite(values))
+
+
+def test_equations_take_driver_names_from_the_samples(precision):
+    """Raw equations declare their drivers from the given samples."""
+    times = np.linspace(0.0, 1.0, 11)
+    drivers = DriverSamples({"d1": np.sin(times)}, time=times)
+    system = _system_from_equations(
+        ["dx = -k * x + d1"],
+        {"x": [1.0]},
+        {"k": [0.5]},
+        drivers,
+        precision=precision,
+    )
+    assert list(system.indices.driver_names) == ["d1"]
 
 
 def test_solver_routes_system_ordering_settings_before_kernel(precision):
@@ -2232,7 +2221,7 @@ def test_save_boundary_zero_gap_run_completes():
         forced,
         y0={"x": np.array([2.0]), "v": np.array([0.0])},
         parameters={"mu": np.array([64.0])},
-        drivers={"forcing": signal, "time": time},
+        drivers=DriverSamples({"forcing": signal}, time=time),
         method="rosenbrock",
         duration=20.0,
         save_every=0.05,
@@ -2477,12 +2466,13 @@ def test_driver_setting_update_syncs_evaluator_and_coefficients(
     solver_mutable.update({"boundary_condition": "natural"})
     updated_output = run_solve(solver_mutable, None)
 
-    natural_settings = dict(driver_settings)
-    natural_settings["boundary_condition"] = "natural"
     reference_solver = _build_solver_instance(
         system=system,
-        solver_settings=solver_settings,
-        driver_settings=natural_settings,
+        solver_settings={
+            **solver_settings,
+            "boundary_condition": "natural",
+        },
+        driver_settings=driver_settings,
         memory_manager=thread_mem_manager,
     )
     reference_output = run_solve(reference_solver, None)
@@ -2633,8 +2623,6 @@ def test_copy_rebuilds_the_same_kernel_on_its_own_system(
     """A copy hashes identically on a copied system."""
     twin = solver.copy()
     try:
-        if driver_settings is not None:
-            twin._configure_drivers(driver_settings)
         assert twin.system is not solver.system
         assert twin.system.config_hash == solver.system.config_hash
         assert twin.kernel.config_hash == solver.kernel.config_hash
@@ -2667,8 +2655,6 @@ def test_copy_carries_step_solver_and_unroll_settings(
     """Step, solver, placement and unroll settings reach the copy."""
     twin = solver.copy()
     try:
-        if driver_settings is not None:
-            twin._configure_drivers(driver_settings)
         step = twin.kernel.single_integrator._algo_step
         parent_step = solver.kernel.single_integrator._algo_step
         assert step.compile_settings.stage_increment_location == "shared"
@@ -2710,8 +2696,6 @@ def test_copy_rederives_what_the_parent_derived(solver, driver_settings):
     run.device_function
     twin = solver.copy()
     try:
-        if driver_settings is not None:
-            twin._configure_drivers(driver_settings)
         twin_run = twin.kernel.single_integrator
         twin_run.device_function
         assert twin_run._algo_step.compile_settings.unroll == (
@@ -2997,6 +2981,27 @@ def test_driverless_batch_queues_only_the_run_inputs(
     assert arrays._needs_overwrite == ["initial_values", "parameters"]
 
 
+def _doubled_first_driver(driver_settings, system):
+    """Return ``driver_settings`` with the first driver's samples doubled."""
+    samples = dict(driver_settings.samples)
+    first_driver = list(system.indices.driver_names)[0]
+    samples[first_driver] = samples[first_driver] * 2.0
+    return DriverSamples(
+        samples,
+        driver_sample_period=driver_settings.driver_sample_period,
+        t0=driver_settings.t0,
+    )
+
+
+def _driverless(solver):
+    """Return ``solver``'s given settings without its driver samples."""
+    return {
+        key: value
+        for key, value in solver.settings_dict.items()
+        if key != "drivers"
+    }
+
+
 def test_unchanged_drivers_upload_once(
     solver_mutable,
     simple_initial_values,
@@ -3005,7 +3010,7 @@ def test_unchanged_drivers_upload_once(
     system,
     precision,
 ):
-    """The table is queued after configure_drivers, not on a repeat."""
+    """The table is queued after new samples, not on a repeat."""
     solver = solver_mutable
     arrays = _prepare_batch(solver, simple_initial_values, simple_parameters)
     uploaded = solver.driver_interpolator.coefficients
@@ -3018,12 +3023,7 @@ def test_unchanged_drivers_upload_once(
     assert arrays._needs_overwrite == ["initial_values", "parameters"]
     _upload_queued(arrays)
 
-    changed = dict(driver_settings)
-    first_driver = list(system.indices.driver_names)[0]
-    changed[first_driver] = np.asarray(
-        changed[first_driver], dtype=precision
-    ) * precision(2.0)
-    solver._configure_drivers(changed)
+    solver.update(drivers=_doubled_first_driver(driver_settings, system))
     replacement = solver.driver_interpolator.coefficients
     assert replacement is not uploaded
 
@@ -3044,12 +3044,7 @@ def test_driver_value_change_keeps_the_kernel_build(
     kernel_hash = kernel.config_hash
     dispatcher = kernel.kernel
 
-    changed = dict(driver_settings)
-    first_driver = list(system.indices.driver_names)[0]
-    changed[first_driver] = np.asarray(
-        changed[first_driver], dtype=precision
-    ) * precision(2.0)
-    solver._configure_drivers(changed)
+    solver.update(drivers=_doubled_first_driver(driver_settings, system))
 
     assert solver.driver_interpolator.drivers_fn is not evaluator
     assert kernel.config_hash == kernel_hash
@@ -3065,8 +3060,8 @@ def test_driver_value_change_keeps_the_kernel_build(
 def test_driver_evaluators_wire_when_drivers_are_configured(
     solver, driver_settings
 ):
-    """An empty kernel interpolator gains its evaluators on configure."""
-    twin = Solver(solver.system.copy(), **solver.settings_dict)
+    """An empty kernel interpolator gains its evaluators on update."""
+    twin = Solver(solver.system.copy(), **_driverless(solver))
     try:
         interpolator = twin.kernel.driver_interpolator
         integrator = twin.kernel.single_integrator
@@ -3074,7 +3069,7 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
         assert interpolator.drivers_fn is None
         assert integrator._loop.compile_settings.drivers_fn is None
         assert twin.kernel.coefficients_shape[0] == 0
-        twin._configure_drivers(driver_settings)
+        twin.update(drivers=driver_settings)
         assert interpolator.num_inputs == twin.system.num_drivers
         assert (
             integrator._loop.compile_settings.drivers_fn
@@ -3094,12 +3089,12 @@ def test_driver_evaluators_wire_when_drivers_are_configured(
 def test_run_rejects_a_driver_system_without_driver_inputs(
     solver, simple_initial_values, simple_parameters
 ):
-    """A driver system with no configured samples fails at solve."""
-    twin = Solver(solver.system.copy(), **solver.settings_dict)
+    """A driver system with no given samples fails at solve."""
+    twin = Solver(solver.system.copy(), **_driverless(solver))
     try:
         assert twin.system.num_drivers > 0
         assert twin.driver_interpolator.num_inputs == 0
-        with pytest.raises(ValueError, match="no driver evaluator"):
+        with pytest.raises(ValueError, match="no driver samples"):
             twin.solve(
                 initial_values=simple_initial_values,
                 parameters=simple_parameters,

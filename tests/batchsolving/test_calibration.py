@@ -265,8 +265,6 @@ def test_erk_stage_times_the_specs_on_the_solver(
     inits, params = solver.build_grid(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
-    if driver_settings is not None:
-        solver._configure_drivers(driver_settings)
     given = dict(solver.given.as_kwargs())
     algorithm = solver.kernel.settings_dict["algorithm"]
     specs = [

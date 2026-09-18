@@ -51,7 +51,6 @@ from typing import (
 
 from numpy import asarray, dtype as np_dtype, float32
 import sympy as sp
-from cubie.array_interpolator import ArrayInterpolator
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
     generate_observables_fac_code,
@@ -441,11 +440,6 @@ class SymbolicODE(BaseODE):
         SymbolicODE
             Fully constructed symbolic system ready for compilation.
         """
-
-        if isinstance(drivers, dict) and (
-            "time" in drivers or "driver_sample_period" in drivers
-        ):
-            ArrayInterpolator(precision=precision, input_dict=drivers)
 
         # Register timing event for parsing (one-time registration)
         default_timelogger.register_event(

@@ -294,8 +294,7 @@ class BatchSolverKernel(CUDAFactory):
         ODE system describing the problem to integrate.
     **settings
         Loop, step, controller, algorithm, output, memory, cache and
-        kernel settings as one flat dict; the interpolation settings
-        and compile flags reach the driver interpolator.
+        kernel settings as one flat dict.
 
     Attributes
     ----------
@@ -345,10 +344,8 @@ class BatchSolverKernel(CUDAFactory):
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
 
-        # Child factory; empty until configure_drivers.
         self.driver_interpolator = ArrayInterpolator(
             precision=precision,
-            input_dict={},
             memory_manager=self._memory_manager,
         )
         self.driver_interpolator.update(settings, silent=True)
@@ -544,8 +541,8 @@ class BatchSolverKernel(CUDAFactory):
         ):
             raise ValueError(
                 f"System declares {self.system.sizes.drivers} driver(s) "
-                "but no driver evaluator is configured; pass drivers= "
-                "to solve."
+                "but no driver samples are given; pass drivers= to "
+                "solve."
             )
         stream = self.stream
         self._memory_manager.begin_work(self)
@@ -1273,12 +1270,12 @@ class BatchSolverKernel(CUDAFactory):
         compile flags last.
         """
         recognised = self.memory_manager.update(self, updates, silent=True)
-        interpolator_recognised = self.driver_interpolator.update(
-            updates, silent=True
-        )
-        if interpolator_recognised:
+        interpolator = self.driver_interpolator
+        known_hash = interpolator.config_hash
+        recognised |= interpolator.update(updates, silent=True)
+        # New sample values alone keep the compiled evaluators.
+        if interpolator.config_hash != known_hash:
             updates.update(self._driver_settings())
-        recognised |= interpolator_recognised
         recognised |= self.single_integrator.update(updates, silent=True)
         run = self.single_integrator
         kernel_updates = {
@@ -1293,42 +1290,6 @@ class BatchSolverKernel(CUDAFactory):
             self.resident_blocks = None
         self._known_system_config = self.system.compile_settings
         return recognised
-
-    def configure_drivers(self, drivers: Dict[str, Any]) -> None:
-        """Update the owned driver interpolator and dependent settings.
-
-        Parameters
-        ----------
-        drivers
-            Driver samples plus interpolation settings, as accepted by
-            :meth:`ArrayInterpolator.update_from_dict`.
-        """
-        drivers = ArrayInterpolator.check_against_system_drivers(
-            drivers, self.system
-        )
-        known_hash = self.driver_interpolator.config_hash
-        self.driver_interpolator.update_from_dict(drivers)
-        if self.driver_interpolator.config_hash != known_hash:
-            self.update(self._driver_settings())
-
-    def driver_inputs(self) -> Optional[Dict[str, Any]]:
-        """Drivers as passed to ``configure_drivers``; ``None`` when unset."""
-        interpolator = self.driver_interpolator
-        samples = interpolator.input_array
-        if samples.shape[0] == 0:
-            return None
-        names = list(self.system.indices.driver_names)
-        inputs = {
-            name: samples[:, index] for index, name in enumerate(names)
-        }
-        return {
-            **inputs,
-            "t0": interpolator.t0,
-            "driver_sample_period": interpolator.driver_sample_period,
-            "order": interpolator.order,
-            "wrap": interpolator.wrap,
-            "boundary_condition": interpolator.boundary_condition,
-        }
 
     def _driver_settings(self) -> Dict[str, Any]:
         """Return the interpolator's evaluators and coefficient layout."""

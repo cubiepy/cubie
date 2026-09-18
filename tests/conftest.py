@@ -35,7 +35,7 @@ from cubie.integrators.loops.ode_loop import ALL_LOOP_SETTINGS
 from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
 )
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS
 from cubie.odesystems.symbolic.parsing.cellml import load_cellml_model
 from cubie.vendored import cellmlmanip
@@ -703,9 +703,9 @@ def solver_settings(solver_settings_override, system, precision):
         "mem_proportion": None,
         "step_controller": "fixed",
         "precision": precision,
-        "driverspline_order": 3,
-        "driverspline_wrap": False,
-        "driverspline_boundary_condition": "clamped",
+        "order": 3,
+        "wrap": False,
+        "boundary_condition": "clamped",
         "krylov_atol": precision(1e-7),
         "krylov_rtol": precision(1e-7),
         "krylov_residual_reduction": None,
@@ -813,7 +813,7 @@ def simple_parameters(system):
 
 @pytest.fixture(scope="session")
 def driver_settings_override(request):
-    """Optional override for driver array configuration."""
+    """Optional :class:`DriverSamples` replacing the default ones."""
 
     return request.param if hasattr(request, "param") else None
 
@@ -825,10 +825,12 @@ def driver_settings(
     system,
     precision,
 ):
-    """Return default driver samples mapped to system driver symbols."""
+    """Return default :class:`DriverSamples` for the system's drivers."""
 
     if system.num_drivers == 0:
         return None
+    if driver_settings_override is not None:
+        return driver_settings_override
 
     if solver_settings["save_every"] is None:
         dt_sample = solver_settings["duration"] / 10.0
@@ -837,7 +839,7 @@ def driver_settings(
     total_span = precision(solver_settings["duration"])
     t0 = precision(solver_settings["warmup"])
 
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
 
     samples = int(np.ceil(total_span / dt_sample)) + 1
     samples = max(samples, order + 1)
@@ -850,23 +852,13 @@ def driver_settings(
         precision=precision,
     )
     driver_names = list(system.indices.driver_names)
-    drivers_dict = {
+    samples = {
         name: np.array(driver_matrix[:, idx], dtype=precision, copy=True)
         for idx, name in enumerate(driver_names)
     }
-    drivers_dict["driver_sample_period"] = precision(dt_sample)
-    drivers_dict["wrap"] = solver_settings["driverspline_wrap"]
-    drivers_dict["order"] = order
-    drivers_dict["boundary_condition"] = solver_settings[
-        "driverspline_boundary_condition"
-    ]
-    drivers_dict["t0"] = t0
-
-    if driver_settings_override:
-        for key, value in driver_settings_override.items():
-            drivers_dict[key] = value
-
-    return drivers_dict
+    return DriverSamples(
+        samples, driver_sample_period=precision(dt_sample), t0=t0
+    )
 
 
 @pytest.fixture(scope="session")
@@ -882,7 +874,10 @@ def driver_array(
 
     return ArrayInterpolator(
         precision=precision,
-        input_dict=driver_settings,
+        drivers=driver_settings,
+        order=int(solver_settings["order"]),
+        wrap=bool(solver_settings["wrap"]),
+        boundary_condition=solver_settings["boundary_condition"],
     )
 
 
@@ -897,12 +892,12 @@ def cpu_driver_evaluator(
     """Return a CPU evaluator configured from the driver fixtures."""
 
     width = system.num_drivers
-    order = int(solver_settings["driverspline_order"])
+    order = int(solver_settings["order"])
     if driver_settings is None or width == 0 or driver_array is None:
         coeffs = np.zeros((1, width, order + 1), dtype=precision)
         dt_value = precision(solver_settings["save_every"]) / 2.0
         t0_value = 0.0
-        wrap_value = bool(solver_settings["driverspline_wrap"])
+        wrap_value = bool(solver_settings["wrap"])
     else:
         coeffs = np.array(
             driver_array.coefficients,
@@ -1034,21 +1029,16 @@ def output_functions_mutable(output_settings, system, precision):
 
 
 @pytest.fixture(scope="session")
-def solverkernel(system, driver_settings, effective_settings):
+def solverkernel(system, effective_settings):
     """Top-level composite fixture for BatchSolverKernel."""
-    kernel = BatchSolverKernel(system, **effective_settings)
-    if driver_settings is not None:
-        kernel.configure_drivers(driver_settings)
-    return kernel
+    return BatchSolverKernel(system, **effective_settings)
 
 
 @pytest.fixture(scope="function")
-def solverkernel_mutable(system, driver_settings, effective_settings):
+def solverkernel_mutable(system, effective_settings):
     """Function-scoped composite fixture for BatchSolverKernel."""
     snapshot = system.compile_settings
     kernel = BatchSolverKernel(system, **effective_settings)
-    if driver_settings is not None:
-        kernel.configure_drivers(driver_settings)
     yield kernel
     _restore_system_flags(system, snapshot)
 
