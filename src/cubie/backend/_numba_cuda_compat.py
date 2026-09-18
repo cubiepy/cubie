@@ -72,7 +72,8 @@ import linecache
 import operator
 import os
 import weakref
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
+from functools import _lru_cache_wrapper
 
 import numpy as np
 
@@ -485,7 +486,7 @@ def _patch_ssa():
 # feat/inline-callee-ir-cache (incl. preserve_ir inline_ir)          #
 # ----------------------------------------------------------------- #
 
-_callee_ir_cache = weakref.WeakKeyDictionary()
+_PIPELINE_CALLEE_IR_CACHE_ATTR = "_numba_cuda_callee_ir_cache"
 
 
 def _clone_callee_ir(func_ir):
@@ -682,7 +683,6 @@ def _patch_inline_worker():
     if hasattr(_icc, "_clone_callee_ir"):
         return
     _icc._clone_callee_ir = _clone_callee_ir
-    _icc._callee_ir_cache = _callee_ir_cache
 
     worker = _icc.InlineWorker
     if "preserve_ir" not in inspect.signature(worker.inline_ir).parameters:
@@ -709,19 +709,22 @@ def _patch_inline_worker():
     def _fresh_callee_ir(self, function, enable_ssa=False):
         """Return callee IR that is safe for ``inline_ir`` to mutate.
 
-        The canonical IR produced by the untyped pipeline for a given
-        function and flags configuration is cached, and each call
-        site receives a structural clone of it. Running the untyped
-        pipeline is far more expensive than cloning, and deeply
-        nested inline='always' functions otherwise recompile their
-        whole subtree at every transitive call site.
+        The canonical IR for a function and flags configuration is
+        cached on the current compiler pipeline and each call site
+        receives a structural clone of it.
         """
-        per_func = _callee_ir_cache.setdefault(function, {})
-        key = (str(self.flags), enable_ssa)
-        canonical_ir = per_func.get(key)
+        # enable_ssa is rewritten by the pipeline; pin it so keys match.
+        self.flags.enable_ssa = enable_ssa
+        holder = self.pipeline if self.pipeline is not None else self
+        cache = getattr(holder, _PIPELINE_CALLEE_IR_CACHE_ATTR, None)
+        if cache is None:
+            cache = {}
+            setattr(holder, _PIPELINE_CALLEE_IR_CACHE_ATTR, cache)
+        key = (function, str(self.flags), enable_ssa)
+        canonical_ir = cache.get(key)
         if canonical_ir is None:
             canonical_ir = self.run_untyped_passes(function, enable_ssa)
-            per_func[key] = canonical_ir
+            cache[key] = canonical_ir
         return _clone_callee_ir(canonical_ir)
 
     worker.inline_function = inline_function
@@ -1076,6 +1079,45 @@ def _patch_cross_file_lineinfo():
 # ----------------------------------------------------------------- #
 
 
+# ----------------------------------------------------------------- #
+# per-dispatcher launch configuration cache                          #
+# ----------------------------------------------------------------- #
+
+_CONFIGURE_CACHE_SIZE = 128
+
+
+def _patch_configure_cache():
+    """Cache launch configurations on each dispatcher, not the class."""
+    from numba.cuda import dispatcher as _dispatcher
+
+    cls = _dispatcher.CUDADispatcher
+    stock = cls.__dict__.get("configure")
+    if not isinstance(stock, _lru_cache_wrapper):
+        return
+    normalize = _dispatcher.normalize_kernel_dimensions
+    launch_configuration = _dispatcher._LaunchConfiguration
+
+    def configure(self, griddim, blockdim, stream=0, sharedmem=0):
+        cache = self.__dict__.get("_cubie_configure_cache")
+        if cache is None:
+            cache = self._cubie_configure_cache = OrderedDict()
+        key = (griddim, blockdim, stream, sharedmem)
+        config = cache.get(key)
+        if config is not None:
+            cache.move_to_end(key)
+            return config
+        griddim, blockdim = normalize(griddim, blockdim)
+        config = launch_configuration(
+            self, griddim, blockdim, stream, sharedmem
+        )
+        cache[key] = config
+        if len(cache) > _CONFIGURE_CACHE_SIZE:
+            cache.popitem(last=False)
+        return config
+
+    cls.configure = configure
+
+
 def apply_patches():
     """Apply all patch groups that the installed numba-cuda needs."""
     if not _PATCHES_ACTIVE:
@@ -1086,6 +1128,7 @@ def apply_patches():
     _patch_error_markup()
     _patch_ssa()
     _patch_inline_worker()
+    _patch_configure_cache()
     _patch_lowering()
     _patch_cross_file_lineinfo()
 
