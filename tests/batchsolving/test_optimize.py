@@ -500,14 +500,18 @@ def test_compile_caches_the_optimize_candidates_without_a_solve(
         {"state_location": "local"},
         {"state_location": "shared"},
     )
+    verbosity = default_timelogger.verbosity
     solver.compile(
         drivers=driver_settings,
         optimize_candidates=True,
         max_parallel=1,
+        time_logging_level="silent",
     )
+    default_timelogger.set_verbosity(verbosity)
     for settings in candidates:
         solver.update(settings)
         assert solver.kernel.kernel_is_cached()
+    # Check no CUDA kernels ran.
     assert solver.kernel._cuda_events == []
 
 

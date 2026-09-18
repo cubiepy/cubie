@@ -34,7 +34,6 @@ from cubie.batchsolving.comparison import (
     Candidate,
     CandidateTiming,
     ComparisonRunner,
-    compile_kernels,
     rank_timings,
     settings_label,
     validate_sizing,
@@ -579,18 +578,21 @@ def run_optimization(
         for settings in parent.optimisation_candidates(force=force)
     ]
     if compile_only:
-        errors = compile_kernels(
-            parent,
-            tuple(candidate.settings for candidate in candidates),
-            max_parallel,
-        )
+        with ComparisonRunner(
+            parent, verbose=verbose, max_parallel=max_parallel
+        ) as runner:
+            runner.compile(candidates)
+            launches = [
+                LaunchResult(
+                    dict(candidate.settings),
+                    None,
+                    None,
+                    error=runner.rejection(candidate),
+                )
+                for candidate in candidates
+            ]
         return OptimizeResult(
-            launches=[
-                LaunchResult(dict(candidate.settings), None, None, error=error)
-                for candidate, error in zip(candidates, errors)
-            ],
-            best=None,
-            applied_settings={},
+            launches=launches, best=None, applied_settings={}
         )
     inits, params = parent.build_grid(
         initial_values, parameters, grid_type=grid_type
