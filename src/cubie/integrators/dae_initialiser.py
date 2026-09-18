@@ -35,9 +35,9 @@ from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
     CUDADispatcherCache,
+    build_config,
 )
 from cubie._utils import (
-    build_config,
     device_function_field,
     getype_validator,
     is_device_validator,

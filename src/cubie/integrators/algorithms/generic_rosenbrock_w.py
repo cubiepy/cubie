@@ -43,14 +43,17 @@ Designed for Parabolic Problems. *BIT Numerical Mathematics* 41,
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from cubie.CUDAFactory import UnrollChoice
+from cubie.CUDAFactory import (
+    UnrollChoice,
+    build_config,
+)
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from numpy import int32 as np_int32
 
-from cubie._utils import build_config, device_function_field, PrecisionDType
+from cubie._utils import device_function_field, PrecisionDType
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     AlgorithmDefaults,

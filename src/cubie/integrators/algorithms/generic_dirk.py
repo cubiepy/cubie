@@ -41,14 +41,13 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from attrs import evolve, field, validators, frozen
 from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
-from cubie.CUDAFactory import UnrollChoice
+from cubie.CUDAFactory import (
+    UnrollChoice,
+    build_config,
+)
 from cubie.cuda_simsafe import unroll_if
 
-from cubie._utils import (
-    build_config,
-    device_function_field,
-    PrecisionDType,
-)
+from cubie._utils import device_function_field, PrecisionDType
 from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (

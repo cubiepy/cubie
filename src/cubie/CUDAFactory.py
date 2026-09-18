@@ -51,7 +51,16 @@ See Also
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import cache
-from typing import Any, Dict, Optional, Set, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+    get_args,
+    get_origin,
+)
 
 from attrs import (
     NOTHING,
@@ -78,7 +87,6 @@ from cubie._env import lineinfo_default
 from cubie._serialize import canonical_digest
 from cubie._utils import (
     in_attr,
-    nested_config_fields,
     unpack_dict_values,
     PrecisionDType,
     precision_validator,
@@ -217,6 +225,155 @@ class FrozenSettings:
         if not changed:
             return self, set(given), set()
         return candidate, set(given), changed
+
+
+def build_config(
+    config_class: type, required: dict, instance_label: str = "", **optional
+) -> Any:
+    """Build attrs config instance from required and optional parameters.
+
+    Merges required parameters with optional overrides and passes them to the
+    attrs config class constructor. The config class itself defines defaults
+    for optional fields - this function simply filters and routes kwargs.
+
+    Parameters
+    ----------
+    config_class : type
+        Attrs class to instantiate (e.g., DIRKStepConfig).
+    required : dict
+        Required parameters that must be provided. These are typically
+        function parameters like precision, n, dxdt_fn.
+    instance_label : str, optional
+        Instance label for MultipleInstanceCUDAFactoryConfig classes.
+        When provided, prefixed keys (e.g., 'krylov_atol') are
+        transformed to unprefixed keys ('atol') before field matching.
+        Default is empty string (no prefix transformation).
+    **optional
+        Optional parameter overrides passed to the config constructor.
+        Extra keys not in the config class signature are ignored.
+
+    Returns
+    -------
+    config_class instance
+        Configured attrs object.
+
+    Raises
+    ------
+    TypeError
+        If config_class is not an attrs class.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> # Without instance_label
+    >>> config = build_config(
+    ...     DIRKStepConfig,
+    ...     required={"precision": np.float32, "n_states": 3},
+    ... )
+    >>>
+    >>> # With instance_label (prefix transformation)
+    >>> config = build_config(
+    ...     ScaledNormConfig,
+    ...     required={"precision": np.float32, "n_states": 3},
+    ...     instance_label="krylov",
+    ...     krylov_atol=1e-6,  # Transformed to atol
+    ... )
+
+    Notes
+    -----
+    The helper:
+    - Merges required and optional kwargs
+    - Applies prefix transformation if instance_label is provided and
+      config_class has get_prefixed_attributes
+    - Converts field names to aliases for underscore-prefixed attrs fields
+    - Filters to only valid fields (ignores extra keys)
+    - Lets attrs handle defaults for unspecified optional parameters
+    """
+    if not has(config_class):
+        raise TypeError(f"{config_class.__name__} is not an attrs class")
+
+    # Merge all inputs; required/optional are user-facing distinctions.
+    merged = {**required, **optional}
+
+    field_to_external = {}
+    prefixed_attrs = set()
+    prefix = ""
+    # Generate prefix if instance_label provided and applicable
+    if instance_label:
+        # Add instance_label to merged for config constructor
+        merged["instance_label"] = instance_label
+
+        if not hasattr(config_class, "instance_label"):
+            raise ValueError(
+                f"instance_label '{instance_label}' is not valid for "
+                f"{config_class.__name__}. Use `instance_label` for "
+                f"MultipleInstanceCUDAFactoryConfig classes whose attributes "
+                f"are prefaced, i.e. a solver with max_iters might have "
+                f"`instance_label='newton'` so that newton_max_iters is "
+                f"recognised in init/updates."
+            )
+        else:
+            prefixed_attrs = config_class.get_prefixed_attributes(aliases=True)
+            prefix = f"{instance_label}_"
+
+    # Get external handle (Cubie keyword argument) and init handle (
+    # attrs init arg). Always use aliases, prefix external handle if
+    # applicable.
+    for field in fields(config_class):
+        # Non-init fields take no constructor kwarg, but circulating
+        # settings dicts may still carry their keys.
+        if not field.init:
+            continue
+        name = field.name
+        alias = field.alias
+        handle = alias if alias is not None else name
+        is_prefixed = handle in prefixed_attrs
+
+        external_handle = f"{prefix}{handle}" if is_prefixed else handle
+        field_to_external[external_handle] = handle
+
+    # Keep the provided fields, keyed by init handle; None means default.
+    final = {
+        field_to_external[k]: v
+        for k, v in merged.items()
+        if k in field_to_external and v is not None
+    }
+
+    config = config_class(**final)
+    # Remaining keys name fields of nested settings (unroll_*, lineinfo).
+    loose = {
+        k: v
+        for k, v in merged.items()
+        if k not in field_to_external and v is not None
+    }
+    nested = {}
+    for fld in nested_config_fields(config_class) if loose else ():
+        current = getattr(config, fld.name)
+        if current is None:
+            continue
+        replacement, _, changed = current.update(loose)
+        if changed:
+            nested[fld.alias or fld.name] = replacement
+    if nested:
+        config = evolve(config, **nested)
+    return config
+
+
+@cache
+def nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
+    """Return the fields typed as ``FrozenSettings`` or its ``Optional``."""
+    nested = []
+    for fld in fields(cls):
+        candidates = (fld.type,)
+        if get_origin(fld.type) is Union:
+            candidates = get_args(fld.type)
+        if any(
+            isinstance(candidate, type)
+            and issubclass(candidate, FrozenSettings)
+            for candidate in candidates
+        ):
+            nested.append(fld)
+    return tuple(nested)
 
 
 def _jit_flag_field(name: str):

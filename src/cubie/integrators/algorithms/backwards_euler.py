@@ -31,7 +31,8 @@ from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
-from cubie._utils import PrecisionDType, build_config
+from cubie._utils import PrecisionDType
+from cubie.CUDAFactory import build_config
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
     AlgorithmDefaults

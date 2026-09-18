@@ -25,8 +25,12 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
 
 from attrs import define, field
 
-from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
-from cubie._utils import build_config, merge_kwargs_into_settings
+from cubie.CUDAFactory import (
+    CUDAFactory,
+    CUDADispatcherCache,
+    build_config,
+)
+from cubie._utils import merge_kwargs_into_settings
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.IntegratorRunSettings import IntegratorRunSettings
 from cubie.integrators.algorithms import (

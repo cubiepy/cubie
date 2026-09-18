@@ -17,7 +17,6 @@ from numpy import finfo as np_finfo
 from numpy import ndarray
 
 from cubie._utils import (
-    build_config,
     device_function_field,
     inrangetype_validator,
     is_device_validator,
@@ -29,7 +28,10 @@ from cubie.integrators.matrix_free_solvers.base_solver import (
     MatrixFreeSolver,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.CUDAFactory import CUDADispatcherCache
+from cubie.CUDAFactory import (
+    CUDADispatcherCache,
+    build_config,
+)
 from cubie.integrators.norms import ScaledNorm
 
 

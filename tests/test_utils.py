@@ -6,7 +6,6 @@ import pytest
 from cubie.cuda_simsafe import cuda
 from cubie._utils import (
     _expand_dtype,
-    build_config,
     clamp_factory,
     ensure_nonzero_size,
     float_array_validator,
@@ -20,6 +19,7 @@ from cubie._utils import (
     tol_converter,
     unpack_dict_values,
 )
+from cubie.CUDAFactory import build_config
 from cubie.cuda_simsafe import is_devfunc
 from cubie.memory import default_memmgr
 

@@ -46,6 +46,7 @@ from cubie.CUDAFactory import (
     ALL_UNROLL_PARAMETERS,
     CUDAFactory,
     CUDADispatcherCache,
+    build_config,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import (
@@ -56,7 +57,7 @@ from cubie.cuda_simsafe import (
     selp,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES
-from cubie._utils import PrecisionDType, build_config
+from cubie._utils import PrecisionDType
 from cubie.integrators.loops.ode_loop_config import ODELoopConfig
 from cubie.outputhandling import OutputCompileFlags
 
