@@ -167,8 +167,8 @@ construction: constructors and `update` (after a recognised key) run
 `build_implicit_helpers()`, which requests the helpers, pushes them into the
 solver children and writes their device functions and an `OperationCounts`
 into the step's config; `build()` reads that config only.
-`ODEImplicitStep.update` adds `solver_width` (the coupled all-stages length
-for FIRK; `n_states` elsewhere) on an `n_states` or `tableau` change.
+A step `update` carrying another `tableau` or `n_states` raises;
+`SingleIntegratorRunCore` rebuilds the step for those.
 `performance_defaults` (the step's own placement values) and
 `step_operation_count` feed `BatchSolverKernel.performance_defaults`.
 `optimisation_candidates` lists the combinations `Solver.optimize` times.

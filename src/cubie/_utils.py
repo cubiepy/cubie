@@ -838,14 +838,18 @@ def build_config(
 
 @_cache
 def nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return the fields typed as attrs classes; unwraps ``Optional``."""
+    """Return the attrs-typed fields that take loose keys."""
     nested = []
     for fld in fields(cls):
         candidates = (fld.type,)
         if _get_origin(fld.type) is _Union:
             candidates = _get_args(fld.type)
         for candidate in candidates:
-            if isinstance(candidate, type) and has(candidate):
+            if (
+                isinstance(candidate, type)
+                and has(candidate)
+                and getattr(candidate, "takes_loose_keys", True)
+            ):
                 nested.append(fld)
                 break
     return tuple(nested)

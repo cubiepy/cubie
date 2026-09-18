@@ -398,7 +398,13 @@ def test_uncalibrated_tableau_disables_prediction(system):
     )
     assert not step.dense_prediction
     opened = attrs.evolve(custom, dense_prediction_ratio_float64=4.0)
-    step.update(tableau=opened)
+    step = DIRKStep(
+        get_solver_helper_fn=system.get_solver_helper,
+        precision=np.float64,
+        n_states=2,
+        tableau=opened,
+        attempt_dense_prediction=True,
+    )
     assert step.dense_prediction
 
 

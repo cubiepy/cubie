@@ -301,6 +301,8 @@ class ButcherTableau(_CubieConfigBase):
         Return a matrix (rows) as a zero-padded array in the precision.
     """
 
+    takes_loose_keys = False
+
     a: Tuple[Tuple[float, ...], ...] = field()
     b: Tuple[float, ...] = field()
     c: Tuple[float, ...] = field()
@@ -864,10 +866,18 @@ class BaseAlgorithmStep(CUDAFactory):
         set[str]
             Names the settings and the buffer registry took.
 
-        Notes
-        -----
-        Subclasses with child factories extend this method.
+        Raises
+        ------
+        ValueError
+            A ``tableau`` or ``n_states`` other than this step's.
         """
+        for name in ("tableau", "n_states"):
+            if name in updates and updates[name] != getattr(
+                self.compile_settings, name
+            ):
+                raise ValueError(
+                    f"{name} is set at construction; build a new step."
+                )
         recognised = self.update_compile_settings(updates, silent=True)
         recognised |= buffer_registry.update(self, updates, silent=True)
         self.register_buffers()

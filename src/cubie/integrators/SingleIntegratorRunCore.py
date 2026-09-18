@@ -149,8 +149,8 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         Notes
         -----
-        Each child gets the updates plus its system inputs; a new
-        ``algorithm`` or ``step_controller`` swaps that child first.
+        A new ``algorithm``, ``tableau`` or state count rebuilds the
+        step; a new ``step_controller`` swaps the controller.
         """
         system = self._system
         recognised = self.update_compile_settings(updates, silent=True)
@@ -159,11 +159,16 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         config = self.compile_settings
-        if config.algorithm != self._algo_step_algorithm:
+        step_config = self._algo_step.compile_settings
+        updates["tableau"] = algorithm_facts(
+            config.algorithm, updates.get("tableau")
+        ).tableau
+        if (
+            config.algorithm != self._algo_step_algorithm
+            or updates["tableau"] != step_config.tableau
+            or system.sizes.states != step_config.n_states
+        ):
             self._swap_step(updates)
-        if "tableau" in updates and updates["tableau"] is None:
-            # The algorithm names its own tableau.
-            updates["tableau"] = algorithm_facts(config.algorithm).tableau
         recognised |= self._algo_step.update(
             {**updates, **self._step_inputs()}, silent=True
         )

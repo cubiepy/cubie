@@ -176,6 +176,9 @@ def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
 class FrozenSettings:
     """Frozen attrs settings; :meth:`update` derives a replacement."""
 
+    # Whether a parent config's loose keys update this nested object.
+    takes_loose_keys = True
+
     def update(
         self, updates_dict: dict = None, **kwargs
     ) -> Tuple["FrozenSettings", Set[str], Set[str]]:

@@ -370,35 +370,17 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         self.error_solver = None
         if self.owns_error_solver and config.smoothed_error_capable:
-            self.error_solver = self._build_error_solver(linear_kwargs)
-
-    def _build_error_solver(
-        self, settings: Dict[str, Any]
-    ) -> LinearSolverBase:
-        """Return the width-n smoothing solver reading ``error_*`` keys.
-
-        Parameters
-        ----------
-        settings
-            Setting names to values; linear-solver names apply.
-        """
-        config = self.compile_settings
-        linear_kwargs = {
-            key: value
-            for key, value in settings.items()
-            if key in self._LINEAR_SOLVER_PARAMS and value is not None
-        }
-        # Single-stage solve: width n.
-        return self._construct_linear_solver(
-            precision=config.precision,
-            solver_width=config.n_states,
-            norm=None,
-            norm_reference="base_state",
-            instance_label="error",
-            zero_initial_guess=self.error_solver_zero_initial_guess,
-            n_states=config.n_states,
-            **linear_kwargs,
-        )
+            # Single-stage smoothing solve: width n, error_* keys.
+            self.error_solver = self._construct_linear_solver(
+                precision=config.precision,
+                solver_width=config.n_states,
+                norm=None,
+                norm_reference="base_state",
+                instance_label="error",
+                zero_initial_guess=self.error_solver_zero_initial_guess,
+                n_states=config.n_states,
+                **linear_kwargs,
+            )
 
     def register_buffers(self) -> None:
         """Register buffers with buffer_registry."""
@@ -499,8 +481,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         Parameters
         ----------
         updates
-            Setting names to new values; gains ``solver_width`` when
-            ``n_states`` or ``tableau`` changes.
+            Setting names to new values.
 
         Returns
         -------
@@ -509,36 +490,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         Notes
         -----
-        Step settings first, then the solver, dense predictor and error
-        solver, then their device functions into the step settings and
-        the implicit helpers rebuilt. A ``linear_correction_type``
-        needing another solver class swaps the linear solver, rebuilt
-        from its ``settings_dict``, before the updates reach it. A
-        newly smoothing-capable tableau builds the error solver first.
+        A ``linear_correction_type`` of another solver class swaps the
+        linear solver before the updates reach it.
         """
-        tableau = updates.get("tableau")
-        if (
-            self.owns_error_solver
-            and self.error_solver is None
-            and tableau is not None
-            and tableau.supports_smoothed_error
-        ):
-            correction_type = updates.get("linear_correction_type")
-            if correction_type is None:
-                correction_type = self.linear_correction_type
-            self.error_solver = self._build_error_solver(
-                {**updates, "linear_correction_type": correction_type}
-            )
         recognized = super()._apply_updates(updates)
 
         if updates.get("linear_correction_type") is not None:
             self._swap_linear_solver(updates["linear_correction_type"])
             recognized.add("linear_correction_type")
-
-        if "n_states" in updates or "tableau" in updates:
-            updates["solver_width"] = self.compile_settings.solver_width
-        # The children take this step's tableau.
-        updates["tableau"] = self.compile_settings.tableau
 
         recognized |= self.solver.update(updates, silent=True)
 
@@ -555,12 +514,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
 
         if self.error_solver is not None:
-            # The error solve is single-stage: width n, not s*n.
-            recognized |= self.error_solver.update(
-                updates,
-                solver_width=self.compile_settings.n_states,
-                silent=True,
-            )
+            recognized |= self.error_solver.update(updates, silent=True)
 
         recognized |= super()._apply_updates(compiled_functions)
         if recognized:

@@ -168,19 +168,28 @@ def test_smoothing_default_follows_tableau_capability(system):
     ).smooth_error
 
 
-def test_request_survives_tableau_swap(system):
+def test_request_survives_tableau_swap(single_integrator_run_mutable):
     """A stored request enables smoothing once the tableau can."""
 
+    run = single_integrator_run_mutable
     with pytest.warns(UserWarning, match="use_smoothed_error"):
-        step = FIRKStep(
-            get_solver_helper_fn=system.get_solver_helper,
-            precision=np.float64,
-            n_states=2,
-            tableau=GAUSS_LEGENDRE_2_TABLEAU,
-            use_smoothed_error=True,
+        run.update(
+            {
+                "algorithm": "firk",
+                "tableau": GAUSS_LEGENDRE_2_TABLEAU,
+                "use_smoothed_error": True,
+                "step_controller": "pi",
+            }
         )
-    assert not step.smooth_error
-    step.update(tableau=RADAU_IIA_5_TABLEAU)
+    assert not run._algo_step.smooth_error
+    run.update(
+        {
+            "tableau": RADAU_IIA_5_TABLEAU,
+            "use_smoothed_error": True,
+            "step_controller": "pi",
+        }
+    )
+    step = run._algo_step
     assert step.smooth_error
     norm_config = step.solver.norm.compile_settings
     assert norm_config.tableau is RADAU_IIA_5_TABLEAU

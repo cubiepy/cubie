@@ -427,6 +427,27 @@ def test_update_empty_dict_noop(single_integrator_run_mutable):
     [ALGORITHM_CHAIN_SETS["erk"]],
     indirect=True,
 )
+def test_tableau_change_rebuilds_the_step(single_integrator_run_mutable):
+    """A new tableau or state count rebuilds the step, which refuses
+    them itself."""
+    run = single_integrator_run_mutable
+    run.update(
+        {"algorithm": "dirk", "tableau": DIRK_TABLEAU_REGISTRY["kvaerno3"]}
+    )
+    first = run._algo_step
+    assert first.tableau is DIRK_TABLEAU_REGISTRY["kvaerno3"]
+    run.update({"tableau": DIRK_TABLEAU_REGISTRY["l_stable_dirk_3"]})
+    second = run._algo_step
+    assert second is not first
+    assert second.tableau is DIRK_TABLEAU_REGISTRY["l_stable_dirk_3"]
+    run.update({"tableau": DIRK_TABLEAU_REGISTRY["l_stable_dirk_3"]})
+    assert run._algo_step is second
+    with pytest.raises(ValueError, match="construction"):
+        second.update(tableau=DIRK_TABLEAU_REGISTRY["kvaerno3"])
+    with pytest.raises(ValueError, match="construction"):
+        second.update(n_states=second.n_states + 1)
+
+
 def test_algorithm_hot_swap_preserves_controller_buffers(
     single_integrator_run_mutable,
 ):

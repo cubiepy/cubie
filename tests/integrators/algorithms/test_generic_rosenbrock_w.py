@@ -32,16 +32,17 @@ def test_errorless_tableau_selects_fixed_controller_defaults(system):
     assert defaults["step_controller"] == "fixed"
 
 
-def test_operator_gamma_follows_the_tableau(precision, system):
-    """The operator coefficient tracks the tableau's gamma."""
-    step = GenericRosenbrockWStep(
-        get_solver_helper_fn=system.get_solver_helper,
-        precision=precision,
-        n_states=3,
-        tableau=ROS3P_TABLEAU,
-    )
+def test_operator_gamma_follows_the_tableau(
+    precision, single_integrator_run_mutable
+):
+    """The operator coefficient is the tableau's gamma, through a
+    tableau change."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "rosenbrock", "tableau": ROS3P_TABLEAU})
+    step = run._algo_step
     assert step.operator_gamma == precision(ROS3P_TABLEAU.gamma)
-    step.update(tableau=RODAS3P_TABLEAU)
+    run.update({"tableau": RODAS3P_TABLEAU})
+    step = run._algo_step
     assert step.compile_settings.tableau is RODAS3P_TABLEAU
     assert step.operator_gamma == precision(RODAS3P_TABLEAU.gamma)
     assert step._helper_request_kwargs()["operator_gamma"] == float(
