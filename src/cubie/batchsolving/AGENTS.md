@@ -52,8 +52,10 @@ launching the compiled kernel. Results flow back through `OutputArrays` →
 system (settings and constants by name), resolve, pass `effective.as_kwargs()` to
 `kernel.update`, then apply `optimize.performance_defaults` from the built step.
 `solve` and `compile` call `update(duration=...)`; it returns early when nothing
-changed and the system is not stale. `None` makes a setting not given;
-`time_logging_level` sets the global logger. Child `update` calls are
+changed and the system is not stale. `None` makes a setting not given and
+returns it to its declared default; `time_logging_level` sets the global
+logger. `settings_dict` is the given record with the logger's current level,
+and `copy()` rebuilds from it on a copied system. Child `update` calls are
 `silent=True`. New result accessors go on `kernel` with a `Solver` property.
 
 ### Live system updates

@@ -133,7 +133,9 @@ def test_grouped_dicts_flatten_and_unknown_names_raise(system):
 def test_signature_defaults_are_not_given(system):
     """A Solver given nothing records nothing and resolves euler."""
     built = Solver(system)
-    assert built.settings_dict == {}
+    assert built.settings_dict == {
+        "time_logging_level": default_timelogger.verbosity
+    }
     assert built.effective.algorithm == "euler"
     assert built.effective.step_controller == "fixed"
     assert built.kernel.compile_settings.auto_performance is True
@@ -668,14 +670,31 @@ def test_filter_after_gains_raises(solver_mutable):
     assert solver_mutable.settings_dict["filter_coefficients"] == "pi42"
 
 
-def test_none_on_a_plain_setting_keeps_the_factory_value(solver_mutable):
-    """A plain setting made not given leaves the factory as it was."""
+def test_none_returns_a_plain_setting_to_its_default(solver_mutable):
+    """A plain setting given None goes back to its declared default."""
     solver_mutable.update(max_registers=96)
     assert solver_mutable.kernel.compile_settings.max_registers == 96
+    assert solver_mutable.settings_dict["max_registers"] == 96
     solver_mutable.update(max_registers=None)
     assert solver_mutable.is_given("max_registers") is False
-    assert solver_mutable.kernel.compile_settings.max_registers == 96
-    assert solver_mutable.settings_dict["max_registers"] == 96
+    assert solver_mutable.kernel.compile_settings.max_registers is None
+    assert solver_mutable.settings_dict == {
+        **solver_mutable.given.as_kwargs(),
+        "time_logging_level": default_timelogger.verbosity,
+    }
+
+
+def test_none_returns_a_nested_flag_to_its_default(solver_mutable):
+    """An unroll flag given None goes back to its declared default."""
+    solver_mutable.update(unroll_krylov_exits=(True, 4))
+    step = solver_mutable.kernel.single_integrator._algo_step
+    system = solver_mutable.system
+    assert step.compile_settings.unroll.unroll_krylov_exits == (True, 4)
+    assert system.compile_settings.unroll.unroll_krylov_exits == (True, 4)
+    solver_mutable.update(unroll_krylov_exits=None)
+    assert solver_mutable.is_given("unroll_krylov_exits") is False
+    assert step.compile_settings.unroll.unroll_krylov_exits == (True, 1)
+    assert system.compile_settings.unroll.unroll_krylov_exits == (True, 1)
 
 
 @pytest.mark.parametrize(
@@ -683,18 +702,20 @@ def test_none_on_a_plain_setting_keeps_the_factory_value(solver_mutable):
     [{"algorithm": "kvaerno3", "step_controller": "pid"}],
     indirect=True,
 )
-def test_copy_carries_retained_and_recorded_settings(solver_mutable):
-    """A copy rebuilds retained child values and derives the rest."""
+def test_copy_carries_the_given_settings(solver_mutable):
+    """A copy rebuilds from the given settings and derives the rest."""
     solver_mutable.update(max_registers=96)
     solver_mutable.update(max_registers=None)
     solver_mutable.set_cache_dir("review-cache-path")
     settings = solver_mutable.settings_dict
-    assert settings["max_registers"] == 96
     assert settings["cache_dir"] == Path("review-cache-path")
-    assert "integral_gain" not in settings
+    assert settings == {
+        **solver_mutable.given.as_kwargs(),
+        "time_logging_level": default_timelogger.verbosity,
+    }
     twin = solver_mutable.copy()
     try:
-        assert twin.kernel.compile_settings.max_registers == 96
+        assert twin.kernel.compile_settings.max_registers is None
         assert twin.cache_dir == Path("review-cache-path")
         assert twin.is_given("integral_gain") is False
         assert twin.effective.integral_gain == (

@@ -149,8 +149,8 @@ back here. CUDA-authoring **optimisation** conventions are in
 - **Settings resolve at the `Solver`.** `batchsolving/solver_settings.py` records
   the given settings (`None` = not given), `batchsolving/resolve_defaults.py`
   resolves the rest, and the Solver passes the effective settings as one flat dict
-  down `update`. A factory resolves nothing; a setting made not given leaves it as it
-  was. `build_config` folds loose nested keys (`unroll_*`, jit flags, `cache_*`)
+  down `update`. A factory resolves nothing; a setting given `None` returns to its declared
+  default. `build_config` folds loose nested keys (`unroll_*`, jit flags, `cache_*`)
   through the config's own `update`, and every child's `ALL_*` key set includes
   `ALL_UNROLL_PARAMETERS` and `ALL_JIT_PARAMETERS`.
 - **Device functions are named `<full words>_fn`** on both sides: the producer's cache field and every consumer's config field carry the same name (`dxdt_fn`, `step_fn`, `loop_fn`). State counts are `n_states` everywhere (`n_observables`, `n_parameters`, `n_drivers` alongside); `solver_width` is a solver's vector length.

@@ -46,7 +46,7 @@ from typing import (
     Union,
 )
 
-from attrs import NOTHING, Factory, evolve, fields
+from attrs import NOTHING, Factory, evolve, fields, has
 from numpy import asarray, ndarray
 
 from cubie.outputhandling.output_config import OutputCompileFlags
@@ -74,6 +74,9 @@ from cubie.batchsolving.solveresult import (
     SolveSpec,
 )
 from cubie.batchsolving.SystemInterface import SystemInterface
+from cubie.integrators.step_control.base_step_controller import (
+    CONTROLLER_GAIN_NAMES,
+)
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.symbolic import create_ODE_system
 from cubie.array_interpolator import ArrayInterpolator
@@ -111,17 +114,6 @@ def _finalize_solver(kernel: BatchSolverKernel) -> None:
 default_timelogger.register_event(
     "solver_solve", "runtime", "Wall-clock time for Solver.solve()"
 )
-
-
-def _differs(old: Any, new: Any) -> bool:
-    """Compare arrays elementwise with broadcasting, else by inequality."""
-    if isinstance(old, ndarray) or isinstance(new, ndarray):
-        new = asarray(new)
-        try:
-            return not bool((asarray(old, dtype=new.dtype) == new).all())
-        except (TypeError, ValueError):
-            return True
-    return bool(old != new)
 
 
 def _unknown_names(
@@ -482,10 +474,10 @@ class Solver:
     # ------------------------------------------------------------------
     # Settings
     # ------------------------------------------------------------------
-    def _child_defaults(self) -> Dict[str, Any]:
-        """Return the declared default of every child compile setting."""
+    def _declared_defaults(self) -> Dict[str, Any]:
+        """Return the declared default of every compile setting."""
         defaults = dict(DEFAULT_MEMORY_SETTINGS)
-        pending = [self.kernel]
+        pending = [self.system, self.kernel]
         while pending:
             factory = pending.pop()
             pending.extend(factory._iter_child_factories())
@@ -494,34 +486,26 @@ class Solver:
             for fld in fields(type(config)):
                 if not fld.init or fld.default is NOTHING:
                     continue
+                default = fld.default
+                if isinstance(default, Factory):
+                    nested = default.factory
+                    # Here unroll and jit flags default field by field.
+                    if isinstance(nested, type) and has(nested):
+                        for nested_field in fields(nested):
+                            key = nested_field.alias or nested_field.name
+                            defaults.setdefault(key, nested_field.default)
+                    continue
                 key = fld.alias or fld.name
                 if key in prefixed:
                     key = config.prefixed(key)
-                defaults.setdefault(key, fld.default)
+                defaults.setdefault(key, default)
         return defaults
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
-        """Return the given settings over the children's retained values."""
-        record_fields = [fld for fld in fields(SolverSettings) if fld.init]
-        names = {fld.name for fld in record_fields}
-        resolved = {
-            fld.name
-            for fld in record_fields
-            if fld.metadata.get("passes_none")
-            or self.effective.is_given(fld.name)
-        }
-        defaults = self._child_defaults()
-        settings = {}
-        for key, value in self.kernel.settings_dict.items():
-            if key not in names or key in resolved:
-                continue
-            default = defaults.get(key, NOTHING)
-            if isinstance(default, Factory):
-                continue
-            if default is NOTHING or _differs(default, value):
-                settings[key] = value
-        settings.update(self.given.as_kwargs())
+        """Return the given settings with the logger's current level."""
+        settings = self.given.as_kwargs()
+        settings["time_logging_level"] = default_timelogger.verbosity
         return settings
 
     def is_given(self, name: str) -> bool:
@@ -543,21 +527,9 @@ class Solver:
                 candidates.append(free)
         return tuple(candidates)
 
-    def copy(self, **overrides: Any) -> "Solver":
-        """Return a copy: same settings and drivers, current log level.
-
-        Parameters
-        ----------
-        **overrides
-            Settings applied over this solver's; ``None`` leaves one
-            not given.
-        """
-        settings = {
-            **self.settings_dict,
-            "time_logging_level": default_timelogger.verbosity,
-            **overrides,
-        }
-        twin = type(self)(self.system.copy(), **settings)
+    def copy(self) -> "Solver":
+        """Return a copy: same settings and drivers, current log level."""
+        twin = type(self)(self.system.copy(), **self.settings_dict)
         drivers = self.kernel.driver_inputs()
         if drivers is not None:
             twin._configure_drivers(drivers)
@@ -1041,7 +1013,7 @@ class Solver:
         """Record the given settings, resolve them and update the kernel.
 
         Constants of the system are given by name; ``None`` makes a
-        setting not given.
+        setting not given and returns it to its default.
 
         Parameters
         ----------
@@ -1103,7 +1075,27 @@ class Solver:
             return recognised
 
         self.effective = effective
-        self.kernel.update(effective.as_kwargs(), silent=True)
+        kernel_updates = effective.as_kwargs()
+        # Here a name given None goes back to its declared default.
+        defaults = self._declared_defaults()
+        if given.filter_coefficients is not None:
+            # In this case the controller derives its gains from the filter.
+            defaults = {
+                key: value
+                for key, value in defaults.items()
+                if key not in CONTROLLER_GAIN_NAMES
+            }
+        resets = {
+            name: defaults[name]
+            for name in changed
+            if getattr(given, name) is None
+            and name in defaults
+            and name not in kernel_updates
+        }
+        if resets:
+            system.update(resets, silent=True)
+            kernel_updates.update(resets)
+        self.kernel.update(kernel_updates, silent=True)
         self._apply_performance_defaults()
         self._solve_info_key = None
         return recognised
