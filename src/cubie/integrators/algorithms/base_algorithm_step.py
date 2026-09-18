@@ -77,7 +77,6 @@ from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
     CUDADispatcherCache,
-    _CubieConfigBase,
 )
 
 ALL_ALGORITHM_STEP_PARAMETERS = {
@@ -269,7 +268,7 @@ LINEAR_SOLVER_VARIANT_PARAMETERS = (
 
 
 @frozen
-class ButcherTableau(_CubieConfigBase):
+class ButcherTableau:
     """Generic Butcher tableau object.
 
     Attributes
@@ -301,8 +300,6 @@ class ButcherTableau(_CubieConfigBase):
         Return a matrix (rows) as a zero-padded array in the precision.
     """
 
-    takes_loose_keys = False
-
     a: Tuple[Tuple[float, ...], ...] = field()
     b: Tuple[float, ...] = field()
     c: Tuple[float, ...] = field()
@@ -321,7 +318,6 @@ class ButcherTableau(_CubieConfigBase):
 
     def __attrs_post_init__(self) -> None:
         """Validate tableau structure after initialisation."""
-        super().__attrs_post_init__()
         if self.b_hat is not None and len(self.b_hat) != self.stage_count:
             raise ValueError("b_hat must match the number of stages in b")
         if (self.b_hat is None) != (self.embedded_order is None):

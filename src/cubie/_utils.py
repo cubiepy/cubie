@@ -838,7 +838,7 @@ def build_config(
 
 @_cache
 def nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
-    """Return the attrs-typed fields that take loose keys."""
+    """Return the fields typed as updatable attrs settings."""
     nested = []
     for fld in fields(cls):
         candidates = (fld.type,)
@@ -848,7 +848,7 @@ def nested_config_fields(cls: type) -> Tuple[Attribute, ...]:
             if (
                 isinstance(candidate, type)
                 and has(candidate)
-                and getattr(candidate, "takes_loose_keys", True)
+                and callable(getattr(candidate, "update", None))
             ):
                 nested.append(fld)
                 break
