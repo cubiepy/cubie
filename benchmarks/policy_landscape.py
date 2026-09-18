@@ -532,7 +532,7 @@ def _compile_worker(payload):
         solver = build_solver(
             system, system_name, algo_name, spec, duration
         )
-        solver.compile(duration=duration)
+        solver.compile()
         return (
             system_name, algo_name, label, solver.kernel.config_hash,
             time.perf_counter() - started, None,
@@ -764,7 +764,7 @@ def _build_arm(arm, system, system_name, algo_name, duration):
         deepcopy(system), system_name, algo_name, arm.spec, duration
     )
     arm.solver = solver
-    solver.compile(duration=duration)
+    solver.compile()
     solver.kernel.launch_geometry(REFERENCE_BLOCKSIZE)
     return solver
 

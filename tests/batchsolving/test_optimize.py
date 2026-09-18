@@ -479,7 +479,7 @@ def test_kernel_is_cached_follows_the_cache_directory(
     kernel.set_cache_dir(tmp_path / "fresh")
     assert not kernel.kernel_is_cached()
     kernel.set_cache_dir(cache_root)
-    solver_mutable.compile(drivers=driver_settings, duration=0.1)
+    solver_mutable.compile(drivers=driver_settings)
     assert kernel.kernel_is_cached()
     assert kernel._disk_cache.cache_path.parent == cache_root
 
@@ -502,7 +502,6 @@ def test_compile_caches_the_optimize_candidates_without_a_solve(
     )
     solver.compile(
         drivers=driver_settings,
-        duration=0.1,
         optimize_candidates=True,
         max_parallel=1,
     )

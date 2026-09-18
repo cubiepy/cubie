@@ -40,7 +40,8 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 ## For AI Agents
 
 ### Data flow
-`Solver.solve()` → `update(duration=...)` when the duration changed →
+`Solver.solve()` → `update(**kwargs)` for solve-time settings, then
+`check_duration` on the effective timing →
 `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` → `kernel.run()` sets
 `RunParams`, queues allocations via `InputArrays.update`/`OutputArrays.update`, calls
 `memory_manager.allocate_queue(self)` (which may split into chunks), then loops chunks
@@ -51,7 +52,9 @@ launching the compiled kernel. Results flow back through `OutputArrays` →
 `__init__` and `update` flatten the settings groups, record `given`, update the
 system (settings and constants by name), resolve, pass `effective.as_kwargs()` to
 `kernel.update`, then apply `optimize.performance_defaults` from the built step.
-`solve` and `compile` call `update(duration=...)`; it returns early when nothing
+`duration`, `settling_time` and `t0` are per-solve arguments, never settings:
+`solve` checks them against the effective timing (`check_duration`) and
+`compile` takes none of them. `update` returns early when nothing
 changed and the system is not stale. `None` makes a setting not given and
 returns it to its declared default; `time_logging_level` sets the global
 logger. `settings_dict` is the given record with the logger's current level,

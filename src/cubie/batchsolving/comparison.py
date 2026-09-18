@@ -322,8 +322,7 @@ def settings_in_effect(solver: Any) -> Dict[str, Any]:
 
 def _compile_solver(solver: Any) -> None:
     """Compile the solver's current configuration."""
-    kernel = solver.kernel
-    kernel.compile(kernel.duration, kernel.warmup, kernel.t0)
+    solver.kernel.compile()
 
 
 def _pool_pays(
@@ -536,12 +535,10 @@ class ComparisonRunner:
                     {key: self._baseline.get(key) for key in touched},
                     silent=True,
                 )
-            # Every timed solve records its duration.
-            touched.add("duration")
-            solver.update(
-                {key: self._given.get(key) for key in touched},
-                silent=True,
-            )
+                solver.update(
+                    {key: self._given.get(key) for key in touched},
+                    silent=True,
+                )
             solver.kernel.resident_blocks = self._resident_blocks
         finally:
             self._touched = set()

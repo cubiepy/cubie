@@ -517,19 +517,8 @@ def _newton_rtol_inverted(
     return bool(((controller > 0.0) & (newton >= controller)).any())
 
 
-def check_loop_timing(
-    timing: Dict[str, Any], duration: Optional[float], precision: type
-) -> None:
-    """Raise an error if requested save or summary timing is impossible
-    or returns zero samples.
-
-    Raises
-    ------
-    ValueError
-        Save or summary timing that cannot produce output in the
-        integration, or summary timing that would save zero samples.
-    """
-    save_every = timing["save_every"]
+def check_loop_timing(timing: Dict[str, Any]) -> None:
+    """Raise ``ValueError`` when the summary window holds no sample."""
     summarise_every = timing["summarise_every"]
     sample_every = timing["sample_summaries_every"]
     if timing["summarise_regularly"] and sample_every >= summarise_every:
@@ -538,24 +527,41 @@ def check_loop_timing(
             f"({summarise_every}); The saved summary will be based on 0 "
             f"samples, so will result in 0/inf/NaN values."
         )
-    if duration is None:
-        return
+
+
+def check_duration(
+    effective: EffectiveSettings, duration: float, precision: type
+) -> None:
+    """Raise ``ValueError`` when a solve of ``duration`` saves nothing.
+
+    Parameters
+    ----------
+    effective
+        The settings in effect.
+    duration
+        Integration time of the solve.
+    precision
+        Floating-point type of the solve.
+    """
+    save_every = effective.save_every
+    summarise_every = effective.summarise_every
+    sample_every = effective.sample_summaries_every
 
     def events(interval: float) -> int:
         return regular_event_count(duration, interval, precision)
 
-    if timing["save_regularly"] and events(save_every) == 0:
+    if effective.save_regularly and events(save_every) == 0:
         raise ValueError(
             f"save_every ({save_every}) > duration ({duration}) so this "
             f"loop will produce no outputs"
         )
-    if timing["summarise_last"] and events(sample_every) == 0:
+    if effective.summarise_last and events(sample_every) == 0:
         raise ValueError(
             f"sample_summaries_every ({sample_every}) > duration "
             f"({duration}), so the summary at the end will be based on 0 "
             f"samples"
         )
-    if timing["summarise_regularly"] and events(summarise_every) == 0:
+    if effective.summarise_regularly and events(summarise_every) == 0:
         raise ValueError(
             f"summarise_every ({summarise_every}) > duration ({duration}), "
             f"so this loop will produce no summary outputs"
@@ -665,7 +671,7 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
         time_domain,
         summaries,
     )
-    check_loop_timing(timing, given.duration, precision)
+    check_loop_timing(timing)
     resolved.update(timing)
     if given.drivers is not None:
         # The kernel reads driver columns in the system's declared order.

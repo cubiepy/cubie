@@ -41,6 +41,7 @@ from cubie.batchsolving.comparison import (
     validate_sizing,
     warn_low_waves,
 )
+from cubie.batchsolving.resolve_defaults import check_duration
 from cubie.CUDAFactory import UnrollChoice
 
 LOCAL_LAUNCH_BLOCKSIZES = (32, 64, 128, 256)
@@ -440,7 +441,7 @@ def performance_defaults(given: Any, step: Any, system: Any) -> Dict[str, Any]:
 def _fits_sample_interval(solver: Any, duration: float) -> bool:
     """Whether ``solver`` accepts ``duration`` under its sample interval."""
     try:
-        solver.update(duration=duration, silent=True)
+        check_duration(solver.effective, duration, solver.precision)
     except ValueError as error:
         if "sample_summaries_every" in str(error):
             return False
