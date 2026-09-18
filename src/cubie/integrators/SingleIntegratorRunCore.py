@@ -76,11 +76,6 @@ def _controller_name(controller: BaseStepController) -> str:
     raise ValueError(f"{type(controller).__name__} is not registered.")
 
 
-def _given(settings: Dict[str, Any]) -> Dict[str, Any]:
-    """Return ``settings`` without the ``None`` entries."""
-    return {key: value for key, value in settings.items() if value is not None}
-
-
 class SingleIntegratorRunCore(CUDAFactory):
     """Coordinate a single ODE integration loop and its dependencies.
 
@@ -219,7 +214,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """Replace the step with one built from ``updates``."""
         buffer_registry.clear_parent(self._algo_step)
         self._algo_step = self._new_step(
-            {**self.compile_settings.init_kwargs, **_given(updates)}
+            {**self.compile_settings.init_kwargs, **updates}
         )
 
     def _step_inputs(self) -> Dict[str, Any]:
@@ -253,7 +248,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         """Replace the controller with one built from ``updates``."""
         buffer_registry.clear_parent(self._step_controller)
         self._step_controller = self._new_controller(
-            {**self.compile_settings.init_kwargs, **_given(updates)}
+            {**self.compile_settings.init_kwargs, **updates}
         )
 
     def _new_initialiser(self, settings: Dict[str, Any]) -> DAEInitialiser:
@@ -261,7 +256,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return DAEInitialiser(
             **{
                 **self._algo_step.settings_dict,
-                **_given(settings),
+                **settings,
                 **DAEInitialiser.system_inputs(self._system),
             }
         )

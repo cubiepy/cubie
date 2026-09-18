@@ -457,7 +457,7 @@ class _CubieConfigBase(FrozenSettings):
                 continue
             loose = updates_dict
             if handle in evolve_kwargs:
-                # A supplied object keeps its values where a loose key is None.
+                # Loose None keys do not override an object supplied here.
                 loose = {k: v for k, v in loose.items() if v is not None}
             new_nested, nested_recognized, nested_changed = nested_obj.update(
                 loose
