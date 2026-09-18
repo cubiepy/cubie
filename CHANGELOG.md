@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.1](https://github.com/cubiepy/cubie/compare/v0.14.0...v0.14.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **backend:** inline callee IR cache is scoped to the compiler pipeline - leak plugged ([#982](https://github.com/cubiepy/cubie/issues/982)) ([88dd431](https://github.com/cubiepy/cubie/commit/88dd431bcd3f2b75edf45b07fbfe30d1ec74b0dd))
+* **backend:** numba-cuda inline callee IR cache is scoped to the compiler pipeline and launch configurations are cached per dispatcher ([#984](https://github.com/cubiepy/cubie/issues/984)) ([6f57f2f](https://github.com/cubiepy/cubie/commit/6f57f2fd3c154f36d06ca196fb4aaa44bcfd6ad6))
+* **batchsolving:** worth_parallelising's score is overridable for CI, compile moved out of assertion for CI caching ([#980](https://github.com/cubiepy/cubie/issues/980)) ([94a08c3](https://github.com/cubiepy/cubie/commit/94a08c3c43975ae9d4236850e0745d6a8c5855d1))
+
 ## [0.14.0](https://github.com/cubiepy/cubie/compare/v0.13.1...v0.14.0) (2026-09-18)
 
 
