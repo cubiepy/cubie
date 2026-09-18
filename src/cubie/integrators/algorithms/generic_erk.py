@@ -56,10 +56,13 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
-from cubie.CUDAFactory import UnrollChoice
+from cubie.CUDAFactory import (
+    UnrollChoice,
+    build_config,
+)
 from cubie.cuda_simsafe import unroll_if
 
-from cubie._utils import PrecisionDType, build_config
+from cubie._utils import PrecisionDType
 from cubie.backend.utils import MAX_REGISTERS_PER_THREAD
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import all_sync, activemask

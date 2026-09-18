@@ -54,12 +54,12 @@ from numpy import (
 )
 from numpy.typing import NDArray
 
-from cubie._utils import (
+from cubie._utils import opt_gttype_validator, PrecisionDType
+from cubie.CUDAFactory import (
+    CUDAFactoryConfig,
+    _CubieConfigBase,
     build_config,
-    opt_gttype_validator,
-    PrecisionDType,
 )
-from cubie.CUDAFactory import CUDAFactoryConfig, _CubieConfigBase
 from cubie.outputhandling.summarymetrics import summary_metrics
 
 

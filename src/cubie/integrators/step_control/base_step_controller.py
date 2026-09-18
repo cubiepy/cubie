@@ -51,13 +51,13 @@ from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
     CUDADispatcherCache,
+    build_config,
 )
 from cubie._utils import (
     getype_validator,
     nonnegative_float_array_validator,
     opt_getype_validator,
     optional_tuple_converter,
-    build_config,
     PrecisionDType,
     tol_converter,
 )

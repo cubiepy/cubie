@@ -41,14 +41,13 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from attrs import evolve, field, validators, frozen
 from numpy import int32 as np_int32
 from cubie.cuda_simsafe import cuda, int32
-from cubie.CUDAFactory import UnrollChoice
+from cubie.CUDAFactory import (
+    UnrollChoice,
+    build_config,
+)
 from cubie.cuda_simsafe import unroll_if
 
-from cubie._utils import (
-    build_config,
-    device_function_field,
-    PrecisionDType,
-)
+from cubie._utils import device_function_field, PrecisionDType
 from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -63,7 +62,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ImplicitStepConfig,
     ODEImplicitStep,
 )
-from cubie.integrators.norms import ScaledNorm
 from cubie.integrators.stage_predictors import DenseStagePredictor
 from cubie.backend.utils import MAX_REGISTERS_PER_THREAD
 from cubie.buffer_registry import buffer_registry
@@ -186,6 +184,9 @@ class DIRKStep(ODEImplicitStep):
     """Diagonally implicit Runge–Kutta step with an embedded error estimate."""
 
     default_tableau = DEFAULT_DIRK_TABLEAU
+    owns_error_solver = True
+    # Smoothing solves warm-start from the raw error estimate.
+    error_solver_zero_initial_guess = False
 
     @classmethod
     def family_defaults(cls, tableau=None) -> AlgorithmDefaults:
@@ -287,44 +288,11 @@ class DIRKStep(ODEImplicitStep):
         self.register_buffers()
         self.build_implicit_helpers()
 
-    def _build_error_solver(self) -> None:
-        """Construct the width-n smoothing solver from live settings."""
-        config = self.compile_settings
-        # Smoothing solves with the at-state operator family.
-        carried = {
-            key.replace("krylov_", "error_", 1): value
-            for key, value in self.linear_solver.settings_dict.items()
-            if key in self._LINEAR_SOLVER_PARAMS and value is not None
-        }
-        norm_kwargs = {
-            key: carried[key]
-            for key in ("error_atol", "error_rtol")
-            if key in carried
-        }
-        # Smoothing solves warm-start from the raw error estimate.
-        self.error_solver = self._construct_linear_solver(
-            precision=config.precision,
-            solver_width=config.n_states,
-            norm=ScaledNorm(
-                precision=config.precision,
-                solver_width=config.n_states,
-                n_states=config.n_states,
-                instance_label="error",
-                **norm_kwargs,
-            ),
-            norm_reference="base_state",
-            instance_label="error",
-            zero_initial_guess=False,
-            **carried,
-        )
-
     def register_buffers(self) -> None:
         """Register buffers according to locations in compile settings."""
         config = self.compile_settings
         n = config.n_states
         tableau = config.tableau
-        if self.smooth_error and self.error_solver is None:
-            self._build_error_solver()
 
         # Clear this step's own registrations only: child factories
         # keep their still-valid declarations, and register_child

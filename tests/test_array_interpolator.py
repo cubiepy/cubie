@@ -1,5 +1,7 @@
 """Tests for CUDA input-array interpolation helpers."""
 
+import pickle
+from types import MappingProxyType
 from typing import Tuple
 
 import numpy as np
@@ -981,6 +983,31 @@ def test_ordered_samples_follow_the_declared_order(
     assert ordered.t0 == precision(0.5)
     np.testing.assert_array_equal(ordered.input_array[:, 0], samples_a)
     np.testing.assert_array_equal(ordered.input_array[:, 1], samples_b)
+
+
+def test_pickle_round_trip_keeps_samples_and_time_base(precision):
+    """A pickle round trip keeps samples, columns and time base."""
+
+    samples = DriverSamples(
+        {
+            "d_a": np.linspace(0.0, 1.0, 6, dtype=precision),
+            "d_b": np.full(6, 5.0, dtype=precision),
+        },
+        driver_sample_period=precision(0.1),
+        t0=precision(0.5),
+    )
+
+    restored = pickle.loads(pickle.dumps(samples))
+
+    assert restored == samples
+    assert isinstance(restored.samples, MappingProxyType)
+    assert restored.names == samples.names
+    assert restored.driver_sample_period == samples.driver_sample_period
+    assert restored.t0 == samples.t0
+    np.testing.assert_array_equal(restored.input_array, samples.input_array)
+    np.testing.assert_array_equal(
+        restored.samples["d_a"], samples.samples["d_a"]
+    )
 
 
 @pytest.mark.parametrize(

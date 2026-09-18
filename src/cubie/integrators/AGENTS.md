@@ -72,8 +72,9 @@ child class declares `system_inputs(system, ...)`, what it takes from the system
    step, controller and initialiser register under it and `loop_fn` is captured.
 
 `update()` writes this config, then each child with the same dict plus its inputs,
-and recaptures `loop_fn`; a new `algorithm` or `step_controller` swaps that child,
-built from this config's `init_kwargs` plus the update. The system is not a child:
+and recaptures `loop_fn`; a new `algorithm`, `tableau` or state count rebuilds
+the step and a new `step_controller` the controller, from `init_kwargs` plus
+the update. The system is not a child:
 the Solver updates it before the chain runs. `build()` returns `loop_fn`.
 `settings_dict` merges the children's.
 

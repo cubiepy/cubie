@@ -43,14 +43,17 @@ Designed for Parabolic Problems. *BIT Numerical Mathematics* 41,
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from cubie.CUDAFactory import UnrollChoice
+from cubie.CUDAFactory import (
+    UnrollChoice,
+    build_config,
+)
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from numpy import int32 as np_int32
 
-from cubie._utils import build_config, device_function_field, PrecisionDType
+from cubie._utils import device_function_field, PrecisionDType
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     AlgorithmDefaults,
@@ -112,6 +115,13 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
         default="local", validator=validators.in_(["local", "shared"])
     )
     apply_mass_fn: Optional[Callable] = device_function_field()
+
+    def __attrs_post_init__(self) -> None:
+        """Take the operator coefficient from the tableau."""
+        object.__setattr__(
+            self, "_operator_gamma", float(self.tableau.gamma)
+        )
+        super().__attrs_post_init__()
 
 
 class GenericRosenbrockWStep(ODEImplicitStep):
@@ -207,7 +217,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 "get_solver_helper_fn": get_solver_helper_fn,
                 "tableau": tableau_value,
                 "operator_beta": 1.0,
-                "operator_gamma": tableau_value.gamma,
             },
             **kwargs,
         )

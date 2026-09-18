@@ -569,8 +569,8 @@ class Solver:
             in (n_params, n_runs) format. Device arrays are accepted
             as for ``initial_values``.
         drivers
-            Driver samples or configuration matching
-            :class:`cubie.array_interpolator.ArrayInterpolator`.
+            :class:`~cubie.array_interpolator.DriverSamples`
+            replacing the solver's configured samples.
         duration
             Total integration time. Default is ``1.0``.
         settling_time
@@ -749,7 +749,7 @@ class Solver:
         self,
         initial_values: Union[ndarray, Dict[str, Any]],
         parameters: Union[ndarray, Dict[str, Any]],
-        drivers: Optional[Dict[str, Any]] = None,
+        drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
@@ -785,8 +785,8 @@ class Solver:
             mapping parameter names to values, or pre-built arrays
             in (n_params, n_runs) format.
         drivers
-            Driver samples or configuration matching
-            :class:`cubie.array_interpolator.ArrayInterpolator`.
+            :class:`~cubie.array_interpolator.DriverSamples`
+            replacing the solver's configured samples.
         duration
             Total integration time. Default is ``1.0``.
         settling_time
@@ -824,8 +824,8 @@ class Solver:
         Raises
         ------
         ValueError
-            The system declares drivers but none are supplied;
-            ``waves`` under 1; ``target_ms`` under 10 or not finite.
+            No driver samples for a driven system; ``waves`` under 1;
+            ``target_ms`` under 10 or not finite.
         """
         return run_calibration(
             self,
@@ -848,7 +848,7 @@ class Solver:
         self,
         initial_values: Union[ndarray, Dict[str, Any]],
         parameters: Union[ndarray, Dict[str, Any]],
-        drivers: Optional[Dict[str, Any]] = None,
+        drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
@@ -873,7 +873,8 @@ class Solver:
         parameters
             Dict of parameter names to values, or an (n_params, n_runs) array.
         drivers
-            Time-domain sampled driver values.
+            :class:`~cubie.array_interpolator.DriverSamples`
+            replacing the solver's configured samples.
         duration
             Integration time of your solves. Default ``1.0``.
         settling_time

@@ -10,7 +10,6 @@ from attrs import define, field, Converter, frozen, validators
 
 from cubie._utils import (
     PrecisionDType,
-    build_config,
     getype_validator,
     nonnegative_float_array_validator,
     is_device_validator,
@@ -21,6 +20,7 @@ from cubie.CUDAFactory import (
     CUDADispatcherCache,
     MultipleInstanceCUDAFactoryConfig,
     MultipleInstanceCUDAFactory,
+    build_config,
 )
 
 ATOL_FLOOR = 1e-16

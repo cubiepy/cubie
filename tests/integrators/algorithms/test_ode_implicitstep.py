@@ -526,13 +526,11 @@ def test_combined_update_ignores_zero_guess_rosenbrock(system, precision):
         n_states=3,
     )
     recognized = step.update(
-        n_states=4,
         linear_correction_type="bicgstab",
         zero_initial_guess=True,
         silent=True,
     )
     assert "zero_initial_guess" not in recognized
-    assert step.compile_settings.n_states == 4
     assert step.solver.linear_correction_type == "bicgstab"
     assert step.solver.compile_settings.zero_initial_guess is False
 
@@ -545,13 +543,11 @@ def test_combined_update_ignores_zero_guess_newton(system, precision):
         n_states=3,
     )
     recognized = step.update(
-        n_states=4,
         linear_correction_type="bicgstab",
         zero_initial_guess=False,
         silent=True,
     )
     assert "zero_initial_guess" not in recognized
-    assert step.compile_settings.n_states == 4
     child = step.solver.linear_solver
     assert child.linear_correction_type == "bicgstab"
     assert child.compile_settings.zero_initial_guess is True

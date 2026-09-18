@@ -5,7 +5,6 @@ import numpy as np
 
 from cubie.integrators.algorithms.generic_firk import FIRKStep
 from cubie.integrators.algorithms.generic_firk_tableaus import (
-    GAUSS_LEGENDRE_2_TABLEAU,
     RADAU_IIA_5_TABLEAU,
 )
 
@@ -43,8 +42,8 @@ def test_previous_step_size_owned_by_algorithm(system):
 
 
 def test_update_carries_typed_ceiling(system):
-    """Tableau and precision updates leave the step holding the
-    matching typed ratio ceiling."""
+    """A precision update leaves the step holding the matching typed
+    ratio ceiling."""
     step = FIRKStep(
         get_solver_helper_fn=system.get_solver_helper,
         precision=np.float64,
@@ -58,14 +57,11 @@ def test_update_carries_typed_ceiling(system):
     assert isinstance(limit, np.float64)
     assert float(limit) == 4.0
 
-    step.update(
-        tableau=opened(GAUSS_LEGENDRE_2_TABLEAU, ceiling=2.0),
-        precision=np.float32,
-    )
+    step.update(precision=np.float32)
     settings = step.compile_settings
     limit = settings.tableau.dense_prediction_ratio_limit(
         settings.precision
     )
     assert isinstance(limit, np.float32)
-    assert float(limit) == 2.0
+    assert float(limit) == 4.0
     assert step.dense_prediction

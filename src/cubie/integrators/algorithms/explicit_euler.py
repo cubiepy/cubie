@@ -31,7 +31,8 @@ from cubie.cuda_simsafe import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 
-from cubie._utils import PrecisionDType, build_config
+from cubie._utils import PrecisionDType
+from cubie.CUDAFactory import build_config
 from cubie.integrators.algorithms.base_algorithm_step import StepCache, \
     AlgorithmDefaults
 from cubie.integrators.algorithms.ode_explicitstep import (

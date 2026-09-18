@@ -59,17 +59,13 @@ from numpy import zeros as np_zeros
 from numpy.polynomial import polynomial as np_poly
 from numpy.polynomial.legendre import leggauss as np_leggauss
 
-from cubie._utils import (
-    PrecisionDType,
-    build_config,
-    getype_validator,
-    is_device_validator,
-)
+from cubie._utils import PrecisionDType, getype_validator, is_device_validator
 from cubie.buffer_registry import buffer_registry
 from cubie.CUDAFactory import (
     CUDADispatcherCache,
     CUDAFactory,
     CUDAFactoryConfig,
+    build_config,
 )
 from cubie.cuda_simsafe import cuda, int32, selp
 from cubie.cuda_simsafe import unroll_if

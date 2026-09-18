@@ -77,7 +77,6 @@ from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
     CUDADispatcherCache,
-    _CubieConfigBase,
 )
 
 ALL_ALGORITHM_STEP_PARAMETERS = {
@@ -269,7 +268,7 @@ LINEAR_SOLVER_VARIANT_PARAMETERS = (
 
 
 @frozen
-class ButcherTableau(_CubieConfigBase):
+class ButcherTableau:
     """Generic Butcher tableau object.
 
     Attributes
@@ -319,7 +318,6 @@ class ButcherTableau(_CubieConfigBase):
 
     def __attrs_post_init__(self) -> None:
         """Validate tableau structure after initialisation."""
-        super().__attrs_post_init__()
         if self.b_hat is not None and len(self.b_hat) != self.stage_count:
             raise ValueError("b_hat must match the number of stages in b")
         if (self.b_hat is None) != (self.embedded_order is None):
@@ -864,10 +862,18 @@ class BaseAlgorithmStep(CUDAFactory):
         set[str]
             Names the settings and the buffer registry took.
 
-        Notes
-        -----
-        Subclasses with child factories extend this method.
+        Raises
+        ------
+        ValueError
+            A ``tableau`` or ``n_states`` other than this step's.
         """
+        for name in ("tableau", "n_states"):
+            if name in updates and updates[name] != getattr(
+                self.compile_settings, name
+            ):
+                raise ValueError(
+                    f"{name} is set at construction; build a new step."
+                )
         recognised = self.update_compile_settings(updates, silent=True)
         recognised |= buffer_registry.update(self, updates, silent=True)
         self.register_buffers()

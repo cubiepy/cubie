@@ -89,6 +89,7 @@ from cubie.CUDAFactory import (
     CUDAFactory,
     CUDADispatcherCache,
     UnrollChoice,
+    build_config,
 )
 from cubie.batchsolving.arrays.BatchInputArrays import InputArrays
 from cubie.batchsolving.arrays.BatchOutputArrays import (
@@ -109,7 +110,6 @@ from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie.outputhandling.output_sizes import OutputArrayHeights
 from cubie.integrators.SingleIntegratorRun import SingleIntegratorRun
 from cubie._utils import (
-    build_config,
     getype_validator,
     merge_kwargs_into_settings,
     precision_converter,

@@ -16,6 +16,12 @@ from tests.integrators.cpu_reference.algorithms import CPUDIRKStep
 from tests._utils import LORENZ_DIRK
 
 
+def _rebuilt_with(run, algorithm_settings, tableau):
+    """Return the run's step rebuilt on the DIRK family with ``tableau``."""
+    run.update({**algorithm_settings, "algorithm": "dirk", "tableau": tableau})
+    return run._algo_step
+
+
 NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -40,7 +46,8 @@ NON_ADJACENT_REPEAT_TABLEAU = DIRKTableau(
 )
 def test_eldirk_tableaus_match_cpu_reference(
     tableau_name,
-    step_object_mutable,
+    single_integrator_run_mutable,
+    algorithm_settings,
     system,
     precision,
     solver_settings,
@@ -50,7 +57,9 @@ def test_eldirk_tableaus_match_cpu_reference(
 ):
     """Trailing explicit stages integrate identically on device and CPU."""
     tableau = DIRK_TABLEAU_REGISTRY[tableau_name]
-    step_object_mutable.update(tableau=tableau)
+    step_object_mutable = _rebuilt_with(
+        single_integrator_run_mutable, algorithm_settings, tableau
+    )
     assert step_object_mutable.tableau.explicit_last_stage
     params = np.asarray(
         system.parameters.values_array, dtype=precision
@@ -93,21 +102,24 @@ def test_eldirk_tableaus_match_cpu_reference(
 @pytest.mark.parametrize(
     "solver_settings_override", [LORENZ_DIRK], indirect=True
 )
-def test_update_rederives_predict_first_stage(step_object_mutable):
-    """Tableau updates in both directions refresh the predictor's
-    first-stage row through the single update path."""
-    predictor = step_object_mutable.dense_predictor
+def test_rebuilt_step_derives_predict_first_stage(
+    single_integrator_run_mutable, algorithm_settings
+):
+    """A tableau change rebuilds the predictor's first-stage row."""
+    run = single_integrator_run_mutable
+    predictor = run._algo_step.dense_predictor
     assert predictor.compile_settings.predict_first_stage is True
-    step_object_mutable.update(tableau=KVAERNO3_TABLEAU)
+    step = _rebuilt_with(run, algorithm_settings, KVAERNO3_TABLEAU)
+    predictor = step.dense_predictor
     assert predictor.compile_settings.predict_first_stage is False
     assert (
         predictor.compile_settings.stage_count
         == KVAERNO3_TABLEAU.stage_count
     )
-    step_object_mutable.update(tableau=L_STABLE_DIRK3_TABLEAU)
-    assert predictor.compile_settings.predict_first_stage is True
+    step = _rebuilt_with(run, algorithm_settings, L_STABLE_DIRK3_TABLEAU)
+    assert step.dense_predictor.compile_settings.predict_first_stage is True
     assert (
-        step_object_mutable.compile_settings.tableau.stage_count
+        step.compile_settings.tableau.stage_count
         == L_STABLE_DIRK3_TABLEAU.stage_count
     )
 
@@ -132,10 +144,16 @@ def test_previous_step_size_owned_by_algorithm(step_object_mutable):
 @pytest.mark.parametrize(
     "solver_settings_override", [LORENZ_DIRK], indirect=True
 )
-def test_single_stage_midpoint_predicts_its_stage(step_object_mutable):
+def test_single_stage_midpoint_predicts_its_stage(
+    single_integrator_run_mutable, algorithm_settings
+):
     """Implicit midpoint's sole implicit stage keeps its predicted
     row."""
-    step_object_mutable.update(tableau=IMPLICIT_MIDPOINT_TABLEAU)
+    step_object_mutable = _rebuilt_with(
+        single_integrator_run_mutable,
+        algorithm_settings,
+        IMPLICIT_MIDPOINT_TABLEAU,
+    )
     assert step_object_mutable.dense_prediction
     predictor_settings = (
         step_object_mutable.dense_predictor.compile_settings
@@ -147,7 +165,8 @@ def test_single_stage_midpoint_predicts_its_stage(step_object_mutable):
     "solver_settings_override", [LORENZ_DIRK], indirect=True
 )
 def test_non_adjacent_repeat_matches_cpu_reference(
-    step_object_mutable,
+    single_integrator_run_mutable,
+    algorithm_settings,
     system,
     precision,
     solver_settings,
@@ -163,7 +182,11 @@ def test_non_adjacent_repeat_matches_cpu_reference(
     differ, so an adjacent-only carry would diverge even though each
     solve still converges.
     """
-    step_object_mutable.update(tableau=NON_ADJACENT_REPEAT_TABLEAU)
+    step_object_mutable = _rebuilt_with(
+        single_integrator_run_mutable,
+        algorithm_settings,
+        NON_ADJACENT_REPEAT_TABLEAU,
+    )
     assert step_object_mutable.dense_prediction
     params = np.asarray(
         system.parameters.values_array, dtype=precision

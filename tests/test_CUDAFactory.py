@@ -15,8 +15,8 @@ from cubie.CUDAFactory import (
     _CubieConfigBase,
     _config_field_map,
     attribute_is_hashable,
+    nested_config_fields,
 )
-from cubie._utils import nested_config_fields
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import cuda
 from cubie.cuda_simsafe import from_dtype as simsafe_dtype
@@ -236,20 +236,25 @@ def test_field_map_contains_name_and_alias():
     assert field_map["_val"] is field_map["val"]
 
 
-def test_nested_config_fields_identifies_attrs_fields():
-    """Nested attrs-class fields are recognised for recursion."""
+def test_nested_config_fields_identifies_settings_fields():
+    """Fields typed as FrozenSettings are recursed into; a bare attrs
+    field is not."""
     @attrs.frozen
     class _Inner(_CubieConfigBase):
         x: int = 1
 
     @attrs.frozen
+    class _Bare:
+        y: int = 1
+
+    @attrs.frozen
     class _Outer(_CubieConfigBase):
         inner: _Inner = attrs.Factory(_Inner)
+        bare: _Bare = attrs.Factory(_Bare)
         plain: int = 2
 
     nested_names = {fld.name for fld in nested_config_fields(_Outer)}
-    assert "inner" in nested_names
-    assert "plain" not in nested_names
+    assert nested_names == {"inner"}
 
 
 def test_post_init_generates_hash():

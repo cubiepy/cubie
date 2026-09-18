@@ -270,6 +270,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
         }
     )
 
+    # Separate width-n error solver, and whether it starts from zero.
+    owns_error_solver = False
+    error_solver_zero_initial_guess = True
+
     # Parameters accepted by NewtonKrylov
     _NEWTON_KRYLOV_PARAMS = frozenset(
         {
@@ -304,25 +308,24 @@ class ODEImplicitStep(BaseAlgorithmStep):
             other solver components.
         **kwargs
             Optional solver parameters (krylov_atol, krylov_max_iters,
-            newton_rtol, etc.). None values are ignored and defaults
-            from solver config classes are used. ``newton_norm``
-            supplies a :class:`CorrectionNorm` for Newton solves;
-            ``krylov_norm`` supplies a :class:`ScaledNorm` for the
-            linear solver's convergence weighting; when absent each
-            solver builds its default.
+            newton_rtol, error_atol, etc.). None values are ignored and
+            defaults from solver config classes are used.
+            ``newton_norm`` supplies a :class:`CorrectionNorm` for
+            Newton solves; ``krylov_norm`` supplies a
+            :class:`ScaledNorm` for the linear solver's convergence
+            weighting; when absent each solver builds its default.
 
         Notes
         -----
         The class attribute ``is_linear`` selects the solver
         arrangement: linearly-implicit steps own their linear solver
-        directly, all others wrap it in a :class:`NewtonKrylov`.
+        directly, all others wrap it in a :class:`NewtonKrylov`. A
+        smoothing-capable tableau also gets the width-``n_states``
+        ``error_solver``, registered only while smoothing is on.
         """
         super().__init__(config, _defaults)
 
         self.dense_predictor = None
-
-        # Set by subclasses needing a separate solver for smoothing.
-        self.error_solver = None
 
         newton_norm = kwargs.pop("newton_norm", None)
         krylov_norm = kwargs.pop("krylov_norm", None)
@@ -363,6 +366,20 @@ class ODEImplicitStep(BaseAlgorithmStep):
                 linear_solver=linear_solver,
                 norm=newton_norm,
                 **newton_kwargs,
+            )
+
+        self.error_solver = None
+        if self.owns_error_solver and config.smoothed_error_capable:
+            # Single-stage smoothing solve: width n, error_* keys.
+            self.error_solver = self._construct_linear_solver(
+                precision=config.precision,
+                solver_width=config.n_states,
+                norm=None,
+                norm_reference="base_state",
+                instance_label="error",
+                zero_initial_guess=self.error_solver_zero_initial_guess,
+                n_states=config.n_states,
+                **linear_kwargs,
             )
 
     def register_buffers(self) -> None:
@@ -464,8 +481,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
         Parameters
         ----------
         updates
-            Setting names to new values; gains ``solver_width`` when
-            ``n_states`` or ``tableau`` changes.
+            Setting names to new values.
 
         Returns
         -------
@@ -474,22 +490,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
 
         Notes
         -----
-        Step settings first, then the solver, dense predictor and error
-        solver, then their device functions into the step settings and
-        the implicit helpers rebuilt. A ``linear_correction_type``
-        needing another solver class swaps the linear solver, rebuilt
-        from its ``settings_dict``, before the updates reach it.
+        A ``linear_correction_type`` of another solver class swaps the
+        linear solver before the updates reach it.
         """
         recognized = super()._apply_updates(updates)
 
         if updates.get("linear_correction_type") is not None:
             self._swap_linear_solver(updates["linear_correction_type"])
             recognized.add("linear_correction_type")
-
-        if "n_states" in updates or "tableau" in updates:
-            updates["solver_width"] = self.compile_settings.solver_width
-        # The children take this step's tableau.
-        updates["tableau"] = self.compile_settings.tableau
 
         recognized |= self.solver.update(updates, silent=True)
 
@@ -506,12 +514,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
 
         if self.error_solver is not None:
-            # The error solve is single-stage: width n, not s*n.
-            recognized |= self.error_solver.update(
-                updates,
-                solver_width=self.compile_settings.n_states,
-                silent=True,
-            )
+            recognized |= self.error_solver.update(updates, silent=True)
 
         recognized |= super()._apply_updates(compiled_functions)
         if recognized:

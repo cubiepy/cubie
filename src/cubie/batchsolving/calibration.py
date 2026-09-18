@@ -667,8 +667,8 @@ def run_calibration(
         Parameter values for each run, as accepted by
         :meth:`Solver.solve`.
     drivers
-        Driver samples or configuration matching
-        :class:`cubie.array_interpolator.ArrayInterpolator`.
+        :class:`~cubie.array_interpolator.DriverSamples` replacing
+        the solver's configured samples.
     duration
         Total integration time candidates are ranked on.
     settling_time
@@ -702,12 +702,15 @@ def run_calibration(
     Raises
     ------
     ValueError
-        The system declares drivers but none are supplied; ``waves``
-        under 1; ``target_ms`` under 10 or not finite.
+        No driver samples for a driven system; ``waves`` under 1;
+        ``target_ms`` under 10 or not finite.
     """
     validate_sizing(waves, target_ms)
-    system = parent.system
-    if system.sizes.drivers > 0 and drivers is None:
+    if (
+        parent.system.sizes.drivers > 0
+        and drivers is None
+        and parent.given.drivers is None
+    ):
         raise ValueError(
             "The system declares drivers; calibrate requires the "
             "driver samples that solves will use."

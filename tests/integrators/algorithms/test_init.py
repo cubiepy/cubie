@@ -225,6 +225,25 @@ def test_get_algorithm_step_tableau_injects_tableau():
     assert step.tableau is tab
 
 
+def test_loose_keys_do_not_reach_the_tableau(system):
+    """A setting sharing a tableau field's name leaves the tableau."""
+    tab = DIRK_TABLEAU_REGISTRY["kvaerno5"]
+    step = get_algorithm_step(
+        np.float32,
+        settings={
+            "algorithm": "kvaerno5",
+            "get_solver_helper_fn": system.get_solver_helper,
+            "n_states": system.sizes.states,
+            "n_drivers": 0,
+            "order": 3,
+        },
+    )
+    assert step.tableau is tab
+    step.update({"order": 2}, silent=True)
+    assert step.tableau is tab
+    assert step.tableau.order == tab.order
+
+
 def test_get_algorithm_step_no_tableau_for_base():
     """get_algorithm_step does not inject tableau for base algorithms."""
     step = get_algorithm_step(

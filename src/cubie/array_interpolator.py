@@ -59,7 +59,7 @@ from numpy import (
     vstack,
 )
 from numpy.linalg import solve as np_solve
-from attrs import cmp_using, define, field, validators, frozen
+from attrs import cmp_using, define, field, fields, validators, frozen
 from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 from numpy.typing import NDArray
@@ -232,6 +232,23 @@ class DriverSamples(FrozenSettings):
         if period <= 0.0:
             raise ValueError("driver_sample_period must be positive.")
         return period, t0
+
+    def __getstate__(self) -> dict:
+        """Return the pickled state with ``samples`` as a plain dict."""
+        state = {
+            fld.name: getattr(self, fld.name)
+            for fld in fields(DriverSamples)
+        }
+        state["samples"] = dict(self.samples)
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore the state and rebuild the read-only samples view."""
+        for name, value in state.items():
+            object.__setattr__(self, name, value)
+        object.__setattr__(
+            self, "samples", MappingProxyType(state["samples"])
+        )
 
     def _cubie_canonical_(self) -> Tuple[Any, ...]:
         """Identity: names, time base and sample count."""

@@ -9,6 +9,7 @@ from cubie.integrators.algorithms.generic_rosenbrock_w import (
 )
 from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
     DEFAULT_ROSENBROCK_TABLEAU,
+    RODAS3P_TABLEAU,
     ROS3P_TABLEAU,
 )
 
@@ -29,6 +30,24 @@ def test_errorless_tableau_selects_fixed_controller_defaults(system):
     )
     defaults = step.controller_default_settings
     assert defaults["step_controller"] == "fixed"
+
+
+def test_operator_gamma_follows_the_tableau(
+    precision, single_integrator_run_mutable
+):
+    """The operator coefficient is the tableau's gamma, through a
+    tableau change."""
+    run = single_integrator_run_mutable
+    run.update({"algorithm": "rosenbrock", "tableau": ROS3P_TABLEAU})
+    step = run._algo_step
+    assert step.operator_gamma == precision(ROS3P_TABLEAU.gamma)
+    run.update({"tableau": RODAS3P_TABLEAU})
+    step = run._algo_step
+    assert step.compile_settings.tableau is RODAS3P_TABLEAU
+    assert step.operator_gamma == precision(RODAS3P_TABLEAU.gamma)
+    assert step._helper_request_kwargs()["operator_gamma"] == float(
+        precision(RODAS3P_TABLEAU.gamma)
+    )
 
 
 def test_shared_stage_increment_gets_its_own_window(system):

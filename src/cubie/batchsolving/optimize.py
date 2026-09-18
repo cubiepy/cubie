@@ -529,7 +529,8 @@ def run_optimization(
         Parameter values for each run, as accepted by
         :meth:`Solver.solve`.
     drivers
-        Time-domain sampled driver values.
+        :class:`~cubie.array_interpolator.DriverSamples` replacing
+        the solver's configured samples.
     duration
         Integration time of the caller's solves.
     settling_time
