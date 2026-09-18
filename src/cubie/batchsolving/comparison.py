@@ -483,9 +483,8 @@ class ComparisonRunner:
         return cuda.to_device(grid)
 
     def compile(self, candidates: Sequence[Candidate]) -> List[Candidate]:
-        """Compile the candidates in ``max_parallel`` workers if cheaper
-        than serially; return the accepted ones. A rejected candidate
-        keeps its error for :meth:`time`."""
+        """Compile the candidates, pooled if cheaper than serially;
+        return the accepted ones, a rejected one keeps its error."""
         solver = self._solver
         missing = []
         seen = set()
