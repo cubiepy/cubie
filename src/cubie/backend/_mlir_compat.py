@@ -22,6 +22,9 @@ retain their storage types.
 numba-cuda-mlir also gives Python ``min`` and ``max`` NaN-propagating
 float semantics. This module selects the non-NaN operand.
 
+numba-cuda-mlir also types ``math.floor``/``ceil``/``trunc`` of a
+float as an integer. This module types them as the argument's float.
+
 numba-cuda-mlir also registers comparisons for matching operand kinds
 only. This module adds the mixed ``(Boolean, Number)`` pairs Python's
 bool-to-int promotion allows.
@@ -118,6 +121,10 @@ from numba_cuda_mlir.numba_cuda.core import (
     ssa as _nb_ssa,
     untyped_passes as _nb_untyped_passes,
 )
+from numba_cuda_mlir.numba_cuda.typing.templates import (
+    signature as _signature,
+)
+from numba_cuda_mlir.typing import math as _typing_math
 
 
 _COMPARISON_CGS = {
@@ -632,6 +639,34 @@ def register_float_minmax_semantics() -> None:
 
 
 register_float_minmax_semantics()
+
+
+_FLOAT_ROUNDING_FUNCTIONS = ("ceil", "floor", "trunc")
+
+
+def register_float_rounding_typing() -> None:
+    """Type ``math.ceil``/``floor``/``trunc`` of a float as that float."""
+
+    for name in _FLOAT_ROUNDING_FUNCTIONS:
+        template = _typing_math._math_functions[name]
+        if getattr(template, "_cubie_float_rounding", False):
+            continue
+        stock_generic = template.generic
+        stock = stock_generic(None, (types.float32,), {})
+        if stock is not None and stock.return_type == types.float32:
+            template._cubie_float_rounding = "upstream"
+            continue
+
+        def generic(self, args, kws, stock_generic=stock_generic):
+            if len(args) == 1 and isinstance(args[0], types.Float):
+                return _signature(args[0], args[0])
+            return stock_generic(self, args, kws)
+
+        template.generic = generic
+        template._cubie_float_rounding = "shim"
+
+
+register_float_rounding_typing()
 
 
 # ------------------------------------------------------------------ #
