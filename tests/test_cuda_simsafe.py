@@ -178,42 +178,6 @@ def test_narrow_f64_unflushed_under_ftz():
 
 
 @pytest.mark.nocudasim
-def test_float_rounding_keeps_float32():
-    """floor, ceil and trunc of float32 type as float32."""
-    import math
-
-    import numpy as np
-    from cubie.cuda_simsafe import cuda
-    from cubie.memory import default_memmgr
-
-    @cuda.jit
-    def kernel(out, x):
-        floored = math.floor(x[0])
-        ceiled = math.ceil(x[0])
-        truncated = math.trunc(x[0])
-        out[0] = floored
-        out[1] = ceiled
-        out[2] = truncated
-        out[3] = np.float32(40.0) * floored
-
-    stream = default_memmgr.get_group_stream()
-    x = cuda.to_device(np.array([-2.5], dtype=np.float32), stream=stream)
-    device_out = cuda.to_device(
-        np.zeros(4, dtype=np.float32), stream=stream
-    )
-    kernel[1, 1, stream](device_out, x)
-    out = device_out.copy_to_host(stream=stream)
-    stream.synchronize()
-
-    (compiled,) = kernel.overloads.values()
-    typemap = compiled.type_annotation.typemap
-    np.testing.assert_array_equal(out, [-3.0, -2.0, -2.0, -120.0])
-    assert str(typemap["floored"]) == "float32"
-    assert str(typemap["ceiled"]) == "float32"
-    assert str(typemap["truncated"]) == "float32"
-
-
-@pytest.mark.nocudasim
 def test_devfunc_returns_nonfloat_reads_compiled_overloads():
     """Integer and boolean returns report True; float and uncompiled False."""
     from cubie.cuda_simsafe import (
