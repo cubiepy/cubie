@@ -1313,40 +1313,12 @@ def _patch_inline_worker():
     worker._fresh_callee_ir = _fresh_callee_ir
 
 
-_PERF_PATCH_GROUPS = {
-    "ssa": _patch_ssa,
-    "inline": _patch_inline_worker,
-    "dominators": _patch_dominators,
-    "liveness": _patch_liveness_set_copies,
-}
-
-
 def apply_compiler_perf_patches() -> None:
-    """Apply all frontend perf patch groups the installed wheel needs.
-
-    Set CUBIE_DISABLE_NUMBA_PERF_PATCHES=1 to skip every group, for
-    A/B benchmarking and for isolating suspected patch regressions.
-    Set CUBIE_NUMBA_PERF_PATCH_GROUPS to a comma-separated subset of
-    ssa, inline, dominators, liveness to apply only those groups
-    (per-feature A/B).
-    """
-    import os
-
-    if os.environ.get("CUBIE_DISABLE_NUMBA_PERF_PATCHES", "0") == "1":
-        return
-    selected = os.environ.get("CUBIE_NUMBA_PERF_PATCH_GROUPS", "all")
-    if selected.strip().lower() == "all":
-        names = list(_PERF_PATCH_GROUPS)
-    else:
-        names = [n.strip() for n in selected.split(",") if n.strip()]
-        unknown = [n for n in names if n not in _PERF_PATCH_GROUPS]
-        if unknown:
-            raise ValueError(
-                f"Unknown perf patch group(s) {unknown}; valid: "
-                f"{sorted(_PERF_PATCH_GROUPS)}"
-            )
-    for name in names:
-        _PERF_PATCH_GROUPS[name]()
+    """Apply the frontend perf patches the installed wheel needs."""
+    _patch_ssa()
+    _patch_inline_worker()
+    _patch_dominators()
+    _patch_liveness_set_copies()
 
 
 apply_compiler_perf_patches()
