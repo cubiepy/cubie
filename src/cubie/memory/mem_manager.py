@@ -1477,6 +1477,18 @@ class MemoryManager:
             return 0
         return self._pinned_arena.release_free_slabs()
 
+    def retire_idle_pinned(self) -> int:
+        """Free pinned slabs idle at this call and the previous one.
+
+        Frees only while every group stream is idle.
+
+        Returns
+        -------
+        int
+            Bytes released.
+        """
+        return self._pinned_arena.retire_idle_slabs(self._streams_idle())
+
     def _streams_idle(self) -> bool:
         """Return whether every group stream has finished its work."""
         if CUDA_SIMULATION:
@@ -1494,7 +1506,8 @@ class MemoryManager:
     ) -> Optional[ndarray]:
         """Return an uninitialised pinned array from the arena.
 
-        A new slab is page-locked only when no free extent fits; idle
+        A new slab is page-locked only when no free extent fits and it
+        leaves the RAM reserve (``host_headroom_bytes``) free; idle
         slabs are freed first while every group stream is idle.
 
         Parameters
@@ -1511,7 +1524,7 @@ class MemoryManager:
         -------
         numpy.ndarray or None
             The pinned array, or ``None`` when a new slab would exceed
-            the budget or the driver refuses one.
+            the budget or the RAM headroom, or the driver refuses one.
 
         Raises
         ------
@@ -1525,6 +1538,7 @@ class MemoryManager:
                 dtype,
                 cap=None if force else cap,
                 may_trim=self._streams_idle,
+                room=None if force else host_headroom_bytes,
             )
         except Exception:
             if force:

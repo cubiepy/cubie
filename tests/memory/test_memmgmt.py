@@ -24,6 +24,7 @@ from cubie.memory.mem_manager import (
     ArrayResponse,
     InstanceMemorySettings,
     available_system_ram,
+    host_headroom_bytes,
     total_system_ram,
     _numba_stream_ptr,
     current_cupy_stream,
@@ -2533,6 +2534,15 @@ def test_pinned_budget_refuses_a_new_slab(mgr):
     assert not is_pinned_array(fallback)
 
 
+def test_pinned_slab_refused_past_ram_headroom(mgr):
+    """A slab the RAM headroom cannot hold is refused, not attempted."""
+    mgr.pinned_max_bytes = 2**62
+    room = max(host_headroom_bytes(), 0)
+    request = 2 * room + 2**30
+    assert mgr.allocate_pinned_array((request,), np.uint8) is None
+    assert mgr.pinned_reserved_bytes == 0
+
+
 def test_forced_pinned_allocation_grows_past_budget(mgr):
     """A forced allocation page-locks a slab past the budget."""
     mgr.pinned_max_bytes = 0
@@ -2573,6 +2583,31 @@ def test_trim_pinned_pool_frees_idle_slabs(mgr):
     assert mgr.pinned_reserved_bytes == 0
 
 
+def test_retire_frees_slabs_idle_at_two_calls(mgr):
+    """A slab idle at two retire calls running is freed."""
+    array = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    del array
+    gc.collect()
+    assert mgr.retire_idle_pinned() == 0
+    assert mgr.retire_idle_pinned() > 0
+    assert mgr.pinned_reserved_bytes == 0
+
+
+def test_retire_keeps_a_slab_reused_between_calls(mgr):
+    """A slab used between retire calls restarts its idle count."""
+    array = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    del array
+    gc.collect()
+    mgr.retire_idle_pinned()
+    array = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    mgr.retire_idle_pinned()
+    del array
+    gc.collect()
+    reserved = mgr.pinned_reserved_bytes
+    assert mgr.retire_idle_pinned() == 0
+    assert mgr.pinned_reserved_bytes == reserved
+
+
 @pytest.mark.nocudasim
 def test_busy_group_stream_keeps_idle_slabs(mgr, start_cuda_busy_work):
     """Work on a group stream defers trimming, so nothing waits on it."""
@@ -2584,6 +2619,8 @@ def test_busy_group_stream_keeps_idle_slabs(mgr, start_cuda_busy_work):
     mgr.stream_groups.streams["busy"] = busy_stream
     try:
         assert mgr.trim_pinned_pool() == 0
+        mgr.retire_idle_pinned()
+        assert mgr.retire_idle_pinned() == 0
         mgr.allocate_pinned_array((2 * MIN_SLAB_BYTES,), np.uint8)
         assert mgr.pinned_reserved_bytes > reserved
         assert not done.query()

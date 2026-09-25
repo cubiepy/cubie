@@ -2,8 +2,9 @@
 
 Arrays take the best-fitting free extent of any slab; a collected
 array returns its extent for the next request of any size. Idle slabs
-are freed by :meth:`PinnedArena.release_free_slabs`, and before a new
-slab when the caller's ``may_trim`` allows it.
+are freed by :meth:`PinnedArena.release_free_slabs`, before a new slab
+when the caller's ``may_trim`` allows it, and by
+:meth:`PinnedArena.retire_idle_slabs` once idle at two calls running.
 
 Published Classes
 -----------------
@@ -54,6 +55,8 @@ class _Slab:
     # Sorted (offset, length) pairs.
     free: List[Tuple[int, int]] = field(factory=list)
     live: int = 0
+    # Consecutive retire_idle_slabs calls that found the slab idle.
+    idle_checks: int = 0
 
     def take(self, nbytes: int) -> Optional[int]:
         """Return the offset of the best-fitting free extent."""
@@ -126,6 +129,7 @@ class PinnedArena:
         dtype: DTypeLike,
         cap: Optional[int],
         may_trim: Callable[[], bool] = lambda: False,
+        room: Optional[Callable[[], int]] = None,
     ) -> Optional[ndarray]:
         """Return an uninitialised page-locked array.
 
@@ -141,12 +145,15 @@ class PinnedArena:
         may_trim
             Called before a new slab is needed; ``True`` frees the
             idle slabs first.
+        room
+            Called before a new slab is page-locked; returns the bytes
+            it may take. ``None`` for no limit.
 
         Returns
         -------
         numpy.ndarray or None
             The array, or ``None`` when nothing fits and a new slab
-            would exceed ``cap``.
+            would exceed ``cap`` or ``room``.
 
         Raises
         ------
@@ -162,7 +169,7 @@ class PinnedArena:
             if slab is None:
                 if may_trim():
                     self._drop_idle_slabs()
-                slab = self._grow(extent, cap)
+                slab = self._grow(extent, cap, room)
                 if slab is None:
                     return None
                 offset = slab.take(extent)
@@ -189,6 +196,31 @@ class PinnedArena:
             self._apply_releases()
             return self._drop_idle_slabs()
 
+    def retire_idle_slabs(self, may_free: bool) -> int:
+        """Free slabs found idle at this call and the previous one.
+
+        Parameters
+        ----------
+        may_free
+            ``False`` only counts idle calls and frees nothing.
+
+        Returns
+        -------
+        int
+            Bytes released.
+        """
+        with self._lock:
+            self._apply_releases()
+            for slab in self._slabs:
+                slab.idle_checks = slab.idle_checks + 1 if not slab.live else 0
+            if not may_free:
+                return 0
+            stale = [slab for slab in self._slabs if slab.idle_checks >= 2]
+            self._slabs = [
+                slab for slab in self._slabs if slab.idle_checks < 2
+            ]
+        return sum(slab.size for slab in stale)
+
     def _drop_idle_slabs(self) -> int:
         """Free slabs with no live array; lock held."""
         idle = [slab for slab in self._slabs if slab.live == 0]
@@ -210,14 +242,24 @@ class PinnedArena:
             return None, 0
         return best, best.take(extent)
 
-    def _grow(self, extent: int, cap: Optional[int]) -> Optional[_Slab]:
+    def _grow(
+        self,
+        extent: int,
+        cap: Optional[int],
+        room: Optional[Callable[[], int]] = None,
+    ) -> Optional[_Slab]:
         """Page-lock a slab that fits ``extent``; lock held."""
+        limit = None
+        if cap is not None:
+            limit = cap - sum(slab.size for slab in self._slabs)
+        if room is not None:
+            available = room()
+            limit = available if limit is None else min(limit, available)
         size = _round_up(max(extent, MIN_SLAB_BYTES), SLAB_GRANULE_BYTES)
-        reserved = sum(slab.size for slab in self._slabs)
-        if cap is not None and reserved + size > cap:
+        if limit is not None and size > limit:
             # A slab sized to the request alone may still fit.
             size = _round_up(extent, SLAB_GRANULE_BYTES)
-            if reserved + size > cap:
+            if size > limit:
                 return None
         address, owner = alloc_pinned_slab(size)
         slab = _Slab(address=address, size=size, owner=owner)

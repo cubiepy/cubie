@@ -658,6 +658,7 @@ class Solver:
             # the caller orders further work on the returned stream.
             self.kernel.synchronize()
             self.kernel.wait_for_writeback()
+            self.kernel.memory_manager.retire_idle_pinned()
 
         # Stop wall-clock timing for solve
         default_timelogger.stop_event("solver_solve")
