@@ -76,12 +76,12 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
   collected array and its views return the extent. A new slab is page-locked only when
   nothing fits, within `pinned_budget_bytes` = `min(pinned_max_bytes,
   HOST_SPILL_FRACTION × total RAM)` of slab bytes and within `host_headroom_bytes()`
-  (`force` ignores both). A `cudaHostAlloc` that runs out of RAM can keep its partial
-  commit and make later pinned allocations fail with `cudaErrorAlreadyMapped`. Idle slabs are
-  freed before a new slab, by `trim_pinned_pool`, and by `retire_idle_pinned` (called
-  after each host-result solve's sync) once idle at two calls running, only while every
-  group stream is idle; `flush_pinned_pool` frees them unconditionally. Freeing a slab waits for the
-  whole device and stalls launches on every thread.
+  (`force` ignores both). Idle slabs are freed before a new slab, by `trim_pinned_pool`,
+  and by `retire_idle_pinned` (after each host-result solve's sync) once idle at two
+  calls running, only while every group stream is idle; `flush_pinned_pool` frees them
+  unconditionally. Freeing a slab waits for the whole device and stalls launches on
+  every thread. A failed `cudaHostAlloc` can keep its commit and make later pinned
+  allocations fail with `cudaErrorAlreadyMapped`.
   `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
 - `create_host_array` allocates the requested type; a `"pinned"` request the budget or
   the driver refuses lands pageable; `"memmap"` arrays land in the cache root. Pageable
