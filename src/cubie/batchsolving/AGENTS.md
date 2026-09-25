@@ -29,7 +29,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `optimize.py` | `Solver.optimize` backend: `run_optimization` times the solver's `optimisation_candidates(force)` at `launch_candidates(kernel, runs=)` through a `ComparisonRunner` and applies the best `LaunchResult` through `apply_launch`. Ramps the duration toward `target_ms` before sizing the batch. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
 | `writeback_watcher.py` | `WritebackWatcher` (daemon thread) + `WritebackTask` — polls CUDA events via `event.query()`, copies completed pinned-buffer data into host arrays (D2H writeback) or just releases H2D staging buffers. |
-| `_utils.py` | Docstring only — no exports (dead validators removed). |
+| `_utils.py` | Docstring only; no exports. |
 | `__init__.py` | Defines the `ArrayTypes` alias (`Optional[Union[NDArray, DeviceNDArrayBase, MappedNDArray]]`) and re-exports the public surface. |
 
 ## Subdirectories
@@ -37,146 +37,111 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 |-----------|---------|
 | `arrays/` | Host/device array managers (`InputArrays`/`OutputArrays`/`BaseArrayManager`/`ManagedArray`) — allocation, chunked transfers, writeback. See `arrays/AGENTS.md`. |
 
-## For AI Agents
+## Data flow
+`Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
+effective timing → `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
+`kernel.run()` sets `RunParams`, queues allocations via
+`InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
+(which may split the batch into chunks) and launches per chunk. Results return through
+`OutputArrays` → `SolveResult.from_solver`.
 
-### Data flow
-`Solver.solve()` → `update(**kwargs)` for solve-time settings, then
-`check_duration` on the effective timing →
-`input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` → `kernel.run()` sets
-`RunParams`, queues allocations via `InputArrays.update`/`OutputArrays.update`, calls
-`memory_manager.allocate_queue(self)` (which may split into chunks), then loops chunks
-launching the compiled kernel. Results flow back through `OutputArrays` →
-`SolveResult.from_solver`.
+## Solver settings
+`__init__` and `update` flatten the settings groups, record `given`, update the system
+(settings and constants by name), resolve, and pass `effective.as_kwargs()` (`None` for
+every name not in effect) to `kernel.update`. The kernel fills a placement or unroll key
+given `None` from `kernel.performance_defaults()` under `auto_performance`; otherwise it
+falls to its declared default. `duration`, `settling_time` and `t0` are per-solve
+arguments, never settings: `solve` checks them with `check_duration` and `compile` takes
+none of them. `update` returns early when nothing changed and the system is not stale.
+`None` returns a setting to its declared default; `time_logging_level` sets the global
+logger. `settings_dict()` is the given record plus the logger's level; `copy()` rebuilds
+from it on a copied system. Child `update` calls are `silent=True`. New result
+accessors go on `kernel` with a `Solver` property.
 
-### Solver: settings
-`__init__` and `update` flatten the settings groups, record `given`, update the
-system (settings and constants by name), resolve, and pass `effective.as_kwargs()`,
-`None` for every name not in effect, to `kernel.update`. The kernel fills a placement
-or unroll key given `None` from `kernel.performance_defaults()` under
-`auto_performance`, and lets it fall to its declared default otherwise.
-`duration`, `settling_time` and `t0` are per-solve arguments, never settings:
-`solve` checks them against the effective timing (`check_duration`) and
-`compile` takes none of them. `update` returns early when nothing
-changed and the system is not stale. `None` makes a setting not given and
-returns it to its declared default; `time_logging_level` sets the global
-logger. `settings_dict()` is the given record with the logger's current level,
-and `copy()` rebuilds from it on a copied system. Child `update` calls are
-`silent=True`. New result accessors go on `kernel` with a `Solver` property.
+A system changed outside the Solver is `kernel.system_config_stale`; the next `update`
+pushes the whole effective record so every child re-reads its products.
 
-### Live system updates
-A system changed outside the Solver is `kernel.system_config_stale`; the next
-`update` pushes the whole effective record so every child re-reads its products.
+## Teardown and memory pressure
+`Solver.close()` waits for its last run stream, drains staging work and deregisters the
+kernel and array managers; a failed close can be retried. `solve_ivp` closes its
+temporary solver before returning. Finalizers clean up abandoned solvers.
 
-### Solver teardown
-`Solver.close()` waits only for its last run stream, drains staging work, and
-deregisters the kernel and array managers. Explicit failures are reported and
-the close can be retried. `solve_ivp` closes its temporary solver before it
-returns. Finalizers provide best-effort cleanup for abandoned solvers.
+VRAM pressure evicts a completed solver's buffers; it reallocates on its next run. Host
+arrays above `HOST_SPILL_FRACTION` of RAM are `numpy.memmap` files in the cache root,
+staged through the pinned pool; results keep the disk backing until close, and
+`as_numpy`/`as_pandas` load them into RAM.
 
-Physical VRAM pressure evicts a completed solver's buffers (completion
-checked with a CUDA event); the evicted solver reallocates on its next
-run. Host arrays above `HOST_SPILL_FRACTION` of RAM are `numpy.memmap`
-in the cache root, staged through the pinned pool; results keep the disk
-backing until close, and `as_numpy`/`as_pandas` materialise in RAM.
+## Grids and variable selection
+`BatchInputHandler` builds `(variable, run)` arrays with the module-level grid builders:
+`combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). `solve_ivp`
+defaults to `"combinatorial"`, `Solver.solve`/`Solver.build_grid` to `"verbatim"`.
 
-### Grids
-`BatchInputHandler` converts user dicts/arrays into `(variable, run)` arrays via the
-module-level grid builders. Two grid types: `combinatorial` (cartesian product across inputs)
-and `verbatim` (inputs zipped run-for-run). **The default differs by entry point:** `solve_ivp`
-defaults `grid_type="combinatorial"`; `Solver.solve`/`Solver.build_grid` default `"verbatim"`.
+For states and observables, `None` = all, `[]` = none, labels plus index kwargs = union.
+`SystemInterface.merge_variable_labels_and_idxs` pops `save_variables`/
+`summarise_variables` and writes `saved_*_indices`/`summarised_*_indices` into the
+settings dict; summarised defaults to saved when every summarise input is `None`.
 
-### Variable selection (states/observables)
-`None` = use all, `[]` = explicitly none, labels + index kwargs = union.
-`SystemInterface.merge_variable_labels_and_idxs` pops `save_variables`/`summarise_variables`
-and writes `saved_*_indices`/`summarised_*_indices` into the settings dict in place;
-summarised defaults to saved when all summarise inputs are `None`.
+## The batch kernel
+- Each thread runs a `SingleIntegratorRun` device function over one system;
+  `BatchSolverKernel` is the only batch-wide view.
+- `RunParams` is frozen (duration/warmup/t0/runs + chunk metadata): `run_params[i]`
+  returns a copy with chunk `i`'s run count (the last chunk takes the remainder);
+  `update_from_allocation` returns a copy carrying `num_chunks`/`chunk_length`.
+- `duration`/`warmup`/`t0` are `float64` in `run()` and cast to `precision` per chunk at
+  launch.
+- When the batch's arrays exceed available memory less the manager's headroom, the
+  memory manager splits along the run axis into even chunks. The run loop calls
+  `input_arrays.initialise(i)` (H2D) and `output_arrays.finalise(i)` (D2H) per chunk.
+- `launch_geometry(blocksize=None, runs=None)` returns block size and dynamic shared
+  bytes; `launchable_shapes(blocksizes, runs=None)` lists valid shapes and occupancy.
+  `runs=None` sizes a full block. Launch choices and geometry are cached per signature;
+  launch policies live in `optimize.py`.
+- Kept across solves: the system snapshot identity, the chunk partition until an
+  allocation replaces it, and the timing `CUDAEvent`s while timing is on.
 
-### The batch kernel
-- One launch integrates many runs; each thread runs a `SingleIntegratorRun` device function
-  over a single system in isolation. `BatchSolverKernel` is the only place with a batch-wide view.
-- **`RunParams` is a frozen value object** (duration/warmup/t0/runs + chunk metadata). Frozen so
-  per-chunk views and allocation updates produce independent copies via `attrs.evolve` instead of
-  mutating shared state: `run_params[i]` returns a copy with that chunk's run count (last chunk
-  gets the dangling remainder); `update_from_allocation` returns a copy carrying
-  `num_chunks`/`chunk_length`.
-- **Time is float64:** `duration`/`warmup`/`t0` are coerced to `float64` in `run()` for
-  accumulation accuracy, then cast to `precision` per chunk at launch.
-- **Chunking is driven by memory availability:** when the batch's arrays exceed available GPU
-  memory less the manager's headroom, the memory manager splits it along the run axis into
-  even chunks; `num_chunks`/`chunk_length` come back on the allocation response. The run
-  loop iterates chunks, calling `input_arrays.initialise(i)` (H2D) and
-  `output_arrays.finalise(i)` (D2H/writeback).
-- **Launch geometry:** `launch_geometry(blocksize=None, runs=None)` returns block size
-  and dynamic shared bytes; `launchable_shapes(blocksizes, runs=None)` lists valid
-  shapes and occupancy. `runs=None` sizes a full block; solves pass their chunk's
-  run count. Resource queries use the selected kernel signature. Launch choices
-  and geometry are cached per signature. Launch policies live in `optimize.py`.
-- **Kept across solves:** the system snapshot identity (`system_config_stale`), the chunk
-  partition until an allocation replaces it, and the timing `CUDAEvent`s while timing is
-  on (rebuilt on a chunk-count or verbosity change).
+## Results
+A `SolveResult` owns the solve's host buffers with no copy: `OutputArrays.loan_host_arrays`
+empties the slots into it. If the result has been garbage collected by the next solve,
+`reclaim_or_release_loan` returns the buffers to their slots; otherwise the next solve
+allocates fresh ones. `time`/`time_domain_array` are views when one time-domain source is
+active (two concatenate into RAM on first access). `as_numpy`, `as_numpy_per_summary`
+and `as_pandas` build RAM copies on demand. Runs with nonzero `status_codes` are
+NaN-masked in place. `status_messages` decodes the status word via
+`cubie.result_codes.decode_status_codes`. `SolveSpec` snapshots the solve configuration.
 
-### Results
-Every solve returns one `SolveResult` that **owns the solve's host buffers** — nothing is
-copied. `OutputArrays.loan_host_arrays` empties the slots into the result; if the result has
-been garbage collected by the next solve the buffers return to their slots for reuse
-(`reclaim_or_release_loan`), otherwise the next solve allocates fresh backing. Keep a result
-alive while its data is needed. `state`/`observables`/summary buffers/`status_codes`/
-`iteration_counters` are the kernel's arrays; `time` and `time_domain_array` are views when a
-single time-domain source is active (two active sources concatenate lazily into RAM on first
-access). `as_numpy`, `as_numpy_per_summary`, and `as_pandas` (lazy `pandas` import) build RAM
-representations on demand. Trajectories for runs that errored (nonzero `status_codes`) are
-NaN-masked **in place** on the owned buffers. Disk-backed results release their spill files on
-`close()`, context exit, or collection. `SolveResult.status_messages` decodes the per-run
-status word into named `CUBIE_RESULT_CODES` flags via `cubie.result_codes.decode_status_codes`.
-`SolveSpec` is an attrs snapshot of the solve configuration.
+## One stream per kernel
+Every launch and transfer runs on `kernel.stream`, the stream its memory manager issued
+for its stream group. No caller-supplied stream; nothing outside the memory manager
+synchronizes more than that stream (no `cuda.synchronize()`). `SolveResult.stream` and
+`DeviceSolveResult.stream` expose it for ordering follow-up work.
 
-### One stream per kernel
-Every launch and transfer for a kernel runs on `kernel.stream` — the stream its memory
-manager issued for its stream group. There is **no caller-supplied stream**: neither
-`Solver.solve` nor `BatchSolverKernel.run` accepts one, and no code outside the memory
-manager may synchronize anything wider than that stream (no `cuda.synchronize()`; #644
-removed device-wide syncs for concurrent/multiprocess operation). `SolveResult.stream` and
-`DeviceSolveResult.stream` carry this stream as data so callers can order follow-up work.
+## Device-resident results and inputs
+`Solver.solve(on_device=True)` skips the D2H transfers, host output buffers and result
+loan, and returns a `DeviceSolveResult`: the kernel's device output buffers plus
+`kernel.stream`. The handles are views the next `solve()` overwrites. Single-chunk
+only; a chunked run raises `ValueError`. `solve_ivp` has no `on_device`.
 
-### Device-resident results and inputs
-`Solver.solve(on_device=True)` skips the per-chunk `output_arrays.finalise` D2H
-(`kernel.run(transfer_outputs=False)`), creates no host output buffers, leaves any result
-loan untouched, skips the end-of-solve sync/writeback wait, and
-returns a `DeviceSolveResult`: the kernel's device output buffers plus `kernel.stream`.
-Contents are valid once that stream is synchronized; work queued on it executes in order
-after the solve. The handles are views the next `solve()` overwrites (and a reallocation
-or memory-pressure eviction detaches) — no loan is taken. Single-chunk only; a chunked run
-raises `ValueError`. `solve_ivp` has no `on_device` option (it closes its temporary solver
-before returning).
+Device-array `initial_values`/`parameters` must be 2D with the exact variable count and
+dtype (`BatchInputHandler._process_device_inputs` raises otherwise) and attach directly
+through `InputArrays._attach_device_inputs`, with no host staging. A lone device input's
+host counterpart is paired verbatim. Device inputs are single-chunk only.
+`Solver.device_initial_values`/`device_parameters` return the last run's device inputs
+for reuse; they raise `ValueError` after a chunked run.
 
-`initial_values`/`parameters` supplied as device arrays (validated by
-`BatchInputHandler._process_device_inputs`: 2D, exact variable count, exact dtype — raise,
-never pad/cast) are wired directly into the kernel via `InputArrays._attach_device_inputs`
-with no host staging, H2D copy, or managed-buffer allocation; the host-side counterpart of
-a lone device input is paired verbatim (defaults or a single column broadcast to the device
-run count). Device inputs are likewise single-chunk only. `Solver.device_initial_values` /
-`Solver.device_parameters` return the last run's device input buffers, usable as device
-inputs to the next `solve` with no upload; they raise `ValueError` after a chunked run. Every dim in `BatchInputSizes` is
-concrete: `coefficients_shape` is a `BatchSolverConfig` compile setting (the
-`(num_segments, num_drivers, order + 1)` layout baked into the compiled driver evaluators as
-closure constants), seeded at kernel construction from the kernel-owned interpolator and
-refreshed through `kernel.update` wherever the interpolator's
-evaluators change, so shape checks compare against the layout the kernel was compiled for.
-A driverless kernel's layout has a zero first dimension. The kernel hands `InputArrays`
-its interpolator's `coefficients` only when the slot does not already hold that table.
-The `drivers` setting is a `DriverSamples`. `driver_sample_period` is its sample
-spacing; `dt` is the integrator timestep.
+`coefficients_shape` is a `BatchSolverConfig` compile setting (the
+`(num_segments, num_drivers, order + 1)` layout compiled into the driver evaluators),
+seeded from the kernel-owned interpolator and refreshed through `kernel.update`; shape
+checks compare against it. A driverless kernel's layout has a zero first dimension. The
+`drivers` setting is a `DriverSamples`; `driver_sample_period` is its sample spacing and
+`dt` the integrator timestep.
 
-### Candidate comparisons (`Solver.calibrate`, `Solver.optimize`)
-- Both run on the solver itself through `comparison.ComparisonRunner`: one device input pair, one device output set, no host output buffers, candidates switched by `Solver.update`.
-- The timing protocol, the success-tier ranking, the warm-up and the batch sizing are fixed in `comparison.py` and shared; both entry points take `auto_size`, `waves` and `target_ms`, neither takes protocol parameters.
-- Candidates the package rejects drop individually with the package's error message and keep no time.
+## Candidate comparisons (`Solver.calibrate`, `Solver.optimize`)
+- Both run on the solver through `comparison.ComparisonRunner`: one device input pair,
+  one device output set, candidates switched by `Solver.update`.
+- The timing protocol, success-tier ranking, warm-up and batch sizing are fixed in
+  `comparison.py`; both entry points take `auto_size`, `waves` and `target_ms` only.
+- A candidate the package rejects drops with its error message and no time.
 - `run_optimization(compile_only=True)` compiles the candidate kernels and runs nothing.
-
-### Testing
-`tests/batchsolving/` (`test_solver.py`, `test_BatchSolverKernel.py`, input-handler/result tests,
-`test_calibration.py`).
-Prefer real system fixtures (`tests/system_fixtures.py`) over mocks.
 
 ## Dependencies
 ### Internal

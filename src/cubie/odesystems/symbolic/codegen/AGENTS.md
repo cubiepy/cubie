@@ -72,97 +72,71 @@ Each Jacobian-facing generator takes a `HelperVariant`, the internal product of 
 device-function signatures in each template docstring as the contract;
 factory-binding signatures are declared in the registry.
 
-## For AI Agents
+## Generators emit strings
+Every `generate_*` builds Python source from a module-level `*_TEMPLATE`; wiring one in
+takes a `SolverHelperRole` subclass in `../helper_registry.py`. Templates are
+indentation-sensitive: bodies from `print_cuda_multiple(...)` are joined with explicit
+leading spaces (8 inside a factory body, 12 inside the preconditioner's
+`for _ in unroll_if(...)` loop). Emitted loops take their `unroll_if` flag from the
+factory's `unroll_solver_element`/`unroll_other_small` arguments.
 
-### Generators emit strings, not functions
-Every public `generate_*` builds Python source from a module-level `*_TEMPLATE`. To wire in a
-new one, add a `SolverHelperRole` subclass in `../helper_registry.py` —
-generating the string alone does nothing. **Templates are
-indentation-sensitive:** bodies come from `print_cuda_multiple(...)` then joined with explicit
-leading spaces (8 inside a factory body, 12 inside the preconditioner's `for _ in unroll_if(...)`
-loop). Preserve the exact counts or the generated source won't parse.
-Emitted loops take their `unroll_if` flag from the factory's `unroll_solver_element`/`unroll_other_small` arguments.
+## Sign and coefficient convention
+Operator `β·M·v − γ·a_ij·h·(J·v)` (explicit `a_ij`); residual `β·M·u − γ·h·f(base +
+a_ij·u)` (`a_ij` only inside the evaluation point); the preconditioner approximates
+`(β·I − γ·a_ij·h·J)⁻¹` with `h_eff = (γ·a_ij/β)·h`. The operator is `∂residual/∂u`, which
+is where the operator's explicit `a_ij` comes from; change all three forms together.
+Non-cached paths substitute `state → base_state + a_ij*state`; cached paths read
+`cached_aux` with no substitution (`_build_operator_body`'s `use_cached_aux`).
 
-### Sign and coefficient convention
-Operator `β·M·v − γ·a_ij·h·(J·v)` (explicit `a_ij`); residual `β·M·u − γ·h·f(base + a_ij·u)`
-(`a_ij` only inside the eval point, not multiplying `f`); preconditioner approximates
-`(β·I − γ·a_ij·h·J)⁻¹` with `h_eff = (γ·a_ij/β)·h`. The operator equals `∂residual/∂u` —
-differentiating the residual's eval point pulls the `a_ij` down via the chain rule, which is why
-it appears explicitly in the operator but implicitly in the residual. **The `a_ij` asymmetry is
-deliberate; changing one form without the others breaks Newton convergence.** State evaluation
-also differs by variant (see Generator variants): non-cached paths substitute
-`state → base_state + a_ij*state`; cached paths read `cached_aux` and apply no substitution
-(`_build_operator_body`'s `use_cached_aux` flag gates this).
+## The `_cubie_codegen_` namespace
+User constants fold into the equations as literals and bind no name (the LU family also
+folds `operator_beta`/`operator_gamma`, keyed through `folded_args`). Every name the
+generators bind lives under `_cubie_codegen_`: scalings (`_cubie_codegen_beta`,
+`_cubie_codegen_gamma`), scalar device arguments (`_cubie_codegen_h`,
+`_cubie_codegen_a_ij`), factory locals (`_cubie_codegen_n`, `_cubie_codegen_order`,
+`_cubie_codegen_total_n`, ...), tableau metadata (`_cubie_codegen_c_<i>`,
+`_cubie_codegen_a_<i>_<j>`) and IR locals (`_cubie_codegen_dx_*`,
+`_cubie_codegen_aux_*`, `_cubie_codegen_j_*`, `_cubie_codegen_diag_*`, stage renames
+`_cubie_codegen_s<i>_*`). `IndexedBases.from_user_inputs` rejects user names with that
+prefix. A new generator binds nothing outside the namespace except the template's
+positional argument names (`t` stays bare). Factory signatures expose `precision` (plus
+`order` for preconditioners).
 
-### The `_cubie_codegen_` reserved namespace (#373 and successors)
-User constants never bind a name at all — their values fold into the
-equations as literals before generation (the LU family also folds
-the request's `operator_beta`/`operator_gamma`, keying its source hash on them
-via the role's `folded_args`). Every name the generators do bind — solver
-scalings (`_cubie_codegen_beta`/`_cubie_codegen_gamma`), the scalar device arguments
-`_cubie_codegen_h`/`_cubie_codegen_a_ij`, factory locals (`_cubie_codegen_n`,
-`_cubie_codegen_order`, `_cubie_codegen_total_n`, ...), tableau metadata
-(`_cubie_codegen_c_<i>`, `_cubie_codegen_a_<i>_<j>`), and builder-internal IR locals
-(`_cubie_codegen_dx_*`, `_cubie_codegen_aux_*`, `_cubie_codegen_j_*`,
-`_cubie_codegen_diag_*`, stage renames `_cubie_codegen_s<i>_*`) — lives in the
-`_cubie_codegen_` namespace. `IndexedBases.from_user_inputs` rejects user names with
-that prefix, so a user symbol can never alias a generated binding (in either
-direction) at IR-merge time, factory scope, or device-body scope. When adding a
-generator, bind nothing outside this namespace except the template's positional
-argument names (`t` is parse-reserved and stays bare). Factory signatures
-expose `precision` (plus `order` for preconditioners); the request's
-`operator_beta`/`operator_gamma` fold into the source as numeric literals and key the source hash through each
-role's `folded_args`.
+## Mass matrix and order
+`M` is `None` (identity) or the 0/1 diagonal structural simplification derives for torn
+systems, consumed as per-row flags: an identity row emits the plain form, a zero row the
+residual form. `order` is in every factory signature; only the preconditioner uses it
+(Neumann truncation degree, default `1`).
 
-### Mass matrix & order
-`M` defaults to identity (`None`); the only other legal value is the 0/1 diagonal structural
-simplification derives for torn systems. Codegen consumes it as per-row flags — an identity row
-emits the plain form, a zero row the residual form — and no matrix values enter generated source.
-`order` is in every factory signature but only the preconditioner uses it (Neumann
-truncation degree, factory default `1`); operators/residuals accept and ignore it.
-
-### Reuse jvp_equations
-`generate_analytical_jvp` is the expensive step; operator/preconditioner/cached-JVP generators all
-accept a prebuilt `JVPEquations` via `jvp_equations=` so one differentiation feeds the whole helper
-set.
-
-### Canonical helper pipeline
+## Helper pipeline
 Parsed equations → JVP graph → cache selection → per-helper emission.
-Cached bodies consume the graph's views (`cached_runtime_assignments()`,
-`jacobian_entry(i, j)`, `prepare_fill_assignments()`,
-`cached_slot_order`); stacked consumers reach the same set through
-`build_stage_jvp_assignments` renames. Only cached variants may depend
-on the cache selection (`helper_source_hash` freezes that split).
+`generate_analytical_jvp` is the expensive step; operator, preconditioner and cached-JVP
+generators take a prebuilt `JVPEquations` via `jvp_equations=`. Cached bodies read the
+graph's views (`cached_runtime_assignments()`, `jacobian_entry(i, j)`,
+`prepare_fill_assignments()`, `cached_slot_order`); stacked consumers reach them through
+`build_stage_jvp_assignments` renames. Only cached variants may depend on the cache
+selection.
 
-### Printer (engine)
-The printer lives in `engine/printer.py` (see `engine/AGENTS.md`). Emission rules:
-`precision(...)` wrapping of numeric literals (array indices stay plain integers),
-integer-power multiplication chains up to `_POW_CHAIN_LIMIT` via structural Pow
-rules, `CUDA_FUNCTIONS`, explicit
-user-function aliases, Piecewise as branchless `selp` selections, and
-scalar-to-array remapping via a name-keyed symbol map (generators pass `sysir.arrayrefs`).
-Constant values arrive as `Num` literals; the printer never names a constant.
+## Printing
+The printer is `engine/printer.py`: numeric literals wrapped in `precision(...)` (array
+indices stay plain integers), integer powers as multiplication chains up to
+`_POW_CHAIN_LIMIT`, `CUDA_FUNCTIONS`, user-function aliases, Piecewise as branchless
+`selp`, and scalar-to-array remapping through a name-keyed symbol map (generators pass
+`sysir.arrayrefs`).
 
-### Codegen hygiene
+## Codegen hygiene
 - `engine.prune_unused(..., output_name=...)` runs last in every `_build_*`, dropping
-  intermediates that don't feed the named output array (`'out'`, `'jvp'`, `'cached_aux'`, …).
-  Omitting it bloats output and leaves dangling symbols.
-- Stage builders construct **one combined substitution map per stage** and apply it with a
-  single `engine.xreplace` pass; all non-dx equation left-hand sides are stage-renamed by
-  `build_stage_substitutions` so repeated assignment targets never collapse across stages.
-- `cse` toggles the engine's `cse_and_stack` vs `topological_sort` (either emits in dependency
-  order); the Jacobian/JVP cache normalises the CSE flag into its key.
-- Jacobian `_cache` is process-global and unbounded, keyed by equation tuple + input/output orders
-  + CSE flag; the Jacobian matrix and JVP share one entry (`"jac"`/`"jvp"`).
-- Each generator module registers `default_timelogger` events at import (the functions return
-  strings, not cacheable objects) and brackets work with `start_event`/`stop_event`.
-
-### Testing
-`tests/odesystems/symbolic/` (`test_dxdt`, `test_time_derivative`, `test_jacobian`,
-`test_cuda_printer`, `test_solver_helpers`) + `tests/odesystems/symbolic/codegen/`
-(`test_stage_utils`). These are numerically critical — validate emitted operators against
-finite-difference Jacobians and the trio's algebraic consistency, not just that the source imports.
-See root for CUDASIM/real-CUDA commands.
+  intermediates that don't feed the named output (`'out'`, `'jvp'`, `'cached_aux'`, …).
+- Stage builders apply one combined substitution map per stage in a single
+  `engine.xreplace`; `build_stage_substitutions` renames every non-dx LHS per stage.
+- `cse` selects `cse_and_stack` or `topological_sort`; the Jacobian/JVP cache key
+  includes the CSE flag.
+- The Jacobian `_cache` is process-global and unbounded, keyed by equation tuple,
+  input/output orders and CSE flag; the Jacobian and JVP share an entry.
+- Each generator module registers `default_timelogger` events at import and brackets
+  its work with `start_event`/`stop_event`.
+- Validate emitted operators against finite-difference Jacobians and the
+  operator/residual/preconditioner consistency, not just that the source imports.
 
 ## Dependencies
 ### Internal

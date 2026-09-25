@@ -56,173 +56,125 @@ resolves `__version__` via `importlib.metadata.version("cubie")`.
 | `gui/` | Optional Qt-based editors for `SymbolicODE` constants/parameters/states (see `gui/AGENTS.md`). |
 | `vendored/` | Third-party code vendored as compatibility shims (see `vendored/AGENTS.md`). |
 
-## For AI Agents
-
-This directory is the **compilation spine**. The invariants below are uniform across
-the codebase; subpackage `AGENTS.md` files describe only what they *add* and point
-back here. CUDA-authoring **optimisation** conventions are in
-[Device-code optimisation](#device-code-optimisation) below.
-
-### CUDAFactory (cached compilation)
+## CUDAFactory (cached compilation)
+Subpackage `AGENTS.md` files describe only what they add to these conventions.
 - **Subclasses override `build()`** to return a `CUDADispatcherCache` subclass
-  instance (a bare callable raises `TypeError`). They **expose compiled device
-  functions as named properties** (e.g. `device_function`, `dxdt_fn`); callers use
-  those properties. `get_cached_output(name)` is the internal plumbing the properties
-  use, not the external interface. Never call `build()` directly — storing a
-  device-function reference and then updating settings yields a stale reference
-  (rebuild is lazy, on next property access).
-- **`build()` compiles by closure capture.** A `build()` reads the current
-  `compile_settings` (plus registry allocators and child device-function references)
-  and bakes those values into the compiled device function as **closure constants** —
-  fixed at compile time, not read at call time. This is why any settings change needs a
-  rebuild (cache Layer B): the old values are frozen into the old closure. Capturing
-  Python scalars/booleans as constants also lets Numba constant-fold and drop dead
-  branches — see [Device-code optimisation](#device-code-optimisation).
-- **Three cache layers — know which one you are touching:**
-  1. **Compiled-kernel cache** (`cubie_cache`), keyed by `config_hash` = each
-     factory's `values_hash` re-hashed together with its child factories'. An
-     unchanged `config_hash` reuses the on-disk compiled kernel, so the dispatcher
-     does not recompile. `BaseODE` folds constant *values* into its `config_hash`.
+  instance (a bare callable raises `TypeError`) and **expose compiled device
+  functions as named properties** (`device_function`, `dxdt_fn`); callers use those
+  properties, never `build()` or `get_cached_output(name)`. A stored device-function
+  reference goes stale when settings change: rebuild is lazy, on the next property
+  access.
+- **`build()` compiles by closure capture:** it bakes the current `compile_settings`,
+  registry allocators and child device functions into the compiled function as
+  closure constants, so any settings change needs a rebuild.
+- **Three cache layers:**
+  1. **Compiled-kernel cache** (`cubie_cache`), keyed by `config_hash` (each
+     factory's `values_hash` re-hashed with its children's). An unchanged
+     `config_hash` reuses the on-disk kernel. `BaseODE` folds constant *values*
+     into its `config_hash`.
   2. **Object build cache** (`CUDAFactory._cache` + `_cache_valid`).
-     `update_compile_settings` invalidates it **only if a setting actually changed**,
-     re-running `build()` on the next property access.
-  3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`),
-     keyed by `fn_hash` — equations with constant values folded in as
-     literals, name-sorted array layouts, constant labels, observables,
-     derivative helpers, and function aliases. It caches generated
-     CUDA source, separate from compilation, one file per source
-     identity.
-- **`update` / `update_compile_settings` contract (uniform):** keys are the
-  non-underscored field names; raises `KeyError` on an unrecognised key unless
-  `silent=True`; returns a **`set`** of recognised/updated labels. `CUDAFactory.update`
-  merges `updates_dict` and kwargs, flattens dict values (groups; their names count as
-  recognised), calls `_update(updates, silent)` and raises for what it did not
-  recognise. Subclasses override only `_update` (default: `update_compile_settings`):
-  it may add entries to `updates` in place and returns the names any child took. The config-level
-  `update` is **pure**: it returns a `(replacement, recognised, changed)` triple and
-  never mutates the snapshot — `update_compile_settings` is the sole write boundary,
-  swapping the replacement in and invalidating the build when **any** field changed.
-  Change detection is per-field over post-conversion values: device-function
-  fields compare by identity, arrays elementwise, everything else by
-  inequality. Hashing and invalidation are different predicates: `values_hash`
-  covers only semantic (eq-participating) fields, but a replaced `eq=False`
-  callable still rebuilds the consumer. Compile-settings snapshots are deeply
-  sealed, not just top-level frozen: direct assignment raises, array-valued
-  fields are stored by their converters as owned read-only copies (never
-  aliases of caller arrays), and `SystemValues` containers freeze in place at
-  the snapshot boundary — structure always; values too for constants, whose
-  values are compile-critical. In-place mutation of a held value raises, which
-  is what makes memoizing `values_hash` sound. Updates derive a copy
-  (`copy()`), modify the copy, and pass it through the boundary.
-  A subclass `update` documents **only its additions** over this contract.
-- **`config_hash` recurses into child `CUDAFactory` attributes** (direct attributes
-  only, discovered alphabetically), so a composite factory invalidates when any
-  child's config changes. A subclass may exclude a *diagnostic service* factory
-  from discovery by listing its attribute name in `_excluded_child_factories` —
-  excluded factories deliberately contribute nothing to semantic identity.
-- **`MultipleInstanceCUDAFactory`** maps prefixed external keys (e.g. `krylov_atol`)
-  to unprefixed internal fields via `instance_label`; build configs with
-  `build_config(...)`. `products` and `settings_dict` carry the label
-  (`krylov_linear_solver_fn`, `krylov_atol`); `prefixed(name)` returns the labelled
-  key. A consumer field a labelled child
-  fills is named with that label (`newton_nonlinear_solver_fn`,
-  `error_linear_solver_fn`); a labelled consumer's own device slot is declared
-  `device_function_field(prefixed=True)` and keyed `{label}_norm_fn`.
+     `update_compile_settings` invalidates it only when a setting changed.
+  3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`), keyed by
+     `fn_hash`: one generated source file per source identity.
+- **`update` / `update_compile_settings` contract:** keys are the non-underscored
+  field names; an unrecognised key raises `KeyError` unless `silent=True`; returns a
+  **`set`** of recognised labels. `CUDAFactory.update` merges `updates_dict` and
+  kwargs, flattens dict values (group names count as recognised) and calls
+  `_update(updates, silent)`, the only method subclasses override (default:
+  `update_compile_settings`); `_update` may add entries to `updates` and returns the
+  names any child took. The config-level `update` is pure: it returns
+  `(replacement, recognised, changed)`; `update_compile_settings` swaps the
+  replacement in and invalidates the build when any field changed. Change detection
+  compares post-conversion values: device-function fields by identity, arrays
+  elementwise, the rest by inequality. `values_hash` covers only eq-participating
+  fields, but a replaced `eq=False` callable still rebuilds the consumer.
+  Snapshots are sealed: assignment raises, array fields are owned read-only copies,
+  and `SystemValues` containers freeze at the snapshot boundary (structure always;
+  values too for constants). Updates modify a `copy()` and pass it through the
+  boundary. A subclass `update` documents only its additions.
+- **`config_hash` recurses into child `CUDAFactory` attributes** (direct attributes,
+  alphabetical). Attribute names in `_excluded_child_factories` contribute nothing
+  to identity (diagnostic services).
+- **`MultipleInstanceCUDAFactory`** maps prefixed external keys (`krylov_atol`) to
+  unprefixed fields via `instance_label`; build configs with `build_config(...)`.
+  `products` and `settings_dict` carry the label (`krylov_linear_solver_fn`);
+  `prefixed(name)` returns the labelled key. A consumer field a labelled child fills
+  carries that label (`newton_nonlinear_solver_fn`, `error_linear_solver_fn`); a
+  labelled consumer's own device slot is `device_function_field(prefixed=True)`,
+  keyed `{label}_norm_fn`.
 
-### Config classes (attrs convention)
-- Compile settings are **frozen** attrs classes (`@attrs.frozen`) subclassing
-  `CUDAFactoryConfig` / `MultipleInstanceCUDAFactoryConfig`. **Variable- or
-  float-typed members are stored underscore-prefixed and exposed, type-coerced,
-  through a same-named property**; attrs `__init__` and `update` take the
-  **non-underscored** names, so the entire external interface is non-underscored.
-  Never pass underscored names; never alias underscored fields.
-- Derived fields are recomputed in `__attrs_post_init__` (via
-  `object.__setattr__`) so every snapshot — construction or update-derived
-  replacement — is self-consistent; converters and validators re-run on every
-  replacement, so collections must normalize to canonical immutable values
-  (tuples, not lists).
+## Config classes (attrs convention)
+- Compile settings are **frozen** attrs classes subclassing `CUDAFactoryConfig` /
+  `MultipleInstanceCUDAFactoryConfig`. Variable- or float-typed members are stored
+  underscore-prefixed and exposed, type-coerced, through a same-named property;
+  `__init__` and `update` take the non-underscored names.
+- Derived fields are recomputed in `__attrs_post_init__` (via `object.__setattr__`).
+  Converters and validators re-run on every replacement, so collections normalise to
+  immutable values (tuples, not lists).
 - A system runs at **one precision** (`ALLOWED_PRECISIONS` = float16/32/64); float
-  members are returned cast to it via `self.precision(...)`.
-- **Cache products.** `build()` writes the sizes, flags and device functions
-  a parent reads into the cache; parents read children's `products` at update
-  time to feed siblings.
-- **Settings resolve at the `Solver`.** `batchsolving/solver_settings.py` records
-  the given settings (`None` = not given), `batchsolving/resolve_defaults.py`
-  resolves the rest, and the Solver passes the effective settings as one flat dict
-  down `update`. A factory resolves nothing; a config `update` (or `build_config`) given `None`
-  for a field sets its declared default. `build_config` folds loose nested keys (`unroll_*`, jit flags, `cache_*`)
-  through the config's own `update`, and every child's `ALL_*` key set includes
-  `ALL_UNROLL_PARAMETERS` and `ALL_JIT_PARAMETERS`.
-- **Device functions are named `<full words>_fn`** on both sides: the producer's cache field and every consumer's config field carry the same name (`dxdt_fn`, `step_fn`, `loop_fn`). State counts are `n_states` everywhere (`n_observables`, `n_parameters`, `n_drivers` alongside); `solver_width` is a solver's vector length.
-- **Device-function fields are declared with `device_function_field()`** (`_utils`):
-  `metadata={"device_function": True}`, compared by identity for invalidation,
-  excluded from hashing. `CUDAFactory.products` returns a build's cache fields by
-  name, building first if needed.
-- **`eq=False`** marks fields excluded from config equality/hashing (other
-  callables; array fields use a custom `eq`) — a replaced value is still
-  a change for invalidation. Plain `dict`-typed fields are rejected at
-  construction — wrap compile-critical data in its own attrs class. Every
-  eq-participating value must be canonically serializable (see `_serialize.py`);
-  there is no fallback encoding.
+  members are returned cast via `self.precision(...)`.
+- `build()` writes the sizes, flags and device functions a parent reads into the
+  cache; parents read children's `products` at update time to feed siblings.
+- **Settings resolve at the `Solver`:** `batchsolving/solver_settings.py` records the
+  given settings (`None` = not given), `batchsolving/resolve_defaults.py` resolves the
+  rest, and the Solver passes the effective settings as one flat dict down `update`.
+  A factory resolves nothing; a config `update` (or `build_config`) given `None` sets
+  the field's declared default. `build_config` folds loose nested keys (`unroll_*`,
+  jit flags, `cache_*`) through the config's `update`; every child's `ALL_*` key set
+  includes `ALL_UNROLL_PARAMETERS` and `ALL_JIT_PARAMETERS`.
+- **Device functions are named `<full words>_fn`** on both sides (`dxdt_fn`,
+  `step_fn`, `loop_fn`). Counts are `n_states`, `n_observables`, `n_parameters`,
+  `n_drivers`; `solver_width` is a solver's vector length.
+- **Device-function fields use `device_function_field()`** (`_utils`): compared by
+  identity, excluded from hashing. `CUDAFactory.products` returns a build's cache
+  fields by name, building first if needed.
+- **`eq=False`** excludes a field from equality and hashing (callables; array fields
+  use a custom `eq`). Plain `dict` fields are rejected; wrap compile-critical data in
+  an attrs class. Every eq-participating value must be canonically serializable
+  (`_serialize.py`).
 
-### buffer_registry (CUDA memory layout)
-- **Code requirement:** a factory with managed buffers must **register and allocate
-  them through the registry** — `register(name, parent, size, location,
-  persistent=...)` in `register_buffers()`, then `get_allocator(name, self)` /
-  `get_child_allocators(parent, child, name)` for device-side allocation; sizes via
-  the `*_buffer_size` properties. Locations: `'local'` (thread registers / persistent
-  local) vs `'shared'` (block shared memory). The shared/persistent carve-out and
-  buffer **aliasing** are registry-internal. `register_child(parent, child, name)`
-  registers a child's buffer footprint with its parent and records the ownership edge
-  (`get_child_allocators` calls it before returning allocators), and `clear_parent`
-  cascades through recorded children — this is how hot-swap paths drop a replaced
-  component's whole chain, so registering children through `register_child` /
-  `get_child_allocators` is what keeps swap cleanup working. Both take an optional
-  `aliases=` naming a shared entry the child's window overlaps; every
-  re-registration must repeat it. An alias never overlaps persistent storage
-  (a `persistent=True` entry on either side, at any nesting depth); such an
-  alias falls back to its own allocation. A buffer's
-  `dtype` defaults to the parent's run precision; buffers that differ pass
-  `dtype=` (e.g. `np_int32` counters) and receive their shared/persistent
-  slice through a `view` of the parent array.
-- **Docs requirement:** a child `AGENTS.md` just **lists the buffers it registers**;
-  it does not re-describe the registry mechanics or aliasing.
+## buffer_registry (CUDA memory layout)
+- A factory with managed buffers registers them with `register(name, parent, size,
+  location, persistent=...)` in `register_buffers()` and allocates through
+  `get_allocator(name, self)` / `get_child_allocators(parent, child, name)`; sizes
+  come from the `*_buffer_size` properties. Locations: `'local'` or `'shared'`.
+- `register_child(parent, child, name)` (called by `get_child_allocators`) records
+  the ownership edge; `clear_parent` cascades through it when a component is
+  swapped. Both take `aliases=` naming a shared entry the child's window overlaps;
+  every re-registration repeats it. An alias touching persistent storage gets its
+  own allocation instead.
+- A buffer's `dtype` defaults to the parent's precision; others pass `dtype=`
+  (`np_int32` counters) and get their slice through a `view` of the parent array.
+- A child `AGENTS.md` lists the buffers it registers and nothing about the
+  registry itself.
 
-### Array sizing (`ArraySizingClass`)
-Host-side array shapes are computed by small attrs helpers subclassing `ArraySizingClass`
-(defined in `outputhandling/output_sizes.py`, also used by `batchsolving`). Each exposes a
-**`.nonzero`** property returning a copy with every int/tuple dimension floored to a minimum
-of 1 — call it before allocating host or device buffers to avoid zero-length allocations.
+## Array sizing (`ArraySizingClass`)
+Host-side shapes come from `ArraySizingClass` subclasses
+(`outputhandling/output_sizes.py`). Call `.nonzero` (every dimension floored to 1)
+before allocating.
 
-### Device-code conventions
-- **Import every CUDA symbol from `cuda_simsafe`** — never import a CUDA
-  backend package (`numba.cuda`, `numba_cuda_mlir`) directly, and **never set
-  `NUMBA_ENABLE_CUDASIM` in source.**
-- **`# no cover` on device functions:** coverage cannot see inside compiled
-  `@cuda.jit` code, so device-function bodies/closures are wrapped with
-  `# no cover: start` / `# no cover: end` (and `# pragma: no cover` where
-  appropriate). Keep these brackets when editing device code.
-- **Import aliasing:** import NumPy scalar types with an `np_` prefix
-  (`from numpy import float32 as np_float32`) to disambiguate them from the
-  same-named numba types. Prefer explicit symbol imports over `import numpy as np`.
-- **Compile-time loops:** `for i in unroll_if(range(n), flag)` with `flag` a closure local read from `compile_settings.unroll`; warp-voted iteration loops take `unroll_newton_exits` (Newton, DAE initialiser) or `unroll_krylov_exits` (Krylov); runtime-bounded loops use plain `range`.
+## Device code
+- Import every CUDA symbol from `cuda_simsafe`, never from a backend package
+  (`numba.cuda`, `numba_cuda_mlir`).
+- Device-function bodies are bracketed with `# no cover: start` / `# no cover: end`
+  (coverage cannot see compiled code); keep the brackets when editing.
+- Import NumPy scalar types with an `np_` prefix (`from numpy import float32 as
+  np_float32`); prefer explicit imports over `import numpy as np`.
+- Compile-time loops: `for i in unroll_if(range(n), flag)`, `flag` a closure local
+  from `compile_settings.unroll`; warp-voted iteration loops take
+  `unroll_newton_exits` (Newton, DAE initialiser) or `unroll_krylov_exits` (Krylov);
+  runtime-bounded loops use plain `range`.
+- Prefer `selp` over branches, except on closure constants, which the compiler prunes.
+- All threads compute; gate their commits, not their participation.
+- Iteration exits are warp-coherent: `all_sync` or `any_sync`.
+- Tests never `xfail`, `importorskip` or otherwise conditionally skip.
 
-### Device-code optimisation
-- Prefer `selp` (predicated select) over branches, except when branching on compile-time-known constants captured from closure, as the compiler will prune those branches completely.
-- Have all threads participate in computation but gate their saves/commits, instead of branching their participation, as all threads follow the same instructions anyway.
-- Exit conditions for iteration should be warp-coherent with an `all_sync` or `any_sync` call.
-
-### Testing
-See the repo-root `AGENTS.md` for the canonical simulator vs real-GPU commands, markers, and the
-full-suite approval gate. Never `xfail`, `importorskip`, or otherwise conditionally skip
-behaviour; use the shared `tests/conftest.py` fixtures rather than mocking cubie objects.
-
-### Root-file gotchas
-- **`cubie_cache` depends on numba-cuda internals** (`_Kernel`, `IndexDataCacheFile`,
-  `CUDACache`) and may break across numba-cuda versions; under CUDASIM it uses the
-  vendored `CUDACache`.
-- **Timing is no-op by default:** `default_timelogger` starts at `verbosity=None`;
-  enable via `solve_ivp(time_logging_level=...)` / `Solver(time_logging_level=...)`.
+## Gotchas
+- `cubie_cache` uses numba-cuda internals (`_Kernel`, `IndexDataCacheFile`,
+  `CUDACache`) that can change between numba-cuda versions; under CUDASIM it uses
+  the vendored `CUDACache`.
+- `default_timelogger` starts at `verbosity=None` (no timing); enable with
+  `time_logging_level=` on `solve_ivp` or `Solver`.
 
 ## Dependencies
 ### Internal

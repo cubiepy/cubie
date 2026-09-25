@@ -36,52 +36,39 @@ each have their own `AGENTS.md`.
 | `matrix_free_solvers/` | Matrix-free linear (steepest-descent / minimal-residual) and Newton-Krylov solvers (see `matrix_free_solvers/AGENTS.md`). |
 | `step_control/` | Fixed/adaptive step-size controllers + `get_controller()` (see `step_control/AGENTS.md`). |
 
-## For AI Agents
+## CUBIE_RESULT_CODES
+The kernel status word is `CUBIE_RESULT_CODES(IntFlag)` (`cubie/result_codes.py`,
+re-exported here and from `cubie`); device functions capture its values as closure
+constants and OR them into their status:
+`SUCCESS=0`, `MAX_NEWTON_ITERATIONS_EXCEEDED=2`, `MAX_LINEAR_ITERATIONS_EXCEEDED=4`,
+`STEP_TOO_SMALL=8` (controller reject at minimum step), `DT_EFF_EFFECTIVELY_ZERO=16` and
+`MAX_LOOP_ITERS_EXCEEDED=32` (reserved, never set), `STAGNATION=64` (loop made no
+progress), `BICGSTAB_BREAKDOWN=128`, `NEWTON_DIVERGENCE=256`,
+`DAE_INITIALISATION_FAILED=1024` (the t0 consistent-initialisation solve failed; the run
+ends at the t0 save with the solver bits also set). Iteration counts go in the
+`counters` array, never the status word. Host-side, decode with
+`cubie.result_codes.decode_status_codes` (`SolveResult.status_messages`).
 
-### CUBIE_RESULT_CODES — kernel status-bit meanings
-The status vocabulary is the package-central `CUBIE_RESULT_CODES(IntFlag)` (defined in
-`cubie/result_codes.py`, re-exported from this package and from `cubie`). Device functions
-capture its values as closure constants and OR them into the returned status word:
-`SUCCESS=0`, `MAX_NEWTON_ITERATIONS_EXCEEDED=2`,
-`MAX_LINEAR_ITERATIONS_EXCEEDED=4`, `STEP_TOO_SMALL=8` (controllers' reject-at-min),
-`DT_EFF_EFFECTIVELY_ZERO=16` and `MAX_LOOP_ITERS_EXCEEDED=32` (reserved, unemitted),
-`STAGNATION=64` (loop no-progress), `BICGSTAB_BREAKDOWN=128`,
-`NEWTON_DIVERGENCE=256`, `DAE_INITIALISATION_FAILED=1024` (t0
-consistent-initialisation solve failed; the run ends at the t0 save
-with the solver failure bits also set).
-Iteration counts are returned separately via the
-`counters` array, never packed into the status word. Host-side, decode via
-`cubie.result_codes.decode_status_codes` (exposed as `SolveResult.status_messages` /
-`Solver.status_messages`).
-
-### Component assembly (`SingleIntegratorRunCore.__init__`)
-`SingleIntegratorRunCore` resolves nothing; it takes one flat dict of settings. Each
-child class declares `system_inputs(system, ...)`, what it takes from the system
-(sizes, precision, products, mass flags). Order:
+## Component assembly (`SingleIntegratorRunCore`)
+The core resolves nothing; it takes one flat settings dict. Each child class declares
+`system_inputs(system, ...)`, what it reads from the system (sizes, precision, products,
+mass flags). Construction order:
 1. `IntegratorRunSettings` (`algorithm`, `step_controller`, driver functions, compile
    flags).
 2. `OutputFunctions` from the output keys and its system inputs.
-3. The algorithm step named by `algorithm`, from the settings, its system inputs,
-   the driver evaluators and `is_adaptive`; an explicit step on a mass-matrix system
-   raises.
-4. The controller named by `step_controller`, from the settings, its system inputs
-   and the step's order.
-5. `DAEInitialiser` from the step's `settings_dict`, the settings and its system
-   inputs; no-op configurations register zero-size buffers.
+3. The step named by `algorithm`, from the settings, its system inputs, the driver
+   evaluators and `is_adaptive`; an explicit step on a mass-matrix system raises.
+4. The controller named by `step_controller`, given the step's order.
+5. `DAEInitialiser` from the step's `settings_dict`; no-op configurations register
+   zero-size buffers.
 6. `IVPLoop` from the loop keys plus `_loop_inputs()` (the children's products); the
    step, controller and initialiser register under it and `loop_fn` is captured.
 
-`update()` writes this config, then each child with the same dict plus its inputs,
-and recaptures `loop_fn`; a new `algorithm`, `tableau` or state count rebuilds
-the step and a new `step_controller` the controller, from `init_kwargs` plus
-the update. The system is not a child:
-the Solver updates it before the chain runs. `build()` returns `loop_fn`.
+`update()` writes this config, then each child with the same dict plus its inputs, and
+recaptures `loop_fn`. A new `algorithm`, `tableau` or state count rebuilds the step; a new
+`step_controller` rebuilds the controller, from `init_kwargs` plus the update. The
+Solver updates the system before this chain runs. `build()` returns `loop_fn`;
 `settings_dict` merges the children's.
-
-### Testing
-Top-level files are exercised via `tests/integrators/` integration tests and
-`tests/batchsolving/` end-to-end tests. `ScaledNorm` is tested with the
-matrix-free solvers.
 
 ## Dependencies
 ### Internal
