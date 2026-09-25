@@ -26,7 +26,7 @@ public API.
   (`pyproject.toml`).
 - Each wheel rebuild updates the `_mlir_compat.py` sections by hand to
   match their pull requests and moves the `mlir*` extras pin.
-- Test kernels compile with `cubie.cuda_simsafe._BACKEND_JIT_OPTIONS`;
+- Test kernels compile with `cubie.cuda_simsafe.compile_kwargs`;
   inlined callees take the kernel's options.
 - Scheduler knobs: `CUBIE_BLOCK_SCHEDULE` (policy; documented in
   `cubie/_env.py`), `CUBIE_BLOCK_SCHEDULE_DUMP` (gzip graph dump),

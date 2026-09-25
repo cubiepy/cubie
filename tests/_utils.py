@@ -8,7 +8,7 @@ from typing import Mapping, Optional, Union, Dict, Any, Callable
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda, int32, numba_from_dtype as from_dtype
-from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import MemoryManager
 from numpy.testing import assert_allclose
@@ -997,7 +997,7 @@ def run_device_loop(
         singleintegratorrun.summary_sample_count(duration)
     )
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(
         init_vec,
         params_vec,
@@ -1604,7 +1604,7 @@ def setup_chunked_arrays(manager, num_runs, num_chunks):
 
 @lru_cache(maxsize=None)
 def _dxdt_kernel(device_fn):
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(state, params, drivers, obs, out, t):
         device_fn(state, params, drivers, obs, out, t)
 
@@ -1629,7 +1629,7 @@ def run_device_dxdt(device_fn, state, params, drivers, obs, out, t):
 
 @lru_cache(maxsize=None)
 def _observables_kernel(device_fn):
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(state, params, drivers, obs, t):
         device_fn(state, params, drivers, obs, t)
 
@@ -1652,7 +1652,7 @@ def run_device_observables(device_fn, state, params, drivers, obs, t):
 
 @lru_cache(maxsize=None)
 def _driver_eval_kernel(device_fn):
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(times, coeffs, out):
         idx = cuda.grid(1)
         if idx < times.size:
@@ -1710,7 +1710,7 @@ class StepResult:
 
 @lru_cache(maxsize=None)
 def _controller_step_kernel(device_func):
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(
         dt_val,
         state_val,
@@ -1804,7 +1804,7 @@ def run_controller_device_step(
 def _step_schedule_kernel(
     step_fn, n, n_obs, n_drv, persistent_len, numba_precision
 ):
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(state_io, params_vec, driver_coeffs, dt_schedule,
                out_iters, status_vec):
         idx = cuda.grid(1)
@@ -1953,7 +1953,7 @@ def run_device_step_schedule(
 
 @lru_cache(maxsize=None)
 def _dense_predictor_kernel(device_fn, persistent_len, numba_precision):
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(vector, step_ratio, flag):
         idx = cuda.grid(1)
         if idx > 0:

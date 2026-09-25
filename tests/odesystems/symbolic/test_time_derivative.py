@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 
 from cubie.odesystems.symbolic.codegen.time_derivative import (
@@ -54,7 +54,7 @@ def test_time_derivative_helper_matches_reference(time_derivative_system,
     param_len = 1
     obs_len = 1
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(time_value, driver_value, driver_rate, out_array):
         state = cuda.local.array(state_len, numba_precision)
         parameters = cuda.local.array(param_len, numba_precision)

@@ -9,7 +9,7 @@ import attrs
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype, int32
-from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose
 
@@ -147,7 +147,7 @@ def _execute_step_twice(
     driver_len = int(n_drivers)
     observable_len = int(n_observables)
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(
         state_vec,
         params_vec,

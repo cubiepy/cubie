@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     GAUSS_LEGENDRE_2_TABLEAU,
 )
@@ -269,7 +269,7 @@ def test_tiled_norm_tiles_tolerances_across_stages():
     )
     fn = factory.device_function
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(values, reference, result):
         result[0] = fn(values, reference)
 
@@ -310,7 +310,7 @@ def test_firk_correction_norm_tiles_tolerances_across_stages():
     )
     fn = factory.device_function
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(delta, increment, stage_base, step_start, a_ij, result):
         result[0] = fn(delta, increment, stage_base, step_start, a_ij)
 
@@ -417,7 +417,7 @@ def test_build_converged_norm():
     )
     fn = factory.device_function
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(values, reference, result):
         result[0] = fn(values, reference)
 
@@ -446,7 +446,7 @@ def test_build_exceeds_tolerance():
     )
     fn = factory.device_function
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(values, reference, result):
         result[0] = fn(values, reference)
 
@@ -472,7 +472,7 @@ def test_build_atol_floor_prevents_division_by_zero():
         )
     fn = factory.device_function
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(values, reference, result):
         result[0] = fn(values, reference)
 
@@ -504,7 +504,7 @@ def test_build_mean_squared_norm():
     )
     fn = factory.device_function
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(values, reference, result):
         result[0] = fn(values, reference)
 
@@ -560,7 +560,7 @@ def _run_two_ref_norm(factory, values, reference_a, reference_b):
     fn = factory.device_function
     dtype = factory.precision
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(values, reference_a, reference_b, result):
         result[0] = fn(values, reference_a, reference_b)
 
@@ -674,7 +674,7 @@ def correction_norm_kernel(correction_norm_case, precision):
     )
     correction_norm = factory.device_function
 
-    @cuda.jit(**_BACKEND_JIT_OPTIONS)
+    @cuda.jit(**compile_kwargs)
     def kernel(delta, increment, stage_base, step_start, a_ij, result):
         result[0] = correction_norm(
             delta,
