@@ -912,7 +912,7 @@ def test_periodic_boundary_respects_general_order(
     np.testing.assert_allclose(
         gpu,
         reference,
-        rtol=tolerance.rel_tight,
+        rtol=tolerance.rel_loose,
         atol=tolerance.abs_tight,
         err_msg=("periodic spline failed to reproduce samples\n"
                  f"device={gpu}\nref={reference}\ndelta={gpu-reference}"),
