@@ -1,5 +1,7 @@
 import ctypes
 import gc
+import json
+import sys
 from pathlib import Path
 import weakref
 
@@ -2541,6 +2543,29 @@ def test_pinned_slab_refused_past_ram_headroom(mgr):
     request = 2 * room + 2**30
     assert mgr.allocate_pinned_array((request,), np.uint8) is None
     assert mgr.pinned_reserved_bytes == 0
+
+
+
+
+@pytest.mark.nocudasim
+@pytest.mark.cupy
+def test_commit_capped_slab_refused_without_poisoning():
+    """An uncommittable slab is refused and pinned allocation survives."""
+    if sys.platform != "win32":
+        from cubie.cuda_simsafe import _require_commit
+
+        assert _require_commit(2**40) is None
+        return
+    import subprocess
+
+    child = Path(__file__).with_name("_commit_cap_child.py")
+    result = subprocess.run(
+        [sys.executable, str(child)],
+        capture_output=True, text=True, timeout=300,
+    )
+    assert result.returncode == 0, result.stderr
+    outcome = json.loads(result.stdout.strip().splitlines()[-1])
+    assert outcome == {"big_refused": True, "small_pinned": True}
 
 
 def test_forced_pinned_allocation_grows_past_budget(mgr):
