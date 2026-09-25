@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/cubiepy/cubie/compare/v0.14.1...v0.14.2) (2026-09-25)
+
+
+### Bug Fixes
+
+* **backend:** numba-cuda-mlir frontend perf patches always apply ([#986](https://github.com/cubiepy/cubie/issues/986)) ([4a2ca0c](https://github.com/cubiepy/cubie/commit/4a2ca0caa4c7b379efb2c22e6360602c1ad45c5e))
+
 ## [0.14.1](https://github.com/cubiepy/cubie/compare/v0.14.0...v0.14.1) (2026-09-18)
 
 
