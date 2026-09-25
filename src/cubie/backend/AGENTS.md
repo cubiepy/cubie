@@ -24,12 +24,10 @@ public API.
   from anywhere else.
 - Coverage omits `_mlir_compat.py` and `_numba_cuda_compat.py`
   (`pyproject.toml`).
-- A `_mlir_compat.py` section changes only when its pull request
-  changes; each wheel rebuild updates the sections by hand and moves
-  the `mlir*` extras pin.
-- Test kernels compile with `cubie.cuda_simsafe._BACKEND_JIT_OPTIONS`:
-  inlined callees take the calling kernel's options, so AST
-  transforms such as `unroll_if` need the kernel to enable them.
+- Each wheel rebuild updates the `_mlir_compat.py` sections by hand to
+  match their pull requests and moves the `mlir*` extras pin.
+- Test kernels compile with `cubie.cuda_simsafe._BACKEND_JIT_OPTIONS`;
+  inlined callees take the kernel's options.
 - Scheduler knobs: `CUBIE_BLOCK_SCHEDULE` (policy; documented in
   `cubie/_env.py`), `CUBIE_BLOCK_SCHEDULE_DUMP` (gzip graph dump),
   `CUBIE_BLOCK_SCHEDULE_ORDER` (JSON orders for the `inject` policy).

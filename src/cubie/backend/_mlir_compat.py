@@ -1,15 +1,9 @@
 """Shims mirroring the open numba-cuda-mlir pull requests cubie uses.
 
-Each section reproduces one open pull request branch of the
-ccam80/numba-cuda-mlir fork, as merged onto the pinned
-``cubie-numba-cuda-mlir`` wheel, and applies it at import. Changed
-functions are copied from the branch with module names qualified;
-changed lowerings are registered again for the same signatures, which
-replaces the stock implementation. Remove a section when its pull
-request merges and the wheel carries it.
-
-The module then registers cubie's typed-IR block scheduler with the
-wheel's typed-planner hook.
+Each section applies one fork branch, as merged onto the pinned
+``cubie-numba-cuda-mlir`` wheel, at import. Changed lowerings are
+registered again for their signatures, replacing the stock ones. The
+module then registers cubie's typed-IR block scheduler.
 
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
