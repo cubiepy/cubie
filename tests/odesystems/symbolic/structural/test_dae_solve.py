@@ -14,6 +14,7 @@ import pytest
 
 from cubie import Solver, solve_ivp
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     RADAU_IIA_5_TABLEAU,
 )
@@ -646,7 +647,7 @@ def _dense_at_state_operator(device_fn, state, params, drivers, t, h):
     params_dev = cuda.to_device(params, stream=stream)
     drivers_dev = cuda.to_device(drivers, stream=stream)
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def kernel(state_in, params_in, drivers_in, vec, out):
         cached_aux = cuda.local.array(1, precision)
         device_fn(
@@ -725,7 +726,7 @@ def test_diode_line_stacked_prefactored_lu_matches_dense(
     factor = cuda.to_device(np.zeros(1, dtype=precision), stream=stream)
     flag = cuda.to_device(np.zeros(2, dtype=np.int32), stream=stream)
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def kernel(state_in, params_in, drivers_in, cached_aux, rhs_io, x,
                factor_buf, flags):
         flags[0] = prepare(

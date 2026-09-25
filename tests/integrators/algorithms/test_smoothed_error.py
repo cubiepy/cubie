@@ -7,6 +7,7 @@ import pytest
 
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
+from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
 from cubie.memory import default_memmgr
 from cubie.integrators.algorithms.crank_nicolson import CrankNicolsonStep
 from cubie.integrators.algorithms.generic_dirk import DIRKStep
@@ -376,7 +377,7 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
 
     if shape == "operator":
 
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(vec, out):
             params = cuda.local.array(1, np.float64)
             cached_aux = cuda.local.array(1, np.float64)
@@ -387,7 +388,7 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
 
     elif shape == "preconditioner":
 
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(vec, out):
             params = cuda.local.array(1, np.float64)
             cached_aux = cuda.local.array(1, np.float64)
@@ -399,7 +400,7 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
 
     else:
 
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(vec, out):
             device_fn(vec, out)
 
@@ -585,7 +586,7 @@ def test_error_solver_solves_the_at_state_dense_system(
         np.zeros(1, dtype=np.int32), stream=stream
     )
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def kernel(rhs_io, x_io, shared_mem, persistent_mem, iters_out,
                status_out):
         params = cuda.local.array(1, np.float64)
@@ -667,7 +668,7 @@ def _run_one_device_step(step, state, dt, time_value):
     shared_bytes = np.float64(0).itemsize * shared_elems
     step_fn = step.step_fn
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def kernel(state_in, proposed_out, error_out, status_out):
         shared = cuda.shared.array(0, dtype=numba_precision)
         persistent = cuda.local.array(

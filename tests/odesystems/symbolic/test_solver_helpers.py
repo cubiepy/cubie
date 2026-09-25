@@ -5,6 +5,8 @@ import pytest
 import sympy as sp
 
 from cubie.cuda_simsafe import cuda
+
+from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
 from cubie.cuda_simsafe import numba_from_dtype as from_dtype
 from cubie.memory import default_memmgr
 from cubie.odesystems.solver_helpers import (
@@ -117,7 +119,7 @@ def operator_kernel(precision):
     n = 2
 
     def make_kernel(op):
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(t, h, a_ij, vec, base_state, out):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
@@ -206,7 +208,7 @@ def cached_operator_kernel(cached_system, precision):
         param_len = max(n_params, 1)
         driver_len = max(n_drivers, 1)
 
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(
             state_values,
             parameter_values,
@@ -862,7 +864,7 @@ def neumann_kernel(precision):
     n = 2
 
     def make_kernel(pre):
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(t, h, a_ij, vec, base_state, out):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
@@ -929,7 +931,7 @@ def neumann_cached_kernel(cached_system, precision):
         param_len = max(n_params, 1)
         driver_len = max(n_drivers, 1)
 
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(
             state_values,
             parameter_values,
@@ -1163,7 +1165,7 @@ def stage_residual_factory(operator_system, precision):
 @pytest.fixture(scope="session")
 def residual_kernel(precision):
     def make_kernel(residual):
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(t, h, aij, vec, base_state, out):
             parameters = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
@@ -1505,7 +1507,7 @@ def jacobi_kernel(precision):
     n = 2
 
     def make_kernel(pre):
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(t, h, a_ij, state_values, base_state, vec, out):
             state = cuda.local.array(n, precision)
             parameters = cuda.local.array(1, precision)
@@ -1723,7 +1725,7 @@ def n_stage_jacobi_kernel(precision):
     width = 4
 
     def make_kernel(pre):
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(t, h, stage_values, base_state, vec, out):
             state = cuda.local.array(width, precision)
             parameters = cuda.local.array(1, precision)
@@ -2181,7 +2183,7 @@ def system_operator_pair_kernel(system, precision):
         param_len = max(n_params, 1)
         driver_len = max(n_drivers, 1)
 
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(
             state_values, t, h, a_ij, vec, out_cached, out_inline
         ):
@@ -2235,7 +2237,7 @@ def system_cached_precond_kernel(system, precision):
         param_len = max(n_params, 1)
         driver_len = max(n_drivers, 1)
 
-        @cuda.jit
+        @cuda.jit(**_BACKEND_JIT_OPTIONS)
         def kernel(state_values, t, h, a_ij, vec, out):
             state = cuda.local.array(n_state, precision)
             parameters = cuda.local.array(param_len, precision)
@@ -2659,7 +2661,7 @@ def test_lu_solve_scaled_binding_matches_dense(
     rhs = np.array([1.5, -0.25], dtype=precision)
     expected = np.linalg.solve(shifted, rhs)
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def kernel(rhs_vec, x, status):
         state = cuda.local.array(n, precision)
         base_state = cuda.local.array(n, precision)
@@ -2719,7 +2721,7 @@ def test_none_preconditioner_is_identity(operator_system, precision):
 
     fn = plain.device_function
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def kernel(v, out):
         state = cuda.local.array(2, precision)
         parameters = cuda.local.array(1, precision)

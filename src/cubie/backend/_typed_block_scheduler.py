@@ -11,8 +11,7 @@ barriers, Del pins). Policies (see
 Knobs: ``CUBIE_BLOCK_SCHEDULE`` (policy),
 ``CUBIE_BLOCK_SCHEDULE_DUMP`` (gzip graph dump),
 ``CUBIE_BLOCK_SCHEDULE_ORDER`` (JSON orders for ``inject``).
-Import only via ``cubie.backend._mlir_compat`` after hook
-detection.
+Import only via ``cubie.backend._mlir_compat``.
 """
 
 import gzip

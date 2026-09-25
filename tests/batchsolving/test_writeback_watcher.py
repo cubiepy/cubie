@@ -12,6 +12,7 @@ from cubie.batchsolving.writeback_watcher import (
     WritebackWatcher,
 )
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
 
 from cubie.cuda_simsafe import CUDA_SIMULATION
 from cubie.memory import MemoryManager
@@ -22,7 +23,7 @@ from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
 
 
 if not CUDA_SIMULATION:
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def _busy_kernel(out):
         """Single-thread kernel that runs long enough to stay pending."""
         x = 0.0

@@ -1,69 +1,15 @@
-"""Lowering registrations that fill gaps in numba-cuda-mlir.
+"""Shims mirroring the open numba-cuda-mlir pull requests cubie uses.
 
-numba-cuda-mlir lowers shared memory to zero-sized
-internal-linkage globals: ``cuda.shared.array(0)`` becomes a private
-zero-length ``memref.global`` and ``gpu.dynamic_shared_memory``'s
-base becomes ``llvm.mlir.global internal @__dynamic_shmem__N :
-!llvm.array<0 x i8>``. Indexing a zero-length internal object is
-undefined behaviour, so optimizers (libnvvm -O3 and the LTO cubin
-link at opt > 0) legally sink or delete stores staged through
-dynamic shared memory. This module reroutes zero-length shared
-arrays through a ``gpu.dynamic_shared_memory`` view and rewrites the
-``__dynamic_shmem__`` globals to external linkage, which is the
-"LTO store erasure" fix (upstream warning in #117 blames the
-linker's fp16 handling; the actual defect is this lowering).
+Each section reproduces one open pull request branch of the
+ccam80/numba-cuda-mlir fork, as merged onto the pinned
+``cubie-numba-cuda-mlir`` wheel, and applies it at import. Changed
+functions are copied from the branch with module names qualified;
+changed lowerings are registered again for the same signatures, which
+replaces the stock implementation. Remove a section when its pull
+request merges and the wheel carries it.
 
-numba-cuda-mlir also uses ABI storage types for multiply-assigned
-compiler locals. Boolean locals therefore cross an i1/i8 boundary on
-every stack load and store. This module keeps scalar and tuple locals
-in their semantic value types. External arrays and ABI-facing data
-retain their storage types.
-
-numba-cuda-mlir also gives Python ``min`` and ``max`` NaN-propagating
-float semantics. This module selects the non-NaN operand.
-
-numba-cuda-mlir also registers comparisons for matching operand kinds
-only. This module adds the mixed ``(Boolean, Number)`` pairs Python's
-bool-to-int promotion allows.
-
-numba-cuda-mlir also rejects the compile-time-empty tail view
-``arr[n:n]`` of a size-``n`` array: the optimization pipeline folds
-the frozen bounds and parent shape static after inlining, and the
-``memref.subview`` bounds check then fails ("offset 0 is
-out-of-bounds: n >= n") although numpy-style slicing allows the
-view. This module anchors statically empty slices at offset zero,
-which stays in bounds under any folding (the registry's zero-length
-buffer views hit this on every statically sized shared or
-persistent scratch parent).
-
-Import this module before compiling any kernel; registrations are
-picked up when the MLIR target context refreshes its registries.
-These are stop-gaps that belong upstream in numba-cuda-mlir; patch
-branches exist in the ccam80/numba-cuda-mlir fork. Fixes in the
-backend's native (C++) code cannot be patched from here; they ship
-prebuilt in the ``cubie-numba-cuda-mlir`` wheel the ``mlir*``
-extras install (built from the fork's ``cubie-wheel`` branch), so
-the installed wheel, not upstream source, is what compiles device
-code. The Python-side branches are fix-dynamic-shared-memory-ub,
-fix-local-boolean-stack-slots, fix-float-minmax-lowering,
-perf-ssa-restricted-sweeps, perf-inline-callee-ir-cache,
-perf/dominators-from-idom, perf/frontend-set-copies,
-ssa-iterative-def-search, fix/11-topo-order-iterative,
-codex/empty-body-repair and feat/inlined-callee-ast-transforms.
-
-The iterative SSA def-search shim removes the RecursionError that
-large flattened kernels hit inside ``reconstruct_ssa``; it no-ops
-on builds that carry the fix natively. Remove each shim once its
-fix lands upstream. With the shared-memory shim in place CuBIE
-requests LTO-link optimization explicitly; set
-NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the LTO
-link.
-
-numba-cuda-mlir also applies its AST transforms (``consteval``) only
-to the function ``compile_mlir`` receives. This module transforms each
-inlined callee whose decorator enables the transforms, under the
-calling kernel's options, and fills emptied statement bodies with
-``pass``.
+The module then registers cubie's typed-IR block scheduler with the
+wheel's typed-planner hook.
 
 Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
@@ -72,591 +18,344 @@ import ast
 import copy
 import functools
 import inspect
+import math
 import operator
-import warnings
-import weakref
 from collections import defaultdict
 
 from numba_cuda_mlir import ast_transforms as _ast_transforms
 from numba_cuda_mlir import lowering_utilities
-from numba_cuda_mlir import mlir_lowering as _mlir_lowering
+from numba_cuda_mlir import mlir_compiler as _mlir_compiler
+from numba_cuda_mlir import mlir_lowering as _ml
 from numba_cuda_mlir import mlir_optimization as _mlir_optimization
+from numba_cuda_mlir._mlir.dialects import arith
 from numba_cuda_mlir.ast_transforms import (
     ASTTransformPass,
     apply_ast_transforms,
-    common as _ast_common,
 )
-from numba_cuda_mlir.cuda.experimental import consteval
-from numba_cuda_mlir._mlir import ir as _ir
-from numba_cuda_mlir._mlir.dialects import (
-    arith,
-    llvm as _llvm,
-    memref as _memref,
-)
-from numba_cuda_mlir._mlir.extras import types as _T
-from numba_cuda_mlir.lowering import builtins as _lowering_builtins
-from numba_cuda_mlir.lowering import cuda as _lowering_cuda
-from numba_cuda_mlir.lowering import numpy as _lowering_numpy
-from numba_cuda_mlir.lowering.math import (
-    eq_cg,
-    ge_cg,
-    gt_cg,
-    le_cg,
-    lt_cg,
-    ne_cg,
-    registry as _math_registry,
-)
-from numba_cuda_mlir.lowering.numpy import registry as _np_registry
+from numba_cuda_mlir.ast_transforms import common as _ast_common
+from numba_cuda_mlir.extending import register_typed_planner
+from numba_cuda_mlir.lowering import builtins as _lbuiltins
+from numba_cuda_mlir.lowering import cuda as _lcuda
+from numba_cuda_mlir.lowering import math as _lmath
+from numba_cuda_mlir.lowering import numpy as _lnumpy
 from numba_cuda_mlir.numba_cuda import types
 from numba_cuda_mlir.numba_cuda.core import (
     analysis as _nb_analysis,
+)
+from numba_cuda_mlir.numba_cuda.core import (
     controlflow as _nb_controlflow,
+)
+from numba_cuda_mlir.numba_cuda.core import (
     errors as _nb_errors,
+)
+from numba_cuda_mlir.numba_cuda.core import (
     inline_closurecall as _nb_icc,
+)
+from numba_cuda_mlir.numba_cuda.core import (
     ir as _nb_ir,
+)
+from numba_cuda_mlir.numba_cuda.core import (
     ir_utils as _nb_ir_utils,
+)
+from numba_cuda_mlir.numba_cuda.core import (
     ssa as _nb_ssa,
+)
+from numba_cuda_mlir.numba_cuda.core import (
     untyped_passes as _nb_untyped_passes,
 )
+from numba_cuda_mlir.numba_cuda.typing.templates import signature
+from numba_cuda_mlir.typing import math as _tmath
+
+# ------------------------------------------------------------------ #
+# ccam80/mixed-bool-number                                           #
+# ------------------------------------------------------------------ #
 
 
-_COMPARISON_CGS = {
-    operator.eq: eq_cg,
-    operator.ne: ne_cg,
-    operator.lt: lt_cg,
-    operator.le: le_cg,
-    operator.gt: gt_cg,
-    operator.ge: ge_cg,
-}
-
-
-def register_mixed_boolean_comparison_lowerings() -> None:
-    """Register comparisons for mixed Boolean/Number operand pairs; upstream
-    covers matching pairs only.
-    """
-
-    for op, cg in _COMPARISON_CGS.items():
-        _math_registry.lower(op, types.Boolean, types.Number)(cg)
-        _math_registry.lower(op, types.Number, types.Boolean)(cg)
-
-
-register_mixed_boolean_comparison_lowerings()
-
-
-_original_static_shared = _lowering_cuda.cuda_static_shared_memory
-
-
-def _dynamic_region_view(lower, mr_type):
-    """Build a view of the whole dynamic shared region at offset 0.
-
-    A private zero-length shared ``memref.global`` is undefined
-    behaviour to index, so optimizers sink or delete stores staged
-    through it. A view over ``gpu.dynamic_shared_memory`` at byte
-    offset zero, sized at runtime from the region's extent, matches
-    numba's convention that every zero-length shared array aliases
-    the dynamic region base. The view does not advance the running
-    byte offset used by runtime-shaped shared arrays.
-    """
-
-    with lower.alloca_insertion_point():
-        shm_base = lower._get_shared_memory_base()
-        zero = arith.constant(result=_T.index(), value=0)
-        element_bytes = arith.constant(
-            result=_T.index(),
-            value=mr_type.element_type.width // 8,
-        )
-        num_elements = arith.divui(_memref.dim(shm_base, zero), element_bytes)
-        return _memref.view(
-            result=mr_type,
-            source=shm_base,
-            byte_shift=zero,
-            sizes=[num_elements],
-        )
-
-
-def _dynamic_region_shared_memory(lower, target, dtype):
-    """Lower ``cuda.shared.array(0)`` to the dynamic shared region."""
-
-    element_type = lower.get_storage_type(
-        _lowering_cuda._resolve_numba_dtype(lower, dtype)
-    )
-    mr_type = _ir.MemRefType.get(
-        shape=[_ir.ShapedType.get_dynamic_size()],
-        element_type=element_type,
-        memory_space=lower._get_shared_address_space(),
-    )
-    lower.store_var(target, _dynamic_region_view(lower, mr_type))
-
-
-def _static_shared_memory_shim(lower, target, static_shape, dtype, alignas):
-    """Route zero-length 1-D shared arrays to the dynamic region."""
-
-    if len(static_shape) == 1 and static_shape[0] == 0:
-        return _dynamic_region_shared_memory(lower, target, dtype)
-    return _original_static_shared(lower, target, static_shape, dtype, alignas)
-
-
-def _request_shared_memory_shim(self, sizes, mr_type):
-    """Emit runtime-shaped shared views at the current insertion point.
-
-    Upstream inserts at the end of the entry block, which raises an
-    insertion error once the block has a terminator (any shared
-    request lowered after control flow) and cannot see size operands
-    computed after a branch.
-    """
-
-    match mr_type.element_type:
-        case _ir.IntegerType() | _ir.FloatType() as t:
-            element_bytes = t.width // 8
-        case _T.index:
-            element_bytes = 8
-        case _:
-            raise NotImplementedError(
-                f"NotImplemented shared memory type {mr_type}."
-            )
-    assert self.mlir_funcOp
-    bytes_op = arith.constant(result=_T.index(), value=element_bytes)
-    for size in sizes:
-        size = self.mlir_convert(size, _T.index())
-        bytes_op = arith.muli(lhs=bytes_op, rhs=size)
-    shm_base = self._get_shared_memory_base()
-    if self._total_shared_memory_bytes is None:
-        self._total_shared_memory_bytes = arith.constant(
-            result=_T.index(), value=0
-        )
-    view = _memref.view(
-        result=mr_type,
-        source=shm_base,
-        byte_shift=self._total_shared_memory_bytes,
-        sizes=sizes,
-    )
-    self._total_shared_memory_bytes = arith.addi(
-        lhs=self._total_shared_memory_bytes, rhs=bytes_op
-    )
-    return view
-
-
-def _request_dynamic_shared_memory_shim(self, mr_type):
-    """Emit the dynamic-region view at the current insertion point.
-
-    Upstream inserts at the end of the entry block, which raises an
-    insertion error once the block has a terminator (any
-    ``shared.array(0)`` lowered after control flow), offsets the
-    view by the running byte total, and consumes the whole region;
-    every zero-length shared array must instead alias the region
-    base at byte offset zero.
-    """
-
-    view = _dynamic_region_view(self, mr_type)
-    self._dynamic_shared_memory_values.append(view)
-    return view
-
-
-def _make_dynamic_shared_memory_external(module):
-    """Rewrite ``__dynamic_shmem__*`` globals to external linkage.
-
-    With internal linkage the optimizer may assume the zero-length
-    object really is zero bytes long, making every indexed access
-    out of bounds; external linkage makes the size unknown and
-    restores conservative aliasing, matching CUDA C's
-    ``extern __shared__`` declaration.
-    """
-
-    external = _ir.Attribute.parse("#llvm.linkage<external>")
-
-    def walk(op):
-        for region in op.regions:
-            for block in region.blocks:
-                for child in block.operations:
-                    if child.operation.name == "llvm.mlir.global":
-                        sym = str(child.attributes["sym_name"])
-                        if "__dynamic_shmem__" in sym:
-                            child.attributes["linkage"] = external
-                    walk(child.operation)
-
-    walk(module.operation)
-
-
-_original_pre_codegen = _mlir_optimization.run_pre_codegen_patterns
-
-
-def _pre_codegen_with_external_shmem(module, *args, **kwargs):
-    result = _original_pre_codegen(module, *args, **kwargs)
-    _make_dynamic_shared_memory_external(module)
-    return result
-
-
-def register_dynamic_shared_memory_shims() -> None:
-    """Install the dynamic-shared-memory UB fixes."""
-
-    _lowering_cuda.cuda_static_shared_memory = _static_shared_memory_shim
-    _mlir_lowering.MLIRLower._request_shared_memory = (
-        _request_shared_memory_shim
-    )
-    if hasattr(_mlir_lowering.MLIRLower, "_request_dynamic_shared_memory"):
-        _mlir_lowering.MLIRLower._request_dynamic_shared_memory = (
-            _request_dynamic_shared_memory_shim
-        )
-    _mlir_optimization.run_pre_codegen_patterns = (
-        _pre_codegen_with_external_shmem
-    )
-
-
-register_dynamic_shared_memory_shims()
-
-
-# The dynamic-shared-memory shims above make explicit LTO safe. Set
-# NUMBA_CUDA_MLIR_DISABLE_LTO_OPT=1 to force opt_level=0 on the link.
-
-
-def register_semantic_local_stack_slots():
-    """Keep multiply-assigned compiler locals in value types."""
-    lower_class = _mlir_lowering.MLIRLower
-    marker = "_cubie_semantic_local_stack_slots"
-    if getattr(lower_class, marker, None):
-        return
-
-    method_names = (
-        "_allocate_stack_slot_for_type",
-        "allocate_stack_space_for_vars_with_multiple_assigns",
-        "_load_stack_slot",
-        "_store_stack_slot",
-        "_load_var",
-        "store_var",
-    )
-    try:
-        sources = {
-            name: inspect.getsource(getattr(lower_class, name))
-            for name in method_names
-        }
-    except (AttributeError, OSError, TypeError) as exc:
-        raise RuntimeError(
-            "cubie.backend._mlir_compat: cannot inspect numba-cuda-mlir's "
-            "local stack-slot lowering; update the compatibility "
-            "check for this release."
-        ) from exc
-
-    semantic_signatures = (
-        "get_mlir_type(var_type)" in sources["_allocate_stack_slot_for_type"],
-        "get_mlir_type(var_type.dtype)"
-        in sources["allocate_stack_space_for_vars_with_multiple_assigns"],
-        "get_mlir_type(var_type)"
-        in sources["allocate_stack_space_for_vars_with_multiple_assigns"],
-        (
-            "get_mlir_type(var_type)" in sources["_load_stack_slot"]
-            and "from_storage" not in sources["_load_stack_slot"]
-        ),
-        (
-            "as_storage" not in sources["_store_stack_slot"]
-            and "from_storage" not in sources["_store_stack_slot"]
-            and "value=value" in sources["_store_stack_slot"]
-        ),
-        (
-            "from_storage" not in sources["_load_var"]
-            and "memref.load" in sources["_load_var"]
-        ),
-        (
-            "as_storage" not in sources["store_var"]
-            and "memref.store" in sources["store_var"]
-        ),
-    )
-    if all(semantic_signatures):
-        setattr(lower_class, marker, "upstream")
-        return
-
-    stock_fragments = {
-        "_allocate_stack_slot_for_type": ("self.get_storage_type(var_type)",),
-        "allocate_stack_space_for_vars_with_multiple_assigns": (
-            "self.get_storage_type(var_type.dtype)",
-            "self.get_storage_type(var_type)",
-        ),
-        "_load_stack_slot": (
-            "self.from_storage(var_type, loadOp)",
-            "self.get_storage_type(var_type)",
-        ),
-        "_store_stack_slot": (
-            "self.from_storage(var_type",
-            "self.as_storage(var_type, value)",
-        ),
-        "_load_var": (
-            "self.from_storage(",
-            "var_type.dtype",
-        ),
-        "store_var": ("self.as_storage(var_type.dtype, elem)",),
-    }
-    if any(
-        fragment not in sources[name]
-        for name, fragments in stock_fragments.items()
-        for fragment in fragments
+def apply_mixed_bool_number() -> None:
+    """Register mixed Boolean/Number comparisons; ``!=`` unordered."""
+    for op, cg in (
+        (operator.ne, _lmath.ne_cg),
+        (operator.eq, _lmath.eq_cg),
+        (operator.lt, _lmath.lt_cg),
+        (operator.le, _lmath.le_cg),
+        (operator.gt, _lmath.gt_cg),
+        (operator.ge, _lmath.ge_cg),
     ):
-        raise RuntimeError(
-            "cubie.backend._mlir_compat: numba-cuda-mlir's local stack-slot "
-            "lowering no longer matches the storage-type implementation; "
-            "update the semantic local-slot shim for this release."
+        _lmath.registry.lower(op, types.Boolean, types.Number)(cg)
+        _lmath.registry.lower(op, types.Number, types.Boolean)(cg)
+    # _operator_mapping is cached; its dict is the mapping in use.
+    _lmath._operator_mapping()[operator.ne] = _lmath.OpForType(
+        _lmath._make_fcmp(arith.CmpFPredicate.UNE),
+        _lmath._make_icmp(arith.CmpIPredicate.ne),
+        _lmath._make_icmp(arith.CmpIPredicate.ne),
+        None,
+    )
+
+
+apply_mixed_bool_number()
+
+
+# ------------------------------------------------------------------ #
+# fix-local-boolean-stack-slots                                      #
+# ------------------------------------------------------------------ #
+
+
+def _allocate_stack_slot_for_type(self, var_type):
+    if isinstance(var_type, types.BaseTuple):
+        return tuple(
+            self._allocate_stack_slot_for_type(elem_type)
+            for elem_type in self._tuple_element_types(var_type)
         )
 
-    def allocate_stack_slot_for_type(self, var_type):
-        if isinstance(var_type, types.BaseTuple):
-            return tuple(
-                self._allocate_stack_slot_for_type(element_type)
-                for element_type in self._tuple_element_types(var_type)
-            )
+    mlir_type = self.get_mlir_type(var_type)
+    if not _ml._is_valid_memref_element_type(mlir_type):
+        return self.alloca(mlir_type, count=1)
 
-        slot_type = self.get_mlir_type(var_type)
-        if not _mlir_lowering._is_valid_memref_element_type(slot_type):
-            return self.alloca(slot_type, count=1)
+    memref_type = _ml.ir.MemRefType.get(shape=[1], element_type=mlir_type)
+    return _ml.memref.alloca(
+        memref=memref_type, dynamic_sizes=[], symbol_operands=[]
+    )
 
-        memref_type = _ir.MemRefType.get(shape=[1], element_type=slot_type)
-        return _memref.alloca(
-            memref=memref_type,
-            dynamic_sizes=[],
-            symbol_operands=[],
-        )
 
-    def allocate_stack_space(self, var_assign_count):
-        _mlir_lowering.trace()
-        for var_name, count in var_assign_count.items():
-            if count <= 1:
-                continue
+def allocate_stack_space_for_vars_with_multiple_assigns(
+    self, var_assign_count
+):
+    _ml.trace()
+    for var_name, count in var_assign_count.items():
+        if count > 1:
             var_type = self.get_numba_type(var_name)
             if isinstance(var_type, types.NoneType):
                 continue
             if isinstance(var_type, types.UniTuple):
-                element_type = self.get_mlir_type(var_type.dtype)
-                memref_type = _ir.MemRefType.get(
-                    shape=[var_type.count],
-                    element_type=element_type,
+                elem_mlir_type = self.get_mlir_type(var_type.dtype)
+                memref_type = _ml.ir.MemRefType.get(
+                    shape=[var_type.count], element_type=elem_mlir_type
                 )
-                self.varmap[var_name] = _memref.alloca(
-                    memref=memref_type,
-                    dynamic_sizes=[],
-                    symbol_operands=[],
+                self.varmap[var_name] = _ml.memref.alloca(
+                    memref=memref_type, dynamic_sizes=[], symbol_operands=[]
                 )
                 continue
+            if isinstance(var_type, types.BaseTuple):
+                self.varmap[var_name] = self._allocate_stack_slot_for_type(
+                    var_type
+                )
+                continue
+            mlir_type = self.get_mlir_type(var_type)
 
-            slot = self._allocate_stack_slot_for_type(var_type)
-            self.varmap[var_name] = slot
-            if isinstance(slot, tuple):
-                continue
-            if isinstance(slot.type, _ir.MemRefType):
-                self._tag_alloca_for_deferred_dbg_declare(var_name, slot)
+            if not _ml._is_valid_memref_element_type(mlir_type):
+                self.varmap[var_name] = self.alloca(mlir_type, count=1)
+                _ml.trace(
+                    f"Allocated LLVM stack space for "
+                    f"{type(var_type).__name__} "
+                    f"variable {var_name} (mlir type {mlir_type})"
+                )
             else:
-                _mlir_lowering.trace(
-                    "Allocated LLVM stack space for %s variable %s",
-                    type(var_type).__name__,
-                    var_name,
+                memref_type = _ml.ir.MemRefType.get(
+                    shape=[1], element_type=mlir_type
                 )
-        if (
-            self._debug_full
-            and self._di_builder is not None
-            and self._di_builder.valid
-        ):
-            self._allocate_poly_dbg_slots()
+                self.varmap[var_name] = _ml.memref.alloca(
+                    memref=memref_type, dynamic_sizes=[], symbol_operands=[]
+                )
+                self._tag_alloca_for_deferred_dbg_declare(
+                    var_name, self.varmap[var_name]
+                )
+    if (
+        self._debug_full
+        and self._di_builder is not None
+        and self._di_builder.valid
+    ):
+        self._allocate_poly_dbg_slots()
 
-    def load_stack_slot(self, var_type, slot):
-        if isinstance(var_type, types.BaseTuple):
-            assert isinstance(slot, tuple)
+
+def _load_stack_slot(self, var_type, slot):
+    if isinstance(var_type, types.BaseTuple):
+        assert isinstance(slot, tuple)
+        return tuple(
+            self._load_stack_slot(elem_type, elem_slot)
+            for elem_type, elem_slot in zip(
+                self._tuple_element_types(var_type), slot
+            )
+        )
+
+    if isinstance(slot.type, _ml.MemRefType):
+        _ml.trace("")
+        index = _ml.index_of(0)
+        _ml.trace("index=%s", index)
+        loadOp = _ml.memref.load(memref=slot, indices=[index])
+        _ml.trace("loadOp=%s", loadOp)
+        return loadOp
+
+    _ml.trace("Loading %s from LLVM stack slot", type(var_type).__name__)
+    return _ml.llvm.load(res=self.get_mlir_type(var_type), addr=slot)
+
+
+def _load_var(self, var):
+    """
+    Load the value from the given numba variable.
+    """
+    _ml.trace("var=%s", var)
+    if isinstance(var, (list, tuple)):
+        return [self.load_var(v) for v in var]
+
+    assert self.var_lowered(var), f"Var {var.name} not found in varmap."
+
+    if self._is_poly_debug_var(var.name):
+        return self._load_poly_debug_var(var.name)
+
+    if (
+        var.name in self.var_assign_count
+        and self.var_assign_count[var.name] > 1
+    ):
+        # if variable is stack allocated (multiple assigned),
+        # load the variable from stack
+        var_type = self.get_numba_type(var.name)
+        slot = self.varmap[var.name]
+
+        # UniTuple multi-assign uses a packed memref; heterogeneous
+        # BaseTuple multi-assign uses per-element stack slots.
+        if isinstance(var_type, types.UniTuple) and not isinstance(
+            slot, tuple
+        ):
             return tuple(
-                self._load_stack_slot(element_type, element_slot)
-                for element_type, element_slot in zip(
-                    self._tuple_element_types(var_type), slot
-                )
+                _ml.memref.load(memref=slot, indices=[_ml.index_of(i)])
+                for i in range(var_type.count)
             )
 
-        if isinstance(slot.type, _ir.MemRefType):
-            index = lowering_utilities.index_of(0)
-            return _memref.load(memref=slot, indices=[index])
+        return self._load_stack_slot(var_type, slot)
+    elif var.name in self._debug_forced_alloca:
+        # variable forced to memref.alloca for debug info.
+        return _ml.memref.load(
+            memref=self.varmap[var.name], indices=[_ml.index_of(0)]
+        )
+    else:
+        _ml.trace("")
+        # the variable is promoted to register,
+        # load the value from varmap
+        return self.varmap[var.name]
 
-        return _llvm.load(res=self.get_mlir_type(var_type), addr=slot)
 
-    def store_stack_slot(self, var_type, slot, value):
-        if isinstance(var_type, types.BaseTuple):
-            assert isinstance(slot, tuple)
+def _store_stack_slot(self, var_type, slot, value):
+    if isinstance(var_type, types.BaseTuple):
+        assert isinstance(slot, tuple)
+        assert isinstance(value, (tuple, list))
+        for elem_type, elem_slot, elem_value in zip(
+            self._tuple_element_types(var_type), slot, value
+        ):
+            self._store_stack_slot(elem_type, elem_slot, elem_value)
+        return
+
+    if isinstance(var_type, types.Optional) and not isinstance(
+        value, (_ml.ir.Value, _ml.ir.OpView)
+    ):
+        value = self._cast_to_optional(types.NoneType("none"), var_type, None)
+
+    if self.nrt.type_has_nrt_meminfo(var_type) and isinstance(
+        value, _ml.ir.Value
+    ):
+        if isinstance(slot.type, _ml.MemRefType):
+            old = _ml.memref.load(memref=slot, indices=[_ml.index_of(0)])
+        else:
+            old = _ml.llvm.load(res=self.get_mlir_type(var_type), addr=slot)
+        self.decref(var_type, old)
+
+    if isinstance(slot.type, _ml.MemRefType):
+        _ml.memref.store(value=value, memref=slot, indices=[_ml.index_of(0)])
+    else:
+        _ml.trace("Storing %s to LLVM stack slot", type(var_type).__name__)
+        _ml.llvm.store(value=value, addr=slot)
+
+
+def store_var(self, var, value):
+    """
+    Store the value (MLIR Op) into the given variable.
+    """
+    _ml.trace("var=%s value=%s", var, value)
+    if self._debug_full:
+        base_name = self._canonical_dbg_var_name(var.name)
+        if self._poly_dbg_alloca.get(base_name) is not None:
+            self._store_poly_dbg_var(var.name, value)
+            return
+    if (
+        var.name in self.var_assign_count
+        and self.var_assign_count[var.name] > 1
+    ):
+        # if variable is stack allocated (multiple assigned),
+        # store the value to stack
+        assert self.var_lowered(var), (
+            f"Stack allocated var {var.name} not found in varmap."
+        )
+
+        slot = self.varmap[var.name]
+        var_type = self.get_numba_type(var.name)
+
+        # UniTuple multi-assign uses a packed memref; heterogeneous
+        # BaseTuple multi-assign uses per-element stack slots.
+        if isinstance(var_type, types.UniTuple) and not isinstance(
+            slot, tuple
+        ):
             assert isinstance(value, (tuple, list))
-            for element_type, element_slot, element_value in zip(
-                self._tuple_element_types(var_type), slot, value
-            ):
-                self._store_stack_slot(
-                    element_type, element_slot, element_value
+            for i, elem in enumerate(value):
+                _ml.memref.store(
+                    value=elem, memref=slot, indices=[_ml.index_of(i)]
                 )
             return
 
-        if isinstance(var_type, types.Optional) and not isinstance(
-            value, (_ir.Value, _ir.OpView)
+        self._store_stack_slot(var_type, slot, value)
+    else:
+        # the value can be safely stored in register,
+        # register the value in varmap
+        assert not self.var_lowered(var) or isinstance(
+            self.get_numba_type(var.name), types.BaseTuple
+        ), f"Var {var.name} already defined in varmap."
+        numba_type = self._get_numba_type_for_dbg_var(var.name)
+        if (
+            self._debug_full
+            and isinstance(numba_type, types.Complex)
+            and isinstance(value, (_ml.ir.Value, _ml.ir.OpView))
         ):
-            value = self._cast_to_optional(
-                types.NoneType("none"), var_type, None
+            # Force single-assign complex vars onto stack so deferred
+            # dbg.declare has a stable pointer location after
+            # memref->LLVM lowering.
+            mlir_value = (
+                value.result if isinstance(value, _ml.ir.OpView) else value
             )
-
-        if self.nrt.type_has_nrt_meminfo(var_type) and isinstance(
-            value, _ir.Value
-        ):
-            old = self._load_stack_slot(var_type, slot)
-            self.decref(var_type, old)
-
-        if isinstance(slot.type, _ir.MemRefType):
-            _memref.store(
-                value=value,
-                memref=slot,
-                indices=[lowering_utilities.index_of(0)],
+            memref_type = _ml.ir.MemRefType.get(
+                shape=[1], element_type=mlir_value.type
             )
+            alloca_op = _ml.memref.alloca(
+                memref=memref_type, dynamic_sizes=[], symbol_operands=[]
+            )
+            _ml.memref.store(
+                value=mlir_value, memref=alloca_op, indices=[_ml.index_of(0)]
+            )
+            self.varmap[var.name] = alloca_op
+            self._debug_forced_alloca.add(var.name)
+            self._tag_alloca_for_deferred_dbg_declare(var.name, alloca_op)
         else:
-            _mlir_lowering.trace(
-                "Storing %s to LLVM stack slot",
-                type(var_type).__name__,
-            )
-            _llvm.store(value=value, addr=slot)
+            self.varmap[var.name] = value
 
-    original_load_var = lower_class._load_var
+    self._emit_dbg_value(var.name, value)
 
-    def load_var(self, var):
-        if (
-            var.name in self.var_assign_count
-            and self.var_assign_count[var.name] > 1
-            and not self._is_poly_debug_var(var.name)
-        ):
-            var_type = self.get_numba_type(var.name)
-            slot = self.varmap[var.name]
-            if isinstance(var_type, types.UniTuple) and not isinstance(
-                slot, tuple
-            ):
-                return tuple(
-                    _memref.load(
-                        memref=slot,
-                        indices=[lowering_utilities.index_of(index)],
-                    )
-                    for index in range(var_type.count)
-                )
-        return original_load_var(self, var)
 
-    original_store_var = lower_class.store_var
-
-    def store_var(self, var, value):
-        if (
-            var.name in self.var_assign_count
-            and self.var_assign_count[var.name] > 1
-            and not (
-                self._debug_full
-                and self._poly_dbg_alloca.get(
-                    self._canonical_dbg_var_name(var.name)
-                )
-                is not None
-            )
-        ):
-            var_type = self.get_numba_type(var.name)
-            slot = self.varmap[var.name]
-            if isinstance(var_type, types.UniTuple) and not isinstance(
-                slot, tuple
-            ):
-                assert isinstance(value, (tuple, list))
-                for index, element in enumerate(value):
-                    _memref.store(
-                        value=element,
-                        memref=slot,
-                        indices=[lowering_utilities.index_of(index)],
-                    )
-                return
-        original_store_var(self, var, value)
-
-    lower_class._allocate_stack_slot_for_type = allocate_stack_slot_for_type
+def apply_fix_local_boolean_stack_slots() -> None:
+    """Keep multiply-assigned compiler locals in their value types."""
+    lower_class = _ml.MLIRLower
+    lower_class._allocate_stack_slot_for_type = _allocate_stack_slot_for_type
     lower_class.allocate_stack_space_for_vars_with_multiple_assigns = (
-        allocate_stack_space
+        allocate_stack_space_for_vars_with_multiple_assigns
     )
-    lower_class._load_stack_slot = load_stack_slot
-    lower_class._store_stack_slot = store_stack_slot
-    lower_class._load_var = load_var
+    lower_class._load_stack_slot = _load_stack_slot
+    lower_class._load_var = _load_var
+    lower_class._store_stack_slot = _store_stack_slot
     lower_class.store_var = store_var
-    setattr(lower_class, marker, "shim")
 
 
-register_semantic_local_stack_slots()
-
-
-def _lower_builtin_extrema(float_op, integer_op, name):
-    """Build a scalar numeric lowering for Python min or max."""
-
-    def lower(builder, target, args, kwargs):
-        left = builder.load_var(args[0])
-        right = builder.load_var(args[1])
-        left, right = lowering_utilities.coerce_numpy_scalars_for_binary_op(
-            left, right
-        )
-        if isinstance(left.type, _ir.FloatType):
-            result = float_op(left, right)
-        elif isinstance(left.type, _ir.IntegerType):
-            result = integer_op(left, right)
-        else:
-            raise NotImplementedError(
-                f"{name} not implemented for type {left.type}"
-            )
-        builder.store_var(target, result)
-
-    return lower
-
-
-def register_float_minmax_semantics() -> None:
-    """Use Python's non-NaN operand semantics for float min and max."""
-
-    registry = _lowering_builtins.registry
-    marker = "_cubie_float_minmax_semantics"
-    if getattr(registry, marker, None):
-        return
-
-    lower_max_source = inspect.getsource(_lowering_builtins.lower_max)
-    lower_min_source = inspect.getsource(_lowering_builtins.lower_min)
-    native = (
-        "arith.maxnumf" in lower_max_source,
-        "arith.minnumf" in lower_min_source,
-    )
-    if all(native):
-        setattr(registry, marker, "upstream")
-        return
-    if (
-        any(native)
-        or "arith.maximumf" not in lower_max_source
-        or ("arith.minimumf" not in lower_min_source)
-    ):
-        raise RuntimeError(
-            "cubie.backend._mlir_compat: numba-cuda-mlir's float min/max "
-            "lowering no longer matches the stock implementation; update "
-            "the compatibility shim for this release."
-        )
-
-    registry.lower(max, types.Number, types.Number)(
-        _lower_builtin_extrema(arith.maxnumf, arith.maxsi, "max")
-    )
-    registry.lower(min, types.Number, types.Number)(
-        _lower_builtin_extrema(arith.minnumf, arith.minsi, "min")
-    )
-    setattr(registry, marker, "shim")
-
-
-register_float_minmax_semantics()
+apply_fix_local_boolean_stack_slots()
 
 
 # ------------------------------------------------------------------ #
-# Compile-time performance patches (numba_cuda frontend)             #
+# perf-ssa-restricted-sweeps                                         #
 # ------------------------------------------------------------------ #
-# The shims below rebind the compiler-frontend performance changes
-# carried on the cubie_patch branch of the ccam80/numba-cuda-mlir
-# fork so they apply to the stock wheel: SSA sweeps restricted to
-# def/use blocks, memoised callee IR with a structural clone
-# (including the preserve_ir form of inline_ir), CFG dominators
-# from immediate dominators (perf/dominators-from-idom), and dead
-# maps and scope repair without set copies (perf/frontend-set-copies).
-# All are behaviour-preserving; only compile time changes.
-# Each group feature-detects the installed package and no-ops when
-# the change is already present (a patched build, or a future release
-# that merged it). Upstream PRs: perf-ssa-restricted-sweeps (#199),
-# perf-inline-callee-ir-cache (#197). The lazy-postproc-liveness,
-# lazy-error-markup, and liveness-bitsets groups were removed after
-# upstream merged #200, #201, and #198; the former targetconfig-hash
-# and callconstraint-memo groups were removed: no measurable effect.
-# The numba-cuda lowering-side patches (call-type cache, linear
-# singly-assigned scan) have no analogue here: MLIRBackend replaces
-# the LLVM lowering entirely. The NumbaError double-highlight fix is
-# also inapplicable: the vendored NumbaError inherits Exception
-# directly, so no base class re-highlights the message.
 
 
 def _ssa_find_defs_violators(blocks, cfg):
@@ -804,10 +503,8 @@ def _ssa_run_ssa(blocks):
     return blocks
 
 
-def _patch_ssa():
-    params = inspect.signature(_nb_ssa._fresh_vars).parameters
-    if "def_labels" in params:
-        return
+def apply_perf_ssa_restricted_sweeps() -> None:
+    """Restrict SSA rewrites to blocks defining or using a name."""
     _nb_ssa._find_defs_violators = _ssa_find_defs_violators
     _nb_ssa._run_block_rewrite = _ssa_run_block_rewrite
     _nb_ssa._fresh_vars = _ssa_fresh_vars
@@ -815,158 +512,12 @@ def _patch_ssa():
     _nb_ssa._run_ssa = _ssa_run_ssa
 
 
-def _cfg_immediate_dominators(self, roots, preds_table, succs_table):
-    """CHK idoms under a virtual root; roots map to themselves."""
-    if not roots:
-        raise RuntimeError(
-            "no entry points: dominator algorithm cannot be seeded"
-        )
-
-    order = []
-    seen = set()
-
-    def visit(node):
-        if node not in seen:
-            seen.add(node)
-            stack.append((order.append, node))
-            stack.extend((visit, dest) for dest in succs_table[node])
-
-    stack = [(visit, root) for root in roots]
-    while stack:
-        cb, node = stack.pop()
-        cb(node)
-
-    virtual_root = object()
-    idx = {node: i for i, node in enumerate(order)}
-    idx[virtual_root] = len(order)
-    idom = {virtual_root: virtual_root}
-
-    def intersect(u, v):
-        while u != v:
-            while idx[u] < idx[v]:
-                u = idom[u]
-            while idx[u] > idx[v]:
-                v = idom[v]
-        return u
-
-    reverse_postorder = order[::-1]
-    changed = True
-    while changed:
-        changed = False
-        for u in reverse_postorder:
-            preds = [v for v in preds_table[u] if v in idom]
-            if u in roots:
-                preds.append(virtual_root)
-            new_idom = functools.reduce(intersect, preds)
-            if idom.get(u) != new_idom:
-                idom[u] = new_idom
-                changed = True
-
-    result = {}
-    for u in order:
-        v = idom[u]
-        result[u] = u if u in roots else (None if v is virtual_root else v)
-    return result
+apply_perf_ssa_restricted_sweeps()
 
 
-def _cfg_find_immediate_dominators(self):
-    return self._immediate_dominators(
-        {self._entry_point}, self._preds, self._succs
-    )
-
-
-def _cfg_find_immediate_post_dominators(self):
-    # Roots: exit points plus the bodies of loops that never exit.
-    roots = set(self._exit_points)
-    for loop in self._loops.values():
-        if not loop.exits:
-            roots.update(loop.body)
-    if not roots:
-        return {}
-    return self._immediate_dominators(roots, self._succs, self._preds)
-
-
-def _cfg_dominator_sets(self, idom):
-    # A node's set is its idom chain; unreachable nodes get every node.
-    doms = {}
-    for node in idom:
-        chain = []
-        cur = node
-        while cur is not None and cur not in doms:
-            chain.append(cur)
-            parent = idom[cur]
-            cur = None if parent == cur else parent
-        base = set() if cur is None else doms[cur]
-        for cur in reversed(chain):
-            base = base | {cur}
-            doms[cur] = base
-    for node in self._nodes:
-        doms.setdefault(node, set(self._nodes))
-    return doms
-
-
-def _cfg_find_dominators(self):
-    return self._dominator_sets(self._idom)
-
-
-def _cfg_find_post_dominators(self):
-    return self._dominator_sets(self._ipdom)
-
-
-def _cfg_backbone(self):
-    """Nodes on every path from the entry point (ipdom chain)."""
-    ipdom = self._ipdom
-    node = self._entry_point
-    if node not in ipdom:
-        return set(self._nodes)
-    backbone = set()
-    while node is not None:
-        backbone.add(node)
-        parent = ipdom[node]
-        node = None if parent == node else parent
-    return backbone
-
-
-def _cfg_find_back_edges(self, stats=None):
-    """Find back edges: (src, dest) where *dest* dominates *src*."""
-    if stats is not None:
-        if not isinstance(stats, dict):
-            raise TypeError(f"*stats* must be a dict; got {type(stats)}")
-        stats.setdefault("iteration_count", 0)
-
-    back_edges = set()
-    stack = []
-    on_stack = set()
-    succs_state = {}
-    entry_point = self.entry_point()
-    checked = set()
-
-    def push_state(node):
-        stack.append(node)
-        on_stack.add(node)
-        succs_state[node] = [dest for dest in self._succs[node]]
-
-    push_state(entry_point)
-
-    iter_ct = 0
-    while stack:
-        iter_ct += 1
-        tos = stack[-1]
-        tos_succs = succs_state[tos]
-        if tos_succs:
-            cur_node = tos_succs.pop()
-            if cur_node in on_stack:
-                back_edges.add((tos, cur_node))
-            elif cur_node not in checked:
-                push_state(cur_node)
-        else:
-            stack.pop()
-            on_stack.remove(tos)
-            checked.add(tos)
-
-    if stats is not None:
-        stats["iteration_count"] += iter_ct
-    return back_edges
+# ------------------------------------------------------------------ #
+# frontend-set-copies-pr                                             #
+# ------------------------------------------------------------------ #
 
 
 def _analysis_compute_dead_maps(cfg, blocks, live_map, var_def_map):
@@ -1035,36 +586,23 @@ def _ir_utils_fixup_var_define_in_scope(blocks):
                 scope.localvars.define(var.name, var)
 
 
-def _patch_dominators():
-    graph = _nb_controlflow.CFGraph
-    if hasattr(graph, "_immediate_dominators"):
-        return
-    graph._immediate_dominators = _cfg_immediate_dominators
-    graph._find_immediate_dominators = _cfg_find_immediate_dominators
-    graph._find_immediate_post_dominators = _cfg_find_immediate_post_dominators
-    ipdom = functools.cached_property(_cfg_find_immediate_post_dominators)
-    ipdom.__set_name__(graph, "_ipdom")
-    graph._ipdom = ipdom
-    graph._dominator_sets = _cfg_dominator_sets
-    graph._find_dominators = _cfg_find_dominators
-    graph._find_post_dominators = _cfg_find_post_dominators
-    graph.backbone = _cfg_backbone
-    graph._find_back_edges = _cfg_find_back_edges
+def apply_frontend_set_copies() -> None:
+    """Build dead maps and scope repairs without set copies."""
+    _nb_analysis.compute_dead_maps = _analysis_compute_dead_maps
+    _nb_ir_utils.fixup_var_define_in_scope = (
+        _ir_utils_fixup_var_define_in_scope
+    )
+    _nb_untyped_passes.fixup_var_define_in_scope = (
+        _ir_utils_fixup_var_define_in_scope
+    )
 
 
-def _patch_liveness_set_copies():
-    """Install the set-copy-free dead maps and scope repair."""
-    if "set().union" not in inspect.getsource(_nb_analysis.compute_dead_maps):
-        _nb_analysis.compute_dead_maps = _analysis_compute_dead_maps
-    fixup_source = inspect.getsource(_nb_ir_utils.fixup_var_define_in_scope)
-    if "scopes = {id(blk.scope)" not in fixup_source:
-        _nb_ir_utils.fixup_var_define_in_scope = (
-            _ir_utils_fixup_var_define_in_scope
-        )
-        _nb_untyped_passes.fixup_var_define_in_scope = (
-            _ir_utils_fixup_var_define_in_scope
-        )
+apply_frontend_set_copies()
 
+
+# ------------------------------------------------------------------ #
+# perf-inline-callee-ir-cache                                        #
+# ------------------------------------------------------------------ #
 
 _PIPELINE_CALLEE_IR_CACHE_ATTR = "_numba_cuda_callee_ir_cache"
 
@@ -1261,14 +799,11 @@ def _make_inline_ir():
     return inline_ir
 
 
-def _patch_inline_worker():
-    if hasattr(_nb_icc, "_clone_callee_ir"):
-        return
+def apply_perf_inline_callee_ir_cache() -> None:
+    """Cache callee IR per pipeline and clone it for each call site."""
     _nb_icc._clone_callee_ir = _clone_callee_ir
-
     worker = _nb_icc.InlineWorker
-    if "preserve_ir" not in inspect.signature(worker.inline_ir).parameters:
-        worker.inline_ir = _make_inline_ir()
+    worker.inline_ir = _make_inline_ir()
 
     def inline_function(self, caller_ir, block, i, function, arg_typs=None):
         """Inlines the function in the caller_ir at statement index i
@@ -1313,32 +848,182 @@ def _patch_inline_worker():
     worker._fresh_callee_ir = _fresh_callee_ir
 
 
-def apply_compiler_perf_patches() -> None:
-    """Apply the frontend perf patches the installed wheel needs."""
-    _patch_ssa()
-    _patch_inline_worker()
-    _patch_dominators()
-    _patch_liveness_set_copies()
-
-
-apply_compiler_perf_patches()
+apply_perf_inline_callee_ir_cache()
 
 
 # ------------------------------------------------------------------ #
-# AST transforms on inlined device functions (fork branches          #
-# codex/empty-body-repair and feat/inlined-callee-ast-transforms)    #
+# ssa-iterative-def-search-pr                                        #
 # ------------------------------------------------------------------ #
 
-_AST_TRANSFORM_OPTIONS = {"experimental_ast_transforms": True}
+
+def _find_def_from_top(self, states, label, loc):
+    """Find definition reaching the top of the block at ``label``,
+    inserting phi nodes where necessary.
+
+    Runs on an explicit worklist so the search depth does not grow
+    with the CFG. Each ``pending`` item is a ``(phinode, pred, loc)``
+    triple whose resolved incoming definition is appended to
+    ``phinode``; predecessors are pushed in reverse so phi nodes are
+    created, and fresh variables numbered, in depth-first order.
+    """
+    pending = []
+    result = self._walk_def_chain(states, label, loc, True, pending)
+    while pending:
+        phinode, pred, philoc = pending.pop()
+        incoming_def = self._walk_def_chain(
+            states,
+            pred,
+            philoc,
+            False,
+            pending,
+        )
+        _nb_ssa._logger.debug("incoming_def %s", incoming_def)
+        phinode.value.incoming_values.append(incoming_def.target)
+        phinode.value.incoming_blocks.append(pred)
+    return result
 
 
-class _EmptyBodyRepairer(ast.NodeTransformer):
+def _walk_def_chain(self, states, label, loc, from_top, pending):
+    """Walk a single def-search chain.
+
+    Alternates between the *from_bottom* step (take the last
+    definition in the block, if any) and the *from_top* step (insert
+    a phi node, or hop to the immediate dominator).  A phi node is
+    registered in ``defmap`` before its predecessors are resolved,
+    so a chain revisiting the block terminates there; resolution of
+    the phi's incoming values is deferred onto ``pending``.
+    """
+    cfg = states["cfg"]
+    defmap = states["defmap"]
+    phimap = states["phimap"]
+    phi_locations = states["phi_locations"]
+
+    while True:
+        if not from_top:
+            _nb_ssa._logger.debug("find_def_from_bottom label %r", label)
+            defs = defmap[label]
+            if defs:
+                return defs[-1]
+            from_top = True
+
+        _nb_ssa._logger.debug("find_def_from_top label %r", label)
+        if label in phi_locations:
+            scope = states["scope"]
+            loc = states["block"].loc
+            # fresh variable
+            freshvar = scope.redefine(states["varname"], loc=loc)
+            # insert phi
+            phinode = _nb_ir.Assign(
+                target=freshvar,
+                value=_nb_ir.Expr.phi(loc=loc),
+                loc=loc,
+            )
+            _nb_ssa._logger.debug("insert phi node %s at %s", phinode, label)
+            defmap[label].insert(0, phinode)
+            phimap[label].append(phinode)
+            # Defer the search for the phi's incoming values;
+            # reversed so they resolve in predecessor order.
+            preds = [pred for pred, _ in cfg.predecessors(label)]
+            for pred in reversed(preds):
+                pending.append((phinode, pred, loc))
+            return phinode
+        else:
+            idom = cfg.immediate_dominators()[label]
+            if idom == label:
+                # We have searched to the top of the idom tree.
+                # Since we still cannot find a definition,
+                # we will warn.
+                _nb_ssa._warn_about_uninitialized_variable(
+                    states["varname"], loc
+                )
+                return _nb_ssa.UndefinedVariable
+            _nb_ssa._logger.debug("idom %s from label %s", idom, label)
+            label = idom
+            from_top = False
+
+
+def apply_ssa_iterative_def_search() -> None:
+    """Search SSA reaching definitions on an explicit worklist."""
+    fixer = _nb_ssa._FixSSAVars
+    fixer._find_def_from_top = _find_def_from_top
+    fixer._walk_def_chain = _walk_def_chain
+
+
+apply_ssa_iterative_def_search()
+
+
+# ------------------------------------------------------------------ #
+# topo-order-iterative-pr                                            #
+# ------------------------------------------------------------------ #
+
+
+def topo_sort(self, nodes, reverse=False):
+    """
+    Iterate over the *nodes* in topological order (ignoring back edges).
+    The sort isn't guaranteed to be stable.
+    """
+    nodes = set(nodes)
+    if not nodes:
+        return
+    it = self._topo_order
+    if reverse:
+        it = reversed(it)
+    for n in it:
+        if n in nodes:
+            yield n
+
+
+def _find_topo_order(self):
+    succs = self._succs
+    back_edges = self._back_edges
+    post_order = []
+    seen = set()
+
+    # Successors pushed in reverse so the stack visits them in
+    # iteration order.
+    def visit(node):
+        if node not in seen:
+            seen.add(node)
+            stack.append((post_order.append, node))
+            forward = [
+                dest for dest in succs[node] if (node, dest) not in back_edges
+            ]
+            stack.extend((visit, dest) for dest in reversed(forward))
+
+    stack = [(visit, self._entry_point)]
+    while stack:
+        cb, node = stack.pop()
+        cb(node)
+
+    post_order.reverse()
+    return post_order
+
+
+def apply_topo_order_iterative() -> None:
+    """Compute CFGraph topological order without recursion."""
+    graph = _nb_controlflow.CFGraph
+    graph.topo_sort = topo_sort
+    graph._find_topo_order = _find_topo_order
+
+
+apply_topo_order_iterative()
+
+
+# ------------------------------------------------------------------ #
+# empty-body-repair-pr                                               #
+# ------------------------------------------------------------------ #
+
+
+class EmptyBodyRepairer(ast.NodeTransformer):
     """Fill empty statement bodies with ``pass``."""
 
     def __init__(self):
         self.modified = False
 
-    def generic_visit(self, node):
+    def visit_Module(self, node: ast.Module) -> ast.Module:
+        return super().generic_visit(node)
+
+    def generic_visit(self, node: ast.AST) -> ast.AST:
         node = super().generic_visit(node)
         body = getattr(node, "body", None)
         if isinstance(body, list) and not body:
@@ -1347,15 +1032,15 @@ class _EmptyBodyRepairer(ast.NodeTransformer):
         return node
 
 
-def _repair_empty_bodies(tree):
-    """Insert ``pass`` into every empty body; returns (tree, modified)."""
-    repairer = _EmptyBodyRepairer()
+def repair_empty_bodies(tree: ast.Module) -> tuple[ast.Module, bool]:
+    """Insert ``pass`` into every empty statement body."""
+    repairer = EmptyBodyRepairer()
     new_tree = repairer.visit(tree)
     ast.fix_missing_locations(new_tree)
     return new_tree, repairer.modified
 
 
-class _EmptyBodyRepairPass(ASTTransformPass):
+class EmptyBodyRepairPass(ASTTransformPass):
     """Pipeline pass filling bodies emptied by earlier passes."""
 
     @property
@@ -1363,120 +1048,51 @@ class _EmptyBodyRepairPass(ASTTransformPass):
         return "EmptyBodyRepair"
 
     def transform(self, tree, context):
-        return _repair_empty_bodies(tree)
+        return repair_empty_bodies(tree)
 
 
-def _zero_trip_loop_probe(flag, out):
-    if flag:
-        for i in consteval(range(0)):
-            out[i] = 0
-
-
-def _wheel_repairs_empty_bodies() -> bool:
-    """Return whether the wheel's transforms compile emptied bodies."""
-    try:
-        apply_ast_transforms(
-            _zero_trip_loop_probe, dict(_AST_TRANSFORM_OPTIONS)
-        )
-    except ValueError:
-        return False
-    return True
-
-
-def _patch_empty_body_repair() -> None:
+def apply_empty_body_repair() -> None:
     """Append the empty-body repair pass to the transform pipeline."""
-    if _wheel_repairs_empty_bodies():
-        return
     stock_create_default_pipeline = _ast_transforms.create_default_pipeline
 
     def create_default_pipeline():
         pipeline = stock_create_default_pipeline()
-        pipeline.add_pass(_EmptyBodyRepairPass())
+        pipeline.add_pass(EmptyBodyRepairPass())
         return pipeline
 
     _ast_transforms.create_default_pipeline = create_default_pipeline
 
 
-_patch_empty_body_repair()
+apply_empty_body_repair()
 
 
-def _recompile_function_on_file_lines(stock_recompile_function):
-    """Wrap ``recompile_function`` to keep the function's file lines."""
+# ------------------------------------------------------------------ #
+# inlined-callee-ast-transforms-pr                                   #
+# ------------------------------------------------------------------ #
 
-    def recompile_function(func, tree, stored_values=None):
-        # Shift the dedented tree onto the function's file lines.
-        ast.increment_lineno(tree, func.__code__.co_firstlineno - 1)
-        return stock_recompile_function(func, tree, stored_values)
-
-    return recompile_function
-
-
-def _patch_recompile_line_numbers() -> None:
-    """Recompile transformed functions on their file's line numbers."""
-    stock = _ast_common.recompile_function
-    if "increment_lineno" in inspect.getsource(stock):
-        return
-    shim = _recompile_function_on_file_lines(stock)
-    _ast_common.recompile_function = shim
-    _ast_transforms.recompile_function = shim
-
-
-_patch_recompile_line_numbers()
-
-
-# Options taken from the callee's decorator; the rest from the caller.
-_CALLEE_AST_OPTIONS = (
-    "experimental_ast_transforms",
-    "dump_ast",
-    "dump_ast_after_all",
-)
-# Stands in for each parameter of an inlined callee.
 _INLINEE_PARAMETER = object()
-# py_func -> {effective options: transformed function}.
-_transformed_inlinees = weakref.WeakKeyDictionary()
 
 
-def _options_key(value):
-    """Return a hashable rendering of a target-options value."""
-    if isinstance(value, dict):
-        return tuple(
-            sorted((str(k), _options_key(v)) for k, v in value.items())
-        )
-    if isinstance(value, (set, frozenset)):
-        return frozenset(_options_key(v) for v in value)
-    if isinstance(value, (list, tuple)):
-        return tuple(_options_key(v) for v in value)
-    try:
-        hash(value)
-    except TypeError:
-        return repr(value)
-    return value
+def transform_inline_callee(pyfunc, targetoptions):
+    """Apply AST transforms to an inlinee under the caller's options.
 
-
-def _transform_inline_callee(
-    pyfunc, callee_targetoptions, caller_targetoptions
-):
-    """Transform the callee under the caller's options, memoised."""
-    if not callee_targetoptions.get("experimental_ast_transforms", False):
+    Parameters resolve to a placeholder.
+    """
+    if not targetoptions.get("experimental_ast_transforms", False):
         return pyfunc
 
-    targetoptions = dict(caller_targetoptions or {})
-    for name in _CALLEE_AST_OPTIONS:
-        if name in callee_targetoptions:
-            targetoptions[name] = callee_targetoptions[name]
-
-    per_func = _transformed_inlinees.setdefault(pyfunc, {})
-    key = _options_key(targetoptions)
-    transformed = per_func.get(key)
-    if transformed is None:
-        argtypes = (_INLINEE_PARAMETER,) * len(
-            inspect.signature(pyfunc).parameters
-        )
-        transformed, _ = apply_ast_transforms(
-            pyfunc, targetoptions, argtypes
-        )
-        per_func[key] = transformed
+    argtypes = (_INLINEE_PARAMETER,) * len(
+        inspect.signature(pyfunc).parameters
+    )
+    transformed, _ = apply_ast_transforms(pyfunc, targetoptions, argtypes)
     return transformed
+
+
+def _inline_worker_transform_inlinee(self, function):
+    """Apply the configured target-specific transform to an inlinee."""
+    if self.inlinee_transform is None:
+        return function
+    return self.inlinee_transform(function, self.targetoptions)
 
 
 def _inline_worker_run_untyped_passes(self, func, enable_ssa=False):
@@ -1523,19 +1139,70 @@ def _inline_worker_run_untyped_passes(self, func, enable_ssa=False):
     return state.func_ir
 
 
+def _inline_inlinables_run_pass(self, state):
+    """Run inlining of inlinables"""
+    if self._DEBUG:
+        print("before inline".center(80, "-"))
+        print(state.func_ir.dump())
+        print("".center(80, "-"))
+
+    inline_worker = _nb_icc.InlineWorker(
+        state.typingctx,
+        state.targetctx,
+        state.locals,
+        state.pipeline,
+        state.flags,
+        validator=_nb_icc.callee_ir_validator,
+        targetoptions=state.metadata.get("targetoptions"),
+        inlinee_transform=state.metadata.get("inlinee_transform"),
+    )
+
+    modified = False
+    # use a work list, look for call sites via `ir.Expr.op == call`
+    # and pass these to `self._do_work` to decide on inlining.
+    work_list = list(state.func_ir.blocks.items())
+    while work_list:
+        label, block = work_list.pop()
+        for i, instr in enumerate(block.body):
+            if isinstance(instr, _nb_ir.Assign):
+                expr = instr.value
+                if isinstance(expr, _nb_ir.Expr) and expr.op == "call":
+                    if _nb_untyped_passes.guard(
+                        self._do_work,
+                        state,
+                        work_list,
+                        block,
+                        i,
+                        expr,
+                        inline_worker,
+                    ):
+                        modified = True
+                        break  # because block structure changed
+
+    if modified:
+        # clean up unconditional branches that appear due to inlined
+        # functions introducing blocks
+        cfg = _nb_untyped_passes.compute_cfg_from_blocks(state.func_ir.blocks)
+        for dead in cfg.dead_nodes():
+            del state.func_ir.blocks[dead]
+        post_proc = _nb_untyped_passes.postproc.PostProcessor(state.func_ir)
+        post_proc.run()
+        state.func_ir.blocks = _nb_untyped_passes.simplify_CFG(
+            state.func_ir.blocks
+        )
+
+    if self._DEBUG:
+        print("after inline".center(80, "-"))
+        print(state.func_ir.dump())
+        print("".center(80, "-"))
+    return True
+
+
 def _inline_inlinables_do_work(
     self, state, work_list, block, i, expr, inline_worker
 ):
     from numba_cuda_mlir.numba_cuda.compiler import run_frontend
     from numba_cuda_mlir.numba_cuda.core.options import InlineOptions
-
-    # The worker takes the caller's options from the compiler state.
-    if inline_worker.targetoptions is None:
-        inline_worker.targetoptions = state.metadata.get("targetoptions")
-    if inline_worker.inlinee_transform is None:
-        inline_worker.inlinee_transform = state.metadata.get(
-            "inlinee_transform", _transform_inline_callee
-        )
 
     to_inline = None
     try:
@@ -1575,7 +1242,7 @@ def _inline_inlinables_do_work(
                             expr, state.func_ir, py_func_ir
                         )
                     if do_inline:
-                        pyfunc = inline_worker.transform_inlinee(pyfunc, topt)
+                        pyfunc = inline_worker.transform_inlinee(pyfunc)
                         _, _, _, new_blocks = inline_worker.inline_function(
                             state.func_ir,
                             block,
@@ -1589,80 +1256,779 @@ def _inline_inlinables_do_work(
     return False
 
 
-def _wheel_transforms_inlined_callees() -> bool:
-    """Return whether the wheel already transforms inlined callees."""
-    return hasattr(_nb_icc.InlineWorker, "transform_inlinee")
+def apply_inlined_callee_ast_transforms() -> None:
+    """Transform inlined callees under the calling kernel's options."""
+    _ast_transforms._INLINEE_PARAMETER = _INLINEE_PARAMETER
+    _ast_transforms.transform_inline_callee = transform_inline_callee
 
+    stock_recompile_function = _ast_common.recompile_function
 
-def _patch_inlinee_transforms() -> None:
-    """Transform callees before the inline worker builds their IR."""
-    if _wheel_transforms_inlined_callees():
-        return
+    def recompile_function(func, tree, stored_values=None):
+        # Shift the dedented tree onto the function's file lines.
+        ast.increment_lineno(tree, func.__code__.co_firstlineno - 1)
+        return stock_recompile_function(func, tree, stored_values)
+
+    _ast_common.recompile_function = recompile_function
+    _ast_transforms.recompile_function = recompile_function
+
+    stock_get_compiler_class = _mlir_compiler.get_compiler_class
+
+    @functools.wraps(stock_get_compiler_class)
+    def get_compiler_class(*args, **kwargs):
+        compiler_class = stock_get_compiler_class(*args, **kwargs)
+        stock_init = compiler_class.__init__
+
+        @functools.wraps(stock_init)
+        def __init__(self, *init_args, **init_kwargs):
+            stock_init(self, *init_args, **init_kwargs)
+            self.state.metadata["inlinee_transform"] = transform_inline_callee
+
+        compiler_class.__init__ = __init__
+        return compiler_class
+
+    _mlir_compiler.get_compiler_class = get_compiler_class
+    _mlir_compiler.transform_inline_callee = transform_inline_callee
+
     worker = _nb_icc.InlineWorker
-    passes = _nb_untyped_passes.InlineInlinables
-    stock_fragments = {
-        worker.run_untyped_passes: (
-            "state.metadata = {}",
-            "ExtractByteCode().run_pass(state)",
-            "pm = self._compiler_pipeline(state)",
-        ),
-        passes._do_work: (
-            'topt = getattr(val, "targetoptions", False)',
-            "py_func_ir = run_frontend(pyfunc)",
-            "inline_worker.inline_function(",
-        ),
-    }
-    if any(
-        fragment not in inspect.getsource(method)
-        for method, fragments in stock_fragments.items()
-        for fragment in fragments
-    ):
-        raise RuntimeError(
-            "cubie.backend._mlir_compat: numba-cuda-mlir's inline worker "
-            "no longer matches the stock implementation; update the "
-            "inlined-callee transform shim for this release."
-        )
+    stock_worker_init = worker.__init__
 
-    stock_init = worker.__init__
-
-    @functools.wraps(stock_init)
-    def __init__(
+    @functools.wraps(stock_worker_init)
+    def worker_init(
         self, *args, targetoptions=None, inlinee_transform=None, **kwargs
     ):
-        stock_init(self, *args, **kwargs)
+        stock_worker_init(self, *args, **kwargs)
         self.targetoptions = targetoptions
         self.inlinee_transform = inlinee_transform
 
-    def transform_inlinee(self, function, callee_targetoptions):
-        """Apply the configured transform to an inlinee."""
-        if self.inlinee_transform is None:
-            return function
-        return self.inlinee_transform(
-            function, callee_targetoptions, self.targetoptions
-        )
-
-    worker.__init__ = __init__
-    worker.transform_inlinee = transform_inlinee
+    worker.__init__ = worker_init
+    worker.transform_inlinee = _inline_worker_transform_inlinee
     worker.run_untyped_passes = _inline_worker_run_untyped_passes
+    passes = _nb_untyped_passes.InlineInlinables
+    passes.run_pass = _inline_inlinables_run_pass
     passes._do_work = _inline_inlinables_do_work
 
 
-_patch_inlinee_transforms()
+apply_inlined_callee_ast_transforms()
+
+
+# ------------------------------------------------------------------ #
+# slice-python-parity                                                #
+# ------------------------------------------------------------------ #
+
+
+def lower_strides(_, mlir_lower, target, array):
+    from numba_cuda_mlir.lowering_utilities import index_of
+
+    array_numba_type = mlir_lower.get_numba_type(array.name)
+    array = mlir_lower.load_var(array)
+    array_type = array.type
+    rank = array_type.rank
+    element_size = _lcuda.storage_itemsize_bytes(array_numba_type)
+
+    if isinstance(array_type, _lcuda.ir.MemRefType):
+        metadata = _lcuda.memref.extract_strided_metadata(array)
+        element_strides = metadata[2 + rank : 2 + 2 * rank]
+        strides = [
+            _lcuda.arith.muli(index_of(stride), index_of(element_size))
+            for stride in element_strides
+        ]
+    elif isinstance(array_type, _lcuda.ir.RankedTensorType):
+        dims = [
+            _lcuda.tensor.dim(
+                source=array,
+                index=_lcuda.arith.constant(result=_lcuda.T.index(), value=i),
+            )
+            for i in range(rank)
+        ]
+        strides = [None] * rank
+        strides[-1] = index_of(element_size)
+        for i in range(rank - 2, -1, -1):
+            strides[i] = _lcuda.arith.muli(strides[i + 1], dims[i + 1])
+    else:
+        raise NotImplementedError(f"strides not implemented for {array_type}")
+
+    mlir_lower.store_var(target, tuple(strides))
+
+
+def _slice_init(self, start=None, stop=None, step=None):
+    def as_index(bound):
+        if bound is None or isinstance(bound, _lnumpy.ir.NoneType):
+            return None
+        return lowering_utilities.convert(bound, _lnumpy.T.index())
+
+    self.start = as_index(start)
+    self.stop = as_index(stop)
+    self.step = as_index(step)
+
+
+def _resolve_slice(builder, slc, mr, dim_index=0):
+    """Return (start, length, step) index values with Python slice
+    semantics for dim dim_index."""
+    np_ = _lnumpy
+    start, stop, step = slc.start, slc.stop, slc.step
+    c_step = 1 if step is None else np_.try_extract_constant(step)
+    if c_step == 0:
+        raise ValueError("slice step cannot be zero")
+    step = np_.index_of(1) if step is None else step
+    extent = mr.type.shape[dim_index]
+    dynamic = np_.ir.ShapedType.get_dynamic_size()
+    ext = (
+        np_.index_of(extent)
+        if extent != dynamic
+        else np_.memref.dim(mr, np_.index_of(dim_index))
+    )
+    zero = np_.index_of(0)
+    one = np_.index_of(1)
+    neg1 = np_.index_of(-1)
+
+    if c_step is None:
+        is_zero = np_.arith.cmpi(np_.arith.CmpIPredicate.eq, step, zero)
+        error_memref = builder._get_or_create_error_global()
+        if error_memref is not None:
+            with np_.scf.if_ctx_manager(is_zero):
+                np_.set_error_code_if_zero(
+                    error_memref, np_.KERNEL_ERROR_CODES[ValueError]
+                )
+                np_.scf.yield_([])
+        # The flagged zero step still reaches the length division;
+        # substitute one.
+        step = np_.arith.select(is_zero, one, step)
+
+    is_negative_step = np_.arith.cmpi(np_.arith.CmpIPredicate.slt, step, zero)
+    extent_minus_one = np_.arith.subi(ext, one)
+    lower = np_.arith.select(is_negative_step, neg1, zero)
+    upper = np_.arith.select(is_negative_step, extent_minus_one, ext)
+
+    def fix_bound(bound, default):
+        if bound is None:
+            return default
+        is_negative = np_.arith.cmpi(np_.arith.CmpIPredicate.slt, bound, zero)
+        wrapped = np_.arith.select(
+            is_negative, np_.arith.addi(bound, ext), bound
+        )
+        return np_.arith.minsi(np_.arith.maxsi(wrapped, lower), upper)
+
+    resolved_start = fix_bound(
+        start, np_.arith.select(is_negative_step, extent_minus_one, zero)
+    )
+    resolved_stop = fix_bound(
+        stop, np_.arith.select(is_negative_step, neg1, ext)
+    )
+
+    delta = np_.arith.subi(resolved_stop, resolved_start)
+    dividend = np_.arith.select(
+        is_negative_step,
+        np_.arith.addi(delta, one),
+        np_.arith.subi(delta, one),
+    )
+    nominal_length = np_.arith.addi(one, np_.arith.divsi(dividend, step))
+    is_empty = np_.arith.select(
+        is_negative_step,
+        np_.arith.cmpi(np_.arith.CmpIPredicate.sge, delta, zero),
+        np_.arith.cmpi(np_.arith.CmpIPredicate.sle, delta, zero),
+    )
+    length = np_.arith.select(is_empty, zero, nominal_length)
+    return resolved_start, length, step
+
+
+def _strided_view(array, offsets, sizes, strides, dims_to_drop=None):
+    """Build a strided view; dimensions marked in dims_to_drop are
+    dropped from the result."""
+    np_ = _lnumpy
+    rank = array.type.rank
+    metadata = np_.memref_dialect.extract_strided_metadata(array)
+    source_strides = list(metadata[2 + rank : 2 + 2 * rank])
+    result_offset = metadata[1]
+    result_strides = []
+    result_sizes = []
+    if dims_to_drop is None:
+        dims_to_drop = [False] * rank
+
+    for offset, size, stride, source_stride, drop in zip(
+        offsets, sizes, strides, source_strides, dims_to_drop
+    ):
+        result_offset = np_.arith.addi(
+            result_offset,
+            np_.arith.muli(np_.index_of(offset), np_.index_of(source_stride)),
+        )
+        if not drop:
+            result_sizes.append(np_.index_of(size))
+            result_strides.append(
+                np_.arith.muli(
+                    np_.index_of(source_stride), np_.index_of(stride)
+                )
+            )
+
+    dynamic_size = np_.ir.ShapedType.get_dynamic_size()
+    dynamic_stride = np_.ir.ShapedType.get_dynamic_stride_or_offset()
+    result_type = np_.ir.MemRefType.get(
+        [dynamic_size] * len(result_sizes),
+        array.type.element_type,
+        layout=np_.ir.StridedLayoutAttr.get(
+            dynamic_stride, [dynamic_stride] * len(result_sizes)
+        ),
+        memory_space=array.type.memory_space,
+    )
+    return np_.memref_dialect.reinterpret_cast(
+        result_type,
+        array,
+        offsets=[result_offset],
+        sizes=result_sizes,
+        strides=result_strides,
+        static_offsets=[dynamic_stride],
+        static_sizes=[dynamic_size] * len(result_sizes),
+        static_strides=[dynamic_stride] * len(result_sizes),
+    )
+
+
+def lower_array_getitem(builder, target, args, kwargs):
+    np_ = _lnumpy
+    np_.trace()
+
+    # Check if this is a record array
+    array_numba_type = builder.get_numba_type(args[0].name)
+    from numba_cuda_mlir.types import NestedArray
+
+    if isinstance(array_numba_type, NestedArray):
+        from numba_cuda_mlir.lowering.record import (
+            lower_nested_array_getitem_int,
+        )
+
+        return lower_nested_array_getitem_int(builder, target, args, kwargs)
+
+    if isinstance(array_numba_type.dtype, np_.Record):
+        return np_._lower_record_array_getitem(builder, target, args, kwargs)
+
+    array = builder.load_var(args[0])
+    # Handle both variable and constant indices
+    if isinstance(args[1], int):
+        index = args[1]
+    else:
+        index = builder.load_var(args[1])
+    array_type = array.type
+
+    if not array_type.has_rank:
+        raise NotImplementedError("NYI: unranked memrefs")
+
+    index = np_._normalize_negative_index(array, index, 0)
+    if array_type.rank == 1:
+        value = lowering_utilities.array_element_value_load(
+            array_numba_type,
+            array,
+            [index],
+            dynamic_shared_memory=builder._is_dynamic_shared_memory(array),
+        )
+    else:
+        rank = array_type.rank
+        sv_offsets = [index] + [np_.index_of(0)] * (rank - 1)
+        sv_sizes = [np_.index_of(1)] + [
+            np_.memref.dim(array, np_.index_of(i)) for i in range(1, rank)
+        ]
+        sv_strides = [np_.index_of(1)] * rank
+        dims_to_drop = [True] + [False] * (rank - 1)
+        value = _strided_view(
+            array, sv_offsets, sv_sizes, sv_strides, dims_to_drop
+        )
+
+    builder.store_var(target, value)
+
+
+def lower_array_slice_getitem(builder, target, args, kwargs):
+    np_ = _lnumpy
+    np_.trace()
+    mr = builder.load_var(args[0])
+    rank = mr.type.rank
+    slc = builder.load_var(args[1])
+    start, length, step = _resolve_slice(builder, slc, mr)
+
+    offsets = [start] + [np_.index_of(0) for _ in range(1, rank)]
+    sizes = [length] + [
+        np_.memref.dim(mr, np_.index_of(i)) for i in range(1, rank)
+    ]
+    strides = [step] + [np_.index_of(1) for _ in range(1, rank)]
+    view = _strided_view(mr, offsets, sizes, strides)
+    builder.store_var(target, view)
+
+
+def lower_array_slice_setitem(builder, target, args, kwargs):
+    """Lower arr[slice] = value: fill the sliced region."""
+    np_ = _lnumpy
+    np_.trace()
+    array = builder.load_var(args[0])
+    slice_val = builder.load_var(args[1])
+    value = builder.load_var(args[2])
+
+    array_numba_type = builder.get_numba_type(args[0].name)
+    mr_type = array.type
+    rank = mr_type.rank
+
+    start, length, step = _resolve_slice(builder, slice_val, array)
+
+    # Map a forward loop onto the resolved slice.
+    starts = [np_.index_of(0)] * rank
+    stops = [length] + [
+        np_.memref.dim(array, np_.index_of(i + 1)) for i in range(rank - 1)
+    ]
+    steps = [np_.index_of(1)] * rank
+
+    @np_.scf.forall_(starts, stops, steps)
+    def fill_all(*indices):
+        idx0 = np_.arith.addi(start, np_.arith.muli(indices[0], step))
+        lowering_utilities.array_element_value_store(
+            array_numba_type,
+            array,
+            [idx0, *indices[1:]],
+            value,
+            dynamic_shared_memory=builder._is_dynamic_shared_memory(array),
+        )
+
+
+def lower_array_tuple_getitem(builder, target, args, kwargs):
+    np_ = _lnumpy
+    if len(args) != 2:
+        raise np_.InternalCompilerError(
+            f"Tuple getitem takes exactly two arguments, got {len(args)}"
+        )
+
+    # Check if this is a nested array (embedded in a record)
+    from numba_cuda_mlir.types import NestedArray
+
+    array_numba_type = builder.get_numba_type(args[0].name)
+    if isinstance(array_numba_type, NestedArray):
+        from numba_cuda_mlir.lowering.record import (
+            lower_nested_array_getitem_tuple,
+        )
+
+        return lower_nested_array_getitem_tuple(builder, target, args, kwargs)
+
+    array = builder.load_var(args[0])
+    tuple_indices = builder.load_var(args[1])
+
+    array_type = array.type
+    if (
+        not isinstance(
+            array_type, (np_.ir.MemRefType, np_.ir.RankedTensorType)
+        )
+        or not array_type.has_rank
+    ):
+        raise np_.InternalCompilerError(
+            "Array must be a statically-ranked memref or tensor, "
+            f"got {array_type}"
+        )
+
+    if not isinstance(tuple_indices, tuple):
+        raise np_.InternalCompilerError(
+            f"Tuple indices must be a tuple, got {type(tuple_indices)}"
+        )
+
+    target_type = builder.get_numba_type(target.name)
+    source_rank = array_type.rank
+    n_indexed = len(tuple_indices)
+    n_trailing = source_rank - n_indexed
+
+    offsets, sizes, strides, is_scalar = [], [], [], []
+    for dim, index in enumerate(tuple_indices):
+        match index:
+            case np_.Slice() as slc:
+                if not isinstance(target_type, types.Array):
+                    raise TypeError(
+                        f"Target type {target_type} is not an array, but "
+                        "a slice was used to index it"
+                    )
+                s_start, s_length, s_step = _resolve_slice(
+                    builder, slc, array, dim
+                )
+                offsets.append(s_start)
+                sizes.append(s_length)
+                strides.append(s_step)
+                is_scalar.append(False)
+            case int() | np_.ir.Value() as value:
+                offsets.append(
+                    np_._normalize_negative_index(array, value, dim)
+                )
+                sizes.append(1)
+                strides.append(1)
+                is_scalar.append(True)
+            case _:
+                raise np_.InternalCompilerError(
+                    f"Tuple indices must be a slice or int, got {type(index)}"
+                )
+
+    # Extend with full-extent entries for unindexed trailing dimensions
+    trailing_dims = [
+        np_.memref.dim(array, np_.index_of(n_indexed + i))
+        for i in range(n_trailing)
+    ]
+    full_offsets = list(offsets) + [np_.index_of(0)] * n_trailing
+    full_sizes = list(sizes) + trailing_dims
+    full_strides = list(strides) + [np_.index_of(1)] * n_trailing
+    full_is_scalar = list(is_scalar) + [False] * n_trailing
+
+    match target_type:
+        case types.Array():
+            n_kept = sum(1 for sc in full_is_scalar if not sc)
+            if n_kept != target_type.ndim:
+                raise np_.InternalCompilerError(
+                    f"Result rank {n_kept} does not match target type ndim "
+                    f"{target_type.ndim}"
+                )
+            value = _strided_view(
+                array, full_offsets, full_sizes, full_strides, full_is_scalar
+            )
+            builder.store_var(target, value)
+        case types.Number() | types.Boolean():
+            value = lowering_utilities.array_element_value_load(
+                array_numba_type,
+                array,
+                full_offsets,
+                dynamic_shared_memory=builder._is_dynamic_shared_memory(array),
+            )
+            builder.store_var(target, value)
+        case _:
+            raise np_.InternalCompilerError(
+                f"Target type {target_type} is not an array or number, but "
+                "a tuple was used to index it"
+            )
+
+
+def _request_dynamic_shared_memory(self, mr_type):
+    bytes = _ml.get_type_size_bytes(mr_type.element_type)
+    assert self.mlir_funcOp
+    # Emit at the current insertion point: the entry block may
+    # already have a terminator once the request appears after
+    # control flow. The shared-memory base itself is still created
+    # at the entry block's start by _get_shared_memory_base.
+    bytes_op = _ml.arith.constant(result=_ml.T.index(), value=bytes)
+    shm_base = self._get_shared_memory_base()
+    total_shared_memory_bytes = self._load_total_shared_memory_bytes()
+    # LLVM 7 has no dynamic_smem_size intrinsic; read the sreg directly.
+    smem_size = _ml.llvm.inline_asm(
+        _ml.T.i32(),
+        [],
+        "mov.u32 $0, %dynamic_smem_size;",
+        "=r",
+    )
+    dynamic_shared_bytes = self.mlir_convert(smem_size, _ml.T.index())
+    remaining_bytes = _ml.arith.subi(
+        lhs=dynamic_shared_bytes, rhs=total_shared_memory_bytes
+    )
+    size = _ml.arith.divui(lhs=remaining_bytes, rhs=bytes_op)
+    view = _ml.memref.view(
+        result=mr_type,
+        source=shm_base,
+        byte_shift=total_shared_memory_bytes,
+        sizes=[size],
+    )
+    self._dynamic_shared_memory_values.append(view)
+    return view
+
+
+def _externalize_dynamic_shared_globals(module):
+    """Give zero-length ``__dynamic_shmem__`` globals external linkage
+    so their size is unknown."""
+    ir = _ml.ir
+    external = ir.Attribute.parse("#llvm.linkage<external>")
+
+    def walk(op):
+        for region in op.regions:
+            for block in region.blocks:
+                for child in block.operations:
+                    if child.operation.name == "llvm.mlir.global":
+                        sym = ir.StringAttr(child.attributes["sym_name"]).value
+                        if sym.startswith("__dynamic_shmem__"):
+                            child.attributes["linkage"] = external
+                    walk(child.operation)
+
+    walk(module.operation)
+
+
+def apply_slice_python_parity() -> None:
+    """Resolve slices with Python semantics and alias dynamic shared
+    arrays at the region base."""
+    _lnumpy.Slice.__init__ = _slice_init
+    _lnumpy._resolve_slice = _resolve_slice
+    _lnumpy._strided_view = _strided_view
+    np_lower = _lnumpy.registry.lower
+    np_lower(operator.getitem, types.Array, types.Number)(lower_array_getitem)
+    np_lower(operator.getitem, types.Array, types.Integer)(lower_array_getitem)
+    np_lower(operator.getitem, types.Buffer, types.Integer)(
+        lower_array_getitem
+    )
+    np_lower(operator.getitem, types.Array, types.SliceType)(
+        lower_array_slice_getitem
+    )
+    np_lower(operator.setitem, types.Array, types.SliceType, types.Any)(
+        lower_array_slice_setitem
+    )
+    np_lower(operator.getitem, types.Array, types.UniTuple)(
+        lower_array_tuple_getitem
+    )
+    np_lower(operator.getitem, types.Array, types.Tuple)(
+        lower_array_tuple_getitem
+    )
+    _lcuda.registry.lower_getattr(types.Array, "strides")(lower_strides)
+
+    lower_class = _ml.MLIRLower
+    lower_class._request_dynamic_shared_memory = _request_dynamic_shared_memory
+    stock_lower_literal = lower_class.lower_literal_if_needed
+
+    @functools.wraps(stock_lower_literal)
+    def lower_literal_if_needed(self, value, numba_type=None):
+        if isinstance(value, slice):
+            # Materialize frozen slices like inline slices.
+            return _lnumpy.Slice(
+                *(
+                    self.lower_literal_if_needed(bound)
+                    if bound is not None
+                    else None
+                    for bound in (value.start, value.stop, value.step)
+                )
+            )
+        return stock_lower_literal(self, value, numba_type)
+
+    lower_class.lower_literal_if_needed = lower_literal_if_needed
+
+    stock_pre_codegen = _mlir_optimization.run_pre_codegen_patterns
+
+    @functools.wraps(stock_pre_codegen)
+    def run_pre_codegen_patterns(module, *args, **kwargs):
+        result = stock_pre_codegen(module, *args, **kwargs)
+        _externalize_dynamic_shared_globals(module)
+        return result
+
+    _mlir_optimization.run_pre_codegen_patterns = run_pre_codegen_patterns
+
+
+apply_slice_python_parity()
+
+
+# ------------------------------------------------------------------ #
+# float-rounding-parity-pr                                           #
+# ------------------------------------------------------------------ #
+
+# Exponent types that convert safely to int32
+POW_INT32_EXPONENTS = (
+    types.int8,
+    types.int16,
+    types.int32,
+    types.uint8,
+    types.uint16,
+)
+
+
+def _math_result_type(*arg_types):
+    """Float type a math function computes in: integers become float64,
+    the widest float wins."""
+    floats = [
+        types.float64 if isinstance(ty, types.Integer) else ty
+        for ty in arg_types
+    ]
+    return max(floats, key=lambda ty: getattr(ty, "bitwidth", 0))
+
+
+def _pow_result_type(base, exponent):
+    """A float base raised to an exponent that converts safely to int32
+    keeps the base type."""
+    if isinstance(base, types.Float) and exponent in POW_INT32_EXPONENTS:
+        return base
+    return _math_result_type(base, exponent)
+
+
+def _unary_math_generic(acceptable, return_type_fn):
+    def generic(self, args, kws):
+        if len(args) == 1 and isinstance(args[0], acceptable):
+            return_fn = return_type_fn or _math_result_type
+            return signature(return_fn(args[0]), args[0])
+
+    return generic
+
+
+def _binary_math_generic(return_type_fn):
+    def generic(self, args, kws):
+        if (
+            len(args) == 2
+            and isinstance(args[0], types.Number)
+            and isinstance(args[1], types.Number)
+        ):
+            return_fn = return_type_fn or _math_result_type
+            return signature(return_fn(args[0], args[1]), args[0], args[1])
+
+    return generic
+
+
+def _get_range_object(builder, args, int_type):
+    """Load the range bounds converted to the range's resolved integer
+    type."""
+    int_of = _lbuiltins.int_of
+    int_mlir_type = builder.get_mlir_type(int_type)
+
+    def bound(var):
+        signed = _lbuiltins.get_conversion_signedness(
+            builder.get_numba_type(var.name), int_type
+        )
+        return int_of(builder.load_var(var), ty=int_mlir_type, signed=signed)
+
+    match args:
+        case [stop]:
+            return (
+                int_of(0, ty=int_mlir_type),
+                bound(stop),
+                int_of(1, ty=int_mlir_type),
+            )
+        case [start, stop]:
+            return bound(start), bound(stop), int_of(1, ty=int_mlir_type)
+        case [start, stop, step]:
+            return bound(start), bound(stop), bound(step)
+        case _:
+            raise ValueError(f"Invalid arguments for range: {args}")
+
+
+def lower_range(builder, target, args, kwargs):
+    int_type = builder.get_numba_type(target.name).dtype
+    start, stop, step = _get_range_object(builder, args, int_type)
+    ro = _lbuiltins.RangeObject(builder, start, stop, step)
+    builder.store_var(target, ro)
+
+
+def _ensure_float(value, source_type=None):
+    """Ensure value is floating-point; integers become float64."""
+    if isinstance(value.type, _lmath.ir.IntegerType) or isinstance(
+        value.type, _lmath.ir.IndexType
+    ):
+        signed = None
+        if source_type is not None:
+            signed = _lmath.get_conversion_signedness(
+                source_type, types.float64
+            )
+        return lowering_utilities.convert(value, _lmath.T.f64(), signed=signed)
+    return value
+
+
+def math_ceil_cg(mlir_lower, target, args, kwargs):
+    assert not kwargs, (
+        "math_ceil_intrinsic does not accept any keyword arguments"
+    )
+    value = mlir_lower.load_var(args[0])
+    if _lmath._is_integer_type(value.type):
+        # ceil of an integer is the integer itself, as float64
+        result = _ensure_float(value, mlir_lower.get_numba_type(args[0].name))
+    else:
+        result = _lmath.math_dialect.ceil(value)
+    mlir_lower.store_var(target, result)
+
+
+def math_floor_cg(mlir_lower, target, args, kwargs):
+    assert not kwargs, "math_floor does not accept any keyword arguments"
+    value = mlir_lower.load_var(args[0])
+    if _lmath._is_integer_type(value.type):
+        # floor of an integer is the integer itself, as float64
+        result = _ensure_float(value, mlir_lower.get_numba_type(args[0].name))
+    else:
+        result = _lmath.math_dialect.floor(value)
+    mlir_lower.store_var(target, result)
+
+
+def math_trunc_cg(mlir_lower, target, args, kwargs):
+    assert not kwargs, "math_trunc does not accept any keyword arguments"
+    value = mlir_lower.load_var(args[0])
+    if _lmath._is_integer_type(value.type):
+        # trunc of an integer is the integer itself, as float64
+        result = _ensure_float(value, mlir_lower.get_numba_type(args[0].name))
+    else:
+        result = _lmath.math_dialect.trunc(value)
+    mlir_lower.store_var(target, result)
+
+
+def math_pow_cg(mlir_lower, target, args, kwargs):
+    """math.pow(x, y) - x raised to power y"""
+    assert not kwargs, "math_pow does not accept any keyword arguments"
+    assert len(args) == 2, "math_pow expects 2 arguments"
+    target_type = mlir_lower.get_numba_type(target.name)
+    float_type = mlir_lower.get_mlir_type(target_type)
+    x = _lmath._load_and_convert_operand(
+        mlir_lower, args[0], target_type, float_type
+    )
+    exponent_type = mlir_lower.get_numba_type(args[1].name)
+    if (
+        isinstance(target_type, types.Float)
+        and exponent_type in POW_INT32_EXPONENTS
+    ):
+        y = _lmath._load_and_convert_operand(
+            mlir_lower, args[1], types.int32, _lmath.T.i32()
+        )
+        result = _lmath.math_dialect.fpowi(x, y)
+    else:
+        y = _lmath._load_and_convert_operand(
+            mlir_lower, args[1], target_type, float_type
+        )
+        result = _lmath.math_dialect.powf(x, y)
+    mlir_lower.store_var(target, result)
+
+
+def apply_float_rounding_parity() -> None:
+    """Math functions return the float type they compute in."""
+    _tmath.POW_INT32_EXPONENTS = POW_INT32_EXPONENTS
+    _tmath._math_result_type = _math_result_type
+    _tmath._pow_result_type = _pow_result_type
+    return_type_fns = {
+        "ceil": None,
+        "floor": None,
+        "trunc": None,
+        "pow": _pow_result_type,
+    }
+    for name, template in _tmath._math_functions.items():
+        qualname = template.__qualname__
+        stock = template.__dict__.get("generic")
+        if stock is None or stock.__closure__ is None:
+            continue
+        cells = dict(zip(stock.__code__.co_freevars, stock.__closure__))
+        return_type_fn = return_type_fns.get(
+            name, cells["return_type_fn"].cell_contents
+        )
+        if qualname.startswith("_make_unary_math_template."):
+            template.generic = _unary_math_generic(
+                cells["acceptable"].cell_contents, return_type_fn
+            )
+        elif qualname.startswith("_make_binary_math_template."):
+            template.generic = _binary_math_generic(return_type_fn)
+
+    _lbuiltins._get_range_object = _get_range_object
+    builtins_lower = _lbuiltins.registry.lower
+    builtins_lower(range, types.Number)(lower_range)
+    builtins_lower(range, types.Number, types.Number)(lower_range)
+    builtins_lower(range, types.Number, types.Number, types.Number)(
+        lower_range
+    )
+
+    _lmath._ensure_float = _ensure_float
+    _lmath.POW_INT32_EXPONENTS = POW_INT32_EXPONENTS
+    math_lower = _lmath.registry.lower
+    math_lower(math.ceil, types.Number)(math_ceil_cg)
+    math_lower(math.floor, types.Number)(math_floor_cg)
+    math_lower(math.trunc, types.Number)(math_trunc_cg)
+    math_lower(math.pow, types.Number, types.Number)(math_pow_cg)
+
+
+apply_float_rounding_parity()
+
+
+# ------------------------------------------------------------------ #
+# Typed-IR block scheduler                                           #
+# ------------------------------------------------------------------ #
 
 
 def register_typed_block_scheduler() -> None:
     """Register cubie's typed-IR block scheduler with the backend.
 
-    Warns and no-ops on wheels without the typed-planner hook;
-    no-ops silently when ``CUBIE_BLOCK_SCHEDULE`` is ``source``.
-    The registered policy folds into the kernel-cache fingerprint.
+    No-ops when ``CUBIE_BLOCK_SCHEDULE`` is ``source``. The registered
+    policy folds into the kernel-cache fingerprint.
     """
-    from cubie.backend._block_schedule_policies import (
-        BLOCK_SCHEDULE_POLICIES,
-    )
     from cubie._env import (
         block_schedule_default,
         set_active_block_schedule,
+    )
+    from cubie.backend._block_schedule_policies import (
+        BLOCK_SCHEDULE_POLICIES,
     )
 
     policy = block_schedule_default()
@@ -1673,19 +2039,6 @@ def register_typed_block_scheduler() -> None:
             f"CUBIE_BLOCK_SCHEDULE={policy!r} is not recognised; "
             f"valid values: {sorted(BLOCK_SCHEDULE_POLICIES)}"
         )
-    try:
-        from numba_cuda_mlir.extending import (
-            register_typed_planner,
-        )
-    except ImportError:
-        warnings.warn(
-            f"The block-schedule policy {policy!r} is configured "
-            "but the installed numba-cuda-mlir wheel has no "
-            "typed-planner hook; kernels compile in source order. "
-            "Install cubie-numba-cuda-mlir with the "
-            "register_typed_planner hook to enable scheduling."
-        )
-        return
     from cubie.backend._typed_block_scheduler import (
         TypedBlockScheduler,
     )
@@ -1696,283 +2049,3 @@ def register_typed_block_scheduler() -> None:
 
 
 register_typed_block_scheduler()
-
-
-# ------------------------------------------------------------------ #
-# Iterative SSA reaching-definition search                            #
-# ------------------------------------------------------------------ #
-# The stock reaching-definition search in numba_cuda/core/ssa.py is a
-# mutual recursion between _find_def_from_top and
-# _find_def_from_bottom at two Python frames per CFG block, so large
-# flattened kernels (exactly the shape cubie's generated loops take
-# after inlining) raise RecursionError inside reconstruct_ssa. These
-# methods mirror the ssa-iterative-def-search branch of the
-# ccam80/numba-cuda-mlir fork: an explicit worklist bounds the search
-# by memory instead of the interpreter recursion limit, and
-# predecessors are pushed in reverse so phi creation order — and thus
-# fresh-variable numbering — matches the recursive formulation
-# exactly.
-
-
-def _ssa_find_def_from_top(self, states, label, loc):
-    """Find definition reaching the top of the block at ``label``."""
-
-    return self._find_def_iteratively(states, label, loc, from_top=True)
-
-
-def _ssa_find_def_from_bottom(self, states, label, loc):
-    """Find definition from within the block at ``label``."""
-
-    return self._find_def_iteratively(states, label, loc, from_top=False)
-
-
-def _ssa_find_def_iteratively(self, states, label, loc, from_top):
-    """Drive the def search on an explicit worklist.
-
-    Each ``pending`` item is a ``(phinode, pred, loc)`` triple whose
-    resolved incoming definition must be appended to ``phinode``.
-    """
-
-    pending = []
-    result = self._walk_def_chain(states, label, loc, from_top, pending)
-    while pending:
-        phinode, pred, philoc = pending.pop()
-        incoming_def = self._walk_def_chain(
-            states, pred, philoc, False, pending
-        )
-        phinode.value.incoming_values.append(incoming_def.target)
-        phinode.value.incoming_blocks.append(pred)
-    return result
-
-
-def _ssa_walk_def_chain(self, states, label, loc, from_top, pending):
-    """Walk one def-search chain without recursion.
-
-    Alternates the *from-bottom* step (take the block's last
-    definition, if any) with the *from-top* step (insert a phi node,
-    or hop to the immediate dominator). A phi node is registered in
-    ``defmap`` before its predecessors are resolved, so a chain that
-    revisits the block terminates there; resolution of the phi's
-    incoming values is deferred onto ``pending``.
-    """
-
-    cfg = states["cfg"]
-    defmap = states["defmap"]
-    phimap = states["phimap"]
-    phi_locations = states["phi_locations"]
-
-    while True:
-        if not from_top:
-            defs = defmap[label]
-            if defs:
-                return defs[-1]
-            from_top = True
-
-        if label in phi_locations:
-            scope = states["scope"]
-            loc = states["block"].loc
-            freshvar = scope.redefine(states["varname"], loc=loc)
-            phinode = _nb_ir.Assign(
-                target=freshvar,
-                value=_nb_ir.Expr.phi(loc=loc),
-                loc=loc,
-            )
-            defmap[label].insert(0, phinode)
-            phimap[label].append(phinode)
-            # Defer the search for the phi's incoming values;
-            # reversed so they resolve in predecessor order.
-            preds = [pred for pred, _ in cfg.predecessors(label)]
-            for pred in reversed(preds):
-                pending.append((phinode, pred, loc))
-            return phinode
-        else:
-            idom = cfg.immediate_dominators()[label]
-            if idom == label:
-                _nb_ssa._warn_about_uninitialized_variable(
-                    states["varname"], loc
-                )
-                return _nb_ssa.UndefinedVariable
-            label = idom
-            from_top = False
-
-
-def register_iterative_ssa_def_search() -> None:
-    """Make the SSA reaching-definition search iterative.
-
-    No-ops on builds whose ``_FixSSAVars`` already carries
-    ``_walk_def_chain`` (a patched build, or a future release that
-    merged the fix).
-    """
-
-    fixer = _nb_ssa._FixSSAVars
-    if hasattr(fixer, "_walk_def_chain"):
-        return
-    fixer._walk_def_chain = _ssa_walk_def_chain
-    fixer._find_def_iteratively = _ssa_find_def_iteratively
-    fixer._find_def_from_top = _ssa_find_def_from_top
-    fixer._find_def_from_bottom = _ssa_find_def_from_bottom
-
-
-register_iterative_ssa_def_search()
-
-
-# ------------------------------------------------------------------ #
-# Iterative CFG topological order (fork branch fix/11-topo-order-iterative)
-# ------------------------------------------------------------------ #
-
-
-def _cfg_find_topo_order(self):
-    succs = self._succs
-    back_edges = self._back_edges
-    post_order = []
-    seen = set()
-
-    # Successors pushed in reverse so the stack visits them in order.
-    def visit(node):
-        if node not in seen:
-            seen.add(node)
-            stack.append((post_order.append, node))
-            forward = [
-                dest for dest in succs[node] if (node, dest) not in back_edges
-            ]
-            stack.extend((visit, dest) for dest in reversed(forward))
-
-    stack = [(visit, self._entry_point)]
-    while stack:
-        cb, node = stack.pop()
-        cb(node)
-
-    post_order.reverse()
-    return post_order
-
-
-def register_iterative_topo_order() -> None:
-    """Make CFGraph._find_topo_order iterative; no-op without ``_dfs_rec``."""
-
-    graph = _nb_controlflow.CFGraph
-    nested = graph._find_topo_order.__code__.co_consts
-    if not any(getattr(c, "co_name", None) == "_dfs_rec" for c in nested):
-        return
-    graph._find_topo_order = _cfg_find_topo_order
-
-
-register_iterative_topo_order()
-
-
-def _lower_array_slice_getitem_empty_safe(builder, target, args, kwargs):
-    """Lower 1-D array slices, anchoring statically empty ones at 0.
-
-    A compile-time-empty slice ``arr[n:n]`` (bounds frozen into the
-    closure, as the buffer registry does for every zero-length
-    buffer view) survives initial lowering — the parent crosses the
-    device-function boundary as a dynamically shaped memref — but
-    the optimization pipeline's inlining and canonicalization fold
-    the parent shape and the slice bounds static again, and a
-    mid-pipeline verification then rejects the ``memref.subview``
-    bounds: "offset 0 is out-of-bounds: n >= n". numpy-style slicing
-    allows the empty tail view, and an empty view has no addressable
-    elements, so its anchor is arbitrary: statically empty slices
-    are rewritten to offset zero with zero size before the upstream
-    lowering logic runs. Offset zero stays in bounds no matter how
-    far canonicalization folds. SSA-normalizing the original bounds
-    instead does not survive: the canonicalizer folds
-    ``index_cast(constant)`` chains back into static attributes. The
-    body otherwise mirrors upstream.
-    """
-    from numba_cuda_mlir.lowering.numpy import trace as _np_trace
-
-    _np = _lowering_numpy
-    _np_trace()
-    mr = builder.load_var(args[0])
-    mr_type = mr.type
-    dtype = mr_type.element_type
-    rank = mr_type.rank
-    slc = builder.load_var(args[1])
-    start, stop, step = slc.start, slc.stop, slc.step
-
-    def _static_bound(value):
-        if value is None or isinstance(value, int):
-            return value
-        return lowering_utilities.try_extract_constant(value)
-
-    static_start = _static_bound(start)
-    static_stop = _static_bound(stop)
-    static_step = _static_bound(step)
-    statically_empty = (
-        isinstance(static_start, int)
-        and isinstance(static_stop, int)
-        and static_stop <= static_start
-        and (step is None or static_step == 1)
-    )
-    if statically_empty:
-        start = _np.index_of(0)
-        stop = _np.index_of(0)
-        step = _np.index_of(1)
-
-    if start is None:
-        start = _np.arith.index_cast(
-            _np.arith.constant(result=_np.T.i64(), value=0),
-            to=_np.T.index(),
-        )
-    if stop is None:
-        stop = _np.memref.dim(mr, _np.index_of(0))
-    if step is None:
-        step = _np.index_of(1)
-    starts, stops, steps = [start], [stop], [step]
-    for i in range(1, rank):
-        starts.append(_np.index_of(0))
-        stops.append(_np.memref.dim(mr, _np.index_of(i)))
-        steps.append(_np.index_of(1))
-
-    dyn = _np.ir.ShapedType.get_dynamic_stride_or_offset()
-    source_strides, _ = mr_type.get_strides_and_offset()
-    result_strides = []
-    for src_stride, step_value in zip(source_strides, steps):
-        step_const = lowering_utilities.try_extract_constant(step_value)
-        if step_const is not None and src_stride != dyn:
-            result_strides.append(src_stride * step_const)
-        else:
-            result_strides.append(dyn)
-    layout = _np.ir.StridedLayoutAttr.get(offset=dyn, strides=result_strides)
-    mrt = _np.ir.MemRefType.get(
-        element_type=dtype,
-        shape=[dyn for _ in range(rank)],
-        layout=layout,
-        memory_space=mr_type.memory_space,
-    )
-    sizes = [
-        (stop_v - start_v) // step_v
-        for start_v, stop_v, step_v in zip(starts, stops, steps)
-    ]
-    view = _np.memref.subview(
-        mr, offsets=starts, sizes=sizes, strides=steps, result_type=mrt
-    )
-    builder.store_var(target, view)
-
-
-def register_empty_slice_anchor_shim() -> None:
-    """Anchor statically empty array slices at offset zero.
-
-    Verifies the stock 1-D slice lowering still matches the copied
-    body before overriding it, mirroring the other source-checked
-    shims in this module.
-    """
-
-    stock_source = inspect.getsource(_lowering_numpy.lower_array_slice_getitem)
-    fragments = (
-        "starts, stops, steps = [start], [stop], [step]",
-        "memref.subview(mr, offsets=starts",
-        "(stop - start) // step",
-    )
-    if any(fragment not in stock_source for fragment in fragments):
-        raise RuntimeError(
-            "cubie.backend._mlir_compat: numba-cuda-mlir's array slice "
-            "lowering no longer matches the stock implementation; "
-            "update the empty-slice anchor shim for this release."
-        )
-    _np_registry.lower(operator.getitem, types.Array, types.SliceType)(
-        _lower_array_slice_getitem_empty_safe
-    )
-
-
-register_empty_slice_anchor_shim()

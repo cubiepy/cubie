@@ -9,6 +9,8 @@ import pytest
 from scipy.interpolate import CubicSpline
 
 from cubie.cuda_simsafe import cuda, is_pinned_array
+
+from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
 from cubie.memory import default_memmgr
 
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples
@@ -247,7 +249,7 @@ def _run_time_derivative(del_t, system, query_times):
         (query_times.size, out_len), dtype=system.precision
     )
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def kernel(times, out):
         idx = cuda.grid(1)
         if idx < times.size:

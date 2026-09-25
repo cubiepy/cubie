@@ -4,6 +4,7 @@ import time
 
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
 
 from cubie.time_logger import (
     CUDAEvent,
@@ -13,7 +14,7 @@ from cubie.time_logger import (
 )
 
 
-@cuda.jit
+@cuda.jit(**_BACKEND_JIT_OPTIONS)
 def _busy_kernel(out):
     """Trivial kernel that does enough work to register nonzero time."""
     idx = cuda.grid(1)

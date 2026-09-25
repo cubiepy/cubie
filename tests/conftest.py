@@ -546,8 +546,9 @@ def start_cuda_busy_work():
     genuine device-wide synchronization.
     """
     from cubie.cuda_simsafe import cuda, cupy
+    from cubie.cuda_simsafe import _BACKEND_JIT_OPTIONS
 
-    @cuda.jit
+    @cuda.jit(**_BACKEND_JIT_OPTIONS)
     def _busy_kernel(flag, out):
         spins = 0.0
         while cuda.atomic.add(flag, 0, 0) == 0 and spins < 1.0e9:
