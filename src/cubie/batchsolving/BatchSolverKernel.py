@@ -1351,6 +1351,9 @@ class BatchSolverKernel(CUDAFactory):
         self.wait_for_writeback(timeout=shutdown_timeout)
         self.input_arrays.close()
         self.output_arrays.close()
+        # Freed device blocks leave the pool at a sync of their stream.
+        if self._last_stream is not None:
+            self.memory_manager.sync_stream(self, stream=self._last_stream)
         self._specialization_cache = None
         finalizer = getattr(self, "_finalizer", None)
         settings = self.memory_manager.registry.get(id(self))

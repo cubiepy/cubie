@@ -1,10 +1,15 @@
-"""CuPy async External Memory Manager plugin for Numba CUDA contexts.
+"""CuPy stream-ordered External Memory Manager plugin for Numba contexts.
 
-Backs Numba's device allocations with CuPy's asynchronous (stream-ordered)
-memory pool via the EMM plugin interface, so ``cuda.device_array`` returns a
-**native** ``DeviceNDArray`` drawn from a pooled allocator. Native arrays keep
-the fast kernel-launch path (no per-launch ``__cuda_array_interface__``
+Backs Numba's device allocations with the device's stream-ordered
+memory pool (``cudaMallocAsync``, reached through CuPy's
+``malloc_async``) via the EMM plugin interface, so ``cuda.device_array``
+returns a **native** ``DeviceNDArray``. Native arrays keep the fast
+kernel-launch path (no per-launch ``__cuda_array_interface__``
 re-parse) and let transfers use Numba's pinned + streamed async copies.
+
+The pool keeps the driver's release threshold of zero: freed memory
+returns to the device at the next synchronization, so the pool holds
+only live allocations between solves.
 
 See Also
 --------
@@ -20,37 +25,52 @@ from cubie.cuda_simsafe import cuda, cupy, CUDA_SIMULATION
 
 logger = logging.getLogger(__name__)
 
+CUDA_ERROR_MEMORY_ALLOCATION = 2
+"""``cudaErrorMemoryAllocation``, from the CUDA runtime API."""
+
 
 if not CUDA_SIMULATION:
 
     class CuPyAsyncNumbaManager(
         cuda.GetIpcHandleMixin, cuda.HostOnlyCUDAMemoryManager
     ):
-        """EMM plugin allocating native Numba arrays from CuPy's async pool.
+        """EMM plugin allocating native Numba arrays from the device pool.
 
         Adapted from the numba cupy-EMM tutorial (BSD 2-Clause; see
-        THIRD_PARTY_LICENSES), using
-        ``cupy.cuda.MemoryAsyncPool`` so allocations are stream-ordered
-        (cudaMallocAsync) against whichever stream is current at allocation.
+        THIRD_PARTY_LICENSES). Allocations are stream-ordered
+        (``cudaMallocAsync``) against whichever CuPy stream is current
+        at allocation, and are freed on that stream.
         """
 
         def __init__(self, context) -> None:
             super().__init__(context=context)
-            # Kept alive so CuPy returns the block to the pool on finalize.
+            # Kept alive so CuPy frees the block on finalize.
             self._allocations: dict[int, Any] = {}
-            self._mp = None
+            self._pool = None
             self.is_cupy = True
 
         def initialize(self) -> None:
             super().initialize()
             # Context.prepare_for_use calls initialize() on every context
-            # activation; the pool must persist across calls because live
-            # allocations hold blocks from it.
-            if self._mp is None:
-                self._mp = cupy.cuda.MemoryAsyncPool()
+            # activation; the pool is configured once.
+            if self._pool is None:
+                runtime = cupy.cuda.runtime
+                pool = runtime.deviceGetMemPool(runtime.getDevice())
+                runtime.memPoolSetAttribute(
+                    pool, runtime.cudaMemPoolAttrReleaseThreshold, 0
+                )
+                self._pool = pool
 
         def memalloc(self, nbytes: int) -> "cuda.MemoryPointer":
-            cp_mp = self._mp.malloc(nbytes)
+            try:
+                cp_mp = cupy.cuda.memory.malloc_async(nbytes)
+            except cupy.cuda.runtime.CUDARuntimeError as error:
+                if error.status != CUDA_ERROR_MEMORY_ALLOCATION:
+                    raise
+                # Frees queued on the stream return to the pool once
+                # it reaches them.
+                cupy.cuda.get_current_stream().synchronize()
+                cp_mp = cupy.cuda.memory.malloc_async(nbytes)
             self._allocations[cp_mp.ptr] = cp_mp
             return cuda.MemoryPointer(
                 cuda.current_context(),
@@ -63,29 +83,40 @@ if not CUDA_SIMULATION:
             allocations = self._allocations
 
             def finalizer() -> None:
-                # Dropping the last reference returns the block to the pool.
+                # Dropping the last reference frees the block on its
+                # stream.
                 allocations.pop(ptr, None)
 
             return finalizer
 
         def get_memory_info(self) -> "cuda.MemoryInfo":
-            # Device free plus the pool's cached free blocks.
-            free, total = cupy.cuda.runtime.memGetInfo()
-            if self._mp is not None:
-                free += self._mp.free_bytes()
+            # Device free plus the pool's reserved but unused bytes.
+            runtime = cupy.cuda.runtime
+            free, total = runtime.memGetInfo()
+            if self._pool is not None:
+                reserved = runtime.memPoolGetAttribute(
+                    self._pool, runtime.cudaMemPoolAttrReservedMemCurrent
+                )
+                used = runtime.memPoolGetAttribute(
+                    self._pool, runtime.cudaMemPoolAttrUsedMemCurrent
+                )
+                free += reserved - used
             return cuda.MemoryInfo(free=free, total=total)
 
         def reset(self, stream: Optional[Any] = None) -> None:
             super().reset()
-            if self._mp:
-                self._mp.free_all_blocks(stream=stream)
+            if self._pool is not None:
+                if stream is None:
+                    stream = cupy.cuda.get_current_stream()
+                stream.synchronize()
+                cupy.cuda.runtime.memPoolTrimTo(self._pool, 0)
 
         @property
         def interface_version(self) -> int:
             return 1
 
     def install_async_emm() -> None:
-        """Install the CuPy async pool as Numba's device memory manager.
+        """Install the device pool as Numba's device memory manager.
 
         Must run before the CUDA context is created; the manager takes effect
         on first context creation.

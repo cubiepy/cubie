@@ -48,9 +48,7 @@ See Also
     Manages CUDA stream groups used by the memory manager.
 """
 
-from collections import deque
 from tempfile import mkstemp
-from threading import Lock
 from types import TracebackType
 from functools import partial
 from typing import Any, Optional, Callable, Dict, Set, Tuple, Union
@@ -73,7 +71,6 @@ from attrs.validators import (
 )
 from numpy import (
     ceil as np_ceil,
-    dtype as np_dtype,
     memmap as np_memmap,
     ndarray,
     floor as np_floor,
@@ -88,9 +85,8 @@ from cubie.cuda_simsafe import (
     Stream,
     cupy,
     current_mem_info,
-    empty_pinned,
-    free_all_pinned_blocks,
 )
+from cubie.memory.pinned_arena import PinnedArena
 from cubie.memory.stream_groups import StreamGroups
 from cubie.memory.array_requests import ArrayRequest, ArrayResponse
 
@@ -673,13 +669,8 @@ class MemoryManager:
         default=ALLOCATION_GRANULE_BYTES,
         validator=getype_validator(int, 0),
     )
-    # Pinned ledger: live backs reachable arrays; retained is
-    # page-locked memory held only by CuPy's pinned pool.
-    # Finalizers queue releases; the ledger drains them under the lock.
-    _pinned_lock: Lock = field(factory=Lock, init=False)
-    _pinned_live_bytes: int = field(default=0, init=False)
-    _pinned_retained_bytes: int = field(default=0, init=False)
-    _pinned_releases: deque = field(factory=deque, init=False)
+    # Page-locked slabs every pinned host array is carved from.
+    _pinned_arena: PinnedArena = field(factory=PinnedArena, init=False)
     # Cause for the NoCudaDeviceError a sizing decision raises.
     _device_probe_error: Optional[BaseException] = field(
         default=None, init=False
@@ -1457,62 +1448,24 @@ class MemoryManager:
     @property
     def pinned_live_bytes(self) -> int:
         """Pinned bytes currently backing reachable arrays."""
-        with self._pinned_lock:
-            self._apply_pinned_releases()
-            return self._pinned_live_bytes
+        return self._pinned_arena.live_bytes
 
     @property
-    def pinned_retained_bytes(self) -> int:
-        """Pinned bytes held only by CuPy's pinned pool."""
-        with self._pinned_lock:
-            self._apply_pinned_releases()
-            return self._pinned_retained_bytes
+    def pinned_reserved_bytes(self) -> int:
+        """Page-locked bytes the pinned arena holds."""
+        return self._pinned_arena.reserved_bytes
 
-    def _apply_pinned_releases(self) -> None:
-        """Move queued finalizer releases from live to retained."""
-        while True:
-            try:
-                nbytes = self._pinned_releases.popleft()
-            except IndexError:
-                return
-            self._pinned_live_bytes -= nbytes
-            self._pinned_retained_bytes += nbytes
-
-    def _reserve_pinned_bytes(self, nbytes: int, force: bool = False) -> bool:
-        """Atomically reserve ``nbytes`` against the pinned budget.
-
-        Live and retained bytes count together; pressure empties the
-        CuPy pinned pool before a refusal. ``force`` reserves past
-        the budget.
-        """
-        with self._pinned_lock:
-            self._apply_pinned_releases()
-            budget = self.pinned_budget_bytes
-            held = self._pinned_live_bytes + self._pinned_retained_bytes
-            if held + nbytes > budget:
-                self._flush_retained_pinned()
-            if not force and self._pinned_live_bytes + nbytes > budget:
-                return False
-            self._pinned_live_bytes += nbytes
-            return True
-
-    def _flush_retained_pinned(self) -> None:
-        """Return the pool's page-locked blocks to the OS; lock held."""
-        free_all_pinned_blocks()
-        self._pinned_retained_bytes = 0
-
-    def flush_pinned_pool(self) -> None:
-        """Release every page-locked block CuPy's pinned pool retains.
+    def flush_pinned_pool(self) -> int:
+        """Free every pinned slab with no live array.
 
         Freeing page-locked memory synchronizes the whole device.
-        """
-        with self._pinned_lock:
-            self._apply_pinned_releases()
-            self._flush_retained_pinned()
 
-    def _on_pinned_released(self, nbytes: int) -> None:
-        """Queue a collected pinned array's bytes without locking."""
-        self._pinned_releases.append(nbytes)
+        Returns
+        -------
+        int
+            Bytes released.
+        """
+        return self._pinned_arena.release_free_slabs()
 
     def allocate_pinned_array(
         self,
@@ -1520,11 +1473,12 @@ class MemoryManager:
         dtype: DTypeLike,
         force: bool = False,
     ) -> Optional[ndarray]:
-        """Allocate one budget-accounted pinned host array.
+        """Carve one uninitialised pinned host array from the arena.
 
-        Reserves bytes, attempts the driver allocation, and attaches
-        a finalizer that releases the bytes once the array and every
-        view of it are collected.
+        A free extent of any slab is reused whatever its previous
+        shape; a new slab is page-locked only when none fits. The
+        extent returns to the arena once the array and every view of
+        it are collected.
 
         Parameters
         ----------
@@ -1533,35 +1487,29 @@ class MemoryManager:
         dtype
             Data type for the array elements.
         force
-            Reserve even past the budget. A driver failure then
-            propagates instead of returning ``None``.
+            Grow past the budget. A driver failure then propagates
+            instead of returning ``None``.
 
         Returns
         -------
         numpy.ndarray or None
-            The pinned array, or ``None`` when the budget or the
-            driver refuses.
+            The pinned array, or ``None`` when a new slab would cross
+            the budget or the driver refuses one.
 
         Raises
         ------
         NoCudaDeviceError
             If the last device probe failed.
         """
-        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        if not self._reserve_pinned_bytes(nbytes, force=force):
-            return None
+        cap = self.pinned_budget_bytes
         try:
-            arr = empty_pinned(shape, dtype)
+            return self._pinned_arena.allocate(
+                shape, dtype, cap=None if force else cap
+            )
         except Exception:
-            # Driver refused: return the reservation to the budget.
-            with self._pinned_lock:
-                self._pinned_live_bytes -= nbytes
             if force:
-                # Forced callers were promised pinned: re-raise.
                 raise
             return None
-        finalize(arr, self._on_pinned_released, nbytes)
-        return arr
 
     def create_host_array(
         self,

@@ -62,7 +62,9 @@ def _make_pool():
 def _make_pinned_buffer(shape=(4, 3), dtype=np.float32, fill=1.0):
     """Return a PinnedBuffer with known data."""
     arr = np.full(shape, fill, dtype=dtype)
-    return PinnedBuffer(buffer_id=0, array=arr)
+    return PinnedBuffer(
+        buffer_id=0, storage=arr.reshape(-1).view(np.uint8), array=arr
+    )
 
 
 # ── WritebackTask attrs dataclass (item 2) ──────────────────── #

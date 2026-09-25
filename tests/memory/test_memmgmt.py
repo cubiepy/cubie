@@ -11,7 +11,6 @@ from cubie.cuda_simsafe import (
     CudaSupportError,
     DeviceNDArray,
     Stream,
-    empty_pinned,
     is_pinned_array,
 )
 
@@ -34,6 +33,10 @@ from cubie.memory.mem_manager import (
     placeholder_dataready,
     placeholder_invalidate,
     replace_with_chunked_size,
+)
+from cubie.memory.pinned_arena import (
+    MIN_SLAB_BYTES,
+    PINNED_ALIGNMENT_BYTES,
 )
 from tests.memory.conftest import (
     DummyStream,
@@ -426,22 +429,54 @@ class TestMemoryManager:
     @pytest.mark.nocudasim
     @pytest.mark.cupy
     def test_get_memory_info_counts_pool_cached_blocks(self):
-        """Free memory includes a dropped array's pool-cached block."""
+        """Free memory includes a freed block awaiting its sync."""
         import cupy as cp
 
+        runtime = cp.cuda.runtime
         context = cuda.current_context()
-        pool = context.memory_manager._mp
+        pool = context.memory_manager._pool
+        stream = cuda.stream()
         nbytes = 64 * 1024**2
-        arr = cuda.device_array(nbytes // 4, np.float32)
-        del arr
-        cached = pool.free_bytes()
+        with current_cupy_stream(stream):
+            arr = cuda.device_array(nbytes // 4, np.float32)
+            del arr
+        cached = runtime.memPoolGetAttribute(
+            pool, runtime.cudaMemPoolAttrReservedMemCurrent
+        ) - runtime.memPoolGetAttribute(
+            pool, runtime.cudaMemPoolAttrUsedMemCurrent
+        )
         assert cached >= nbytes
 
-        raw_before, _ = cp.cuda.runtime.memGetInfo()
+        raw_before, _ = runtime.memGetInfo()
         free = context.get_memory_info().free
-        raw_after, _ = cp.cuda.runtime.memGetInfo()
+        raw_after, _ = runtime.memGetInfo()
         assert min(raw_before, raw_after) + cached <= free
         assert free <= max(raw_before, raw_after) + cached
+        stream.synchronize()
+
+    @pytest.mark.nocudasim
+    @pytest.mark.cupy
+    def test_freed_device_memory_leaves_pool_at_sync(self):
+        """A freed block returns to the device at its stream's sync."""
+        import cupy as cp
+
+        runtime = cp.cuda.runtime
+        pool = cuda.current_context().memory_manager._pool
+        stream = cuda.stream()
+        nbytes = 64 * 1024**2
+
+        def reserved():
+            return runtime.memPoolGetAttribute(
+                pool, runtime.cudaMemPoolAttrReservedMemCurrent
+            )
+
+        with current_cupy_stream(stream):
+            arr = cuda.device_array(nbytes // 4, np.float32)
+        held = reserved()
+        with current_cupy_stream(stream):
+            del arr
+        stream.synchronize()
+        assert reserved() <= held - nbytes
 
     def test_free(self, registered_mgr, registered_instance):
         """Test free removes allocation by key from all instances."""
@@ -1507,12 +1542,13 @@ def test_numba_stream_ptr_unconvertible_handle():
 
 
 @pytest.mark.nocudasim
-def test_empty_pinned_real_gpu():
-    """empty_pinned draws from CuPy's pinned pool on a real GPU."""
-    arr = empty_pinned((4, 3), np.float32)
+def test_pinned_arena_arrays_are_page_locked(mgr):
+    """Arena arrays are page-locked on a real GPU."""
+    arr = mgr.allocate_pinned_array((4, 3), np.float32)
     assert arr.shape == (4, 3)
     assert arr.dtype == np.float32
     assert is_pinned_array(arr)
+    assert is_pinned_array(arr[1:])
 
 
 def test_instance_memory_settings_free_missing_key_warns():
@@ -2418,110 +2454,126 @@ def test_pinned_ceiling_defaults_to_vram(mgr):
     assert mgr.pinned_max_bytes == mgr.totalmem
 
 
-def test_pinned_budget_counts_all_live_allocations(mgr):
-    """Reservations that individually fit are refused cumulatively."""
-    mgr.pinned_max_bytes = 1024
-    first = mgr.allocate_pinned_array((96,), np.float64)
-    assert first is not None
-    assert mgr.pinned_live_bytes == 768
-    second = mgr.allocate_pinned_array((96,), np.float64)
-    assert second is None
-    assert mgr.pinned_live_bytes == 768
-    fallback = mgr.create_host_array((96,), np.float64, "pinned")
-    assert fallback.shape == (96,)
-    assert mgr.pinned_live_bytes == 768
-    small = mgr.allocate_pinned_array((16,), np.float64)
-    assert small is not None
-    assert mgr.pinned_live_bytes == 768 + 128
+def _extent(nbytes):
+    """Arena extent that backs ``nbytes`` bytes."""
+    return -(-nbytes // PINNED_ALIGNMENT_BYTES) * PINNED_ALIGNMENT_BYTES
 
 
-def test_pinned_release_returns_budget(mgr):
-    """Collected arrays retire to retained; pressure reclaims them."""
-    mgr.pinned_max_bytes = 1024
-    array = mgr.allocate_pinned_array((96,), np.float64)
-    assert array is not None
+def test_pinned_extent_serves_a_different_shape(mgr):
+    """A collected array's extent backs the next shape without growth."""
+    array = mgr.allocate_pinned_array((96, 4), np.float64)
+    reserved = mgr.pinned_reserved_bytes
     del array
     gc.collect()
     assert mgr.pinned_live_bytes == 0
-    assert mgr.pinned_retained_bytes == 768
-    again = mgr.allocate_pinned_array((96,), np.float64)
-    assert again is not None
-    assert mgr.pinned_live_bytes == 768
-    assert mgr.pinned_retained_bytes == 0
+    again = mgr.allocate_pinned_array((3, 50), np.float32)
+    assert again.shape == (3, 50)
+    assert mgr.pinned_reserved_bytes == reserved
+    assert mgr.pinned_live_bytes == _extent(again.nbytes)
 
 
-def test_pinned_release_during_reservation_is_deferred(mgr):
-    """A finalizer firing under the ledger lock lands at the next read."""
-    mgr.pinned_max_bytes = 1024
+def test_pinned_freed_neighbours_coalesce(mgr):
+    """Adjacent freed extents serve a request larger than either."""
+    first = mgr.allocate_pinned_array((PINNED_ALIGNMENT_BYTES,), np.uint8)
+    second = mgr.allocate_pinned_array((PINNED_ALIGNMENT_BYTES,), np.uint8)
+    reserved = mgr.pinned_reserved_bytes
+    del first, second
+    gc.collect()
+    merged = mgr.allocate_pinned_array(
+        (2 * PINNED_ALIGNMENT_BYTES,), np.uint8
+    )
+    assert merged is not None
+    assert mgr.pinned_reserved_bytes == reserved
+
+
+def test_pinned_arrays_do_not_overlap(mgr):
+    """Live arrays own disjoint byte ranges."""
+    arrays = [
+        mgr.allocate_pinned_array((size,), np.float64)
+        for size in (7, 1000, 1, 513)
+    ]
+    for index, array in enumerate(arrays):
+        array[:] = index
+    for index, array in enumerate(arrays):
+        assert (array == index).all()
+
+
+def test_pinned_view_keeps_extent_live(mgr):
+    """A surviving view keeps the owning array's extent live."""
     array = mgr.allocate_pinned_array((96,), np.float64)
-    assert array is not None
-    with mgr._pinned_lock:
-        del array
-        gc.collect()
-        assert list(mgr._pinned_releases) == [768]
-        assert mgr._pinned_live_bytes == 768
-    assert mgr.pinned_live_bytes == 0
-    assert mgr.pinned_retained_bytes == 768
-    again = mgr.allocate_pinned_array((96,), np.float64)
-    assert again is not None
-    assert mgr.pinned_live_bytes == 768
-    assert mgr.pinned_retained_bytes == 0
-
-
-def test_pinned_view_keeps_reservation(mgr):
-    """A surviving view keeps the owning array's bytes reserved."""
-    mgr.pinned_max_bytes = 1024
-    array = mgr.allocate_pinned_array((96,), np.float64)
+    live = mgr.pinned_live_bytes
     view = array[10:20]
     del array
     gc.collect()
-    assert mgr.pinned_live_bytes == 768
+    assert mgr.pinned_live_bytes == live
     del view
     gc.collect()
     assert mgr.pinned_live_bytes == 0
 
 
-def test_concurrent_pinned_reservations_respect_budget(mgr):
-    """Racing reservations never overshoot the cumulative budget."""
+def test_pinned_release_during_allocation_is_deferred(mgr):
+    """A finalizer firing under the arena lock lands at the next read."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    arena = mgr._pinned_arena
+    with arena._lock:
+        del array
+        gc.collect()
+        assert len(arena._releases) == 1
+    assert mgr.pinned_live_bytes == 0
+
+
+def test_pinned_budget_refuses_a_new_slab(mgr):
+    """No fitting extent and no room for a slab returns None."""
+    mgr.pinned_max_bytes = MIN_SLAB_BYTES
+    held = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    assert held is not None
+    assert mgr.allocate_pinned_array((1,), np.uint8) is None
+    fallback = mgr.create_host_array((96,), np.float64, "pinned")
+    assert fallback.shape == (96,)
+    assert not is_pinned_array(fallback)
+
+
+def test_forced_pinned_allocation_grows_past_budget(mgr):
+    """A forced allocation page-locks a slab past the budget."""
+    mgr.pinned_max_bytes = 0
+    array = mgr.allocate_pinned_array((96,), np.float64, force=True)
+    assert array is not None
+    assert mgr.pinned_reserved_bytes > mgr.pinned_max_bytes
+
+
+def test_flush_pinned_pool_frees_idle_slabs_only(mgr):
+    """An explicit flush frees idle slabs and keeps live ones."""
+    kept = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    idle = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    reserved = mgr.pinned_reserved_bytes
+    del idle
+    gc.collect()
+    released = mgr.flush_pinned_pool()
+    assert released > 0
+    assert mgr.pinned_reserved_bytes == reserved - released
+    kept[:] = 1
+    assert (kept == 1).all()
+
+
+def test_concurrent_pinned_allocations_are_disjoint(mgr):
+    """Racing allocations each get their own extent."""
     from threading import Barrier, Thread
 
-    mgr.pinned_max_bytes = 8 * 64
     granted = []
     barrier = Barrier(16)
 
     def worker():
         barrier.wait()
-        array = mgr.allocate_pinned_array((8,), np.float64)
-        if array is not None:
-            granted.append(array)
+        granted.append(mgr.allocate_pinned_array((8,), np.float64))
 
     threads = [Thread(target=worker) for _ in range(16)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
-    assert len(granted) == 8
-    assert mgr.pinned_live_bytes == 8 * 64
-
-
-def test_forced_pinned_reservation_exceeds_budget(mgr):
-    """A forced reservation records past the budget for pool liveness."""
-    mgr.pinned_max_bytes = 64
-    array = mgr.allocate_pinned_array((96,), np.float64, force=True)
-    assert array is not None
-    assert mgr.pinned_live_bytes == 768
-
-
-def test_flush_pinned_pool_returns_retained_bytes(mgr):
-    """An explicit flush empties the retained ledger."""
-    array = mgr.allocate_pinned_array((96,), np.float64)
-    assert array is not None
-    del array
-    gc.collect()
-    assert mgr.pinned_retained_bytes == 768
-    mgr.flush_pinned_pool()
-    assert mgr.pinned_retained_bytes == 0
-    assert mgr.pinned_live_bytes == 0
+    addresses = {array.ctypes.data for array in granted}
+    assert len(addresses) == 16
+    assert mgr.pinned_live_bytes == 16 * _extent(64)
 
 
 def test_pinned_budget_capped_by_ram_fraction(mgr):

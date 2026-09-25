@@ -440,6 +440,10 @@ class OutputArrays(BaseArrayManager):
                 if backing == "host" and wanted != "pinned":
                     continue
             backing = wanted
+            # The old buffer returns to the pinned arena before its
+            # replacement is carved.
+            manager.release_host_array(slot.array)
+            slot.array = None
             array = None
             if wanted == "pinned":
                 array = manager.allocate_pinned_array(shape, dtype)
@@ -450,7 +454,6 @@ class OutputArrays(BaseArrayManager):
                     array.fill(0)
             if array is None:
                 array = manager.create_host_array(shape, dtype, backing)
-            manager.release_host_array(slot.array)
             slot.array = array
             slot.memory_type = backing
 

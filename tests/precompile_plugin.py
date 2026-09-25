@@ -533,11 +533,14 @@ if POPULATION:
     )
     stream_groups.cuda = SimpleNamespace(stream=lambda: _fake_stream)
     mem_manager._ensure_cuda_context = lambda: None
-    mem_manager.empty_pinned = (
-        lambda shape, dtype: np.zeros(shape, dtype=dtype)
-    )
-    # No CUDA driver here, so the pool flush must not touch cupy.
-    mem_manager.free_all_pinned_blocks = lambda: None
+    # Pinned slabs become plain host buffers without a driver.
+    import cubie.memory.pinned_arena as _pinned_arena  # noqa: E402
+
+    def _population_pinned_slab(nbytes):
+        buffer = np.zeros(nbytes, dtype=np.uint8)
+        return buffer.ctypes.data, buffer
+
+    _pinned_arena.alloc_pinned_slab = _population_pinned_slab
 
     # Compile the launch specialization; stand in for driver queries.
     _backend_utils = importlib.import_module("cubie.backend.utils")
@@ -611,32 +614,20 @@ if POPULATION:
     )
     _array_interpolator.current_cupy_stream = _fake_cupy_stream
 
-    # Input/output chunk staging draws pinned buffers from the
-    # ChunkBufferPool, which allocates through ``cupyx.empty_pinned``;
-    # without a CUDA driver that raises inside every solver run's
-    # fixture setup, so no batch-solver kernel would reach the cache.
-    import cubie.memory.chunk_buffer_pool as _chunk_buffer_pool  # noqa: E402
-
-    _chunk_buffer_pool.cupyx = SimpleNamespace(
-        empty_pinned=lambda shape, dtype=np.float64: np.zeros(
-            shape, dtype=dtype
-        ),
-    )
-
     # The busy-kernel canary fixture (tests.conftest.start_cuda_busy_work)
     # builds its non-blocking stream through ``cupy.cuda.Stream``,
     # imported from cuda_simsafe at fixture call time. Stub the stream
-    # constructor while keeping the real pinned-pointer class so
-    # ``is_pinned_array`` still answers correctly.
+    # constructor; no host memory is page-locked without a driver.
     import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
 
-    _real_pinned_pointer = _cuda_simsafe.cupy.cuda.PinnedMemoryPointer
     # ``asarray`` stands in for the cupy grids tests hand to optimize.
     _cuda_simsafe.cupy = SimpleNamespace(
         asarray=lambda a: _fake_device_array(np.array(a, copy=True)),
         cuda=SimpleNamespace(
             Stream=lambda non_blocking=False: SimpleNamespace(ptr=0),
-            PinnedMemoryPointer=_real_pinned_pointer,
+            pinned_memory=SimpleNamespace(
+                is_memory_pinned=lambda address: False
+            ),
         ),
     )
 

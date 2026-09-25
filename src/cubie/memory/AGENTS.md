@@ -7,21 +7,22 @@ GPU memory management for CuBIE. `MemoryManager` is a proportion-based VRAM allo
 registers caller instances, enforces per-instance memory caps, chunks batches along the run
 axis when they exceed available VRAM, and routes host/device transfers to the right CUDA
 stream. It runs as a process-wide instance (`default_memmgr`, created in `__init__.py` at
-import) — a singleton **by convention**, not enforced via `__new__`. CuPy's async memory pool
-is the single device allocation provider on a real GPU, plugged into Numba as an External
-Memory Manager (`cupy_emm.py`), so `cuda.device_array` returns **native** `DeviceNDArray`
-objects backed by pooled, stream-ordered allocations. Pinned host buffers and the chunk
-staging pool come from CuPy's pinned pool (`cupyx.empty_pinned`), so releasing one returns
-it to the pool instead of a device-synchronizing `cuMemFreeHost`. The CUDA
-simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting pieces:
-`StreamGroups` (CUDA stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata),
-`ChunkBufferPool` (reusable pinned staging buffers).
+import) — a singleton **by convention**, not enforced via `__new__`. The device's
+stream-ordered memory pool (`cudaMallocAsync`, through CuPy's `malloc_async`) is the single
+device allocation provider on a real GPU, plugged into Numba as an External Memory Manager
+(`cupy_emm.py`), so `cuda.device_array` returns **native** `DeviceNDArray` objects backed by
+stream-ordered allocations. Every pinned host array, chunk staging buffers included, is
+carved from the manager's `PinnedArena` (`pinned_arena.py`). The CUDA simulator never
+touches CuPy — it keeps its own numpy-backed fakes. Supporting pieces: `StreamGroups` (CUDA
+stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBufferPool`
+(reusable pinned staging buffers).
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `__init__.py` | Installs the CuPy async EMM (`install_async_emm()`, before any CUDA context exists), instantiates `default_memmgr = MemoryManager()`; re-exports `MemoryManager`, `NoCudaDeviceError`, `current_cupy_stream`, `CuPyAsyncNumbaManager`. |
-| `cupy_emm.py` | `CuPyAsyncNumbaManager` — Numba EMM plugin drawing device memory from `cupy.cuda.MemoryAsyncPool`; `install_async_emm()`. |
+| `__init__.py` | Installs the device-pool EMM (`install_async_emm()`, before any CUDA context exists), instantiates `default_memmgr = MemoryManager()`; re-exports `MemoryManager`, `NoCudaDeviceError`, `current_cupy_stream`, `CuPyAsyncNumbaManager`. |
+| `cupy_emm.py` | `CuPyAsyncNumbaManager` — Numba EMM plugin drawing device memory from the device's stream-ordered pool with a release threshold of zero; `install_async_emm()`. |
+| `pinned_arena.py` | `PinnedArena` — page-locked slabs sub-allocated into host arrays of any shape; `PINNED_ALIGNMENT_BYTES`, `SLAB_GRANULE_BYTES`, `MIN_SLAB_BYTES`. |
 | `mem_manager.py` | `MemoryManager` (central allocator); `NoCudaDeviceError`; `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `current_cupy_stream` (Numba→CuPy stream forwarding). |
 | `array_requests.py` | `ArrayRequest` (shape/dtype/placement spec) and `ArrayResponse` (allocated arrays + chunk metadata). |
 | `stream_groups.py` | `StreamGroups` — maps instance ids to named groups, each backed by a CUDA stream. |
@@ -56,8 +57,9 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 ## Deregistration and eviction
 - Registry allocations keep device arrays alive until deregistration.
   `release_instance` removes one exact registry entry (an identity check guards against
-  reused ids). Close never flushes the pinned pool, since freeing page-locked memory
-  synchronizes the device.
+  reused ids). Freed device blocks leave the pool at the next synchronization of their
+  stream; `BatchSolverKernel.close` syncs its own stream after releasing its arrays.
+  Pinned slabs stay in the arena for the next array.
 - Explicit close reports cleanup failures and can be retried; finalizers are best
   effort and silent at interpreter shutdown.
 - Allocation, copies, launch and release use the run's stream; memory caps chunk the
@@ -70,16 +72,18 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 ## Host backing
 - `choose_host_memory_type(nbytes, allow_pinned)`: memmap above `HOST_SPILL_FRACTION` of
   RAM, pinned up to `pinned_max_bytes` (default: total VRAM), else pageable.
-- The pinned ceiling is cumulative: `allocate_pinned_array` reserves against
-  `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in an atomic ledger of live
-  plus pool-retained bytes, never consulting other processes' RAM use. Release is
-  finalizer-driven; `flush_pinned_pool` reclaims retained bytes under pressure (a
-  device-wide synchronization) or on request.
-- `create_host_array` allocates the requested type; a `"pinned"` request whose
-  reservation or `cudaHostAlloc` fails lands pageable; `"memmap"` arrays land in the
-  cache root. Pageable and memmap transfers stage through the pinned pool, charged to
-  the same budget (the first buffer per label may exceed it). Spill settings live on the
-  solver kernel.
+- `allocate_pinned_array` carves the array from the best-fitting free extent of any
+  arena slab, whatever its shape; a collected array (and every view of it) returns its
+  extent, coalesced with its neighbours. Only when no extent fits is a new slab
+  page-locked, and never past `pinned_budget_bytes` = `min(pinned_max_bytes,
+  HOST_SPILL_FRACTION × total RAM)` of slab bytes (`force` grows past it). The arena
+  never frees a slab on its own: freeing page-locked memory synchronizes the device and
+  blocks kernel launches from every thread. `flush_pinned_pool` frees the idle slabs on
+  request. `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
+- `create_host_array` allocates the requested type; a `"pinned"` request the budget or
+  the driver refuses lands pageable; `"memmap"` arrays land in the cache root. Pageable
+  and memmap transfers stage through the pinned staging pool, charged to the same budget
+  (the first buffer per label may exceed it). Spill settings live on the solver kernel.
 - Chunk parameters are cached per `(stream group, owner)`. Partial reallocations reuse
   the cached partition; a full reallocation of the owner's registrations picks a new
   one. A cached partition is reused only when it covers the batch exactly
@@ -88,11 +92,14 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
   owner, their queued requests and the cached partition.
 
 ## Allocation provider
-CuPy's async pool is the only device allocator, reached through the EMM plugin; take
-`cupy`/`cupyx` from `cubie.cuda_simsafe`. The plugin's `get_memory_info` reports device
-free memory plus the pool's cached free bytes. `allocate()` routes `"device"` requests
-through `cuda.device_array` inside `current_cupy_stream` and `"pinned"` requests through
-`allocate_pinned_array`; any other placement raises `ValueError`. `to_device`/
+The device's stream-ordered pool is the only device allocator, reached through the EMM
+plugin; take `cupy`/`cupyx` from `cubie.cuda_simsafe`. The plugin sets the pool's release
+threshold to zero, so it holds only live allocations between synchronizations; an
+out-of-memory allocation syncs the current stream once and retries. Its
+`get_memory_info` reports device free memory plus the pool's reserved but unused bytes.
+`allocate()` routes `"device"` requests through `cuda.device_array` inside
+`current_cupy_stream` and `"pinned"` requests through `allocate_pinned_array`; any other
+placement raises `ValueError`. `to_device`/
 `from_device` issue streamed copies between pinned host buffers and native device
 arrays; device arrays must be allocated through `allocate_queue` first.
 
@@ -126,11 +133,12 @@ arrays; device arrays must be allocated through `allocate_queue` first.
   current stream. Allocation and release enter it; transfers use the Numba stream.
 
 ## ChunkBufferPool
-Pinned staging buffers keyed by `(array_name, shape, dtype)`. `acquire` reuses a free
-match, grows while fewer than `STAGING_POOL_DEPTH` matches are in flight and RAM headroom
-and the pinned budget allow (a label with nothing in flight always gets one), and
-otherwise blocks until the transfer watcher releases a buffer; this bound paces the
-pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use on error
+Pinned staging buffers keyed by `array_name`. `acquire` hands out the smallest idle buffer
+whose capacity fits, its `array` viewed in the requested shape and dtype, and replaces an
+idle buffer too small for the request; it grows while fewer than `STAGING_POOL_DEPTH`
+buffers of the label are in flight and RAM headroom and the pinned budget allow (a label
+with nothing in flight always gets one), and otherwise blocks until the transfer watcher
+releases a buffer; this bound paces the pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use on error
 paths). Buffers are charged to the pinned ledger.
 
 ## Dependencies

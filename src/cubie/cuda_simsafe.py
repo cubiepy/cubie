@@ -88,6 +88,7 @@ from numpy import (
     fmax as np_fmax,
     fmin as np_fmin,
     ndarray as np_ndarray,
+    uint8 as np_uint8,
 )
 
 from cubie.cuda_backend import IS_MLIR
@@ -258,12 +259,10 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         fakemem = FakeMemoryInfo()
         return fakemem.free, fakemem.total
 
-    def empty_pinned(shape, dtype) -> np_ndarray:
-        """Return a plain host array; the simulator has no pinning."""
-        return np_empty(shape, dtype=dtype)
-
-    def free_all_pinned_blocks() -> None:
-        """Do nothing; the simulator has no pinned-memory pool."""
+    def alloc_pinned_slab(nbytes: int) -> Tuple[int, Any]:
+        """Return a plain host buffer; the simulator has no pinning."""
+        buffer = np_empty(nbytes, dtype=np_uint8)
+        return buffer.ctypes.data, buffer
 
 else:  # pragma: no cover - exercised in GPU environments
     try:
@@ -309,13 +308,16 @@ else:  # pragma: no cover - exercised in GPU environments
 
         return cuda.current_context().get_memory_info()
 
-    def empty_pinned(shape, dtype) -> np_ndarray:
-        """Return a page-locked host array from CuPy's pinned pool."""
-        return cupyx.empty_pinned(shape, dtype=dtype)
+    def alloc_pinned_slab(nbytes: int) -> Tuple[int, Any]:
+        """Page-lock ``nbytes`` of host memory.
 
-    def free_all_pinned_blocks() -> None:
-        """Release the page-locked blocks CuPy's pinned pool holds."""
-        cupy.get_default_pinned_memory_pool().free_all_blocks()
+        Returns the address and its owner; dropping the owner frees
+        the memory, which synchronizes the device.
+        """
+        memory = cupy.cuda.pinned_memory.PinnedMemory(
+            nbytes, cupy.cuda.runtime.hostAllocPortable
+        )
+        return int(memory.ptr), memory
 
 
 def is_cuda_array(value: Any) -> bool:
@@ -358,17 +360,17 @@ def is_device_array(value: Any) -> bool:
 def is_pinned_array(array: Any) -> bool:
     """Return whether a host array is backed by page-locked memory.
 
-    Walks the view chain to the owning object and checks for the
-    CuPy pinned-pool pointer, which backs every pinned allocation
-    CuBIE makes. Always ``False`` under the CUDA simulator, which
-    has no page-locked memory.
+    Asks the driver about the array's first byte, so any page-locked
+    allocation answers, whoever made it. Always ``False`` under the
+    CUDA simulator, which has no page-locked memory.
     """
     if CUDA_SIMULATION:  # pragma: no cover - simulated
         return False
-    base = array
-    while isinstance(base, np_ndarray):
-        base = base.base
-    return isinstance(base, cupy.cuda.PinnedMemoryPointer)
+    if not isinstance(array, np_ndarray) or array.size == 0:
+        return False
+    return bool(
+        cupy.cuda.pinned_memory.is_memory_pinned(array.ctypes.data)
+    )
 
 
 def from_dtype(dt: dtype):
@@ -710,10 +712,9 @@ __all__ = [
     "current_mem_info",
     "DeviceNDArray",
     "DeviceNDArrayBase",
-    "empty_pinned",
+    "alloc_pinned_slab",
     "FakeMemoryInfo",
     "FakeStream",
-    "free_all_pinned_blocks",
     "float32",
     "float64",
     "from_dtype",
