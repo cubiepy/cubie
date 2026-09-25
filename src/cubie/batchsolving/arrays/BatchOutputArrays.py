@@ -453,6 +453,8 @@ class OutputArrays(BaseArrayManager):
                     array.fill(0)
             if array is None:
                 array = manager.create_host_array(shape, dtype, backing)
+                # A pageable request the OS refuses lands memmap.
+                backing = self._host_memory_type(array)
             slot.array = array
             slot.memory_type = backing
 

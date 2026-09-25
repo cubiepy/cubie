@@ -1571,7 +1571,8 @@ class MemoryManager:
         numpy.ndarray
             C-contiguous host array; a :class:`numpy.memmap` in the
             cache root when spilled. A ``"pinned"`` request whose
-            reservation or driver allocation fails lands pageable.
+            reservation or driver allocation fails lands pageable,
+            and a pageable allocation the OS refuses lands memmap.
 
         Raises
         ------
@@ -1590,13 +1591,11 @@ class MemoryManager:
         elif memory_type == "pinned":
             arr = self.allocate_pinned_array(shape, dtype)
             if arr is None:
-                arr = np_zeros(shape, dtype=dtype)
+                arr = self._pageable_or_spill_array(shape, dtype)
             elif like is None:
                 arr.fill(0.0)
         else:
-            # zeros() maps untouched pages lazily, so a large pageable
-            # array costs nothing until the transfer writes it.
-            arr = np_zeros(shape, dtype=dtype)
+            arr = self._pageable_or_spill_array(shape, dtype)
         if like is not None:
             arr[:] = like
         return arr
@@ -1637,6 +1636,15 @@ class MemoryManager:
         if nbytes <= self.pinned_max_bytes:
             return "pinned"
         return "host"
+
+    def _pageable_or_spill_array(
+        self, shape: tuple[int, ...], dtype: DTypeLike
+    ) -> ndarray:
+        """Pageable zeros; a refused commit charge spills to disk."""
+        try:
+            return np_zeros(shape, dtype=dtype)
+        except MemoryError:
+            return self._create_spill_array(shape, dtype)
 
     def _create_spill_array(
         self, shape: tuple[int, ...], dtype: DTypeLike

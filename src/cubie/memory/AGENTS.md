@@ -80,11 +80,10 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
   and by `retire_idle_pinned` (after each host-result solve's sync) once idle at two
   calls running, only while every group stream is idle; `flush_pinned_pool` frees them
   unconditionally. Freeing a slab waits for the whole device and stalls launches on
-  every thread. A failed `cudaHostAlloc` can keep its commit and make later pinned
-  allocations fail with `cudaErrorAlreadyMapped`.
-  `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
+  every thread. `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
 - `create_host_array` allocates the requested type; a `"pinned"` request the budget or
-  the driver refuses lands pageable; `"memmap"` arrays land in the cache root. Pageable
+  the driver refuses lands pageable, and a pageable allocation the OS refuses lands
+  memmap; `"memmap"` arrays land in the cache root. Pageable
   and memmap transfers stage through the pinned staging pool, charged to the same budget
   (the first buffer per label may exceed it). Spill settings live on the solver kernel.
 - Chunk parameters are cached per `(stream group, owner)`. Partial reallocations reuse
