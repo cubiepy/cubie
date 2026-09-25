@@ -1359,6 +1359,7 @@ class BatchSolverKernel(CUDAFactory):
         settings = self.memory_manager.registry.get(id(self))
         if settings is not None:
             self.memory_manager.release_instance(id(self), settings)
+        self.memory_manager.trim_pinned_pool()
         if finalizer is not None:
             finalizer.detach()
         self._closed = True

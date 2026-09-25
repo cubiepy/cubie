@@ -58,8 +58,8 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
 - Registry allocations keep device arrays alive until deregistration.
   `release_instance` removes one exact registry entry (an identity check guards against
   reused ids). Freed device blocks leave the pool at the next sync of their stream;
-  `BatchSolverKernel.close` syncs its stream after releasing its arrays. Pinned slabs
-  stay in the arena.
+  `BatchSolverKernel.close` syncs its stream after releasing its arrays, then calls
+  `trim_pinned_pool`.
 - Explicit close reports cleanup failures and can be retried; finalizers are best
   effort and silent at interpreter shutdown.
 - Allocation, copies, launch and release use the run's stream; memory caps chunk the
@@ -75,9 +75,11 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
 - `allocate_pinned_array` takes the best-fitting free extent of any arena slab; a
   collected array and its views return the extent. A new slab is page-locked only when
   nothing fits, within `pinned_budget_bytes` = `min(pinned_max_bytes,
-  HOST_SPILL_FRACTION × total RAM)` of slab bytes (`force` ignores it). Slabs are freed
-  only by `flush_pinned_pool`, which syncs the device and stalls launches on every
-  thread. `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
+  HOST_SPILL_FRACTION × total RAM)` of slab bytes (`force` ignores it). Idle slabs are
+  freed before a new slab and by `trim_pinned_pool`, only while every group stream is
+  idle; `flush_pinned_pool` frees them unconditionally. Freeing a slab waits for the
+  whole device and stalls launches on every thread.
+  `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
 - `create_host_array` allocates the requested type; a `"pinned"` request the budget or
   the driver refuses lands pageable; `"memmap"` arrays land in the cache root. Pageable
   and memmap transfers stage through the pinned staging pool, charged to the same budget

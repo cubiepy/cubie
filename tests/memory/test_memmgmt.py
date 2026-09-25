@@ -2555,6 +2555,43 @@ def test_flush_pinned_pool_frees_idle_slabs_only(mgr):
     assert (kept == 1).all()
 
 
+def test_new_slab_frees_idle_slabs_first(mgr):
+    """A request needing a new slab frees idle slabs before it grows."""
+    small = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    del small
+    gc.collect()
+    large = mgr.allocate_pinned_array((2 * MIN_SLAB_BYTES,), np.uint8)
+    assert mgr.pinned_reserved_bytes == _extent(large.nbytes)
+
+
+def test_trim_pinned_pool_frees_idle_slabs(mgr):
+    """Trimming with idle streams frees slabs with no live array."""
+    array = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    del array
+    gc.collect()
+    assert mgr.trim_pinned_pool() > 0
+    assert mgr.pinned_reserved_bytes == 0
+
+
+@pytest.mark.nocudasim
+def test_busy_group_stream_keeps_idle_slabs(mgr, start_cuda_busy_work):
+    """Work on a group stream defers trimming, so nothing waits on it."""
+    array = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    del array
+    gc.collect()
+    reserved = mgr.pinned_reserved_bytes
+    _, busy_stream, done, release = start_cuda_busy_work()
+    mgr.stream_groups.streams["busy"] = busy_stream
+    try:
+        assert mgr.trim_pinned_pool() == 0
+        mgr.allocate_pinned_array((2 * MIN_SLAB_BYTES,), np.uint8)
+        assert mgr.pinned_reserved_bytes > reserved
+        assert not done.query()
+    finally:
+        release()
+        busy_stream.synchronize()
+
+
 def test_concurrent_pinned_allocations_are_disjoint(mgr):
     """Racing allocations each get their own extent."""
     from threading import Barrier, Thread

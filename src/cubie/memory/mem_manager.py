@@ -1465,6 +1465,27 @@ class MemoryManager:
         """
         return self._pinned_arena.release_free_slabs()
 
+    def trim_pinned_pool(self) -> int:
+        """Free idle pinned slabs while every group stream is idle.
+
+        Returns
+        -------
+        int
+            Bytes released.
+        """
+        if not self._streams_idle():
+            return 0
+        return self._pinned_arena.release_free_slabs()
+
+    def _streams_idle(self) -> bool:
+        """Return whether every group stream has finished its work."""
+        if CUDA_SIMULATION:
+            return True
+        return all(
+            cupy.cuda.Stream.from_external(stream).done
+            for stream in self.stream_groups.streams.values()
+        )
+
     def allocate_pinned_array(
         self,
         shape: Tuple[int, ...],
@@ -1473,7 +1494,8 @@ class MemoryManager:
     ) -> Optional[ndarray]:
         """Return an uninitialised pinned array from the arena.
 
-        A new slab is page-locked only when no free extent fits.
+        A new slab is page-locked only when no free extent fits; idle
+        slabs are freed first while every group stream is idle.
 
         Parameters
         ----------
@@ -1499,7 +1521,10 @@ class MemoryManager:
         cap = self.pinned_budget_bytes
         try:
             return self._pinned_arena.allocate(
-                shape, dtype, cap=None if force else cap
+                shape,
+                dtype,
+                cap=None if force else cap,
+                may_trim=self._streams_idle,
             )
         except Exception:
             if force:

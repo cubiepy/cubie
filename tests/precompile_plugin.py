@@ -590,6 +590,7 @@ if POPULATION:
     _MemoryManager.from_device = _host_copy
     _MemoryManager.get_available_memory = lambda self, group: 8 << 30
     _MemoryManager.get_memory_info = lambda self: (8 << 30, 24 << 30)
+    _MemoryManager._streams_idle = lambda self: True
 
     # Read the patched figures into the already-built shared manager.
     from cubie.memory import default_memmgr as _default_memmgr  # noqa: E402

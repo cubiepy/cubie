@@ -1,8 +1,9 @@
 """Page-locked slabs sub-allocated into host arrays of any shape.
 
 Arrays take the best-fitting free extent of any slab; a collected
-array returns its extent for the next request of any size. Slabs are
-freed only by :meth:`PinnedArena.release_free_slabs`.
+array returns its extent for the next request of any size. Idle slabs
+are freed by :meth:`PinnedArena.release_free_slabs`, and before a new
+slab when the caller's ``may_trim`` allows it.
 
 Published Classes
 -----------------
@@ -18,7 +19,7 @@ from bisect import insort
 from collections import deque
 from math import prod
 from threading import Lock
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 from weakref import finalize
 
 from attrs import define, field
@@ -124,6 +125,7 @@ class PinnedArena:
         shape: Tuple[int, ...],
         dtype: DTypeLike,
         cap: Optional[int],
+        may_trim: Callable[[], bool] = lambda: False,
     ) -> Optional[ndarray]:
         """Return an uninitialised page-locked array.
 
@@ -136,6 +138,9 @@ class PinnedArena:
         cap
             Reserved bytes a new slab may not exceed; ``None`` for
             no limit.
+        may_trim
+            Called before a new slab is needed; ``True`` frees the
+            idle slabs first.
 
         Returns
         -------
@@ -155,6 +160,8 @@ class PinnedArena:
             self._apply_releases()
             slab, offset = self._take(extent)
             if slab is None:
+                if may_trim():
+                    self._drop_idle_slabs()
                 slab = self._grow(extent, cap)
                 if slab is None:
                     return None
@@ -180,8 +187,12 @@ class PinnedArena:
         """
         with self._lock:
             self._apply_releases()
-            idle = [slab for slab in self._slabs if slab.live == 0]
-            self._slabs = [slab for slab in self._slabs if slab.live]
+            return self._drop_idle_slabs()
+
+    def _drop_idle_slabs(self) -> int:
+        """Free slabs with no live array; lock held."""
+        idle = [slab for slab in self._slabs if slab.live == 0]
+        self._slabs = [slab for slab in self._slabs if slab.live]
         # Dropping the owner frees the page-locked memory.
         return sum(slab.size for slab in idle)
 
