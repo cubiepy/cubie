@@ -22,65 +22,47 @@ Nodes pickle through their constructor functions, so unpickled expressions re-in
 | `assignments.py` | Assignment-list transforms: `topological_sort` (policy-driven ordering — `liveness_auto` default, `kahn`, `greedy`, `dfs` — deterministic tie-breaks), `prune_unused` (drop assignments not feeding outputs), `cse_and_stack` (reference-counting CSE over the DAG plus partial Add/Mul subset matching, atomic-assignment inlining before and after extraction, and pow-family strength reduction). |
 | `printer.py` | `IRPrinter` and `print_cuda`/`print_cuda_multiple`: renders IR as Numba-CUDA source — `precision(...)` literal wrapping, integer and integral-float powers up to `_POW_CHAIN_LIMIT` as multiplication chains (structural Pow rules), half powers to `math.sqrt`, guarded reciprocals, Piecewise as branchless `selp` selections (bitwise `&`/`|` predicates), `CUDA_FUNCTIONS` mapping, scalar→array symbol remapping. Constants never reach the printer as symbols — their values fold in as `Num` literals before generation. Accepts SymPy input at the boundary (auto-converts). |
 
-## For AI Agents
+## Interning
+Structurally identical live expressions are one Python object: equality is `is`, hashing
+is `id`, and a weak pool releases unused graphs. Constructors fold algebra on the way in:
+flattening, like-term and power collection, numeric folding, zero/one identities; `call`
+folds known math functions of numeric literals when the result is finite; `rel` folds
+numeric operands to `TRUE`/`FALSE`; `bool_op` folds boolean literals; `piecewise` drops
+false branches, truncates at the first true one and merges default-valued branches into
+the default. Build nodes only through the constructor functions; instantiating a node
+class directly breaks interning, and `xreplace`/CSE stop matching.
 
-### Interning is the invariant everything relies on
-Live structurally identical expressions are the same Python object: equality is `is`,
-hashing is `id`. The weak intern pool releases unused graphs. Constructors fold algebra on the way in (flattening, like-term and
-power collection, numeric folding, zero/one identities; `call` folds
-known math functions of numeric literals when the result is finite;
-`rel` folds numeric
-operands to `TRUE`/`FALSE`, `bool_op` folds boolean literals, `piecewise`
-drops false branches, truncates at the first true one, and merges
-default-valued branches into the default). **Never
-instantiate node classes directly** — always build through the constructor
-functions, or interning breaks and `xreplace`/CSE silently stop matching.
+## Determinism
+Commutative arguments order by the structural `sort_key` computed at construction, never
+by hash or intern order, so generated source is byte-identical across processes. No set
+iteration may influence emitted structure.
 
-### Determinism
-Commutative arguments are ordered by the structural `sort_key` computed at
-construction — never by hash or intern order — so generated source is byte-identical
-across processes regardless of `PYTHONHASHSEED` or session history. Keep it that way:
-no set iteration may influence emitted structure.
+## Array references
+`Arr(name, index)` with a fixed int index is the engine's `IndexedBase`. Bracket-named
+SymPy symbols (`sp.Symbol("jvp[0]")`) and 1-D `sp.Indexed` leaves convert to `Arr`. JVP
+outputs are `Arr("jvp", i)`.
 
-### Array references
-`Arr(name, index)` with a fixed Python int index is the engine's entire "IndexedBase".
-Bracket-named SymPy symbols (`sp.Symbol("jvp[0]")`) and 1-D `sp.Indexed` leaves both
-convert to `Arr`. JVP outputs are detected as `Arr("jvp", i)` — not by string prefix.
+## Differentiation
+`diff` uses the rule table `_DERIVATIVES`: `Min`/`Max` → Piecewise selections, `Abs` →
+`sign`, `sign`/`floor`/`ceiling` → zero. Unknown functions differentiate to
+`d_<name>` placeholders (argument index appended) unless `derivative_names` overrides
+them; the adapter recovers those names from the parser's `fdiff` classes via
+`derivative_name_map`. `gamma`/`loggamma` raise `DifferentiationError`.
 
-### Differentiation
-`diff` uses an analytic rule table (`_DERIVATIVES`); `Min`/`Max` differentiate to
-Piecewise selections, `Abs` to `sign`, `sign`/`floor`/`ceiling` to zero. Unknown
-applied functions differentiate to `d_<name>` placeholders (chain rule appended as a
-trailing integer arg index) unless `derivative_names` overrides the target — the
-adapter recovers those names from the parser's `fdiff` classes via
-`derivative_name_map`. `gamma`/`loggamma` raise `DifferentiationError` (no CUDA-side
-polygamma exists).
+## Substitution
+`xreplace` applies one node-for-node map in a single memoised pass and does not revisit
+replacement images. Build one combined map per stage; compose maps when sequential
+semantics are needed rather than re-walking the tree.
 
-### Substitution maps compose, passes don't repeat
-`xreplace` applies one node-for-node map in a single memoised pass and does not
-revisit replacement images. Generators build one combined map per stage instead of
-chaining `.subs` calls; when sequential semantics are genuinely needed, compose the
-maps, don't re-walk the tree.
-
-### CSE
-`cse_and_stack` extracts every multiply-referenced composite node, then a partial
-subset pass recovers sharing that n-ary flattening hides (`2*e*a` vs `e*a` — see
-`_find_partial_subsets`). `_cse<N>` numbering continues after existing locals.
-Extraction produces the assignments; `topological_sort` orders them.
-Around extraction, `_inline_atomic_assignments` substitutes literal-, symbol-,
-and local-valued targets into later right-hand sides, and
-`_reduce_pow_families` names one primal per non-integer power family
-(`x**p` alongside `x**(p±1)`, `x**(2p)`, `x**(2p±1)`), deriving the rest by
-multiply/divide of the primal local. Both passes only rewrite — the callers'
-`prune_unused` drops assignments they leave unreferenced.
-
-### Testing
-`tests/odesystems/symbolic/engine/test_engine.py` (unit: folding, diff vs SymPy
-ground truth via `to_sympy` + numeric spot checks, subs, CSE numeric equivalence,
-ordering, pruning); `tests/odesystems/symbolic/test_cuda_printer.py` (printer
-emission rules, including the subtracted-sum parenthesisation and division
-regression guards). The generator/solver test suites exercise the engine end to end
-against finite-difference references.
+## CSE
+`cse_and_stack` extracts every multiply-referenced composite, then a partial-subset pass
+recovers sharing that n-ary flattening hides (`2*e*a` vs `e*a`, `_find_partial_subsets`).
+`_cse<N>` numbering continues after existing locals; `topological_sort` orders the
+result. Around extraction, `_inline_atomic_assignments` substitutes literal-, symbol- and
+local-valued targets into later right-hand sides, and `_reduce_pow_families` names one
+primal per non-integer power family (`x**p` with `x**(p±1)`, `x**(2p)`, `x**(2p±1)`),
+deriving the rest from it. Both only rewrite; callers' `prune_unused` drops what they
+leave unreferenced.
 
 ## Dependencies
 ### Internal

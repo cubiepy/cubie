@@ -28,97 +28,80 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 | `function_inspector.py` | AST analysis of a callable ODE. `inspect_ode_function` → `FunctionInspection`; `_OdeAstVisitor` collects state/constant accesses, assignments (incl. annotated), calls, unrolls `for` (also inside if-branches), synthesises `IfExp` from if/elif/else, rejects unsupported constructs (`while`/`with`/`try`/`match`/nested `def`/comprehensions; branch bodies raise on statements other than assignments and nested `if`/`for`); `AstToSympyConverter` maps AST nodes to SymPy — resolves user-function calls before `KNOWN_FUNCTIONS` (inlining non-device callables), inlines dxdt-named locals, and (in `strict_names` mode) raises on unknown bare names, suggesting the container access when the name is declared. Extra args used only by bare name are `scalar_params` (SciPy `args=` convention), bound to the like-named declared symbol. |
 | `function_parser.py` | `parse_function_input` — bridges `FunctionInspection` to the parser's `(equation_map, funcs, new_params)` triple: builds the symbol map (container accesses search parameters → constants → drivers; undeclared attribute/string accesses infer parameters in non-strict mode with `EquationWarning`), emits auxiliary/observable/dxdt equations, inlines `dx = expr; return [dx]` aliases. `infer_function_states` derives state names from dict-return keys or synthesises them for pure positional access when `states` is omitted. |
 
-## For AI Agents
+## parse_input
+Returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash, parsed_system)`,
+consumed by `SymbolicODE.create` and `cellml.load_cellml_model`. The derived mass matrix
+is `parsed_equations.mass_matrix` (`None` for solved systems). `parsed_system` is the
+constants-symbolic checkpoint (`parsed_system.py`); assembly runs inside its `specialise`
+on the constant-folded equations, so structure can change with constant values.
+`_detect_input_type` dispatches to `"string"`, `"sympy"` or `"function"`, and every
+pathway goes through `normalise_input`. `strict=False` (default) infers undeclared RHS
+symbols as parameters; `strict=True` requires every RHS symbol declared and refuses a
+stateless system. An LHS assignment defines its symbol in both modes.
 
-### parse_input — the entry point
-Returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash,
-parsed_system)` — a 6-tuple consumed directly by `SymbolicODE.create` and
-`cellml.load_cellml_model`. The derived mass matrix rides on
-`parsed_equations.mass_matrix` (`None` for solved systems). `parsed_system` is the
-constants-symbolic checkpoint (`parsed_system.py`); assembly runs *inside* its
-`specialise`, on the constant-folded equations, so structure can change with
-constant values. `_detect_input_type` dispatches to `"string"`, `"sympy"`, or
-`"function"`, routing the resulting IR pairs through `normalise_input` on every
-pathway. `strict=False` is the default: undeclared RHS symbols are inferred as
-parameters; `strict=True` requires every RHS symbol declared and refuses a
-stateless system. An LHS assignment defines its symbol, so anonymous auxiliaries
-are admitted in both modes.
+## Normalisation and assembly
+`normalise_input` applies one set of state-aware rules:
+- `dX` on the LHS is a derivative only if `X` is a declared unknown (with no declared
+  states, non-strict `dX` assignments infer state `X`).
+- `d(x, t)` and `sympy.Derivative` (any order, nested) are explicit derivatives and may
+  appear inside expressions; any other unassigned `dX` token binds to the derivative of
+  unknown `X`.
+- A numeric or expression LHS marks an implicit equation.
+- Assembly runs structural simplification on the constant-folded equations, so
+  `Cs*dU = g(...)` is algebraic when `Cs` is zero and differential otherwise.
+- A declared state assigned algebraically is eliminated with a warning.
+- Observable definitions the dynamics use are inlined, so dxdt never reads the
+  observables buffer.
+- Symbols are `real=True` (`TIME_SYMBOL = sp.Symbol("t", real=True)`).
 
-### One normalisation layer, one assembler
-`normalise_input` handles every input with the same state-aware rules: `dX` on the
-LHS is a derivative only if `X` is a declared unknown (with no declared states, non-strict `dX`
-assignments infer state `X`); `d(x, t)` calls and `sympy.Derivative` (any order, nested) are the
-explicit derivative notations and may appear inside expressions; any other bare, unassigned
-`dX` token — inside an expression LHS (`c*dx = f(...)`, an implicit equation) or on an RHS —
-binds to the derivative of unknown `X`. A numeric or expression LHS marks an implicit
-equation. Every system assembles through structural simplification on its constant-folded
-equations, so a scaled-derivative row like `Cs*dU = g(...)` is algebraic when `Cs` is zero
-and differential otherwise. States are unknowns everywhere: a declared state assigned
-algebraically is *reduced* (eliminated with a warning), not an error, and there is no
-underived-state→observable conversion. Observable definitions consumed by the dynamics are
-inlined so the generated dxdt never reads the stale observables buffer. Symbols are created
-`real=True` throughout (`TIME_SYMBOL = sp.Symbol("t", real=True)`).
+## Hash stability
+`fn_hash` is computed over the IR pairs' reprs after constants fold in: identical systems
+with identical constant values hash identically on every input pathway, and different
+constant values hash differently. Keep that equality when changing the normaliser,
+assemblers or specialisation.
 
-### Hash stability contract
-`fn_hash` is computed over the IR pairs' reprs after constant values fold in, so
-identical systems with identical constant values hash identically regardless of input
-pathway (string vs SymPy vs IR), and different constant values hash differently —
-codegen caches key on the hash. Guard this cross-pathway equality when touching the
-normaliser, the assemblers, or the specialisation pass; the IR's deterministic folding
-is what makes it hold.
+## ParsedEquations and JVPEquations
+`ParsedEquations` is frozen; build a new one with `from_equations`. `JVPEquations` is
+produced by `codegen.jacobian.generate_analytical_jvp`; its `_*` fields are set in
+`__attrs_post_init__`.
 
-### ParsedEquations & JVPEquations
-`ParsedEquations` is frozen — build a new one via `from_equations`, don't mutate; its
-`_state/_observable/_auxiliary_symbols` fields are exposed through same-named properties.
-`JVPEquations` is produced by `codegen.jacobian.generate_analytical_jvp`, not here — this module
-only defines the container and its derived metadata; treat its `_*` fields as `init=False` computed
-state set in `__attrs_post_init__` (never set them directly).
-
-### Driver declarations
-A driver dict maps driver symbols to default values, attached via
+## Drivers
+A driver dict maps driver symbols to defaults, attached via
 `drivers.set_passthrough_defaults`. Sampled driver data is a Solver setting
-(`DriverSamples`), never part of the system declaration.
+(`DriverSamples`), not part of the system.
 
-### CellML (optional)
-`cellmlmanip` is imported in a `try/except` and may be `None`; `load_cellml_model` raises
-`ImportError` at call time when it's absent (never import it at top level unguarded). Numeric Dummy
-atoms (e.g. `_0.5`) are converted to `sp.Float`/`sp.Integer`; algebraic equations with a numeric
-RHS become constants (or parameters if named), non-numeric ones become observables/auxiliaries.
-`CellMLCache` is a disk LRU (≤5 configs per model) under `<cache root>/<model>/`, keyed by
-file-content SHA-256 + serialised args in `cellml_cache_manifest.json`; the root comes from
-`cubie.cache_root.get_cache_root()` (shared with codegen and kernel caches) and entries
-invalidate on any content change (whitespace included).
+## CellML
+`cellmlmanip` is imported under `try/except` and may be `None`; `load_cellml_model` raises
+`ImportError` at call time without it. Numeric Dummy atoms (`_0.5`) become
+`sp.Float`/`sp.Integer`; algebraic equations with a numeric RHS become constants (or
+parameters if named), others observables or auxiliaries. `CellMLCache` is a disk LRU (≤5
+configs per model) under `<cache root>/<model>/`, keyed by file-content SHA-256 plus
+serialised args in `cellml_cache_manifest.json`; any content change (whitespace
+included) invalidates.
 
-### User functions
-Renamed with a trailing underscore during string parsing to dodge SymPy name clashes; device
-functions / functions with derivative helpers are wrapped in dynamic `sp.Function` subclasses whose
-`fdiff` emits derivative placeholders (`d_<name>` or the provided derivative's `__name__`).
-Non-device callables are inlined when they accept SymPy args. `function_parser` intentionally does
-**not** map `dx`/`dv` dxdt symbols into the symbol map, so `dx = expr; return [dx]` inlines `expr`
-instead of creating a circular reference to the output.
+## User functions
+String parsing renames user functions with a trailing underscore to avoid SymPy
+clashes. Device functions and functions with derivative helpers are wrapped in dynamic
+`sp.Function` subclasses whose `fdiff` emits `d_<name>` (or the given derivative's
+`__name__`). Non-device callables are inlined when they accept SymPy arguments.
+`function_parser` leaves dxdt symbols out of the symbol map, so `dx = expr; return [dx]`
+inlines `expr`.
 
-### function_inspector — supported AST subset
-A `for` loop is supported only if it can be **fully unrolled** at parse time: the iterable must be
-a literal `range(...)` (integer-literal args), a literal list, or a literal tuple, and the target a
-simple name. Every other `for` (over a variable, a non-`range` call, non-constant elements, or with
-tuple-unpacking) raises `NotImplementedError`, as do `while`, comprehensions, generators, `with`,
-`del`, `assert`, `raise`, `global`, `nonlocal`.
+## function_inspector
+A `for` loop must unroll fully at parse time: the iterable a literal `range(...)` with
+integer-literal arguments, or a literal list or tuple, and the target a simple name. Any
+other `for`, and `while`, comprehensions, generators, `with`, `del`, `assert`, `raise`,
+`global`, `nonlocal`, raise `NotImplementedError`.
 
-### auxiliary_caching
-`plan_auxiliary_cache` caches any v-independent node — consumers of a cached leaf stay in
-the runtime body and read the value from the `cached_aux` buffer slot, and `_cse` locals are
-first-class candidates. Selection is a min-cut over the whole graph: a removed node earns its
-device-weighted cost (`engine.count_device_ops`), a cached slot charges `read_price` per
-operator call, and a removed node stays uncached only when every consumer is removed.
-Over-cap plans are re-solved at bisected higher prices and trimmed to `cache_slot_limit`;
-`CacheSelection.read_price` records the price used, `duplicate_cost` the work computed in
+## auxiliary_caching
+`plan_auxiliary_cache` caches v-independent nodes: consumers of a cached leaf stay in the
+runtime body and read its `cached_aux` slot, and `_cse` locals are candidates. Selection
+is a min-cut over the whole graph: a removed node earns its device-weighted cost
+(`engine.count_device_ops`), a cached slot costs `read_price` per operator call, and a
+removed node stays uncached only when every consumer is removed. Over-cap plans are
+re-solved at bisected higher prices and trimmed to `cache_slot_limit`;
+`CacheSelection.read_price` records the price used and `duplicate_cost` the work done in
 both the fill and the runtime body.
-
-### Testing
-`tests/odesystems/symbolic/` (`test_parser`, `test_cellml`, `test_cellml_cache`,
-`test_function_inspector`, `test_function_parser`; `JVPEquations` via `test_jacobian`).
-Pure-Python parsing — runs without a GPU; CellML tests need optional `cellmlmanip`. See root for
-CUDASIM/real-CUDA commands.
 
 ## Dependencies
 ### Internal

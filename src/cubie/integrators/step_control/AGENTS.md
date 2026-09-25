@@ -26,58 +26,48 @@ controllers.
 | `adaptive_PID_controller.py` | `AdaptivePIDController` (`PIDStepControlConfig` extends PI with `derivative_gain=0.0`) — uses two previous norms; `derivative_gain` likewise. |
 | `gustafsson_controller.py` | `GustafssonController` (`safety=0.9`, `newton_target_iters=5`) — min of a basic gain and a Newton-iteration-aware predictive gain; stores previous `dt` + norm. |
 
-## For AI Agents
+## Device-function contract (`IVPLoop` must match)
+- Signature, identical for all controllers: `(dt, state, state_prev, error, niters,
+  truncated, accept_out, shared_scratch, persistent_local)`.
+- Writes `accept_out[0] = int32(1)` to accept, `int32(0)` to reject.
+- `truncated` is set by the loop when it clamped the step onto an output boundary. An
+  accepted truncated step leaves `dt` and the history unchanged and returns `SUCCESS`; a
+  rejected one shrinks `dt` normally.
+- Returns `SUCCESS`, or `STEP_TOO_SMALL` when the proposed step falls at or below
+  `dt_min`, which ends the run's adaptive retries.
 
-### Device-function contract (the caller — `IVPLoop` — must match)
-- Signature, identical across all controllers:
-  `(dt, state, state_prev, error, niters, truncated, accept_out, shared_scratch, persistent_local)`.
-- Writes `accept_out[0] = int32(1)` to accept the step, `int32(0)` to reject (a plain
-  accept/reject flag, not a result code).
-- `truncated`: set by the loop when it forced the step length onto an output boundary.
-  On an **accepted** truncated step the adaptive controllers freeze `dt` and their
-  history and return `SUCCESS`; a **rejected** one shrinks `dt` normally.
-- Returns `CUBIE_RESULT_CODES.SUCCESS` normally, or `CUBIE_RESULT_CODES.STEP_TOO_SMALL`
-  when the proposed step would fall at/below `dt_min` (reject-at-minimum-step — the loop
-  uses this to stop adaptive retries). Both are captured as device closure constants from
-  `cubie/result_codes.py`.
+## Error norm
+`nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over
+the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`, called
+as `error_norm(error, state, state_prev)`). A zero norm gives an `inf`/`nan` gain that
+`clamp` (`fmax`/`fmin`, NaN dropped) resolves to `max_gain`; Gustafsson caps a non-finite
+norm at `1e16` because its reject path runs through `clamp`.
 
-### Error norm
-- `nrm2 = mean((|error_i| / (atol_i + rtol_i * max(|state_i|, |state_prev_i|)))**2)` over the rows whose `mass_flags` entry is set (`TwoRefMaskedScaledNorm`, `../norms.py`, called as `error_norm(error, state, state_prev)`). A zero norm gives an `inf`/`nan` gain that `clamp` (`fmax`/`fmin`, NaN dropped) resolves to `max_gain`; Gustafsson alone caps a non-finite norm at `1e16` because its reject path runs through `clamp`.
+## History buffers
+Controllers with history register one `timestep_buffer` of
+`_timestep_buffer_elements` slots: PI 1 (previous norm), PID 2 (two previous norms),
+Gustafsson 2 (previous `dt` and norm); fixed and I register nothing. Query its size with
+`persistent_local_buffer_size`. On the first call, PI/PID fall back to the current norm
+and Gustafsson to `max(..., 1e-16)`; the buffer is not pre-filled.
 
-### History buffers
-- Controllers that keep per-trajectory history register a single `timestep_buffer`:
-  PI stores the previous error norm, PID the previous two norms, and Gustafsson the
-  previous `dt` and norm (I and fixed keep no history). The slot count is the
-  `_timestep_buffer_elements` class attribute (PI 1, PID/Gustafsson 2, fixed/I 0), which
-  the base `register_buffers()` uses to register the buffer — controllers with 0 register
-  nothing. There is **no** `persistent_local_elements` property; query the size the same way
-  as any other buffer-registered factory, via the registry-derived
-  `persistent_local_buffer_size`.
-
-### Controller specifics
-- **Step bounds are plain fields** with `DEFAULT_*` defaults; an unset adaptive `dt`
-  is the bounds' geometric mean; contradictory bounds raise `ValueError`.
-- **Deadband**: `deadband_min == deadband_max == 1.0` elides the branch at compile time; accepted gains inside the band snap to 1.0; rejected steps skip the band and retry on the current-error term alone (Gustafsson: basic gain).
-- **`update` addition**: parameters present in `ALL_STEP_CONTROLLER_PARAMETERS` but not
-  applicable to the current controller emit a `UserWarning` and are dropped (so
-  cross-controller kwarg forwarding is safe); genuinely unknown keys still raise
-  `KeyError` per the base contract.
-- **Gains** come from the Solver: the family defaults for the family's controller, provided gains otherwise; a swapped-in controller is built from the update's keys.
-- **Gain semantics**: `beta1 = kI+kP+kD`, `beta2 = -(kP+2kD)`, `beta3 = kD`, each divided by `order+1` at build; `filter_coefficients` (beta triple or preset name) maps to gains on `i`/`pi`/`pid` and raises when mixed with explicit gains.
-- **Adding a controller**: subclass the config + controller bases, set `_config_class`,
-  implement `build_controller(...) → ControllerCache` (or `compile_controller()`
-  for a non-adaptive one), register the controller's history
-  buffer (if any) in `register_buffers()`, register in `_CONTROLLER_REGISTRY`, and add any
-  new fields to `ALL_STEP_CONTROLLER_PARAMETERS`.
-
-### Gotchas
-- **Uninitialised history**: first-call guards fall back to the current norm (PI/PID)
-  or `max(..., 1e-16)` (Gustafsson) — there is no explicit buffer pre-fill.
-
-### Testing
-Tests under `tests/integrators/step_control/` (`test_controllers.py`,
-`test_adaptive_step_controller.py`, `test_fixed_step_controller.py`); CPU reference in
-`tests/integrators/cpu_reference/step_controllers.py`.
+## Controller specifics
+- Step bounds are plain fields with `DEFAULT_*` defaults; an unset adaptive `dt` is the
+  bounds' geometric mean; contradictory bounds raise `ValueError`.
+- Deadband: `deadband_min == deadband_max == 1.0` compiles the branch out; accepted gains
+  inside the band snap to 1.0; rejected steps skip the band and retry on the
+  current-error term alone (Gustafsson: basic gain).
+- `update` warns about and drops keys in `ALL_STEP_CONTROLLER_PARAMETERS` that the
+  current controller does not use; unknown keys raise `KeyError`.
+- Gains come from the Solver: the family defaults for the family's controller, the given
+  gains otherwise; a swapped-in controller is built from the update's keys.
+- `beta1 = kI+kP+kD`, `beta2 = -(kP+2kD)`, `beta3 = kD`, each divided by `order+1` at
+  build. `filter_coefficients` (a beta triple or preset name) maps to gains on
+  `i`/`pi`/`pid` and raises when mixed with explicit gains.
+- Adding a controller: subclass the config and controller bases, set `_config_class`,
+  implement `build_controller(...) -> ControllerCache` (or `compile_controller()` for a
+  non-adaptive one), register any history buffer in `register_buffers()`, add it to
+  `_CONTROLLER_REGISTRY` and its fields to `ALL_STEP_CONTROLLER_PARAMETERS`.
+- CPU reference: `tests/integrators/cpu_reference/step_controllers.py`.
 
 ## Dependencies
 Internal: `CUDAFactory`; `_utils` (`build_config`, `clamp_factory`, validators,

@@ -27,149 +27,111 @@ simulator never touches CuPy — it keeps its own numpy-backed fakes. Supporting
 | `stream_groups.py` | `StreamGroups` — maps instance ids to named groups, each backed by a CUDA stream. |
 | `chunk_buffer_pool.py` | `PinnedBuffer` + `ChunkBufferPool` — reusable pinned staging buffers. Not exported from `__init__.py`. |
 
-## For AI Agents
+## Registration and pools
+- `register(instance, proportion=None, invalidate_cache_hook=…, allocation_ready_hook=…,
+  stream_group="default")` once per object. `proportion=None` joins the auto pool (an
+  equal share of the remaining VRAM); a float takes a manual pool. `MIN_AUTOPOOL_SIZE`
+  reserves part of VRAM for the auto pool; a manual proportion that would crowd it raises
+  `ValueError` when auto instances exist, else warns. `proportion(instance)` is the
+  fraction the instance may use now; `manual_proportion(instance)` the fraction given at
+  registration (`None` for the auto pool).
+- The registry is keyed by `id(instance)`: keep a live reference to every registered
+  object, or a new object can claim its slot.
+- Limit mode (`set_limit_mode()`): `"passive"` (default) computes caps without enforcing
+  them; `"active"` enforces per-instance caps.
 
-### Registration & pools
-- `register(instance, proportion=None, invalidate_cache_hook=…, allocation_ready_hook=…, stream_group="default")` once per object. `proportion=None` → auto pool (equal share of remaining VRAM); a float → manual pool. `MIN_AUTOPOOL_SIZE = 0.05` reserves 5% for the auto pool; a manual proportion that would crowd it below 5% raises `ValueError` if auto instances exist (else warns). `proportion(instance)` is the fraction of VRAM the instance may use now (auto-pool instances split the remainder equally); `manual_proportion(instance)` is the fraction passed at registration, `None` for auto-pool instances.
-- The registry is keyed by `id(instance)`. Keep a live reference to every registered object — GC frees the id and a new object can silently claim the slot.
-- Two limit modes (`_mode`, default `"passive"`): `"passive"` computes caps but doesn't enforce (returns raw free VRAM); `"active"` enforces per-instance caps. Switch via `set_limit_mode()`.
-
-### No device
-- `totalmem` is read from the device by `probe_device()`; it is **not** a
-  constructor argument. A device-absence failure (`CudaSupportError`, the
-  unpacking `ValueError`) stores its error and leaves `totalmem` and
-  `pinned_max_bytes` `None`; any other probe failure propagates.
+## No device
+- `probe_device()` reads `totalmem`. A device-absence failure (`CudaSupportError`, the
+  unpacking `ValueError`) stores its error and leaves `totalmem` and `pinned_max_bytes`
+  `None`; other failures propagate.
 - Sizing decisions (`pinned_budget_bytes`, `allocate_pinned_array`,
   `get_available_memory`, `get_chunk_parameters`, a pinned choice in
-  `choose_host_memory_type`) reprobe an unsized manager, then raise
-  `NoCudaDeviceError` chained to the probe's error. Disk and pageable
-  backing choices need no device.
-- `register` needs a group stream, so a driverless process fails in
-  `stream_groups`. `_cap_bytes` is the only place a proportion becomes
-  bytes. The precompile plugin patches `get_memory_info` after
-  `import cubie` and calls `probe_device()` before registrations.
+  `choose_host_memory_type`) reprobe an unsized manager, then raise `NoCudaDeviceError`
+  chained to the probe error. Disk and pageable choices need no device.
+- `register` needs a group stream, so a driverless process fails in `stream_groups`.
+  `_cap_bytes` is the only place a proportion becomes bytes. The precompile plugin
+  patches `get_memory_info` after `import cubie` and calls `probe_device()` before
+  registering.
 
-### Deregistration & teardown
+## Deregistration and eviction
 - Registry allocations keep device arrays alive until deregistration.
-- `release_instance` removes one exact registry entry. The identity check
-  protects against reused object IDs. Close never flushes the pinned
-  pool: freeing page-locked memory synchronizes the whole device.
-- Explicit close reports cleanup failures and can be retried. Finalizers are
-  best effort and do not raise during interpreter shutdown.
-- Allocation, copies, launch, and release use the run's stream. Memory caps
-  cause chunking without device-wide synchronization or garbage collection.
-- Physical pressure evicts whole idle owners, oldest first, once their
-  completion event (recorded by `end_work`) has fired; owners with work
-  in flight are never candidates. Eviction is core behaviour, not an
-  option: every registration is a candidate, and `queue_request`
-  rejects any instance that registered without a live
-  `invalidate_cache_hook`, since allocation holders must be able to
-  drop handles when their buffers are freed. Evicted owners
-  reallocate on their next solve.
+  `release_instance` removes one exact registry entry (an identity check guards against
+  reused ids). Close never flushes the pinned pool, since freeing page-locked memory
+  synchronizes the device.
+- Explicit close reports cleanup failures and can be retried; finalizers are best
+  effort and silent at interpreter shutdown.
+- Allocation, copies, launch and release use the run's stream; memory caps chunk the
+  batch without device-wide synchronization or garbage collection.
+- Physical pressure evicts whole idle owners, oldest first, once their completion event
+  (recorded by `end_work`) has fired; owners with work in flight are never evicted.
+  Every registration is a candidate, so `queue_request` rejects an instance registered
+  without a live `invalidate_cache_hook`. Evicted owners reallocate on their next solve.
 
-### Host backing policy
-- `choose_host_memory_type(nbytes, allow_pinned)`: memmap above `HOST_SPILL_FRACTION`
-  (80%) of RAM, pinned up to `pinned_max_bytes` (default: total VRAM),
-  else pageable. Only a reachable pinned choice needs a device (see **No device**).
-- The pinned ceiling is cumulative: `allocate_pinned_array` reserves
-  against `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in
-  an atomic ledger of live plus pool-retained bytes. Ambient RAM use
-  by other processes is never consulted. Release is finalizer-driven;
-  retained bytes are reclaimed by `flush_pinned_pool` under pressure
-  (a device-wide synchronization) or on explicit request.
-- `create_host_array` allocates the requested type; a `"pinned"`
-  request whose reservation or `cudaHostAlloc` fails lands pageable.
-  `"memmap"` arrays land in the cache root.
-- Pageable and memmap transfers stage through the pinned buffer pool,
-  charged to the same budget; the first buffer per label reserves
-  past it.
-- Spill settings live on the solver kernel; callers pass them in.
-- Chunk parameters are cached per `(stream group, owner)`: a peer of
-  the owner that is not reallocating keeps device arrays laid out for
-  the cached run partition, so partial reallocations reuse it and only
-  a full reallocation of the owner's registrations picks a new one. A
-  cached partition is reused only when it covers the batch exactly
-  (`partition_covers`), and it is dropped when its owner deregisters.
-- `change_stream_group(instance, group)` moves every registration of
-  the instance's owner, their queued requests and the cached partition.
+## Host backing
+- `choose_host_memory_type(nbytes, allow_pinned)`: memmap above `HOST_SPILL_FRACTION` of
+  RAM, pinned up to `pinned_max_bytes` (default: total VRAM), else pageable.
+- The pinned ceiling is cumulative: `allocate_pinned_array` reserves against
+  `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in an atomic ledger of live
+  plus pool-retained bytes, never consulting other processes' RAM use. Release is
+  finalizer-driven; `flush_pinned_pool` reclaims retained bytes under pressure (a
+  device-wide synchronization) or on request.
+- `create_host_array` allocates the requested type; a `"pinned"` request whose
+  reservation or `cudaHostAlloc` fails lands pageable; `"memmap"` arrays land in the
+  cache root. Pageable and memmap transfers stage through the pinned pool, charged to
+  the same budget (the first buffer per label may exceed it). Spill settings live on the
+  solver kernel.
+- Chunk parameters are cached per `(stream group, owner)`. Partial reallocations reuse
+  the cached partition; a full reallocation of the owner's registrations picks a new
+  one. A cached partition is reused only when it covers the batch exactly
+  (`partition_covers`) and is dropped when its owner deregisters.
+- `change_stream_group(instance, group)` moves every registration of the instance's
+  owner, their queued requests and the cached partition.
 
-### Single allocation provider
-CuPy's async pool is the only device allocator, reached through the EMM plugin; `cupy`/`cupyx`
-come from `cubie.cuda_simsafe`, which imports them at package import on a real GPU. The
-plugin's `get_memory_info` reports device free memory plus the pool's cached free bytes.
-`allocate()` routes `"device"` requests through `cuda.device_array` (inside
-`current_cupy_stream`, so the pool allocation is stream-ordered) and `"pinned"` requests
-through `allocate_pinned_array` with a forced reservation; any other placement raises
-`ValueError`. Pinned arrays come from `cuda_simsafe.empty_pinned` (CuPy's pinned pool).
-`to_device`/`from_device`
-issue streamed `cuda.cudadrv.driver.host_to_device`/`device_to_host` copies between pinned
-host buffers and native device arrays, sized by the pinned buffer's `nbytes`. Device arrays
-must be allocated (via `allocate_queue`) before `to_device` copies into them.
+## Allocation provider
+CuPy's async pool is the only device allocator, reached through the EMM plugin; take
+`cupy`/`cupyx` from `cubie.cuda_simsafe`. The plugin's `get_memory_info` reports device
+free memory plus the pool's cached free bytes. `allocate()` routes `"device"` requests
+through `cuda.device_array` inside `current_cupy_stream` and `"pinned"` requests through
+`allocate_pinned_array`; any other placement raises `ValueError`. `to_device`/
+`from_device` issue streamed copies between pinned host buffers and native device
+arrays; device arrays must be allocated through `allocate_queue` first.
 
-### Queued / chunked allocation
-- `queue_request(instance, {label: ArrayRequest(...)})` per participating instance, then
-  `allocate_queue(triggering_instance)` once. The manager computes chunk parameters across the
-  queued requests of the triggering instance's owner in the stream group and calls each of
-  those instances' `allocation_ready_hook(ArrayResponse)`. Requests queued by other owners in
-  the group stay queued until their own owner triggers.
-- **Notary instances** — same stream group and owner, no queued requests — still get an
-  `allocation_ready_hook` with an empty `arr` dict but correct `chunks`/`chunk_length`; hooks
-  must handle empty `arr`. With nothing queued for the owner, `allocate_queue` returns
-  without calling any hook; callers keep the partition from their last response.
-- Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True` keeps the
-  full shape.
-- `get_chunk_parameters` offers a request `min((1 − CHUNK_HEADROOM_FRACTION) × available,
-  physical free − allocation_granule_bytes)` bytes for the single-chunk test and the chunk
-  sizing; `num_chunks` is the count the largest fitting chunk needs and `chunk_length` is
-  `ceil(runs / num_chunks)`. Test managers that fake `get_memory_info` at byte scale pass
-  `allocation_granule_bytes=0`.
-- `allocate_all` releases the registry entries a request replaces before allocating the
-  replacements; `BaseArrayManager.allocate` drops its device references for the requested
-  labels at queue time.
+## Queued and chunked allocation
+- Each participating instance calls `queue_request(instance, {label:
+  ArrayRequest(...)})`, then one `allocate_queue(triggering_instance)`. The manager sizes
+  chunks across the queued requests of the trigger's owner in its stream group and calls
+  each of those instances' `allocation_ready_hook(ArrayResponse)`; other owners' requests
+  stay queued.
+- Instances in the group and owner with nothing queued still get the hook, with an empty
+  `arr` and the chunk parameters. With nothing queued for the owner, `allocate_queue`
+  calls no hook; callers keep their last partition.
+- Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True`
+  keeps the full shape.
+- `get_chunk_parameters` offers `min((1 − CHUNK_HEADROOM_FRACTION) × available, physical
+  free − allocation_granule_bytes)` bytes; `num_chunks` is what the largest fitting chunk
+  needs and `chunk_length = ceil(runs / num_chunks)`. Tests faking `get_memory_info` at
+  byte scale pass `allocation_granule_bytes=0`.
+- `allocate_all` releases the entries a request replaces before allocating.
+- `ArrayRequest.dtype` must be exactly `float64`/`float32`/`int32` and `memory` one of
+  `device`/`pinned`; `chunk_axis_index` defaults to `2` (the run axis of the 3-D output
+  layout); `total_runs ≥ 1` sizes the chunks. `ArrayResponse` carries `arr`, `chunks`,
+  `chunk_length`, `chunked_shapes`.
 
-### ArrayRequest / ArrayResponse
-- `ArrayRequest.dtype` is validated to exactly `float64`/`float32`/`int32`; `memory` ∈
-  `{device, pinned}` (`ManagedArray.memory_type` allows `device`/`pinned`/`host`); any other
-  placement raises `ValueError` at construction;
-  `chunk_axis_index` defaults to `2` (the run axis in the 3-D output layout — callers with
-  other layouts pass their own index); `total_runs ≥ 1` (the manager reads it from the first
-  chunkable request to size chunks).
-- `ArrayResponse` carries `arr` (label→device array), `chunks`, `chunk_length`, `chunked_shapes`.
+## Stream groups and CuPy streams
+- Groups map instance ids to a shared `cuda.stream()`. The `"default"` group is created
+  on its first registration. `reinit_streams()` replaces every group's stream.
+  `add_instance`/`get_group`/`get_stream`/`change_group` take an `int` id or an object.
+- `current_cupy_stream` forwards a Numba stream into CuPy via
+  `cupy.cuda.Stream.from_external`; Numba's default stream (handle `0`) stays CuPy's
+  current stream. Allocation and release enter it; transfers use the Numba stream.
 
-### Stream groups
-- Groups map instance ids → a shared `cuda.stream()`. The `"default"` group is created
-  **lazily** on the first `register(..., stream_group="default")` (via `add_instance`, with a
-  fresh `cuda.stream()`), not at construction. `reinit_streams()` replaces every group's stream
-  with a new `cuda.stream()`.
-- `add_instance`/`get_group`/`get_stream`/`change_group` accept either a plain `int` (used as
-  the id directly) or any object (uses `id()`).
-
-### CuPy stream forwarding
-- `current_cupy_stream` (defined in `mem_manager.py`) is a **class** context manager that
-  always forwards the given Numba stream into CuPy via `cupy.cuda.Stream.from_external`
-  (Numba's default stream, handle `0`, is left as CuPy's ambient current stream instead of
-  wrapped).
-- Allocation and release enter the same external CuPy stream. Transfers use
-  that Numba stream directly. `get_memory_info()` reports device-wide memory.
-
-### ChunkBufferPool (internal, not exported)
-Reusable pinned staging buffers for chunked transfers, keyed by `(array_name, shape, dtype)`.
-`acquire` reuses a free matching buffer, grows the pool while fewer than
-`STAGING_POOL_DEPTH` matching buffers are in flight and RAM headroom and the owning
-manager's pinned budget both allow (a label with nothing in flight always gets one buffer,
-reserving past the budget when it must), and otherwise blocks on a `Condition` until the
-transfer watcher releases an in-flight buffer — this depth bound is the pipeline's pacing,
-letting the CPU pre-stage the next chunk while the kernel runs. `release` marks a buffer free
-and wakes blocked acquirers; `clear` frees all (call on error paths). Buffers come from the
-manager's `allocate_pinned_array`, so they are charged to the cumulative pinned ledger.
-Consumers: `InputArrays`/`OutputArrays`.
-
-### Testing
-`tests/memory/` (`test_memmgmt.py`, `test_array_requests.py`, `test_stream_groups.py`,
-`test_chunk_buffer_pool.py`, `test_memmgmt.py` — needs the `cupy` marker + a real GPU with
-cupy installed). Native-device-array assertions and the CuPy-stream-forwarding test are marked
-`nocudasim`; the `ValueError` on unsupported placements is exercised at both request
-construction and direct `allocate()` calls.
+## ChunkBufferPool
+Pinned staging buffers keyed by `(array_name, shape, dtype)`. `acquire` reuses a free
+match, grows while fewer than `STAGING_POOL_DEPTH` matches are in flight and RAM headroom
+and the pinned budget allow (a label with nothing in flight always gets one), and
+otherwise blocks until the transfer watcher releases a buffer; this bound paces the
+pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use on error
+paths). Buffers are charged to the pinned ledger.
 
 ## Dependencies
 ### Internal

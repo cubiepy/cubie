@@ -21,126 +21,91 @@ Allocation, streams, and chunk math live in `cubie.memory`.
 | `BatchOutputArrays.py` | `OutputArrayContainer` (`state`, `observables`, `state_summaries`, `observable_summaries`, `status_codes`, `iteration_counters`) + `OutputArrays` — sizes from `BatchOutputSizes`; `finalise` does D2H + async writeback. |
 | `__init__.py` | Empty — managers are imported from their modules. |
 
-## For AI Agents
+## Containers
+Each manager owns a `host` and a `device` container of the same type; arrays match by
+field name. `_iter_managed_arrays` iterates both (device then host);
+`container.iter_managed_arrays()` iterates one. Containers are `@define(slots=False)` and
+find their `ManagedArray`s by scanning `__dict__`; `attach` warns on an unknown label.
+Host slot types record the attached array's backing (`pinned`/`host`/`memmap`); device
+slots are `"device"`.
 
-### Two containers per manager
-Each manager owns a `host` and a `device` container of the same type; arrays are matched by
-field name. Iterate both via `_iter_managed_arrays` (device then host), one container via
-`container.iter_managed_arrays()`. Host slot types describe the attached array's actual
-backing (`pinned`/`host`/`memmap`); device is `"device"`.
-
-### ManagedArray & chunking
-- A `ManagedArray` starts with a real backing array (`__attrs_post_init__` allocates a
-  `np_zeros` default); an output host slot is `None` after a loan or a device-only run
-  until the next transfer backs it.
-- Chunking is always along the `"run"` axis: the chunk axis index is `stride_order.index("run")`.
-  Arrays without `"run"` in `stride_order` or with `is_chunked=False` (e.g.
-  `driver_coefficients`) are never chunked; `needs_chunked_transfer` is true only when the full
-  `shape` differs from `chunked_shape`.
-- `status_codes` is `int32`/`("run",)`; `iteration_counters` is `int32`/`(time,variable,run)`
-  default `(1,4,1)`. Float arrays get their dtype rebound to the solver precision in
+## ManagedArray and chunking
+- A `ManagedArray` starts with a `np_zeros` backing; an output host slot is `None` after
+  a loan or a device-only run until the next transfer backs it.
+- Chunking is along the `"run"` axis (`stride_order.index("run")`). Arrays without
+  `"run"` or with `is_chunked=False` (`driver_coefficients`) are never chunked;
+  `needs_chunked_transfer` is true only when `shape` differs from `chunked_shape`.
+- `status_codes` is `int32`/`("run",)`; `iteration_counters` is
+  `int32`/`(time, variable, run)`. Float arrays take the solver precision in
   `update_from_solver`; integer arrays keep their dtype.
 
-### Lifecycle
-`from_solver(...)` builds a manager with sizes only (no allocation). `InputArrays.update(...)`
-refreshes sizes/precision/run-count, sets host arrays (`update_host_arrays` — incoming arrays
-are attached **verbatim** with their actual backing recorded on the slot; the only copy is a
-dtype cast; same-shape attaches queue `_needs_overwrite`, shape changes also queue
-reallocation), and calls `allocate()`. `OutputArrays.update(solver, transfer_outputs)`
-refreshes the sizes and, when they changed, drops host buffers of another shape and queues
-every device output for reallocation. `allocate()` queues `ArrayRequest`s with the memory
-manager, shaped by `_request_shape(label)` (the host array for inputs, `_sizes` for outputs),
-and drops the device reference of every requested slot. The memory manager later drives
-`_on_allocation_complete(response)`: attach device arrays, record
-`chunked_shape`/`chunk_length`/`num_chunks`, set `_chunks`, then the `_after_allocation`
-hook. `_invalidate_hook` drops device refs and re-marks everything for reallocation.
+## Lifecycle
+- `from_solver(...)` builds a manager with sizes only.
+- `InputArrays.update(...)` refreshes sizes, precision and run count, attaches host
+  arrays verbatim with their backing recorded (the only copy is a dtype cast; same
+  shape queues `_needs_overwrite`, a new shape also queues reallocation) and calls
+  `allocate()`.
+- `OutputArrays.update(solver, transfer_outputs)` refreshes the sizes; when they
+  changed it drops host buffers of another shape and queues every device output.
+- `allocate()` queues `ArrayRequest`s shaped by `_request_shape(label)` and drops the
+  device reference of every requested slot. The memory manager then calls
+  `_on_allocation_complete(response)`: attach device arrays, record
+  `chunked_shape`/`chunk_length`/`num_chunks`, then run `_after_allocation`.
+  `_invalidate_hook` drops device references and queues everything again.
+- Output host buffers exist only for transferring runs:
+  `OutputArrays._ensure_host_arrays` (from `_after_allocation` and `finalise(0)`) keeps
+  a buffer only with the sized shape and dtype and a backing the partition accepts
+  (pinned only unchunked, pageable only when the policy would not pin it, memmap
+  always).
+- Device-array inputs (`cuda_simsafe.is_device_array`) go to `_attach_device_inputs`:
+  exact shape and dtype or raise, attached as the kernel-facing array, tracked in
+  `_device_inputs`, with no allocation or H2D. A slot's own device buffer supplied back
+  queues nothing; a slot that reverts to host input is queued for reallocation.
+  `BatchSolverKernel._execute_run` enforces single-chunk for device inputs.
+  `has_device_inputs` reports the state; the `initial_values`/`parameters` properties
+  return the attached device array.
 
-Output host buffers exist only for runs that transfer: `OutputArrays._ensure_host_arrays`
-runs from `_after_allocation` when the run transfers and from `finalise(0)`, and keeps a
-buffer only when it has the sized shape and dtype and a backing the partition accepts
-(pinned only unchunked, pageable only when the policy would not pin it, memmap always).
-A device-only run leaves every output host slot `None`.
+## Per-chunk hooks
+- `initialise(chunk_index)` (pre-launch, `InputArrays`): H2D for the queued slots.
+  Pinned contiguous sources transfer directly; everything else stages block by block
+  through `ChunkBufferPool` buffers, each handed to the transfer watcher with its own
+  event.
+- `finalise(chunk_index)` (post-launch, `OutputArrays`): D2H for the enabled outputs;
+  pinned slots transfer directly, the rest stage block by block through the
+  `WritebackWatcher`, which copies each block into the host target and releases it.
+- Neither hook blocks the host on the stream. The pool's depth, RAM headroom and pinned
+  budget pace the pipeline, so chunk N+1 stages while kernel N runs.
+- `staging_blocks(device_array, host_array, budget)` cuts blocks along the leading axis
+  (into rows when over budget), each a contiguous device region within
+  `HOST_STAGING_BYTES`.
 
-`InputArrays.update` detects device-array inputs (`cuda_simsafe.is_device_array`); a slot's
-own device buffer supplied back queues nothing, and any other device array is
-routed to `_attach_device_inputs`: validated (exact shape vs `_sizes`, exact dtype —
-raise, never coerce) and attached directly as the kernel-facing device array, tracked in
-`_device_inputs`, removed from `_needs_reallocation`/`_needs_overwrite` so no buffer is
-allocated and no H2D runs. A slot that later reverts to host input is re-queued for
-reallocation. Device inputs are single-chunk only, guarded in `BatchSolverKernel._execute_run` — the
-only place that can: an attached slot queues no allocation, so `InputArrays` never learns
-the run's chunk count. `has_device_inputs` exposes the state, and
-the `initial_values`/`parameters` properties return the caller's device array while one is
-attached.
+## Host memory types and loans
+Output host arrays are created after the chunk decision with the backing
+`choose_host_memory_type` picks: `"memmap"` above the spill threshold, pinned for
+unchunked arrays within the cumulative pinned budget, else pageable (staged through the
+pool). The grid handler writes inputs directly into buffers chosen by the kernel's host
+backing policy. Staging blocks are capped by `HOST_STAGING_BYTES` and charged to the
+pinned budget.
 
-### Teardown
-Explicit close drains transfer watchers before clearing staging pools and
-device registrations. Failures leave resources attached so close can be
-retried. Finalizers use cleanup calls that do not capture the manager.
+`loan_host_arrays(result)` empties every host slot into the returned `SolveResult`.
+`reclaim_or_release_loan()` (in `update_from_solver` for a transferring run, and in
+`SolveResult.from_solver`) returns a collected owner's buffers to their slots; a live
+owner keeps them and the next transfer builds fresh host backing.
 
-### Per-chunk hooks (called by `BatchSolverKernel.run` around each launch)
-- `initialise(chunk_index)` — pre-launch. `InputArrays`: H2D for the queued slots (zero-size sources skipped). Pinned contiguous sources
-  transfer directly; everything else (pageable, memmap, or any chunk slice) stages
-  block-by-block through `ChunkBufferPool` pinned buffers, each handed to the transfer
-  watcher with its own event. `OutputArrays`: no-op.
-- `finalise(chunk_index)` — post-launch. `OutputArrays`: D2H for the outputs the compile
-  flags enable (placeholder arrays are skipped); pinned slots transfer directly, everything
-  else stages block-by-block, each block submitted to the `WritebackWatcher` with its own
-  event for the trimmed copy into the host target and buffer release.
-- Neither hook ever blocks the host on the stream: pacing comes from the pool's
-  depth, RAM-headroom, and pinned-budget bounds, so the CPU stages chunk N+1 while kernel
-  N runs and writebacks of chunk N drain during kernel N+1.
-- `staging_blocks(device_array, host_array, budget)` cuts both stagers' blocks along the
-  leading axis, descending into rows over budget, so every block is a contiguous device
-  region within `HOST_STAGING_BYTES`; blocks stop at the shorter host extent on every axis.
+## Writeback and teardown
+Transfer watchers release pinned buffers once their CUDA event completes; output tasks
+also copy the staged data into the result arrays. Every acquired buffer reaches a
+release: a failed writeback copy, a failed stager or a failed event query frees the
+buffer and stores the error, which `wait_all` raises once the queue drains. Close
+drains the watchers, then clears the staging pools and device registrations; a failed
+close leaves resources attached for a retry. Finalizers do not capture the manager.
 
-### Memory types
-Output host arrays are created after the chunk decision with the
-backing `choose_host_memory_type` picks: `"memmap"` above the spill
-threshold, pinned for unchunked arrays the cumulative pinned budget
-grants, else pageable, which stages through the pool. Input slots
-record the attached array's actual backing; the grid handler
-assembles inputs directly into buffers chosen by the kernel's
-registered host backing policy. Staging blocks are capped by
-`HOST_STAGING_BYTES` and charged to the same budget.
-
-### Result buffer loans
-After a solve, `loan_host_arrays(result)` empties every host slot into
-the returned `SolveResult`. `reclaim_or_release_loan()` runs in
-`update_from_solver` for a transferring run and in
-`SolveResult.from_solver`: a collected owner's buffers return to their
-slots (with their memory types) for reuse; a live owner keeps them and
-the next transfer builds fresh host backing while the device outputs
-stay allocated. A device-only run leaves the loan record untouched.
-
-### Async writeback
-Transfer watchers release pinned buffers after their CUDA event completes.
-Output tasks also copy staged data into the result arrays. Shutdown drains all
-tasks before it clears the pool.
-
-Every acquired buffer must reach a release. A failing writeback copy is stored
-on the watcher and re-raised by `wait_all` once the queue drains. A stager
-that raises drains the stream, then releases its buffer. An event whose query
-raises retires its task, frees the buffer, and stores the error for
-`wait_all`.
-
-### Container mechanics
-Containers use `@define(slots=False)` and discover their arrays by scanning `__dict__` for
-`ManagedArray` instances (`_iter_field_items`), so fields are picked up dynamically. `attach`
-warns (doesn't raise) on an unknown label.
-
-### Sizes
-`_sizes` is a `BatchInputSizes`/`BatchOutputSizes` (`ArraySizingClass`); `update_sizes` raises
-`TypeError` if the replacement isn't the same subtype. `.nonzero` (floor empty/disabled dims to
-1) is applied to `_sizes` before allocation, in `update_from_solver`. All dims are concrete:
-`BatchInputSizes.driver_coefficients` comes from `kernel.coefficients_shape` — a
-`BatchSolverConfig` compile setting the Solver keeps aligned with
-`ArrayInterpolator.coefficients_shape` — so no `None` wildcards exist in the sizing scheme. See root for the `ArraySizingClass`/`.nonzero` pattern.
-
-### Testing
-`tests/batchsolving/arrays/`. Pinned/async-writeback paths short-circuit under `CUDA_SIMULATION`
-(events treated as complete). Prefer building via `InputArrays.from_solver`/
-`OutputArrays.from_solver` against a `BatchSolverKernel` fixture.
+## Sizes
+`_sizes` is a `BatchInputSizes`/`BatchOutputSizes`; `update_sizes` raises `TypeError` for
+another subtype, and `.nonzero` is applied in `update_from_solver`.
+`BatchInputSizes.driver_coefficients` comes from `kernel.coefficients_shape`, so every
+dimension is concrete. Under `CUDA_SIMULATION`, pinned and async-writeback paths treat
+events as complete.
 
 ## Dependencies
 ### Internal

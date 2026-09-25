@@ -29,77 +29,44 @@ attrs conventions.
 |-----------|---------|
 | `symbolic/` | IR-based CUDA code generation for `SymbolicODE(BaseODE)` (see `symbolic/AGENTS.md`). |
 
-## For AI Agents
+## ODECache and helpers
+`build()` (implemented by `SymbolicODE`) returns an `ODECache` holding `dxdt`,
+`observables` and `helpers: SolverHelperCache`. Illegal role/variant combinations fail at
+`SolverHelperRequest` construction; legal requests always return a `HelperResult`. A
+compile-setting change rebuilds the `ODECache`, and with it the helper map; the helper
+identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` raises
+`NotImplementedError`; `SymbolicODE` overrides it.
 
-### ODECache and the helper member map
-`build()` (implemented by `SymbolicODE`, not `BaseODE`) returns an `ODECache` holding
-`dxdt`, `observables`, and `helpers: SolverHelperCache`. Illegal role/variant
-combinations fail at `SolverHelperRequest` construction; legal requests always
-return a typed `HelperResult`. A true ODE compile-setting change rebuilds the `ODECache` and
-therefore starts a fresh member map. The helper identity/reuse protocol
-(source and member hashes, factory naming, binding) is owned by
-`symbolic/AGENTS.md` and `symbolic/helper_registry.py`.
+## BaseODE updates and identity
+- `BaseODE._update()` routes constant-value changes through `set_constants()`, which
+  updates a copy of the constants container and passes it through
+  `update_compile_settings`. A `precision` change re-materialises all four
+  `SystemValues` through `ODEData.update`.
+- `BaseODE.config_hash` adds a digest of the sorted constant items; a `SystemValues`
+  canonical identity is its names and precision only.
+- The mass matrix is a float64 array in `ODEData._mass` (`BaseODE.mass`); codegen reads
+  it as boolean diagonal flags. Explicit algorithms and Neumann preconditioners reject a
+  non-identity mass matrix.
+- `BaseODE.initial_values` and `.states` both return `compile_settings.initial_states`;
+  build `ODEData` through `ODEData.from_BaseODE_initargs`.
 
-### BaseODE._update() — additions over the base contract
-`BaseODE._update()` also routes constant-*value* changes through `set_constants()`, which
-applies them to a **copy** of the constants container and passes the copy through
-`update_compile_settings`; never mutate the instance a snapshot holds. A `precision` change
-re-materialises all four embedded `SystemValues` through `ODEData.update`.
+## SystemValues
+- A plain class, not attrs.
+- Accepts `sympy.Symbol` keys (converted to strings) and lists or tuples of names
+  (expanded to `{name: 0.0}`).
+- Precision is fixed at construction; after reassigning `.precision`, call
+  `update_param_array_and_indices()` to recast.
+- `update_from_dict()` returns the recognised keys; `add_entry()`/`remove_entry()` mutate
+  in place, on unfrozen instances only.
+- `ODEData`'s converters `freeze()` every container a snapshot takes: structure seals on
+  all four, and constants seal fully, so `system.constants.update_from_dict(...)` raises
+  (use `set_constants()`/`update()`). Parameter, state and observable values stay
+  writable. Instances compare by value and are unhashable.
 
-### config_hash folds constant values
-`BaseODE.config_hash` extends the parent hash with a canonical digest over the
-sorted constant items; `SystemValues`' canonical identity is structural
-(names + precision) only.
-
-### get_solver_helper at the base level
-`BaseODE.get_solver_helper(role, **request_kwargs)` raises `NotImplementedError`;
-only `SymbolicODE` overrides it.
-
-### The mass matrix is system-owned
-It lives as a float64 array in `ODEData._mass` (access via `BaseODE.mass`).
-Codegen consumes it as bool diagonal flags. Non-identity mass matrices are
-rejected for explicit algorithms and Neumann preconditioners.
-
-### SystemValues
-- **A plain Python class, not attrs** — don't use `attrs.fields()`/`has()` on it.
-- Accepts `sympy.Symbol` keys (auto-converted to strings by `_convert_symbol_keys`) and
-  lists/tuples of names (expanded to `{name: 0.0}` — used to declare variables before values).
-- **Precision is fixed at construction:** `__init__` calls `update_param_array_and_indices()`,
-  materialising `values_array` at `precision`. Reassigning `.precision` later does *not* recast
-  existing values — call `update_param_array_and_indices()` again to rebuild.
-- `update_from_dict()` returns the **recognised** keys as `set[str]` (not the unrecognised);
-  `add_entry()`/`remove_entry()` mutate in place and rebuild the index maps —
-  on unfrozen instances only.
-- **Snapshot freezing is enforced:** `ODEData`'s field converters call
-  `freeze()` on every container a snapshot takes. Structure (names, precision,
-  packed layout) seals on all four; the constants container seals fully
-  because constant values are compile-critical, so
-  `system.constants.update_from_dict(...)` raises — use
-  `set_constants()`/`update()`, which derive a `copy()` (unfrozen) and pass it
-  through the update boundary. Parameter/state/observable *values* stay
-  writable in place: they are runtime data outside configuration identity.
-  Value equality (`__eq__`) exists for change detection at the update
-  boundary; instances are unhashable (`__hash__ = None`) because a mutable
-  value-equal container cannot satisfy the hash contract. The canonical
-  serialization identity (`_cubie_canonical_`) is structural — names and
-  precision — because stored values are runtime data (constants fold into
-  `config_hash` separately).
-
-### `initial_values` is an alias for `states`
-`BaseODE.initial_values` and `.states` both return `compile_settings.initial_states`. Don't
-confuse the property with the `initial_values` constructor argument, which feeds
-`ODEData.from_BaseODE_initargs` — the canonical `ODEData` builder (never construct `ODEData`
-directly).
-
-### Adding a component category
-A fifth slot (beyond states/parameters/constants/observables) touches two files in several
-places: in `ODEData.py`, add the field, the `SystemSizes` count, and extend the
-precision-propagation list in `ODEData.update()` and `from_BaseODE_initargs()`; in
-`baseODE.py`, add a property.
-
-### Testing
-`tests/odesystems/test_ODEData.py`, `test_SystemValues.py`; `BaseODE` is covered indirectly via
-`SymbolicODE` fixtures. See root for the CUDASIM/real-CUDA commands.
+## Adding a component category
+A fifth category (beyond states/parameters/constants/observables) needs, in `ODEData.py`,
+the field, a `SystemSizes` count and entries in the precision propagation of
+`ODEData.update()` and `from_BaseODE_initargs()`; and in `baseODE.py`, a property.
 
 ## Dependencies
 ### Internal

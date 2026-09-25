@@ -41,96 +41,66 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | `parsing/` | Converts string / SymPy / callable / CellML input into `ParsedEquations` + `IndexedBases`, plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end feeds every system through `structural/` (see `parsing/AGENTS.md`). |
 | `structural/` | MTK-style structural simplification and tearing (singular derivative-block removal, alias elimination, Pantelides index reduction, dummy derivatives, Carpanzano/Modia tearing); runs on every parsed system (see `structural/AGENTS.md`). |
 
-## For AI Agents
+## get_solver_helper
+`build()` compiles only `dxdt` and `observables`; every other device function comes from
+`get_solver_helper(role, **request_kwargs)`, `role` a role name or preconditioner type,
+which assembles an immutable `SolverHelperRequest`. Each request has two canonical
+identities:
+- `helper_source_hash` (role, variant, `fn_hash`, and the stage spec and cache
+  selection where the variant uses them) names the generated factory
+  `<role>_<variant>_s<source hash>` in the `ODEFile`.
+- `helper_member_hash` (source hash plus the role's binding arguments) keys the bound
+  member in `ODECache.helpers`; different bindings share one generated factory.
 
-### get_solver_helper — the single helper entry point
-`build()` compiles only `dxdt` and `observables`; every other device function comes from `get_solver_helper(role, **request_kwargs)`, where `role` is a role name or preconditioner type string and the getter assembles the immutable `SolverHelperRequest`.
-Two identities per request, both from the canonical serializer:
-- `helper_source_hash` (role + variant + `fn_hash` + stage spec and
-  cache selection where the variant applies) names the generated
-  factory `<role>_<variant>_s<full source hash>` in the `ODEFile`.
-- `helper_member_hash` (source hash + the binding arguments the role
-  declares) keys the bound member in `ODECache.helpers`. Different
-  bindings reuse one generated factory.
-Adding a helper means one `SolverHelperRole` subclass in
-`helper_registry.py` (capabilities + `generate`) and a generator entry in
-`codegen/`; registration is automatic. The algorithm layer passes its
-`preconditioner_type` string as the role name; the request converter
-resolves it through `PRECONDITIONER_ROLES`. The `no_preconditioner`
-role answers `preconditioner_type="none"` with an identity
-preconditioner (`out = v`) at the request's solver width. Validation hooks
-(`Role.validate`) run per request, including cache hits: the Neumann
-hook rejects mass-matrix systems, the Jacobi hook rejects series
-orders on stacked multi-stage operators. Members whose variant reads
-`cached_aux` (`cached`, `cached_stacked`, `prefactored`) are served
-with their role-declared prepare companion
-(`Role.prepare_request_kwargs`: `prepare_jac` for the iterative
-helpers, `lu_prepare_blocks` for the prefactored LU variants) and its
-buffer size on `HelperResult.cached_auxiliary_count`; the `lu_solve`
-role's per-call factor-buffer length travels on
-`HelperResult.lu_nnz` (each source stamps `aux_count`/`lu_nnz`,
-`None` when unsized). Every
-operator-coefficient (`operator_beta`/`operator_gamma`) helper folds those values (the LU solve also a
-baked `a_ij`) into the source as literals, keyed into the source
-hash through the role's `folded_args` instead of the factory
-binding; factories bind `precision` (plus `order` for the
-preconditioners), and constant values always key the bound member.
-Mass-consuming helpers read the
-system's own `compile_settings.mass` — always `None` or a 0/1 diagonal,
-consumed by codegen as per-row flags (a zero row selects the residual
-form, an identity row the plain form).
+Adding a helper is one `SolverHelperRole` subclass in `helper_registry.py`
+(capabilities + `generate`) and a generator in `codegen/`; registration is automatic.
+`preconditioner_type` resolves through `PRECONDITIONER_ROLES`; `no_preconditioner`
+answers `"none"` with an identity (`out = v`) at the solver width. `Role.validate` runs
+on every request, cache hits included: Neumann rejects mass-matrix systems, Jacobi
+rejects series orders on stacked multi-stage operators. Variants reading `cached_aux`
+(`cached`, `cached_stacked`, `prefactored`) come with their role's prepare companion
+(`Role.prepare_request_kwargs`: `prepare_jac` for iterative helpers,
+`lu_prepare_blocks` for prefactored LU) and its buffer size on
+`HelperResult.cached_auxiliary_count`; `lu_solve`'s factor-buffer length is
+`HelperResult.lu_nnz` (`None` when unsized). `operator_beta`/`operator_gamma` (and the LU
+solve's `a_ij`) fold into the source as literals, keyed into the source hash through the
+role's `folded_args`; factories bind `precision` (plus `order` for preconditioners), and
+constant values key the bound member. Mass-consuming helpers read
+`compile_settings.mass`, `None` or a 0/1 diagonal: a zero row selects the residual form,
+an identity row the plain form.
 
-### Constant specialisation — values are source identity
-Constant values substitute into the equations as IR literals at the head of
-the codegen pipeline (`parsing/parsed_system.py`); generated source never
-names a constant and device functions capture no constant closures. The
-checkpoint on `SymbolicODE._parsed_system` (a `ParsedSystem` for every input
-pathway) drives re-specialisation on every constant-value change:
-substitution, constructor folding, structural simplification, and tearing,
-updating the state layout and mass matrix to match the values.
-`set_constants` derives the new products and pushes every changed compile
-setting through `update_compile_settings` in one call. Live solvers receive
-changes through `Solver.update`; a direct `set_constants` on a
-solver-attached system raises at the next solve.
+## Constant specialisation
+Constant values substitute into the equations as IR literals at the head of the codegen
+pipeline (`parsing/parsed_system.py`); generated source never names a constant and device
+functions capture no constant closures. `SymbolicODE._parsed_system` (a `ParsedSystem`)
+re-specialises on every constant-value change: substitution, constructor folding,
+structural simplification and tearing, updating the state layout and mass matrix.
+`set_constants` pushes every changed compile setting through one
+`update_compile_settings`. Live solvers take changes through `Solver.update`; a direct
+`set_constants` on a solver-attached system raises at the next solve.
 
-### build() and system identity
-`build()` compiles `dxdt`+`observables` into the `ODECache`, first recomputing the system hash —
-swapping `self.gen_file` to a fresh `ODEFile` when the specialised source identity changed.
-The identity is `fn_hash` from `hash_system_definition`: equations (with constant values folded
-as literals), name-sorted state/dxdt/parameter/driver/observable layouts, constant labels,
-derivative helpers, and function aliases. Each source identity keeps its own
-`ODEFile`. Equations sort by
-LHS name, so string and SymPy input hit the same cache.
+`make_parameter`/`make_constant` evolve the checkpoint's category maps and re-specialise:
+a freed constant returns to the equations as a parameter-array symbol, a new constant
+folds in as a literal. The checkpoint is replaced only when specialisation succeeds.
 
-### Constant/parameter conversion
-`make_parameter`/`make_constant` evolve the checkpoint's category maps and
-re-specialise: a freed constant returns to the equations as a symbol reading
-the parameters array, and a new constant's value folds into the source as a
-literal. The evolved checkpoint replaces the stored one only when
-specialisation succeeds. `SymbolicODE` overrides `set_constants()` to
-re-specialise on any value change.
+## build() and system identity
+`build()` recomputes the system hash first and switches `self.gen_file` to a fresh
+`ODEFile` when the source identity changed. The identity is `fn_hash` from
+`hash_system_definition`: equations (constants folded), name-sorted state, dxdt,
+parameter, driver and observable layouts, constant labels, derivative helpers and
+function aliases. Equations sort by LHS name, so string and SymPy input hit the same
+cache.
 
-### Codegen cache gotchas (`ODEFile`)
-- `function_is_cached` parses the generated file textually: it needs a top-level `def <name>(`
-  with a `return` one indent level in. A generator that emits a factory without a `return` is
-  treated as uncached forever.
-- Output lands under `cubie.cache_root.get_cache_root()` — by default
-  `<cwd>/generated`, evaluated at `ODEFile` construction, relocatable with
-  `set_cache_root()` — not under the package.
-
-### IndexedBaseMap rebuilds on structural change
-`push` inserts at the sorted position and `pop` removes, both rebuilding the
-`sympy.IndexedBase` and reindexing every entry, so any `ref_map` array reference
-captured before a conversion goes stale — re-read it after `make_parameter`/`make_constant`.
-
-### Qt GUIs are lazily imported
-`constants_gui`/`states_gui` import the `cubie.gui` editors *inside* the method (Qt is optional).
-Never import Qt or `cubie.gui` at module top level.
-
-### Testing
-`tests/odesystems/symbolic/` (`test_symbolicode.py`, `test_odefile.py`, `test_indexedbasemaps.py`,
-`test_sym_utils.py`, `test_solver_helpers.py`); codegen tests under `.../codegen/`. Prefer real
-`SymbolicODE` fixtures (`conftest.py`). See root for CUDASIM/real-CUDA commands.
+## Gotchas
+- `ODEFile.function_is_cached` parses the file textually: it needs a top-level
+  `def <name>(` with a `return` one indent level in; a factory without one is never
+  cached.
+- Generated files land under `cubie.cache_root.get_cache_root()` (default
+  `<cwd>/generated`, read at `ODEFile` construction, relocatable with
+  `set_cache_root()`).
+- `IndexedBaseMap.push`/`pop` rebuild the `sympy.IndexedBase` and reindex every entry;
+  re-read `ref_map` array references after `make_parameter`/`make_constant`.
+- `constants_gui`/`states_gui` import `cubie.gui` inside the method (Qt is optional).
 
 ## Dependencies
 ### Internal

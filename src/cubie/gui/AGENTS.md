@@ -15,16 +15,15 @@ abstracted through `qtpy` (PyQt6/PyQt5/PySide6/PySide2).
 | `constants_editor.py` | `FloatLineEdit`, `ConstantsEditor` (live constants/parameters), `PreParseEditor` (raw-dict categorisation), and the `edit_pre_parse_dicts()` / `show_constants_editor()` wrappers. |
 | `states_editor.py` | `StatesEditor` (live initial-state editing) + `show_states_editor()`. |
 
-## For AI Agents
-- The dialogs are the GUI's only coupling to `SymbolicODE`, through its public methods
-  (duck-typed; `SymbolicODE` imported under `TYPE_CHECKING`): `ConstantsEditor` uses
-  `get_constants_info`/`get_parameters_info`, `set_constant_value`/`set_parameter_value`,
-  `make_parameter`/`make_constant`, `indices.constant_names`/`parameter_names`; `StatesEditor`
-  uses `get_states_info`/`set_initial_value`. If that API changes, update these call sites.
-- `PreParseEditor` is the odd one out — plain dicts in/out (no `SymbolicODE`), so it can run
-  before parsing; its `result_*` properties are valid only after OK, and `edit_pre_parse_dicts`
-  returns its inputs unchanged on cancel.
-- No `tests/gui/`; run any new tests headless (`QT_QPA_PLATFORM=offscreen`).
+## SymbolicODE coupling
+- `ConstantsEditor` calls `get_constants_info`/`get_parameters_info`,
+  `set_constant_value`/`set_parameter_value`, `make_parameter`/`make_constant` and
+  `indices.constant_names`/`parameter_names`; `StatesEditor` calls
+  `get_states_info`/`set_initial_value`. `SymbolicODE` is imported under
+  `TYPE_CHECKING` only.
+- `PreParseEditor` takes and returns plain dicts; its `result_*` properties are valid
+  only after OK, and `edit_pre_parse_dicts` returns its inputs unchanged on cancel.
+- GUI tests run headless (`QT_QPA_PLATFORM=offscreen`).
 
 ## Dependencies
 - `qtpy` (needs one of PyQt6/PyQt5/PySide6/PySide2); `cubie.odesystems.symbolic.SymbolicODE`

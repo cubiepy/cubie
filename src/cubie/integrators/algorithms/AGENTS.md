@@ -37,168 +37,141 @@ resolves a name or `ButcherTableau` to the right factory.
 | `backwards_euler_predict_correct.py` | `BackwardsEulerPCStep`: subclass adding an explicit forward-Euler predictor before the Newton corrector. |
 | `crank_nicolson.py` | `CrankNicolsonStep` + config: order-2 adaptive implicit; two implicit solves per step (CN + backward Euler), the difference giving the embedded error estimate. |
 
-## For AI Agents
+## Device step contract (`IVPLoop` must match)
+- Signature, identical for every algorithm: `(state, proposed_state, parameters,
+  driver_coefficients, drivers_buffer, proposed_drivers, observables,
+  proposed_observables, error, dt_scalar, time_scalar, first_step_flag, accepted_flag,
+  shared, persistent_local, counters)`.
+- `error` has length `n_states` only when `uses_error` (`has_error_estimate and
+  is_adaptive`; `is_adaptive` comes from the controller); otherwise it is zero-length,
+  the estimate compiles out and `error_weights` returns zeros. Crank–Nicolson overrides
+  `uses_error` to `True`.
+- Returns an `int32` status (`../AGENTS.md` lists the codes). Implicit steps OR in each
+  stage solve's status; explicit steps return `SUCCESS`. The loop zeroes `counters`
+  before every step and every solve adds to it: `[0]` is the step's Newton iterations,
+  `[1]` its Krylov iterations over all linear solves.
+- The commented-out `@cuda.jit` signature block above each kernel documents the types;
+  keep it in sync and commented.
 
-### Device step contract (the caller — `IVPLoop` — must match)
-- **Signature (16 positional args, identical across every algorithm):**
-  `(state, proposed_state, parameters, driver_coefficients, drivers_buffer,
-  proposed_drivers, observables, proposed_observables, error, dt_scalar, time_scalar,
-  first_step_flag, accepted_flag, shared, persistent_local, counters)`.
-- `error` has length `n_states` only when the step's `uses_error` (`has_error_estimate and
-  is_adaptive`; `is_adaptive` is set from the controller) is true; otherwise it is
-  zero-length, the estimate compiles out and `error_weights` returns zeros.
-  Crank–Nicolson overrides `uses_error` to `True`.
-- **Returns an `int32` status code** from the `CUBIE_RESULT_CODES` vocabulary
-  (`cubie/result_codes.py`, captured as device closure constants). For implicit methods it
-  OR-combines the solver status from each stage's solve (`status_code |= solver_status`);
-  explicit methods return `SUCCESS`. The loop zeroes the `counters` array (the last
-  argument) before every step; every solve in the step adds to it, so `[0]` is the
-  step's Newton iterations over all stages and `[1]` its Krylov iterations over every
-  linear solve (stage solves and the smoothed-error solve).
-- The commented-out `@cuda.jit` signature block atop each kernel documents the intended
-  types; keep it in sync but it stays commented.
+## Factory and dispatch
+- Subclasses implement `build_step(...)` returning `StepCache(step_fn=...,
+  nonlinear_solver_fn=...)`; `BaseAlgorithmStep.build()` fills the remaining fields from
+  the same-named properties. The compiled step is the `step_fn` property.
+- `get_algorithm_step(precision, settings, **kwargs)` requires `settings["algorithm"]`:
+  a name (resolved through `_TABLEAU_REGISTRY_BY_ALGORITHM` by `resolve_alias`) or a
+  `ButcherTableau` instance (dispatched by type in `resolve_supplied_tableau`). The bare
+  family names `"erk"`, `"dirk"`, `"firk"`, `"rosenbrock"` use the class's
+  `default_tableau`; `"euler"`, `"backwards_euler"`, `"backwards_euler_pc"` and
+  `"crank_nicolson"` have no tableau.
+- `AlgorithmDefaults` holds one flat settings dict per family (controller and solver
+  keys together), adaptive or fixed by `tableau.has_error_estimate`; a tableau's own
+  `defaults` overlay it in `BaseAlgorithmStep.algorithm_defaults`. Keys in
+  `ALL_ALGORITHM_STEP_PARAMETERS` are step defaults (`step_default_settings`), the rest
+  controller defaults (`controller_default_settings`). `family_defaults(tableau)` and
+  `algorithm_facts(algorithm, tableau)` (`AlgorithmFacts`: step class, tableau,
+  defaults, `has_error_estimate`, `is_implicit`, `is_linear`) give the table without a
+  step instance.
+- Errorless tableaus require a fixed controller; constructors enforce it.
+- New `update` keywords go in `ALL_ALGORITHM_STEP_PARAMETERS` or `update` rejects them.
+  `BaseAlgorithmStep._update` runs `_apply_updates` (settings and buffers), counts
+  unapplied names from that set as recognised and warns unless `silent`.
+  `ODEImplicitStep` extends `_apply_updates` with its solvers and predictor.
 
-### Factory & dispatch
-- Subclasses implement **`build_step(...)`**, returning a
-  `StepCache(step_fn=..., nonlinear_solver_fn=...)`; the bases' `compile_step()`
-  call it and `BaseAlgorithmStep.build()` fills the cache's remaining fields
-  from the same-named properties. The compiled step is the `step_fn` property.
-- `get_algorithm_step(precision, settings, **kwargs)` requires `settings["algorithm"]`
-  — a name string or a `ButcherTableau` instance. Names resolve via
-  `_TABLEAU_REGISTRY_BY_ALGORITHM` (`resolve_alias`); tableau instances dispatch by
-  type (`resolve_supplied_tableau`). For the **tableau methods**, the bare keys
-  `"erk"`, `"dirk"`, `"firk"`, `"rosenbrock"` use the class-default tableau; the
-  **non-tableau methods** `"euler"`, `"backwards_euler"`, `"backwards_euler_pc"`,
-  `"crank_nicolson"` are fixed schemes with no tableau.
-- `AlgorithmDefaults`: one flat settings dict per family (controller and solver keys together); the adaptive/fixed variant is chosen from `tableau.has_error_estimate`, and a tableau's own `defaults` mapping overlays the family dict in `BaseAlgorithmStep.algorithm_defaults`.
+## Tableaus
+- Add a tableau to the relevant `*_tableaus.py` registry; `__init__.py` merges the
+  registries into valid `algorithm` names. `ButcherTableau.__attrs_post_init__` checks
+  that `b` and `b_hat` sum to 1.
+- Tableau properties drive compile-time shortcuts; use them rather than hand-rolling:
+  `b_matches_a_row`/`b_hat_matches_a_row` copy a stage state instead of accumulating;
+  `first_same_as_last`/`can_reuse_accepted_start` enable FSAL stage-0 reuse (gated on
+  `all_sync(activemask(), accepted_flag != 0)`); `explicit_first_stage` and
+  `DIRKTableau.last_implicit_stage` split stage 0, the Newton loop and trailing explicit
+  stages.
+- `algorithm_order` = `min(order, embedded_order)`; tableaus with `b_hat` declare
+  `embedded_order`. Controllers receive `algorithm_order`; `order` stays classical. FIRK
+  smoothing uses `RadauIIATableau.smoothed_embedded_order`.
 
-- Keys in `ALL_ALGORITHM_STEP_PARAMETERS` are step defaults (`step_default_settings`); every other key is a controller default (`controller_default_settings`). The `family_defaults(tableau)` classmethod and `algorithm_facts(algorithm, tableau)` (`AlgorithmFacts`: step class, tableau, defaults, `has_error_estimate`, `is_implicit`, `is_linear`) give the table without a step instance; the Solver applies it. A bare family alias (`dirk`, `firk`, `erk`, `rosenbrock`) resolves to the class's `default_tableau`, the tableau its constructor builds on.
+## Explicit and implicit steps
+- Explicit (`ODEExplicitStep`, no solver): `ExplicitEulerStep`, `ERKStep`.
+- Implicit (`ODEImplicitStep`, owns a solver): `BackwardsEulerStep`,
+  `BackwardsEulerPCStep`, `CrankNicolsonStep`, `DIRKStep`, `FIRKStep` use Newton-Krylov;
+  `GenericRosenbrockWStep` is linearly implicit with a `LinearSolver` and no Newton
+  iteration (`is_linear = True`).
 
-- **Errorless tableaus must use a fixed controller** — constructors enforce this; never pair an adaptive controller with an errorless tableau.
-- **`update` additions:** new keywords must be added to `ALL_ALGORITHM_STEP_PARAMETERS`
-  (`base_algorithm_step.py`) or `update` rejects them. `BaseAlgorithmStep._update` runs
-  `_apply_updates` (settings and buffers), then counts unapplied names from that set as
-  recognised and warns unless `silent`. `ODEImplicitStep` extends `_apply_updates` with
-  its owned solvers and predictor.
+## Registered buffers
+- Steps register their working buffers (DIRK `stage_base`/`accumulator`, CN
+  `cn_dxdt`); buffers with disjoint lifetimes alias (CN `base_state` → `error`, DIRK
+  `stage_base` → `accumulator`). Implicit steps take child allocators for their solver
+  via `get_child_allocators(self, self.solver, ...)`.
+- Rosenbrock registers `cached_auxiliaries` at size 0; `build_implicit_helpers()`
+  resizes it from `prepare_jac`'s `HelperResult.cached_auxiliary_count`.
 
-### Tableaus
-- **Adding a tableau:** append to the relevant `*_tableaus.py` registry; `__init__.py`'s
-  registry-merge loops pick it up as a valid `algorithm` name. Coefficients are validated
-  in `ButcherTableau.__attrs_post_init__` (`b` and `b_hat` must sum to 1).
-- **Tableau-derived compile-time optimisations** (do not hand-roll — they come from
-  `ButcherTableau` properties): `b_matches_a_row` / `b_hat_matches_a_row` replace
-  streaming accumulation with a direct copy when a stage state already equals the
-  solution / embedded estimate; `first_same_as_last` / `can_reuse_accepted_start` (FSAL)
-  enable stage-0 RHS reuse; `explicit_first_stage` / `DIRKTableau.last_implicit_stage`
-  split stage 0, the Newton loop and the trailing explicit (ELDIRK) stages.
+## Dense stage prediction (FIRK, DIRK)
+Both own a `DenseStagePredictor` (`../stage_predictors.py`) that turns the last accepted
+step's stage increments into the next step's Newton starting guesses. The step keeps
+the persistent `previous_step_size` and folds first-step, rejection and the tableau's
+per-precision `dense_prediction_ratio_*` ceiling (from
+`benchmarks/dense_prediction_ratio_sweep.py`) into a flag the predictor commits per lane
+with `selp`. Tableau properties: `prediction_sample_stages` (one sample per distinct
+node), `explicit_first_stage` (never predicted; its `dt*f` sample still enters DIRK's
+history), DIRK's `prediction_source_stages` (a repeated stage time starts from the
+earlier stage's row). `predictor_fn` arrives through compile settings;
+`predictor_*_location` keys place its buffers.
 
-### Explicit vs implicit
-- **Explicit** (`ODEExplicitStep`, no solver): `ExplicitEulerStep`, `ERKStep`.
-- **Implicit** (`ODEImplicitStep`, owns a solver): `BackwardsEulerStep`,
-  `BackwardsEulerPCStep`, `CrankNicolsonStep`, `DIRKStep`, `FIRKStep`,
-  `GenericRosenbrockWStep`. All use **Newton-Krylov except `GenericRosenbrockWStep`**,
-  which is linearly-implicit and constructs a `LinearSolver` directly
-  (no Newton iteration). The class attribute `is_linear` (`True` on
-  `GenericRosenbrockWStep`, `False` elsewhere) exposes the distinction.
-
-### Registered buffers
-- Each step registers its working buffers (e.g. DIRK `stage_base`/`accumulator`,
-  CN `cn_dxdt`). Buffers with disjoint lifetimes are aliased to share storage — e.g.
-  CN's `base_state` aliases `error`, and DIRK's `stage_base` aliases `accumulator`.
-  Implicit steps additionally pull **child allocators** for their owned solver via
-  `get_child_allocators(self, self.solver, ...)`.
-- **Rosenbrock auxiliary-cache sizing:** `register_buffers` registers
-  `cached_auxiliaries` at size 0; `build_implicit_helpers()` resizes it via
-  `update_buffer` from `prepare_jac`'s `HelperResult.cached_auxiliary_count`.
-
-### Dense stage prediction (FIRK and DIRK)
-Both steps own a `DenseStagePredictor` (`../stage_predictors.py`) child that
-turns the previous accepted step's stage increments into the next step's
-Newton starting guesses. The algorithm owns eligibility: it keeps the
-persistent `previous_step_size` scalar and folds first-step, rejection, and
-the tableau's per-precision `dense_prediction_ratio_*` ceiling (calibrated
-by `benchmarks/dense_prediction_ratio_sweep.py`) into a flag the predictor
-commits per lane via predicated `selp`. Tableau-derived behaviour lives on
-the tableaus: `prediction_sample_stages` (one sample per distinct node),
-`explicit_first_stage` (an explicit first stage is never predicted; its
-`dt*f` sample still enters DIRK's history), and DIRK's
-`prediction_source_stages` (a repeated stage time starts from the earlier
-same-time stage's row). `predictor_fn` pipes through compile settings
-like `newton_nonlinear_solver_fn`; `predictor_*_location` keys place the predictor's buffers.
-
-### Step-size control order
-`algorithm_order` = `min(order, embedded_order)`; tableaus with `b_hat`
-declare `embedded_order` (validated together). `SingleIntegratorRunCore`
-feeds it to controllers as `algorithm_order`; `order` stays classical. FIRK
-smoothing swaps in `RadauIIATableau.smoothed_embedded_order` (stage count).
-
-### Smoothed error estimate (DIRK, FIRK, Rosenbrock-W)
+## Smoothed error estimate (DIRK, FIRK, Rosenbrock-W)
 - `use_smoothed_error` filters the embedded estimate through
-  `(M - smoothing_gamma * h * J)^-1`: one extra linear solve per step.
-- `smooth_error` = request AND `tableau.supports_smoothed_error` AND adaptive;
-  off compiles the smoothing out, an unsupported request warns.
-  `FIRKStep.family_defaults(tableau)` defaults the request on for radau.
-- `smoothing_gamma`: `a[-1][-1]` on `ButcherTableau`; the sole real
-  eigenvalue of `a` on `RadauIIATableau`, solved exactly and rounded once
-  so it is identical on every host. The tableau also derives the
-  estimator weights (`smoothed_error_weights`, always accumulated).
-- DIRK and FIRK own width-`n_states` `error_solver` children on the `AT_STATE`
-  helper family (J at the `state` argument, `a_ij` scales the matrix only),
-  aliased into `solver_shared`; Rosenbrock-W reuses its cached-Jacobian
-  solver. `ODEImplicitStep` builds it for a smoothing-capable tableau when
-  `owns_error_solver` (DIRK, FIRK), registering it only while smoothing is
-  on. It carries `instance_label="error"` and reads `error_atol`,
-  `error_rtol`, `error_max_iters`, `error_residual_reduction` and
-  `error_residual_floor`, which `resolve()` fills from the `krylov_*`
-  settings when not given; its product is `error_linear_solver_fn`.
-- Rhs via generated `apply_mass`: DIRK and Rosenbrock-W `M @ raw_error`
-  (DIRK solves at the final stage state/time/drivers, rhs in `error_rhs`);
-  FIRK `M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` at the step-start state.
+  `(M - smoothing_gamma * h * J)^-1`, one extra linear solve per step. It is active when
+  requested, supported by the tableau (`supports_smoothed_error`) and adaptive;
+  otherwise it compiles out, and an unsupported request warns.
+  `FIRKStep.family_defaults(tableau)` turns it on for Radau.
+- `smoothing_gamma` is `a[-1][-1]` on `ButcherTableau` and the sole real eigenvalue of
+  `a` on `RadauIIATableau`, computed exactly and rounded once. The tableau also derives
+  `smoothed_error_weights`.
+- DIRK and FIRK own an `error_solver` (width `n_states`, `AT_STATE` helpers, aliased
+  into `solver_shared`) when `owns_error_solver`, registered only while smoothing is
+  on. It has `instance_label="error"`, reads `error_atol`, `error_rtol`,
+  `error_max_iters`, `error_residual_reduction`, `error_residual_floor` (resolved from
+  the `krylov_*` settings when not given) and produces `error_linear_solver_fn`.
+  Rosenbrock-W reuses its cached-Jacobian solver.
+- The RHS comes from the generated `apply_mass`: DIRK and Rosenbrock-W `M @ raw_error`
+  (DIRK at the final stage state, time and drivers, into `error_rhs`); FIRK
+  `M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` at the step-start state.
 
-### DIRK stage data is in state-increment space
-`stage_rhs` holds `k_i = M^-1 @ f(Y_i)`: implicit stages store
-`stage_increment / dt`; explicit stages evaluate through the generated
-`evaluate_inv_mass_f` helper (plain `f` when the mass is identity).
+## DIRK stage data
+`stage_rhs` holds `k_i = M^-1 @ f(Y_i)`: implicit stages store `stage_increment / dt`;
+explicit stages evaluate the generated `evaluate_inv_mass_f` (plain `f` for identity
+mass).
 
-### Solver helpers arrive by name
-Implicit steps call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=..., **kwargs).device_function` with plain strings and bools: a role name (`"residual"`, `"linear_operator"`, `"apply_mass"`, ...) or the configured `preconditioner_type`, plus the request axes (`jacobian_at="step"` for frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing, `prefactored=True` for step-start LU factors). `preconditioner_type` validates against `PRECONDITIONER_ROLES` at construction.
-Every implicit step and the initialiser take `get_solver_helper_fn` at
-construction: constructors and `update` (after a recognised key) run
-`build_implicit_helpers()`, which requests the helpers, pushes them into the
-solver children and writes their device functions and an `OperationCounts`
-into the step's config; `build()` reads that config only.
-A step `update` carrying another `tableau` or `n_states` raises;
-`SingleIntegratorRunCore` rebuilds the step for those.
-`performance_defaults` (the step's own placement values) and
-`step_operation_count` feed `BatchSolverKernel.performance_defaults`.
-`optimisation_candidates` lists the combinations `Solver.optimize` times.
+## Solver helpers
+- Implicit steps and the initialiser take `get_solver_helper_fn` at construction and
+  call `get_solver_helper_fn(role, jacobian_at=..., prefactored=..., stacked=...,
+  **kwargs).device_function` with a role name (`"residual"`, `"linear_operator"`,
+  `"apply_mass"`, ...) or the configured `preconditioner_type`: `jacobian_at="step"` for
+  frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing,
+  `prefactored=True` for step-start LU factors. `preconditioner_type` is validated
+  against `PRECONDITIONER_ROLES`.
+- Constructors and `update` (after a recognised key) run `build_implicit_helpers()`,
+  which requests the helpers, pushes them into the solver children and writes their
+  device functions and an `OperationCounts` into the config; `build()` reads only the
+  config. An `update` with another `tableau` or `n_states` raises;
+  `SingleIntegratorRunCore` rebuilds the step instead.
+- `performance_defaults` and `step_operation_count` feed
+  `BatchSolverKernel.performance_defaults`; `optimisation_candidates` lists what
+  `Solver.optimize` times.
+- With `linear_correction_type="lu"` (`uses_direct_solver`) steps request the
+  `lu_solve` role; `HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
+  `update(lu_solve_fn=..., lu_nnz=...)`.
 
-When `linear_correction_type="lu"` (`uses_direct_solver`), steps request
-the `lu_solve` role instead of the operator + preconditioner pair;
-`HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
-`update(lu_solve_fn=..., lu_nnz=...)`.
-
-### Simplified Newton (`inexact_newton`)
-`ImplicitStepConfig.inexact_newton` (default `False`) freezes the Newton
-iteration matrix at the step start; the residual stays exact. The frozen
-chain wires a per-step prepare function
-(`(state, parameters, drivers, t, h, cached_aux) -> int32` status, OR'd
-into the step status) into `compile_settings.prepare_jacobian_fn`,
-resizes the step's `cached_auxiliaries` buffer, and sets
-`use_cached_auxiliaries=True` on the solver. LU pairings follow
-`ImplicitStepConfig.prefactored` (default `True`: finished step-start
-factors per distinct tableau diagonal; `False`: frozen entries
-factorised per call); FIRK + lu runs the stacked prefactored eigenvalue
-block transform, with smoothing sharing its real block. Rosenbrock-W
-ignores both flags.
-
-### FSAL warp-coherence
-- FSAL stage-0 RHS reuse is gated on `all_sync(activemask(), accepted_flag != 0)`.
-
-### Testing
-Tests under `tests/integrators/algorithms/`:
-`test_step_algorithms.py`, `test_init.py`, `test_ode_explicitstep.py`,
-`test_ode_implicitstep.py`, `test_tableau_properties.py`, `test_*_tableaus.py`.
+## Simplified Newton (`inexact_newton`)
+`ImplicitStepConfig.inexact_newton` (default `False`) freezes the Newton iteration
+matrix at the step start; the residual stays exact. The frozen chain wires a per-step
+prepare function (`(state, parameters, drivers, t, h, cached_aux) -> int32`, OR'd into
+the step status) into `compile_settings.prepare_jacobian_fn`, resizes
+`cached_auxiliaries` and sets `use_cached_auxiliaries=True` on the solver. LU pairings
+follow `ImplicitStepConfig.prefactored` (default `True`: step-start factors per distinct
+tableau diagonal; `False`: frozen entries factorised per call); FIRK + LU runs the
+stacked prefactored eigenvalue block transform, with smoothing sharing its real block.
+Rosenbrock-W ignores both flags.
 
 ## Dependencies
 ### Internal

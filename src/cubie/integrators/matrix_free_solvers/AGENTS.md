@@ -25,111 +25,76 @@ Both are `MultipleInstanceCUDAFactory` subclasses.
 | `lu_solver.py` | `LUSolver` — direct sparse LU solve (`linear_correction_type="lu"`); wraps the generated `lu_solve` helper (codegen: `odesystems/symbolic/codegen/lu_solver.py`) in the shared linear-solver contract. |
 | `newton_krylov.py` | `NewtonKrylov` — Newton iteration with a warm-started contraction test. |
 
-## For AI Agents
+## Classes
+The public surface is `MRLinearSolver`, `BiCGSTABSolver`, `LUSolver` and `NewtonKrylov`;
+get the compiled callable from `.device_function`.
 
-**Class factories, not free functions.** The public surface is the classes
-`MRLinearSolver`, `BiCGSTABSolver`, `LUSolver`, and `NewtonKrylov`; there are
-no `linear_solver_factory` / `newton_krylov_solver_factory` functions. Get the
-compiled callable from `.device_function`.
-
-### Compiled device-function signatures (the caller contract)
-- Linear solvers (MR/SD, BiCGSTAB, and LU share it): `linear_solver(state,
-  parameters, drivers, base_state, cached_aux, t, h, a_ij, rhs, x, shared,
-  persistent_local, krylov_iters_out) -> int32`. `cached_aux` may be
-  zero-length. `rhs` enters as the RHS and is overwritten with the residual;
-  `x` enters as the initial guess and is overwritten with the solution;
-  `krylov_iters_out` is a length-1 int32 array.
-- `LUSolver` shares the signature: exact per call, `rhs` read-only, the
-  guess in `x` ignored, status always `SUCCESS`.
+## Device-function signatures
+- Linear solvers (MR/SD, BiCGSTAB, LU): `linear_solver(state, parameters, drivers,
+  base_state, cached_aux, t, h, a_ij, rhs, x, shared, persistent_local,
+  krylov_iters_out) -> int32`. `cached_aux` may be zero-length. `rhs` is overwritten
+  with the residual and `x` (initial guess) with the solution; `krylov_iters_out` is a
+  length-1 int32 array. `LUSolver` is exact per call: `rhs` is read-only, the guess is
+  ignored and the status is always `SUCCESS`.
 - `NewtonKrylov`: `nonlinear_solver_fn(stage_increment, parameters, drivers,
-  cached_aux, t, h, a_ij, base_state, step_start, shared_scratch,
-  persistent_scratch, counters) -> int32`. `stage_increment` updates in
-  place; `use_cached_auxiliaries=True` solves at `step_start`. `counters` is
-  a length-2 int32 array: `[0]` = Newton iters, `[1]` = total Krylov iters.
+  cached_aux, t, h, a_ij, base_state, step_start, shared_scratch, persistent_scratch,
+  counters) -> int32`. `stage_increment` updates in place;
+  `use_cached_auxiliaries=True` solves at `step_start`. `counters` is length-2 int32:
+  `[0]` Newton iterations, `[1]` total Krylov iterations.
+- Status bits (`../AGENTS.md`) are OR-combined; iteration counts never enter the status
+  word. Callers OR it into their step status.
 
-### Caller-supplied callbacks (set via config/`update`)
-- `operator_apply_fn` — applies `F @ v`; sig `(state, parameters, drivers,
-  cached_aux, base_state, t, h, a_ij, v, out)`.
-- `preconditioner` (optional; `None` → search direction is `rhs`); sig
-  `(state, parameters, drivers, cached_aux, base_state, t, h, a_ij, rhs,
-  preconditioned_vec, jvp)`.
-- `residual_fn` (Newton); sig `(stage_increment, parameters, drivers, t, h,
-  a_ij, base_state, residual_out)`.
-- `krylov_linear_solver_fn` (Newton) — the inner linear solver's
-  `device_function`. `NewtonKrylov` owns a child linear solver: its `update`
-  forwards `krylov_`-prefixed params to the child and re-injects the
-  recompiled device function.
+## Caller-supplied callbacks (config / `update`)
+- `operator_apply_fn` applies `F @ v`: `(state, parameters, drivers, cached_aux,
+  base_state, t, h, a_ij, v, out)`.
+- `preconditioner` (`None` makes the search direction `rhs`): `(state, parameters,
+  drivers, cached_aux, base_state, t, h, a_ij, rhs, preconditioned_vec, jvp)`.
+- `residual_fn` (Newton): `(stage_increment, parameters, drivers, t, h, a_ij,
+  base_state, residual_out)`.
+- `krylov_linear_solver_fn` (Newton): the child linear solver's `device_function`.
+  `NewtonKrylov.update` forwards `krylov_`-prefixed keys to the child and re-injects its
+  recompiled function.
 
-### Registered buffers (length `solver_width` unless noted)
+## Registered buffers (length `solver_width` unless noted)
 - `MRLinearSolver`: `preconditioned_vec`, `temp`.
-- `BiCGSTABSolver`: `bicg_r0_hat`, `bicg_p`, `bicg_v`, `bicg_tmp`,
-  `bicg_s_hat`.
-- `LUSolver`: `lu_factor` (length `lu_nnz`, location `lu_factor_location`; 0 for substitution-only variants).
-- `NewtonKrylov`: `delta`, `residual`, `krylov_iters_local` (length 1,
-  int32), and `prev_theta` (length 1, persistent — contraction
-  history carried between solves).
+- `BiCGSTABSolver`: `bicg_r0_hat`, `bicg_p`, `bicg_v`, `bicg_tmp`, `bicg_s_hat`.
+- `LUSolver`: `lu_factor` (length `lu_nnz`, location `lu_factor_location`; 0 for
+  substitution-only variants).
+- `NewtonKrylov`: `delta`, `residual`, `krylov_iters_local` (1, int32), `prev_theta`
+  (1, persistent contraction history).
 
-### Status codes & convergence
-- Status codes come from the package-central `CUBIE_RESULT_CODES` (`cubie/result_codes.py`,
-  re-exported from this package): `SUCCESS=0`,
-  `MAX_NEWTON_ITERATIONS_EXCEEDED=2`, `MAX_LINEAR_ITERATIONS_EXCEEDED=4`
-  (captured as device closure constants). `nonlinear_solver_fn` OR-combines these into a **low-bits** status
-  word — it does NOT pack the iteration count into high bits (counts go to `counters`).
-  Callers OR this word into their own step status.
-- Linear norms use `ScaledNorm` (`TiledScaledNorm` for coupled FIRK
-  solves, whose reference tiles the single-stage base state across
-  all stages). The Newton norm is a `DIRKCorrectionNorm` or
-  `FIRKCorrectionNorm`, whose whole-vector function scales the update
-  by `atol + rtol * max(|stage_value|, |step_start|)` (DIRK: one
-  diagonal coefficient; FIRK: the full tableau row).
-- **Norm tolerances are per physical state** (`n_states` entries, the length
-  the step controller takes); stage-tiled norms read entry `i mod n_states`.
-  `n_states` is a required norm-constructor argument.
-- **Every linear solve (MR, SD, BiCGSTAB; Newton-owned or direct)
-  stops on** `||r|| <= krylov_residual_floor +
-  krylov_residual_reduction * ||b||`. `||.||` = the solver's
-  `ScaledNorm` (1.0 sits at the `krylov_atol`/`krylov_rtol`
-  envelope); `||b||` = the untouched RHS at solve entry; the squared
-  target is capped at `finfo.max`. Norm
-  reference: stage base state (Newton-owned) or model state
-  (direct) — `norm_reference` config field, bound at compile time.
-  Derived defaults: `krylov_atol`/`krylov_rtol` = the step
-  controller's `atol`/`rtol`; reduction = adaptive controller min
-  `rtol`, divided by 100 for linearly-implicit (`is_linear`) steps
-  (machine epsilon for non-adaptive runs); floor = `sqrt(eps)`.
-- **Newton convergence:** consecutive full steps estimate the
-  contraction `theta` (floored at `0.3 * prev_theta`, warm-started via
-  the persistent `prev_theta` buffer, stored clamped to 1, reset by a
-  failed solve). Accept on `theta / (1 - theta) * ||dz|| < 1/100`, a
-  first-iteration `||dz|| < 1e-5`, or `||dz|| >= ||dz_prev||` with
-  `||dz|| <= 1`.
-  A non-finite norm exits with `NEWTON_DIVERGENCE=256`; otherwise an
-  unconverged solve ends at `newton_max_iters`, adding
-  `NEWTON_DIVERGENCE` if any `||dz|| > 1` update had `theta > 2`. A
-  failed linear solve commits nothing and clears the in-solve
-  contraction history.
-- **Iteration limits:** `newton_max_iters` defaults to 8; unset
-  `krylov_max_iters` resolves to `ceil(1.5 * solver_width)`.
-- Every norm floors `atol` at `1e-16` per entry on the host (`UserWarning`); correction-norm `rtol` floors at 4 ULPs; Krylov norms keep raw `rtol`.
-- There is no line search: a diverging solve exits early with a
-  nonzero status and the adaptive step controller rejects the step
-  and shrinks `dt`.
+## Norms and convergence
+- Linear norms are `ScaledNorm` (`TiledScaledNorm` for coupled FIRK solves, tiling the
+  single-stage base state across stages). The Newton norm is `DIRKCorrectionNorm` or
+  `FIRKCorrectionNorm`, scaling the update by
+  `atol + rtol * max(|stage_value|, |step_start|)` (DIRK: one diagonal coefficient;
+  FIRK: the full tableau row).
+- Tolerances are per physical state (`n_states` entries, a required norm argument);
+  stage-tiled norms read entry `i mod n_states`. Every norm floors `atol` at `1e-16` per
+  entry on the host with a `UserWarning`; correction-norm `rtol` floors at 4 ULPs;
+  Krylov norms keep raw `rtol`.
+- Every linear solve stops on `||r|| <= krylov_residual_floor + krylov_residual_reduction
+  * ||b||`, `||.||` the solver's `ScaledNorm` and `||b||` the RHS at entry (squared target
+  capped at `finfo.max`). The norm reference is the stage base state (Newton-owned) or
+  the model state (direct), bound at compile time via `norm_reference`. Defaults:
+  `krylov_atol`/`krylov_rtol` = the controller's `atol`/`rtol`; reduction = the adaptive
+  controller's minimum `rtol` (divided by 100 for `is_linear` steps; machine epsilon
+  for non-adaptive runs); floor = `sqrt(eps)`.
+- Newton: consecutive full steps estimate the contraction `theta` (floored at
+  `0.3 * prev_theta`, warm-started from `prev_theta`, stored clamped to 1, reset by a
+  failed solve). Accept on `theta / (1 - theta) * ||dz|| < 1/100`, a first-iteration
+  `||dz|| < 1e-5`, or `||dz|| >= ||dz_prev||` with `||dz|| <= 1`. A non-finite norm exits
+  with `NEWTON_DIVERGENCE`; otherwise an unconverged solve ends at `newton_max_iters`,
+  adding `NEWTON_DIVERGENCE` if any `||dz|| > 1` update had `theta > 2`. A failed linear
+  solve commits nothing and clears the contraction history.
+- Unset `krylov_max_iters` resolves to `ceil(1.5 * solver_width)`.
+- No line search: a diverging solve exits with a nonzero status and the adaptive
+  controller rejects the step.
 
-### Solver-specific gotchas
-- **Warp-coherent loops.** Iterative loops exit on warp votes (`all_sync`/`any_sync`
-  from `cuda_simsafe`) so every active lane agrees before breaking; `selp` gives
-  branchless commits. Don't add un-voted data-dependent `break`/early-return — it
-  breaks lane lockstep.
-- **Iteration loops** are `unroll_if(range(max_iters), flag)` sites: `unroll_newton_exits` on the Newton loop, `unroll_krylov_exits` on the Krylov loops.
-
-### Testing
-Solver behaviour is exercised through the implicit algorithm steps under
-`tests/integrators/algorithms/`, verified against the plain CPU reference
-solvers in `tests/integrators/cpu_reference/cpu_utils.py`
-(`newton_solve`, `krylov_solve`). Any change to a device function's
-algorithm, signature, buffers, or status logic must be replicated in its
-CPU reference counterpart. Run e.g.
-`pytest tests/integrators/algorithms -k "newton or krylov or implicit"`.
+## CPU references
+The CPU reference solvers in `tests/integrators/cpu_reference/cpu_utils.py`
+(`newton_solve`, `krylov_solve`) must match every change to a device function's
+algorithm, signature, buffers or status logic.
 
 ## Dependencies
 ### Internal
