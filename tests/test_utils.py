@@ -4,6 +4,7 @@ import attrs
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import compile_kwargs
 from cubie._utils import (
     _expand_dtype,
     clamp_factory,
@@ -28,7 +29,7 @@ from cubie.memory import default_memmgr
 def _clamp_kernel(fn):
     """Compile one clamp kernel per clamp device function."""
 
-    @cuda.jit()
+    @cuda.jit(**compile_kwargs)
     def clamp_test_kernel(d_value, d_low_clip, d_high_clip, dout):
         dout[0] = fn(d_value, d_low_clip, d_high_clip)
 
@@ -200,7 +201,7 @@ def test_is_devfnc():
         """A simple CUDA device function."""
         return x + y
 
-    @cuda.jit(device=False)
+    @cuda.jit(device=False, **compile_kwargs)
     def cuda_kernel(x, y):
         """A regular Python function."""
         y = x  # noqa: F841 -- kernel body is the is_devfunc input

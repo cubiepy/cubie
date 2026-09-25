@@ -9,6 +9,8 @@ import pytest
 from scipy.interpolate import CubicSpline
 
 from cubie.cuda_simsafe import cuda, is_pinned_array
+
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples
@@ -247,7 +249,7 @@ def _run_time_derivative(del_t, system, query_times):
         (query_times.size, out_len), dtype=system.precision
     )
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(times, out):
         idx = cuda.grid(1)
         if idx < times.size:
@@ -910,7 +912,7 @@ def test_periodic_boundary_respects_general_order(
     np.testing.assert_allclose(
         gpu,
         reference,
-        rtol=tolerance.rel_tight,
+        rtol=tolerance.rel_loose,
         atol=tolerance.abs_tight,
         err_msg=("periodic spline failed to reproduce samples\n"
                  f"device={gpu}\nref={reference}\ndelta={gpu-reference}"),

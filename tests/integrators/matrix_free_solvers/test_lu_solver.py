@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose
 
@@ -260,7 +261,7 @@ def test_lu_stacked_solve_matches_dense(
         np.zeros(1, dtype=np.int32), stream=stream
     )
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(state, params, drivers, base_state, rhs, x, factor, flag):
         cached_aux = cuda.local.array(1, precision)
         flag[0] = lu_solve(
@@ -361,7 +362,7 @@ def test_lu_prefactored_solve_matches_dense(
         np.zeros(1, dtype=precision), stream=stream
     )
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(
         state, params, drivers, cached, a_ij, rhs, x, factor, flag
     ):
@@ -462,7 +463,7 @@ def test_lu_transformed_solve_matches_dense(
         np.zeros(2, dtype=np.int32), stream=stream
     )
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(state, params, drivers, cached, rhs, x, factor, flag):
         flag[0] = prepare(
             state, params, drivers, precision(0.0), h, cached
@@ -554,7 +555,7 @@ def test_lu_smoothing_solve_matches_dense(
     )
     g_typed = precision(gamma_smooth)
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(state, params, drivers, cached, rhs, x, factor, flag):
         prepare(state, params, drivers, precision(0.0), h, cached)
         flag[0] = smoothing_solve(
@@ -631,7 +632,7 @@ def test_lu_baked_diagonal_governs_solve(
         np.zeros(1, dtype=np.int32), stream=stream
     )
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(state, params, drivers, rhs, x, factor, flag):
         cached_aux = cuda.local.array(1, precision)
         flag[0] = lu_solve(

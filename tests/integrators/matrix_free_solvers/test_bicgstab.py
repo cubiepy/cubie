@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose
 
@@ -109,7 +110,7 @@ def _cached_solver_kernel(n, precision):
     scratch_size = 2 * n
 
     def factory(solver, h):
-        @cuda.jit
+        @cuda.jit(**compile_kwargs)
         def kernel(state_init, rhs, base_state, cached_aux, x, flag):
             time_scalar = precision(0.0)
             state = cuda.local.array(n, precision)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 
 from cubie.outputhandling.save_state import save_state_factory
@@ -63,7 +64,7 @@ def _run_save_state_kernel(
 
     step_val = precision(current_step)
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(
         st, obs, ctrs, step, st_out, obs_out, ctrs_out
     ):

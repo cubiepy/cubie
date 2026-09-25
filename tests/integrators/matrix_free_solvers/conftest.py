@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pytest
 from cubie.cuda_simsafe import cuda
+from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 
 from cubie.integrators.matrix_free_solvers import CUBIE_RESULT_CODES
@@ -341,7 +342,7 @@ def newton_edge_kernel(newton_edge_case, newton_edge_solver, precision):
         newton_edge_solver.persistent_local_buffer_size, 1
     )
 
-    @cuda.jit
+    @cuda.jit(**compile_kwargs)
     def kernel(states, statuses, counts):
         parameters = cuda.local.array(1, precision)
         drivers = cuda.local.array(1, precision)
@@ -502,7 +503,7 @@ def system_setup(request, precision):
     )
     deriv_dev = cuda.to_device(np.zeros(3, dtype=precision), stream=stream)
 
-    @cuda.jit()
+    @cuda.jit(**compile_kwargs)
     def dxdt_kernel(state, params, drivers, observables, deriv, time_scalar):
         dxdt_func(state, params, drivers, observables, deriv, time_scalar)
 
@@ -535,7 +536,7 @@ def system_setup(request, precision):
     state_fp_dev = cuda.to_device(state_fp, stream=stream)
     temp_out = cuda.to_device(np.zeros(3, dtype=precision), stream=stream)
 
-    @cuda.jit()
+    @cuda.jit(**compile_kwargs)
     def operator_kernel(
         state,
         params,
@@ -624,7 +625,7 @@ def neumann_kernel(precision):
     def factory(precond, n, h):
         scratch_size = n
 
-        @cuda.jit
+        @cuda.jit(**compile_kwargs)
         def kernel(state_init, residual, base_state, out):
             time_scalar = precision(0.0)
             state = cuda.local.array(n, precision)
@@ -671,7 +672,7 @@ def counting_solver_kernel():
             linear_solver.persistent_local_buffer_size, 1
         )
 
-        @cuda.jit
+        @cuda.jit(**compile_kwargs)
         def kernel(state_init, parameters, rhs, base_state, x, flag):
             time_scalar = precision(0.0)
             state = cuda.local.array(n, precision)
@@ -729,7 +730,7 @@ def solver_kernel():
             linear_solver.persistent_local_buffer_size, 1
         )
 
-        @cuda.jit
+        @cuda.jit(**compile_kwargs)
         def kernel(state_init, rhs, base_state, x, flag):
             time_scalar = precision(0.0)
             state = cuda.local.array(n, precision)
@@ -955,7 +956,7 @@ def newton_kernel(precision):
             newton_solver.persistent_local_buffer_size, 1
         )
 
-        @cuda.jit
+        @cuda.jit(**compile_kwargs)
         def kernel(state, base, flag, h):
             params = cuda.local.array(1, precision)
             drivers = cuda.local.array(1, precision)
