@@ -5,12 +5,10 @@ used for staging data during chunked host-device transfers. Buffers
 are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
-A free buffer serves any request that fits its capacity, viewed in
-the requested shape and dtype. Pool depth is bounded by
-``STAGING_POOL_DEPTH`` per label, RAM headroom, and the memory
-manager's pinned budget; a full pool blocks
-:meth:`ChunkBufferPool.acquire` until a release. The first buffer for
-a label always allocates.
+An idle buffer serves any request that fits its capacity. Depth per
+label is bounded by ``STAGING_POOL_DEPTH``, RAM headroom and the
+pinned budget; a full pool blocks :meth:`ChunkBufferPool.acquire`
+until a release. The first buffer for a label always allocates.
 
 Published Classes
 -----------------
@@ -99,8 +97,7 @@ class ChunkBufferPool:
 
     Manages allocation and lifecycle of pinned memory buffers used
     for staging data during chunked device transfers. Buffers are
-    sized for one transfer block and reused across blocks, chunks and
-    shapes that fit.
+    reused for any block that fits.
 
     Attributes
     ----------
@@ -131,10 +128,9 @@ class ChunkBufferPool:
     ) -> PinnedBuffer:
         """Acquire a pinned buffer for the given array.
 
-        Reuses a free buffer of the label that fits the request,
-        replacing a free one too small for it; grows the pool within
-        the depth, RAM-headroom, and pinned-budget bounds, and
-        otherwise blocks until the transfer watcher releases a buffer.
+        Reuses an idle buffer that fits, replacing one too small;
+        otherwise grows within the depth, headroom and budget bounds,
+        or blocks until a release.
 
         Parameters
         ----------
@@ -163,8 +159,7 @@ class ChunkBufferPool:
                     buf.view(shape, dtype)
                     return buf
                 if idle:
-                    # Too small for this block: return it to the arena
-                    # and replace it.
+                    # Too small: drop it and allocate a replacement.
                     buffers.remove(idle[0])
                     continue
 

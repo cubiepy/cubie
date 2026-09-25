@@ -309,10 +309,9 @@ else:  # pragma: no cover - exercised in GPU environments
         return cuda.current_context().get_memory_info()
 
     def alloc_pinned_slab(nbytes: int) -> Tuple[int, Any]:
-        """Page-lock ``nbytes`` of host memory.
+        """Return the address and owner of ``nbytes`` of pinned memory.
 
-        Returns the address and its owner; dropping the owner frees
-        the memory, which synchronizes the device.
+        Dropping the owner frees the memory and synchronizes the device.
         """
         memory = cupy.cuda.pinned_memory.PinnedMemory(
             nbytes, cupy.cuda.runtime.hostAllocPortable
@@ -358,11 +357,9 @@ def is_device_array(value: Any) -> bool:
 
 
 def is_pinned_array(array: Any) -> bool:
-    """Return whether a host array is backed by page-locked memory.
+    """Return whether the driver reports ``array`` as page-locked.
 
-    Asks the driver about the array's first byte, so any page-locked
-    allocation answers, whoever made it. Always ``False`` under the
-    CUDA simulator, which has no page-locked memory.
+    Always ``False`` under the CUDA simulator.
     """
     if CUDA_SIMULATION:  # pragma: no cover - simulated
         return False

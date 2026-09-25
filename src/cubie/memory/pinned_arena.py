@@ -1,11 +1,8 @@
 """Page-locked slabs sub-allocated into host arrays of any shape.
 
-A slab is one page-locked allocation held until an explicit
-:meth:`PinnedArena.release_free_slabs`. Arrays are carved from free
-extents of any slab (best fit), and a collected array returns its
-extent, coalesced with its free neighbours, for the next request of
-any size. The arena never frees page-locked memory on its own, so no
-allocation or release synchronizes the device.
+Arrays take the best-fitting free extent of any slab; a collected
+array returns its extent for the next request of any size. Slabs are
+freed only by :meth:`PinnedArena.release_free_slabs`.
 
 Published Classes
 -----------------
@@ -105,8 +102,7 @@ class PinnedArena:
 
     _slabs: List[_Slab] = field(factory=list, init=False)
     _lock: Lock = field(factory=Lock, init=False)
-    # Collected arrays queue their extents here without locking;
-    # garbage collection can run inside a locked allocation.
+    # Collected arrays queue extents here; GC may run under the lock.
     _releases: deque = field(factory=deque, init=False)
     _live_bytes: int = field(default=0, init=False)
 
@@ -138,14 +134,14 @@ class PinnedArena:
         dtype
             Element type of the array.
         cap
-            Reserved-byte ceiling a new slab may not cross; ``None``
-            grows without a ceiling.
+            Reserved bytes a new slab may not exceed; ``None`` for
+            no limit.
 
         Returns
         -------
         numpy.ndarray or None
-            The array, or ``None`` when no free extent fits and a new
-            slab would cross ``cap``.
+            The array, or ``None`` when nothing fits and a new slab
+            would exceed ``cap``.
 
         Raises
         ------
@@ -168,8 +164,7 @@ class PinnedArena:
             slab.address + offset
         )
         array = ndarray(shape, dtype=dtype, buffer=buffer)
-        # Views keep ``array`` as their base, so this fires once the
-        # last view is collected.
+        # Fires once the array and all its views are collected.
         finalize(array, self._releases.append, (slab, offset, extent))
         return array
 

@@ -1456,9 +1456,7 @@ class MemoryManager:
         return self._pinned_arena.reserved_bytes
 
     def flush_pinned_pool(self) -> int:
-        """Free every pinned slab with no live array.
-
-        Freeing page-locked memory synchronizes the whole device.
+        """Free every pinned slab with no live array; syncs the device.
 
         Returns
         -------
@@ -1473,12 +1471,9 @@ class MemoryManager:
         dtype: DTypeLike,
         force: bool = False,
     ) -> Optional[ndarray]:
-        """Carve one uninitialised pinned host array from the arena.
+        """Return an uninitialised pinned array from the arena.
 
-        A free extent of any slab is reused whatever its previous
-        shape; a new slab is page-locked only when none fits. The
-        extent returns to the arena once the array and every view of
-        it are collected.
+        A new slab is page-locked only when no free extent fits.
 
         Parameters
         ----------
@@ -1493,7 +1488,7 @@ class MemoryManager:
         Returns
         -------
         numpy.ndarray or None
-            The pinned array, or ``None`` when a new slab would cross
+            The pinned array, or ``None`` when a new slab would exceed
             the budget or the driver refuses one.
 
         Raises

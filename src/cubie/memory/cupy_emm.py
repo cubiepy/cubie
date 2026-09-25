@@ -1,15 +1,9 @@
-"""CuPy stream-ordered External Memory Manager plugin for Numba contexts.
+"""Numba EMM plugin allocating from the device's stream-ordered pool.
 
-Backs Numba's device allocations with the device's stream-ordered
-memory pool (``cudaMallocAsync``, reached through CuPy's
-``malloc_async``) via the EMM plugin interface, so ``cuda.device_array``
-returns a **native** ``DeviceNDArray``. Native arrays keep the fast
-kernel-launch path (no per-launch ``__cuda_array_interface__``
-re-parse) and let transfers use Numba's pinned + streamed async copies.
-
-The pool keeps the driver's release threshold of zero: freed memory
-returns to the device at the next synchronization, so the pool holds
-only live allocations between solves.
+``cuda.device_array`` returns a native ``DeviceNDArray`` backed by
+``cudaMallocAsync`` (CuPy's ``malloc_async``). The pool's release
+threshold is zero: freed blocks return to the device at the next sync
+of their stream.
 
 See Also
 --------
@@ -37,9 +31,8 @@ if not CUDA_SIMULATION:
         """EMM plugin allocating native Numba arrays from the device pool.
 
         Adapted from the numba cupy-EMM tutorial (BSD 2-Clause; see
-        THIRD_PARTY_LICENSES). Allocations are stream-ordered
-        (``cudaMallocAsync``) against whichever CuPy stream is current
-        at allocation, and are freed on that stream.
+        THIRD_PARTY_LICENSES). Blocks are allocated and freed on the
+        CuPy stream current at allocation.
         """
 
         def __init__(self, context) -> None:
@@ -51,8 +44,7 @@ if not CUDA_SIMULATION:
 
         def initialize(self) -> None:
             super().initialize()
-            # Context.prepare_for_use calls initialize() on every context
-            # activation; the pool is configured once.
+            # Runs on every context activation; configure the pool once.
             if self._pool is None:
                 runtime = cupy.cuda.runtime
                 pool = runtime.deviceGetMemPool(runtime.getDevice())
@@ -67,8 +59,7 @@ if not CUDA_SIMULATION:
             except cupy.cuda.runtime.CUDARuntimeError as error:
                 if error.status != CUDA_ERROR_MEMORY_ALLOCATION:
                     raise
-                # Frees queued on the stream return to the pool once
-                # it reaches them.
+                # Let queued frees complete, then retry once.
                 cupy.cuda.get_current_stream().synchronize()
                 cp_mp = cupy.cuda.memory.malloc_async(nbytes)
             self._allocations[cp_mp.ptr] = cp_mp
@@ -83,8 +74,7 @@ if not CUDA_SIMULATION:
             allocations = self._allocations
 
             def finalizer() -> None:
-                # Dropping the last reference frees the block on its
-                # stream.
+                # Dropping the last reference frees the block.
                 allocations.pop(ptr, None)
 
             return finalizer

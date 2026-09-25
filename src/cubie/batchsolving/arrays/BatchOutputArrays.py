@@ -440,8 +440,7 @@ class OutputArrays(BaseArrayManager):
                 if backing == "host" and wanted != "pinned":
                     continue
             backing = wanted
-            # The old buffer returns to the pinned arena before its
-            # replacement is carved.
+            # Free the old buffer before allocating its replacement.
             manager.release_host_array(slot.array)
             slot.array = None
             array = None

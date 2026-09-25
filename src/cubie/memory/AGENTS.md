@@ -57,9 +57,9 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
 ## Deregistration and eviction
 - Registry allocations keep device arrays alive until deregistration.
   `release_instance` removes one exact registry entry (an identity check guards against
-  reused ids). Freed device blocks leave the pool at the next synchronization of their
-  stream; `BatchSolverKernel.close` syncs its own stream after releasing its arrays.
-  Pinned slabs stay in the arena for the next array.
+  reused ids). Freed device blocks leave the pool at the next sync of their stream;
+  `BatchSolverKernel.close` syncs its stream after releasing its arrays. Pinned slabs
+  stay in the arena.
 - Explicit close reports cleanup failures and can be retried; finalizers are best
   effort and silent at interpreter shutdown.
 - Allocation, copies, launch and release use the run's stream; memory caps chunk the
@@ -72,14 +72,12 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
 ## Host backing
 - `choose_host_memory_type(nbytes, allow_pinned)`: memmap above `HOST_SPILL_FRACTION` of
   RAM, pinned up to `pinned_max_bytes` (default: total VRAM), else pageable.
-- `allocate_pinned_array` carves the array from the best-fitting free extent of any
-  arena slab, whatever its shape; a collected array (and every view of it) returns its
-  extent, coalesced with its neighbours. Only when no extent fits is a new slab
-  page-locked, and never past `pinned_budget_bytes` = `min(pinned_max_bytes,
-  HOST_SPILL_FRACTION × total RAM)` of slab bytes (`force` grows past it). The arena
-  never frees a slab on its own: freeing page-locked memory synchronizes the device and
-  blocks kernel launches from every thread. `flush_pinned_pool` frees the idle slabs on
-  request. `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
+- `allocate_pinned_array` takes the best-fitting free extent of any arena slab; a
+  collected array and its views return the extent. A new slab is page-locked only when
+  nothing fits, within `pinned_budget_bytes` = `min(pinned_max_bytes,
+  HOST_SPILL_FRACTION × total RAM)` of slab bytes (`force` ignores it). Slabs are freed
+  only by `flush_pinned_pool`, which syncs the device and stalls launches on every
+  thread. `pinned_live_bytes`/`pinned_reserved_bytes` report the arena.
 - `create_host_array` allocates the requested type; a `"pinned"` request the budget or
   the driver refuses lands pageable; `"memmap"` arrays land in the cache root. Pageable
   and memmap transfers stage through the pinned staging pool, charged to the same budget
@@ -93,9 +91,8 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
 
 ## Allocation provider
 The device's stream-ordered pool is the only device allocator, reached through the EMM
-plugin; take `cupy`/`cupyx` from `cubie.cuda_simsafe`. The plugin sets the pool's release
-threshold to zero, so it holds only live allocations between synchronizations; an
-out-of-memory allocation syncs the current stream once and retries. Its
+plugin; take `cupy`/`cupyx` from `cubie.cuda_simsafe`. The pool's release threshold is
+zero. An out-of-memory allocation syncs the current stream and retries once.
 `get_memory_info` reports device free memory plus the pool's reserved but unused bytes.
 `allocate()` routes `"device"` requests through `cuda.device_array` inside
 `current_cupy_stream` and `"pinned"` requests through `allocate_pinned_array`; any other
@@ -133,12 +130,11 @@ arrays; device arrays must be allocated through `allocate_queue` first.
   current stream. Allocation and release enter it; transfers use the Numba stream.
 
 ## ChunkBufferPool
-Pinned staging buffers keyed by `array_name`. `acquire` hands out the smallest idle buffer
-whose capacity fits, its `array` viewed in the requested shape and dtype, and replaces an
-idle buffer too small for the request; it grows while fewer than `STAGING_POOL_DEPTH`
-buffers of the label are in flight and RAM headroom and the pinned budget allow (a label
-with nothing in flight always gets one), and otherwise blocks until the transfer watcher
-releases a buffer; this bound paces the pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use on error
+Pinned staging buffers keyed by `array_name`. `acquire` returns the smallest idle buffer
+that fits, its `array` viewed in the requested shape and dtype, replacing an idle buffer
+too small; it grows while fewer than `STAGING_POOL_DEPTH` of the label are in flight and
+headroom and budget allow (a label with nothing in flight always gets one), else blocks
+until a release; this bound paces the pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use on error
 paths). Buffers are charged to the pinned ledger.
 
 ## Dependencies
