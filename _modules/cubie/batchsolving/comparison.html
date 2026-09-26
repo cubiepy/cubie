@@ -1,0 +1,1101 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cubie.batchsolving.comparison &mdash; cubie 0.0.4 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=1b720227" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8c5712d9"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            cubie
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../user_guide/index.html">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/coming_from_matlab.html">Coming from MATLAB</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/cellml.html">CellML Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/caching.html">Caching and Recompilation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user_guide/troubleshooting.html">Troubleshooting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/index.html">Theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/numerical_integration.html">Numerical Integration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/solvers.html">Nonlinear Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../theory/cuda.html">CUDA and GPU Computing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer_guide/index.html">Developer Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/codegen.html">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer_guide/testing.html">Testing Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API_reference/index.html">Reference Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/batchsolving/index.html">Batch solving</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solver.html">Solver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_ivp.html">solve_ivp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_result.html">SolveResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/solve_spec.html">SolveSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/calibration.html">Calibration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/optimize.html">Optimisation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/comparison.html">Candidate comparison</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_config.html">BatchSolverConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/batch_solver_kernel.html">BatchSolverKernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/system_interface.html">SystemInterface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/batchsolving/arrays.html">Arrays</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/array_container.html">ArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/base_array_manager.html">BaseArrayManager</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/managed_array.html">ManagedArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_array_container.html">InputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/input_arrays.html">InputArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_array_container.html">OutputArrayContainer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/active_outputs.html">ActiveOutputs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/batchsolving/output_arrays.html">OutputArrays</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/odesystems/index.html">ODE systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/create_ode_system.html">create_ODE_system</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic_ode.html">SymbolicODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/base_ode.html">BaseODE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_data.html">ODEData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_values.html">SystemValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/system_sizes.html">SystemSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/ode_cache.html">ODECache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/odesystems/symbolic.html">Symbolic</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/integrators/index.html">Integrators</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/single_integrator_run.html">SingleIntegratorRun</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/integrator_return_codes.html">IntegratorReturnCodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/algorithms.html">Algorithms</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_step_config.html">BaseStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/base_algorithm_step.html">BaseAlgorithmStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/step_cache.html">StepCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_step_config.html">ExplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/explicit_euler_step.html">ExplicitEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/implicit_step_config.html">ImplicitStepConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_step.html">BackwardsEulerStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/backwards_euler_pc_step.html">BackwardsEulerPCStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/crank_nicolson_step.html">CrankNicolsonStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_step.html">ERKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_erk_tableaus.html">ERK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_step.html">DIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_dirk_tableaus.html">DIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_step.html">FIRKStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_firk_tableaus.html">FIRK tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_step.html">GenericRosenbrockWStep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/generic_rosenbrock_tableaus.html">Rosenbrock tableau registry</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/algorithms/get_algorithm_step.html">get_algorithm_step</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/loops.html">Loops</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ivp_loop.html">IVPLoop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/loops/ode_loop_config.html">ODELoopConfig</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers.html">Matrix-free solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/linear_solver_factory.html">LinearSolver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/newton_krylov_solver_factory.html">NewtonKrylov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/matrix_free_solvers/solver_ret_codes.html">SolverRetCodes</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/integrators/step_control.html">Step control</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/get_controller.html">get_controller</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller.html">BaseStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_adaptive_step_controller.html">BaseAdaptiveStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_controller.html">FixedStepController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_i_controller.html">AdaptiveIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pi_controller.html">AdaptivePIController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_pid_controller.html">AdaptivePIDController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_controller.html">GustafssonController</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/base_step_controller_config.html">BaseStepControllerConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/adaptive_step_control_config.html">AdaptiveStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/fixed_step_control_config.html">FixedStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pi_step_control_config.html">PIStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/pid_step_control_config.html">PIDStepControlConfig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/integrators/step_control/gustafsson_step_control_config.html">GustafssonStepControlConfig</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/outputhandling/index.html">Output handling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_functions.html">OutputFunctions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_config.html">OutputConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_compile_flags.html">OutputCompileFlags</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_array_heights.html">OutputArrayHeights</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/single_run_output_sizes.html">SingleRunOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_input_sizes.html">BatchInputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/batch_output_sizes.html">BatchOutputSizes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/output_function_cache.html">OutputFunctionCache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics.html">Summary metrics</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summary_metrics.html">summary_metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/register_metric.html">register_metric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metric.html">SummaryMetric</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/summary_metrics.html">SummaryMetrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/metric_func_cache.html">MetricFuncCache</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean.html">Mean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max.html">Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/rms.html">RMS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/peaks.html">Peaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/std.html">Std</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/min.html">Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/max_magnitude.html">MaxMagnitude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/extrema.html">Extrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/negative_peaks.html">NegativePeaks</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/mean_std_rms.html">MeanStdRms</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_max.html">DxdtMax</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_min.html">DxdtMin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/dxdt_extrema.html">DxdtExtrema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_max.html">D2xdt2Max</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_min.html">D2xdt2Min</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../API_reference/outputhandling/summarymetrics/metrics/d2xdt2_extrema.html">D2xdt2Extrema</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/memory.html">Memory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/default_memmgr.html">default_memmgr</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/memory_manager.html">MemoryManager</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_request.html">ArrayRequest</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/array_response.html">ArrayResponse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/stream_groups.html">StreamGroups</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/memory/current_cupy_stream.html">current_cupy_stream</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../API_reference/gui/index.html">GUI Editors</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/constants_editor.html">ConstantsEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/states_editor.html">StatesEditor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../API_reference/gui/pre_parse_editor.html">PreParseEditor</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">cubie</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">cubie.batchsolving.comparison</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for cubie.batchsolving.comparison</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Time candidate settings of one solver on one device-resident batch.</span>
+
+<span class="sd">Published Objects</span>
+<span class="sd">-----------------</span>
+<span class="sd">:class:`Candidate`</span>
+<span class="sd">    Settings and launch of one configuration to time.</span>
+<span class="sd">:class:`CandidateTiming`</span>
+<span class="sd">    One candidate's kernel times and failed-run count.</span>
+<span class="sd">:class:`ComparisonRunner`</span>
+<span class="sd">    Switches one solver between candidates and times each one.</span>
+<span class="sd">:func:`rank_timings`</span>
+<span class="sd">    Order timings by success tier, then time.</span>
+<span class="sd">:func:`tail_safe_runs`</span>
+<span class="sd">    The batch near a wanted size whose last wave is fullest.</span>
+<span class="sd">:func:`validate_sizing`</span>
+<span class="sd">    Reject a ``waves`` or ``target_ms`` sizing argument out of range.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">multiprocessing</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">ceil</span><span class="p">,</span> <span class="n">isfinite</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="kn">import</span> <span class="n">warn</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">define</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">arange</span> <span class="k">as</span> <span class="n">np_arange</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">asarray</span> <span class="k">as</span> <span class="n">np_asarray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">count_nonzero</span> <span class="k">as</span> <span class="n">np_count_nonzero</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">int32</span> <span class="k">as</span> <span class="n">np_int32</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">take</span> <span class="k">as</span> <span class="n">np_take</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.backend.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">active_blocks_per_multiprocessor</span><span class="p">,</span>
+    <span class="n">device_hardware</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cache_root</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_cache_root_override</span><span class="p">,</span> <span class="n">set_cache_root</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.cuda_simsafe</span><span class="w"> </span><span class="kn">import</span> <span class="n">cuda</span><span class="p">,</span> <span class="n">float32</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.time_logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_timelogger</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">ROUNDS</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="sd">"""Timing rounds; the second visits the candidates in reverse order."""</span>
+
+<span class="n">SOLVES_PER_ROUND</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="sd">"""Timed solves per candidate per round."""</span>
+
+<span class="n">WARM_MS</span> <span class="o">=</span> <span class="mf">500.0</span>
+<span class="sd">"""Busy-kernel milliseconds run before the first timed solve.</span>
+
+<span class="sd">Empirical: RTX 4070 SUPER launches speed up 11% after 210 to 230 ms</span>
+<span class="sd">of load and hold that rate through host gaps of up to 1 s.</span>
+<span class="sd">"""</span>
+
+<span class="n">BUSY_CHAIN</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span>
+<span class="sd">"""Dependent FMAs per thread in one busy launch.</span>
+
+<span class="sd">Empirical: 2.6 to 2.9 ms per launch on the RTX 4070 SUPER.</span>
+<span class="sd">"""</span>
+
+<span class="n">SUCCESS_TIER_FRACTION</span> <span class="o">=</span> <span class="mf">0.95</span>
+<span class="sd">"""Share of the best success rate a candidate keeps to rank on time."""</span>
+
+<span class="n">TIMED_WAVES_FLOOR</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="sd">"""Fewest occupancy waves a timed batch fills at any launch."""</span>
+
+<span class="n">WORKER_STARTUP_SECONDS</span> <span class="o">=</span> <span class="mf">12.0</span>
+<span class="sd">"""Wall seconds a spawned worker spends importing cubie.</span>
+
+<span class="sd">Empirical: a fresh ``import cubie`` in a spawned process on the</span>
+<span class="sd">development machine (mlir compat 6 s, odesystems 4.8 s, cupy 1.5 s).</span>
+<span class="sd">"""</span>
+
+
+<span class="nd">@cuda</span><span class="o">.</span><span class="n">jit</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_busy_kernel</span><span class="p">(</span><span class="n">sink</span><span class="p">,</span> <span class="n">iterations</span><span class="p">):</span>  <span class="c1"># pragma: no cover - device code</span>
+<span class="w">    </span><span class="sd">"""Run a dependent FMA chain for ``iterations`` steps."""</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">float32</span><span class="p">(</span><span class="n">cuda</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iterations</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">value</span> <span class="o">*</span> <span class="n">float32</span><span class="p">(</span><span class="mf">0.999</span><span class="p">)</span> <span class="o">+</span> <span class="n">float32</span><span class="p">(</span><span class="mf">0.001</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="n">float32</span><span class="p">(</span><span class="mf">0.0</span><span class="p">):</span>
+        <span class="n">sink</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">busy_launch</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Queue one busy launch on ``stream``: every SM at its block and</span>
+<span class="sd">    thread limits, :data:`BUSY_CHAIN` FMAs per thread."""</span>
+    <span class="n">hardware</span> <span class="o">=</span> <span class="n">device_hardware</span><span class="p">()</span>
+    <span class="n">blocks_per_sm</span> <span class="o">=</span> <span class="n">hardware</span><span class="o">.</span><span class="n">max_blocks_per_multiprocessor</span>
+    <span class="n">threads</span> <span class="o">=</span> <span class="n">hardware</span><span class="o">.</span><span class="n">max_threads_per_multiprocessor</span> <span class="o">//</span> <span class="n">blocks_per_sm</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="n">blocks_per_sm</span> <span class="o">*</span> <span class="n">hardware</span><span class="o">.</span><span class="n">multiprocessor_count</span>
+    <span class="n">sink</span> <span class="o">=</span> <span class="n">cuda</span><span class="o">.</span><span class="n">device_array</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"float32"</span><span class="p">)</span>
+    <span class="n">_busy_kernel</span><span class="p">[</span><span class="n">blocks</span><span class="p">,</span> <span class="n">threads</span><span class="p">,</span> <span class="n">stream</span><span class="p">](</span><span class="n">sink</span><span class="p">,</span> <span class="n">BUSY_CHAIN</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">warm_clocks</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Busy-launch on ``stream`` until :data:`WARM_MS` of kernel time</span>
+<span class="sd">    has passed; return that time."""</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">while</span> <span class="n">total</span> <span class="o">&lt;</span> <span class="n">WARM_MS</span><span class="p">:</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">cuda</span><span class="o">.</span><span class="n">event</span><span class="p">()</span>
+        <span class="n">end</span> <span class="o">=</span> <span class="n">cuda</span><span class="o">.</span><span class="n">event</span><span class="p">()</span>
+        <span class="n">start</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+        <span class="n">busy_launch</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+        <span class="n">end</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+        <span class="n">end</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+        <span class="n">total</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">cuda</span><span class="o">.</span><span class="n">event_elapsed_time</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">total</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_sizing</span><span class="p">(</span><span class="n">waves</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target_ms</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Reject ``waves`` under 1 or fractional, ``target_ms`` under 10."""</span>
+    <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">waves</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">waves</span> <span class="o">!=</span> <span class="nb">int</span><span class="p">(</span><span class="n">waves</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"waves must be a positive integer, got </span><span class="si">{</span><span class="n">waves</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">isfinite</span><span class="p">(</span><span class="n">target_ms</span><span class="p">)</span> <span class="ow">and</span> <span class="n">target_ms</span> <span class="o">&gt;=</span> <span class="mf">10.0</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"target_ms must be a finite number of at least 10, "</span>
+            <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">target_ms</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">warn_low_waves</span><span class="p">(</span><span class="n">fewest</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">advice</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Warn that a given batch fills ``fewest`` waves, under the floor."""</span>
+    <span class="n">warn</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"The batch passed only fills </span><span class="si">{</span><span class="n">fewest</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> occupancy waves; the "</span>
+        <span class="s2">"results might not represent the best timing for your system. "</span>
+        <span class="sa">f</span><span class="s2">"Try again with </span><span class="si">{</span><span class="n">TIMED_WAVES_FLOOR</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">fewest</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">x more runs in "</span>
+        <span class="sa">f</span><span class="s2">"the batch</span><span class="si">{</span><span class="n">advice</span><span class="si">}</span><span class="s2">."</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">unused_wave_share</span><span class="p">(</span><span class="n">runs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">concurrent</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Largest empty share of a last wave, ``(ceil(w) - w) / ceil(w)``</span>
+<span class="sd">    with ``w = runs / count``, over the launches' concurrent counts."""</span>
+    <span class="n">worst</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">concurrent</span><span class="p">:</span>
+        <span class="n">waves</span> <span class="o">=</span> <span class="n">runs</span> <span class="o">/</span> <span class="n">count</span>
+        <span class="n">worst</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">worst</span><span class="p">,</span> <span class="p">(</span><span class="n">ceil</span><span class="p">(</span><span class="n">waves</span><span class="p">)</span> <span class="o">-</span> <span class="n">waves</span><span class="p">)</span> <span class="o">/</span> <span class="n">ceil</span><span class="p">(</span><span class="n">waves</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">worst</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">tail_safe_runs</span><span class="p">(</span>
+    <span class="n">concurrent</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="n">wanted</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">floor</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">cap</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the batch near ``wanted`` runs with the fullest last wave.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    concurrent</span>
+<span class="sd">        Runs each launch executes at once.</span>
+<span class="sd">    wanted</span>
+<span class="sd">        Runs the batch should reach.</span>
+<span class="sd">    floor</span>
+<span class="sd">        Fewest runs allowed.</span>
+<span class="sd">    cap</span>
+<span class="sd">        Most runs allowed; ``None`` for no cap.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        The wave boundary or interval end with the least</span>
+<span class="sd">        :func:`unused_wave_share` in the one-wave interval above</span>
+<span class="sd">        ``wanted``, clipped to ``[floor, cap]``; the smallest on a tie.</span>
+<span class="sd">    """</span>
+    <span class="n">most</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">concurrent</span><span class="p">)</span>
+    <span class="n">low</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">wanted</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">floor</span><span class="p">))</span>
+    <span class="n">high</span> <span class="o">=</span> <span class="n">low</span> <span class="o">+</span> <span class="n">most</span>
+    <span class="k">if</span> <span class="n">cap</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">high</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">high</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">cap</span><span class="p">))</span>
+        <span class="n">low</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">floor</span><span class="p">),</span> <span class="nb">min</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">-</span> <span class="n">most</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">low</span> <span class="o">&gt;</span> <span class="n">high</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">high</span>
+    <span class="n">candidates</span> <span class="o">=</span> <span class="p">{</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">concurrent</span><span class="p">:</span>
+        <span class="n">first</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="o">-</span><span class="n">low</span> <span class="o">//</span> <span class="n">count</span><span class="p">)</span>
+        <span class="n">candidates</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">multiple</span> <span class="o">*</span> <span class="n">count</span> <span class="k">for</span> <span class="n">multiple</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">first</span><span class="p">,</span> <span class="n">high</span> <span class="o">//</span> <span class="n">count</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">min</span><span class="p">(</span>
+        <span class="n">candidates</span><span class="p">,</span>
+        <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">runs</span><span class="p">:</span> <span class="p">(</span><span class="n">unused_wave_share</span><span class="p">(</span><span class="n">runs</span><span class="p">,</span> <span class="n">concurrent</span><span class="p">),</span> <span class="n">runs</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">settings_label</span><span class="p">(</span><span class="n">settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a short name for a settings dict."""</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">"unroll_"</span><span class="p">)</span><span class="o">.</span><span class="n">removesuffix</span><span class="p">(</span><span class="s2">"_location"</span><span class="p">)</span>
+        <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">"current"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">device_to_host</span><span class="p">(</span><span class="n">array</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Copy a device array to the host, whatever its container."""</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="s2">"copy_to_host"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">array</span><span class="o">.</span><span class="n">copy_to_host</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="s2">"get"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">array</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">np_asarray</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_settings_key</span><span class="p">(</span><span class="n">settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the identity of a settings dict."""</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+
+
+<div class="viewcode-block" id="Candidate">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.Candidate">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Candidate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One configuration and launch to time.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    label</span>
+<span class="sd">        Name shown in reports.</span>
+<span class="sd">    settings</span>
+<span class="sd">        Solver settings applied through ``Solver.update``.</span>
+<span class="sd">    blocksize</span>
+<span class="sd">        Threads per block of the launch; ``None`` uses the solver's.</span>
+<span class="sd">    resident_blocks</span>
+<span class="sd">        Blocks per SM held resident; ``None`` uses the solver's.</span>
+<span class="sd">    """</span>
+
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">blocksize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">resident_blocks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="CandidateTiming">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.CandidateTiming">[docs]</a>
+<span class="nd">@define</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CandidateTiming</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Measured outcome of one candidate.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    candidate</span>
+<span class="sd">        The configuration timed.</span>
+<span class="sd">    times_ms</span>
+<span class="sd">        Kernel milliseconds of every timed solve.</span>
+<span class="sd">    failures</span>
+<span class="sd">        Runs with a nonzero status code in the last solve read.</span>
+<span class="sd">    runs</span>
+<span class="sd">        Trajectories each solve integrated.</span>
+<span class="sd">    blocks_per_sm</span>
+<span class="sd">        Resident blocks per SM the driver reported for the launch.</span>
+<span class="sd">    waves</span>
+<span class="sd">        Occupancy waves the batch filled at the launch.</span>
+<span class="sd">    error</span>
+<span class="sd">        Why the candidate could not be timed, empty when it was.</span>
+<span class="sd">    """</span>
+
+    <span class="n">candidate</span><span class="p">:</span> <span class="n">Candidate</span>
+    <span class="n">times_ms</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">failures</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">runs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">blocks_per_sm</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">waves</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">error</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">timed</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the candidate has a time."""</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times_ms</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">best_ms</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Lowest kernel time, ``inf`` when never timed."""</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times_ms</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">times_ms</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">success_rate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Share of the batch that integrated without a status flag."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mf">0.0</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">failures</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span></div>
+
+
+
+<div class="viewcode-block" id="rank_timings">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.rank_timings">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">rank_timings</span><span class="p">(</span><span class="n">timings</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">CandidateTiming</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">CandidateTiming</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Order timed candidates: the top success tier by time, then the rest.</span>
+
+<span class="sd">    The top tier holds every candidate whose success rate is at least</span>
+<span class="sd">    :data:`SUCCESS_TIER_FRACTION` of the best success rate.</span>
+<span class="sd">    """</span>
+    <span class="n">timed</span> <span class="o">=</span> <span class="p">[</span><span class="n">timing</span> <span class="k">for</span> <span class="n">timing</span> <span class="ow">in</span> <span class="n">timings</span> <span class="k">if</span> <span class="n">timing</span><span class="o">.</span><span class="n">timed</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">timed</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">best</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">timing</span><span class="o">.</span><span class="n">success_rate</span> <span class="k">for</span> <span class="n">timing</span> <span class="ow">in</span> <span class="n">timed</span><span class="p">)</span>
+    <span class="n">floor</span> <span class="o">=</span> <span class="n">SUCCESS_TIER_FRACTION</span> <span class="o">*</span> <span class="n">best</span>
+    <span class="n">top</span> <span class="o">=</span> <span class="p">[</span><span class="n">timing</span> <span class="k">for</span> <span class="n">timing</span> <span class="ow">in</span> <span class="n">timed</span> <span class="k">if</span> <span class="n">timing</span><span class="o">.</span><span class="n">success_rate</span> <span class="o">&gt;=</span> <span class="n">floor</span><span class="p">]</span>
+    <span class="n">rest</span> <span class="o">=</span> <span class="p">[</span><span class="n">timing</span> <span class="k">for</span> <span class="n">timing</span> <span class="ow">in</span> <span class="n">timed</span> <span class="k">if</span> <span class="n">timing</span><span class="o">.</span><span class="n">success_rate</span> <span class="o">&lt;</span> <span class="n">floor</span><span class="p">]</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="k">lambda</span> <span class="n">timing</span><span class="p">:</span> <span class="n">timing</span><span class="o">.</span><span class="n">best_ms</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">top</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span> <span class="o">+</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">rest</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">key</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">worth_parallelising</span><span class="p">(</span>
+    <span class="n">compile_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+    <span class="n">misses</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">max_parallel</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">startup_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether spawning workers beats compiling ``misses`` serially.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    compile_seconds</span>
+<span class="sd">        Measured seconds of one compile; ``None`` when unmeasured.</span>
+<span class="sd">    misses</span>
+<span class="sd">        Candidates left to compile.</span>
+<span class="sd">    max_parallel</span>
+<span class="sd">        Most workers a pool may hold.</span>
+<span class="sd">    startup_seconds</span>
+<span class="sd">        Seconds a worker spends importing cubie; the module's</span>
+<span class="sd">        :data:`WORKER_STARTUP_SECONDS` when not given.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">compile_seconds</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">misses</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">max_parallel</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="n">startup_seconds</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">startup_seconds</span> <span class="o">=</span> <span class="n">WORKER_STARTUP_SECONDS</span>
+    <span class="n">serial</span> <span class="o">=</span> <span class="n">compile_seconds</span> <span class="o">*</span> <span class="n">misses</span>
+    <span class="n">workers</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">max_parallel</span><span class="p">,</span> <span class="n">misses</span><span class="p">)</span>
+    <span class="n">pooled</span> <span class="o">=</span> <span class="n">startup_seconds</span> <span class="o">+</span> <span class="n">compile_seconds</span> <span class="o">*</span> <span class="n">ceil</span><span class="p">(</span><span class="n">misses</span> <span class="o">/</span> <span class="n">workers</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">serial</span> <span class="o">&gt;</span> <span class="n">pooled</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compile_candidate</span><span class="p">(</span>
+    <span class="n">system_bytes</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">settings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">cache_root</span><span class="p">:</span> <span class="n">Any</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compile one settings set in a worker; return its error, if any."""</span>
+    <span class="k">if</span> <span class="n">cache_root</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">set_cache_root</span><span class="p">(</span><span class="n">cache_root</span><span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.solver</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span>
+
+    <span class="n">solver</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">system_bytes</span><span class="p">),</span> <span class="o">**</span><span class="n">settings</span><span class="p">)</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">compile</span><span class="p">()</span>
+        <span class="k">return</span> <span class="s2">""</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">solver</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">solver</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="ComparisonRunner">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ComparisonRunner</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Switch one solver between candidates and time each on one batch.</span>
+
+<span class="sd">    The batch stays on the device; candidates apply over the</span>
+<span class="sd">    configuration at :meth:`open`, which :meth:`close` restores.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    solver</span>
+<span class="sd">        The solver whose settings the candidates vary.</span>
+<span class="sd">    inits, params</span>
+<span class="sd">        The ``(variable, run)`` grid to time on; ``None`` compiles only.</span>
+<span class="sd">    duration, settling_time, t0</span>
+<span class="sd">        Integration window of the timed solves.</span>
+<span class="sd">    verbose</span>
+<span class="sd">        Print progress lines.</span>
+<span class="sd">    max_parallel</span>
+<span class="sd">        Maximum compilations to run in parallel.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">solver</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">inits</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">params</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">max_parallel</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span> <span class="o">=</span> <span class="n">solver</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_parallel</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_parallel</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">inits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">device_to_host</span><span class="p">(</span><span class="n">inits</span><span class="p">),</span> <span class="n">device_to_host</span><span class="p">(</span><span class="n">params</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">duration</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">duration</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">settling</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">settling_time</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_t0</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">t0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">verbose</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_given</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_touched</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rejected</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_resident_blocks</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">resident_blocks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_verbosity</span> <span class="o">=</span> <span class="n">default_timelogger</span><span class="o">.</span><span class="n">verbosity</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inits</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_codes</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_floor</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_open</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"ComparisonRunner"</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc</span><span class="p">,</span> <span class="n">traceback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="ComparisonRunner.emit">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.emit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">emit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Log ``message``; print it when verbose."""</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.open">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.open">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">open</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Arm event timing and record the solver's configuration."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_open</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_open</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="c1"># "silent" records the kernel events the timings read.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_verbosity</span> <span class="o">=</span> <span class="n">default_timelogger</span><span class="o">.</span><span class="n">verbosity</span>
+        <span class="n">default_timelogger</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="s2">"silent"</span><span class="p">)</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_given</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">given</span><span class="o">.</span><span class="n">as_kwargs</span><span class="p">())</span>
+        <span class="c1"># The record a worker rebuilds the solver from.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_record</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">settings_dict</span><span class="p">(</span><span class="n">for_new_process</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_touched</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.close">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Restore the solver's configuration and release the batch."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_open</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_open</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">solver</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span>
+            <span class="n">solver</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_given</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_touched</span><span class="p">},</span>
+                <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">resident_blocks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resident_blocks</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_touched</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_inits</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_codes</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">default_timelogger</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_verbosity</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.select">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.select">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">select</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidate</span><span class="p">:</span> <span class="n">Candidate</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply ``candidate`` over the opening configuration."""</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">key</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_given</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_touched</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">candidate</span><span class="o">.</span><span class="n">settings</span>
+        <span class="p">}</span>
+        <span class="n">settings</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_touched</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">silent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">resident_blocks</span> <span class="o">=</span> <span class="n">candidate</span><span class="o">.</span><span class="n">resident_blocks</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.rejection">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.rejection">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rejection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidate</span><span class="p">:</span> <span class="n">Candidate</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return why ``candidate`` was rejected; empty when it was not."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rejected</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_settings_key</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">settings</span><span class="p">),</span> <span class="s2">""</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner._reject">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner._reject">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reject</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidate</span><span class="p">:</span> <span class="n">Candidate</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Record ``candidate`` as rejected with ``error``."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rejected</span><span class="p">[</span><span class="n">_settings_key</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">settings</span><span class="p">)]</span> <span class="o">=</span> <span class="n">error</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">candidate</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: rejected (</span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.set_batch">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.set_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">runs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Stage ``runs`` grid columns on the device, cycling if short."""</span>
+        <span class="n">inits</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span>
+        <span class="n">runs</span> <span class="o">=</span> <span class="n">inits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">runs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">runs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">runs</span> <span class="o">!=</span> <span class="n">inits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">columns</span> <span class="o">=</span> <span class="n">np_arange</span><span class="p">(</span><span class="n">runs</span><span class="p">)</span> <span class="o">%</span> <span class="n">inits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">inits</span> <span class="o">=</span> <span class="n">np_take</span><span class="p">(</span><span class="n">inits</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="n">np_take</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stage</span><span class="p">(</span><span class="n">inits</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stage</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_codes</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">=</span> <span class="n">runs</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">staged_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Device bytes of the staged grid."""</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="n">grid</span><span class="o">.</span><span class="n">nbytes</span>
+            <span class="k">for</span> <span class="n">grid</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_inits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">grid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="ComparisonRunner._stage">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner._stage">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_stage</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Upload ``grid``; a grid with no variables is passed as None."""</span>
+        <span class="k">if</span> <span class="n">grid</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">cuda</span><span class="o">.</span><span class="n">to_device</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.compile">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.compile">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidates</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Candidate</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Candidate</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Compile the candidates, pooled if cheaper than serially;</span>
+<span class="sd">        return the accepted ones, a rejected one keeps its error."""</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">seen</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="n">_settings_key</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">seen</span> <span class="ow">or</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rejected</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="c1"># Invalid parameters from grids like calibration's raise.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_reject</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="c1"># Without the disk cache a compile is lost at the next switch.</span>
+            <span class="k">if</span> <span class="n">solver</span><span class="o">.</span><span class="n">cache_enabled</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">kernel_is_cached</span><span class="p">():</span>
+                <span class="n">missing</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+        <span class="c1"># The first miss's compile time decides whether the rest pool.</span>
+        <span class="n">compile_seconds</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">missing</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">compile</span><span class="p">()</span>
+            <span class="n">compile_seconds</span> <span class="o">=</span> <span class="n">default_timelogger</span><span class="o">.</span><span class="n">get_event_duration</span><span class="p">(</span>
+                <span class="s2">"compile_cuda_kernel"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">missing</span> <span class="ow">and</span> <span class="n">worth_parallelising</span><span class="p">(</span>
+            <span class="n">compile_seconds</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">missing</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_parallel</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_compile_in_pool</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">missing</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+                <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">compile</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">candidate</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span>
+            <span class="k">if</span> <span class="n">_settings_key</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rejected</span>
+        <span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner._compile_in_pool">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner._compile_in_pool">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compile_in_pool</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidates</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Candidate</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compile ``candidates`` into the kernel cache in spawned workers."""</span>
+        <span class="c1"># Pickled into spawned workers; the manager holds CUDA state.</span>
+        <span class="n">system_bytes</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">system</span><span class="p">)</span>
+        <span class="n">cache_root</span> <span class="o">=</span> <span class="n">get_cache_root_override</span><span class="p">()</span>
+        <span class="n">payloads</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">system_bytes</span><span class="p">,</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">,</span> <span class="o">**</span><span class="n">candidate</span><span class="o">.</span><span class="n">settings</span><span class="p">},</span> <span class="n">cache_root</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span>
+        <span class="p">]</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">get_context</span><span class="p">(</span><span class="s2">"spawn"</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">context</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_max_parallel</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">)))</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+            <span class="n">errors</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">starmap</span><span class="p">(</span><span class="n">_compile_candidate</span><span class="p">,</span> <span class="n">payloads</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">candidate</span><span class="p">,</span> <span class="n">error</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="n">errors</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">error</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_reject</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">candidate</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: worker compiled"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.solve_ms">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.solve_ms">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solve_ms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blocksize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Solve the staged batch once; return its kernel milliseconds."""</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_inits</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_params</span><span class="p">,</span>
+            <span class="n">duration</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
+            <span class="n">settling_time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">settling</span><span class="p">,</span>
+            <span class="n">t0</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_t0</span><span class="p">,</span>
+            <span class="n">blocksize</span><span class="o">=</span><span class="n">blocksize</span><span class="p">,</span>
+            <span class="n">on_device</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">kernel</span>
+        <span class="n">kernel</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span>
+            <span class="nb">sum</span><span class="p">(</span>
+                <span class="n">event</span><span class="o">.</span><span class="n">elapsed_time_ms</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">kernel</span><span class="o">.</span><span class="n">_cuda_events</span>
+                <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"kernel_chunk"</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.warm">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.warm">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">warm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Lift the clocks with the busy kernel; return its milliseconds."""</span>
+        <span class="n">measured</span> <span class="o">=</span> <span class="n">warm_clocks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">stream</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"warm: </span><span class="si">{</span><span class="n">measured</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> ms busy"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">measured</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.failures">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.failures">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">failures</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the failed-run count of the last solve."""</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">kernel</span>
+        <span class="n">codes</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">device_status_codes</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_codes</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_codes</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">codes</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_codes</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">memory_manager</span><span class="o">.</span><span class="n">create_host_array</span><span class="p">(</span>
+                <span class="nb">tuple</span><span class="p">(</span><span class="n">codes</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span> <span class="n">np_int32</span><span class="p">,</span> <span class="s2">"pinned"</span>
+            <span class="p">)</span>
+        <span class="n">stream</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">stream</span>
+        <span class="n">codes</span><span class="o">.</span><span class="n">copy_to_host</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_codes</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">)</span>
+        <span class="n">stream</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">np_count_nonzero</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_codes</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner._launch_blocks">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner._launch_blocks">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_launch_blocks</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">blocksize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">runs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return blocks per SM and runs per block of the current launch."""</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">kernel</span>
+        <span class="n">actual</span><span class="p">,</span> <span class="n">dynamic</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">launch_geometry</span><span class="p">(</span><span class="n">blocksize</span><span class="p">,</span> <span class="n">runs</span><span class="o">=</span><span class="n">runs</span><span class="p">)</span>
+        <span class="n">blocks</span> <span class="o">=</span> <span class="n">active_blocks_per_multiprocessor</span><span class="p">(</span>
+            <span class="n">kernel</span><span class="o">.</span><span class="n">kernel</span><span class="p">,</span> <span class="n">actual</span><span class="p">,</span> <span class="n">dynamic</span><span class="p">,</span> <span class="n">kernel</span><span class="o">.</span><span class="n">signature</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">blocks</span><span class="p">),</span> <span class="n">actual</span> <span class="o">//</span> <span class="n">kernel</span><span class="o">.</span><span class="n">threads_per_loop</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.concurrent_runs">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.concurrent_runs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">concurrent_runs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blocksize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Runs the current candidate's launch executes at once."""</span>
+        <span class="n">blocks</span><span class="p">,</span> <span class="n">runs_per_block</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_launch_blocks</span><span class="p">(</span><span class="n">blocksize</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">multiprocessors</span> <span class="o">=</span> <span class="n">device_hardware</span><span class="p">()</span><span class="o">.</span><span class="n">multiprocessor_count</span>
+        <span class="k">return</span> <span class="n">blocks</span> <span class="o">*</span> <span class="n">multiprocessors</span> <span class="o">*</span> <span class="n">runs_per_block</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.geometry">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.geometry">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">geometry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blocksize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return blocks per SM and waves of the current launch."""</span>
+        <span class="n">blocks</span><span class="p">,</span> <span class="n">runs_per_block</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_launch_blocks</span><span class="p">(</span><span class="n">blocksize</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">)</span>
+        <span class="n">total_blocks</span> <span class="o">=</span> <span class="n">ceil</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">runs</span> <span class="o">/</span> <span class="n">runs_per_block</span><span class="p">)</span>
+        <span class="n">resident</span> <span class="o">=</span> <span class="n">blocks</span> <span class="o">*</span> <span class="n">device_hardware</span><span class="p">()</span><span class="o">.</span><span class="n">multiprocessor_count</span>
+        <span class="k">return</span> <span class="n">blocks</span><span class="p">,</span> <span class="n">total_blocks</span> <span class="o">/</span> <span class="n">resident</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.size_batch">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.size_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">size_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidates</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Candidate</span><span class="p">],</span> <span class="n">waves</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Stage the tail-safe batch at ``waves`` of the most concurrent</span>
+<span class="sd">        candidate; keep the counts for :meth:`fit_batch`."""</span>
+        <span class="n">concurrent</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+            <span class="n">concurrent</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">concurrent_runs</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">blocksize</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent</span> <span class="o">=</span> <span class="n">concurrent</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">concurrent</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_batch</span><span class="p">()</span>
+            <span class="k">return</span>
+        <span class="n">most</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">concurrent</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_floor</span> <span class="o">=</span> <span class="n">TIMED_WAVES_FLOOR</span> <span class="o">*</span> <span class="n">most</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_batch</span><span class="p">(</span>
+            <span class="n">tail_safe_runs</span><span class="p">(</span><span class="n">concurrent</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">waves</span><span class="p">)</span> <span class="o">*</span> <span class="n">most</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_floor</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"batch: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="si">}</span><span class="s2"> runs"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.batch_cap">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.batch_cap">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">batch_cap</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Runs that fit in memory at the staged batch's bytes per run."""</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">kernel</span>
+        <span class="n">manager</span> <span class="o">=</span> <span class="n">kernel</span><span class="o">.</span><span class="n">memory_manager</span>
+        <span class="n">allocated</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="n">manager</span><span class="o">.</span><span class="n">get_registration</span><span class="p">(</span><span class="n">arrays</span><span class="p">)</span><span class="o">.</span><span class="n">allocated_bytes</span>
+            <span class="k">for</span> <span class="n">arrays</span> <span class="ow">in</span> <span class="p">(</span><span class="n">kernel</span><span class="o">.</span><span class="n">input_arrays</span><span class="p">,</span> <span class="n">kernel</span><span class="o">.</span><span class="n">output_arrays</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">available</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">get_available_memory</span><span class="p">(</span>
+            <span class="n">manager</span><span class="o">.</span><span class="n">get_stream_group</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">bytes_per_run</span> <span class="o">=</span> <span class="p">(</span><span class="n">allocated</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">staged_bytes</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">((</span><span class="n">available</span> <span class="o">+</span> <span class="n">allocated</span><span class="p">)</span> <span class="o">//</span> <span class="n">bytes_per_run</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.fit_batch">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.fit_batch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">measured</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">target_ms</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">grow</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">shrink</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Move the batch once toward ``target_ms``, up within</span>
+<span class="sd">        :meth:`batch_cap` if ``grow``, down to the floor if ``shrink``;</span>
+<span class="sd">        return the kernel time at the staged batch."""</span>
+        <span class="n">concurrent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_concurrent</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">concurrent</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">measured</span>
+        <span class="n">runs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span>
+        <span class="n">wanted</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">runs</span> <span class="o">*</span> <span class="n">target_ms</span> <span class="o">/</span> <span class="n">measured</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">grow</span> <span class="ow">and</span> <span class="n">measured</span> <span class="o">&lt;</span> <span class="n">target_ms</span><span class="p">:</span>
+            <span class="n">runs</span> <span class="o">=</span> <span class="n">tail_safe_runs</span><span class="p">(</span>
+                <span class="n">concurrent</span><span class="p">,</span> <span class="n">wanted</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_floor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_cap</span><span class="p">()</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">shrink</span> <span class="ow">and</span> <span class="n">measured</span> <span class="o">&gt;</span> <span class="n">target_ms</span><span class="p">:</span>
+            <span class="n">runs</span> <span class="o">=</span> <span class="n">tail_safe_runs</span><span class="p">(</span><span class="n">concurrent</span><span class="p">,</span> <span class="n">wanted</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_floor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">runs</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">measured</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_batch</span><span class="p">(</span><span class="n">runs</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">measured</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solve_ms</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">partition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solver</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">run_params</span>
+            <span class="k">if</span> <span class="n">partition</span><span class="o">.</span><span class="n">num_chunks</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="c1"># The live partition is the fresh single-chunk fit.</span>
+            <span class="n">runs</span> <span class="o">=</span> <span class="n">tail_safe_runs</span><span class="p">(</span>
+                <span class="n">concurrent</span><span class="p">,</span>
+                <span class="n">partition</span><span class="o">.</span><span class="n">chunk_length</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_floor</span><span class="p">,</span>
+                <span class="n">partition</span><span class="o">.</span><span class="n">chunk_length</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_batch</span><span class="p">(</span><span class="n">runs</span><span class="p">)</span>
+            <span class="n">measured</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solve_ms</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"batch: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="si">}</span><span class="s2"> runs -&gt; </span><span class="si">{</span><span class="n">measured</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ms"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">measured</span></div>
+
+
+<div class="viewcode-block" id="ComparisonRunner.time">
+<a class="viewcode-back" href="../../../API_reference/batchsolving/comparison.html#cubie.batchsolving.comparison.ComparisonRunner.time">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">candidates</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Candidate</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">CandidateTiming</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Time every candidate on the staged batch, forward then back.</span>
+
+<span class="sd">        Every candidate solves :data:`SOLVES_PER_ROUND` times in each of</span>
+<span class="sd">        :data:`ROUNDS` rounds; the second round reverses the order. A</span>
+<span class="sd">        rejected or failing candidate carries the error and no times.</span>
+<span class="sd">        """</span>
+        <span class="n">timings</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">CandidateTiming</span><span class="p">(</span>
+                <span class="n">candidate</span><span class="o">=</span><span class="n">candidate</span><span class="p">,</span>
+                <span class="n">runs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">runs</span><span class="p">,</span>
+                <span class="n">error</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rejection</span><span class="p">(</span><span class="n">candidate</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">round_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ROUNDS</span><span class="p">):</span>
+            <span class="n">ordered</span> <span class="o">=</span> <span class="n">timings</span> <span class="k">if</span> <span class="n">round_index</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">timings</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">timing</span> <span class="ow">in</span> <span class="n">ordered</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">timing</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">candidate</span> <span class="o">=</span> <span class="n">timing</span><span class="o">.</span><span class="n">candidate</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">SOLVES_PER_ROUND</span><span class="p">):</span>
+                        <span class="n">timing</span><span class="o">.</span><span class="n">times_ms</span> <span class="o">+=</span> <span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">solve_ms</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">blocksize</span><span class="p">),</span>
+                        <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">round_index</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">timing</span><span class="o">.</span><span class="n">failures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">failures</span><span class="p">()</span>
+                        <span class="n">timing</span><span class="o">.</span><span class="n">blocks_per_sm</span><span class="p">,</span> <span class="n">timing</span><span class="o">.</span><span class="n">waves</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">geometry</span><span class="p">(</span>
+                            <span class="n">candidate</span><span class="o">.</span><span class="n">blocksize</span>
+                        <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                    <span class="n">timing</span><span class="o">.</span><span class="n">times_ms</span> <span class="o">=</span> <span class="p">()</span>
+                    <span class="n">timing</span><span class="o">.</span><span class="n">error</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">"</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">candidate</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: failed (</span><span class="si">{</span><span class="n">timing</span><span class="o">.</span><span class="n">error</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">round_index</span> <span class="o">==</span> <span class="n">ROUNDS</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">candidate</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">timing</span><span class="o">.</span><span class="n">best_ms</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ms"</span>
+                        <span class="sa">f</span><span class="s2">" (</span><span class="si">{</span><span class="n">timing</span><span class="o">.</span><span class="n">failures</span><span class="si">}</span><span class="s2"> failed)"</span>
+                    <span class="p">)</span>
+        <span class="k">return</span> <span class="n">timings</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Chris Cameron.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
