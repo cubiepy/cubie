@@ -85,6 +85,7 @@ from cubie.cuda_simsafe import (
     Stream,
     cupy,
     current_mem_info,
+    is_device_array,
 )
 from cubie.memory.pinned_arena import PinnedArena
 from cubie.memory.stream_groups import StreamGroups
@@ -671,6 +672,8 @@ class MemoryManager:
     )
     # Page-locked slabs every pinned host array is carved from.
     _pinned_arena: PinnedArena = field(factory=PinnedArena, init=False)
+    # Device pool release threshold: the registry's device high-water.
+    _pool_threshold_bytes: int = field(default=0, init=False)
     # Cause for the NoCudaDeviceError a sizing decision raises.
     _device_probe_error: Optional[BaseException] = field(
         default=None, init=False
@@ -1281,6 +1284,7 @@ class MemoryManager:
             if key[1] == instance_id
         ]:
             del self._group_chunk_parameters[cache_key]
+        self._lower_pool_threshold()
 
     def release_instance(
         self, instance_id: int, settings: "InstanceMemorySettings"
@@ -1290,6 +1294,44 @@ class MemoryManager:
             return
         self._drop_instance(instance_id)
         self._rebalance_auto_pool()
+
+    def _device_live_bytes(self) -> int:
+        """Total bytes of device arrays held across the registry."""
+        return sum(
+            arr.nbytes
+            for settings in self.registry.values()
+            for arr in settings.allocations.values()
+            if is_device_array(arr)
+        )
+
+    def _set_pool_threshold(self, nbytes: int) -> None:
+        """Set the device pool's release threshold."""
+        if CUDA_SIMULATION:
+            return
+        manager = cuda.current_context().memory_manager
+        setter = getattr(manager, "set_release_threshold", None)
+        if setter is not None:
+            setter(nbytes)
+
+    def _raise_pool_threshold(self) -> None:
+        """Raise the threshold to the pool's reserved high-water."""
+        if CUDA_SIMULATION:
+            return
+        target = self._device_live_bytes()
+        manager = cuda.current_context().memory_manager
+        reserved = getattr(manager, "pool_reserved_bytes", None)
+        if reserved is not None:
+            target = max(target, reserved())
+        if target > self._pool_threshold_bytes:
+            self._pool_threshold_bytes = target
+            self._set_pool_threshold(target)
+
+    def _lower_pool_threshold(self) -> None:
+        """Lower the threshold to the registry's live device bytes."""
+        live = self._device_live_bytes()
+        if live < self._pool_threshold_bytes:
+            self._pool_threshold_bytes = live
+            self._set_pool_threshold(live)
 
     def _owner_settings(self, owner_id: int) -> list[InstanceMemorySettings]:
         """Return registry entries owned by one client."""
@@ -1363,6 +1405,8 @@ class MemoryManager:
                 released += settings.allocated_bytes
                 settings.free_all()
                 settings.invalidate_hook()
+        if released:
+            self._lower_pool_threshold()
         return released
 
     def _rebalance_auto_pool(self) -> None:
@@ -1406,6 +1450,7 @@ class MemoryManager:
         """
         for settings in self.registry.values():
             settings.free_all()
+        self._lower_pool_threshold()
 
     def _check_requests(self, requests: dict[str, ArrayRequest]) -> None:
         """
@@ -2160,6 +2205,7 @@ class MemoryManager:
                 )
             )
 
+        self._raise_pool_threshold()
         return None
 
     def _owned_by(self, instance_id: int, owner_id: int) -> bool:

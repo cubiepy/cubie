@@ -1,9 +1,9 @@
 """Numba EMM plugin allocating from the device's stream-ordered pool.
 
 ``cuda.device_array`` returns a native ``DeviceNDArray`` backed by
-``cudaMallocAsync`` (CuPy's ``malloc_async``). The pool's release
-threshold is zero: freed blocks return to the device at the next sync
-of their stream.
+``cudaMallocAsync`` (CuPy's ``malloc_async``). Freed blocks above the
+pool's release threshold (set by the memory manager) return to the
+device at the next sync of their stream.
 
 See Also
 --------
@@ -78,6 +78,25 @@ if not CUDA_SIMULATION:
                 allocations.pop(ptr, None)
 
             return finalizer
+
+        def pool_reserved_bytes(self) -> int:
+            """Bytes the pool currently holds from the device."""
+            if self._pool is None:
+                return 0
+            runtime = cupy.cuda.runtime
+            return runtime.memPoolGetAttribute(
+                self._pool, runtime.cudaMemPoolAttrReservedMemCurrent
+            )
+
+        def set_release_threshold(self, nbytes: int) -> None:
+            """Retain up to ``nbytes`` of freed blocks across syncs."""
+            if self._pool is not None:
+                runtime = cupy.cuda.runtime
+                runtime.memPoolSetAttribute(
+                    self._pool,
+                    runtime.cudaMemPoolAttrReleaseThreshold,
+                    int(nbytes),
+                )
 
         def get_memory_info(self) -> "cuda.MemoryInfo":
             # Device free plus the pool's reserved but unused bytes.

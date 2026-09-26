@@ -96,8 +96,10 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
 
 ## Allocation provider
 The device's stream-ordered pool is the only device allocator, reached through the EMM
-plugin; take `cupy`/`cupyx` from `cubie.cuda_simsafe`. The pool's release threshold is
-zero. An out-of-memory allocation syncs the current stream and retries once.
+plugin; take `cupy`/`cupyx` from `cubie.cuda_simsafe`. The pool's release threshold
+tracks the registry's device high-water, dropping to live bytes at deregistration,
+eviction and `free_all`; freed blocks above it leave at the next sync of their stream.
+An out-of-memory allocation syncs the current stream and retries once.
 `get_memory_info` reports device free memory plus the pool's reserved but unused bytes.
 `allocate()` routes `"device"` requests through `cuda.device_array` inside
 `current_cupy_stream` and `"pinned"` requests through `allocate_pinned_array`; any other
