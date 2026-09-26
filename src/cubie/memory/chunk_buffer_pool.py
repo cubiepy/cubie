@@ -6,9 +6,10 @@ are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
 An idle buffer serves any request that fits its capacity. Depth per
-label is bounded by ``STAGING_POOL_DEPTH``, RAM headroom and the
-pinned budget; a full pool blocks :meth:`ChunkBufferPool.acquire`
-until a release. The first buffer for a label always allocates.
+label is bounded by ``STAGING_POOL_DEPTH``; the arena refuses a new
+buffer past the pinned budget or RAM headroom. A full pool blocks
+:meth:`ChunkBufferPool.acquire` until a release. The first buffer for
+a label always allocates.
 
 Published Classes
 -----------------
@@ -50,7 +51,6 @@ from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import (
     MemoryManager,
     STAGING_POOL_DEPTH,
-    host_headroom_bytes,
 )
 
 
@@ -129,8 +129,8 @@ class ChunkBufferPool:
         """Acquire a pinned buffer for the given array.
 
         Reuses an idle buffer that fits, replacing one too small;
-        otherwise grows within the depth, headroom and budget bounds,
-        or blocks until a release.
+        otherwise grows within the depth bound and the arena's budget
+        and headroom checks, or blocks until a release.
 
         Parameters
         ----------
@@ -171,10 +171,7 @@ class ChunkBufferPool:
                 else:
                     # None when a bound refuses.
                     new_buffer = None
-                    if (
-                        len(in_flight) < STAGING_POOL_DEPTH
-                        and self._headroom_allows(shape, dtype)
-                    ):
+                    if len(in_flight) < STAGING_POOL_DEPTH:
                         new_buffer = self._allocate_buffer(nbytes)
                 if new_buffer is not None:
                     new_buffer.in_use = True
@@ -184,12 +181,6 @@ class ChunkBufferPool:
 
                 # Wait for a buffer release, then retry.
                 self._condition.wait()
-
-    @staticmethod
-    def _headroom_allows(shape: Tuple[int, ...], dtype: np_dtype) -> bool:
-        """Return whether RAM headroom permits one more buffer."""
-        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        return nbytes < host_headroom_bytes()
 
     def release(self, buffer: PinnedBuffer) -> None:
         """Release a buffer back to the pool.

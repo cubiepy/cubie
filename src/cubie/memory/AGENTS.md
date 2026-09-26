@@ -22,7 +22,7 @@ stream grouping), `ArrayRequest`/`ArrayResponse` (allocation metadata), `ChunkBu
 |------|-------------|
 | `__init__.py` | Installs the device-pool EMM (`install_async_emm()`, before any CUDA context exists), instantiates `default_memmgr = MemoryManager()`; re-exports `MemoryManager`, `NoCudaDeviceError`, `current_cupy_stream`, `CuPyAsyncNumbaManager`. |
 | `cupy_emm.py` | `CuPyAsyncNumbaManager` — Numba EMM plugin drawing device memory from the device's stream-ordered pool with a release threshold of zero; `install_async_emm()`. |
-| `pinned_arena.py` | `PinnedArena` — page-locked slabs sub-allocated into host arrays of any shape; `PINNED_ALIGNMENT_BYTES`, `SLAB_GRANULE_BYTES`, `MIN_SLAB_BYTES`. |
+| `pinned_arena.py` | `PinnedArena` — page-locked slabs sub-allocated into host arrays of any shape; `PINNED_ALIGNMENT_BYTES`, `MIN_SLAB_BYTES`. |
 | `mem_manager.py` | `MemoryManager` (central allocator); `NoCudaDeviceError`; `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `current_cupy_stream` (Numba→CuPy stream forwarding). |
 | `array_requests.py` | `ArrayRequest` (shape/dtype/placement spec) and `ArrayResponse` (allocated arrays + chunk metadata). |
 | `stream_groups.py` | `StreamGroups` — maps instance ids to named groups, each backed by a CUDA stream. |
@@ -140,9 +140,10 @@ arrays; device arrays must be allocated through `allocate_queue` first.
 Pinned staging buffers keyed by `array_name`. `acquire` returns the smallest idle buffer
 that fits, its `array` viewed in the requested shape and dtype, replacing an idle buffer
 too small; it grows while fewer than `STAGING_POOL_DEPTH` of the label are in flight and
-headroom and budget allow (a label with nothing in flight always gets one), else blocks
-until a release; this bound paces the pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use on error
-paths). Buffers are charged to the pinned ledger.
+the arena's budget and headroom checks allow the buffer (a label with nothing in flight
+always gets one), else blocks until a release; this bound paces the pipeline. `release`
+frees a buffer and wakes waiters; `clear` frees all (use on error paths). Buffers are
+carved from the pinned arena.
 
 ## Dependencies
 ### Internal

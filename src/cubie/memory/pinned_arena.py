@@ -12,7 +12,9 @@ Published Classes
     Slab sub-allocator for page-locked host arrays.
 
     >>> arena = PinnedArena()
-    >>> array = arena.allocate((4, 3), "float32", cap=None)
+    >>> array = arena.allocate(
+    ...     (4, 3), "float32", cap=None, may_trim=lambda: True, room=None
+    ... )
 """
 
 import ctypes
@@ -33,16 +35,8 @@ from cubie.cuda_simsafe import alloc_pinned_slab
 PINNED_ALIGNMENT_BYTES = 4096
 """Alignment of every extent: one host page."""
 
-SLAB_GRANULE_BYTES = 2 * 1024**2
-"""Slab sizes round up to this many bytes."""
-
 MIN_SLAB_BYTES = 64 * 1024**2
 """Smallest slab, so small arrays share one allocation."""
-
-
-def _round_up(nbytes: int, granule: int) -> int:
-    """Round ``nbytes`` up to a multiple of ``granule``."""
-    return -(-nbytes // granule) * granule
 
 
 @define(eq=False)
@@ -128,8 +122,8 @@ class PinnedArena:
         shape: Tuple[int, ...],
         dtype: DTypeLike,
         cap: Optional[int],
-        may_trim: Callable[[], bool] = lambda: False,
-        room: Optional[Callable[[], int]] = None,
+        may_trim: Callable[[], bool],
+        room: Optional[Callable[[], int]],
     ) -> Optional[ndarray]:
         """Return an uninitialised page-locked array.
 
@@ -162,7 +156,8 @@ class PinnedArena:
         """
         dtype = np_dtype(dtype)
         nbytes = int(prod(shape)) * dtype.itemsize
-        extent = _round_up(max(nbytes, 1), PINNED_ALIGNMENT_BYTES)
+        pages = -(-max(nbytes, 1) // PINNED_ALIGNMENT_BYTES)
+        extent = pages * PINNED_ALIGNMENT_BYTES
         with self._lock:
             self._apply_releases()
             slab, offset = self._take(extent)
@@ -181,6 +176,15 @@ class PinnedArena:
         # Fires once the array and all its views are collected.
         finalize(array, self._releases.append, (slab, offset, extent))
         return array
+
+    def contains(self, array: ndarray) -> bool:
+        """Return whether ``array``'s bytes lie in one of the slabs."""
+        address = array.ctypes.data
+        with self._lock:
+            return any(
+                slab.address <= address < slab.address + slab.size
+                for slab in self._slabs
+            )
 
     def release_free_slabs(self) -> int:
         """Free every slab with no live array.
@@ -246,7 +250,7 @@ class PinnedArena:
         self,
         extent: int,
         cap: Optional[int],
-        room: Optional[Callable[[], int]] = None,
+        room: Optional[Callable[[], int]],
     ) -> Optional[_Slab]:
         """Page-lock a slab that fits ``extent``; lock held."""
         limit = None
@@ -255,10 +259,10 @@ class PinnedArena:
         if room is not None:
             available = room()
             limit = available if limit is None else min(limit, available)
-        size = _round_up(max(extent, MIN_SLAB_BYTES), SLAB_GRANULE_BYTES)
+        size = max(extent, MIN_SLAB_BYTES)
         if limit is not None and size > limit:
             # A slab sized to the request alone may still fit.
-            size = _round_up(extent, SLAB_GRANULE_BYTES)
+            size = extent
             if size > limit:
                 return None
         address, owner = alloc_pinned_slab(size)

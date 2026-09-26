@@ -103,13 +103,10 @@ if not CUDA_SIMULATION:
             runtime = cupy.cuda.runtime
             free, total = runtime.memGetInfo()
             if self._pool is not None:
-                reserved = runtime.memPoolGetAttribute(
-                    self._pool, runtime.cudaMemPoolAttrReservedMemCurrent
-                )
                 used = runtime.memPoolGetAttribute(
                     self._pool, runtime.cudaMemPoolAttrUsedMemCurrent
                 )
-                free += reserved - used
+                free += self.pool_reserved_bytes() - used
             return cuda.MemoryInfo(free=free, total=total)
 
         def reset(self, stream: Optional[Any] = None) -> None:

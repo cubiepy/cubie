@@ -68,7 +68,7 @@ def test_acquire_reuses_released_buffer(mgr):
 
 def test_acquire_allocates_new_when_all_in_use(mgr):
     """acquire grows the pool when in-use buffers block reuse."""
-    pool = _UnthrottledPool(memory_manager=mgr)
+    pool = ChunkBufferPool(memory_manager=mgr)
     buf1 = pool.acquire("x", (10,), np.float32)
     buf2 = pool.acquire("x", (10,), np.float32)
     assert buf1.buffer_id != buf2.buffer_id
@@ -161,31 +161,17 @@ def test_thread_safe_concurrent_acquire_release(mgr):
     assert len(errors) == 0
 
 
-# ── headroom-bounded growth ───────────────────────────────────── #
+# ── budget-bounded growth ─────────────────────────────────────── #
 
-class _ThrottledPool(ChunkBufferPool):
-    """Pool whose headroom check is forced closed for testing."""
-
-    def _headroom_allows(self, shape, dtype):
-        return False
-
-
-class _UnthrottledPool(ChunkBufferPool):
-    """Pool whose headroom check is forced open for testing."""
-
-    def _headroom_allows(self, shape, dtype):
-        return True
-
-
-def _assert_second_acquire_waits_for_release(pool):
+def _assert_second_acquire_waits_for_release(pool, shape, dtype):
     """Check a second matching acquire waits instead of growing."""
-    first = pool.acquire("state", (10,), np.float32)
+    first = pool.acquire("state", shape, dtype)
     acquired = []
     started = threading.Event()
 
     def worker():
         started.set()
-        acquired.append(pool.acquire("state", (10,), np.float32))
+        acquired.append(pool.acquire("state", shape, dtype))
 
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
@@ -200,18 +186,12 @@ def _assert_second_acquire_waits_for_release(pool):
     assert acquired[0] is first
 
 
-def test_acquire_grows_first_buffer_even_without_headroom(mgr):
+def test_acquire_grows_first_buffer_past_the_budget(mgr):
     """A label with nothing in flight always gets one buffer."""
-    pool = _ThrottledPool(memory_manager=mgr)
+    mgr.pinned_max_bytes = 0
+    pool = ChunkBufferPool(memory_manager=mgr)
     buf = pool.acquire("state", (10,), np.float32)
     assert buf.in_use is True
-
-
-def test_acquire_blocks_until_release_when_headroom_exhausted(mgr):
-    """Headroom exhausted: acquire waits for a release."""
-    _assert_second_acquire_waits_for_release(
-        _ThrottledPool(memory_manager=mgr)
-    )
 
 
 def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
@@ -219,26 +199,9 @@ def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
     mgr.pinned_max_bytes = 0
     # Two of these cannot share one slab.
     shape = (MIN_SLAB_BYTES // 2 + PINNED_ALIGNMENT_BYTES,)
-    pool = _UnthrottledPool(memory_manager=mgr)
-    first = pool.acquire("state", shape, np.uint8)
-    acquired = []
-    started = threading.Event()
-
-    def worker():
-        started.set()
-        acquired.append(pool.acquire("state", shape, np.uint8))
-
-    thread = threading.Thread(target=worker, daemon=True)
-    thread.start()
-    started.wait(timeout=2.0)
-    thread.join(timeout=0.2)
-    assert thread.is_alive()
-    assert acquired == []
-
-    pool.release(first)
-    thread.join(timeout=2.0)
-    assert not thread.is_alive()
-    assert acquired[0] is first
+    _assert_second_acquire_waits_for_release(
+        ChunkBufferPool(memory_manager=mgr), shape, np.uint8
+    )
 
 
 # ── Depth cap ─────────────────────────────────────────────────── #
@@ -246,7 +209,7 @@ def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
 def test_acquire_blocks_at_the_depth_cap(mgr):
     """Once STAGING_POOL_DEPTH matching buffers are in flight, the
     next acquire waits for a release instead of growing the pool."""
-    pool = _UnthrottledPool(memory_manager=mgr)
+    pool = ChunkBufferPool(memory_manager=mgr)
     held = [
         pool.acquire("state", (10,), np.float32)
         for _ in range(STAGING_POOL_DEPTH)

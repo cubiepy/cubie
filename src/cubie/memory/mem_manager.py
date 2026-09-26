@@ -86,6 +86,7 @@ from cubie.cuda_simsafe import (
     cupy,
     current_mem_info,
     is_device_array,
+    is_pinned_array,
 )
 from cubie.memory.pinned_arena import PinnedArena
 from cubie.memory.stream_groups import StreamGroups
@@ -1499,6 +1500,14 @@ class MemoryManager:
     def pinned_reserved_bytes(self) -> int:
         """Page-locked bytes the pinned arena holds."""
         return self._pinned_arena.reserved_bytes
+
+    def is_pinned(self, array: ndarray) -> bool:
+        """Return whether ``array`` is page-locked.
+
+        The driver's answer, or membership of this manager's arena,
+        whose slabs are plain memory under the CUDA simulator.
+        """
+        return is_pinned_array(array) or self._pinned_arena.contains(array)
 
     def flush_pinned_pool(self) -> int:
         """Free every pinned slab with no live array; syncs the device.
