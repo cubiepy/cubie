@@ -958,13 +958,7 @@ class BaseArrayManager(ABC):
             managed.memory_type = types[label]
 
     def _host_memory_type(self, array: NDArray) -> str:
-        """Classify a host array's actual backing.
-
-        ``"pinned"`` requires C-contiguous page-locked memory, which
-        transfers directly and asynchronously. Strided or pageable
-        arrays stage through bounded pinned blocks, and memmaps are
-        disk-backed.
-        """
+        """Classify backing; pinned needs C-contiguous locked pages."""
         if isinstance(array, np_memmap):
             return "memmap"
         if (

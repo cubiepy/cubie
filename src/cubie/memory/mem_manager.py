@@ -1502,11 +1502,7 @@ class MemoryManager:
         return self._pinned_arena.reserved_bytes
 
     def is_pinned(self, array: ndarray) -> bool:
-        """Return whether ``array`` is page-locked.
-
-        The driver's answer, or membership of this manager's arena,
-        whose slabs are plain memory under the CUDA simulator.
-        """
+        """Whether the driver or this manager's arena pins ``array``."""
         return is_pinned_array(array) or self._pinned_arena.contains(array)
 
     def flush_pinned_pool(self) -> int:

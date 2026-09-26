@@ -207,8 +207,7 @@ def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
 # ── Depth cap ─────────────────────────────────────────────────── #
 
 def test_acquire_blocks_at_the_depth_cap(mgr):
-    """Once STAGING_POOL_DEPTH matching buffers are in flight, the
-    next acquire waits for a release instead of growing the pool."""
+    """At the depth cap, acquire waits for a release, not growth."""
     pool = ChunkBufferPool(memory_manager=mgr)
     held = [
         pool.acquire("state", (10,), np.float32)

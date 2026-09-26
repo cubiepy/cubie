@@ -137,13 +137,13 @@ arrays; device arrays must be allocated through `allocate_queue` first.
   current stream. Allocation and release enter it; transfers use the Numba stream.
 
 ## ChunkBufferPool
-Pinned staging buffers keyed by `array_name`. `acquire` returns the smallest idle buffer
-that fits, its `array` viewed in the requested shape and dtype, replacing an idle buffer
-too small; it grows while fewer than `STAGING_POOL_DEPTH` of the label are in flight and
-the arena's budget and headroom checks allow the buffer (a label with nothing in flight
-always gets one), else blocks until a release; this bound paces the pipeline. `release`
-frees a buffer and wakes waiters; `clear` frees all (use on error paths). Buffers are
-carved from the pinned arena.
+Pinned staging buffers keyed by `array_name`, carved from the pinned arena. `acquire`
+returns the smallest idle buffer that fits, its `array` viewed in the requested shape
+and dtype, replacing an idle buffer too small; it grows while fewer than
+`STAGING_POOL_DEPTH` of the label are in flight and the arena accepts the buffer (a
+label with nothing in flight always gets one), else blocks until a release; this bound
+paces the pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use
+on error paths).
 
 ## Dependencies
 ### Internal
