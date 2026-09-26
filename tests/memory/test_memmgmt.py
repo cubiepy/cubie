@@ -1,7 +1,5 @@
 import ctypes
 import gc
-import json
-import sys
 from pathlib import Path
 import weakref
 
@@ -39,7 +37,7 @@ from cubie.memory.mem_manager import (
 )
 from cubie.memory.pinned_arena import (
     MIN_SLAB_BYTES,
-    PINNED_ALIGNMENT_BYTES,
+    PAGE_BYTES,
 )
 from tests.memory.conftest import (
     DummyStream,
@@ -2457,9 +2455,9 @@ def test_pinned_ceiling_defaults_to_vram(mgr):
     assert mgr.pinned_max_bytes == mgr.totalmem
 
 
-def _extent(nbytes):
-    """Arena extent that backs ``nbytes`` bytes."""
-    return -(-nbytes // PINNED_ALIGNMENT_BYTES) * PINNED_ALIGNMENT_BYTES
+def _pages(nbytes):
+    """Whole pages of pinned memory holding ``nbytes``."""
+    return -(-nbytes // PAGE_BYTES) * PAGE_BYTES
 
 
 def test_pinned_extent_serves_a_different_shape(mgr):
@@ -2472,19 +2470,17 @@ def test_pinned_extent_serves_a_different_shape(mgr):
     again = mgr.allocate_pinned_array((3, 50), np.float32)
     assert again.shape == (3, 50)
     assert mgr.pinned_reserved_bytes == reserved
-    assert mgr.pinned_live_bytes == _extent(again.nbytes)
+    assert mgr.pinned_live_bytes == _pages(again.nbytes)
 
 
 def test_pinned_freed_neighbours_coalesce(mgr):
     """Adjacent freed extents serve a request larger than either."""
-    first = mgr.allocate_pinned_array((PINNED_ALIGNMENT_BYTES,), np.uint8)
-    second = mgr.allocate_pinned_array((PINNED_ALIGNMENT_BYTES,), np.uint8)
+    first = mgr.allocate_pinned_array((PAGE_BYTES,), np.uint8)
+    second = mgr.allocate_pinned_array((PAGE_BYTES,), np.uint8)
     reserved = mgr.pinned_reserved_bytes
     del first, second
     gc.collect()
-    merged = mgr.allocate_pinned_array(
-        (2 * PINNED_ALIGNMENT_BYTES,), np.uint8
-    )
+    merged = mgr.allocate_pinned_array((2 * PAGE_BYTES,), np.uint8)
     assert merged is not None
     assert mgr.pinned_reserved_bytes == reserved
 
@@ -2515,13 +2511,12 @@ def test_pinned_view_keeps_extent_live(mgr):
 
 
 def test_pinned_release_during_allocation_is_deferred(mgr):
-    """A finalizer firing under the arena lock lands at the next read."""
+    """A finalizer firing under the pinned lock lands at the next read."""
     array = mgr.allocate_pinned_array((96,), np.float64)
-    arena = mgr._pinned_arena
-    with arena._lock:
+    with mgr._pinned_lock:
         del array
         gc.collect()
-        assert len(arena._releases) == 1
+        assert len(mgr._pinned_arena._returned) == 1
     assert mgr.pinned_live_bytes == 0
 
 
@@ -2545,27 +2540,13 @@ def test_pinned_slab_refused_past_ram_headroom(mgr):
     assert mgr.pinned_reserved_bytes == 0
 
 
-
-
 @pytest.mark.nocudasim
-@pytest.mark.cupy
-def test_commit_capped_slab_refused_without_poisoning():
-    """An uncommittable slab is refused and pinned allocation survives."""
-    if sys.platform != "win32":
-        from cubie.cuda_simsafe import _require_commit
-
-        assert _require_commit(2**40) is None
-        return
-    import subprocess
-
-    child = Path(__file__).with_name("_commit_cap_child.py")
-    result = subprocess.run(
-        [sys.executable, str(child)],
-        capture_output=True, text=True, timeout=300,
-    )
-    assert result.returncode == 0, result.stderr
-    outcome = json.loads(result.stdout.strip().splitlines()[-1])
-    assert outcome == {"big_refused": True, "small_pinned": True}
+def test_refused_slab_leaves_pinned_allocation_working(mgr):
+    """A slab the OS cannot supply raises; later slabs still pin."""
+    with pytest.raises(MemoryError):
+        mgr.allocate_pinned_array((2**50,), np.uint8, force=True)
+    array = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
+    assert is_pinned_array(array)
 
 
 def test_forced_pinned_allocation_grows_past_budget(mgr):
@@ -2576,14 +2557,14 @@ def test_forced_pinned_allocation_grows_past_budget(mgr):
     assert mgr.pinned_reserved_bytes > mgr.pinned_max_bytes
 
 
-def test_flush_pinned_pool_frees_idle_slabs_only(mgr):
-    """An explicit flush frees idle slabs and keeps live ones."""
+def test_free_idle_pinned_frees_idle_slabs_only(mgr):
+    """Freeing idle pinned memory keeps slabs holding live arrays."""
     kept = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
     idle = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
     reserved = mgr.pinned_reserved_bytes
     del idle
     gc.collect()
-    released = mgr.flush_pinned_pool()
+    released = mgr.free_idle_pinned()
     assert released > 0
     assert mgr.pinned_reserved_bytes == reserved - released
     kept[:] = 1
@@ -2596,16 +2577,7 @@ def test_new_slab_frees_idle_slabs_first(mgr):
     del small
     gc.collect()
     large = mgr.allocate_pinned_array((2 * MIN_SLAB_BYTES,), np.uint8)
-    assert mgr.pinned_reserved_bytes == _extent(large.nbytes)
-
-
-def test_trim_pinned_pool_frees_idle_slabs(mgr):
-    """Trimming with idle streams frees slabs with no live array."""
-    array = mgr.allocate_pinned_array((MIN_SLAB_BYTES,), np.uint8)
-    del array
-    gc.collect()
-    assert mgr.trim_pinned_pool() > 0
-    assert mgr.pinned_reserved_bytes == 0
+    assert mgr.pinned_reserved_bytes == _pages(large.nbytes)
 
 
 def test_retire_frees_slabs_idle_at_two_calls(mgr):
@@ -2643,7 +2615,7 @@ def test_busy_group_stream_keeps_idle_slabs(mgr, start_cuda_busy_work):
     _, busy_stream, done, release = start_cuda_busy_work()
     mgr.stream_groups.streams["busy"] = busy_stream
     try:
-        assert mgr.trim_pinned_pool() == 0
+        assert mgr.free_idle_pinned() == 0
         mgr.retire_idle_pinned()
         assert mgr.retire_idle_pinned() == 0
         mgr.allocate_pinned_array((2 * MIN_SLAB_BYTES,), np.uint8)
@@ -2672,7 +2644,7 @@ def test_concurrent_pinned_allocations_are_disjoint(mgr):
         thread.join()
     addresses = {array.ctypes.data for array in granted}
     assert len(addresses) == 16
-    assert mgr.pinned_live_bytes == 16 * _extent(64)
+    assert mgr.pinned_live_bytes == 16 * _pages(64)
 
 
 def test_pinned_budget_capped_by_ram_fraction(mgr):

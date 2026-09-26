@@ -1,282 +1,235 @@
-"""Page-locked slabs sub-allocated into host arrays of any shape.
+"""Page-locked slabs handed out as host arrays of any shape.
 
-Arrays take the best-fitting free extent of any slab; a collected
-array returns its extent for the next request of any size. Idle slabs
-are freed by :meth:`PinnedArena.release_free_slabs`, before a new slab
-when the caller's ``may_trim`` allows it, and by
-:meth:`PinnedArena.retire_idle_slabs` once idle at two calls running.
+A collected array's bytes hold the next array of any shape. The
+memory manager decides when slabs are added and freed.
 
 Published Classes
 -----------------
 :class:`PinnedArena`
-    Slab sub-allocator for page-locked host arrays.
+    Page-locked slabs handed out as host arrays.
 
     >>> arena = PinnedArena()
-    >>> array = arena.allocate(
-    ...     (4, 3), "float32", cap=None, may_trim=lambda: True, room=None
-    ... )
+    >>> arena.add_slab(1024, limit=None)
+    True
+    >>> array = arena.allocate((4, 3), "float32")
 """
 
 import ctypes
+import sys
 from bisect import insort
 from collections import deque
 from math import prod
-from threading import Lock
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from weakref import finalize
 
 from attrs import define, field
-from numpy import dtype as np_dtype, ndarray
+from numpy import dtype as np_dtype, empty as np_empty, ndarray
+from numpy import uint8 as np_uint8
 from numpy.typing import DTypeLike
 
-from cubie.cuda_simsafe import alloc_pinned_slab
+from cubie.cuda_simsafe import CUDA_SIMULATION, cupy
 
 
-PINNED_ALIGNMENT_BYTES = 4096
-"""Alignment of every extent: one host page."""
+PAGE_BYTES = 4096
+"""Host page size; every array starts on a page boundary."""
 
 MIN_SLAB_BYTES = 64 * 1024**2
-"""Smallest slab, so small arrays share one allocation."""
+"""Smallest slab, so that many small arrays share one."""
+
+
+if sys.platform == "win32":
+    _kernel32 = ctypes.WinDLL("kernel32")
+    _kernel32.VirtualAlloc.restype = ctypes.c_void_p
+    _kernel32.VirtualAlloc.argtypes = [
+        ctypes.c_void_p, ctypes.c_size_t, ctypes.c_ulong, ctypes.c_ulong
+    ]
+    _kernel32.VirtualFree.argtypes = [
+        ctypes.c_void_p, ctypes.c_size_t, ctypes.c_ulong
+    ]
+
+    def _check_commit(nbytes: int) -> None:
+        """Raise ``MemoryError`` if Windows cannot commit ``nbytes``."""
+        # MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE
+        address = _kernel32.VirtualAlloc(None, nbytes, 0x3000, 0x04)
+        if not address:
+            raise MemoryError(f"Windows cannot commit {nbytes} bytes")
+        # MEM_RELEASE
+        _kernel32.VirtualFree(ctypes.c_void_p(address), 0, 0x8000)
+
+else:
+
+    def _check_commit(nbytes: int) -> None:
+        """Do nothing; only Windows needs the check."""
+
+
+def page_locked_slab(nbytes: int) -> Tuple[int, Any]:
+    """Return the address and owner of ``nbytes`` of pinned memory.
+
+    Dropping the owner frees it and waits for the whole device.
+
+    Raises
+    ------
+    MemoryError
+        If the memory cannot be page-locked.
+    """
+    if CUDA_SIMULATION:
+        buffer = np_empty(nbytes, dtype=np_uint8)
+        return buffer.ctypes.data, buffer
+    _check_commit(nbytes)
+    try:
+        memory = cupy.cuda.pinned_memory.PinnedMemory(
+            nbytes, cupy.cuda.runtime.hostAllocPortable
+        )
+    except cupy.cuda.runtime.CUDARuntimeError as error:
+        raise MemoryError(f"cannot page-lock {nbytes} bytes") from error
+    return int(memory.ptr), memory
+
+
+def _page_round(nbytes: int) -> int:
+    """Round ``nbytes`` up to whole pages, at least one."""
+    pages = -(-max(nbytes, 1) // PAGE_BYTES)
+    return pages * PAGE_BYTES
 
 
 @define(eq=False)
 class _Slab:
-    """One page-locked allocation and its free extents."""
+    """One page-locked allocation and its unused ranges."""
 
     address: int
     size: int
     owner: Any
-    # Sorted (offset, length) pairs.
+    # Sorted (offset, length) ranges not backing an array.
     free: List[Tuple[int, int]] = field(factory=list)
-    live: int = 0
-    # Consecutive retire_idle_slabs calls that found the slab idle.
+    arrays: int = 0
+    # Consecutive idle checks that found no array in the slab.
     idle_checks: int = 0
 
-    def take(self, nbytes: int) -> Optional[int]:
-        """Return the offset of the best-fitting free extent."""
-        best = None
-        for index, (offset, length) in enumerate(self.free):
-            if length >= nbytes and (
-                best is None or length < self.free[best][1]
-            ):
-                best = index
-        if best is None:
-            return None
-        offset, length = self.free.pop(best)
+    def take(self, index: int, nbytes: int) -> int:
+        """Take ``nbytes`` from the front of free range ``index``."""
+        offset, length = self.free.pop(index)
         if length > nbytes:
             insort(self.free, (offset + nbytes, length - nbytes))
-        self.live += 1
+        self.arrays += 1
         return offset
 
-    def give(self, offset: int, nbytes: int) -> None:
-        """Return an extent, merging it with adjacent free extents."""
+    def give_back(self, offset: int, nbytes: int) -> None:
+        """Return a range, merging it with free neighbours."""
         insort(self.free, (offset, nbytes))
         merged = []
         for start, length in self.free:
-            if merged and merged[-1][0] + merged[-1][1] == start:
+            if merged and sum(merged[-1]) == start:
                 merged[-1] = (merged[-1][0], merged[-1][1] + length)
             else:
                 merged.append((start, length))
         self.free = merged
-        self.live -= 1
-
-    def best_fit(self, nbytes: int) -> Optional[int]:
-        """Return the length of the smallest free extent that fits."""
-        fits = [length for _, length in self.free if length >= nbytes]
-        return min(fits) if fits else None
+        self.arrays -= 1
 
 
 @define(eq=False)
 class PinnedArena:
-    """Slab sub-allocator for page-locked host arrays.
-
-    Attributes
-    ----------
-    reserved_bytes
-        Page-locked bytes held in slabs.
-    live_bytes
-        Bytes of extents backing reachable arrays.
-    """
+    """Page-locked slabs handed out as host arrays; not thread-safe."""
 
     _slabs: List[_Slab] = field(factory=list, init=False)
-    _lock: Lock = field(factory=Lock, init=False)
-    # Collected arrays queue extents here; GC may run under the lock.
-    _releases: deque = field(factory=deque, init=False)
+    # Ranges of collected arrays; collection can happen mid-call.
+    _returned: deque = field(factory=deque, init=False)
     _live_bytes: int = field(default=0, init=False)
 
     @property
     def reserved_bytes(self) -> int:
         """Page-locked bytes held in slabs."""
-        with self._lock:
-            return sum(slab.size for slab in self._slabs)
+        return sum(slab.size for slab in self._slabs)
 
     @property
     def live_bytes(self) -> int:
-        """Bytes of extents backing reachable arrays."""
-        with self._lock:
-            self._apply_releases()
-            return self._live_bytes
+        """Bytes backing arrays that are still reachable."""
+        self._take_back_returned()
+        return self._live_bytes
 
     def allocate(
-        self,
-        shape: Tuple[int, ...],
-        dtype: DTypeLike,
-        cap: Optional[int],
-        may_trim: Callable[[], bool],
-        room: Optional[Callable[[], int]],
+        self, shape: Tuple[int, ...], dtype: DTypeLike
     ) -> Optional[ndarray]:
-        """Return an uninitialised page-locked array.
-
-        Parameters
-        ----------
-        shape
-            Shape of the array.
-        dtype
-            Element type of the array.
-        cap
-            Reserved bytes a new slab may not exceed; ``None`` for
-            no limit.
-        may_trim
-            Called before a new slab is needed; ``True`` frees the
-            idle slabs first.
-        room
-            Called before a new slab is page-locked; returns the bytes
-            it may take. ``None`` for no limit.
-
-        Returns
-        -------
-        numpy.ndarray or None
-            The array, or ``None`` when nothing fits and a new slab
-            would exceed ``cap`` or ``room``.
-
-        Raises
-        ------
-        Exception
-            The driver's error when a new slab cannot be page-locked.
-        """
+        """Return an uninitialised array; ``None`` if nothing fits."""
         dtype = np_dtype(dtype)
-        nbytes = int(prod(shape)) * dtype.itemsize
-        pages = -(-max(nbytes, 1) // PINNED_ALIGNMENT_BYTES)
-        extent = pages * PINNED_ALIGNMENT_BYTES
-        with self._lock:
-            self._apply_releases()
-            slab, offset = self._take(extent)
-            if slab is None:
-                if may_trim():
-                    self._drop_idle_slabs()
-                slab = self._grow(extent, cap, room)
-                if slab is None:
-                    return None
-                offset = slab.take(extent)
-            self._live_bytes += extent
-        buffer = (ctypes.c_uint8 * extent).from_address(
-            slab.address + offset
-        )
+        nbytes = _page_round(int(prod(shape)) * dtype.itemsize)
+        self._take_back_returned()
+        best = None
+        for slab in self._slabs:
+            for index, (offset, length) in enumerate(slab.free):
+                if length >= nbytes and (best is None or length < best[2]):
+                    best = (slab, index, length)
+        if best is None:
+            return None
+        slab, index, _ = best
+        offset = slab.take(index, nbytes)
+        self._live_bytes += nbytes
+        buffer = (ctypes.c_uint8 * nbytes).from_address(slab.address + offset)
         array = ndarray(shape, dtype=dtype, buffer=buffer)
         # Fires once the array and all its views are collected.
-        finalize(array, self._releases.append, (slab, offset, extent))
+        finalize(array, self._returned.append, (slab, offset, nbytes))
         return array
 
-    def contains(self, array: ndarray) -> bool:
-        """Return whether ``array``'s bytes lie in one of the slabs."""
-        address = array.ctypes.data
-        with self._lock:
-            return any(
-                slab.address <= address < slab.address + slab.size
-                for slab in self._slabs
-            )
+    def add_slab(self, nbytes: int, limit: Optional[int]) -> bool:
+        """Page-lock a slab of at least ``nbytes`` within ``limit``.
 
-    def release_free_slabs(self) -> int:
-        """Free every slab with no live array.
-
-        Freeing page-locked memory synchronizes the device.
+        Uses :data:`MIN_SLAB_BYTES` unless that exceeds ``limit``.
 
         Returns
         -------
-        int
-            Bytes released.
+        bool
+            ``False`` when even the array's size exceeds ``limit``.
         """
-        with self._lock:
-            self._apply_releases()
-            return self._drop_idle_slabs()
-
-    def retire_idle_slabs(self, may_free: bool) -> int:
-        """Free slabs found idle at this call and the previous one.
-
-        Parameters
-        ----------
-        may_free
-            ``False`` only counts idle calls and frees nothing.
-
-        Returns
-        -------
-        int
-            Bytes released.
-        """
-        with self._lock:
-            self._apply_releases()
-            for slab in self._slabs:
-                slab.idle_checks = slab.idle_checks + 1 if not slab.live else 0
-            if not may_free:
-                return 0
-            stale = [slab for slab in self._slabs if slab.idle_checks >= 2]
-            self._slabs = [
-                slab for slab in self._slabs if slab.idle_checks < 2
-            ]
-        return sum(slab.size for slab in stale)
-
-    def _drop_idle_slabs(self) -> int:
-        """Free slabs with no live array; lock held."""
-        idle = [slab for slab in self._slabs if slab.live == 0]
-        self._slabs = [slab for slab in self._slabs if slab.live]
-        # Dropping the owner frees the page-locked memory.
-        return sum(slab.size for slab in idle)
-
-    def _take(self, extent: int) -> Tuple[Optional[_Slab], int]:
-        """Carve ``extent`` from the best-fitting slab; lock held."""
-        best = None
-        best_length = None
-        for slab in self._slabs:
-            length = slab.best_fit(extent)
-            if length is not None and (
-                best_length is None or length < best_length
-            ):
-                best, best_length = slab, length
-        if best is None:
-            return None, 0
-        return best, best.take(extent)
-
-    def _grow(
-        self,
-        extent: int,
-        cap: Optional[int],
-        room: Optional[Callable[[], int]],
-    ) -> Optional[_Slab]:
-        """Page-lock a slab that fits ``extent``; lock held."""
-        limit = None
-        if cap is not None:
-            limit = cap - sum(slab.size for slab in self._slabs)
-        if room is not None:
-            available = room()
-            limit = available if limit is None else min(limit, available)
-        size = max(extent, MIN_SLAB_BYTES)
+        needed = _page_round(nbytes)
+        size = max(needed, MIN_SLAB_BYTES)
         if limit is not None and size > limit:
-            # A slab sized to the request alone may still fit.
-            size = extent
+            size = needed
             if size > limit:
-                return None
-        address, owner = alloc_pinned_slab(size)
+                return False
+        address, owner = page_locked_slab(size)
         slab = _Slab(address=address, size=size, owner=owner)
         slab.free.append((0, size))
         self._slabs.append(slab)
-        return slab
+        return True
 
-    def _apply_releases(self) -> None:
-        """Return queued extents to their slabs; lock held."""
-        while True:
-            try:
-                slab, offset, extent = self._releases.popleft()
-            except IndexError:
-                return
-            slab.give(offset, extent)
-            self._live_bytes -= extent
+    def contains(self, array: ndarray) -> bool:
+        """Return whether ``array``'s memory lies in a slab."""
+        address = array.ctypes.data
+        return any(
+            slab.address <= address < slab.address + slab.size
+            for slab in self._slabs
+        )
+
+    def check_idle_slabs(self) -> None:
+        """Count one more idle check for each slab with no arrays."""
+        self._take_back_returned()
+        for slab in self._slabs:
+            slab.idle_checks = 0 if slab.arrays else slab.idle_checks + 1
+
+    def free_idle_slabs(self, min_idle_checks: int = 0) -> int:
+        """Free slabs with no arrays; waits for the whole device.
+
+        Parameters
+        ----------
+        min_idle_checks
+            Free only slabs found idle by at least this many
+            consecutive :meth:`check_idle_slabs` calls.
+
+        Returns
+        -------
+        int
+            Bytes freed.
+        """
+        self._take_back_returned()
+        idle = [
+            slab for slab in self._slabs
+            if not slab.arrays and slab.idle_checks >= min_idle_checks
+        ]
+        self._slabs = [slab for slab in self._slabs if slab not in idle]
+        # Dropping a slab's owner frees its memory.
+        return sum(slab.size for slab in idle)
+
+    def _take_back_returned(self) -> None:
+        """Return collected arrays' ranges to their slabs."""
+        while self._returned:
+            slab, offset, nbytes = self._returned.popleft()
+            slab.give_back(offset, nbytes)
+            self._live_bytes -= nbytes

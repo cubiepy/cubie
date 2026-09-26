@@ -11,7 +11,7 @@ import numpy as np
 
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
 from cubie.memory.mem_manager import STAGING_POOL_DEPTH
-from cubie.memory.pinned_arena import MIN_SLAB_BYTES, PINNED_ALIGNMENT_BYTES
+from cubie.memory.pinned_arena import MIN_SLAB_BYTES, PAGE_BYTES
 
 
 # ── PinnedBuffer ──────────────────────────────────────────────── #
@@ -21,7 +21,6 @@ def test_pinned_buffer_construction():
     storage = np.zeros((800,), dtype=np.uint8)
     buf = PinnedBuffer(buffer_id=0, storage=storage)
     assert buf.buffer_id == 0
-    assert buf.array is storage
     assert buf.capacity == storage.nbytes
     assert buf.in_use is False
 
@@ -33,11 +32,11 @@ def test_pinned_buffer_in_use_override():
     assert buf.in_use is True
 
 
-def test_pinned_buffer_view_shares_storage():
-    """view points array at the leading bytes in the given shape."""
+def test_pinned_buffer_shape_as_shares_storage():
+    """shape_as sets array to the start of the buffer's memory."""
     storage = np.zeros((800,), dtype=np.uint8)
     buf = PinnedBuffer(buffer_id=0, storage=storage)
-    buf.view((10, 5), np.float32)
+    buf.shape_as((10, 5), np.float32)
     assert buf.array.shape == (10, 5)
     assert buf.array.dtype == np.float32
     buf.array[:] = 1.0
@@ -198,7 +197,7 @@ def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
     """Budget with no room for a second buffer: acquire waits."""
     mgr.pinned_max_bytes = 0
     # Two of these cannot share one slab.
-    shape = (MIN_SLAB_BYTES // 2 + PINNED_ALIGNMENT_BYTES,)
+    shape = (MIN_SLAB_BYTES // 2 + PAGE_BYTES,)
     _assert_second_acquire_waits_for_release(
         ChunkBufferPool(memory_manager=mgr), shape, np.uint8
     )

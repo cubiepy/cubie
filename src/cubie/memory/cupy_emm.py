@@ -1,9 +1,8 @@
 """Numba EMM plugin allocating from the device's stream-ordered pool.
 
-``cuda.device_array`` returns a native ``DeviceNDArray`` backed by
-``cudaMallocAsync`` (CuPy's ``malloc_async``). Freed blocks above the
-pool's release threshold (set by the memory manager) return to the
-device at the next sync of their stream.
+``cuda.device_array`` returns a native ``DeviceNDArray`` from
+``cudaMallocAsync``. Freed memory beyond what the manager keeps
+returns to the device at the next sync of the freeing stream.
 
 See Also
 --------
@@ -19,8 +18,8 @@ from cubie.cuda_simsafe import cuda, cupy, CUDA_SIMULATION
 
 logger = logging.getLogger(__name__)
 
-CUDA_ERROR_MEMORY_ALLOCATION = 2
-"""``cudaErrorMemoryAllocation``, from the CUDA runtime API."""
+# cudaErrorMemoryAllocation in the CUDA runtime API.
+_OUT_OF_MEMORY = 2
 
 
 if not CUDA_SIMULATION:
@@ -28,11 +27,10 @@ if not CUDA_SIMULATION:
     class CuPyAsyncNumbaManager(
         cuda.GetIpcHandleMixin, cuda.HostOnlyCUDAMemoryManager
     ):
-        """EMM plugin allocating native Numba arrays from the device pool.
+        """Numba EMM plugin allocating from the device's memory pool.
 
         Adapted from the numba cupy-EMM tutorial (BSD 2-Clause; see
-        THIRD_PARTY_LICENSES). Blocks are allocated and freed on the
-        CuPy stream current at allocation.
+        THIRD_PARTY_LICENSES). Uses the current CuPy stream.
         """
 
         def __init__(self, context) -> None:
@@ -40,6 +38,7 @@ if not CUDA_SIMULATION:
             # Kept alive so CuPy frees the block on finalize.
             self._allocations: dict[int, Any] = {}
             self._pool = None
+            self._release_threshold = 0
             self.is_cupy = True
 
         def initialize(self) -> None:
@@ -47,17 +46,14 @@ if not CUDA_SIMULATION:
             # Runs on every context activation; configure the pool once.
             if self._pool is None:
                 runtime = cupy.cuda.runtime
-                pool = runtime.deviceGetMemPool(runtime.getDevice())
-                runtime.memPoolSetAttribute(
-                    pool, runtime.cudaMemPoolAttrReleaseThreshold, 0
-                )
-                self._pool = pool
+                self._pool = runtime.deviceGetMemPool(runtime.getDevice())
+                self._set_release_threshold(0)
 
         def memalloc(self, nbytes: int) -> "cuda.MemoryPointer":
             try:
                 cp_mp = cupy.cuda.memory.malloc_async(nbytes)
             except cupy.cuda.runtime.CUDARuntimeError as error:
-                if error.status != CUDA_ERROR_MEMORY_ALLOCATION:
+                if error.status != _OUT_OF_MEMORY:
                     raise
                 # Let queued frees complete, then retry once.
                 cupy.cuda.get_current_stream().synchronize()
@@ -79,7 +75,7 @@ if not CUDA_SIMULATION:
 
             return finalizer
 
-        def pool_reserved_bytes(self) -> int:
+        def reserved_bytes(self) -> int:
             """Bytes the pool currently holds from the device."""
             if self._pool is None:
                 return 0
@@ -88,15 +84,28 @@ if not CUDA_SIMULATION:
                 self._pool, runtime.cudaMemPoolAttrReservedMemCurrent
             )
 
-        def set_release_threshold(self, nbytes: int) -> None:
-            """Retain up to ``nbytes`` of freed blocks across syncs."""
-            if self._pool is not None:
-                runtime = cupy.cuda.runtime
-                runtime.memPoolSetAttribute(
-                    self._pool,
-                    runtime.cudaMemPoolAttrReleaseThreshold,
-                    int(nbytes),
-                )
+        def keep_reserved(self) -> None:
+            """Keep the pool's current memory through stream syncs."""
+            reserved = self.reserved_bytes()
+            if reserved > self._release_threshold:
+                self._set_release_threshold(reserved)
+
+        def release_beyond(self, nbytes: int) -> None:
+            """Return freed memory beyond ``nbytes`` at stream syncs."""
+            if nbytes < self._release_threshold:
+                self._set_release_threshold(nbytes)
+
+        def _set_release_threshold(self, nbytes: int) -> None:
+            """Set how many freed bytes the pool keeps through syncs."""
+            if self._pool is None:
+                return
+            runtime = cupy.cuda.runtime
+            runtime.memPoolSetAttribute(
+                self._pool,
+                runtime.cudaMemPoolAttrReleaseThreshold,
+                int(nbytes),
+            )
+            self._release_threshold = nbytes
 
         def get_memory_info(self) -> "cuda.MemoryInfo":
             # Device free plus the pool's reserved but unused bytes.
@@ -106,7 +115,7 @@ if not CUDA_SIMULATION:
                 used = runtime.memPoolGetAttribute(
                     self._pool, runtime.cudaMemPoolAttrUsedMemCurrent
                 )
-                free += self.pool_reserved_bytes() - used
+                free += self.reserved_bytes() - used
             return cuda.MemoryInfo(free=free, total=total)
 
         def reset(self, stream: Optional[Any] = None) -> None:

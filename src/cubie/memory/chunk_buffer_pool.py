@@ -5,11 +5,10 @@ used for staging data during chunked host-device transfers. Buffers
 are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
-An idle buffer serves any request that fits its capacity. Depth per
-label is bounded by ``STAGING_POOL_DEPTH``; the arena refuses a new
-buffer past the pinned budget or RAM headroom. A full pool blocks
-:meth:`ChunkBufferPool.acquire` until a release. The first buffer for
-a label always allocates.
+An idle buffer serves any block that fits. :meth:`acquire` waits
+for a release once ``STAGING_POOL_DEPTH`` buffers per label are in
+use or pinned memory runs out; a label's first buffer always
+allocates.
 
 Published Classes
 -----------------
@@ -42,7 +41,7 @@ from math import prod
 from typing import Dict, List, Optional, Tuple
 from threading import Condition
 
-from attrs import Factory as attrsFactory, define, field
+from attrs import define, field
 from attrs.validators import instance_of as attrsval_instance_of
 from numpy import ndarray, uint8 as np_uint8
 from numpy import dtype as np_dtype
@@ -63,32 +62,27 @@ class PinnedBuffer:
     buffer_id : int
         Unique identifier for this buffer.
     storage : ndarray
-        The pinned bytes backing the buffer.
-    array : ndarray
-        ``storage`` viewed in the shape and dtype of the current use.
+        The buffer's pinned memory, as bytes.
     in_use : bool
         Whether the buffer is currently in use.
+    array : ndarray or None
+        The data being staged, set by :meth:`shape_as`.
     """
 
     buffer_id: int = field(validator=attrsval_instance_of(int))
     storage: ndarray = field(validator=attrsval_instance_of(ndarray))
-    array: ndarray = field(
-        default=attrsFactory(lambda self: self.storage, takes_self=True),
-        validator=attrsval_instance_of(ndarray),
-    )
     in_use: bool = field(default=False, validator=attrsval_instance_of(bool))
+    array: Optional[ndarray] = field(default=None, init=False)
 
     @property
     def capacity(self) -> int:
         """Bytes the buffer can hold."""
         return self.storage.nbytes
 
-    def view(self, shape: Tuple[int, ...], dtype: np_dtype) -> None:
-        """Point ``array`` at the leading bytes in ``shape``."""
+    def shape_as(self, shape: Tuple[int, ...], dtype: np_dtype) -> None:
+        """Set ``array`` to the start of the buffer in this shape."""
         nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        self.array = (
-            self.storage[:nbytes].view(dtype).reshape(shape)
-        )
+        self.array = self.storage[:nbytes].view(dtype).reshape(shape)
 
 
 @define
@@ -128,9 +122,8 @@ class ChunkBufferPool:
     ) -> PinnedBuffer:
         """Acquire a pinned buffer for the given array.
 
-        Reuses an idle buffer that fits, replacing one too small;
-        otherwise grows within the depth bound and the arena's budget
-        and headroom checks, or blocks until a release.
+        Reuses the smallest idle buffer that fits, else allocates
+        within the depth and pinned limits, else waits.
 
         Parameters
         ----------
@@ -156,10 +149,10 @@ class ChunkBufferPool:
                 if fitting:
                     buf = min(fitting, key=lambda item: item.capacity)
                     buf.in_use = True
-                    buf.view(shape, dtype)
+                    buf.shape_as(shape, dtype)
                     return buf
                 if idle:
-                    # Too small: drop it and allocate a replacement.
+                    # Too small: replace it.
                     buffers.remove(idle[0])
                     continue
 
@@ -175,7 +168,7 @@ class ChunkBufferPool:
                         new_buffer = self._allocate_buffer(nbytes)
                 if new_buffer is not None:
                     new_buffer.in_use = True
-                    new_buffer.view(shape, dtype)
+                    new_buffer.shape_as(shape, dtype)
                     buffers.append(new_buffer)
                     return new_buffer
 
@@ -211,20 +204,20 @@ class ChunkBufferPool:
         nbytes: int,
         force: bool = False,
     ) -> Optional[PinnedBuffer]:
-        """Allocate a new budget-accounted pinned buffer.
+        """Allocate a new pinned buffer.
 
         Parameters
         ----------
         nbytes
             Capacity of the buffer in bytes.
         force
-            Reserve past the manager's pinned budget.
+            Ignore the manager's pinned-memory limits.
 
         Returns
         -------
         PinnedBuffer or None
-            Newly allocated pinned buffer, or ``None`` when the
-            budget refuses the reservation.
+            Newly allocated pinned buffer, or ``None`` when no
+            pinned memory is available.
         """
         storage = self._memory_manager.allocate_pinned_array(
             (nbytes,), np_uint8, force=force

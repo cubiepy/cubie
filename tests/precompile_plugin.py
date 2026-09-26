@@ -526,6 +526,7 @@ else:
 if POPULATION:
     # Replace eager allocations with zero-filled host arrays.
     import cubie.memory.mem_manager as mem_manager  # noqa: E402
+    import cubie.memory.pinned_arena as pinned_arena  # noqa: E402
     import cubie.memory.stream_groups as stream_groups  # noqa: E402
 
     _batch_solver_kernel = importlib.import_module(
@@ -533,14 +534,13 @@ if POPULATION:
     )
     stream_groups.cuda = SimpleNamespace(stream=lambda: _fake_stream)
     mem_manager._ensure_cuda_context = lambda: None
-    # Pinned slabs become plain host buffers without a driver.
-    import cubie.memory.pinned_arena as _pinned_arena  # noqa: E402
 
     def _population_pinned_slab(nbytes):
+        # Plain host memory: nothing is page-locked without a driver.
         buffer = np.zeros(nbytes, dtype=np.uint8)
         return buffer.ctypes.data, buffer
 
-    _pinned_arena.alloc_pinned_slab = _population_pinned_slab
+    pinned_arena.page_locked_slab = _population_pinned_slab
 
     # Compile the launch specialization; stand in for driver queries.
     _backend_utils = importlib.import_module("cubie.backend.utils")

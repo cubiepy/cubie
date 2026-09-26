@@ -49,6 +49,7 @@ See Also
 """
 
 from tempfile import mkstemp
+from threading import Lock
 from types import TracebackType
 from functools import partial
 from typing import Any, Optional, Callable, Dict, Set, Tuple, Union
@@ -71,6 +72,7 @@ from attrs.validators import (
 )
 from numpy import (
     ceil as np_ceil,
+    dtype as np_dtype,
     memmap as np_memmap,
     ndarray,
     floor as np_floor,
@@ -88,6 +90,7 @@ from cubie.cuda_simsafe import (
     is_device_array,
     is_pinned_array,
 )
+from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
 from cubie.memory.pinned_arena import PinnedArena
 from cubie.memory.stream_groups import StreamGroups
 from cubie.memory.array_requests import ArrayRequest, ArrayResponse
@@ -671,10 +674,9 @@ class MemoryManager:
         default=ALLOCATION_GRANULE_BYTES,
         validator=getype_validator(int, 0),
     )
-    # Page-locked slabs every pinned host array is carved from.
+    # Page-locked memory every pinned host array comes from.
     _pinned_arena: PinnedArena = field(factory=PinnedArena, init=False)
-    # Device pool release threshold: the registry's device high-water.
-    _pool_threshold_bytes: int = field(default=0, init=False)
+    _pinned_lock: Lock = field(factory=Lock, init=False)
     # Cause for the NoCudaDeviceError a sizing decision raises.
     _device_probe_error: Optional[BaseException] = field(
         default=None, init=False
@@ -1285,7 +1287,7 @@ class MemoryManager:
             if key[1] == instance_id
         ]:
             del self._group_chunk_parameters[cache_key]
-        self._lower_pool_threshold()
+        self._release_device_reservation()
 
     def release_instance(
         self, instance_id: int, settings: "InstanceMemorySettings"
@@ -1296,43 +1298,33 @@ class MemoryManager:
         self._drop_instance(instance_id)
         self._rebalance_auto_pool()
 
-    def _device_live_bytes(self) -> int:
-        """Total bytes of device arrays held across the registry."""
-        return sum(
+    def _device_pool(self) -> Optional[CuPyAsyncNumbaManager]:
+        """Return the context's device-pool plugin, if installed."""
+        if CUDA_SIMULATION:
+            return None
+        plugin = cuda.current_context().memory_manager
+        if isinstance(plugin, CuPyAsyncNumbaManager):
+            return plugin
+        return None
+
+    def _keep_device_reservation(self) -> None:
+        """Keep the device pool's memory for the next allocation."""
+        pool = self._device_pool()
+        if pool is not None:
+            pool.keep_reserved()
+
+    def _release_device_reservation(self) -> None:
+        """Let the device pool return memory no array still uses."""
+        pool = self._device_pool()
+        if pool is None:
+            return
+        live = sum(
             arr.nbytes
             for settings in self.registry.values()
             for arr in settings.allocations.values()
             if is_device_array(arr)
         )
-
-    def _set_pool_threshold(self, nbytes: int) -> None:
-        """Set the device pool's release threshold."""
-        if CUDA_SIMULATION:
-            return
-        manager = cuda.current_context().memory_manager
-        setter = getattr(manager, "set_release_threshold", None)
-        if setter is not None:
-            setter(nbytes)
-
-    def _raise_pool_threshold(self) -> None:
-        """Raise the threshold to the pool's reserved high-water."""
-        if CUDA_SIMULATION:
-            return
-        target = self._device_live_bytes()
-        manager = cuda.current_context().memory_manager
-        reserved = getattr(manager, "pool_reserved_bytes", None)
-        if reserved is not None:
-            target = max(target, reserved())
-        if target > self._pool_threshold_bytes:
-            self._pool_threshold_bytes = target
-            self._set_pool_threshold(target)
-
-    def _lower_pool_threshold(self) -> None:
-        """Lower the threshold to the registry's live device bytes."""
-        live = self._device_live_bytes()
-        if live < self._pool_threshold_bytes:
-            self._pool_threshold_bytes = live
-            self._set_pool_threshold(live)
+        pool.release_beyond(live)
 
     def _owner_settings(self, owner_id: int) -> list[InstanceMemorySettings]:
         """Return registry entries owned by one client."""
@@ -1407,7 +1399,7 @@ class MemoryManager:
                 settings.free_all()
                 settings.invalidate_hook()
         if released:
-            self._lower_pool_threshold()
+            self._release_device_reservation()
         return released
 
     def _rebalance_auto_pool(self) -> None:
@@ -1451,7 +1443,7 @@ class MemoryManager:
         """
         for settings in self.registry.values():
             settings.free_all()
-        self._lower_pool_threshold()
+        self._release_device_reservation()
 
     def _check_requests(self, requests: dict[str, ArrayRequest]) -> None:
         """
@@ -1494,50 +1486,50 @@ class MemoryManager:
     @property
     def pinned_live_bytes(self) -> int:
         """Pinned bytes currently backing reachable arrays."""
-        return self._pinned_arena.live_bytes
+        with self._pinned_lock:
+            return self._pinned_arena.live_bytes
 
     @property
     def pinned_reserved_bytes(self) -> int:
-        """Page-locked bytes the pinned arena holds."""
-        return self._pinned_arena.reserved_bytes
+        """Page-locked bytes held for pinned arrays."""
+        with self._pinned_lock:
+            return self._pinned_arena.reserved_bytes
 
     def is_pinned(self, array: ndarray) -> bool:
-        """Whether the driver or this manager's arena pins ``array``."""
-        return is_pinned_array(array) or self._pinned_arena.contains(array)
+        """Return whether ``array`` is locked or from this manager."""
+        if is_pinned_array(array):
+            return True
+        with self._pinned_lock:
+            return self._pinned_arena.contains(array)
 
-    def flush_pinned_pool(self) -> int:
-        """Free every pinned slab with no live array; syncs the device.
-
-        Returns
-        -------
-        int
-            Bytes released.
-        """
-        return self._pinned_arena.release_free_slabs()
-
-    def trim_pinned_pool(self) -> int:
-        """Free idle pinned slabs while every group stream is idle.
+    def free_idle_pinned(self) -> int:
+        """Free unused pinned memory while every group stream is idle.
 
         Returns
         -------
         int
-            Bytes released.
+            Bytes freed.
         """
-        if not self._streams_idle():
-            return 0
-        return self._pinned_arena.release_free_slabs()
+        with self._pinned_lock:
+            if not self._streams_idle():
+                return 0
+            return self._pinned_arena.free_idle_slabs()
 
     def retire_idle_pinned(self) -> int:
-        """Free pinned slabs idle at this call and the previous one.
+        """Free pinned memory unused since the previous call.
 
-        Frees only while every group stream is idle.
+        Frees nothing while any group stream has work queued.
 
         Returns
         -------
         int
-            Bytes released.
+            Bytes freed.
         """
-        return self._pinned_arena.retire_idle_slabs(self._streams_idle())
+        with self._pinned_lock:
+            self._pinned_arena.check_idle_slabs()
+            if not self._streams_idle():
+                return 0
+            return self._pinned_arena.free_idle_slabs(min_idle_checks=2)
 
     def _streams_idle(self) -> bool:
         """Return whether every group stream has finished its work."""
@@ -1554,11 +1546,10 @@ class MemoryManager:
         dtype: DTypeLike,
         force: bool = False,
     ) -> Optional[ndarray]:
-        """Return an uninitialised pinned array from the arena.
+        """Allocate an uninitialised page-locked host array.
 
-        A new slab is page-locked only when no free extent fits and it
-        leaves the RAM reserve (``host_headroom_bytes``) free; idle
-        slabs are freed first while every group stream is idle.
+        Reuses collected arrays' memory; new slabs stay within
+        ``pinned_budget_bytes`` and ``host_headroom_bytes()``.
 
         Parameters
         ----------
@@ -1567,33 +1558,42 @@ class MemoryManager:
         dtype
             Data type for the array elements.
         force
-            Grow past the budget. A driver failure then propagates
-            instead of returning ``None``.
+            Ignore the budget and RAM limits, and raise ``MemoryError``
+            instead of returning ``None`` when page-locking fails.
 
         Returns
         -------
         numpy.ndarray or None
-            The pinned array, or ``None`` when a new slab would exceed
-            the budget or the RAM headroom, or the driver refuses one.
+            The pinned array, or ``None`` when the limits or the
+            driver refuse more page-locked memory.
 
         Raises
         ------
         NoCudaDeviceError
             If the last device probe failed.
         """
-        cap = self.pinned_budget_bytes
-        try:
-            return self._pinned_arena.allocate(
-                shape,
-                dtype,
-                cap=None if force else cap,
-                may_trim=self._streams_idle,
-                room=None if force else host_headroom_bytes,
-            )
-        except Exception:
-            if force:
-                raise
-            return None
+        budget = self.pinned_budget_bytes
+        arena = self._pinned_arena
+        with self._pinned_lock:
+            array = arena.allocate(shape, dtype)
+            if array is not None:
+                return array
+            if self._streams_idle():
+                arena.free_idle_slabs()
+            limit = None
+            if not force:
+                limit = min(
+                    budget - arena.reserved_bytes, host_headroom_bytes()
+                )
+            nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
+            try:
+                if not arena.add_slab(nbytes, limit):
+                    return None
+            except MemoryError:
+                if force:
+                    raise
+                return None
+            return arena.allocate(shape, dtype)
 
     def create_host_array(
         self,
@@ -1620,9 +1620,8 @@ class MemoryManager:
         -------
         numpy.ndarray
             C-contiguous host array; a :class:`numpy.memmap` in the
-            cache root when spilled. A ``"pinned"`` request whose
-            reservation or driver allocation fails lands pageable,
-            and a pageable allocation the OS refuses lands memmap.
+            cache root when spilled. A refused ``"pinned"`` request
+            lands pageable, and a refused pageable one lands memmap.
 
         Raises
         ------
@@ -1636,16 +1635,21 @@ class MemoryManager:
                 f"memory_type must be 'pinned', 'host', or 'memmap', "
                 f"got '{memory_type}'"
             )
+        arr = None
+        if memory_type == "pinned":
+            arr = self.allocate_pinned_array(shape, dtype)
+            if arr is not None and like is None:
+                arr.fill(0.0)
         if memory_type == "memmap":
             arr = self._create_spill_array(shape, dtype)
-        elif memory_type == "pinned":
-            arr = self.allocate_pinned_array(shape, dtype)
-            if arr is None:
-                arr = self._pageable_or_spill_array(shape, dtype)
-            elif like is None:
-                arr.fill(0.0)
-        else:
-            arr = self._pageable_or_spill_array(shape, dtype)
+        elif arr is None:
+            # zeros() maps untouched pages lazily, so a large pageable
+            # array costs nothing until the transfer writes it.
+            try:
+                arr = np_zeros(shape, dtype=dtype)
+            except MemoryError:
+                # The OS refused the commit charge.
+                arr = self._create_spill_array(shape, dtype)
         if like is not None:
             arr[:] = like
         return arr
@@ -1686,15 +1690,6 @@ class MemoryManager:
         if nbytes <= self.pinned_max_bytes:
             return "pinned"
         return "host"
-
-    def _pageable_or_spill_array(
-        self, shape: tuple[int, ...], dtype: DTypeLike
-    ) -> ndarray:
-        """Pageable zeros; a refused commit charge spills to disk."""
-        try:
-            return np_zeros(shape, dtype=dtype)
-        except MemoryError:
-            return self._create_spill_array(shape, dtype)
 
     def _create_spill_array(
         self, shape: tuple[int, ...], dtype: DTypeLike
@@ -2210,7 +2205,7 @@ class MemoryManager:
                 )
             )
 
-        self._raise_pool_threshold()
+        self._keep_device_reservation()
         return None
 
     def _owned_by(self, instance_id: int, owner_id: int) -> bool:

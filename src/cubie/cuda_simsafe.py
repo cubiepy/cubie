@@ -77,20 +77,16 @@ See Also
 
 from __future__ import annotations
 
-import ctypes
 from ctypes import c_void_p
 import os
-import sys
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
 from numpy import (
     dtype,
-    empty as np_empty,
     fmax as np_fmax,
     fmin as np_fmin,
     ndarray as np_ndarray,
-    uint8 as np_uint8,
 )
 
 from cubie.cuda_backend import IS_MLIR
@@ -261,11 +257,6 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         fakemem = FakeMemoryInfo()
         return fakemem.free, fakemem.total
 
-    def alloc_pinned_slab(nbytes: int) -> Tuple[int, Any]:
-        """Return a plain host buffer; the simulator has no pinning."""
-        buffer = np_empty(nbytes, dtype=np_uint8)
-        return buffer.ctypes.data, buffer
-
 else:  # pragma: no cover - exercised in GPU environments
     try:
         import cupy
@@ -309,48 +300,6 @@ else:  # pragma: no cover - exercised in GPU environments
         """Return free and total memory from the active CUDA context."""
 
         return cuda.current_context().get_memory_info()
-
-    if sys.platform == "win32":
-        _kernel32 = ctypes.windll.kernel32
-        _kernel32.VirtualAlloc.restype = c_void_p
-        _kernel32.VirtualAlloc.argtypes = [
-            c_void_p, ctypes.c_size_t, ctypes.c_ulong, ctypes.c_ulong
-        ]
-        _kernel32.VirtualFree.argtypes = [
-            c_void_p, ctypes.c_size_t, ctypes.c_ulong
-        ]
-        _MEM_RESERVE_COMMIT = 0x3000
-        _MEM_RELEASE = 0x8000
-        _PAGE_READWRITE = 0x04
-
-        def _require_commit(nbytes: int) -> None:
-            """Raise unless the OS grants ``nbytes`` of commit now."""
-            address = _kernel32.VirtualAlloc(
-                None, nbytes, _MEM_RESERVE_COMMIT, _PAGE_READWRITE
-            )
-            if not address:
-                raise MemoryError(
-                    f"cannot commit {nbytes} bytes for a pinned slab"
-                )
-            _kernel32.VirtualFree(c_void_p(address), 0, _MEM_RELEASE)
-
-    else:
-
-        def _require_commit(nbytes: int) -> None:
-            """Commit is untracked off Windows."""
-            return None
-
-    def alloc_pinned_slab(nbytes: int) -> Tuple[int, Any]:
-        """Return the address and owner of ``nbytes`` of pinned memory.
-
-        Dropping the owner frees it and synchronizes the device; an
-        uncommittable slab raises ``MemoryError``.
-        """
-        _require_commit(nbytes)
-        memory = cupy.cuda.pinned_memory.PinnedMemory(
-            nbytes, cupy.cuda.runtime.hostAllocPortable
-        )
-        return int(memory.ptr), memory
 
 
 def is_cuda_array(value: Any) -> bool:
@@ -743,7 +692,6 @@ __all__ = [
     "current_mem_info",
     "DeviceNDArray",
     "DeviceNDArrayBase",
-    "alloc_pinned_slab",
     "FakeMemoryInfo",
     "FakeStream",
     "float32",
