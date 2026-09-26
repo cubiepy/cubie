@@ -439,20 +439,13 @@ class OutputArrays(BaseArrayManager):
                     continue
                 if backing == "host" and wanted != "pinned":
                     continue
-            backing = wanted
-            array = None
-            if wanted == "pinned":
-                array = manager.allocate_pinned_array(shape, dtype)
-                if array is None:
-                    # The pinned budget refused; stage through the pool.
-                    backing = "host"
-                else:
-                    array.fill(0)
-            if array is None:
-                array = manager.create_host_array(shape, dtype, backing)
+            # Free the old buffer before allocating its replacement.
             manager.release_host_array(slot.array)
+            slot.array = None
+            array = manager.create_host_array(shape, dtype, wanted)
             slot.array = array
-            slot.memory_type = backing
+            # Record the fallback the manager actually delivered.
+            slot.memory_type = self._host_memory_type(array)
 
     def finalise(self, chunk_index: int, stream=None) -> None:
         """Queue device-to-host transfers for a chunk.

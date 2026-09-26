@@ -47,22 +47,18 @@ def _record_busy_event():
     return stream, event
 
 
-class _UnthrottledPool(ChunkBufferPool):
-    """Pool whose headroom check is forced open."""
-
-    def _headroom_allows(self, shape, dtype):
-        return True
-
-
 def _make_pool():
-    """Return a growth-unthrottled pool with its own pinned budget."""
-    return _UnthrottledPool(memory_manager=MemoryManager())
+    """Return a pool with its own pinned budget."""
+    return ChunkBufferPool(memory_manager=MemoryManager())
 
 
 def _make_pinned_buffer(shape=(4, 3), dtype=np.float32, fill=1.0):
     """Return a PinnedBuffer with known data."""
-    arr = np.full(shape, fill, dtype=dtype)
-    return PinnedBuffer(buffer_id=0, array=arr)
+    nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
+    buffer = PinnedBuffer(buffer_id=0, storage=np.empty(nbytes, np.uint8))
+    buffer.shape_as(shape, dtype)
+    buffer.array[...] = fill
+    return buffer
 
 
 # ── WritebackTask attrs dataclass (item 2) ──────────────────── #

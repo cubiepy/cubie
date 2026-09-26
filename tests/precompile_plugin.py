@@ -526,6 +526,7 @@ else:
 if POPULATION:
     # Replace eager allocations with zero-filled host arrays.
     import cubie.memory.mem_manager as mem_manager  # noqa: E402
+    import cubie.memory.pinned_arena as pinned_arena  # noqa: E402
     import cubie.memory.stream_groups as stream_groups  # noqa: E402
 
     _batch_solver_kernel = importlib.import_module(
@@ -533,11 +534,13 @@ if POPULATION:
     )
     stream_groups.cuda = SimpleNamespace(stream=lambda: _fake_stream)
     mem_manager._ensure_cuda_context = lambda: None
-    mem_manager.empty_pinned = (
-        lambda shape, dtype: np.zeros(shape, dtype=dtype)
-    )
-    # No CUDA driver here, so the pool flush must not touch cupy.
-    mem_manager.free_all_pinned_blocks = lambda: None
+
+    def _population_pinned_slab(nbytes):
+        # Plain host memory: nothing is page-locked without a driver.
+        buffer = np.zeros(nbytes, dtype=np.uint8)
+        return buffer.ctypes.data, buffer
+
+    pinned_arena.page_locked_slab = _population_pinned_slab
 
     # Compile the launch specialization; stand in for driver queries.
     _backend_utils = importlib.import_module("cubie.backend.utils")
@@ -587,6 +590,7 @@ if POPULATION:
     _MemoryManager.from_device = _host_copy
     _MemoryManager.get_available_memory = lambda self, group: 8 << 30
     _MemoryManager.get_memory_info = lambda self: (8 << 30, 24 << 30)
+    _MemoryManager._streams_idle = lambda self: True
 
     # Read the patched figures into the already-built shared manager.
     from cubie.memory import default_memmgr as _default_memmgr  # noqa: E402
@@ -611,32 +615,20 @@ if POPULATION:
     )
     _array_interpolator.current_cupy_stream = _fake_cupy_stream
 
-    # Input/output chunk staging draws pinned buffers from the
-    # ChunkBufferPool, which allocates through ``cupyx.empty_pinned``;
-    # without a CUDA driver that raises inside every solver run's
-    # fixture setup, so no batch-solver kernel would reach the cache.
-    import cubie.memory.chunk_buffer_pool as _chunk_buffer_pool  # noqa: E402
-
-    _chunk_buffer_pool.cupyx = SimpleNamespace(
-        empty_pinned=lambda shape, dtype=np.float64: np.zeros(
-            shape, dtype=dtype
-        ),
-    )
-
     # The busy-kernel canary fixture (tests.conftest.start_cuda_busy_work)
     # builds its non-blocking stream through ``cupy.cuda.Stream``,
     # imported from cuda_simsafe at fixture call time. Stub the stream
-    # constructor while keeping the real pinned-pointer class so
-    # ``is_pinned_array`` still answers correctly.
+    # constructor; no host memory is page-locked without a driver.
     import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
 
-    _real_pinned_pointer = _cuda_simsafe.cupy.cuda.PinnedMemoryPointer
     # ``asarray`` stands in for the cupy grids tests hand to optimize.
     _cuda_simsafe.cupy = SimpleNamespace(
         asarray=lambda a: _fake_device_array(np.array(a, copy=True)),
         cuda=SimpleNamespace(
             Stream=lambda non_blocking=False: SimpleNamespace(ptr=0),
-            PinnedMemoryPointer=_real_pinned_pointer,
+            pinned_memory=SimpleNamespace(
+                is_memory_pinned=lambda address: False
+            ),
         ),
     )
 

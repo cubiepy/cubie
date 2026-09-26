@@ -48,7 +48,6 @@ See Also
     Manages CUDA stream groups used by the memory manager.
 """
 
-from collections import deque
 from tempfile import mkstemp
 from threading import Lock
 from types import TracebackType
@@ -88,9 +87,11 @@ from cubie.cuda_simsafe import (
     Stream,
     cupy,
     current_mem_info,
-    empty_pinned,
-    free_all_pinned_blocks,
+    is_device_array,
+    is_pinned_array,
 )
+from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
+from cubie.memory.pinned_arena import PinnedArena
 from cubie.memory.stream_groups import StreamGroups
 from cubie.memory.array_requests import ArrayRequest, ArrayResponse
 
@@ -673,13 +674,9 @@ class MemoryManager:
         default=ALLOCATION_GRANULE_BYTES,
         validator=getype_validator(int, 0),
     )
-    # Pinned ledger: live backs reachable arrays; retained is
-    # page-locked memory held only by CuPy's pinned pool.
-    # Finalizers queue releases; the ledger drains them under the lock.
+    # Page-locked memory every pinned host array comes from.
+    _pinned_arena: PinnedArena = field(factory=PinnedArena, init=False)
     _pinned_lock: Lock = field(factory=Lock, init=False)
-    _pinned_live_bytes: int = field(default=0, init=False)
-    _pinned_retained_bytes: int = field(default=0, init=False)
-    _pinned_releases: deque = field(factory=deque, init=False)
     # Cause for the NoCudaDeviceError a sizing decision raises.
     _device_probe_error: Optional[BaseException] = field(
         default=None, init=False
@@ -1290,6 +1287,7 @@ class MemoryManager:
             if key[1] == instance_id
         ]:
             del self._group_chunk_parameters[cache_key]
+        self._release_device_reservation()
 
     def release_instance(
         self, instance_id: int, settings: "InstanceMemorySettings"
@@ -1299,6 +1297,34 @@ class MemoryManager:
             return
         self._drop_instance(instance_id)
         self._rebalance_auto_pool()
+
+    def _device_pool(self) -> Optional[CuPyAsyncNumbaManager]:
+        """Return the context's device-pool plugin, if installed."""
+        if CUDA_SIMULATION:
+            return None
+        plugin = cuda.current_context().memory_manager
+        if isinstance(plugin, CuPyAsyncNumbaManager):
+            return plugin
+        return None
+
+    def _keep_device_reservation(self) -> None:
+        """Keep the device pool's memory for the next allocation."""
+        pool = self._device_pool()
+        if pool is not None:
+            pool.keep_reserved()
+
+    def _release_device_reservation(self) -> None:
+        """Let the device pool return memory no array still uses."""
+        pool = self._device_pool()
+        if pool is None:
+            return
+        live = sum(
+            arr.nbytes
+            for settings in self.registry.values()
+            for arr in settings.allocations.values()
+            if is_device_array(arr)
+        )
+        pool.release_beyond(live)
 
     def _owner_settings(self, owner_id: int) -> list[InstanceMemorySettings]:
         """Return registry entries owned by one client."""
@@ -1372,6 +1398,8 @@ class MemoryManager:
                 released += settings.allocated_bytes
                 settings.free_all()
                 settings.invalidate_hook()
+        if released:
+            self._release_device_reservation()
         return released
 
     def _rebalance_auto_pool(self) -> None:
@@ -1415,6 +1443,7 @@ class MemoryManager:
         """
         for settings in self.registry.values():
             settings.free_all()
+        self._release_device_reservation()
 
     def _check_requests(self, requests: dict[str, ArrayRequest]) -> None:
         """
@@ -1458,61 +1487,58 @@ class MemoryManager:
     def pinned_live_bytes(self) -> int:
         """Pinned bytes currently backing reachable arrays."""
         with self._pinned_lock:
-            self._apply_pinned_releases()
-            return self._pinned_live_bytes
+            return self._pinned_arena.live_bytes
 
     @property
-    def pinned_retained_bytes(self) -> int:
-        """Pinned bytes held only by CuPy's pinned pool."""
+    def pinned_reserved_bytes(self) -> int:
+        """Page-locked bytes held for pinned arrays."""
         with self._pinned_lock:
-            self._apply_pinned_releases()
-            return self._pinned_retained_bytes
+            return self._pinned_arena.reserved_bytes
 
-    def _apply_pinned_releases(self) -> None:
-        """Move queued finalizer releases from live to retained."""
-        while True:
-            try:
-                nbytes = self._pinned_releases.popleft()
-            except IndexError:
-                return
-            self._pinned_live_bytes -= nbytes
-            self._pinned_retained_bytes += nbytes
-
-    def _reserve_pinned_bytes(self, nbytes: int, force: bool = False) -> bool:
-        """Atomically reserve ``nbytes`` against the pinned budget.
-
-        Live and retained bytes count together; pressure empties the
-        CuPy pinned pool before a refusal. ``force`` reserves past
-        the budget.
-        """
-        with self._pinned_lock:
-            self._apply_pinned_releases()
-            budget = self.pinned_budget_bytes
-            held = self._pinned_live_bytes + self._pinned_retained_bytes
-            if held + nbytes > budget:
-                self._flush_retained_pinned()
-            if not force and self._pinned_live_bytes + nbytes > budget:
-                return False
-            self._pinned_live_bytes += nbytes
+    def is_pinned(self, array: ndarray) -> bool:
+        """Return whether ``array`` is locked or from this manager."""
+        if is_pinned_array(array):
             return True
+        with self._pinned_lock:
+            return self._pinned_arena.contains(array)
 
-    def _flush_retained_pinned(self) -> None:
-        """Return the pool's page-locked blocks to the OS; lock held."""
-        free_all_pinned_blocks()
-        self._pinned_retained_bytes = 0
+    def free_idle_pinned(self) -> int:
+        """Free unused pinned memory while every group stream is idle.
 
-    def flush_pinned_pool(self) -> None:
-        """Release every page-locked block CuPy's pinned pool retains.
-
-        Freeing page-locked memory synchronizes the whole device.
+        Returns
+        -------
+        int
+            Bytes freed.
         """
         with self._pinned_lock:
-            self._apply_pinned_releases()
-            self._flush_retained_pinned()
+            if not self._streams_idle():
+                return 0
+            return self._pinned_arena.free_idle_slabs()
 
-    def _on_pinned_released(self, nbytes: int) -> None:
-        """Queue a collected pinned array's bytes without locking."""
-        self._pinned_releases.append(nbytes)
+    def retire_idle_pinned(self) -> int:
+        """Free pinned memory unused since the previous call.
+
+        Frees nothing while any group stream has work queued.
+
+        Returns
+        -------
+        int
+            Bytes freed.
+        """
+        with self._pinned_lock:
+            self._pinned_arena.check_idle_slabs()
+            if not self._streams_idle():
+                return 0
+            return self._pinned_arena.free_idle_slabs(min_idle_checks=2)
+
+    def _streams_idle(self) -> bool:
+        """Return whether every group stream has finished its work."""
+        if CUDA_SIMULATION:
+            return True
+        return all(
+            cupy.cuda.Stream.from_external(stream).done
+            for stream in self.stream_groups.streams.values()
+        )
 
     def allocate_pinned_array(
         self,
@@ -1520,11 +1546,10 @@ class MemoryManager:
         dtype: DTypeLike,
         force: bool = False,
     ) -> Optional[ndarray]:
-        """Allocate one budget-accounted pinned host array.
+        """Allocate an uninitialised page-locked host array.
 
-        Reserves bytes, attempts the driver allocation, and attaches
-        a finalizer that releases the bytes once the array and every
-        view of it are collected.
+        Reuses collected arrays' memory; new slabs stay within
+        ``pinned_budget_bytes`` and ``host_headroom_bytes()``.
 
         Parameters
         ----------
@@ -1533,35 +1558,42 @@ class MemoryManager:
         dtype
             Data type for the array elements.
         force
-            Reserve even past the budget. A driver failure then
-            propagates instead of returning ``None``.
+            Ignore the budget and RAM limits, and raise ``MemoryError``
+            instead of returning ``None`` when page-locking fails.
 
         Returns
         -------
         numpy.ndarray or None
-            The pinned array, or ``None`` when the budget or the
-            driver refuses.
+            The pinned array, or ``None`` when the limits or the
+            driver refuse more page-locked memory.
 
         Raises
         ------
         NoCudaDeviceError
             If the last device probe failed.
         """
-        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        if not self._reserve_pinned_bytes(nbytes, force=force):
-            return None
-        try:
-            arr = empty_pinned(shape, dtype)
-        except Exception:
-            # Driver refused: return the reservation to the budget.
-            with self._pinned_lock:
-                self._pinned_live_bytes -= nbytes
-            if force:
-                # Forced callers were promised pinned: re-raise.
-                raise
-            return None
-        finalize(arr, self._on_pinned_released, nbytes)
-        return arr
+        budget = self.pinned_budget_bytes
+        arena = self._pinned_arena
+        with self._pinned_lock:
+            array = arena.allocate(shape, dtype)
+            if array is not None:
+                return array
+            if self._streams_idle():
+                arena.free_idle_slabs()
+            limit = None
+            if not force:
+                limit = min(
+                    budget - arena.reserved_bytes, host_headroom_bytes()
+                )
+            nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
+            try:
+                if not arena.add_slab(nbytes, limit):
+                    return None
+            except MemoryError:
+                if force:
+                    raise
+                return None
+            return arena.allocate(shape, dtype)
 
     def create_host_array(
         self,
@@ -1588,8 +1620,8 @@ class MemoryManager:
         -------
         numpy.ndarray
             C-contiguous host array; a :class:`numpy.memmap` in the
-            cache root when spilled. A ``"pinned"`` request whose
-            reservation or driver allocation fails lands pageable.
+            cache root when spilled. A refused ``"pinned"`` request
+            lands pageable, and a refused pageable one lands memmap.
 
         Raises
         ------
@@ -1603,18 +1635,21 @@ class MemoryManager:
                 f"memory_type must be 'pinned', 'host', or 'memmap', "
                 f"got '{memory_type}'"
             )
+        arr = None
+        if memory_type == "pinned":
+            arr = self.allocate_pinned_array(shape, dtype)
+            if arr is not None and like is None:
+                arr.fill(0.0)
         if memory_type == "memmap":
             arr = self._create_spill_array(shape, dtype)
-        elif memory_type == "pinned":
-            arr = self.allocate_pinned_array(shape, dtype)
-            if arr is None:
-                arr = np_zeros(shape, dtype=dtype)
-            elif like is None:
-                arr.fill(0.0)
-        else:
+        elif arr is None:
             # zeros() maps untouched pages lazily, so a large pageable
             # array costs nothing until the transfer writes it.
-            arr = np_zeros(shape, dtype=dtype)
+            try:
+                arr = np_zeros(shape, dtype=dtype)
+            except MemoryError:
+                # The OS refused the commit charge.
+                arr = self._create_spill_array(shape, dtype)
         if like is not None:
             arr[:] = like
         return arr
@@ -2170,6 +2205,7 @@ class MemoryManager:
                 )
             )
 
+        self._keep_device_reservation()
         return None
 
     def _owned_by(self, instance_id: int, owner_id: int) -> bool:

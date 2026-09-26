@@ -60,7 +60,6 @@ from cubie._utils import (
 from cubie.cuda_simsafe import (
     CUDA_SIMULATION,
     DeviceNDArrayBase,
-    is_pinned_array,
 )
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import (
@@ -958,18 +957,14 @@ class BaseArrayManager(ABC):
             managed.array = array
             managed.memory_type = types[label]
 
-    @staticmethod
-    def _host_memory_type(array: NDArray) -> str:
-        """Classify a host array's actual backing.
-
-        ``"pinned"`` requires C-contiguous page-locked memory, which
-        transfers directly and asynchronously. Strided or pageable
-        arrays stage through bounded pinned blocks, and memmaps are
-        disk-backed.
-        """
+    def _host_memory_type(self, array: NDArray) -> str:
+        """Classify backing; pinned needs C-contiguous locked pages."""
         if isinstance(array, np_memmap):
             return "memmap"
-        if is_pinned_array(array) and array.flags["C_CONTIGUOUS"]:
+        if (
+            self._memory_manager.is_pinned(array)
+            and array.flags["C_CONTIGUOUS"]
+        ):
             return "pinned"
         return "host"
 

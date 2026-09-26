@@ -5,18 +5,18 @@ used for staging data during chunked host-device transfers. Buffers
 are sized for one transfer block and reused across blocks and chunks
 to avoid repeated allocation overhead.
 
-Pool depth is bounded by ``STAGING_POOL_DEPTH`` per label and
-shape, RAM headroom, and the memory manager's pinned budget; a full
-pool blocks :meth:`ChunkBufferPool.acquire` until a release. The
-first buffer for a label always allocates.
+An idle buffer serves any block that fits. :meth:`acquire` waits
+for a release once ``STAGING_POOL_DEPTH`` buffers per label are in
+use or pinned memory runs out; a label's first buffer always
+allocates.
 
 Published Classes
 -----------------
 :class:`PinnedBuffer`
     Wrapper for a reusable pinned memory buffer.
 
-    >>> from numpy import zeros, float64
-    >>> buf = PinnedBuffer(buffer_id=0, array=zeros((10,), float64))
+    >>> from numpy import zeros, uint8
+    >>> buf = PinnedBuffer(buffer_id=0, storage=zeros((80,), uint8))
     >>> buf.in_use
     False
 
@@ -43,14 +43,13 @@ from threading import Condition
 
 from attrs import define, field
 from attrs.validators import instance_of as attrsval_instance_of
-from numpy import ndarray
+from numpy import ndarray, uint8 as np_uint8
 from numpy import dtype as np_dtype
 
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import (
     MemoryManager,
     STAGING_POOL_DEPTH,
-    host_headroom_bytes,
 )
 
 
@@ -62,15 +61,28 @@ class PinnedBuffer:
     ----------
     buffer_id : int
         Unique identifier for this buffer.
-    array : ndarray
-        The pinned numpy array.
+    storage : ndarray
+        The buffer's pinned memory, as bytes.
     in_use : bool
         Whether the buffer is currently in use.
+    array : ndarray or None
+        The data being staged, set by :meth:`shape_as`.
     """
 
     buffer_id: int = field(validator=attrsval_instance_of(int))
-    array: ndarray = field(validator=attrsval_instance_of(ndarray))
+    storage: ndarray = field(validator=attrsval_instance_of(ndarray))
     in_use: bool = field(default=False, validator=attrsval_instance_of(bool))
+    array: Optional[ndarray] = field(default=None, init=False)
+
+    @property
+    def capacity(self) -> int:
+        """Bytes the buffer can hold."""
+        return self.storage.nbytes
+
+    def shape_as(self, shape: Tuple[int, ...], dtype: np_dtype) -> None:
+        """Set ``array`` to the start of the buffer in this shape."""
+        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
+        self.array = self.storage[:nbytes].view(dtype).reshape(shape)
 
 
 @define
@@ -79,7 +91,7 @@ class ChunkBufferPool:
 
     Manages allocation and lifecycle of pinned memory buffers used
     for staging data during chunked device transfers. Buffers are
-    sized for one transfer block and reused across blocks and chunks.
+    reused for any block that fits.
 
     Attributes
     ----------
@@ -110,9 +122,8 @@ class ChunkBufferPool:
     ) -> PinnedBuffer:
         """Acquire a pinned buffer for the given array.
 
-        Reuses a free matching buffer, grows the pool within the
-        depth, RAM-headroom, and pinned-budget bounds, and otherwise
-        blocks until the transfer watcher releases a buffer.
+        Reuses the smallest idle buffer that fits, else allocates
+        within the depth and pinned limits, else waits.
 
         Parameters
         ----------
@@ -126,47 +137,43 @@ class ChunkBufferPool:
         Returns
         -------
         PinnedBuffer
-            A buffer ready for use, either reused or newly allocated.
+            A buffer ready for use, its ``array`` in ``shape``.
         """
+        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
         with self._condition:
             while True:
-                matching_in_flight = 0
-                for buf in self._buffers.get(array_name, []):
-                    if (buf.array.shape == shape
-                            and buf.array.dtype == dtype):
-                        if not buf.in_use:
-                            buf.in_use = True
-                            return buf
-                        matching_in_flight += 1
+                buffers = self._buffers.setdefault(array_name, [])
+                in_flight = [buf for buf in buffers if buf.in_use]
+                idle = [buf for buf in buffers if not buf.in_use]
+                fitting = [buf for buf in idle if buf.capacity >= nbytes]
+                if fitting:
+                    buf = min(fitting, key=lambda item: item.capacity)
+                    buf.in_use = True
+                    buf.shape_as(shape, dtype)
+                    return buf
+                if idle:
+                    # Too small: replace it.
+                    buffers.remove(idle[0])
+                    continue
 
-                if not matching_in_flight:
+                if not in_flight:
                     # First buffer per label: forced, never None.
                     new_buffer = self._allocate_buffer(
-                        shape, dtype, force=True
+                        nbytes, force=True
                     )
                 else:
                     # None when a bound refuses.
                     new_buffer = None
-                    if (
-                        matching_in_flight < STAGING_POOL_DEPTH
-                        and self._headroom_allows(shape, dtype)
-                    ):
-                        new_buffer = self._allocate_buffer(shape, dtype)
+                    if len(in_flight) < STAGING_POOL_DEPTH:
+                        new_buffer = self._allocate_buffer(nbytes)
                 if new_buffer is not None:
                     new_buffer.in_use = True
-                    self._buffers.setdefault(array_name, []).append(
-                        new_buffer
-                    )
+                    new_buffer.shape_as(shape, dtype)
+                    buffers.append(new_buffer)
                     return new_buffer
 
                 # Wait for a buffer release, then retry.
                 self._condition.wait()
-
-    @staticmethod
-    def _headroom_allows(shape: Tuple[int, ...], dtype: np_dtype) -> bool:
-        """Return whether RAM headroom permits one more buffer."""
-        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        return nbytes < host_headroom_bytes()
 
     def release(self, buffer: PinnedBuffer) -> None:
         """Release a buffer back to the pool.
@@ -194,35 +201,32 @@ class ChunkBufferPool:
 
     def _allocate_buffer(
         self,
-        shape: Tuple[int, ...],
-        dtype: np_dtype,
+        nbytes: int,
         force: bool = False,
     ) -> Optional[PinnedBuffer]:
-        """Allocate a new budget-accounted pinned buffer.
+        """Allocate a new pinned buffer.
 
         Parameters
         ----------
-        shape
-            Shape for the buffer.
-        dtype
-            Data type for the buffer elements.
+        nbytes
+            Capacity of the buffer in bytes.
         force
-            Reserve past the manager's pinned budget.
+            Ignore the manager's pinned-memory limits.
 
         Returns
         -------
         PinnedBuffer or None
-            Newly allocated pinned buffer, or ``None`` when the
-            budget refuses the reservation.
+            Newly allocated pinned buffer, or ``None`` when no
+            pinned memory is available.
         """
-        arr = self._memory_manager.allocate_pinned_array(
-            shape, dtype, force=force
+        storage = self._memory_manager.allocate_pinned_array(
+            (nbytes,), np_uint8, force=force
         )
-        if arr is None:
+        if storage is None:
             return None
-        arr.fill(0)
+        storage.fill(0)
 
         buffer_id = self._next_id
         self._next_id += 1
 
-        return PinnedBuffer(buffer_id=buffer_id, array=arr)
+        return PinnedBuffer(buffer_id=buffer_id, storage=storage)

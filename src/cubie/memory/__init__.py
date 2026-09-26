@@ -2,7 +2,9 @@
 GPU memory management subsystem for cubie.
 
 This module provides GPU memory management capabilities including:
-- CuPy async memory pool backing native Numba device arrays via an EMM plugin
+- The device's stream-ordered pool backing native Numba device arrays via an
+  EMM plugin
+- A page-locked arena backing every pinned host array
 - Stream group management for asynchronous CUDA operations
 - Array request/response system for structured memory allocation
 - Manual or automatic allocation of VRAM to different processes
@@ -29,7 +31,7 @@ from cubie.memory.mem_manager import (
     current_cupy_stream,
 )
 
-# Install the CuPy async pool as Numba's EMM before the first CUDA context is
+# Install the device-pool EMM before the first CUDA context is
 # created (below, when the manager queries device memory).
 install_async_emm()
 

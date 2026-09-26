@@ -11,24 +11,36 @@ import numpy as np
 
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
 from cubie.memory.mem_manager import STAGING_POOL_DEPTH
+from cubie.memory.pinned_arena import MIN_SLAB_BYTES, PAGE_BYTES
 
 
 # ── PinnedBuffer ──────────────────────────────────────────────── #
 
 def test_pinned_buffer_construction():
-    """PinnedBuffer stores buffer_id, array, and in_use (default False)."""
-    arr = np.zeros((10, 20), dtype=np.float32)
-    buf = PinnedBuffer(buffer_id=0, array=arr)
+    """PinnedBuffer stores its bytes and starts idle."""
+    storage = np.zeros((800,), dtype=np.uint8)
+    buf = PinnedBuffer(buffer_id=0, storage=storage)
     assert buf.buffer_id == 0
-    assert buf.array is arr
+    assert buf.capacity == storage.nbytes
     assert buf.in_use is False
 
 
 def test_pinned_buffer_in_use_override():
     """in_use can be set to True at construction."""
-    arr = np.zeros((5,), dtype=np.float64)
-    buf = PinnedBuffer(buffer_id=1, array=arr, in_use=True)
+    storage = np.zeros((40,), dtype=np.uint8)
+    buf = PinnedBuffer(buffer_id=1, storage=storage, in_use=True)
     assert buf.in_use is True
+
+
+def test_pinned_buffer_shape_as_shares_storage():
+    """shape_as sets array to the start of the buffer's memory."""
+    storage = np.zeros((800,), dtype=np.uint8)
+    buf = PinnedBuffer(buffer_id=0, storage=storage)
+    buf.shape_as((10, 5), np.float32)
+    assert buf.array.shape == (10, 5)
+    assert buf.array.dtype == np.float32
+    buf.array[:] = 1.0
+    assert (storage[:200].view(np.float32) == 1.0).all()
 
 
 # ── acquire ───────────────────────────────────────────────────── #
@@ -55,28 +67,31 @@ def test_acquire_reuses_released_buffer(mgr):
 
 def test_acquire_allocates_new_when_all_in_use(mgr):
     """acquire grows the pool when in-use buffers block reuse."""
-    pool = _UnthrottledPool(memory_manager=mgr)
+    pool = ChunkBufferPool(memory_manager=mgr)
     buf1 = pool.acquire("x", (10,), np.float32)
     buf2 = pool.acquire("x", (10,), np.float32)
     assert buf1.buffer_id != buf2.buffer_id
 
 
-def test_acquire_allocates_new_for_different_shape(mgr):
-    """acquire allocates new buffer when shape differs."""
+def test_acquire_reuses_a_buffer_for_a_smaller_shape(mgr):
+    """An idle buffer serves any shape and dtype that fits it."""
+    pool = ChunkBufferPool(memory_manager=mgr)
+    buf1 = pool.acquire("x", (20,), np.float64)
+    pool.release(buf1)
+    buf2 = pool.acquire("x", (4, 5), np.float32)
+    assert buf2 is buf1
+    assert buf2.array.shape == (4, 5)
+    assert buf2.array.dtype == np.float32
+
+
+def test_acquire_replaces_an_idle_buffer_too_small(mgr):
+    """A request larger than the idle buffer replaces it."""
     pool = ChunkBufferPool(memory_manager=mgr)
     buf1 = pool.acquire("x", (10,), np.float32)
     pool.release(buf1)
-    buf2 = pool.acquire("x", (20,), np.float32)
-    assert buf1.buffer_id != buf2.buffer_id
-
-
-def test_acquire_allocates_new_for_different_dtype(mgr):
-    """acquire allocates new buffer when dtype differs."""
-    pool = ChunkBufferPool(memory_manager=mgr)
-    buf1 = pool.acquire("x", (10,), np.float32)
-    pool.release(buf1)
-    buf2 = pool.acquire("x", (10,), np.float64)
-    assert buf1.buffer_id != buf2.buffer_id
+    buf2 = pool.acquire("x", (20,), np.float64)
+    assert buf2.buffer_id != buf1.buffer_id
+    assert pool._buffers["x"] == [buf2]
 
 
 def test_acquire_creates_new_array_name_entry(mgr):
@@ -145,31 +160,17 @@ def test_thread_safe_concurrent_acquire_release(mgr):
     assert len(errors) == 0
 
 
-# ── headroom-bounded growth ───────────────────────────────────── #
+# ── budget-bounded growth ─────────────────────────────────────── #
 
-class _ThrottledPool(ChunkBufferPool):
-    """Pool whose headroom check is forced closed for testing."""
-
-    def _headroom_allows(self, shape, dtype):
-        return False
-
-
-class _UnthrottledPool(ChunkBufferPool):
-    """Pool whose headroom check is forced open for testing."""
-
-    def _headroom_allows(self, shape, dtype):
-        return True
-
-
-def _assert_second_acquire_waits_for_release(pool):
+def _assert_second_acquire_waits_for_release(pool, shape, dtype):
     """Check a second matching acquire waits instead of growing."""
-    first = pool.acquire("state", (10,), np.float32)
+    first = pool.acquire("state", shape, dtype)
     acquired = []
     started = threading.Event()
 
     def worker():
         started.set()
-        acquired.append(pool.acquire("state", (10,), np.float32))
+        acquired.append(pool.acquire("state", shape, dtype))
 
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
@@ -184,34 +185,29 @@ def _assert_second_acquire_waits_for_release(pool):
     assert acquired[0] is first
 
 
-def test_acquire_grows_first_buffer_even_without_headroom(mgr):
+def test_acquire_grows_first_buffer_past_the_budget(mgr):
     """A label with nothing in flight always gets one buffer."""
-    pool = _ThrottledPool(memory_manager=mgr)
+    mgr.pinned_max_bytes = 0
+    pool = ChunkBufferPool(memory_manager=mgr)
     buf = pool.acquire("state", (10,), np.float32)
     assert buf.in_use is True
 
 
-def test_acquire_blocks_until_release_when_headroom_exhausted(mgr):
-    """Headroom exhausted: acquire waits for a release."""
-    _assert_second_acquire_waits_for_release(
-        _ThrottledPool(memory_manager=mgr)
-    )
-
-
 def test_acquire_blocks_until_release_when_the_budget_refuses(mgr):
     """Budget with no room for a second buffer: acquire waits."""
-    mgr.pinned_max_bytes = 40
+    mgr.pinned_max_bytes = 0
+    # Two of these cannot share one slab.
+    shape = (MIN_SLAB_BYTES // 2 + PAGE_BYTES,)
     _assert_second_acquire_waits_for_release(
-        _UnthrottledPool(memory_manager=mgr)
+        ChunkBufferPool(memory_manager=mgr), shape, np.uint8
     )
 
 
 # ── Depth cap ─────────────────────────────────────────────────── #
 
 def test_acquire_blocks_at_the_depth_cap(mgr):
-    """Once STAGING_POOL_DEPTH matching buffers are in flight, the
-    next acquire waits for a release instead of growing the pool."""
-    pool = _UnthrottledPool(memory_manager=mgr)
+    """At the depth cap, acquire waits for a release, not growth."""
+    pool = ChunkBufferPool(memory_manager=mgr)
     held = [
         pool.acquire("state", (10,), np.float32)
         for _ in range(STAGING_POOL_DEPTH)

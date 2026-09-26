@@ -1351,11 +1351,15 @@ class BatchSolverKernel(CUDAFactory):
         self.wait_for_writeback(timeout=shutdown_timeout)
         self.input_arrays.close()
         self.output_arrays.close()
+        # Freed device memory returns at the next sync of its stream.
+        if self._last_stream is not None:
+            self.memory_manager.sync_stream(self, stream=self._last_stream)
         self._specialization_cache = None
         finalizer = getattr(self, "_finalizer", None)
         settings = self.memory_manager.registry.get(id(self))
         if settings is not None:
             self.memory_manager.release_instance(id(self), settings)
+        self.memory_manager.free_idle_pinned()
         if finalizer is not None:
             finalizer.detach()
         self._closed = True
