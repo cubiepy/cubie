@@ -4,7 +4,7 @@ cubie itself is MIT licensed (see LICENSE).
 ========================================================================
 numba and numba-cuda (BSD 2-Clause)
 Applies to: src/cubie/vendored/numba_cuda_cache.py,
-src/cubie/backend/_numba_cuda_compat.py, src/cubie/memory/cupy_emm.py
+src/cubie/backend/_numba_cuda_compat.py
 
 Copyright (c) 2012, Anaconda, Inc.
 Copyright (c) 2024, NVIDIA CORPORATION.

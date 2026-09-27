@@ -1,4 +1,3 @@
-import ctypes
 import gc
 from pathlib import Path
 import weakref
@@ -11,11 +10,11 @@ from cubie.cuda_simsafe import (
     CudaSupportError,
     DeviceNDArray,
     Stream,
-    empty_pinned,
     is_pinned_array,
+    pool_idle_bytes,
+    stream_ordered_buffer,
 )
 
-from cubie.memory.cupy_emm import CuPyAsyncNumbaManager
 from cubie.memory.mem_manager import (
     ALLOCATION_GRANULE_BYTES,
     HOST_SPILL_FRACTION,
@@ -26,8 +25,6 @@ from cubie.memory.mem_manager import (
     InstanceMemorySettings,
     available_system_ram,
     total_system_ram,
-    _numba_stream_ptr,
-    current_cupy_stream,
     get_portioned_request_size,
     is_request_chunkable,
     partition_covers,
@@ -36,7 +33,6 @@ from cubie.memory.mem_manager import (
     replace_with_chunked_size,
 )
 from tests.memory.conftest import (
-    DummyStream,
     FakeAllocation,
     MemoryClient,
     registered_mgr_context_safe,
@@ -405,43 +401,31 @@ class TestMemoryManager:
                 )
 
     @pytest.mark.nocudasim
-    @pytest.mark.cupy
     def test_allocate_device_returns_native_array(self, mgr):
-        """A "device" allocation is a native Numba device array.
-
-        Device memory is drawn from CuPy's async pool through the EMM
-        plugin, so the returned object is a Numba DeviceNDArray (fast
-        kernel-launch path), not a raw CuPy ndarray.
-        """
-        import cupy as cp
-
+        """A "device" allocation is a native Numba device array."""
         arr = mgr.allocate(
             shape=(4, 4), dtype=np.float32, memory_type="device"
         )
         assert isinstance(arr, DeviceNDArray)
-        assert not isinstance(arr, cp.ndarray)
-        context_manager = cuda.current_context().memory_manager
-        assert isinstance(context_manager, CuPyAsyncNumbaManager)
+        host = np.arange(16, dtype=np.float32).reshape(4, 4)
+        arr.copy_to_device(host)
+        assert np.array_equal(arr.copy_to_host(), host)
 
     @pytest.mark.nocudasim
-    @pytest.mark.cupy
-    def test_get_memory_info_counts_pool_cached_blocks(self):
-        """Free memory includes a dropped array's pool-cached block."""
-        import cupy as cp
-
-        context = cuda.current_context()
-        pool = context.memory_manager._mp
+    def test_get_memory_info_counts_pool_idle_bytes(self):
+        """Free memory includes pool bytes freed before a sync."""
+        stream = cuda.stream()
         nbytes = 64 * 1024**2
-        arr = cuda.device_array(nbytes // 4, np.float32)
-        del arr
-        cached = pool.free_bytes()
-        assert cached >= nbytes
-
-        raw_before, _ = cp.cuda.runtime.memGetInfo()
-        free = context.get_memory_info().free
-        raw_after, _ = cp.cuda.runtime.memGetInfo()
-        assert min(raw_before, raw_after) + cached <= free
-        assert free <= max(raw_before, raw_after) + cached
+        buffer = stream_ordered_buffer(nbytes, stream)
+        del buffer
+        idle = pool_idle_bytes()
+        assert idle >= nbytes
+        raw_before = cuda.current_context().get_memory_info().free
+        free, _ = MemoryManager().get_memory_info()
+        raw_after = cuda.current_context().get_memory_info().free
+        assert min(raw_before, raw_after) + idle <= free
+        assert free <= max(raw_before, raw_after) + idle
+        stream.synchronize()
 
     def test_free(self, registered_mgr, registered_instance):
         """Test free removes allocation by key from all instances."""
@@ -1442,77 +1426,19 @@ def stream2():
     return cuda.stream()
 
 
-@pytest.mark.nocudasim
-def test_numba_stream_ptr(stream1):
-    try:
-        expected_ptr = int(stream1.handle.value)
-    except AttributeError:
-        expected_ptr = int(stream1.handle)
-    assert _numba_stream_ptr(stream1) == expected_ptr
-
-
-@pytest.mark.nocudasim
-@pytest.mark.cupy
-def test_cupy_stream_wrapper(stream1, stream2):
-    """Verify current_cupy_stream always forwards a Numba stream.
-
-    Pool allocations are ordered on the Numba integration stream, so the
-    forwarding context manager wraps every non-default stream it is given
-    (via ``Stream.from_external``).
-    """
-    import cupy as cp
-
-    with current_cupy_stream(stream1) as cupy_stream:
-        assert isinstance(cupy_stream.cupy_ext_stream, cp.cuda.Stream)
-        assert cupy_stream.cupy_ext_stream.ptr == _numba_stream_ptr(stream1)
-        assert cp.cuda.get_current_stream().ptr == _numba_stream_ptr(stream1)
-
-    with current_cupy_stream(stream2) as cupy_stream:
-        assert isinstance(cupy_stream.cupy_ext_stream, cp.cuda.Stream)
-        assert cupy_stream.cupy_ext_stream.ptr == _numba_stream_ptr(stream2)
-        assert cp.cuda.get_current_stream().ptr == _numba_stream_ptr(stream2)
-
-    # Check that the default current stream is untouched
-    assert cp.cuda.get_current_stream().ptr != _numba_stream_ptr(stream1)
-    assert cp.cuda.get_current_stream().ptr != _numba_stream_ptr(stream2)
-
-
 def test_placeholder_hooks_are_noop():
     """Test the default hook placeholders perform no operations."""
     assert placeholder_invalidate() is None
     assert placeholder_dataready(ArrayResponse()) is None
 
 
-def test_numba_stream_ptr_none_stream():
-    """Test _numba_stream_ptr returns None for a None stream."""
-    assert _numba_stream_ptr(None) is None
-
-
-def test_numba_stream_ptr_ctypes_void_p():
-    """Test pointer extraction from a ctypes.c_void_p handle."""
-    stream = DummyStream(ctypes.c_void_p(1234))
-    assert _numba_stream_ptr(stream) == 1234
-
-
-def test_numba_stream_ptr_ctypes_void_p_null():
-    """Test a null ctypes.c_void_p handle yields None."""
-    stream = DummyStream(ctypes.c_void_p(None))
-    assert _numba_stream_ptr(stream) is None
-
-
-def test_numba_stream_ptr_unconvertible_handle():
-    """Test a handle that cannot be converted to int yields None."""
-    stream = DummyStream("not-a-number")
-    assert _numba_stream_ptr(stream) is None
-
-
 @pytest.mark.nocudasim
-def test_empty_pinned_real_gpu():
-    """empty_pinned draws from CuPy's pinned pool on a real GPU."""
-    arr = empty_pinned((4, 3), np.float32)
-    assert arr.shape == (4, 3)
-    assert arr.dtype == np.float32
-    assert is_pinned_array(arr)
+def test_is_pinned_array_asks_the_driver(mgr):
+    """Page-locked arrays and their views are pinned; numpy is not."""
+    pinned = mgr.allocate_pinned_array((4, 3), np.float32)
+    assert is_pinned_array(pinned)
+    assert is_pinned_array(pinned[1:])
+    assert not is_pinned_array(np.zeros((4, 3), np.float32))
 
 
 def test_instance_memory_settings_free_missing_key_warns():
@@ -2436,18 +2362,88 @@ def test_pinned_budget_counts_all_live_allocations(mgr):
 
 
 def test_pinned_release_returns_budget(mgr):
-    """Collected arrays retire to retained; pressure reclaims them."""
+    """A collected array's block goes idle and serves the next fit."""
     mgr.pinned_max_bytes = 1024
     array = mgr.allocate_pinned_array((96,), np.float64)
     assert array is not None
     del array
     gc.collect()
     assert mgr.pinned_live_bytes == 0
-    assert mgr.pinned_retained_bytes == 768
+    assert mgr.pinned_idle_bytes == 768
+    mgr.release_idle_memory()
     again = mgr.allocate_pinned_array((96,), np.float64)
     assert again is not None
     assert mgr.pinned_live_bytes == 768
-    assert mgr.pinned_retained_bytes == 0
+    assert mgr.pinned_idle_bytes == 0
+
+
+def test_idle_pinned_block_waits_for_an_idle_point(mgr):
+    """A block idle since the last idle point gets a fresh neighbour."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    address = array.ctypes.data
+    del array
+    gc.collect()
+    fresh = mgr.allocate_pinned_array((96,), np.float64)
+    assert fresh.ctypes.data != address
+    assert mgr.pinned_live_bytes == 768
+    assert mgr.pinned_idle_bytes == 768
+
+
+def test_idle_pinned_block_serves_a_smaller_shape(mgr):
+    """A smaller request of any shape reuses an idle block's bytes."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    address = array.ctypes.data
+    del array
+    gc.collect()
+    mgr.release_idle_memory()
+    smaller = mgr.allocate_pinned_array((4, 10), np.float32)
+    assert smaller.shape == (4, 10)
+    assert smaller.dtype == np.float32
+    assert smaller.ctypes.data == address
+    assert mgr.pinned_live_bytes == 768
+
+
+def test_release_idle_memory_keeps_blocks_for_one_call(mgr):
+    """Blocks idle across two calls are freed; newer ones survive."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    del array
+    gc.collect()
+    mgr.release_idle_memory()
+    assert mgr.pinned_idle_bytes == 768
+    mgr.release_idle_memory()
+    assert mgr.pinned_idle_bytes == 0
+
+
+def test_release_idle_memory_frees_everything_on_request(mgr):
+    """``keep_recent=False`` frees blocks that just went idle."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    del array
+    gc.collect()
+    mgr.release_idle_memory(keep_recent=False)
+    assert mgr.pinned_idle_bytes == 0
+
+
+@pytest.mark.nocudasim
+def test_release_idle_memory_waits_for_busy_group_stream(
+    mgr, start_cuda_busy_work
+):
+    """Nothing is freed while a group stream has queued work."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    # Earlier garbage would queue Numba frees that wait for the device.
+    gc.collect()
+    mgr.release_idle_memory()
+    work, stream, done, release = start_cuda_busy_work()
+    mgr.stream_groups.streams["busy"] = stream
+    try:
+        del array
+        mgr.release_idle_memory(keep_recent=False)
+        assert not done.query()
+        assert mgr.pinned_idle_bytes == 768
+    finally:
+        release()
+        stream.synchronize()
+    mgr.release_idle_memory(keep_recent=False)
+    assert mgr.pinned_idle_bytes == 0
 
 
 def test_pinned_release_during_reservation_is_deferred(mgr):
@@ -2458,14 +2454,15 @@ def test_pinned_release_during_reservation_is_deferred(mgr):
     with mgr._pinned_lock:
         del array
         gc.collect()
-        assert list(mgr._pinned_releases) == [768]
+        assert [entry[1] for entry in mgr._pinned_releases] == [768]
         assert mgr._pinned_live_bytes == 768
     assert mgr.pinned_live_bytes == 0
-    assert mgr.pinned_retained_bytes == 768
+    assert mgr.pinned_idle_bytes == 768
+    mgr.release_idle_memory()
     again = mgr.allocate_pinned_array((96,), np.float64)
     assert again is not None
     assert mgr.pinned_live_bytes == 768
-    assert mgr.pinned_retained_bytes == 0
+    assert mgr.pinned_idle_bytes == 0
 
 
 def test_pinned_view_keeps_reservation(mgr):
@@ -2512,16 +2509,16 @@ def test_forced_pinned_reservation_exceeds_budget(mgr):
     assert mgr.pinned_live_bytes == 768
 
 
-def test_flush_pinned_pool_returns_retained_bytes(mgr):
-    """An explicit flush empties the retained ledger."""
+def test_budget_pressure_drops_idle_blocks(mgr):
+    """A request the idle blocks would crowd out drops them."""
+    mgr.pinned_max_bytes = 1024
     array = mgr.allocate_pinned_array((96,), np.float64)
-    assert array is not None
     del array
     gc.collect()
-    assert mgr.pinned_retained_bytes == 768
-    mgr.flush_pinned_pool()
-    assert mgr.pinned_retained_bytes == 0
-    assert mgr.pinned_live_bytes == 0
+    larger = mgr.allocate_pinned_array((120,), np.float64)
+    assert larger is not None
+    assert mgr.pinned_idle_bytes == 0
+    assert mgr.pinned_live_bytes == 960
 
 
 def test_pinned_budget_capped_by_ram_fraction(mgr):
@@ -2812,42 +2809,28 @@ def test_get_chunk_parameters_raises_when_headroom_leaves_nothing(
         mgr.get_chunk_parameters(requests, 10_000_000, "test")
 
 
-def test_allocate_all_releases_replaced_buffers_before_allocating(
-    memory_client,
+@pytest.mark.nocudasim
+def test_allocate_all_repeat_request_views_the_same_buffer(
+    registered_mgr, registered_instance
 ):
-    """A key's old buffer is released before its replacement is
-    allocated, so the two never coexist."""
-    held_during_allocate = []
-
-    class ReleaseOrderManager(MemoryManager):
-        def get_memory_info(self):
-            return 1024**3, 8 * 1024**3
-
-        def allocate(self, shape, dtype, memory_type, stream=0):
-            settings = self.registry[id(memory_client)]
-            held_during_allocate.append(settings.allocated_bytes)
-            return super().allocate(shape, dtype, memory_type, stream)
-
-    manager = ReleaseOrderManager(allocation_granule_bytes=0)
-    manager.register(
-        memory_client,
-        stream_group="test",
-        invalidate_cache_hook=memory_client.notice_invalidate,
-    )
+    """A repeated request records a new view of the label's buffer."""
+    instance_id = id(registered_instance)
     request = {
         "a": ArrayRequest(
             shape=(256,), dtype=np.float32, memory="device", total_runs=1
         )
     }
-    stream = manager.get_stream(memory_client)
+    stream = registered_mgr.get_stream(registered_instance)
 
-    first = manager.allocate_all(request, id(memory_client), stream)
-    second = manager.allocate_all(request, id(memory_client), stream)
+    first = registered_mgr.allocate_all(request, instance_id, stream)
+    second = registered_mgr.allocate_all(request, instance_id, stream)
 
-    assert held_during_allocate == [0, 0]
-    settings = manager.registry[id(memory_client)]
+    settings = registered_mgr.registry[instance_id]
     assert settings.allocations["a"] is second["a"]
-    assert settings.allocations["a"] is not first["a"]
+    assert (
+        second["a"].device_ctypes_pointer.value
+        == first["a"].device_ctypes_pointer.value
+    )
 
 
 @pytest.mark.parametrize(
@@ -3028,3 +3011,64 @@ def test_release_instance_drops_owner_partition(mgr, memory_client):
     mgr.release_instance(id(instance), settings)
 
     assert owner_key not in mgr._group_chunk_parameters
+
+
+def _state_request(runs):
+    return {
+        "state": ArrayRequest(
+            shape=(2, 3, runs),
+            dtype=np.float32,
+            memory="device",
+            total_runs=runs,
+        )
+    }
+
+
+@pytest.mark.nocudasim
+def test_device_request_reuses_its_label_buffer(
+    registered_mgr, registered_instance
+):
+    """A smaller request views the label's buffer; a larger grows it."""
+    mgr = registered_mgr
+    instance_id = id(registered_instance)
+    settings = mgr.registry[instance_id]
+    stream = mgr.get_stream(registered_instance)
+    first = mgr.allocate_all(
+        _state_request(64), instance_id, stream, settings
+    )["state"]
+    buffer = settings.buffers["state"]
+    smaller = mgr.allocate_all(
+        _state_request(16), instance_id, stream, settings
+    )["state"]
+    assert settings.buffers["state"] is buffer
+    assert smaller.shape == (2, 3, 16)
+    assert (
+        smaller.device_ctypes_pointer.value
+        == first.device_ctypes_pointer.value
+    )
+    assert settings.allocated_bytes == buffer.nbytes
+    larger = mgr.allocate_all(
+        _state_request(128), instance_id, stream, settings
+    )["state"]
+    assert settings.buffers["state"].nbytes == larger.nbytes
+    host = np.arange(larger.size, dtype=np.float32).reshape(larger.shape)
+    larger.copy_to_device(host, stream=stream)
+    stream.synchronize()
+    assert np.array_equal(larger.copy_to_host(), host)
+
+
+@pytest.mark.nocudasim
+def test_stream_ordered_free_leaves_other_work_running(
+    start_cuda_busy_work,
+):
+    """Dropping a stream-ordered buffer does not wait for the device."""
+    work, stream, done, release = start_cuda_busy_work()
+    own = cuda.stream()
+    try:
+        buffer = stream_ordered_buffer(1 << 20, own)
+        del buffer
+        assert not done.query()
+    finally:
+        release()
+        stream.synchronize()
+        own.synchronize()

@@ -423,9 +423,12 @@ class OutputArrays(BaseArrayManager):
         A buffer is kept when it has the sized shape and dtype and a
         backing the run partition accepts: pinned only unchunked,
         pageable only when the policy would not pin it, memmap always.
+        A new pinned buffer is zeroed only for an output no transfer
+        writes.
         """
         allow_pinned = not self.is_chunked
         manager = self._memory_manager
+        active = self._active_names
         for name, slot in self.host.iter_managed_arrays():
             shape = tuple(getattr(self._sizes, name))
             dtype = slot.dtype
@@ -446,7 +449,7 @@ class OutputArrays(BaseArrayManager):
                 if array is None:
                     # The pinned budget refused; stage through the pool.
                     backing = "host"
-                else:
+                elif active is not None and name not in active:
                     array.fill(0)
             if array is None:
                 array = manager.create_host_array(shape, dtype, backing)

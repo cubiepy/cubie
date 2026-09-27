@@ -65,14 +65,8 @@ See Also
 :mod:`cubie._utils`
     Imports ``compile_kwargs`` and ``is_devfunc`` from this module.
 :mod:`cubie.memory.mem_manager`
-    Uses the ``Stream`` stand-in, ``current_mem_info``, and the
-    ``cupy``/``cupyx`` imports exported here. This module owns the
-    single conditional import of ``cupy``/``cupyx``: both are
-    imported eagerly on a real GPU (CuPy is CuBIE's device
-    allocation provider, so it is a hard requirement there) and are
-    ``None`` under the CUDA simulator, which never touches device
-    memory. Consumers import them from here rather than importing
-    CuPy directly.
+    Uses the ``Stream`` stand-in, ``current_mem_info`` and the
+    driver memory helpers exported here.
 """
 
 from __future__ import annotations
@@ -84,10 +78,10 @@ from typing import Any, Callable, Mapping, Optional, Tuple, Union
 
 from numpy import (
     dtype,
-    empty as np_empty,
     fmax as np_fmax,
     fmin as np_fmin,
     ndarray as np_ndarray,
+    uint8,
 )
 
 from cubie.cuda_backend import IS_MLIR
@@ -242,11 +236,6 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
     from numba.cuda.simulator.cudadrv.devicearray import FakeCUDAArray
     from cubie.vendored.numba_cuda_cache import CUDACache  # noqa: F811
 
-    # The simulator never touches real device memory, so CuPy is not
-    # required; code paths guarded by CUDA_SIMULATION never use these.
-    cupy = None
-    cupyx = None
-
     Stream = FakeStream
     DeviceNDArrayBase = FakeCUDAArray
     DeviceNDArray = FakeCUDAArray
@@ -258,24 +247,27 @@ if CUDA_SIMULATION:  # pragma: no cover - simulated
         fakemem = FakeMemoryInfo()
         return fakemem.free, fakemem.total
 
-    def empty_pinned(shape, dtype) -> np_ndarray:
-        """Return a plain host array; the simulator has no pinning."""
-        return np_empty(shape, dtype=dtype)
+    def page_locked_block(nbytes: int) -> Any:
+        """Return a host buffer; the simulator has no pinning."""
+        return bytearray(nbytes)
 
-    def free_all_pinned_blocks() -> None:
-        """Do nothing; the simulator has no pinned-memory pool."""
+    def stream_ordered_buffer(nbytes: int, stream: Any) -> Any:
+        """Return a flat byte device array."""
+        return cuda.device_array(nbytes, dtype=uint8)
+
+    def pool_idle_bytes() -> int:
+        """Return zero; the simulator has no device pool."""
+        return 0
+
+    def stream_idle(stream: Any) -> bool:
+        """Return ``True``; simulated work completes on launch."""
+        return True
+
+    def flush_deferred_frees() -> None:
+        """Do nothing; the simulator defers no frees."""
 
 else:  # pragma: no cover - exercised in GPU environments
-    try:
-        import cupy
-        import cupyx
-    except ImportError as e:
-        raise ImportError(
-            "CuPy is required for CuBIE's device memory allocations "
-            "on a real GPU. Install it via the cuda12/cuda13 or "
-            "mlir-cuda12/mlir-cuda13 extra, or pip install "
-            "cupy-cuda12x directly (assuming CUDA toolkit 12.x)."
-        ) from e
+    from cuda.bindings import driver as cuda_driver
 
     if IS_MLIR:
         from numba_cuda_mlir.cuda import (
@@ -309,13 +301,85 @@ else:  # pragma: no cover - exercised in GPU environments
 
         return cuda.current_context().get_memory_info()
 
-    def empty_pinned(shape, dtype) -> np_ndarray:
-        """Return a page-locked host array from CuPy's pinned pool."""
-        return cupyx.empty_pinned(shape, dtype=dtype)
+    def page_locked_block(nbytes: int) -> Any:
+        """Return ``nbytes`` of page-locked host memory as a buffer.
 
-    def free_all_pinned_blocks() -> None:
-        """Release the page-locked blocks CuPy's pinned pool holds."""
-        cupy.get_default_pinned_memory_pool().free_all_blocks()
+        Numba frees it once the block is collected.
+        """
+        return cuda.current_context().memhostalloc(nbytes)
+
+    def _driver_value(result: Any) -> Any:
+        """Return a driver call's value, raising on its error code."""
+        if result[0] != cuda_driver.CUresult.CUDA_SUCCESS:
+            raise RuntimeError(f"CUDA driver call failed: {result[0]}")
+        return result[1]
+
+    def stream_ordered_buffer(nbytes: int, stream: Any) -> Any:
+        """Return ``nbytes`` of device memory ordered on ``stream``.
+
+        The bytes come from the device's stream-ordered pool and are
+        freed on ``stream`` once the array and every view of it are
+        collected, so the free never waits for the device. Freed
+        bytes return to the device at the stream's next sync.
+
+        Raises
+        ------
+        MemoryError
+            If the pool cannot supply ``nbytes``.
+        """
+        out_of_memory = cuda_driver.CUresult.CUDA_ERROR_OUT_OF_MEMORY
+        error, pointer = cuda_driver.cuMemAllocAsync(nbytes, stream.handle)
+        if error == out_of_memory:
+            # Frees queued on the stream complete at its sync.
+            stream.synchronize()
+            error, pointer = cuda_driver.cuMemAllocAsync(
+                nbytes, stream.handle
+            )
+        if error == out_of_memory:
+            raise MemoryError(
+                f"the device could not allocate {nbytes} bytes"
+            )
+        _driver_value((error, pointer))
+        address = int(pointer)
+
+        def free() -> None:
+            cuda_driver.cuMemFreeAsync(address, stream.handle)
+
+        memory = cuda.MemoryPointer(
+            cuda.current_context(), c_void_p(address), nbytes,
+            finalizer=free,
+        )
+        return DeviceNDArray(
+            (nbytes,), (1,), uint8, stream=stream, gpu_data=memory
+        )
+
+    def pool_idle_bytes() -> int:
+        """Return bytes the device pool holds but no array uses."""
+        attribute = cuda_driver.CUmemPool_attribute
+        device = cuda.get_current_device().id
+        pool = _driver_value(
+            cuda_driver.cuDeviceGetDefaultMemPool(cuda_driver.CUdevice(device))
+        )
+        reserved = _driver_value(cuda_driver.cuMemPoolGetAttribute(
+            pool, attribute.CU_MEMPOOL_ATTR_RESERVED_MEM_CURRENT
+        ))
+        used = _driver_value(cuda_driver.cuMemPoolGetAttribute(
+            pool, attribute.CU_MEMPOOL_ATTR_USED_MEM_CURRENT
+        ))
+        return int(reserved) - int(used)
+
+    def stream_idle(stream: Any) -> bool:
+        """Return whether all work queued on ``stream`` has finished."""
+        error = cuda_driver.cuStreamQuery(stream.handle)[0]
+        return error == cuda_driver.CUresult.CUDA_SUCCESS
+
+    def flush_deferred_frees() -> None:
+        """Run the frees Numba has queued.
+
+        Freeing page-locked or non-pool device memory waits for the
+        whole device.
+        """
+        cuda.current_context().memory_manager.deallocations.clear()
 
 
 def is_cuda_array(value: Any) -> bool:
@@ -358,17 +422,21 @@ def is_device_array(value: Any) -> bool:
 def is_pinned_array(array: Any) -> bool:
     """Return whether a host array is backed by page-locked memory.
 
-    Walks the view chain to the owning object and checks for the
-    CuPy pinned-pool pointer, which backs every pinned allocation
-    CuBIE makes. Always ``False`` under the CUDA simulator, which
-    has no page-locked memory.
+    Asks the driver about the array's first byte. Always ``False``
+    under the CUDA simulator, which has no page-locked memory.
     """
     if CUDA_SIMULATION:  # pragma: no cover - simulated
         return False
-    base = array
-    while isinstance(base, np_ndarray):
-        base = base.base
-    return isinstance(base, cupy.cuda.PinnedMemoryPointer)
+    if array.size == 0:
+        return False
+    error, memory_type = cuda_driver.cuPointerGetAttribute(
+        cuda_driver.CUpointer_attribute.CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+        array.ctypes.data,
+    )
+    return (
+        error == cuda_driver.CUresult.CUDA_SUCCESS
+        and memory_type == cuda_driver.CUmemorytype.CU_MEMORYTYPE_HOST
+    )
 
 
 def from_dtype(dt: dtype):
@@ -705,15 +773,12 @@ __all__ = [
     "INLINE_ALWAYS",
     "CUDA_SIMULATION",
     "CUDACache",
-    "cupy",
-    "cupyx",
     "current_mem_info",
     "DeviceNDArray",
     "DeviceNDArrayBase",
-    "empty_pinned",
     "FakeMemoryInfo",
     "FakeStream",
-    "free_all_pinned_blocks",
+    "flush_deferred_frees",
     "float32",
     "float64",
     "from_dtype",
@@ -729,6 +794,10 @@ __all__ = [
     "fmin",
     "Stream",
     "narrow_f64",
+    "page_locked_block",
+    "pool_idle_bytes",
+    "stream_idle",
+    "stream_ordered_buffer",
     "stwt",
     "syncwarp",
     "unroll_if",

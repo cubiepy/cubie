@@ -1,5 +1,4 @@
 """Populate and enforce the shared CUDA test-kernel cache."""
-import contextlib
 import importlib
 from importlib.util import find_spec
 import os
@@ -533,11 +532,11 @@ if POPULATION:
     )
     stream_groups.cuda = SimpleNamespace(stream=lambda: _fake_stream)
     mem_manager._ensure_cuda_context = lambda: None
-    mem_manager.empty_pinned = (
-        lambda shape, dtype: np.zeros(shape, dtype=dtype)
-    )
-    # No CUDA driver here, so the pool flush must not touch cupy.
-    mem_manager.free_all_pinned_blocks = lambda: None
+    # No CUDA driver here: host buffers stand in for pinned blocks,
+    # and nothing is queued to free.
+    mem_manager.page_locked_block = bytearray
+    mem_manager.stream_idle = lambda stream: True
+    mem_manager.flush_deferred_frees = lambda: None
 
     # Compile the launch specialization; stand in for driver queries.
     _backend_utils = importlib.import_module("cubie.backend.utils")
@@ -583,6 +582,11 @@ if POPULATION:
             np.zeros(shape, dtype=dtype)
         )
     )
+    _MemoryManager._device_view = (
+        lambda self, settings, key, request, stream: _fake_device_array(
+            np.zeros(request.shape, dtype=request.dtype)
+        )
+    )
     _MemoryManager.to_device = _host_copy
     _MemoryManager.from_device = _host_copy
     _MemoryManager.get_available_memory = lambda self, group: 8 << 30
@@ -593,52 +597,33 @@ if POPULATION:
 
     _default_memmgr.probe_device()
 
-    # ArrayInterpolator.get_interpolated stages its kernel arguments
-    # through cupy directly; without a CUDA driver those calls raise
-    # before the launch, so the kernel would never reach the cache.
-    import cubie.array_interpolator as _array_interpolator  # noqa: E402
+    # The busy-kernel canary fixture creates its non-blocking stream
+    # through the driver.
+    import cuda.bindings.driver as _cuda_driver  # noqa: E402
 
-    @contextlib.contextmanager
-    def _fake_cupy_stream(stream):
-        yield stream
-
-    # cupy.empty is zero-filled: nothing launches to overwrite it.
-    _array_interpolator.cupy = SimpleNamespace(
-        asarray=lambda a: _fake_device_array(np.array(a, copy=True)),
-        empty=lambda shape, dtype=np.float64: _fake_device_array(
-            np.zeros(shape, dtype=dtype)
-        ),
+    _cuda_driver.cuStreamCreate = (
+        lambda flags: (_cuda_driver.CUresult.CUDA_SUCCESS, 0)
     )
-    _array_interpolator.current_cupy_stream = _fake_cupy_stream
-
-    # Input/output chunk staging draws pinned buffers from the
-    # ChunkBufferPool, which allocates through ``cupyx.empty_pinned``;
-    # without a CUDA driver that raises inside every solver run's
-    # fixture setup, so no batch-solver kernel would reach the cache.
-    import cubie.memory.chunk_buffer_pool as _chunk_buffer_pool  # noqa: E402
-
-    _chunk_buffer_pool.cupyx = SimpleNamespace(
-        empty_pinned=lambda shape, dtype=np.float64: np.zeros(
-            shape, dtype=dtype
-        ),
+    _cuda_driver.cuStreamDestroy = (
+        lambda handle: (_cuda_driver.CUresult.CUDA_SUCCESS,)
     )
 
-    # The busy-kernel canary fixture (tests.conftest.start_cuda_busy_work)
-    # builds its non-blocking stream through ``cupy.cuda.Stream``,
-    # imported from cuda_simsafe at fixture call time. Stub the stream
-    # constructor while keeping the real pinned-pointer class so
-    # ``is_pinned_array`` still answers correctly.
-    import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
+    # Placeholder host buffers are never page-locked.
+    for _module_name in (
+        "cubie.cuda_simsafe",
+        "cubie.batchsolving.BatchInputHandler",
+        "cubie.batchsolving.arrays.BaseArrayManager",
+    ):
+        importlib.import_module(_module_name).is_pinned_array = (
+            lambda array: False
+        )
 
-    _real_pinned_pointer = _cuda_simsafe.cupy.cuda.PinnedMemoryPointer
     # ``asarray`` stands in for the cupy grids tests hand to optimize.
-    _cuda_simsafe.cupy = SimpleNamespace(
-        asarray=lambda a: _fake_device_array(np.array(a, copy=True)),
-        cuda=SimpleNamespace(
-            Stream=lambda non_blocking=False: SimpleNamespace(ptr=0),
-            PinnedMemoryPointer=_real_pinned_pointer,
-        ),
-    )
+    import cupy as _cupy  # noqa: E402
+
+    _cupy.asarray = lambda a: _fake_device_array(np.array(a, copy=True))
+
+    import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
 
     # Fake device arrays take the device-input path, keeping their layout.
     _real_is_device_array = _cuda_simsafe.is_device_array

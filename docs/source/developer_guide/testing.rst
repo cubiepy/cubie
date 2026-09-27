@@ -28,7 +28,8 @@ Test Markers
    Test requires a real GPU; skip in CUDASIM mode.
 
 ``cupy``
-   Test requires CuPy; skip if not installed.
+   Test passes CuPy arrays in; needs CuPy installed (the ``dev*``
+   extras install it).
 
 ``slow``
    Long-running test; useful with ``-m "not slow"`` for quick

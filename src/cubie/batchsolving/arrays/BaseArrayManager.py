@@ -58,7 +58,6 @@ from cubie._utils import (
     opt_gttype_validator,
 )
 from cubie.cuda_simsafe import (
-    CUDA_SIMULATION,
     DeviceNDArrayBase,
     is_pinned_array,
 )
@@ -67,7 +66,6 @@ from cubie.memory.mem_manager import (
     ArrayRequest,
     ArrayResponse,
     MemoryManager,
-    current_cupy_stream,
     defer_instance_teardown,
 )
 from cubie.outputhandling.output_sizes import ArraySizingClass
@@ -604,17 +602,10 @@ class BaseArrayManager(ABC):
         settings = self._memory_manager.registry.get(id(self))
         if settings is None:
             return
-        if CUDA_SIMULATION or settings.last_stream is None:
-            for cleanup in self._teardown_cleanups():
-                cleanup()
-            self._memory_manager.release_instance(id(self), settings)
-            BaseArrayManager.reset(self)
-        else:
-            with current_cupy_stream(settings.last_stream):
-                for cleanup in self._teardown_cleanups():
-                    cleanup()
-                self._memory_manager.release_instance(id(self), settings)
-                BaseArrayManager.reset(self)
+        for cleanup in self._teardown_cleanups():
+            cleanup()
+        self._memory_manager.release_instance(id(self), settings)
+        BaseArrayManager.reset(self)
         if self._finalizer is not None:
             self._finalizer.detach()
 

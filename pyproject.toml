@@ -46,12 +46,10 @@ Issues = "https://github.com/ccam80/cubie/issues"
 # installs numba-cuda-mlir (the default backend) or numba-cuda (the
 # deprecated fallback: unexpected errors, Python 3.10, or the CUDA
 # simulator). A backendless install fails at import with instructions
-# (cubie.cuda_backend). CuPy is cubie's single device memory
-# allocator on a real GPU, so the toolkit lanes pull in the matching
-# cupy build alongside the toolkit wheels. The bare 'mlir'/'cuda'
-# extras install a backend without toolkit wheels, for machines with
-# a system CUDA install. The mlir lanes need Python >= 3.11
-# (enforced by the numba-cuda-mlir wheel).
+# (cubie.cuda_backend). The bare 'mlir'/'cuda' extras install a
+# backend without toolkit wheels, for machines with a system CUDA
+# install. The mlir lanes need Python >= 3.11 (enforced by the
+# numba-cuda-mlir wheel).
 #
 # The mlir* extras install cubie-numba-cuda-mlir: cubie's build of
 # numba-cuda-mlir carrying the native (C++) fixes pending upstream,
@@ -61,11 +59,11 @@ Issues = "https://github.com/ccam80/cubie/issues"
 # at runtime by cubie.backend._mlir_compat, written for this exact
 # wheel version.
 mlir = ["cubie-numba-cuda-mlir==0.5.3.1"] # MLIR backend, system toolkit
-mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1", "cupy-cuda12x"]
-mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1", "cupy-cuda13x"]
+mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1"]
+mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1"]
 cuda = ["numba-cuda"] # deprecated numba-cuda backend, system toolkit
-cuda12 = ["numba-cuda[cu12]", "cupy-cuda12x"] # CUDA 12 toolkit + CuPy
-cuda13 = ["numba-cuda[cu13]", "cupy-cuda13x"] # CUDA 13 toolkit + CuPy
+cuda12 = ["numba-cuda[cu12]"] # CUDA 12 toolkit
+cuda13 = ["numba-cuda[cu13]"] # CUDA 13 toolkit
 test = [
     "pytest",
     "pytest-cov",
@@ -80,11 +78,12 @@ test = [
 # dev is the default-backend developer install (dev-mlir13). The
 # dev12/dev13 lanes install the deprecated numba-cuda backend, which
 # the CUDA simulator needs; simulator environments add it themselves
-# (e.g. `.[dev,cuda13]`).
-dev12 = ["cubie[cuda12,test]"]
-dev13 = ["cubie[cuda13,test]"]
-dev-mlir12 = ["cubie[mlir-cuda12,test]"]
-dev-mlir13 = ["cubie[mlir-cuda13,test]"]
+# (e.g. `.[dev,cuda13]`). CuPy is installed for the tests that pass
+# CuPy arrays in.
+dev12 = ["cubie[cuda12,test]", "cupy-cuda12x"]
+dev13 = ["cubie[cuda13,test]", "cupy-cuda13x"]
+dev-mlir12 = ["cubie[mlir-cuda12,test]", "cupy-cuda12x"]
+dev-mlir13 = ["cubie[mlir-cuda13,test]", "cupy-cuda13x"]
 dev = ["cubie[dev-mlir13]"]
 optional = [
     "pandas",

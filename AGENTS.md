@@ -93,9 +93,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - Never call a `CUDAFactory.build()` directly — access compiled functions via the cached properties.
 - Never set/modify env vars in source (esp. `NUMBA_ENABLE_CUDASIM`); set them externally.
 - Module-scoped imports belong in the file header only; deliberate lazy imports of optional deps
-  (Qt) stay function-local. cupy/cupyx are required on a real GPU and imported
-  once, conditionally, in `cuda_simsafe` — import them from there (`from cubie.cuda_simsafe
-  import cupy, cupyx`), never directly and never lazily.
+  (Qt, CuPy in tests) stay function-local. CUDA driver calls (`cuda.bindings`) live in
+  `cuda_simsafe`; import the helpers from there.
 - In `CUDAFactory`/device-code files, use explicit imports with the project aliasing (`np_`,
   `attrsval_`, `attrs`-prefixed); store float config fields underscored and expose via a
   precision-casting property.
@@ -120,8 +119,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
   The CUDA simulator exists only on numba-cuda.
 - **CUDA toolkit:** supplied by the `cuda12`/`cuda13`/`mlir-cuda12`/`mlir-cuda13` extras or an
   existing system install (the bare `cuda`/`mlir` extras use whatever toolkit the backend finds).
-- **CuPy is required for real-GPU execution** — it is cubie's single device memory allocator.
-  The toolkit extras pull in the matching cupy build alongside the toolkit wheels.
-  It is imported at `import cubie` through `cubie.cuda_simsafe`; the CUDA simulator
-  (`NUMBA_ENABLE_CUDASIM=1`) never requires it.
+- **Device memory** comes from Numba and the device's stream-ordered pool through
+  `cuda.bindings` (a dependency of both backends). CuPy is a test-only dependency, pulled
+  in by the `dev*` extras for the tests that pass CuPy arrays in.
 - **Optional:** pandas (DataFrame output), matplotlib (driver plots).

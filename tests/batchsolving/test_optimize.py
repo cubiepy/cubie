@@ -24,7 +24,6 @@ from cubie.batchsolving.optimize import (
     most_resident_runs,
     resident_blocks_within_l2,
 )
-from cubie.cuda_simsafe import cupy
 from cubie.CUDAFactory import UnrollChoice
 from cubie.time_logger import default_timelogger
 from tests._utils import LARGE_FIRK
@@ -550,6 +549,8 @@ def test_optimize_takes_device_grids(
     solver_mutable, simple_initial_values, simple_parameters, auto_size
 ):
     """CuPy grids optimise with and without automatic sizing."""
+    import cupy
+
     inits, params = solver_mutable.build_grid(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )

@@ -545,7 +545,10 @@ def start_cuda_busy_work():
     to legacy-stream ordering while still being awaited by any
     genuine device-wide synchronization.
     """
-    from cubie.cuda_simsafe import cuda, cupy
+    from weakref import finalize
+
+    from cuda.bindings import driver as cuda_driver
+    from cubie.cuda_simsafe import cuda
     from cubie.cuda_simsafe import compile_kwargs
 
     @cuda.jit(**compile_kwargs)
@@ -558,10 +561,10 @@ def start_cuda_busy_work():
         out[0] = spins + 1.0
 
     def _start():
-        cupy_stream = cupy.cuda.Stream(non_blocking=True)
-        stream = cuda.external_stream(cupy_stream.ptr)
-        # Keep the owning cupy stream alive alongside the wrapper.
-        stream._cubie_owner = cupy_stream
+        flags = cuda_driver.CUstream_flags.CU_STREAM_NON_BLOCKING.value
+        _, handle = cuda_driver.cuStreamCreate(flags)
+        stream = cuda.external_stream(int(handle))
+        finalize(stream, cuda_driver.cuStreamDestroy, handle)
         out = cuda.device_array(1, dtype=np.float32)
         flag = cuda.to_device(np.zeros(1, dtype=np.int32), stream=stream)
         done = cuda.event()

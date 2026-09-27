@@ -8,18 +8,15 @@ errors.
 Default Behaviour
 -----------------
 
-CuBIE allocates device memory through CuPy's memory pool, which recycles
-allocations across calls instead of freeing and reallocating GPU memory
-each time. Each call to
-:meth:`~cubie.batchsolving.solver.Solver.solve` allocates the required
-device arrays, runs the kernel, copies results back, then frees the
-memory (returning it to the pool for reuse).
+A solver keeps its device and pinned host buffers between calls to
+:meth:`~cubie.batchsolving.solver.Solver.solve`. A batch of the same
+size or smaller reuses them; a larger batch replaces them. Closing the
+solver returns its memory to the device and the operating system.
 
-CuPy is required to run on a real GPU (install it via the
-``mlir-cuda12``/``mlir-cuda13`` extras, e.g.
-``pip install cubie[mlir-cuda12]``, or directly with
-``pip install cupy-cuda12x``). It is not required to run under the CUDA
-simulator (``NUMBA_ENABLE_CUDASIM=1``), which never touches CuPy.
+When you pass device arrays and ``on_device=True`` in a loop, write
+each batch into the same arrays with ``copy_to_device`` rather than
+allocating new ones: freeing a Numba device array waits for all work
+on the GPU.
 
 VRAM Limits
 -----------
