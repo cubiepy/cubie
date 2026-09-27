@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.15.1](https://github.com/cubiepy/cubie/compare/v0.14.2...v0.15.1) (2026-09-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* **backend:** CUDA simulator vendored onto numba-cuda-mlir, numba-cuda dropped as backend ([#992](https://github.com/cubiepy/cubie/issues/992))
+
+### Features
+
+* **backend:** CUDA simulator vendored onto numba-cuda-mlir, numba-cuda dropped as backend ([#992](https://github.com/cubiepy/cubie/issues/992)) ([73afc44](https://github.com/cubiepy/cubie/commit/73afc44a2c0bd6668d4e74c1e78b909b48b568a5))
+
+
+### Bug Fixes
+
+* **memory:** Repeated solves no longer serve as RAM self-destruct; CuPy mem manager dropped in favour of ncm's stream-ordered pool + async ([#993](https://github.com/cubiepy/cubie/issues/993)) ([347573a](https://github.com/cubiepy/cubie/commit/347573a8c44210d7107be9037f2e2ce2a1675a72))
+
+
+### Miscellaneous Chores
+
+* release 0.15.0 ([7014867](https://github.com/cubiepy/cubie/commit/70148676610ce032c48cdaf43647895d710f6cba))
+
 ## [0.14.2](https://github.com/cubiepy/cubie/compare/v0.14.1...v0.14.2) (2026-09-25)
 
 
