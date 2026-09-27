@@ -2360,16 +2360,52 @@ def test_pinned_release_returns_budget(mgr):
     assert mgr.pinned_idle_bytes == 0
 
 
-def test_idle_pinned_block_waits_for_an_idle_point(mgr):
-    """A block idle since the last idle point gets a fresh neighbour."""
+def test_idle_pinned_block_is_reused_while_streams_are_idle(mgr):
+    """With every group stream idle, a just-idled block is reused."""
     array = mgr.allocate_pinned_array((96,), np.float64)
     address = array.ctypes.data
     del array
     gc.collect()
-    fresh = mgr.allocate_pinned_array((96,), np.float64)
-    assert fresh.ctypes.data != address
-    assert mgr.pinned_live_bytes == 768
-    assert mgr.pinned_idle_bytes == 768
+    again = mgr.allocate_pinned_array((96,), np.float64)
+    assert again.ctypes.data == address
+    assert mgr.pinned_idle_bytes == 0
+
+
+def test_large_small_large_reuses_the_large_block(mgr):
+    """A large result dropped after a small solve serves the next one."""
+    large = mgr.allocate_pinned_array((96,), np.float64)
+    address = large.ctypes.data
+    mgr.release_idle_memory()
+    small = mgr.allocate_pinned_array((8,), np.float64)
+    mgr.release_idle_memory()
+    del large
+    gc.collect()
+    again = mgr.allocate_pinned_array((96,), np.float64)
+    assert again.ctypes.data == address
+    assert small is not None
+
+
+@pytest.mark.nocudasim
+def test_idle_pinned_block_waits_while_a_group_stream_is_busy(
+    mgr, start_cuda_busy_work
+):
+    """A busy group stream holds a just-idled block back from reuse."""
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    address = array.ctypes.data
+    # Earlier garbage would queue Numba frees that wait for the device.
+    gc.collect()
+    mgr.release_idle_memory()
+    work, stream, done, release = start_cuda_busy_work()
+    mgr.stream_groups.streams["busy"] = stream
+    try:
+        del array
+        fresh = mgr.allocate_pinned_array((96,), np.float64)
+        assert fresh.ctypes.data != address
+        assert mgr.pinned_idle_bytes == 768
+        assert not done.query()
+    finally:
+        release()
+        stream.synchronize()
 
 
 def test_idle_pinned_block_serves_a_smaller_shape(mgr):
@@ -2502,6 +2538,18 @@ def test_budget_pressure_drops_idle_blocks(mgr):
     assert larger is not None
     assert mgr.pinned_idle_bytes == 0
     assert mgr.pinned_live_bytes == 960
+
+
+@pytest.mark.nocudasim
+def test_budget_pressure_frees_idle_blocks_at_once(mgr):
+    """Dropped idle blocks leave Numba's free queue empty."""
+    mgr.pinned_max_bytes = 1024
+    array = mgr.allocate_pinned_array((96,), np.float64)
+    del array
+    gc.collect()
+    larger = mgr.allocate_pinned_array((120,), np.float64)
+    assert larger is not None
+    assert len(cuda.current_context().memory_manager.deallocations) == 0
 
 
 def test_pinned_budget_capped_by_ram_fraction(mgr):

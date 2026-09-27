@@ -113,6 +113,9 @@ MIN_AUTOPOOL_SIZE = 0.05
 HOST_SPILL_FRACTION = 0.8
 """Fraction of total system RAM available to host arrays."""
 
+HOST_OS_RESERVE_BYTES = 512 * 1024**2
+"""Available RAM staging growth leaves to the OS; a chosen margin."""
+
 HOST_STAGING_BYTES = 64 * 1024**2
 """Maximum pinned staging bytes used by one host transfer.
 
@@ -193,9 +196,7 @@ def available_system_ram() -> int:
 
 def host_headroom_bytes() -> int:
     """Return available RAM above the OS reserve."""
-    total = total_system_ram()
-    available = available_system_ram()
-    return available - int((1 - HOST_SPILL_FRACTION) * total)
+    return available_system_ram() - HOST_OS_RESERVE_BYTES
 
 
 def _remove_spill_file(mapping: Any, path: str) -> None:
@@ -1376,15 +1377,22 @@ class MemoryManager:
                 [block, nbytes, self._pinned_generation]
             )
 
-    def _take_idle_pinned(self, nbytes: int) -> Optional[list]:
-        """Claim the smallest idle block of ``nbytes`` or more.
+    def _group_streams_idle(self) -> bool:
+        """Return whether every group stream has finished its work."""
+        return all(
+            stream_idle(stream)
+            for stream in self.stream_groups.streams.values()
+        )
 
-        Only blocks idle since before the last idle point qualify.
-        """
+    def _take_idle_pinned(self, nbytes: int) -> Optional[list]:
+        """Claim the smallest reusable idle block that fits."""
         generation = self._pinned_generation
+        streams_idle = self._group_streams_idle()
+        # A busy stream may still copy into a recently idled block.
         fitting = [
             entry for entry in self._idle_pinned
-            if entry[1] >= nbytes and entry[2] < generation
+            if entry[1] >= nbytes
+            and (streams_idle or entry[2] < generation)
         ]
         if not fitting:
             return None
@@ -1394,17 +1402,15 @@ class MemoryManager:
         return entry
 
     def _reserve_pinned_bytes(self, nbytes: int, force: bool = False) -> bool:
-        """Atomically reserve ``nbytes`` against the pinned budget.
-
-        Idle blocks count against the budget and are dropped under
-        pressure. ``force`` reserves past the budget.
-        """
+        """Reserve ``nbytes`` against the pinned budget unless forced."""
         with self._pinned_lock:
             self._apply_pinned_releases()
             budget = self.pinned_budget_bytes
             idle = sum(entry[1] for entry in self._idle_pinned)
             if self._pinned_live_bytes + idle + nbytes > budget:
+                # Free idle blocks now; this waits for the device.
                 self._idle_pinned.clear()
+                flush_deferred_frees()
             if not force and self._pinned_live_bytes + nbytes > budget:
                 return False
             self._pinned_live_bytes += nbytes
@@ -1417,9 +1423,8 @@ class MemoryManager:
         idle since the previous call are kept unless ``keep_recent``
         is ``False``.
         """
-        for stream in self.stream_groups.streams.values():
-            if not stream_idle(stream):
-                return
+        if not self._group_streams_idle():
+            return
         with self._pinned_lock:
             self._apply_pinned_releases()
             generation = self._pinned_generation

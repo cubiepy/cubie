@@ -75,8 +75,8 @@ Supporting pieces:
 - The pinned ceiling is cumulative: `allocate_pinned_array` reserves against
   `min(pinned_max_bytes, HOST_SPILL_FRACTION × total RAM)` in an atomic ledger of live
   plus idle bytes, never consulting other processes' RAM use. A collected pinned array's
-  block goes idle; once a `release_idle_memory` idle point has passed it serves the next
-  request of any shape that fits. Budget pressure drops idle blocks.
+  block goes idle and serves the next fitting request once every group stream is idle.
+  Budget pressure frees idle blocks, waiting for the device.
 - `create_host_array` allocates the requested type; a `"pinned"` request whose
   reservation or `cudaHostAlloc` fails lands pageable; `"memmap"` arrays land in the
   cache root. Pageable and memmap transfers stage through the pinned pool, charged to
@@ -128,8 +128,8 @@ arrays; device arrays must be allocated through `allocate_queue` first.
 ## ChunkBufferPool
 Pinned staging buffers per `array_name`. `acquire` reuses an idle buffer of the label
 that fits (re-viewed to the block's shape), replacing an idle one too small, grows while
-fewer than `STAGING_POOL_DEPTH` of the label are in flight and RAM headroom and the
-pinned budget allow (a label with nothing in flight always gets one), and
+fewer than `STAGING_POOL_DEPTH` of the label are in flight, available RAM stays above
+`HOST_OS_RESERVE_BYTES` and the pinned budget allows (a label with nothing in flight always gets one), and
 otherwise blocks until the transfer watcher releases a buffer; this bound paces the
 pipeline. `release` frees a buffer and wakes waiters; `clear` frees all (use on error
 paths). Buffers are charged to the pinned ledger.
