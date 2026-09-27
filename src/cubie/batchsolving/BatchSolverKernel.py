@@ -57,7 +57,6 @@ from cubie.cuda_simsafe import int32
 from attrs import define, field, evolve
 
 from cubie.odesystems import SymbolicODE
-from cubie.cuda_backend import IS_MLIR
 from cubie.backend.utils import (
     LAUNCH_BLOCKSIZES,
     SASS_INSTRUCTION_BYTES,
@@ -275,7 +274,6 @@ class BatchSolverCache(CUDADispatcherCache):
 
     solver_kernel: Union[int, Callable] = field(default=-1)
     signature: Optional[Tuple] = field(default=None)
-    specializations: Dict[Tuple, Tuple] = field(factory=dict)
     output_array_heights: Optional[OutputArrayHeights] = field(default=None)
     duration_counts: Dict[float, DurationCounts] = field(factory=dict)
     launch_geometries: Dict[Tuple, Tuple[int, int]] = field(factory=dict)
@@ -589,22 +587,9 @@ class BatchSolverKernel(CUDAFactory):
                 return dispatcher
             # Use a dummy allocation to avoid full host-device transfer.
             args = self._specialization_args()
-        if IS_MLIR or is_cudasim_enabled():
-            self._cache.signature = compile_kernel_specialization(
-                dispatcher, args
-            )
-            return dispatcher
-        # Array types are cached by Numba; scalar types are fixed per build.
-        array_types = tuple(
-            getattr(array, "_numba_type_", None)
-            or dispatcher.typeof_pyval(array)
-            for array in args[:9]
+        self._cache.signature = compile_kernel_specialization(
+            dispatcher, args
         )
-        signature = self._cache.specializations.get(array_types)
-        if signature is None:
-            signature = compile_kernel_specialization(dispatcher, args)
-            self._cache.specializations[array_types] = signature
-        self._cache.signature = signature
         return dispatcher
 
     @property
@@ -779,8 +764,6 @@ class BatchSolverKernel(CUDAFactory):
                 )
 
         first_chunk_args = self._kernel_launch_args(self.run_params[0])
-        if not IS_MLIR:
-            self._compile_specialization(first_chunk_args)
         blocksize, dynamic_sharedmem = self.launch_geometry(
             blocksize, runs=self.run_params[0].runs
         )
@@ -1072,7 +1055,6 @@ class BatchSolverKernel(CUDAFactory):
     def build_kernel(self) -> None:
         """Build and compile the CUDA integration kernel."""
         config = self.compile_settings
-        simsafe_precision = config.simsafe_precision
         precision = config.numba_precision
 
         loopfunction = self.single_integrator.device_function
@@ -1175,7 +1157,7 @@ class BatchSolverKernel(CUDAFactory):
                 run_idx_low + f32_per_element * shared_elems_per_run
             )
             rx_shared_memory = shared_memory[run_idx_low:run_idx_high].view(
-                simsafe_precision
+                precision
             )
             rx_inits = inits[:, run_index]
             rx_params = params[:, run_index]

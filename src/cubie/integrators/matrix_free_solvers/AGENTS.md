@@ -105,4 +105,4 @@ algorithm, signature, buffers or status logic.
 - `cubie._utils` — `build_config`, device/precision validators, `PrecisionDType`.
 - Consumed by `cubie.integrators.algorithms.*` (implicit steps).
 ### External
-- `numba.cuda`, `attrs`, `numpy`.
+- numba-cuda-mlir (via `cuda_simsafe`), `attrs`, `numpy`.

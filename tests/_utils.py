@@ -7,7 +7,7 @@ from typing import Mapping, Optional, Union, Dict, Any, Callable
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda, int32, numba_from_dtype as from_dtype
+from cubie.cuda_simsafe import cuda, int32, from_dtype
 from cubie.cuda_simsafe import compile_kwargs
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import MemoryManager

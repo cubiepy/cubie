@@ -2,15 +2,6 @@
 import pytest
 
 
-@pytest.mark.sim_only
-def test_compile_kwargs_in_cudasim_mode():
-    """Test that compile_kwargs is empty in CUDASIM mode."""
-    from cubie.cuda_simsafe import compile_kwargs, CUDA_SIMULATION
-
-    assert CUDA_SIMULATION is True
-    assert compile_kwargs == {}
-
-
 @pytest.mark.nocudasim
 def test_compile_kwargs_without_cudasim():
     """Test that compile_kwargs contains lineinfo when CUDASIM is disabled."""
@@ -35,33 +26,38 @@ def test_jit_flags_render_over_live_defaults():
     assert compile_kwargs["lto"] is True
 
 
-@pytest.mark.sim_only
-def test_selp_function_in_cudasim():
-    """Test that selp function works in CUDASIM mode."""
-    from cubie.cuda_simsafe import selp
+def test_warp_intrinsic_wrappers_in_a_kernel():
+    """selp, activemask, all_sync and any_sync run inside a kernel."""
+    import numpy as np
+    from cubie.cuda_simsafe import (
+        activemask,
+        all_sync,
+        any_sync,
+        compile_kwargs,
+        cuda,
+        selp,
+        syncwarp,
+    )
+    from cubie.memory import default_memmgr
 
-    # Test predicated selection
-    assert selp(True, 5.0, 3.0) == 5.0
-    assert selp(False, 5.0, 3.0) == 3.0
+    @cuda.jit(**compile_kwargs)
+    def kernel(out, flag):
+        mask = activemask()
+        syncwarp(mask)
+        out[0] = selp(True, 5.0, 3.0)
+        out[1] = selp(False, 5.0, 3.0)
+        out[2] = 1.0 if mask == 0xFFFFFFFF else 0.0
+        out[3] = 1.0 if all_sync(mask, flag > 0) else 0.0
+        out[4] = 1.0 if any_sync(mask, flag > 0) else 0.0
 
-
-@pytest.mark.sim_only
-def test_activemask_function_in_cudasim():
-    """Test that activemask function works in CUDASIM mode."""
-    from cubie.cuda_simsafe import activemask
-
-    # In CUDASIM mode, activemask always returns 0xFFFFFFFF
-    assert activemask() == 0xFFFFFFFF
-
-
-@pytest.mark.sim_only
-def test_all_sync_function_in_cudasim():
-    """Test that all_sync function works in CUDASIM mode."""
-    from cubie.cuda_simsafe import all_sync
-
-    # In CUDASIM mode, all_sync just returns the predicate
-    assert all_sync(0xFFFFFFFF, True) is True
-    assert all_sync(0xFFFFFFFF, False) is False
+    stream = default_memmgr.get_group_stream()
+    device_out = cuda.to_device(
+        np.zeros(5, dtype=np.float32), stream=stream
+    )
+    kernel[1, 32, stream](device_out, np.int32(1))
+    out = device_out.copy_to_host(stream=stream)
+    stream.synchronize()
+    np.testing.assert_array_equal(out, [5.0, 3.0, 1.0, 1.0, 1.0])
 
 
 @pytest.mark.sim_only
@@ -73,19 +69,13 @@ def test_consteval_passes_iterable_through_in_cudasim():
     assert consteval(7) == 7
 
 
-@pytest.mark.nocudasim
-def test_jit_kwargs_carry_backend_ast_transform_flag():
-    """MLIR builds request the AST transforms; numba-cuda builds do not."""
-    from cubie.cuda_backend import IS_MLIR
+def test_jit_kwargs_carry_ast_transform_flag():
+    """Every build requests the MLIR AST transforms."""
     from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
 
     kwargs = get_jit_kwargs()
-    if IS_MLIR:
-        assert kwargs["experimental_ast_transforms"] is True
-        assert compile_kwargs["experimental_ast_transforms"] is True
-    else:
-        assert set(kwargs) == {"fastmath", "lineinfo", "lto"}
-        assert set(compile_kwargs) == {"fastmath", "lineinfo", "lto"}
+    assert kwargs["experimental_ast_transforms"] is True
+    assert compile_kwargs["experimental_ast_transforms"] is True
 
 
 def test_consteval_loop_in_inlined_device_function():
@@ -156,7 +146,6 @@ def test_zero_trip_consteval_loop_alone_in_if_body():
 
 
 @pytest.mark.nocudasim
-@pytest.mark.mlir_only
 def test_narrow_f64_unflushed_under_ftz():
     """narrow_f64 keeps subnormal results where the plain cast flushes."""
     import numpy as np
@@ -181,24 +170,23 @@ def test_narrow_f64_unflushed_under_ftz():
 def test_devfunc_returns_nonfloat_reads_compiled_overloads():
     """Integer and boolean returns report True; float and uncompiled False."""
     from cubie.cuda_simsafe import (
-        INLINE_ALWAYS,
         cuda,
         devfunc_returns_nonfloat,
     )
 
-    @cuda.jit("int32(float32)", device=True, inline=INLINE_ALWAYS)
+    @cuda.jit("int32(float32)", device=True, inline=True)
     def integer_return(x):
         return 1
 
-    @cuda.jit("boolean(float32)", device=True, inline=INLINE_ALWAYS)
+    @cuda.jit("boolean(float32)", device=True, inline=True)
     def boolean_return(x):
         return x > 0.0
 
-    @cuda.jit("float32(float32)", device=True, inline=INLINE_ALWAYS)
+    @cuda.jit("float32(float32)", device=True, inline=True)
     def float_return(x):
         return x * 2.0
 
-    @cuda.jit(device=True, inline=INLINE_ALWAYS)
+    @cuda.jit(device=True, inline=True)
     def uncompiled(x):
         return 1
 
@@ -278,7 +266,6 @@ def _transformed_loops(func):
 
 
 @pytest.mark.nocudasim
-@pytest.mark.mlir_only
 def test_unroll_if_pass_resolves_closure_flags():
     """True emits the full hint, False a plain loop, count 1 the count."""
     from numba_cuda_mlir import cuda as ncm_cuda
@@ -312,7 +299,6 @@ def test_unroll_if_pass_resolves_closure_flags():
 
 
 @pytest.mark.nocudasim
-@pytest.mark.mlir_only
 def test_unroll_if_pass_emits_count_hints():
     """Pair flags and explicit counts reach the count-unroll hint."""
     from cubie.cuda_simsafe import unroll_if
@@ -353,7 +339,6 @@ def test_unroll_if_pass_emits_count_hints():
 
 
 @pytest.mark.nocudasim
-@pytest.mark.mlir_only
 def test_unroll_if_pass_rejects_zero_count():
     """A count below 1 raises at transform time."""
     from cubie.cuda_simsafe import unroll_if
@@ -369,7 +354,6 @@ def test_unroll_if_pass_rejects_zero_count():
 
 
 @pytest.mark.nocudasim
-@pytest.mark.mlir_only
 def test_unroll_if_flag_must_be_a_closed_over_name():
     """A non-name or unresolvable flag raises at transform time."""
     from numba_cuda_mlir.ast_transforms import apply_ast_transforms
@@ -463,7 +447,6 @@ def test_unroll_flag_converter_forms():
 
 
 @pytest.mark.nocudasim
-@pytest.mark.mlir_only
 def test_unroll_if_pass_resolves_attribute_flags():
     """A ``name.attr`` flag on a closure object resolves per attribute."""
     from cubie.CUDAFactory import UnrollFlags

@@ -18,12 +18,11 @@ authors = [
     { name="Chris Cameron" }
 ]
 readme = "readme.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_LICENSES"]
 dependencies = [
     "numpy>=2.0", # vendoring cellmlmanip lifts the former <2.0 cap
-    "numba",
     "attrs",
     "sympy>=1.13.0",
     # cellmlmanip is vendored under cubie.vendored.cellmlmanip (it pins
@@ -42,14 +41,9 @@ Homepage = "https://github.com/ccam80/cubie.git"
 Issues = "https://github.com/ccam80/cubie/issues"
 
 [project.optional-dependencies]
-# The CUDA backend is chosen by extra: one of the mlir*/cuda* lanes
-# installs numba-cuda-mlir (the default backend) or numba-cuda (the
-# deprecated fallback: unexpected errors, Python 3.10, or the CUDA
-# simulator). A backendless install fails at import with instructions
-# (cubie.cuda_backend). The bare 'mlir'/'cuda' extras install a
-# backend without toolkit wheels, for machines with a system CUDA
-# install. The mlir lanes need Python >= 3.11 (enforced by the
-# numba-cuda-mlir wheel).
+# The CUDA backend, numba-cuda-mlir, is installed by extra so installs
+# stay clean. The bare 'mlir' extra installs the backend without
+# toolkit wheels, for machines with a system CUDA install.
 #
 # The mlir* extras install cubie-numba-cuda-mlir: cubie's build of
 # numba-cuda-mlir carrying the native (C++) fixes pending upstream,
@@ -58,29 +52,22 @@ Issues = "https://github.com/ccam80/cubie/issues"
 # co-install it with the stock wheel. Python-side fixes are applied
 # at runtime by cubie.backend._mlir_compat, written for this exact
 # wheel version.
-mlir = ["cubie-numba-cuda-mlir==0.5.3.1"] # MLIR backend, system toolkit
+mlir = ["cubie-numba-cuda-mlir==0.5.3.1"] # system toolkit
 mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1"]
 mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1"]
-cuda = ["numba-cuda"] # deprecated numba-cuda backend, system toolkit
-cuda12 = ["numba-cuda[cu12]"] # CUDA 12 toolkit
-cuda13 = ["numba-cuda[cu13]"] # CUDA 13 toolkit
 test = [
     "pytest",
     "pytest-cov",
     "pytest-durations",
     "pytest-xdist[psutil]",
+    "numba", # CPU reference integrators in the test suite
     "flake8",
     "ruff",
     "pandas",
     "matplotlib",
     "scipy",
 ]
-# dev is the default-backend developer install (dev-mlir13). The
-# dev12/dev13 lanes install the deprecated numba-cuda backend, which
-# the CUDA simulator needs; simulator environments add it themselves
-# (e.g. `.[dev,cuda13]`).
-dev12 = ["cubie[cuda12,test]"]
-dev13 = ["cubie[cuda13,test]"]
+# dev is the CUDA 13 developer install (dev-mlir13).
 dev-mlir12 = ["cubie[mlir-cuda12,test]"]
 dev-mlir13 = ["cubie[mlir-cuda13,test]"]
 dev = ["cubie[dev-mlir13]"]
@@ -99,8 +86,7 @@ markers = [
     "nocudasim: Will fail if run on the GPU simulator, only test on real GPU",
     "slow: Marks tests that are slow to run, can be skipped with -m 'not slow'",
     "specific_algos: Marks tests covering non-default algorithm tableau aliases",
-    "sim_only: Marks tests that can only run on the CUDA simulator (debug tests only, otherwise what's the point?)",
-    "mlir_only: Marks tests of numba-cuda-mlir backend behaviour, deselected on numba-cuda"
+    "sim_only: Marks tests that can only run on the CUDA simulator (debug tests only, otherwise what's the point?)"
 ]
 addopts = [
     "--import-mode=importlib",
@@ -115,7 +101,7 @@ addopts = [
     "--cov-report=term-missing",
 ]
 filterwarnings = [
-    "ignore::numba.core.errors.NumbaPerformanceWarning",
+    "ignore::numba_cuda_mlir.numba_cuda.core.errors.NumbaPerformanceWarning",
 ]
 
 [tool.coverage.run]
@@ -130,12 +116,11 @@ parallel = true
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
-    # Vendored third-party code (cellmlmanip, numba-cuda cache);
-    # not cubie's tested surface.
+    # Vendored third-party code (cellmlmanip, CUDA simulator); not
+    # cubie's tested surface.
     "*/vendored/cellmlmanip/*",
-    "*/vendored/numba_cuda_cache.py",
+    "*/vendored/cudasim/*",
     # Compile-time backend patches; covered by upstream PRs.
-    "*/backend/_numba_cuda_compat.py",
     "*/backend/_mlir_compat.py",
 ]
 relative_files = true

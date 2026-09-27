@@ -326,7 +326,7 @@ def clamp_factory(precision):
     Callable
         CUDA device function ``clamp(value, minimum, maximum)``.
     """
-    from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+    from cubie.cuda_simsafe import from_dtype
     precision = from_dtype(precision)
 
     # no cover: start

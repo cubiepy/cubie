@@ -14,12 +14,10 @@ the device-code optimisation conventions.
 ## Setup
 - `pip install -e .[dev]` from the repo root (use a venv; some deps are version-pinned).
   `dev` is the mlir backend on the CUDA 13 toolkit (`dev-mlir13`).
-- **Python 3.11-3.14** (3.10 only on the deprecated numba-cuda backend), **CUDA 12 or 13**
-  (via the `mlir-cuda12`/`mlir-cuda13` extras, or a system toolkit), **NVIDIA GPU (compute
-  capability ≥6.0)**.
-- CPU-only dev/test without a GPU: set `NUMBA_ENABLE_CUDASIM=1` (Numba's CUDA simulator).
-  The simulator exists only on numba-cuda, so add that backend to the install
-  (`pip install -e .[dev,cuda13]`); with both backends present, CUDASIM selects numba-cuda.
+- **Python 3.11-3.14**, **CUDA 12 or 13** (via the `mlir-cuda12`/`mlir-cuda13` extras, or a
+  system toolkit), **NVIDIA GPU (compute capability ≥6.0)**.
+- CPU-only dev/test without a GPU: set `NUMBA_ENABLE_CUDASIM=1` (the CUDA simulator
+  vendored from numba-cuda under `src/cubie/vendored/cudasim`; the `dev` install covers it).
   **CUDASIM is not production.** Behaviour under the simulator must never be considered when
   evaluating code: designs, fixes, and diagnostics are judged solely on their real-GPU
   behaviour. A path that works under CUDASIM but degrades or disappears on hardware is broken.
@@ -36,7 +34,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
   `NUMBA_ENABLE_CUDASIM=1 pytest -m "not nocudasim and not specific_algos"`
 - **Real GPU (matches CUDA CI; CUDASIM off) — always run to verify results.** The simulator does
   not guarantee on-device correctness; a change is only verified once the real-GPU tests pass:
-  `pytest -m "not specific_algos and not sim_only"` (add `and not mlir_only` on numba-cuda)
+  `pytest -m "not specific_algos and not sim_only"`
 - **Use the shared session-scoped fixtures in `tests/conftest.py`** with their default parameter
   sets unless the user explicitly excepts a case; don't hand-roll fixtures. **Mocks/patches may
   only be added with an explicit user exception.** Don't type-hint tests.
@@ -53,7 +51,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
 ## Code style
 - PEP8: 79-char lines, 71-char comments. Descriptive names, not abbreviations.
 - Type hints on function/method **signatures** only (PEP484) — no inline variable annotations, no
-  `from __future__ import annotations` (min Python 3.10). numpydoc docstrings on public API.
+  `from __future__ import annotations` (min Python 3.11). numpydoc docstrings on public API.
 - Comments describe current behaviour, not change history ("now", "no longer", "changed from" →
   removed). **Never edit `changelog.md`** (plugin-managed).
 
@@ -66,11 +64,9 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - Capture `ab_gate.py` stdout untruncated.
 - **Performance gate (every PR that touches `src/`):** run `python benchmarks/ab_gate.py` and
   paste its table into the PR message. One command compares A (`origin/main`, an ephemeral
-  `git worktree`) against B (the working tree) on every installed CUDA backend — both
-  `numba-cuda` and `numba-cuda-mlir` should be in the venv. Per backend it starts one persistent
-  worker per side (each compiles and builds its grid once) and ping-pongs short solve blocks
-  between them in ABBA order with
-  randomised idle gaps — continuous load pins the GPU at its power limit and the kernel-time
+  `git worktree`) against B (the working tree). It starts one persistent worker per side (each
+  compiles and builds its grid once) and ping-pongs short solve blocks between them in ABBA
+  order with randomised idle gaps — continuous load pins the GPU at its power limit and the kernel-time
   floor dithers, so the rest between blocks keeps it in a repeatable boost state, and the
   per-block jitter stops a concurrent periodic GPU load phase-locking with the rhythm and
   biasing one side coherently. Each block reports the mean of
@@ -103,22 +99,18 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - No backwards-compatibility burden — breaking changes are expected pre-1.0.
 
 ## Dependencies
-- **Core:** numpy>=2.0, numba, attrs, sympy>=1.13.0. cellmlmanip is vendored under
+- **Core:** numpy>=2.0, attrs, sympy>=1.13.0. cellmlmanip is vendored under
   `src/cubie/vendored/cellmlmanip` (its `lxml`/`networkx`/`Pint>=0.24`/`rdflib` runtime deps are core).
-- **CUDA backend (installed by extra, so installs stay clean):** numba-cuda-mlir is the
-  default (Python >= 3.11; `mlir`/`mlir-cuda12`/`mlir-cuda13` extras — these install
-  `cubie-numba-cuda-mlir`, cubie's own build carrying the native-code fixes pending
-  upstream, with the same `numba_cuda_mlir` import package; never co-install it with the
-  stock wheel, and treat the installed wheel, not upstream numba-cuda-mlir source, as
-  ground truth when debugging how device code compiles). `numba-cuda`
-  (`cuda`/`cuda12`/`cuda13` extras) is deprecated but kept as a fallback for unexpected
-  errors, Python 3.10, and the CUDA simulator. A backendless install fails at
-  `import cubie` with instructions. `cubie.cuda_backend` resolves the active backend at
-  import: `CUBIE_CUDA_BACKEND` overrides; otherwise the installed backend is used,
-  preferring mlir when an environment ends up with both and numba-cuda under CUDASIM.
-  The CUDA simulator exists only on numba-cuda.
-- **CUDA toolkit:** supplied by the `cuda12`/`cuda13`/`mlir-cuda12`/`mlir-cuda13` extras or an
-  existing system install (the bare `cuda`/`mlir` extras use whatever toolkit the backend finds).
+- **CUDA backend (installed by extra, so installs stay clean):** numba-cuda-mlir
+  (`mlir`/`mlir-cuda12`/`mlir-cuda13` extras — these install `cubie-numba-cuda-mlir`,
+  cubie's own build carrying the native-code fixes pending upstream, with the same
+  `numba_cuda_mlir` import package; never co-install it with the stock wheel, and treat
+  the installed wheel, not upstream numba-cuda-mlir source, as ground truth when
+  debugging how device code compiles). A backendless install fails at `import cubie`
+  with instructions. The CUDA simulator is vendored (`cubie.vendored.cudasim`) and runs
+  on the same install.
+- **CUDA toolkit:** supplied by the `mlir-cuda12`/`mlir-cuda13` extras or an existing
+  system install (the bare `mlir` extra uses whatever toolkit the backend finds).
 - **Device memory** comes from Numba and the device's stream-ordered pool through
-  `cuda.bindings` (a dependency of both backends).
+  `cuda.bindings` (a dependency of numba-cuda-mlir).
 - **Optional:** pandas (DataFrame output), matplotlib (driver plots).

@@ -7,7 +7,7 @@ import sympy as sp
 from cubie.cuda_simsafe import cuda
 
 from cubie.cuda_simsafe import compile_kwargs
-from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from cubie.cuda_simsafe import from_dtype
 from cubie.memory import default_memmgr
 from cubie.odesystems.solver_helpers import (
     HelperVariant,

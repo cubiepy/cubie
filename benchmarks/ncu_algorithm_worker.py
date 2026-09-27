@@ -226,7 +226,7 @@ def parse_args(
     parser.add_argument(
         "--backend",
         required=True,
-        choices=("numba-cuda", "mlir"),
+        choices=("mlir",),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
@@ -252,12 +252,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     """Prepare the selected solvers and profile one launch each."""
 
     args = parse_args(argv)
-    active_backend = os.environ.get("CUBIE_CUDA_BACKEND")
-    if active_backend != args.backend:
-        raise SystemExit(
-            f"worker requested {args.backend}, environment has "
-            f"{active_backend!r}"
-        )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     default_timelogger.set_verbosity("default")
     qb.default_memmgr.set_limit_mode("active")

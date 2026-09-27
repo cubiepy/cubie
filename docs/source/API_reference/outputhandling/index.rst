@@ -70,6 +70,6 @@ Dependencies
 ------------
 
 * Compiles CUDA callables through :class:`cubie.CUDAFactory` and
-  :mod:`numba.cuda`.
+  numba-cuda-mlir.
 * Loop buffers and output slices align with expectations from
   :mod:`cubie.integrators.loops` and related algorithm factories.

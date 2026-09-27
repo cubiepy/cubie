@@ -407,11 +407,9 @@ def compile_meta(solver):
     spill-load byte counts plus resources and actual launch geometry.
     """
     (kern,) = solver.kernel.kernel.overloads.values()
-    # The MLIR backend's kernel objects (CompileResult) resolve the
-    # resource attributes from compile metadata, populated on demand;
-    # numba-cuda kernels expose the same names as plain properties.
-    # Both reach the loaded driver function via ``_codelibrary`` (the
-    # public ``library`` is a numba-cuda-only spelling).
+    # The kernel objects (CompileResult) resolve the resource
+    # attributes from compile metadata, populated on demand, and reach
+    # the loaded driver function via ``_codelibrary``.
     cufunc = kern._codelibrary.get_cufunc()
 
     cubin, entry_name = _compiled_cubin(kern)

@@ -12,7 +12,7 @@ CuBIE performs numerical integration in parallel on NVIDIA GPUs. It provides a ~
 speedup over functions like MATLAB's `ode45` and SciPy's `solve_ivp` for parallel batch integrations, 
 while offering a similar interface to make it easy to switch from those environments.
 
-Under the hood, cubie uses [`numba-cuda`](https://nvidia.github.io/numba-cuda/) to compile
+Under the hood, cubie uses [`numba-cuda-mlir`](https://github.com/NVIDIA/numba-cuda-mlir) to compile
 python integration algorithms and your provided ODE/DAE systems into GPU code
 and ferry your data in between your computer and GPU. Python-side, it generates Jacobian-vector 
 product (JVP), residual, and preconditioner functions from your system of equations and folds those into
@@ -46,20 +46,12 @@ that can fit into your computers RAM, to allow REALLY large solves.
 pip install "cubie[mlir-cuda13]"
 ```
 
-The extra in square brackets installs the required CUDA dependencies. There
-are four options:
-
-- `mlir-cuda12`
-- `mlir-cuda13`
-- `cuda12`
-- `cuda13`
-
-We recommend `mlir-cuda13` unless you have a specific reason to use the older
-numba-cuda backend or the CUDA 12 toolkit.
+The extra in square brackets installs the required CUDA dependencies:
+`mlir-cuda13` for the CUDA 13 toolkit, `mlir-cuda12` for CUDA 12, or `mlir` to
+use a system CUDA install.
 
 CuBIE requires Python 3.11-3.14, an up-to-date NVIDIA driver, and an NVIDIA GPU
-with compute capability 6.0 or later. Python 3.10 is supported only by the
-numba-cuda backend. Pandas and Matplotlib support can be installed with
+with compute capability 6.0 or later. Pandas and Matplotlib support can be installed with
 `pip install "cubie[optional]"`.
 
 ## Quick start

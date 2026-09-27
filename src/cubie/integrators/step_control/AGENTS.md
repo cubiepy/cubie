@@ -75,4 +75,4 @@ Internal: `CUDAFactory`; `_utils` (`build_config`, `clamp_factory`, validators,
 `cuda_simsafe` (`selp`, `compile_kwargs`); `integrators.norms`
 (`TwoRefMaskedScaledNorm`). Consumed by `integrators.loops` /
 `SingleIntegratorRun`.
-External: `numba.cuda`, `attrs`, `numpy`, `math`.
+External: numba-cuda-mlir (via `cuda_simsafe`), `attrs`, `numpy`, `math`.

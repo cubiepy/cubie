@@ -1,4 +1,4 @@
-"""Driver and compiled-kernel queries with one form on every backend.
+"""Driver and compiled-kernel queries.
 
 Published Objects
 -----------------
@@ -24,7 +24,6 @@ from typing import Any, Optional, Tuple
 
 from attrs import frozen
 
-from cubie.cuda_backend import IS_MLIR
 from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
 
 SASS_INSTRUCTION_BYTES = 16
@@ -316,39 +315,21 @@ if CUDA_SIMULATION:
         return ()
 
 else:  # pragma: no cover - exercised in GPU environments
-    if IS_MLIR:
-        from cuda.bindings import driver as _cuda_binding
+    from cuda.bindings import driver as _cuda_binding
 
-        def _set_function_attribute(cufunc, attribute, value) -> None:
-            """Set one driver attribute on a loaded kernel function."""
-            (err,) = _cuda_binding.cuFuncSetAttribute(
-                cufunc.handle, attribute, int(value)
-            )
-            if err != _cuda_binding.CUresult.CUDA_SUCCESS:
-                raise RuntimeError(
-                    f"cuFuncSetAttribute failed with error {err}"
-                )
-
-        def _compile(dispatcher: Any, args: Tuple) -> Tuple:
-            compiled = dispatcher.compile_for(*args)
-            return compiled.signature.args
-
-    else:
-        from numba.cuda.cudadrv.driver import (  # type: ignore
-            binding as _cuda_binding,
-            driver as _numba_driver,
+    def _set_function_attribute(cufunc, attribute, value) -> None:
+        """Set one driver attribute on a loaded kernel function."""
+        (err,) = _cuda_binding.cuFuncSetAttribute(
+            cufunc.handle, attribute, int(value)
         )
-
-        def _set_function_attribute(cufunc, attribute, value) -> None:
-            """Set one driver attribute on a loaded kernel function."""
-            _numba_driver.cuKernelSetAttribute(
-                attribute, int(value), cufunc.handle, cufunc.device.id
+        if err != _cuda_binding.CUresult.CUDA_SUCCESS:
+            raise RuntimeError(
+                f"cuFuncSetAttribute failed with error {err}"
             )
 
-        def _compile(dispatcher: Any, args: Tuple) -> Tuple:
-            argtypes = tuple(dispatcher.typeof_pyval(arg) for arg in args)
-            dispatcher.compile(argtypes)
-            return argtypes
+    def _compile(dispatcher: Any, args: Tuple) -> Tuple:
+        compiled = dispatcher.compile_for(*args)
+        return compiled.signature.args
 
     _MAX_DYNAMIC_SHARED_ATTRIBUTE = (
         _cuda_binding.CUfunction_attribute

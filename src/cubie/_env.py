@@ -24,8 +24,6 @@ Published Functions
     (``CUBIE_KERNEL_CACHE_DIR``).
 :func:`max_cache_entries_default`
     Default kernel-cache LRU limit (``CUBIE_MAX_CACHE_ENTRIES``).
-:func:`cuda_backend_requested`
-    Explicitly requested CUDA backend (``CUBIE_CUDA_BACKEND``).
 
 Recognised Variables
 --------------------
@@ -48,11 +46,6 @@ Recognised Variables
     Per-system LRU limit for compiled-kernel cache entries; zero
     disables eviction. Overridden by an explicit ``max_cache_entries``
     argument. Default 0.
-``CUBIE_CUDA_BACKEND``
-    Explicit CUDA backend selection, ``numba-cuda`` or ``mlir``.
-    Read by :mod:`cubie.cuda_backend` at import. When unset, the
-    installed backend is used; when both backends are installed,
-    the MLIR backend is auto-selected.
 ``CUBIE_OPERATION_ORDERING``
     Default codegen operation-ordering policy (``liveness_auto``
     when unset). Read once at ``import cubie``; explicit
@@ -196,33 +189,3 @@ def set_active_block_schedule(policy: str) -> None:
 def active_block_schedule() -> str:
     """Return the active scheduler policy (``source`` = none)."""
     return _active_block_schedule
-
-
-def cuda_backend_requested() -> Optional[str]:
-    """Return the explicitly requested CUDA backend, if any.
-
-    Reads ``CUBIE_CUDA_BACKEND`` from the environment; empty and
-    whitespace-only values are treated as unset.
-    :mod:`cubie.cuda_backend` resolves the active backend from this
-    value and the installed packages.
-
-    Returns
-    -------
-    Optional[str]
-        ``"numba-cuda"`` or ``"mlir"``, or ``None`` when unset.
-
-    Raises
-    ------
-    ValueError
-        If the variable is set to an unrecognised value.
-    """
-    raw = os.environ.get("CUBIE_CUDA_BACKEND")
-    if raw is None or not raw.strip():
-        return None
-    value = raw.strip().lower()
-    if value not in ("numba-cuda", "mlir"):
-        raise ValueError(
-            f"CUBIE_CUDA_BACKEND={raw!r} is not recognised; valid "
-            "values are 'numba-cuda' and 'mlir'."
-        )
-    return value

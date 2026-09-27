@@ -153,4 +153,4 @@ checks compare against it. A driverless kernel's layout has a zero first dimensi
   `SystemValues`); `cubie.cubie_cache` (`CUBIECache`); `cubie.cuda_simsafe`;
   `cubie._utils`.
 ### External
-- `numba`/`numba.cuda`; `numpy`; `attrs`; optional `pandas` (lazy in `as_pandas`).
+- numba-cuda-mlir (via `cuda_simsafe`); `numpy`; `attrs`; optional `pandas` (lazy in `as_pandas`).

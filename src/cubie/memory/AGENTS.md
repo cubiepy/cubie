@@ -139,6 +139,6 @@ paths). Buffers are charged to the pinned ledger.
 - `cubie.cuda_simsafe` (`Stream`, `DeviceNDArray`, `CUDA_SIMULATION`, `current_mem_info`,
   the driver memory helpers); `cubie._utils` (validators in `array_requests.py`).
 ### External
-- `numba`/`numba.cuda` (context/stream management, kernel launch, page-locked blocks,
+- numba-cuda-mlir (context/stream management, kernel launch, page-locked blocks,
   driver copies); `cuda.bindings` (stream-ordered pool, pointer and stream queries);
   `attrs`; `numpy`.

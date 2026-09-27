@@ -110,4 +110,4 @@ cache.
   (driver-array setup); `cubie._utils` (`PrecisionDType`), `cubie.time_logger.default_timelogger`,
   `cubie.cuda_simsafe` (in the generated module header), `cubie.gui.*` (lazy, optional).
 ### External
-- `sympy`; `numpy` (`float32`, `ndarray`); `numba`/`numba.cuda` (generated header + precision types).
+- `sympy`; `numpy` (`float32`, `ndarray`); numba-cuda-mlir via `cuda_simsafe` (generated header + precision types).

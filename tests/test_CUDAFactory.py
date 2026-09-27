@@ -19,8 +19,7 @@ from cubie.CUDAFactory import (
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import from_dtype as simsafe_dtype
-from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from cubie.cuda_simsafe import from_dtype
 from numpy import dtype as np_dtype
 
 
@@ -574,17 +573,6 @@ def test_config_numba_precision():
     assert c.numba_precision == expected
 
 
-def test_config_simsafe_precision():
-    """simsafe_precision returns simsafe_dtype(np_dtype(precision))."""
-    @attrs.frozen
-    class _C(CUDAFactoryConfig):
-        pass
-
-    c = _C(precision=np.float64)
-    expected = simsafe_dtype(np_dtype(np.float64))
-    assert c.simsafe_precision == expected
-
-
 # ── CUDAFactory __init__ / setup / properties ──────────────── #
 
 
@@ -978,14 +966,6 @@ def test_factory_numba_precision_forwarding():
     cfg = CUDAFactoryConfig(precision=np.float64)
     f.setup_compile_settings(cfg)
     assert f.numba_precision == f.compile_settings.numba_precision
-
-
-def test_factory_simsafe_precision_forwarding():
-    """simsafe_precision forwards to compile_settings.simsafe_precision."""
-    f = _make_factory()
-    cfg = CUDAFactoryConfig(precision=np.float32)
-    f.setup_compile_settings(cfg)
-    assert f.simsafe_precision == f.compile_settings.simsafe_precision
 
 
 def test_factory_shared_buffer_size(single_integrator_run):

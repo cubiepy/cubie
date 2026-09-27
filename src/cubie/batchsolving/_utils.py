@@ -28,7 +28,7 @@ def name_and_compile_kernel(
         Name the compiled kernel appears under in profiler and
         disassembly output.
     jit_kwargs
-        Keyword arguments forwarded to :func:`numba.cuda.jit`.
+        Keyword arguments forwarded to ``cuda.jit``.
 
     Returns
     -------

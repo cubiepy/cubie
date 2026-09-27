@@ -16,14 +16,7 @@ from hashlib import sha256
 from types import CodeType, FunctionType
 from typing import Optional
 
-# Whichever backend serializer is installed; population and consumer
-# runs share a pinned environment, so both resolve identically.
-try:
-    from numba.cuda.serialize import dumps as cache_dumps
-except ImportError:
-    from numba_cuda_mlir.numba_cuda.serialize import (
-        dumps as cache_dumps,
-    )
+from numba_cuda_mlir.numba_cuda.serialize import dumps as cache_dumps
 
 
 def _canonical_const(value):

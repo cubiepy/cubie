@@ -12,8 +12,6 @@ CUDA Not Found
 2. Reinstall with a toolkit extra so the toolkit wheels ship with the
    backend: ``pip install cubie[mlir-cuda12]`` (or
    ``cubie[mlir-cuda13]``).
-3. If errors persist, try the deprecated numba-cuda backend:
-   ``pip install cubie[cuda12]``.
 
 Newton Solver Not Converging
 -----------------------------
@@ -64,14 +62,13 @@ CuBIE:
 CUDASIM runs the CUDA kernels on the CPU in a single thread.  It is
 orders of magnitude slower than GPU execution but does not require a GPU.
 Useful for debugging logic errors and running in CI environments without
-GPUs.  The simulator exists only on the deprecated numba-cuda backend
-(``pip install cubie[cuda12]``); the default MLIR backend has no
-simulator.
+GPUs.  The simulator is vendored from numba-cuda and runs on the same
+install as the GPU backend.
 
 .. note::
 
    Never set ``NUMBA_ENABLE_CUDASIM`` inside Python code.  It must be
-   set before the ``numba`` module is imported.
+   set before ``cubie`` is imported.
 
 Common Attrs Validation Errors
 ------------------------------

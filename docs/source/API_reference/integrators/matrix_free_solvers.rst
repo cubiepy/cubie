@@ -18,7 +18,7 @@ Matrix-free solvers
 The ``matrix_free_solvers`` package gathers factories that build CUDA device
 functions for matrix-free linear and nonlinear solves. These factories are used
 by the integrator loops to update implicit states without forming Jacobian
-matrices. The solvers rely on :mod:`numba.cuda` for device kernels and perform
+matrices. The solvers rely on numba-cuda-mlir for device kernels and perform
 warp-synchronisation via lightweight vote helpers.
 
 Public API
@@ -51,6 +51,6 @@ Dependencies
 ------------
 
 * Warp synchronisation helpers implement collective convergence tests.
-* :mod:`numba.cuda` compiles device functions and manages kernel launches.
+* numba-cuda-mlir compiles device functions and manages kernel launches.
 * :mod:`cubie.integrators.matrix_free_solvers.linear_solver` provides the inner
   linear solver used by Newton–Krylov iterations.

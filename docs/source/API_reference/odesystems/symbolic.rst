@@ -25,6 +25,6 @@ Dependencies
 ------------
 
 The code generation workflow relies on :mod:`sympy` for symbolic manipulation
-and :mod:`numba.cuda` for compiling emitted kernels. Generated code is cached via
+and numba-cuda-mlir for compiling emitted kernels. Generated code is cached via
 :class:`cubie.CUDAFactory` and consumed by :mod:`cubie.integrators` during loop
 assembly.

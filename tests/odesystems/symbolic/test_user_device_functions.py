@@ -9,7 +9,7 @@ an identical system written without user functions.
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda, INLINE_ALWAYS
+from cubie.cuda_simsafe import cuda
 
 from cubie import create_ODE_system, solve_ivp
 from cubie.odesystems.symbolic.codegen.dxdt import (
@@ -19,7 +19,7 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
 
 @pytest.fixture(scope="module")
 def cubed():
-    @cuda.jit(device=True, inline=INLINE_ALWAYS)
+    @cuda.jit(device=True, inline=True)
     def cubed(x):
         return x * x * x
 
@@ -28,7 +28,7 @@ def cubed():
 
 @pytest.fixture(scope="module")
 def d_cubed():
-    @cuda.jit(device=True, inline=INLINE_ALWAYS)
+    @cuda.jit(device=True, inline=True)
     def d_cubed(x, index):
         return 3.0 * x * x
 
@@ -121,7 +121,7 @@ def test_device_function_with_derivative_implicit_solve(
 
 @pytest.fixture(scope="module")
 def region():
-    @cuda.jit("int32(float32)", device=True, inline=INLINE_ALWAYS)
+    @cuda.jit("int32(float32)", device=True, inline=True)
     def region(x):
         return 1
 

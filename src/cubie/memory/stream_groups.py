@@ -43,7 +43,7 @@ class StreamGroups:
     streams
         Dictionary mapping group names to CUDA streams. When omitted, each
         group, including "default", receives a dedicated stream from
-        :func:`numba.cuda.stream` on first use. No group is ever backed
+        ``cuda.stream()`` on first use. No group is ever backed
         by the device-wide default stream, so work in one process never
         orders against the CUDA null stream.
 
@@ -152,7 +152,7 @@ class StreamGroups:
         Stream
             The group's dedicated CUDA stream. A missing group (or a
             group created without a stream) receives a fresh stream
-            from :func:`numba.cuda.stream`, never the device-wide
+            from ``cuda.stream()``, never the device-wide
             default stream.
         """
         if group not in self.groups:

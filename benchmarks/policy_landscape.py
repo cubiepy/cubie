@@ -37,7 +37,6 @@ from cubie.batchsolving.optimize import (
     SHARED_LAUNCH_BLOCKSIZES,
 )
 from cubie.cache_root import get_cache_root, set_cache_root
-from cubie.cuda_backend import IS_MLIR
 from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollChoice
 from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
 from cubie.buffer_registry import buffer_registry
@@ -907,7 +906,7 @@ def run_config(
         n_states=SYSTEMS[system_name]["n_states"],
         n_runs=int(n_runs),
         duration=float(duration),
-        backend="mlir" if IS_MLIR else "numba-cuda",
+        backend="mlir",
         cubie=cubie.__version__,
         hardware=dict(
             compute_capability=list(hardware.compute_capability),
@@ -1336,7 +1335,7 @@ def check_device(log):
         f"{hardware.shared_memory_per_multiprocessor // 1024} KiB "
         f"opt-in {hardware.max_dynamic_shared_memory_per_block // 1024} "
         f"KiB icache {icache}")
-    log(f"backend {'mlir' if IS_MLIR else 'numba-cuda'} cubie "
+    log("backend mlir cubie "
         f"{cubie.__version__} cache {get_cache_root()}")
 
 

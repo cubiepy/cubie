@@ -3,30 +3,37 @@
 # vendored
 
 ## Purpose
-A pinned snapshot of numba-cuda's `Cache`/`CUDACache` that gives CuBIE a stable base to extend
-with its own file-based caching (`CUBIECache` in `cubie_cache.py`) without tracking upstream
-churn, and that compiles under CUDASIM. The upstream source path and snapshot date are recorded
-in the module docstring.
+Third-party code CuBIE carries in-tree: the CUDA simulator from numba-cuda, running on
+numba-cuda-mlir, and cellmlmanip. Each snapshot records its upstream source and date.
 
 ## Key Files
 | File | Description |
 |------|-------------|
 | `__init__.py` | Package docstring only; no exports. |
-| `numba_cuda_cache.py` | Snapshot from NVIDIA/numba-cuda, 2026-07-03: `_Cache`/`Cache` from `numba_cuda/numba/cuda/core/caching.py`; `CUDACache` from `numba_cuda/numba/cuda/dispatcher.py` (its `load_overload` override under `utils.numba_target_override()` plus the launch-config API — `is_launch_config_sensitive`/`mark_launch_config_sensitive`/`set_launch_config_key`/`flush`). |
+| `cudasim/` | The CUDA simulator from NVIDIA/numba-cuda 0.30.4 (`numba_cuda/numba/cuda/simulator`, plus `is_available`/`cuda_error` from `simulator_init.py`), snapshot 2026-09-27. Runs device code as Python threads on the CPU. `cuda_simsafe` imports it as `cuda` when `NUMBA_ENABLE_CUDASIM=1`. |
 | `cellmlmanip/` | Vendored snapshot of cellmlmanip 0.3.6 (ModellingWebLab, BSD 3-Clause; `LICENSE` kept alongside). Parses CellML into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/cellml.py`. |
 
-## numba-cuda cache snapshot
-- The snapshot is unmodified. CuBIE's behaviour lives in `CUBIECache(CUDACache)`
-  (`cubie_cache.py`), which sets `_impl_class = CUBIECacheImpl`; the vendored `CUDACache`
-  (`_impl_class = None`) is never instantiated. `cuda_simsafe` picks this base or
-  `numba.cuda.dispatcher.CUDACache` depending on CUDASIM.
-- `CUBIECache.__init__` does not chain to `CUDACache.__init__` (it takes system hashes, not
-  a `py_func`), so it replicates the base's per-instance state: the launch-config fields
-  `_launch_config_key`, `_launch_config_sensitive_flag` and
-  `_launch_config_marker_path`, which the dispatcher reads on every cached launch.
-  Re-check them when re-snapshotting.
-- To update, replace the file with a newer upstream snapshot and bump the date.
-- numba-cuda is BSD 2-Clause; the notice is in the module docstring and
+## cudasim
+- Upstream imports of `numba.cuda.*` point at the same modules inside numba-cuda-mlir
+  (`numba_cuda_mlir.numba_cuda.*`: `core.config`, `core.sigutils`, `np.numpy_support`,
+  `stubs`, `errors`, `types`); intra-package imports point at `cubie.vendored.cudasim`,
+  and the kernel-time module swap matches globals bound to this package.
+- Local modifications, which make it a drop-in `cuda` module for cubie:
+  - `__init__.py`: the `sys.modules["numba.cuda.*"]` aliasing is dropped; submodules
+    import unconditionally.
+  - `api.jit` accepts and ignores GPU-only options (`lineinfo`, `lto`,
+    `experimental_ast_transforms`, ...); `api.stwt` is a plain store; `api.stream` is
+    `cudadrv.driver.Stream`, a class with a null `handle`.
+  - `kernelapi.FakeCUDAModule` adds `activemask` (all lanes), `all_sync`/`any_sync`
+    (the thread's own predicate), `syncwarp` (no-op) and `stwt`. Local and shared
+    arrays are `TypedViewArray`s, whose `view` also takes a Numba type.
+  - `kernel.FakeCUDAKernel.targetoptions` reports `{"device": ...}`.
+  - `cudadrv.devices.FakeCUDAContext.get_memory_info` reports 1 GiB free of 8 GiB.
+  - `cudadrv.devicearray` aliases `DeviceNDArrayBase`/`DeviceNDArray`/`MappedNDArray`
+    to `FakeCUDAArray`.
+  - `experimental.consteval` (new) returns its argument.
+- To update, re-snapshot upstream and re-apply the import rewrite and the list above.
+- numba-cuda is BSD 2-Clause; the notice is in each upstream file header and
   `THIRD_PARTY_LICENSES`.
 
 ## cellmlmanip
@@ -39,8 +46,7 @@ in the module docstring.
   dependencies (`lxml`, `networkx`, `Pint`, `rdflib`) are cubie dependencies.
 
 ## Dependencies
-- `numba_cuda_cache.py`: none internal (consumed by `cubie_cache`/`cuda_simsafe`). Live upstream
-  imports: `numba.cuda.core.caching` (`IndexDataCacheFile`), `numba.cuda.serialize` (`dumps`),
-  `numba.cuda.utils` (`numba_target_override`).
+- `cudasim/`: none internal (consumed by `cuda_simsafe`). External: `numpy`,
+  `numba_cuda_mlir.numba_cuda` (config, types, typing helpers).
 - `cellmlmanip/`: external `lxml`, `networkx`, `Pint`, `rdflib`, `sympy`; consumed by
   `cubie.odesystems.symbolic.parsing.cellml`.

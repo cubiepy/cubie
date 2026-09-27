@@ -74,4 +74,4 @@ the field, a `SystemSizes` count and entries in the precision propagation of
   `cubie._serialize` (`canonical_digest`); `cubie._utils` (`PrecisionDType`);
   `cubie.odesystems.symbolic` (re-exported).
 ### External
-- `attrs`; `numpy`; `sympy` (`Symbol`); `numba`/`numba-cuda` (compilation in subclasses).
+- `attrs`; `numpy`; `sympy` (`Symbol`); numba-cuda-mlir (compilation in subclasses).

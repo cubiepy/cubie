@@ -115,4 +115,4 @@ events as complete.
   (`ArrayTypes`); `cubie.batchsolving.writeback_watcher` (`WritebackWatcher`);
   `cubie.cuda_simsafe` (`DeviceNDArrayBase`, `CUDA_SIMULATION`); `cubie._utils` (validators).
 ### External
-- `numpy`; `attrs`; `numba.cuda` (events in `OutputArrays.finalise`).
+- `numpy`; `attrs`; numba-cuda-mlir via `cuda_simsafe` (events in `OutputArrays.finalise`).

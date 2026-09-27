@@ -71,5 +71,5 @@ Built-in metrics
 Dependencies
 ------------
 
-* Compiles device functions via :class:`cubie.CUDAFactory` and :mod:`numba.cuda`.
+* Compiles device functions via :class:`cubie.CUDAFactory` and numba-cuda-mlir.
 * Consumes save/update cadence configuration from :mod:`cubie.outputhandling`.

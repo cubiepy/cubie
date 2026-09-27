@@ -10,13 +10,11 @@ provided as an argument to "cache".
 
 Notes
 -----
-This module depends on CUDA backend internal classes and may require
-updates when backend versions change. The cache base classes are
-imported from cubie.cuda_simsafe, which maps them per backend:
-numba-cuda's ``CacheImpl``/``CUDACache`` (a vendored ``CUDACache``
-under CUDASIM), or numba-cuda-mlir's ``MLIRCacheImpl``/``MLIRCache``
-whose compile-result scheme (cubin/PTX payloads) carries its own
-serialization.
+This module depends on numba-cuda-mlir internal classes and may
+require updates when its version changes. The cache base classes are
+numba-cuda-mlir's ``MLIRCacheImpl``/``MLIRCache``, re-exported by
+cubie.cuda_simsafe, whose compile-result scheme (cubin/PTX payloads)
+carries its own serialization.
 """
 
 import os
@@ -44,13 +42,11 @@ from cubie._env import (
     kernel_cache_dir_default,
     max_cache_entries_default,
 )
-from cubie.cuda_backend import CUDA_BACKEND, IS_MLIR
 from cubie.cuda_simsafe import (  # noqa: F401
     _CacheLocator,  # noqa: F401
     CacheImpl,  # noqa: F401
     CUDACache,
     IndexDataCacheFile,  # noqa: F401
-    is_cudasim_enabled,
 )
 from cubie.cache_root import get_cache_root
 from cubie.time_logger import default_timelogger
@@ -153,26 +149,18 @@ class _CacheFileLock(AbstractContextManager):
 CACHE_SCHEMA_VERSION = "cubie-cache-v1"
 """Serialized-artifact schema tag folded into the ABI fingerprint."""
 
-_BACKEND_ABI_DISTRIBUTIONS = {
-    "numba-cuda": (("numba-cuda",), ("numba",), ("llvmlite",)),
-    "mlir": (("cubie-numba-cuda-mlir", "numba-cuda-mlir"),),
-}
-"""Distributions whose versions define each backend's artifact ABI.
+_BACKEND_ABI_DISTRIBUTIONS = (
+    ("cubie-numba-cuda-mlir", "numba-cuda-mlir"),
+)
+"""Distributions whose versions define the artifact ABI.
 
-Keys must cover every backend name ``cubie.cuda_backend`` can
-resolve; a new backend without an entry fails fast at fingerprint
-time. Each inner tuple lists the alternative distributions that can
-provide one ABI component (the mlir backend ships as either cubie's
-wheel or the stock wheel, never both); the first installed
-alternative supplies the version, and a component with no installed
-alternative raises rather than silently dropping out of the
-fingerprint.
-
-numba-cuda artifacts are pickled ``_Kernel`` states whose layout
-follows numba-cuda itself and the numba/llvmlite serialization it
-builds on. MLIR artifacts are cubin/PTX compile-result payloads whose
-scheme is owned by the numba-cuda-mlir package (either the stock wheel
-or cubie's ``cubie-numba-cuda-mlir`` build, whichever is installed).
+Each inner tuple lists the alternative distributions that can provide
+one ABI component (numba-cuda-mlir ships as either cubie's wheel or
+the stock wheel, never both); the first installed alternative supplies
+the version, and a component with no installed alternative raises
+rather than silently dropping out of the fingerprint. Artifacts are
+cubin/PTX compile-result payloads whose scheme is owned by the
+numba-cuda-mlir package.
 """
 
 
@@ -181,9 +169,9 @@ def _abi_fingerprint_entries() -> list:
 
     Contains only inputs that can change the stored artifact's ABI or
     code-generation compatibility: the cache schema version, the
-    Python implementation ABI tag, the active backend identifier, the
-    active typed-IR block-schedule policy, and the backend/compiler
-    package versions that own the serialization format. Workspace
+    Python implementation ABI tag, the active typed-IR block-schedule
+    policy, and the backend/compiler package versions that own the
+    serialization format. Workspace
     paths, host identity, unrelated installed packages, and arbitrary
     environment state are deliberately absent.
     Target code-generation capability (compute capability and toolkit
@@ -199,10 +187,9 @@ def _abi_fingerprint_entries() -> list:
     entries = [
         f"schema={CACHE_SCHEMA_VERSION}",
         f"python-abi={abi_tag}",
-        f"backend={CUDA_BACKEND}",
         f"block-schedule={active_block_schedule()}",
     ]
-    for alternatives in _BACKEND_ABI_DISTRIBUTIONS[CUDA_BACKEND]:
+    for alternatives in _BACKEND_ABI_DISTRIBUTIONS:
         for dist_name in alternatives:
             try:
                 entries.append(
@@ -214,7 +201,7 @@ def _abi_fingerprint_entries() -> list:
         else:
             raise RuntimeError(
                 f"No installed distribution among {alternatives} "
-                f"provides the '{CUDA_BACKEND}' backend ABI; the "
+                "provides the numba-cuda-mlir ABI; the "
                 "cache fingerprint cannot be constructed."
             )
     return entries
@@ -310,92 +297,11 @@ class CUBIECacheLocator(_CacheLocator):
         )
 
 
-if IS_MLIR:
-
-    class _KernelSerialization:
-        """The MLIR compile-result scheme serializes itself.
-
-        ``MLIRCacheImpl`` (the ``CacheImpl`` base on this backend)
-        provides ``reduce``/``rebuild``/``check_cachable`` for
-        cubin/PTX compile-result payloads.
-        """
-
-else:
-
-    class _KernelSerialization:
-        """numba-cuda kernel serialization via ``_Kernel`` methods."""
-
-        def reduce(self, kernel) -> dict:
-            """Reduce kernel to serializable form.
-
-            Parameters
-            ----------
-            kernel
-                Compiled CUDA kernel with _reduce_states method.
-
-            Returns
-            -------
-            dict
-                Serializable state dictionary.
-            """
-            if not is_cudasim_enabled():
-                return kernel._reduce_states()
-            else:  # pragma: no cover - simulated
-                raise RuntimeError(
-                    "CUBIECacheImpl.reduce() was called inside "
-                    "CUDASIM mode, indicating a cache miss when "
-                    "there are no compiled kernels available. This "
-                    "indicates a config error; it should not be "
-                    "reachable if CUDASIM mode was properly enabled."
-                )
-
-        def rebuild(self, target_context, payload: dict):
-            """Rebuild kernel from cached payload.
-
-            Parameters
-            ----------
-            target_context
-                CUDA target context for kernel reconstruction.
-            payload
-                Serialized kernel state from reduce().
-
-            Returns
-            -------
-            _Kernel
-                Reconstructed CUDA kernel.
-            """
-            if not is_cudasim_enabled():
-                from numba.cuda.dispatcher import _Kernel
-
-                return _Kernel._rebuild(**payload)
-            else:  # pragma: no cover - simulated
-                raise RuntimeError(
-                    "CUBIECacheImpl.rebuild() was called inside "
-                    "CUDASIM mode, indicating a cache hit when "
-                    "there are no compiled kernels available. This "
-                    "indicates a config error; it should not be "
-                    "reachable if CUDASIM mode was properly enabled."
-                )
-
-        def check_cachable(self, data) -> bool:
-            """Check if the data is cachable.
-
-            CUDA kernels are always cachable.
-
-            Returns
-            -------
-            bool
-                Always True for CUDA kernels.
-            """
-            return True
-
-
-class CUBIECacheImpl(_KernelSerialization, CacheImpl):
+class CUBIECacheImpl(CacheImpl):
     """Serialization logic for CuBIE compiled kernels.
 
-    Delegates actual serialization to the backend's kernel or
-    compile-result methods
-    while using CuBIE-specific cache locator for file paths.
+    Delegates serialization to the backend's compile-result methods
+    while using the CuBIE-specific cache locator for file paths.
 
     Parameters
     ----------
@@ -511,17 +417,6 @@ class CUBIECache(CUDACache):
         )
         self._cache_path = self._impl.locator.get_cache_path()
 
-        # numba-cuda's CUDACache gained launch-config state (PR #804):
-        # the dispatcher calls is_launch_config_sensitive() on cached
-        # launches. This __init__ intentionally does not chain to
-        # CUDACache.__init__, so replicate that state here for the
-        # inherited launch-config methods to work.
-        self._launch_config_key = None
-        self._launch_config_sensitive_flag = None
-        marker_name = f"{self._impl.filename_base}.lcs"
-        self._launch_config_marker_path = os.path.join(
-            self._cache_path, marker_name
-        )
         self._cache_file = IndexDataCacheFile(
             cache_path=self._cache_path,
             filename_base=self._impl.filename_base,
@@ -534,23 +429,18 @@ class CUBIECache(CUDACache):
         self.enable()
 
     def _index_key(self, sig, codegen):
-        """Return the CuBIE and launch-specific cache key.
+        """Return the CuBIE cache key.
 
         Includes the cubie package source hash so package edits
-        invalidate cached kernels compiled from earlier source, and
-        the launch-config component the vendored ``CUDACache`` appends
-        for launch-config-sensitive kernels.
+        invalidate cached kernels compiled from earlier source.
         """
-        key = (
+        return (
             sig,
             codegen.magic_tuple(),
             self._system_hash,
             self._compile_settings_hash,
             package_source_hash(),
         )
-        if self._launch_config_key is not None:
-            key += (("launch_config", self._launch_config_key),)
-        return key
 
     def holds_kernel(self) -> bool:
         """Whether the index holds this system, config and source hash."""

@@ -56,6 +56,6 @@ Stream coordination
 Dependencies
 ------------
 
-The package requires :mod:`numba.cuda` for kernel launch, stream management,
+The package requires numba-cuda-mlir for kernel launch, stream management,
 and context access, and ``cuda.bindings`` for the stream-ordered device
 pool.

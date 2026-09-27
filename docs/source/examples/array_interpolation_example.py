@@ -4,7 +4,7 @@ The example builds a richly featured driver array with several harmonic and
 modulated components, compiles the :class:`~cubie.integrators.driver_array.
 ArrayInterpolator` device function, and then compares GPU-evaluated samples
 against SciPy's :class:`scipy.interpolate.CubicSpline`. The script requires
-SciPy, NumPy, Matplotlib, and a CUDA-capable device (or Numba's CUDA
+SciPy, NumPy, Matplotlib, and a CUDA-capable device (or cubie's CUDA
 simulator).
 """
 
