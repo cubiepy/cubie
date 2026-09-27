@@ -147,26 +147,31 @@ class _FakeEvent:
 
 
 _fake_stream = _FakeStream()
+
+
+def _fake_device_zeros(shape, dtype=np.float64, *args, **kwargs):
+    return _fake_device_array(np.zeros(shape, dtype=dtype))
+
+
+def _host_zeros(shape, dtype=np.float64, *args, **kwargs):
+    return np.zeros(shape, dtype=dtype)
+
+
+def _fake_new_event(timing=True):
+    return _FakeEvent()
+
+
+def _fake_new_stream(*args):
+    return _fake_stream
+
+
 if POPULATION:
     backend_cuda.to_device = _fake_to_device
-    backend_cuda.device_array = (
-        lambda shape, dtype=np.float64, *args, **kwargs: _fake_device_array(
-            np.zeros(shape, dtype=dtype)
-        )
-    )
-    backend_cuda.device_array_like = (
-        lambda ary, stream=0: _fake_device_array(np.zeros_like(ary))
-    )
-    backend_cuda.pinned_array = (
-        lambda shape, dtype=np.float64, *args, **kwargs: np.zeros(
-            shape, dtype=dtype
-        )
-    )
-    backend_cuda.event = lambda timing=True: _FakeEvent()
-    backend_cuda.synchronize = lambda: None
-    backend_cuda.stream = lambda: _fake_stream
-    backend_cuda.default_stream = lambda: _fake_stream
-    backend_cuda.external_stream = lambda ptr: _fake_stream
+    backend_cuda.device_array = _fake_device_zeros
+    backend_cuda.pinned_array = _host_zeros
+    backend_cuda.event = _fake_new_event
+    backend_cuda.stream = _fake_new_stream
+    backend_cuda.external_stream = _fake_new_stream
 
 if POPULATION:
     from cuda.core._device import ComputeCapability  # noqa: E402
@@ -188,21 +193,28 @@ if POPULATION:
         MAX_BLOCKS_PER_MULTIPROCESSOR=16,
     )
     _fake_context = SimpleNamespace(device=_fake_device)
-    backend_cuda.get_current_device = lambda: _fake_device
+
+    def _fake_current_device():
+        return _fake_device
+
+    def _fake_get_context(*args, **kwargs):
+        return _fake_context
+
+    backend_cuda.get_current_device = _fake_current_device
 
 if POPULATION and BACKEND == "numba-cuda":
     import numba.cuda.dispatcher as nb_dispatcher  # noqa: E402
     from numba.cuda.cudadrv import devices as nb_devices  # noqa: E402
 
-    nb_dispatcher.get_current_device = lambda: _fake_device
-    nb_devices.get_context = lambda *args, **kwargs: _fake_context
+    nb_dispatcher.get_current_device = _fake_current_device
+    nb_devices.get_context = _fake_get_context
 
 if POPULATION and BACKEND == "mlir":
     from numba_cuda_mlir.numba_cuda.cudadrv import (  # noqa: E402
         devices as mlir_devices,
     )
 
-    mlir_devices.get_context = lambda *args, **kwargs: _fake_context
+    mlir_devices.get_context = _fake_get_context
 
 
 def _host_copy(self, instance, from_arrays, to_arrays, stream=None):
@@ -384,9 +396,11 @@ if BACKEND == "numba-cuda":
     )
 
     if POPULATION:
-        _Kernel.bind = (
-            lambda self: self._codelibrary.get_cubin(cc=TARGET_CC)
-        )
+
+        def _bind_target_cubin(self):
+            return self._codelibrary.get_cubin(cc=TARGET_CC)
+
+        _Kernel.bind = _bind_target_cubin
 
     _dispatcher_init = CUDADispatcher.__init__
     _dispatcher_compile = CUDADispatcher.compile
@@ -525,17 +539,21 @@ else:
 if POPULATION:
     # Replace eager allocations with zero-filled host arrays.
     import cubie.memory.mem_manager as mem_manager  # noqa: E402
-    import cubie.memory.stream_groups as stream_groups  # noqa: E402
 
-    _batch_solver_kernel = importlib.import_module(
-        "cubie.batchsolving.BatchSolverKernel"
-    )
-    stream_groups.cuda = SimpleNamespace(stream=lambda: _fake_stream)
-    mem_manager._ensure_cuda_context = lambda: None
+    def _no_op(*args, **kwargs):
+        return None
+
+    def _always_idle(stream):
+        return True
+
+    def _never_pinned(array):
+        return False
+
+    mem_manager._ensure_cuda_context = _no_op
     # No CUDA driver: host buffers stand in for pinned blocks.
     mem_manager.page_locked_block = bytearray
-    mem_manager.stream_idle = lambda stream: True
-    mem_manager.flush_deferred_frees = lambda: None
+    mem_manager.stream_idle = _always_idle
+    mem_manager.flush_deferred_frees = _no_op
 
     # Compile the launch specialization; stand in for driver queries.
     _backend_utils = importlib.import_module("cubie.backend.utils")
@@ -546,16 +564,20 @@ if POPULATION:
         _attach_cache(dispatcher)
         return _production_compile(dispatcher, args)
 
+    def _population_kernel_resources(dispatcher, signature=None):
+        return _backend_utils.KernelResources(0, 0, 0)
+
+    def _population_active_blocks(
+        dispatcher, blocksize, dynamic_shared, signature=None
+    ):
+        return 1
+
     _backend_utils.compile_kernel_specialization = (
         _population_compile_kernel_specialization
     )
-    _backend_utils.kernel_resources = (
-        lambda dispatcher, signature=None: _backend_utils.KernelResources(
-            0, 0, 0
-        )
-    )
+    _backend_utils.kernel_resources = _population_kernel_resources
     _backend_utils.active_blocks_per_multiprocessor = (
-        lambda dispatcher, blocksize, dynamic_shared, signature=None: 1
+        _population_active_blocks
     )
     for _module_name in (
         "cubie.batchsolving.BatchSolverKernel",
@@ -575,21 +597,25 @@ if POPULATION:
                     getattr(_backend_utils, _helper_name),
                 )
 
+    def _population_allocate(self, shape, dtype, memory_type, stream=0):
+        return _fake_device_zeros(shape, dtype)
+
+    def _population_device_view(self, settings, key, request, stream):
+        return _fake_device_zeros(request.shape, request.dtype)
+
+    def _population_available_memory(self, group):
+        return 8 << 30
+
+    def _population_memory_info(self):
+        return 8 << 30, 24 << 30
+
     _MemoryManager = mem_manager.MemoryManager
-    _MemoryManager.allocate = (
-        lambda self, shape, dtype, memory_type, stream=0: _fake_device_array(
-            np.zeros(shape, dtype=dtype)
-        )
-    )
-    _MemoryManager._device_view = (
-        lambda self, settings, key, request, stream: _fake_device_array(
-            np.zeros(request.shape, dtype=request.dtype)
-        )
-    )
+    _MemoryManager.allocate = _population_allocate
+    _MemoryManager._device_view = _population_device_view
     _MemoryManager.to_device = _host_copy
     _MemoryManager.from_device = _host_copy
-    _MemoryManager.get_available_memory = lambda self, group: 8 << 30
-    _MemoryManager.get_memory_info = lambda self: (8 << 30, 24 << 30)
+    _MemoryManager.get_available_memory = _population_available_memory
+    _MemoryManager.get_memory_info = _population_memory_info
 
     # Read the patched figures into the already-built shared manager.
     from cubie.memory import default_memmgr as _default_memmgr  # noqa: E402
@@ -599,12 +625,14 @@ if POPULATION:
     # The busy-kernel fixture creates its stream through the driver.
     import cuda.bindings.driver as _cuda_driver  # noqa: E402
 
-    _cuda_driver.cuStreamCreate = (
-        lambda flags: (_cuda_driver.CUresult.CUDA_SUCCESS, 0)
-    )
-    _cuda_driver.cuStreamDestroy = (
-        lambda handle: (_cuda_driver.CUresult.CUDA_SUCCESS,)
-    )
+    def _population_stream_create(flags):
+        return _cuda_driver.CUresult.CUDA_SUCCESS, 0
+
+    def _population_stream_destroy(handle):
+        return (_cuda_driver.CUresult.CUDA_SUCCESS,)
+
+    _cuda_driver.cuStreamCreate = _population_stream_create
+    _cuda_driver.cuStreamDestroy = _population_stream_destroy
 
     # Placeholder host buffers are never page-locked.
     for _module_name in (
@@ -612,9 +640,7 @@ if POPULATION:
         "cubie.batchsolving.BatchInputHandler",
         "cubie.batchsolving.arrays.BaseArrayManager",
     ):
-        importlib.import_module(_module_name).is_pinned_array = (
-            lambda array: False
-        )
+        importlib.import_module(_module_name).is_pinned_array = _never_pinned
 
     import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
 
