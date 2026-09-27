@@ -1358,6 +1358,7 @@ class BatchSolverKernel(CUDAFactory):
             self.memory_manager.release_instance(id(self), settings)
         if finalizer is not None:
             finalizer.detach()
+        self.memory_manager.release_idle_memory(keep_recent=False)
         self._closed = True
 
     @property

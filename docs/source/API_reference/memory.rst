@@ -16,14 +16,13 @@ Memory
    memory/array_request
    memory/array_response
    memory/stream_groups
-   memory/current_cupy_stream
 
 The memory package coordinates GPU allocations across cubie. It exposes the
 package-level :class:`~cubie.memory.mem_manager.MemoryManager` through
 ``default_memmgr`` so integrators can request array buffers and register CUDA
-streams without rewriting the coordination code. CuPy is the single device
-allocation provider on a real GPU: device arrays come from CuPy's memory
-pool and host staging buffers from CuPy's pinned memory pool. Supporting
+streams without rewriting the coordination code. Device arrays come from
+the device's stream-ordered pool and are reused by later requests that fit;
+pinned host arrays come from Numba's page-locked allocations. Supporting
 modules describe allocation requests, track chunked response metadata, and
 manage stream groups.
 
@@ -54,16 +53,9 @@ Stream coordination
 
 * :doc:`StreamGroups <memory/stream_groups>` – assigns host instances to CUDA streams and manages synchronisation policies.
 
-CuPy stream interop
---------------------
-
-* :doc:`current_cupy_stream <memory/current_cupy_stream>` – context manager that binds a Numba stream to a CuPy stream so CuPy allocations and copies stay ordered with the Numba-launched kernel.
-
 Dependencies
 ------------
 
 The package requires :mod:`numba.cuda` for kernel launch, stream management,
-and context access. CuPy is required on a real GPU — it is CuBIE's single
-device memory allocator, imported at package import time through
-:mod:`cubie.cuda_simsafe`. Under the CUDA simulator (which never touches
-device memory) CuPy is not required and the import is skipped.
+and context access, and ``cuda.bindings`` for the stream-ordered device
+pool.

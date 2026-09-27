@@ -33,7 +33,7 @@ Run `pytest` from the repo root. `pyproject.toml` `addopts` already applies cove
 change — the full suite is slow. Run the complete simulator and real-GPU suites before opening or
 updating a PR; targeted subsets miss cross-cutting tests.
 - **Simulator (CPU, matches nocuda CI) — a first pass only:**
-  `NUMBA_ENABLE_CUDASIM=1 pytest -m "not nocudasim and not cupy and not specific_algos"`
+  `NUMBA_ENABLE_CUDASIM=1 pytest -m "not nocudasim and not specific_algos"`
 - **Real GPU (matches CUDA CI; CUDASIM off) — always run to verify results.** The simulator does
   not guarantee on-device correctness; a change is only verified once the real-GPU tests pass:
   `pytest -m "not specific_algos and not sim_only"` (add `and not mlir_only` on numba-cuda)
@@ -93,9 +93,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - Never call a `CUDAFactory.build()` directly — access compiled functions via the cached properties.
 - Never set/modify env vars in source (esp. `NUMBA_ENABLE_CUDASIM`); set them externally.
 - Module-scoped imports belong in the file header only; deliberate lazy imports of optional deps
-  (Qt) stay function-local. cupy/cupyx are required on a real GPU and imported
-  once, conditionally, in `cuda_simsafe` — import them from there (`from cubie.cuda_simsafe
-  import cupy, cupyx`), never directly and never lazily.
+  (Qt) stay function-local. CUDA driver calls (`cuda.bindings`) live in
+  `cuda_simsafe`; import the helpers from there.
 - In `CUDAFactory`/device-code files, use explicit imports with the project aliasing (`np_`,
   `attrsval_`, `attrs`-prefixed); store float config fields underscored and expose via a
   precision-casting property.
@@ -120,8 +119,6 @@ updating a PR; targeted subsets miss cross-cutting tests.
   The CUDA simulator exists only on numba-cuda.
 - **CUDA toolkit:** supplied by the `cuda12`/`cuda13`/`mlir-cuda12`/`mlir-cuda13` extras or an
   existing system install (the bare `cuda`/`mlir` extras use whatever toolkit the backend finds).
-- **CuPy is required for real-GPU execution** — it is cubie's single device memory allocator.
-  The toolkit extras pull in the matching cupy build alongside the toolkit wheels.
-  It is imported at `import cubie` through `cubie.cuda_simsafe`; the CUDA simulator
-  (`NUMBA_ENABLE_CUDASIM=1`) never requires it.
+- **Device memory** comes from Numba and the device's stream-ordered pool through
+  `cuda.bindings` (a dependency of both backends).
 - **Optional:** pandas (DataFrame output), matplotlib (driver plots).

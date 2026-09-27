@@ -329,7 +329,6 @@ class TestOutputArrays:
         assert output_arrays_manager.device_observables is not None
 
     @pytest.mark.nocudasim
-    @pytest.mark.cupy
     def test_finalise_method_copies_device_to_host(
         self, output_arrays_manager, solver, test_memory_manager
     ):

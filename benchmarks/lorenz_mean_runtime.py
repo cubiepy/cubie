@@ -115,7 +115,7 @@ import numpy as np
 
 import cubie as qb
 from cubie.cache_root import get_cache_root
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda, empty_pinned
+from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
 from cubie.time_logger import default_timelogger
 
 discarded_solves = 20
@@ -332,7 +332,7 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
 
 def pinned_copy(array):
     """Copy a host array into page-locked memory."""
-    pinned = empty_pinned(array.shape, array.dtype)
+    pinned = cuda.pinned_array(array.shape, array.dtype)
     pinned[...] = array
     return pinned
 

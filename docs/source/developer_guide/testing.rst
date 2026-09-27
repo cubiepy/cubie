@@ -13,7 +13,7 @@ Running Tests
 
    # CPU-only tests (CUDASIM mode)
    export NUMBA_ENABLE_CUDASIM=1
-   python -m pytest -m "not nocudasim and not cupy"
+   python -m pytest -m "not nocudasim"
 
    # Specific module
    python -m pytest tests/integrators/
@@ -26,9 +26,6 @@ Test Markers
 
 ``nocudasim``
    Test requires a real GPU; skip in CUDASIM mode.
-
-``cupy``
-   Test requires CuPy; skip if not installed.
 
 ``slow``
    Long-running test; useful with ``-m "not slow"`` for quick

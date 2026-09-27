@@ -58,4 +58,4 @@ jobs:
 
       run: |
         # Dump all thread stacks and kill the worker on a 600s stall.
-        pytest -m "not nocudasim and not cupy and not specific_algos" -n logical -o faulthandler_timeout=600 -o faulthandler_exit_on_timeout=true
+        pytest -m "not nocudasim and not specific_algos" -n logical -o faulthandler_timeout=600 -o faulthandler_exit_on_timeout=true

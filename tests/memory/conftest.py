@@ -70,13 +70,6 @@ class MemoryClient:
         self.last_response = response
 
 
-class DummyStream:
-    """Stand-in for a CUDA stream exposing only ``handle``."""
-
-    def __init__(self, handle):
-        self.handle = handle
-
-
 class FakeAllocation:
     """Stand-in allocation exposing only ``nbytes``."""
 

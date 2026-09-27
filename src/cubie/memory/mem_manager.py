@@ -51,7 +51,6 @@ See Also
 from collections import deque
 from tempfile import mkstemp
 from threading import Lock
-from types import TracebackType
 from functools import partial
 from typing import Any, Optional, Callable, Dict, Set, Tuple, Union
 from warnings import warn
@@ -85,11 +84,14 @@ from math import prod
 from cubie.cuda_simsafe import (
     CUDA_SIMULATION,
     CudaSupportError,
+    DeviceNDArray,
     Stream,
-    cupy,
     current_mem_info,
-    empty_pinned,
-    free_all_pinned_blocks,
+    flush_deferred_frees,
+    page_locked_block,
+    pool_idle_bytes,
+    stream_idle,
+    stream_ordered_buffer,
 )
 from cubie.memory.stream_groups import StreamGroups
 from cubie.memory.array_requests import ArrayRequest, ArrayResponse
@@ -111,6 +113,9 @@ MIN_AUTOPOOL_SIZE = 0.05
 HOST_SPILL_FRACTION = 0.8
 """Fraction of total system RAM available to host arrays."""
 
+HOST_OS_RESERVE_BYTES = 512 * 1024**2
+"""Available RAM staging growth leaves to the OS; a chosen margin."""
+
 HOST_STAGING_BYTES = 64 * 1024**2
 """Maximum pinned staging bytes used by one host transfer.
 
@@ -119,7 +124,7 @@ bounding the pinned footprint of a chunked or spilled solve.
 """
 
 STAGING_POOL_DEPTH = 8
-"""Maximum in-flight pinned staging buffers per label and shape."""
+"""Maximum in-flight pinned staging buffers per label."""
 
 CHUNK_HEADROOM_FRACTION = 0.02
 """Fraction of available memory chunk sizing leaves unallocated."""
@@ -191,9 +196,7 @@ def available_system_ram() -> int:
 
 def host_headroom_bytes() -> int:
     """Return available RAM above the OS reserve."""
-    total = total_system_ram()
-    available = available_system_ram()
-    return available - int((1 - HOST_SPILL_FRACTION) * total)
+    return available_system_ram() - HOST_OS_RESERVE_BYTES
 
 
 def _remove_spill_file(mapping: Any, path: str) -> None:
@@ -207,6 +210,25 @@ def _remove_spill_file(mapping: Any, path: str) -> None:
         os.remove(path)
     except OSError as error:  # pragma: no cover - filesystem failure
         warn(f"Could not remove spill file '{path}': {error}", ResourceWarning)
+
+
+def c_contiguous_view(
+    buffer: Any, shape: Tuple[int, ...], dtype: DTypeLike
+) -> Any:
+    """View the start of a flat byte device buffer as a C array."""
+    itemsize = np_dtype(dtype).itemsize
+    strides = []
+    step = itemsize
+    for extent in reversed(shape):
+        strides.append(step)
+        step *= extent
+    return DeviceNDArray(
+        tuple(shape),
+        tuple(reversed(strides)),
+        np_dtype(dtype),
+        stream=buffer.stream,
+        gpu_data=buffer.gpu_data,
+    )
 
 
 def placeholder_invalidate() -> None:
@@ -316,123 +338,6 @@ def _ensure_cuda_context() -> None:
             ) from e
 
 
-def _numba_stream_ptr(
-    nb_stream: Optional[Stream],
-) -> Optional[int]:
-    """
-    Extract a ``CUstream`` pointer from a Numba stream wrapper.
-
-    Parameters
-    ----------
-    nb_stream
-        Numba CUDA stream whose ``CUstream`` pointer should be extracted. When
-        ``None``, pointer extraction is skipped.
-
-    Returns
-    -------
-    int or None
-        Pointer value compatible with CuPy external streams, or ``None`` when
-        extraction fails.
-
-    Notes
-    -----
-    The function checks common attribute layouts across supported Numba
-    versions to maintain compatibility.
-    """
-    if nb_stream is None:
-        return None
-    h = getattr(nb_stream, "handle", None)
-    if h is None:
-        return None
-    # ctypes.c_void_p or int-like
-    if isinstance(h, ctypes.c_void_p):
-        return int(h.value) if h.value is not None else None
-    try:
-        return int(getattr(h, "value", h))
-    except Exception:
-        return None
-
-
-class current_cupy_stream:
-    """Context manager that forwards a Numba stream into CuPy APIs.
-
-    CuPy is CuBIE's single GPU allocation provider on a real device.
-    Wrapping allocations and host/device copies in this context keeps
-    them ordered on the same stream as the Numba-launched integration
-    kernel.
-
-    Parameters
-    ----------
-    nb_stream
-        Numba CUDA stream to expose to CuPy.
-
-    Attributes
-    ----------
-    nb_stream
-        The Numba stream being forwarded.
-    cupy_ext_stream
-        CuPy external stream wrapper around the Numba stream.
-
-    Notes
-    -----
-    Numba's default stream (handle ``0``) is left as CuPy's ambient
-    current stream rather than wrapped, matching Numba's own default
-    stream semantics.
-    """
-
-    def __init__(self, nb_stream: Stream) -> None:
-        self.nb_stream = nb_stream
-        self.cupy_ext_stream = None
-
-    def __enter__(self) -> "current_cupy_stream":
-        """
-        Enter the context and set up a CuPy external stream.
-
-        Returns
-        -------
-        current_cupy_stream
-            The active context manager instance.
-        """
-        ptr = _numba_stream_ptr(self.nb_stream)
-        if ptr:
-            # Numba streams implement the __cuda_stream__ protocol, so
-            # from_external wraps the stream object directly.
-            self.cupy_ext_stream = cupy.cuda.Stream.from_external(
-                self.nb_stream
-            )
-            self.cupy_ext_stream.__enter__()
-        return self
-
-    def __exit__(
-        self,
-        exc_type: Optional[type[BaseException]],
-        exc: Optional[BaseException],
-        tb: Optional[TracebackType],
-    ) -> Optional[bool]:
-        """Exit the context and clean up the CuPy external stream.
-
-        Parameters
-        ----------
-        exc_type
-            Exception type if an exception occurred.
-        exc
-            Exception instance if an exception occurred.
-        tb
-            Traceback object if an exception occurred.
-
-        Returns
-        -------
-        Optional[bool]
-            The inner stream's suppression decision, or ``None``
-            when no external stream is active.
-        """
-        if self.cupy_ext_stream is not None:
-            result = self.cupy_ext_stream.__exit__(exc_type, exc, tb)
-            self.cupy_ext_stream = None
-            return result
-        return None
-
-
 # These will be keys to a dict, so must be hashable: eq=False
 @define(eq=False)
 class InstanceMemorySettings:
@@ -445,6 +350,8 @@ class InstanceMemorySettings:
         Proportion of total VRAM assigned to this instance.
     allocations
         Dictionary of current allocations keyed by label.
+    buffers
+        Device buffer behind each device allocation, keyed by label.
     invalidate_hook
         Function to call when CUDA memory system changes occur.
     allocation_ready_hook
@@ -461,6 +368,9 @@ class InstanceMemorySettings:
         Proportion of total VRAM assigned to this instance.
     allocations : dict
         Dictionary of current allocations keyed by array label.
+    buffers : dict
+        Flat device buffer each device allocation views, keyed by
+        label. A later request that fits reuses it.
     invalidate_hook : callable
         Function to call when CUDA memory system changes.
     allocation_ready_hook : callable
@@ -473,7 +383,8 @@ class InstanceMemorySettings:
     Properties
     ----------
     allocated_bytes : int
-        Total number of bytes across all allocated arrays for the instance.
+        Bytes held for the instance: device buffers at full size plus
+        other allocations.
 
     Notes
     -----
@@ -491,6 +402,9 @@ class InstanceMemorySettings:
         default=1.0, validator=attrsval_instance_of(float)
     )
     allocations: dict = field(
+        default=attrsFactory(dict), validator=attrsval_instance_of(dict)
+    )
+    buffers: dict = field(
         default=attrsFactory(dict), validator=attrsval_instance_of(dict)
     )
     invalidate_hook: Callable[[], None] = field(
@@ -519,27 +433,6 @@ class InstanceMemorySettings:
     owner_id: Optional[int] = field(default=None)
     last_used: int = field(default=0, validator=attrsval_instance_of(int))
 
-    def add_allocation(self, key: str, arr: Any) -> None:
-        """Add an allocation to the instance's allocations list.
-
-        Parameters
-        ----------
-        key
-            Label for the allocation.
-        arr
-            Allocated array object.
-
-        Notes
-        -----
-        If a previous allocation exists with the same key, it is
-        freed before adding the new allocation.
-        """
-
-        if key in self.allocations:
-            # Free the old allocation before adding the new one
-            self.free(key)
-        self.allocations[key] = arr
-
     def free(self, key: str) -> None:
         """Free an allocation by key.
 
@@ -552,6 +445,7 @@ class InstanceMemorySettings:
         -----
         Emits a warning if the key is not found in allocations.
         """
+        self.buffers.pop(key, None)
         if key in self.allocations:
             del self.allocations[key]
         else:
@@ -561,19 +455,22 @@ class InstanceMemorySettings:
             )
 
     def free_all(self) -> None:
-        """Release allocations on their last stream."""
-        if CUDA_SIMULATION or self.last_stream is None:
-            self.allocations.clear()
-            return
-        with current_cupy_stream(self.last_stream):
-            self.allocations.clear()
+        """Release allocations, then sync their last stream.
+
+        The sync returns freed pool memory to the device.
+        """
+        self.allocations.clear()
+        self.buffers.clear()
+        if not CUDA_SIMULATION and self.last_stream is not None:
+            self.last_stream.synchronize()
 
     @property
     def allocated_bytes(self) -> int:
-        """Total bytes allocated across tracked arrays."""
+        """Bytes held: device buffers at full size plus other arrays."""
         total = 0
-        for arr in self.allocations.values():
-            total += arr.nbytes
+        for key, arr in self.allocations.items():
+            buffer = self.buffers.get(key)
+            total += arr.nbytes if buffer is None else buffer.nbytes
         return total
 
     @property
@@ -673,13 +570,13 @@ class MemoryManager:
         default=ALLOCATION_GRANULE_BYTES,
         validator=getype_validator(int, 0),
     )
-    # Pinned ledger: live backs reachable arrays; retained is
-    # page-locked memory held only by CuPy's pinned pool.
-    # Finalizers queue releases; the ledger drains them under the lock.
+    # Pinned bytes of reachable arrays; finalizers queue releases.
     _pinned_lock: Lock = field(factory=Lock, init=False)
     _pinned_live_bytes: int = field(default=0, init=False)
-    _pinned_retained_bytes: int = field(default=0, init=False)
     _pinned_releases: deque = field(factory=deque, init=False)
+    # Idle pinned blocks: [block, nbytes, generation idle since].
+    _idle_pinned: list = field(factory=list, init=False)
+    _pinned_generation: int = field(default=0, init=False)
     # Cause for the NoCudaDeviceError a sizing decision raises.
     _device_probe_error: Optional[BaseException] = field(
         default=None, init=False
@@ -1370,8 +1267,8 @@ class MemoryManager:
                 break
             for settings in owned:
                 released += settings.allocated_bytes
-                settings.free_all()
                 settings.invalidate_hook()
+                settings.free_all()
         return released
 
     def _rebalance_auto_pool(self) -> None:
@@ -1462,57 +1359,85 @@ class MemoryManager:
             return self._pinned_live_bytes
 
     @property
-    def pinned_retained_bytes(self) -> int:
-        """Pinned bytes held only by CuPy's pinned pool."""
+    def pinned_idle_bytes(self) -> int:
+        """Pinned bytes held for reuse by no reachable array."""
         with self._pinned_lock:
             self._apply_pinned_releases()
-            return self._pinned_retained_bytes
+            return sum(entry[1] for entry in self._idle_pinned)
 
     def _apply_pinned_releases(self) -> None:
-        """Move queued finalizer releases from live to retained."""
+        """Move collected pinned blocks to the idle list."""
         while True:
             try:
-                nbytes = self._pinned_releases.popleft()
+                block, nbytes = self._pinned_releases.popleft()
             except IndexError:
                 return
             self._pinned_live_bytes -= nbytes
-            self._pinned_retained_bytes += nbytes
+            self._idle_pinned.append(
+                [block, nbytes, self._pinned_generation]
+            )
+
+    def _group_streams_idle(self) -> bool:
+        """Return whether every group stream has finished its work."""
+        return all(
+            stream_idle(stream)
+            for stream in self.stream_groups.streams.values()
+        )
+
+    def _take_idle_pinned(self, nbytes: int) -> Optional[list]:
+        """Claim the smallest reusable idle block that fits."""
+        generation = self._pinned_generation
+        streams_idle = self._group_streams_idle()
+        # A busy stream may still copy into a recently idled block.
+        fitting = [
+            entry for entry in self._idle_pinned
+            if entry[1] >= nbytes
+            and (streams_idle or entry[2] < generation)
+        ]
+        if not fitting:
+            return None
+        entry = min(fitting, key=lambda item: item[1])
+        self._idle_pinned.remove(entry)
+        self._pinned_live_bytes += entry[1]
+        return entry
 
     def _reserve_pinned_bytes(self, nbytes: int, force: bool = False) -> bool:
-        """Atomically reserve ``nbytes`` against the pinned budget.
-
-        Live and retained bytes count together; pressure empties the
-        CuPy pinned pool before a refusal. ``force`` reserves past
-        the budget.
-        """
+        """Reserve ``nbytes`` against the pinned budget unless forced."""
         with self._pinned_lock:
             self._apply_pinned_releases()
             budget = self.pinned_budget_bytes
-            held = self._pinned_live_bytes + self._pinned_retained_bytes
-            if held + nbytes > budget:
-                self._flush_retained_pinned()
+            idle = sum(entry[1] for entry in self._idle_pinned)
+            if self._pinned_live_bytes + idle + nbytes > budget:
+                # Free idle blocks now; this waits for the device.
+                self._idle_pinned.clear()
+                flush_deferred_frees()
             if not force and self._pinned_live_bytes + nbytes > budget:
                 return False
             self._pinned_live_bytes += nbytes
             return True
 
-    def _flush_retained_pinned(self) -> None:
-        """Return the pool's page-locked blocks to the OS; lock held."""
-        free_all_pinned_blocks()
-        self._pinned_retained_bytes = 0
-
-    def flush_pinned_pool(self) -> None:
-        """Release every page-locked block CuPy's pinned pool retains.
-
-        Freeing page-locked memory synchronizes the whole device.
-        """
+    def release_idle_memory(self, keep_recent: bool = True) -> None:
+        """Free stale idle blocks; ``keep_recent=False`` frees all."""
+        if keep_recent and not (self._idle_pinned or self._pinned_releases):
+            return
+        if not self._group_streams_idle():
+            return
         with self._pinned_lock:
             self._apply_pinned_releases()
-            self._flush_retained_pinned()
+            generation = self._pinned_generation
+            idle = len(self._idle_pinned)
+            self._idle_pinned = [
+                entry for entry in self._idle_pinned
+                if keep_recent and entry[2] == generation
+            ]
+            freed = len(self._idle_pinned) < idle
+            self._pinned_generation = generation + 1
+        if freed or not keep_recent:
+            flush_deferred_frees()
 
-    def _on_pinned_released(self, nbytes: int) -> None:
-        """Queue a collected pinned array's bytes without locking."""
-        self._pinned_releases.append(nbytes)
+    def _on_pinned_released(self, block: Any, nbytes: int) -> None:
+        """Queue a collected pinned array's block without locking."""
+        self._pinned_releases.append((block, nbytes))
 
     def allocate_pinned_array(
         self,
@@ -1522,9 +1447,9 @@ class MemoryManager:
     ) -> Optional[ndarray]:
         """Allocate one budget-accounted pinned host array.
 
-        Reserves bytes, attempts the driver allocation, and attaches
-        a finalizer that releases the bytes once the array and every
-        view of it are collected.
+        Reuses the smallest reusable idle block that fits, else
+        reserves bytes and allocates a block. The block goes idle once
+        the array and every view of it are collected.
 
         Parameters
         ----------
@@ -1547,20 +1472,28 @@ class MemoryManager:
         NoCudaDeviceError
             If the last device probe failed.
         """
-        nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
-        if not self._reserve_pinned_bytes(nbytes, force=force):
-            return None
-        try:
-            arr = empty_pinned(shape, dtype)
-        except Exception:
-            # Driver refused: return the reservation to the budget.
-            with self._pinned_lock:
-                self._pinned_live_bytes -= nbytes
-            if force:
-                # Forced callers were promised pinned: re-raise.
-                raise
-            return None
-        finalize(arr, self._on_pinned_released, nbytes)
+        nbytes = max(int(prod(shape)) * np_dtype(dtype).itemsize, 1)
+        with self._pinned_lock:
+            self._apply_pinned_releases()
+            entry = self._take_idle_pinned(nbytes)
+        if entry is not None:
+            block, capacity = entry[0], entry[1]
+        else:
+            if not self._reserve_pinned_bytes(nbytes, force=force):
+                return None
+            try:
+                block = page_locked_block(nbytes)
+            except Exception:
+                # Driver refused: return the reservation to the budget.
+                with self._pinned_lock:
+                    self._pinned_live_bytes -= nbytes
+                if force:
+                    # Forced callers were promised pinned: re-raise.
+                    raise
+                return None
+            capacity = nbytes
+        arr = ndarray(shape, dtype=dtype, buffer=block)
+        finalize(arr, self._on_pinned_released, block, capacity)
         return arr
 
     def create_host_array(
@@ -1736,9 +1669,11 @@ class MemoryManager:
         Returns
         -------
         tuple of int
-            (free_memory, total_memory) in bytes.
+            (free_memory, total_memory) in bytes. Free memory includes
+            bytes the device pool holds but no array uses.
         """
-        return current_mem_info()
+        free, total = current_mem_info()
+        return free + pool_idle_bytes(), total
 
     def get_stream_group(self, instance: object) -> str:
         """
@@ -1811,32 +1746,50 @@ class MemoryManager:
             settings if settings is not None else self.registry[instance_id]
         )
         instance_settings.last_stream = stream
-        # Release the buffers these requests replace first.
-        replaced = [
-            key for key in requests if key in instance_settings.allocations
-        ]
-        if replaced:
-            if CUDA_SIMULATION:
-                for key in replaced:
-                    instance_settings.free(key)
-            else:
-                with current_cupy_stream(stream):
-                    for key in replaced:
-                        instance_settings.free(key)
         for key, request in requests.items():
-            arr = self.allocate(
-                shape=request.shape,
-                dtype=request.dtype,
-                memory_type=request.memory,
-                stream=stream,
-            )
-            if CUDA_SIMULATION or request.memory != "device":
-                instance_settings.add_allocation(key, arr)
+            if request.memory == "device":
+                arr = self._device_view(
+                    instance_settings, key, request, stream
+                )
             else:
-                with current_cupy_stream(stream):
-                    instance_settings.add_allocation(key, arr)
+                # Release the array this request replaces first.
+                if key in instance_settings.allocations:
+                    instance_settings.free(key)
+                arr = self.allocate(
+                    shape=request.shape,
+                    dtype=request.dtype,
+                    memory_type=request.memory,
+                    stream=stream,
+                )
+            instance_settings.allocations[key] = arr
             responses[key] = arr
         return responses
+
+    def _device_view(
+        self,
+        settings: InstanceMemorySettings,
+        key: str,
+        request: ArrayRequest,
+        stream: Stream,
+    ) -> object:
+        """View the label's buffer, replaced when small or off-stream."""
+        _ensure_cuda_context()
+        if CUDA_SIMULATION:  # pragma: no cover - simulated
+            return cuda.device_array(request.shape, request.dtype)
+        nbytes = prod(request.shape) * np_dtype(request.dtype).itemsize
+        buffer = settings.buffers.get(key)
+        if (
+            buffer is None
+            or buffer.nbytes < nbytes
+            or buffer.stream is not stream
+        ):
+            # Drop every reference so the pool can reuse the bytes.
+            buffer = None
+            settings.buffers.pop(key, None)
+            settings.allocations.pop(key, None)
+            buffer = stream_ordered_buffer(max(nbytes, 1), stream)
+            settings.buffers[key] = buffer
+        return c_contiguous_view(buffer, request.shape, request.dtype)
 
     def allocate(
         self,
@@ -1857,7 +1810,8 @@ class MemoryManager:
         memory_type
             Type of memory: "device" or "pinned".
         stream
-            CUDA stream for the allocation. Defaults to 0.
+            Stream device memory is ordered on; ``0`` uses the
+            default group stream.
 
         Returns
         -------
@@ -1871,12 +1825,13 @@ class MemoryManager:
         """
         _ensure_cuda_context()
         if memory_type == "device":
-            # Native Numba array from the CuPy async pool (via the EMM).
-            # current_cupy_stream makes the pool allocation stream-ordered.
             if CUDA_SIMULATION:  # pragma: no cover - simulated
                 return cuda.device_array(shape, dtype)
-            with current_cupy_stream(stream):
-                return cuda.device_array(shape, dtype)
+            if not isinstance(stream, Stream):
+                stream = self.get_group_stream()
+            nbytes = prod(shape) * np_dtype(dtype).itemsize
+            buffer = stream_ordered_buffer(max(nbytes, 1), stream)
+            return c_contiguous_view(buffer, shape, dtype)
         elif memory_type == "pinned":
             # Pinned was requested by name: force, driver errors raise.
             return self.allocate_pinned_array(shape, dtype, force=True)
@@ -2150,11 +2105,7 @@ class MemoryManager:
                 chunked_shapes=chunked_shapes,
             )
 
-            if CUDA_SIMULATION:
-                settings.allocation_ready_hook(response)
-            else:
-                with current_cupy_stream(stream):
-                    settings.allocation_ready_hook(response)
+            settings.allocation_ready_hook(response)
 
         for peer in notaries:
             peer_settings = self.registry.get(peer)
@@ -2399,15 +2350,9 @@ def run_instance_teardown(
 ) -> None:
     """Best-effort cleanup for a collected client."""
     try:
-        if CUDA_SIMULATION or settings.last_stream is None:
-            for cleanup in cleanups:
-                cleanup()
-            memory_manager.release_instance(instance_id, settings)
-        else:
-            with current_cupy_stream(settings.last_stream):
-                for cleanup in cleanups:
-                    cleanup()
-                memory_manager.release_instance(instance_id, settings)
+        for cleanup in cleanups:
+            cleanup()
+        memory_manager.release_instance(instance_id, settings)
     except Exception:  # pragma: no cover - defensive at shutdown
         # Keep the entry alive if cleanup could not safely finish.
         settings.instance_ref = None

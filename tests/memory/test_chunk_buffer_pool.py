@@ -70,6 +70,29 @@ def test_acquire_allocates_new_for_different_shape(mgr):
     assert buf1.buffer_id != buf2.buffer_id
 
 
+def test_acquire_reuses_released_buffer_for_smaller_block(mgr):
+    """A released buffer serves a smaller block of any shape."""
+    pool = ChunkBufferPool(memory_manager=mgr)
+    buf1 = pool.acquire("x", (10, 4), np.float32)
+    address = buf1.array.ctypes.data
+    pool.release(buf1)
+    buf2 = pool.acquire("x", (3, 5), np.float32)
+    assert buf2 is buf1
+    assert buf2.array.shape == (3, 5)
+    assert buf2.array.ctypes.data == address
+
+
+def test_acquire_replaces_released_buffers_too_small(mgr):
+    """Released buffers too small for the block are replaced."""
+    pool = _UnthrottledPool(memory_manager=mgr)
+    buf1 = pool.acquire("x", (10,), np.float32)
+    buf2 = pool.acquire("x", (10,), np.float32)
+    pool.release(buf1)
+    pool.release(buf2)
+    buf3 = pool.acquire("x", (20,), np.float32)
+    assert pool._buffers["x"] == [buf3]
+
+
 def test_acquire_allocates_new_for_different_dtype(mgr):
     """acquire allocates new buffer when dtype differs."""
     pool = ChunkBufferPool(memory_manager=mgr)

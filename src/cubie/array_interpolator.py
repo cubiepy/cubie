@@ -64,7 +64,7 @@ from cubie.cuda_simsafe import cuda, int32
 from cubie.cuda_simsafe import unroll_if
 from numpy.typing import NDArray
 
-from cubie.cuda_simsafe import CUDA_SIMULATION, cupy, selp
+from cubie.cuda_simsafe import CUDA_SIMULATION, selp
 from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
@@ -75,7 +75,7 @@ from cubie._utils import (
     PrecisionDType,
     gttype_validator,
 )
-from cubie.memory import current_cupy_stream, default_memmgr
+from cubie.memory import default_memmgr
 
 if TYPE_CHECKING:
     from cubie.memory.mem_manager import MemoryManager
@@ -679,13 +679,13 @@ class ArrayInterpolator(CUDAFactory):
                 dtype=self.precision,
             )
         else:
-            with current_cupy_stream(stream):
-                times_device = cupy.asarray(times)
-                coefficients_device = cupy.asarray(coefficients)
-                out_device = cupy.empty(
-                    (num_points, self.num_inputs),
-                    dtype=self.precision,
-                )
+            times_device = cuda.to_device(times, stream=stream)
+            coefficients_device = cuda.to_device(coefficients, stream=stream)
+            out_device = cuda.device_array(
+                (num_points, self.num_inputs),
+                dtype=self.precision,
+                stream=stream,
+            )
 
         threads_per_block = 128
         blocks_per_grid = (num_points + threads_per_block - 1) // (
@@ -700,7 +700,7 @@ class ArrayInterpolator(CUDAFactory):
 
         if CUDA_SIMULATION:  # pragma: no cover - simulated
             return out_device
-        return out_device.get()
+        return out_device.copy_to_host()
 
     def plot_interpolated(
         self,

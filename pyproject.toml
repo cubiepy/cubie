@@ -46,12 +46,10 @@ Issues = "https://github.com/ccam80/cubie/issues"
 # installs numba-cuda-mlir (the default backend) or numba-cuda (the
 # deprecated fallback: unexpected errors, Python 3.10, or the CUDA
 # simulator). A backendless install fails at import with instructions
-# (cubie.cuda_backend). CuPy is cubie's single device memory
-# allocator on a real GPU, so the toolkit lanes pull in the matching
-# cupy build alongside the toolkit wheels. The bare 'mlir'/'cuda'
-# extras install a backend without toolkit wheels, for machines with
-# a system CUDA install. The mlir lanes need Python >= 3.11
-# (enforced by the numba-cuda-mlir wheel).
+# (cubie.cuda_backend). The bare 'mlir'/'cuda' extras install a
+# backend without toolkit wheels, for machines with a system CUDA
+# install. The mlir lanes need Python >= 3.11 (enforced by the
+# numba-cuda-mlir wheel).
 #
 # The mlir* extras install cubie-numba-cuda-mlir: cubie's build of
 # numba-cuda-mlir carrying the native (C++) fixes pending upstream,
@@ -61,11 +59,11 @@ Issues = "https://github.com/ccam80/cubie/issues"
 # at runtime by cubie.backend._mlir_compat, written for this exact
 # wheel version.
 mlir = ["cubie-numba-cuda-mlir==0.5.3.1"] # MLIR backend, system toolkit
-mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1", "cupy-cuda12x"]
-mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1", "cupy-cuda13x"]
+mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1"]
+mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1"]
 cuda = ["numba-cuda"] # deprecated numba-cuda backend, system toolkit
-cuda12 = ["numba-cuda[cu12]", "cupy-cuda12x"] # CUDA 12 toolkit + CuPy
-cuda13 = ["numba-cuda[cu13]", "cupy-cuda13x"] # CUDA 13 toolkit + CuPy
+cuda12 = ["numba-cuda[cu12]"] # CUDA 12 toolkit
+cuda13 = ["numba-cuda[cu13]"] # CUDA 13 toolkit
 test = [
     "pytest",
     "pytest-cov",
@@ -99,7 +97,6 @@ testpaths = [
 ]
 markers = [
     "nocudasim: Will fail if run on the GPU simulator, only test on real GPU",
-    "cupy: Requires optional dependency CuPy, will fail if not installed",
     "slow: Marks tests that are slow to run, can be skipped with -m 'not slow'",
     "specific_algos: Marks tests covering non-default algorithm tableau aliases",
     "sim_only: Marks tests that can only run on the CUDA simulator (debug tests only, otherwise what's the point?)",
