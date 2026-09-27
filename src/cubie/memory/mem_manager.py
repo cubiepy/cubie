@@ -76,7 +76,6 @@ from numpy import (
     memmap as np_memmap,
     ndarray,
     floor as np_floor,
-    uint8 as np_uint8,
     zeros as np_zeros,
 )
 from numpy.typing import DTypeLike
@@ -229,23 +228,6 @@ def c_contiguous_view(
         stream=buffer.stream,
         gpu_data=buffer.gpu_data,
     )
-
-
-def pinned_view(
-    array: ndarray, shape: Tuple[int, ...], dtype: DTypeLike
-) -> Optional[ndarray]:
-    """View the start of ``array``'s allocation as a C array.
-
-    Returns ``None`` when the allocation is too small.
-    """
-    root = array
-    while isinstance(root.base, ndarray):
-        root = root.base
-    nbytes = prod(shape) * np_dtype(dtype).itemsize
-    if nbytes > root.nbytes or not root.flags["C_CONTIGUOUS"]:
-        return None
-    flat = root.reshape(-1).view(np_uint8)
-    return flat[:nbytes].view(dtype).reshape(shape)
 
 
 def placeholder_invalidate() -> None:
@@ -449,27 +431,6 @@ class InstanceMemorySettings:
     # owner id are evicted together or not at all.
     owner_id: Optional[int] = field(default=None)
     last_used: int = field(default=0, validator=attrsval_instance_of(int))
-
-    def add_allocation(self, key: str, arr: Any) -> None:
-        """Add an allocation to the instance's allocations list.
-
-        Parameters
-        ----------
-        key
-            Label for the allocation.
-        arr
-            Allocated array object.
-
-        Notes
-        -----
-        If a previous allocation exists with the same key, it is
-        freed before adding the new allocation.
-        """
-
-        if key in self.allocations:
-            # Free the old allocation before adding the new one
-            self.free(key)
-        self.allocations[key] = arr
 
     def free(self, key: str) -> None:
         """Free an allocation by key.
@@ -1806,14 +1767,19 @@ class MemoryManager:
         request: ArrayRequest,
         stream: Stream,
     ) -> object:
-        """View the label's device buffer, growing it when too small."""
+        """View the label's buffer, replaced when small or off-stream."""
         _ensure_cuda_context()
         if CUDA_SIMULATION:  # pragma: no cover - simulated
             return cuda.device_array(request.shape, request.dtype)
         nbytes = prod(request.shape) * np_dtype(request.dtype).itemsize
         buffer = settings.buffers.get(key)
-        if buffer is None or buffer.nbytes < nbytes:
-            # Drop the old buffer first so the pool can reuse it.
+        if (
+            buffer is None
+            or buffer.nbytes < nbytes
+            or buffer.stream is not stream
+        ):
+            # Drop every reference so the pool can reuse the bytes.
+            buffer = None
             settings.buffers.pop(key, None)
             settings.allocations.pop(key, None)
             buffer = stream_ordered_buffer(max(nbytes, 1), stream)

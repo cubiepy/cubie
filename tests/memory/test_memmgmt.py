@@ -3,6 +3,7 @@ from pathlib import Path
 import weakref
 
 import pytest
+from cuda.bindings import driver as cuda_driver
 
 from cubie.cuda_simsafe import cuda
 
@@ -50,17 +51,10 @@ class TestInstanceMemorySettings:
         assert callable(instance_settings_obj.invalidate_hook)
         assert isinstance(instance_settings_obj.allocations, dict)
 
-    def test_add_allocation(self, instance_settings_obj):
-        # test that add_allocation adds the reference to the allocations dict
-        arr = np.ndarray((10,), dtype=np.float64)
-        instance_settings_obj.add_allocation("foo", arr)
-        assert "foo" in instance_settings_obj.allocations
-        assert instance_settings_obj.allocations["foo"] is arr
-
     def test_free(self, instance_settings_obj):
         # test that free removes the reference to the allocations dict
         arr = np.ndarray((10,), dtype=np.float64)
-        instance_settings_obj.add_allocation("foo", arr)
+        instance_settings_obj.allocations["foo"] = arr
         instance_settings_obj.free("foo")
         assert "foo" not in instance_settings_obj.allocations
 
@@ -68,8 +62,8 @@ class TestInstanceMemorySettings:
         # test that free_all removes all references to the allocations dict
         arr1 = np.ndarray((10,), dtype=np.float64)
         arr2 = np.ndarray((20,), dtype=np.float64)
-        instance_settings_obj.add_allocation("foo", arr1)
-        instance_settings_obj.add_allocation("bar", arr2)
+        instance_settings_obj.allocations["foo"] = arr1
+        instance_settings_obj.allocations["bar"] = arr2
         instance_settings_obj.free_all()
         assert instance_settings_obj.allocations == {}
 
@@ -78,8 +72,8 @@ class TestInstanceMemorySettings:
         # test that the allocated_bytes property returns the correct value
         arr1 = np.ndarray((100,), dtype=np.float64)
         arr2 = np.ndarray((25,), dtype=np.float64)
-        instance_settings_obj.add_allocation("foo", arr1)
-        instance_settings_obj.add_allocation("bar", arr2)
+        instance_settings_obj.allocations["foo"] = arr1
+        instance_settings_obj.allocations["bar"] = arr2
         expected_bytes = arr1.nbytes + arr2.nbytes
         assert instance_settings_obj.allocated_bytes == expected_bytes
         instance_settings_obj.free("foo")
@@ -432,7 +426,7 @@ class TestMemoryManager:
         mgr = registered_mgr
         instance = registered_instance
         arr = np.zeros((2, 2), dtype=np.float32)
-        mgr.registry[id(instance)].add_allocation("foo", arr)
+        mgr.registry[id(instance)].allocations["foo"] = arr
         mgr.free("foo")
         assert "foo" not in mgr.registry[id(instance)].allocations
 
@@ -441,8 +435,8 @@ class TestMemoryManager:
         mgr = registered_mgr
         instance = registered_instance
         arr = np.zeros((2, 2), dtype=np.float32)
-        mgr.registry[id(instance)].add_allocation("foo", arr)
-        mgr.registry[id(instance)].add_allocation("bar", arr)
+        mgr.registry[id(instance)].allocations["foo"] = arr
+        mgr.registry[id(instance)].allocations["bar"] = arr
         mgr.free_all()
         assert mgr.registry[id(instance)].allocations == {}
 
@@ -1599,7 +1593,7 @@ def test_get_available_memory_active_mode_warns_low_headroom(
     mgr.set_limit_mode("active")
     settings = mgr.registry[id(inst)]
     cap = settings.cap
-    settings.add_allocation("fake", FakeAllocation(int(cap * 0.99)))
+    settings.allocations["fake"] = FakeAllocation(int(cap * 0.99))
     with pytest.warns(UserWarning, match="more than 95%"):
         available = mgr.get_available_memory("default")
     free, _ = mgr.get_memory_info()
@@ -1742,17 +1736,6 @@ def test_set_auto_limit_mode_noop_when_already_auto(mgr, memory_client):
     mgr.set_auto_limit_mode(inst)
     assert instance_id in mgr._auto_pool
     assert mgr.proportion(inst) == proportion_before
-
-
-def test_add_allocation_overwrites_existing_key():
-    """Test add_allocation frees a previous allocation before
-    overwriting it with a new one under the same key."""
-    settings = InstanceMemorySettings()
-    arr1 = np.zeros((4,), dtype=np.float32)
-    arr2 = np.ones((4,), dtype=np.float32)
-    settings.add_allocation("foo", arr1)
-    settings.add_allocation("foo", arr2)
-    assert settings.allocations["foo"] is arr2
 
 
 def test_create_host_array_with_like(mgr):
@@ -3024,6 +3007,22 @@ def _state_request(runs):
     }
 
 
+def _device_pool_attribute(attribute):
+    device = cuda_driver.CUdevice(cuda.get_current_device().id)
+    pool = cuda_driver.cuDeviceGetDefaultMemPool(device)[1]
+    return int(cuda_driver.cuMemPoolGetAttribute(pool, attribute)[1])
+
+
+def _reset_device_pool_used_high():
+    device = cuda_driver.CUdevice(cuda.get_current_device().id)
+    pool = cuda_driver.cuDeviceGetDefaultMemPool(device)[1]
+    cuda_driver.cuMemPoolSetAttribute(
+        pool,
+        cuda_driver.CUmemPool_attribute.CU_MEMPOOL_ATTR_USED_MEM_HIGH,
+        cuda_driver.cuuint64_t(0),
+    )
+
+
 @pytest.mark.nocudasim
 def test_device_request_reuses_its_label_buffer(
     registered_mgr, registered_instance
@@ -3047,14 +3046,41 @@ def test_device_request_reuses_its_label_buffer(
         == first.device_ctypes_pointer.value
     )
     assert settings.allocated_bytes == buffer.nbytes
+    old_bytes = buffer.nbytes
+    del first, smaller, buffer
+
+    attribute = cuda_driver.CUmemPool_attribute
+    used = _device_pool_attribute(attribute.CU_MEMPOOL_ATTR_USED_MEM_CURRENT)
+    _reset_device_pool_used_high()
     larger = mgr.allocate_all(
         _state_request(128), instance_id, stream, settings
     )["state"]
+    peak = _device_pool_attribute(attribute.CU_MEMPOOL_ATTR_USED_MEM_HIGH)
+    # The old buffer is released before its replacement is allocated.
+    assert peak - used == larger.nbytes - old_bytes
     assert settings.buffers["state"].nbytes == larger.nbytes
     host = np.arange(larger.size, dtype=np.float32).reshape(larger.shape)
     larger.copy_to_device(host, stream=stream)
     stream.synchronize()
     assert np.array_equal(larger.copy_to_host(), host)
+
+
+@pytest.mark.nocudasim
+def test_device_request_on_a_new_stream_replaces_the_buffer(
+    registered_mgr, registered_instance, stream1
+):
+    """A request on another stream gets a buffer ordered on it."""
+    mgr = registered_mgr
+    instance_id = id(registered_instance)
+    settings = mgr.registry[instance_id]
+    stream = mgr.get_stream(registered_instance)
+    mgr.allocate_all(_state_request(64), instance_id, stream, settings)
+    moved = mgr.allocate_all(
+        _state_request(16), instance_id, stream1, settings
+    )["state"]
+    assert settings.buffers["state"].stream is stream1
+    assert moved.stream is stream1
+    assert settings.buffers["state"].nbytes == moved.nbytes
 
 
 @pytest.mark.nocudasim

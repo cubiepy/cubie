@@ -20,7 +20,7 @@ Supporting pieces:
 | File | Description |
 |------|-------------|
 | `__init__.py` | Instantiates `default_memmgr = MemoryManager()`; re-exports `MemoryManager`, `NoCudaDeviceError`. |
-| `mem_manager.py` | `MemoryManager` (central allocator); `NoCudaDeviceError`; `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `pinned_view` (C view of a pinned allocation's start); `c_contiguous_view` (C view of a flat device buffer). |
+| `mem_manager.py` | `MemoryManager` (central allocator); `NoCudaDeviceError`; `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `c_contiguous_view` (C view of a flat device buffer). |
 | `array_requests.py` | `ArrayRequest` (shape/dtype/placement spec) and `ArrayResponse` (allocated arrays + chunk metadata). |
 | `stream_groups.py` | `StreamGroups` — maps instance ids to named groups, each backed by a CUDA stream. |
 | `chunk_buffer_pool.py` | `PinnedBuffer` + `ChunkBufferPool` — reusable pinned staging buffers. Not exported from `__init__.py`. |
@@ -94,7 +94,7 @@ Driver calls live in `cubie.cuda_simsafe`: `stream_ordered_buffer` (pool bytes f
 their stream when the last view dies), `pool_idle_bytes`, `stream_idle`,
 `page_locked_block`, `flush_deferred_frees`. `get_memory_info` reports device free memory
 plus the pool's idle bytes. `allocate_all` gives each `"device"` label a buffer that
-same-size or smaller requests view; a larger request replaces it. `allocated_bytes`
+same-stream requests that fit view; others replace it. `allocated_bytes`
 counts buffers at full size. `allocate()` returns a fresh `"device"` array or an
 `allocate_pinned_array` result; any other placement raises `ValueError`. `to_device`/
 `from_device` issue streamed copies between pinned host buffers and native device
