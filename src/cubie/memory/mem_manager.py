@@ -1417,12 +1417,7 @@ class MemoryManager:
             return True
 
     def release_idle_memory(self, keep_recent: bool = True) -> None:
-        """Free idle pinned blocks and Numba's queued frees.
-
-        Does nothing while any group stream has work. Blocks that went
-        idle since the previous call are kept unless ``keep_recent``
-        is ``False``.
-        """
+        """Free stale idle blocks; ``keep_recent=False`` frees all."""
         if keep_recent and not (self._idle_pinned or self._pinned_releases):
             return
         if not self._group_streams_idle():
