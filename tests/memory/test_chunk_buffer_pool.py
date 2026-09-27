@@ -84,7 +84,7 @@ def test_acquire_reuses_released_buffer_for_smaller_block(mgr):
 
 def test_acquire_replaces_released_buffers_too_small(mgr):
     """Released buffers too small for the block are replaced."""
-    pool = ChunkBufferPool(memory_manager=mgr)
+    pool = _UnthrottledPool(memory_manager=mgr)
     buf1 = pool.acquire("x", (10,), np.float32)
     buf2 = pool.acquire("x", (10,), np.float32)
     pool.release(buf1)
