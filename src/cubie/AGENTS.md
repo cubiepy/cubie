@@ -157,8 +157,6 @@ before allocating.
   `vendored.cudasim`; call CUDA intrinsics through it (`cuda.selp`,
   `cuda.all_sync`). Scalar types and `from_dtype` come from `numba_cuda_mlir`,
   jit kwargs from `backend.jit`, `unroll_if` from `backend.intrinsics`.
-- A device function reads `cuda` as a module global: the simulator swaps it per
-  thread in the function's globals only.
 - Device-function bodies are bracketed with `# no cover: start` / `# no cover: end`
   (coverage cannot see compiled code); keep the brackets when editing.
 - Import NumPy scalar types with an `np_` prefix (`from numpy import float32 as
