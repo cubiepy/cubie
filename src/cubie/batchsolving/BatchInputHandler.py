@@ -719,8 +719,8 @@ class BatchInputHandler:
     ) -> tuple[dict, SystemValues, ParameterBinding]:
         """Plan a dict parameter grid and the binding it implies.
 
-        Grid rows whose values differ across runs are swept; every
-        other parameter is fixed at its grid value or default.
+        Varying rows are swept; the rest are fixed at their grid value
+        or default.
 
         Parameters
         ----------
@@ -791,11 +791,9 @@ class BatchInputHandler:
     ) -> tuple[object, SystemValues, ParameterBinding]:
         """Bind an array parameter input to a parameter-table layout.
 
-        An array with a row per currently swept parameter keeps the
-        current binding; any other array is read as one row per
-        system parameter, padded or trimmed with a warning, and every
-        row is swept. ``find_constant_params`` fixes rows that hold
-        one value across every run.
+        A row per swept parameter keeps the current binding; any other
+        height is a row per system parameter (padded or trimmed with a
+        warning), all swept.
 
         Parameters
         ----------
