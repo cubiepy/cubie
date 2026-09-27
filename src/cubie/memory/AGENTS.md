@@ -57,9 +57,9 @@ Supporting pieces:
   reused ids). `free_all` syncs the owner's last stream so the pool returns the freed
   bytes to the device.
 - `release_idle_memory(keep_recent=True)` frees pinned blocks idle since its previous
-  call and runs Numba's queued frees, only while every group stream is idle (freeing
-  page-locked memory waits for the whole device). `Solver.solve` calls it after each
-  host-result solve; kernel close calls it with `keep_recent=False`.
+  call and runs Numba's queued frees, only while every group stream is idle.
+  `Solver.solve` calls it after each host-result solve; kernel close calls it with
+  `keep_recent=False`.
 - Explicit close reports cleanup failures and can be retried; finalizers are best
   effort and silent at interpreter shutdown.
 - Allocation, copies, launch and release use the run's stream; memory caps chunk the

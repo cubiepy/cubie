@@ -608,13 +608,11 @@ class MemoryManager:
         default=ALLOCATION_GRANULE_BYTES,
         validator=getype_validator(int, 0),
     )
-    # Pinned ledger of bytes backing reachable arrays. Finalizers
-    # queue releases; the ledger drains them under the lock.
+    # Pinned bytes of reachable arrays; finalizers queue releases.
     _pinned_lock: Lock = field(factory=Lock, init=False)
     _pinned_live_bytes: int = field(default=0, init=False)
     _pinned_releases: deque = field(factory=deque, init=False)
-    # Collected pinned blocks kept for reuse: [block, nbytes,
-    # generation idle since].
+    # Idle pinned blocks: [block, nbytes, generation idle since].
     _idle_pinned: list = field(factory=list, init=False)
     _pinned_generation: int = field(default=0, init=False)
     # Cause for the NoCudaDeviceError a sizing decision raises.
@@ -1418,10 +1416,9 @@ class MemoryManager:
             )
 
     def _take_idle_pinned(self, nbytes: int) -> Optional[list]:
-        """Claim the smallest reusable idle block of ``nbytes`` or more.
+        """Claim the smallest idle block of ``nbytes`` or more.
 
-        A block is reusable once an idle point has passed since it
-        went idle, so no queued copy still reads it.
+        Only blocks idle since before the last idle point qualify.
         """
         generation = self._pinned_generation
         fitting = [
@@ -1453,12 +1450,11 @@ class MemoryManager:
             return True
 
     def release_idle_memory(self, keep_recent: bool = True) -> None:
-        """Free idle pinned blocks and queued frees if streams are idle.
+        """Free idle pinned blocks and Numba's queued frees.
 
-        Freeing page-locked memory waits for the whole device, so
-        nothing is freed while any group stream has work. Blocks that
-        went idle since the previous call are kept unless
-        ``keep_recent`` is ``False``.
+        Does nothing while any group stream has work. Blocks that went
+        idle since the previous call are kept unless ``keep_recent``
+        is ``False``.
         """
         for stream in self.stream_groups.streams.values():
             if not stream_idle(stream):

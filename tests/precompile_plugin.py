@@ -532,8 +532,7 @@ if POPULATION:
     )
     stream_groups.cuda = SimpleNamespace(stream=lambda: _fake_stream)
     mem_manager._ensure_cuda_context = lambda: None
-    # No CUDA driver here: host buffers stand in for pinned blocks,
-    # and nothing is queued to free.
+    # No CUDA driver: host buffers stand in for pinned blocks.
     mem_manager.page_locked_block = bytearray
     mem_manager.stream_idle = lambda stream: True
     mem_manager.flush_deferred_frees = lambda: None
@@ -597,8 +596,7 @@ if POPULATION:
 
     _default_memmgr.probe_device()
 
-    # The busy-kernel canary fixture creates its non-blocking stream
-    # through the driver.
+    # The busy-kernel fixture creates its stream through the driver.
     import cuda.bindings.driver as _cuda_driver  # noqa: E402
 
     _cuda_driver.cuStreamCreate = (

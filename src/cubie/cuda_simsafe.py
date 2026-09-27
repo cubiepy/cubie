@@ -374,11 +374,7 @@ else:  # pragma: no cover - exercised in GPU environments
         return error == cuda_driver.CUresult.CUDA_SUCCESS
 
     def flush_deferred_frees() -> None:
-        """Run the frees Numba has queued.
-
-        Freeing page-locked or non-pool device memory waits for the
-        whole device.
-        """
+        """Run Numba's queued frees; each waits for the whole device."""
         cuda.current_context().memory_manager.deallocations.clear()
 
 

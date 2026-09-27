@@ -78,8 +78,7 @@ test = [
 # dev is the default-backend developer install (dev-mlir13). The
 # dev12/dev13 lanes install the deprecated numba-cuda backend, which
 # the CUDA simulator needs; simulator environments add it themselves
-# (e.g. `.[dev,cuda13]`). CuPy is installed for the tests that pass
-# CuPy arrays in.
+# (e.g. `.[dev,cuda13]`). CuPy is for tests that pass CuPy arrays.
 dev12 = ["cubie[cuda12,test]", "cupy-cuda12x"]
 dev13 = ["cubie[cuda13,test]", "cupy-cuda13x"]
 dev-mlir12 = ["cubie[mlir-cuda12,test]", "cupy-cuda12x"]
