@@ -44,7 +44,7 @@ from threading import Condition
 
 from attrs import define, field
 from attrs.validators import instance_of as attrsval_instance_of
-from numpy import ndarray
+from numpy import ndarray, uint8
 from numpy import dtype as np_dtype
 
 from cubie.memory import default_memmgr
@@ -52,8 +52,21 @@ from cubie.memory.mem_manager import (
     MemoryManager,
     STAGING_POOL_DEPTH,
     host_headroom_bytes,
-    pinned_view,
 )
+
+
+def _staging_view(
+    array: ndarray, shape: Tuple[int, ...], dtype: np_dtype
+) -> Optional[ndarray]:
+    """View the start of the allocation; ``None`` if too small."""
+    root = array
+    while isinstance(root.base, ndarray):
+        root = root.base
+    nbytes = int(prod(shape)) * np_dtype(dtype).itemsize
+    if nbytes > root.nbytes:
+        return None
+    flat = root.reshape(-1).view(uint8)
+    return flat[:nbytes].view(dtype).reshape(shape)
 
 
 @define
@@ -135,19 +148,19 @@ class ChunkBufferPool:
             while True:
                 buffers = self._buffers.setdefault(array_name, [])
                 in_flight = 0
-                too_small = None
+                too_small = []
                 for buf in buffers:
                     if buf.in_use:
                         in_flight += 1
                         continue
-                    view = pinned_view(buf.array, shape, dtype)
+                    view = _staging_view(buf.array, shape, dtype)
                     if view is not None:
                         buf.array = view
                         buf.in_use = True
                         return buf
-                    too_small = buf
-                if too_small is not None:
-                    buffers.remove(too_small)
+                    too_small.append(buf)
+                for buf in too_small:
+                    buffers.remove(buf)
 
                 if not in_flight:
                     # First buffer per label: forced, never None.

@@ -82,13 +82,15 @@ def test_acquire_reuses_released_buffer_for_smaller_block(mgr):
     assert buf2.array.ctypes.data == address
 
 
-def test_acquire_replaces_released_buffer_too_small(mgr):
-    """A released buffer too small for the block is replaced."""
+def test_acquire_replaces_released_buffers_too_small(mgr):
+    """Released buffers too small for the block are replaced."""
     pool = ChunkBufferPool(memory_manager=mgr)
     buf1 = pool.acquire("x", (10,), np.float32)
+    buf2 = pool.acquire("x", (10,), np.float32)
     pool.release(buf1)
-    buf2 = pool.acquire("x", (20,), np.float32)
-    assert pool._buffers["x"] == [buf2]
+    pool.release(buf2)
+    buf3 = pool.acquire("x", (20,), np.float32)
+    assert pool._buffers["x"] == [buf3]
 
 
 def test_acquire_allocates_new_for_different_dtype(mgr):
