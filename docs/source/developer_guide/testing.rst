@@ -41,8 +41,9 @@ Test Markers
 CUDASIM Mode
 ------------
 
-Setting ``NUMBA_ENABLE_CUDASIM=1`` before import causes Numba to emulate
-CUDA on the CPU.  CI pipelines without GPUs use this mode.  CUDASIM is
+Setting ``NUMBA_ENABLE_CUDASIM=1`` before import runs cubie in a
+simulated CUDA environment on the CPU.  CI pipelines without GPUs use
+this mode.  CUDASIM is
 single-threaded and much slower than GPU execution, so keep CUDASIM-
 compatible tests lightweight.
 

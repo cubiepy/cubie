@@ -12,8 +12,9 @@ import pytest
 
 from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_allclose
-from cubie.cuda_simsafe import cuda, numba_from_dtype as from_dtype
-from cubie.cuda_simsafe import compile_kwargs
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
+from cubie._cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 
 from cubie.outputhandling import OutputFunctions

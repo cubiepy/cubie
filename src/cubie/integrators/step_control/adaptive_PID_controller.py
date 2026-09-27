@@ -32,7 +32,8 @@ See Also
 
 from typing import Any, Callable
 
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
 from attrs import field, frozen
 from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry
@@ -43,7 +44,6 @@ from cubie.integrators.step_control.adaptive_step_controller import (
 from cubie.integrators.step_control.adaptive_PI_controller import (
     PIStepControlConfig,
 )
-from cubie.cuda_simsafe import selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.step_control.base_step_controller import ControllerCache
 
@@ -225,11 +225,11 @@ class AdaptivePIDController(BaseAdaptiveStepController):
                 within_deadband = (gain >= deadband_min) and (
                     gain <= deadband_max
                 )
-                gain = selp(within_deadband, typed_one, gain)
+                gain = cuda.selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry on the current error alone.
             gain_reject = max(min_step_shrink, safety * gain_current)
-            gain = selp(accept, gain, gain_reject)
+            gain = cuda.selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size
             # info: on accept, freeze dt and report success. History
@@ -238,9 +238,11 @@ class AdaptivePIDController(BaseAdaptiveStepController):
             freeze = accept and truncated
             commit_history = accept and not truncated
             dt_new_raw = dt[0] * gain
-            dt[0] = selp(freeze, dt[0], clamp(dt_new_raw, dt_min, dt_max))
-            timestep_buffer[1] = selp(commit_history, err_prev, err_prev_prev)
-            timestep_buffer[0] = selp(commit_history, nrm2, err_prev)
+            dt[0] = cuda.selp(freeze, dt[0], clamp(dt_new_raw, dt_min, dt_max))
+            timestep_buffer[1] = cuda.selp(
+                commit_history, err_prev, err_prev_prev
+            )
+            timestep_buffer[0] = cuda.selp(commit_history, nrm2, err_prev)
 
             ret = (
                 success

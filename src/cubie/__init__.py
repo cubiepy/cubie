@@ -3,29 +3,18 @@ cubie: CUDA Batch Integration Engine
 """
 
 from importlib.metadata import version
+from importlib.util import find_spec
 
-# Suppress Numba performance warnings for library users. The warnings are
-# emitted from Numba internals when kernels are dispatched with an
-# inefficient batch size.
-# These are not actionable for CuBIE users,
-# so they are filtered at import time.
-import os
+if find_spec("numba_cuda_mlir") is None:
+    raise ImportError(
+        "cubie needs its CUDA backend, cubie-numba-cuda-mlir. Reinstall "
+        "cubie with 'pip install cubie', or 'pip install cubie[cuda12]' "
+        "or 'cubie[cuda13]' to install a CUDA toolkit with it."
+    )
 
-os.environ["NUMBA_CUDA_LOW_OCCUPANCY_WARNINGS"] = "0"
-
-# Apply the active backend's compatibility patches before anything
-# can compile a kernel. On numba-cuda these are compile-time
-# performance patches (no-op on the cubie_patch fork, under CUDASIM,
-# and for any patch already accepted upstream); on numba-cuda-mlir
-# they register missing lowerings and carry the frontend perf
-# patches.
-from cubie.cuda_backend import IS_MLIR as _IS_MLIR  # noqa: E402
-
-if _IS_MLIR:
-    import cubie.backend._mlir_compat  # noqa: F401
-    import cubie.backend._mlir_cubie_extensions  # noqa: F401
-else:
-    import cubie.backend._numba_cuda_compat  # noqa: F401
+# Patch numba-cuda-mlir before anything compiles.
+import cubie.backend._mlir_compat  # noqa: F401,E402
+import cubie.backend._mlir_cubie_extensions  # noqa: F401,E402
 
 from cubie.result_codes import CUBIE_RESULT_CODES  # noqa: E402
 from cubie.batchsolving import *  # noqa

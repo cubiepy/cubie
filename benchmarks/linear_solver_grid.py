@@ -41,7 +41,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 import cubie as qb
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+from cubie._cudasim_extensions import cuda, CUDA_SIMULATION
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 REPO = Path(__file__).resolve().parent.parent

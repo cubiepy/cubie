@@ -5,12 +5,14 @@ import weakref
 import pytest
 from cuda.bindings import driver as cuda_driver
 
-from cubie.cuda_simsafe import cuda
-
-from cubie.cuda_simsafe import (
+from cubie._cudasim_extensions import (
+    cuda,
     CudaSupportError,
     DeviceNDArray,
     Stream,
+)
+
+from cubie.memory.driver_memory import (
     is_pinned_array,
     pool_idle_bytes,
     stream_ordered_buffer,
@@ -985,7 +987,7 @@ def test_ensure_cuda_context():
 def test_ensure_cuda_context_simulation():
     """Test _ensure_cuda_context is no-op in simulation mode."""
     from cubie.memory.mem_manager import _ensure_cuda_context
-    from cubie.cuda_simsafe import CUDA_SIMULATION
+    from cubie._cudasim_extensions import CUDA_SIMULATION
 
     # In simulation mode, the function should do nothing and not raise
     if CUDA_SIMULATION:

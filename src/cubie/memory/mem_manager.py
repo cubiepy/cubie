@@ -62,7 +62,12 @@ import os
 import sys
 
 from cubie.cache_root import get_cache_root
-from cubie.cuda_simsafe import cuda
+from cubie._cudasim_extensions import (
+    cuda,
+    CudaSupportError,
+    DeviceNDArray,
+    Stream,
+)
 from cubie._utils import getype_validator, opt_getype_validator
 from attrs import define, Factory as attrsFactory, field
 from attrs.validators import (
@@ -81,12 +86,7 @@ from numpy import (
 from numpy.typing import DTypeLike
 from math import prod
 
-from cubie.cuda_simsafe import (
-    CUDA_SIMULATION,
-    CudaSupportError,
-    DeviceNDArray,
-    Stream,
-    current_mem_info,
+from cubie.memory.driver_memory import (
     flush_deferred_frees,
     page_locked_block,
     pool_idle_bytes,
@@ -316,26 +316,25 @@ def _ensure_cuda_context() -> None:
     RuntimeError
         If CUDA context cannot be initialized or is not functional.
     """
-    if not CUDA_SIMULATION:
-        try:
-            # Attempt to access current context - triggers creation if
-            # needed.
-            ctx = cuda.current_context()
-            if ctx is None:
-                raise RuntimeError(
-                    "CUDA context is None - GPU may not be accessible"
-                )
-            # Skip memory info check for performance; context existence
-            # is sufficient validation for most operations
-        except Exception as e:
-            # Provide helpful error message instead of segfault
+    try:
+        # Attempt to access current context - triggers creation if
+        # needed.
+        ctx = cuda.current_context()
+        if ctx is None:
             raise RuntimeError(
-                f"Failed to initialize or verify CUDA context: {e}. "
-                "This may indicate GPU driver issues, insufficient "
-                "permissions, or the GPU may be in an unrecoverable "
-                "state. Try restarting the process or checking GPU "
-                "availability."
-            ) from e
+                "CUDA context is None - GPU may not be accessible"
+            )
+        # Skip memory info check for performance; context existence
+        # is sufficient validation for most operations
+    except Exception as e:
+        # Provide helpful error message instead of segfault
+        raise RuntimeError(
+            f"Failed to initialize or verify CUDA context: {e}. "
+            "This may indicate GPU driver issues, insufficient "
+            "permissions, or the GPU may be in an unrecoverable "
+            "state. Try restarting the process or checking GPU "
+            "availability."
+        ) from e
 
 
 # These will be keys to a dict, so must be hashable: eq=False
@@ -461,7 +460,7 @@ class InstanceMemorySettings:
         """
         self.allocations.clear()
         self.buffers.clear()
-        if not CUDA_SIMULATION and self.last_stream is not None:
+        if self.last_stream is not None:
             self.last_stream.synchronize()
 
     @property
@@ -478,7 +477,7 @@ class InstanceMemorySettings:
         """Return whether the owner's submitted CUDA work is complete."""
         if self.submitting:
             return False
-        if self.completion_event is None or CUDA_SIMULATION:
+        if self.completion_event is None:
             return True
         return bool(self.completion_event.query())
 
@@ -1672,7 +1671,7 @@ class MemoryManager:
             (free_memory, total_memory) in bytes. Free memory includes
             bytes the device pool holds but no array uses.
         """
-        free, total = current_mem_info()
+        free, total = cuda.current_context().get_memory_info()
         return free + pool_idle_bytes(), total
 
     def get_stream_group(self, instance: object) -> str:
@@ -1774,8 +1773,6 @@ class MemoryManager:
     ) -> object:
         """View the label's buffer, replaced when small or off-stream."""
         _ensure_cuda_context()
-        if CUDA_SIMULATION:  # pragma: no cover - simulated
-            return cuda.device_array(request.shape, request.dtype)
         nbytes = prod(request.shape) * np_dtype(request.dtype).itemsize
         buffer = settings.buffers.get(key)
         if (
@@ -1825,8 +1822,6 @@ class MemoryManager:
         """
         _ensure_cuda_context()
         if memory_type == "device":
-            if CUDA_SIMULATION:  # pragma: no cover - simulated
-                return cuda.device_array(shape, dtype)
             if not isinstance(stream, Stream):
                 stream = self.get_group_stream()
             nbytes = prod(shape) * np_dtype(dtype).itemsize
@@ -1911,9 +1906,6 @@ class MemoryManager:
         # compatibility checks (~50us/call), which are unnecessary here: the
         # source is an already-pinned, C-contiguous, size-matched buffer.
         for i, from_array in enumerate(from_arrays):
-            if CUDA_SIMULATION:  # pragma: no cover - simulated
-                cuda.to_device(from_array, stream=stream, to=to_arrays[i])
-                continue
             if from_array.size == 0:
                 continue
             # Sized by the pinned host buffer so the copy can never run
@@ -1950,9 +1942,6 @@ class MemoryManager:
         # Device -> pinned host buffer, streamed async D2H via the low-level
         # driver copy (to_arrays are pinned, C-contiguous, size-matched).
         for i, from_array in enumerate(from_arrays):
-            if CUDA_SIMULATION:  # pragma: no cover - simulated
-                from_array.copy_to_host(to_arrays[i], stream=stream)
-                continue
             if from_array.size == 0:
                 continue
             # Sized by the pinned host buffer so the copy can never run

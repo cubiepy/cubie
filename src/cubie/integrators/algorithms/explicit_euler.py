@@ -26,8 +26,9 @@ See Also
 
 from typing import Callable, Optional
 
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 

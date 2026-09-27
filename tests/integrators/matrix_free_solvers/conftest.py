@@ -3,8 +3,8 @@ import os
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import compile_kwargs
+from cubie._cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 
 from cubie.integrators.matrix_free_solvers import CUBIE_RESULT_CODES

@@ -25,7 +25,7 @@ from cubie.batchsolving.optimize import (
     resident_blocks_within_l2,
 )
 from cubie.CUDAFactory import UnrollChoice
-from cubie.cuda_simsafe import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.time_logger import default_timelogger
 from tests._utils import LARGE_FIRK
 

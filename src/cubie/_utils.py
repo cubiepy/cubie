@@ -77,10 +77,17 @@ from numpy import (
     ndarray,
 )
 from numpy.typing import ArrayLike
-from cubie.cuda_simsafe import cuda
+from numba_cuda_mlir.numba_cuda import types as numba_types
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 
 from attrs import field, fields, validators, Attribute
-from cubie.cuda_simsafe import compile_kwargs, fmax, fmin, is_devfunc
+from cubie.backend.jit import compile_kwargs
+from cubie._cudasim_extensions import (
+    DeviceNDArrayBase,
+    cuda,
+    fmax,
+    fmin,
+)
 
 PrecisionDType = Union[
     type[np_float16],
@@ -326,7 +333,6 @@ def clamp_factory(precision):
     Callable
         CUDA device function ``clamp(value, minimum, maximum)``.
     """
-    from cubie.cuda_simsafe import numba_from_dtype as from_dtype
     precision = from_dtype(precision)
 
     # no cover: start
@@ -341,6 +347,72 @@ def clamp_factory(precision):
 
     # no cover: end
     return clamp
+
+
+def is_devfunc(func: Any) -> bool:
+    """Test whether ``func`` represents a CUDA device function.
+
+    Parameters
+    ----------
+    func
+        Callable object to inspect for CUDA device metadata.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``func`` is tagged as a CUDA device function.
+    """
+    target_options = getattr(func, "targetoptions", None)
+    if isinstance(target_options, dict):
+        return bool(target_options.get("device", False))
+    return False
+
+
+def devfunc_returns_nonfloat(func: Any) -> bool:
+    """Report whether every compiled overload returns int or bool.
+
+    Parameters
+    ----------
+    func
+        Callable object to inspect for compiled device overloads.
+
+    Returns
+    -------
+    bool
+        ``True`` when every overload returns an integer or boolean.
+    """
+    overloads = getattr(func, "overloads", None)
+    if not overloads:
+        return False
+    return all(
+        isinstance(
+            overload.signature.return_type,
+            (numba_types.Integer, numba_types.Boolean),
+        )
+        for overload in overloads.values()
+    )
+
+
+def is_device_array(value: Any) -> bool:
+    """Check whether ``value`` is a GPU-resident array.
+
+    Parameters
+    ----------
+    value
+        Object to test.
+
+    Returns
+    -------
+    bool
+        ``True`` for device arrays (Numba device arrays or any non-numpy
+        object exposing ``__cuda_array_interface__``), ``False`` for
+        host numpy arrays and everything else.
+    """
+    if value is None or isinstance(value, ndarray):
+        return False
+    if isinstance(value, DeviceNDArrayBase):
+        return True
+    return hasattr(value, "__cuda_array_interface__")
 
 
 def is_device_validator(instance, attribute, value):

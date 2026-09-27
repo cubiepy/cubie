@@ -11,10 +11,9 @@ from cubie.batchsolving.writeback_watcher import (
     WritebackTask,
     WritebackWatcher,
 )
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import compile_kwargs
+from cubie._cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie.backend.jit import compile_kwargs
 
-from cubie.cuda_simsafe import CUDA_SIMULATION
 from cubie.memory import MemoryManager
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
 
@@ -308,31 +307,6 @@ def test_process_task_releases_buffer_to_pool():
     )
     w._process_task(task)
     assert buf.in_use is False
-
-
-def test_process_task_cudasim_immediate_complete():
-    """_process_task treats as immediately complete in CUDA_SIMULATION ."""
-    w = WritebackWatcher()
-    buf = _make_pinned_buffer(fill=42.0)
-    target = np.zeros((4, 3), dtype=np.float32)
-    pool = _make_pool()
-    task = WritebackTask(
-        event="not_a_real_event",  # Not None, not a cuda.Event
-        buffer=buf, target_array=target,
-        buffer_pool=pool, array_name="state",
-    )
-    # Under CUDASIM this completes immediately regardless of event type
-    if CUDA_SIMULATION:
-        assert w._process_task(task) is True
-        np.testing.assert_array_equal(target, 42.0)
-    else:
-        try:
-            task_completion = w._process_task(task)
-            assert task_completion is True
-        except AttributeError as e:
-            # Check that our event handling hasn't allowed a vapid True on
-            # invalid watch tasks.
-            assert "object has no attribute" in str(e)
 
 
 def test_process_task_none_event_immediate_complete():

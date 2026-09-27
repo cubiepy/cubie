@@ -256,7 +256,7 @@ def generate_dxdt_fac_code(
     Notes
     -----
     The generated factory expects ``func(precision)`` and returns a
-    CUDA device function compiled with :func:`numba.cuda.jit`.
+    CUDA device function compiled with :func:`numba_cuda_mlir.cuda.jit`.
     """
     default_timelogger.start_event("codegen_generate_dxdt_fac_code")
     dxdt_lines = generate_dxdt_lines(

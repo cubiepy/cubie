@@ -81,7 +81,7 @@ from numpy import (
     dtype as np_dtype,
     ndarray as np_ndarray,
 )
-from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 
 from cubie._env import lineinfo_default
 from cubie._serialize import canonical_digest
@@ -92,12 +92,8 @@ from cubie._utils import (
     precision_validator,
     precision_converter,
 )
-from cubie.cuda_simsafe import (
-    JIT_FLAG_DEFAULTS,
-    UnrollFlag,
-    get_jit_kwargs,
-)
-from cubie.cuda_simsafe import from_dtype as simsafe_dtype
+from cubie.backend.intrinsics import UnrollFlag
+from cubie.backend.jit import get_jit_kwargs, JIT_FLAG_DEFAULTS
 from cubie.buffer_registry import buffer_registry
 
 
@@ -725,12 +721,6 @@ class CUDAFactoryConfig(_CubieConfigBase):
 
         return from_dtype(np_dtype(self.precision))
 
-    @property
-    def simsafe_precision(self) -> type:
-        """Return the CUDA-simulator-safe dtype for ``precision``."""
-
-        return simsafe_dtype(np_dtype(self.precision))
-
 
 @define
 class CUDADispatcherCache:
@@ -883,7 +873,7 @@ class CUDAFactory(ABC):
         """Return ``cuda.jit`` keyword arguments for this factory.
 
         Renders the compile settings' :class:`JITFlags` through
-        :func:`cubie.cuda_simsafe.get_jit_kwargs` — the single route
+        :func:`cubie.backend.jit.get_jit_kwargs` — the single route
         by which jit arguments reach ``@cuda.jit`` decorators in
         ``build()`` implementations.
 
@@ -1127,12 +1117,6 @@ class CUDAFactory(ABC):
         """Return the Numba dtype used by compiled device functions."""
 
         return self.compile_settings.numba_precision
-
-    @property
-    def simsafe_precision(self) -> type:
-        """Return the CUDA-simulator-safe dtype for the functions."""
-
-        return self.compile_settings.simsafe_precision
 
     @property
     def shared_buffer_size(self) -> int:

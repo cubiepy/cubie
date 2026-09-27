@@ -1,4 +1,4 @@
-"""Driver and compiled-kernel queries with one form on every backend.
+"""Driver and compiled-kernel queries.
 
 Published Objects
 -----------------
@@ -24,8 +24,7 @@ from typing import Any, Optional, Tuple
 
 from attrs import frozen
 
-from cubie.cuda_backend import IS_MLIR
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+from cubie._cudasim_extensions import cuda, cuda_driver
 
 SASS_INSTRUCTION_BYTES = 16
 """Bytes per SASS instruction."""
@@ -113,21 +112,7 @@ class KernelResources:
 
 
 def device_hardware() -> DeviceHardware:
-    """Return the current device's quantities; a 48 KiB stand-in in CUDASIM."""
-    if CUDA_SIMULATION:  # pragma: no cover - simulated
-        return DeviceHardware(
-            compute_capability=(0, 0),
-            multiprocessor_count=1,
-            l2_cache_bytes=0,
-            shared_memory_per_multiprocessor=49152,
-            reserved_shared_memory_per_block=0,
-            max_dynamic_shared_memory_per_block=49152,
-            instruction_cache_bytes=DEFAULT_INSTRUCTION_CACHE_BYTES,
-            registers_per_multiprocessor=65536,
-            max_threads_per_multiprocessor=1024,
-            max_blocks_per_multiprocessor=16,
-            warp_size=32,
-        )
+    """Return the current device's quantities."""
     device = cuda.get_current_device()
     major, minor = device.compute_capability
     capability = (int(major), int(minor))
@@ -242,10 +227,7 @@ def _compiled_cubin(
 ) -> bytes:
     """Return the cubin of a compiled specialization."""
     definition = _compiled_kernel(dispatcher, signature)
-    library = definition._codelibrary
-    if hasattr(library, "get_cubin"):
-        return bytes(library.get_cubin().code)
-    return bytes(library._cubin)
+    return bytes(definition._codelibrary._cubin)
 
 
 def sass_bytes_from_cubin(cubin: bytes) -> int:
@@ -283,8 +265,6 @@ def kernel_resources(
     dispatcher: Any, signature: Optional[Tuple] = None
 ) -> KernelResources:
     """Return the register, local-memory and SASS size of a compiled kernel."""
-    if CUDA_SIMULATION:  # pragma: no cover - simulated
-        return KernelResources(0, 0, 0)
     if signature is None:
         (signature,) = dispatcher.overloads
     registers = dispatcher.get_regs_per_thread()[signature]
@@ -298,8 +278,6 @@ def active_blocks_per_multiprocessor(
     signature: Optional[Tuple] = None,
 ) -> int:
     """Return the driver's resident blocks per SM at a launch geometry."""
-    if CUDA_SIMULATION:  # pragma: no cover - simulated
-        return 1
     return int(
         cuda.current_context().get_active_blocks_per_multiprocessor(
             _compiled_kernel_function(dispatcher, signature),
@@ -309,61 +287,37 @@ def active_blocks_per_multiprocessor(
     )
 
 
-if CUDA_SIMULATION:
-
-    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> Tuple:
-        """No-op: the simulator interprets kernels without compiling."""
-        return ()
-
-else:  # pragma: no cover - exercised in GPU environments
-    if IS_MLIR:
-        from cuda.bindings import driver as _cuda_binding
-
-        def _set_function_attribute(cufunc, attribute, value) -> None:
-            """Set one driver attribute on a loaded kernel function."""
-            (err,) = _cuda_binding.cuFuncSetAttribute(
-                cufunc.handle, attribute, int(value)
-            )
-            if err != _cuda_binding.CUresult.CUDA_SUCCESS:
-                raise RuntimeError(
-                    f"cuFuncSetAttribute failed with error {err}"
-                )
-
-        def _compile(dispatcher: Any, args: Tuple) -> Tuple:
-            compiled = dispatcher.compile_for(*args)
-            return compiled.signature.args
-
-    else:
-        from numba.cuda.cudadrv.driver import (  # type: ignore
-            binding as _cuda_binding,
-            driver as _numba_driver,
-        )
-
-        def _set_function_attribute(cufunc, attribute, value) -> None:
-            """Set one driver attribute on a loaded kernel function."""
-            _numba_driver.cuKernelSetAttribute(
-                attribute, int(value), cufunc.handle, cufunc.device.id
-            )
-
-        def _compile(dispatcher: Any, args: Tuple) -> Tuple:
-            argtypes = tuple(dispatcher.typeof_pyval(arg) for arg in args)
-            dispatcher.compile(argtypes)
-            return argtypes
-
-    _MAX_DYNAMIC_SHARED_ATTRIBUTE = (
-        _cuda_binding.CUfunction_attribute
-        .CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+def _set_function_attribute(cufunc, attribute, value) -> None:
+    """Set one driver attribute on a loaded kernel function."""
+    (err,) = cuda_driver.cuFuncSetAttribute(
+        cufunc.handle, attribute, int(value)
     )
-
-    def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> Tuple:
-        """Compile the launch specialization and return its signature."""
-        signature = _compile(dispatcher, args)
-        _set_function_attribute(
-            _compiled_kernel_function(dispatcher, signature),
-            _MAX_DYNAMIC_SHARED_ATTRIBUTE,
-            max_shared_memory_per_block(),
+    if err != cuda_driver.CUresult.CUDA_SUCCESS:
+        raise RuntimeError(
+            f"cuFuncSetAttribute failed with error {err}"
         )
-        return signature
+
+
+def _compile(dispatcher: Any, args: Tuple) -> Tuple:
+    compiled = dispatcher.compile_for(*args)
+    return compiled.signature.args
+
+
+_MAX_DYNAMIC_SHARED_ATTRIBUTE = (
+    cuda_driver.CUfunction_attribute
+    .CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+)
+
+
+def compile_kernel_specialization(dispatcher: Any, args: Tuple) -> Tuple:
+    """Compile the launch specialization and return its signature."""
+    signature = _compile(dispatcher, args)
+    _set_function_attribute(
+        _compiled_kernel_function(dispatcher, signature),
+        _MAX_DYNAMIC_SHARED_ATTRIBUTE,
+        max_shared_memory_per_block(),
+    )
+    return signature
 
 
 __all__ = [

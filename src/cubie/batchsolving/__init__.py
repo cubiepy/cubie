@@ -20,7 +20,7 @@ See Also
 
 from typing import Optional, Union
 from numpy.typing import NDArray
-from cubie.cuda_simsafe import DeviceNDArrayBase, MappedNDArray
+from cubie._cudasim_extensions import DeviceNDArrayBase, MappedNDArray
 
 ArrayTypes = Optional[Union[NDArray, DeviceNDArrayBase, MappedNDArray]]
 

@@ -11,7 +11,7 @@ from cubie.batchsolving.arrays.BatchInputArrays import (
     InputArrays,
 )
 from cubie.batchsolving.arrays.BaseArrayManager import ManagedArray
-from cubie.cuda_simsafe import is_device_array
+from cubie._utils import is_device_array
 from cubie.outputhandling.output_sizes import BatchInputSizes
 
 

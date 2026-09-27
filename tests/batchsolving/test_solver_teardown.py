@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from cubie.batchsolving.solver import solve_ivp
-from cubie.cuda_simsafe import cuda
+from cubie._cudasim_extensions import cuda
 from tests._utils import _build_solver_instance
 
 

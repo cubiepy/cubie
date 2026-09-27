@@ -9,7 +9,7 @@ CPU reference
 Each subplot contrasts the GPU spline evaluation with its CPU counterpart for a
 single end-point handling strategy while the sampled driver values are shown as
 markers.  The script requires NumPy, Matplotlib, and a CUDA-capable device (or
-Numba's CUDA simulator).
+a simulated CUDA environment).
 """
 
 import attrs

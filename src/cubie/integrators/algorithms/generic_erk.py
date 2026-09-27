@@ -55,17 +55,17 @@ See Also
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
 from cubie.CUDAFactory import (
     UnrollChoice,
     build_config,
 )
-from cubie.cuda_simsafe import unroll_if
+from cubie.backend.intrinsics import unroll_if
 
 from cubie._utils import PrecisionDType
 from cubie.backend.utils import MAX_REGISTERS_PER_THREAD
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import all_sync, activemask
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
@@ -444,8 +444,8 @@ class ERKStep(ODEExplicitStep):
             use_cached_rhs = False
             if first_same_as_last and multistage:
                 if not first_step_flag:
-                    mask = activemask()
-                    all_threads_accepted = all_sync(
+                    mask = cuda.activemask()
+                    all_threads_accepted = cuda.all_sync(
                             mask,
                             accepted_flag != int32(0))
                     use_cached_rhs = all_threads_accepted

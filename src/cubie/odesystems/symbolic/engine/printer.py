@@ -303,7 +303,7 @@ class IRPrinter:
         if name == "sign":
             inner = self._print(node.args[0], _PREC_REL)
             return (
-                f"selp({inner} == precision(0), precision(0), "
+                f"cuda.selp({inner} == precision(0), precision(0), "
                 f"math.copysign(precision(1), {inner}))"
             ), _PREC_ATOM
         if name == "Mod":
@@ -328,14 +328,14 @@ class IRPrinter:
         return f"{target}({args})", _PREC_ATOM
 
     def _render_piecewise(self, node: Piecewise) -> Tuple[str, int]:
-        # selp lowers to a hardware select; a ternary would branch.
+        # cuda.selp lowers to a hardware select; a ternary would branch.
         pairs = list(node.pairs)
         last_value, _ = pairs[-1]
         rendered = self._print(last_value, _PREC_TERNARY)
         for value, cond in reversed(pairs[:-1]):
             value_text = self._print(value, _PREC_TERNARY)
             cond_text = self._print(cond, _PREC_TERNARY)
-            rendered = f"selp({cond_text}, {value_text}, {rendered})"
+            rendered = f"cuda.selp({cond_text}, {value_text}, {rendered})"
         return rendered, _PREC_ATOM
 
     def _render_bool(self, node: BoolOp) -> Tuple[str, int]:

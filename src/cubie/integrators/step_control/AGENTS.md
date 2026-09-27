@@ -72,7 +72,7 @@ and Gustafsson to `max(..., 1e-16)`; the buffer is not pre-filled.
 ## Dependencies
 Internal: `CUDAFactory`; `_utils` (`build_config`, `clamp_factory`, validators,
 `tol_converter`, `PrecisionDType`); `buffer_registry` (`timestep_buffer`);
-`cuda_simsafe` (`selp`, `compile_kwargs`); `integrators.norms`
+`_cudasim_extensions` (`cuda`); `backend.jit` (`compile_kwargs`); `integrators.norms`
 (`TwoRefMaskedScaledNorm`). Consumed by `integrators.loops` /
 `SingleIntegratorRun`.
-External: `numba.cuda`, `attrs`, `numpy`, `math`.
+External: numba-cuda-mlir, `attrs`, `numpy`, `math`.

@@ -11,10 +11,8 @@ $uvReleaseUrl =
 
 # (python spec, extra) pairs the Windows CUDA matrix installs.
 $combos = @(
-    @('3.10', 'dev12'), @('3.10', 'dev13'),
-    @('3.11', 'dev-mlir12'), @('3.11', 'dev-mlir13'),
-    @('3.14', 'dev12'), @('3.14', 'dev13'),
-    @('3.14', 'dev-mlir12'), @('3.14', 'dev-mlir13')
+    @('3.11', 'dev-cuda12'), @('3.11', 'dev-cuda13'),
+    @('3.14', 'dev-cuda12'), @('3.14', 'dev-cuda13')
 )
 
 function Get-UvExecutable {

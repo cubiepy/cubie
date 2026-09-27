@@ -1,6 +1,6 @@
 import numpy as np
 
-from cubie.cuda_simsafe import cuda
+from cubie._cudasim_extensions import cuda
 import pytest
 
 from cubie.integrators.matrix_free_solvers.base_solver import (
@@ -14,17 +14,12 @@ from cubie.integrators.norms import ScaledNorm
 
 
 def test_matrix_free_solver_config_precision_property(precision):
-    """Verify numba_precision and simsafe_precision properties work correctly.
-    """
+    """Verify the numba_precision property works correctly."""
     config = MatrixFreeSolverConfig(precision=precision, solver_width=3)
 
     # Verify numba_precision returns correct type
     numba_prec = config.numba_precision
     assert numba_prec is not None
-
-    # Verify simsafe_precision returns correct type
-    simsafe_prec = config.simsafe_precision
-    assert simsafe_prec is not None
 
     # Verify precision attribute is stored correctly
     assert config.precision == precision

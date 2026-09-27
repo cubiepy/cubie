@@ -27,7 +27,8 @@ See Also
 """
 
 from attrs import field, frozen
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 from cubie._utils import getype_validator

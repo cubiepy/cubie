@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Block-interleaved A/B kernel-runtime gate: ``main`` vs the worktree.
 
-For each installed CUDA backend the gate starts two persistent
+The gate starts two persistent
 ``lorenz_mean_runtime.py --worker`` processes — A imports ``cubie``
 from an ephemeral ``git worktree`` at ``--main`` (default
 ``origin/main``; removed afterwards), B from this repository — and
@@ -21,7 +21,7 @@ The workers also report compile metrics read from each config's
 loaded cufunc and exact cubin link (``@META`` lines: registers, ptxas
 spill-store/load byte counts, shared and constant memory, actual
 launch geometry, occupancy in blocks/SM, run and chunk counts). The
-gate prints an A-vs-B metrics table per backend and fails outright on
+gate prints an A-vs-B metrics table and fails outright on
 an occupancy decrease, a spill increase, or a chunk-count mismatch;
 register deltas that leave occupancy and spill unchanged are
 reported but not gated (their runtime effect, if any, is caught by
@@ -66,7 +66,7 @@ as slowly, a per-process offset the ABBA order cannot cancel.
 
 Usage::
 
-    python benchmarks/ab_gate.py [--main REF] [--backends numba-cuda,mlir]
+    python benchmarks/ab_gate.py [--main REF]
         [--pairs P] [--min-count K] [--threshold PCT]
         [--wall-threshold PCT] [--host-overhead-threshold MS]
         [--n-runs N] [--chunked-runs N]
@@ -81,7 +81,6 @@ inconclusive DISTRUST result, and 0 for a trusted pass.
 """
 import argparse
 import ctypes
-import importlib.util
 import os
 import random
 import shutil
@@ -98,16 +97,12 @@ BENCH_NAME = "lorenz_mean_runtime.py"
 # Solves per block for every config. Fixed on purpose: the verdict
 # statistics assume the same block shape on every run and machine,
 # so solve counts are not a tuning lever. Fifteen solves keep the
-# floor statistic well populated while the whole two-backend gate
-# stays inside its five-minute budget with the implicit adaptive
-# config included.
+# floor statistic well populated while the whole gate stays inside
+# its five-minute budget with the implicit adaptive config included.
 BLOCK_SOLVES = 15
 
-# label -> (importable spec, CUBIE_CUDA_BACKEND value)
-BACKENDS = {
-    "numba-cuda": ("numba_cuda", "numba-cuda"),
-    "mlir": ("numba_cuda_mlir", "mlir"),
-}
+# Label of the numba-cuda-mlir backend in the result rows.
+BACKEND = "mlir"
 
 META_FIELDS = (
     "regs",
@@ -123,14 +118,6 @@ META_FIELDS = (
     "runs",
     "chunks",
 )
-
-
-def installed_backends():
-    return [
-        label
-        for label, (spec, _) in BACKENDS.items()
-        if importlib.util.find_spec(spec) is not None
-    ]
 
 
 def performance_core_mask():
@@ -224,7 +211,6 @@ def start_worker(tree, bench, backend, cache_dir, grid_dir, args):
     """Start one persistent benchmark worker; return the process."""
     env = dict(os.environ)
     env["PYTHONPATH"] = str(Path(tree) / "src")
-    env["CUBIE_CUDA_BACKEND"] = BACKENDS[backend][1]
     env["CUBIE_CACHE_DIR"] = str(cache_dir)
     cmd = [sys.executable, str(bench), "--worker",
            "--grid-cache", str(grid_dir), "--no-clear-cache"]
@@ -541,11 +527,8 @@ def main():
     parser.add_argument("--main", default="origin/main",
                         help="A-side ref (default origin/main; the "
                              "local main branch is often stale).")
-    parser.add_argument("--backends", default=None,
-                        help="Comma-separated subset of: "
-                             + ", ".join(BACKENDS))
     parser.add_argument("--pairs", type=int, default=4,
-                        help="A/B block pairs per backend; even "
+                        help="A/B block pairs; even "
                              "cancels linear drift, multiples of 4 "
                              "also quadratic.")
     parser.add_argument("--min-count", type=int, default=5,
@@ -606,18 +589,6 @@ def main():
             file=sys.stderr,
         )
 
-    backends = installed_backends()
-    if args.backends:
-        wanted = [b.strip() for b in args.backends.split(",")]
-        missing = [b for b in wanted if b not in backends]
-        if missing:
-            raise SystemExit(
-                f"backend(s) not installed: {', '.join(missing)}"
-            )
-        backends = wanted
-    if not backends:
-        raise SystemExit("no CUDA backend is installed")
-
     branch = subprocess.run(
         ["git", "-C", str(REPO), "rev-parse", "--abbrev-ref", "HEAD"],
         capture_output=True, text=True,
@@ -628,7 +599,6 @@ def main():
     ).stdout.strip()
     b_label = args.main if args.calibrate else f"{branch} (working tree)"
     print(f"A = {args.main} ({a_sha})   B = {b_label}   "
-          f"backends: {', '.join(backends)}   "
           f"({args.pairs} block pairs x {BLOCK_SOLVES} "
           f"solves/block/side)\n")
 
@@ -638,24 +608,23 @@ def main():
     regressed = False
     distrusted = False
     try:
-        for backend in backends:
-            rows, meta_regressed = run_backend(
-                backend, main_tree, b_tree, base, args)
-            regressed = regressed or meta_regressed
-            print()
-            for row in rows:
-                (bk, key, stat, a, b, delta, verdict, distrust,
-                 unit) = row
-                regressed = regressed or verdict == "REGRESSION"
-                distrusted = distrusted or distrust
-                flag = "  DISTRUST" if distrust else ""
-                shown = (
-                    f"{delta:+7.3f}ms" if unit == "ms"
-                    else f"{delta:+6.2f}%"
-                )
-                print(f"{bk:<11}{key:<15}{stat:<8}"
-                      f"A {a:9.3f}  B {b:9.3f}  "
-                      f"{shown}  {verdict}{flag}")
+        rows, meta_regressed = run_backend(
+            BACKEND, main_tree, b_tree, base, args)
+        regressed = regressed or meta_regressed
+        print()
+        for row in rows:
+            (bk, key, stat, a, b, delta, verdict, distrust,
+             unit) = row
+            regressed = regressed or verdict == "REGRESSION"
+            distrusted = distrusted or distrust
+            flag = "  DISTRUST" if distrust else ""
+            shown = (
+                f"{delta:+7.3f}ms" if unit == "ms"
+                else f"{delta:+6.2f}%"
+            )
+            print(f"{bk:<11}{key:<15}{stat:<8}"
+                  f"A {a:9.3f}  B {b:9.3f}  "
+                  f"{shown}  {verdict}{flag}")
     finally:
         if not args.keep:
             remove_worktree(main_tree)

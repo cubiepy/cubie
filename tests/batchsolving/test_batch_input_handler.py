@@ -19,7 +19,7 @@ from cubie.batchsolving.BatchInputHandler import (
     verbatim_grid,
 )
 from cubie.batchsolving.SystemInterface import SystemInterface
-from cubie.cuda_simsafe import is_pinned_array
+from cubie.memory.driver_memory import is_pinned_array
 
 
 def test_unique_cartesian_product_deduplicates(system):

@@ -8,7 +8,6 @@ from numpy import array, float32
 
 from attrs import define, field
 
-from cubie.cuda_backend import IS_MLIR
 from cubie.batchsolving.BatchSolverConfig import ALL_CACHE_PARAMETERS
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.cubie_cache import (
@@ -96,30 +95,24 @@ def test_toolchain_fingerprint_is_stable_hex_digest():
 def test_fingerprint_covers_declared_abi_inputs_only():
     """The fingerprint holds only declared ABI/toolchain inputs.
 
-    Every declared input (schema, Python ABI tag, backend id, block
-    schedule policy, backend package versions) is present; unrelated
-    installed packages, paths, and host identity are absent.
+    Every declared input (schema, Python ABI tag, block schedule
+    policy, backend package versions) is present; unrelated installed
+    packages, paths, and host identity are absent.
     """
-    from cubie.cuda_backend import CUDA_BACKEND
     from cubie._env import active_block_schedule
 
     entries = _abi_fingerprint_entries()
     keys = [entry.split("=")[0] for entry in entries]
     assert keys[0] == "schema"
     assert keys[1] == "python-abi"
-    assert entries[2] == f"backend={CUDA_BACKEND}"
-    assert entries[3] == (
+    assert entries[2] == (
         f"block-schedule={active_block_schedule()}"
     )
     # Backend serialization owners only — nothing else from the env.
     allowed = {
         "schema",
         "python-abi",
-        "backend",
         "block-schedule",
-        "numba-cuda",
-        "numba",
-        "llvmlite",
         "cubie-numba-cuda-mlir",
         "numba-cuda-mlir",
     }
@@ -291,28 +284,24 @@ def test_cache_impl_filename_base():
 def test_cache_impl_check_cachable():
     """Verify check_cachable accepts what the backend can serialize.
 
-    numba-cuda kernels are always cachable; the MLIR compile-result
-    scheme inspects targetoptions and refuses results that link
-    external files.
+    The MLIR compile-result scheme inspects targetoptions and refuses
+    results that link external files.
     """
     impl = CUBIECacheImpl(
         system_name="test_system",
         system_hash="abc123",
         compile_settings_hash="def456",
     )
-    if IS_MLIR:
 
-        class LinkFreeResult:
-            metadata = {"targetoptions": {"link": []}}
+    class LinkFreeResult:
+        metadata = {"targetoptions": {"link": []}}
 
-        class LinkedResult:
-            metadata = {"targetoptions": {"link": ["kernels.cu"]}}
+    class LinkedResult:
+        metadata = {"targetoptions": {"link": ["kernels.cu"]}}
 
-        assert impl.check_cachable(LinkFreeResult()) is True
-        with pytest.raises(RuntimeError):
-            impl.check_cachable(LinkedResult())
-    else:
-        assert impl.check_cachable(None) is True
+    assert impl.check_cachable(LinkFreeResult()) is True
+    with pytest.raises(RuntimeError):
+        impl.check_cachable(LinkedResult())
 
 
 # --- CUBIECache tests ---
@@ -360,11 +349,6 @@ def test_cubie_cache_index_key():
     assert key[2] == "abc123"
     assert key[3] == config_hash
     assert key[4] == package_source_hash()
-
-    cache._launch_config_key = (1, 2, 3)
-    launch_key = cache._index_key(sig, codegen)
-    assert launch_key[:-1] == key
-    assert launch_key[-1] == ("launch_config", (1, 2, 3))
 
 
 def test_cubie_cache_path(isolated_cache_root):
@@ -645,7 +629,7 @@ def test_index_save_retries_while_the_index_is_held_open(tmp_path):
     """A save denied by an open index handle lands once it closes."""
     from threading import Timer
 
-    from cubie.cuda_simsafe import IndexDataCacheFile
+    from numba_cuda_mlir.numba_cuda.core.caching import IndexDataCacheFile
     from cubie.cubie_cache import _retry_transient_io
 
     cache_file = IndexDataCacheFile(str(tmp_path), "kernels-abc", "stamp")

@@ -10,10 +10,8 @@ runs a fixed batch of 2**20 trajectories — enough for ten-plus
 occupancy waves at the highest occupancy these kernels reach on a
 56-SM GPU (see ``N_TRAJECTORIES`` in the worker).
 
-Profiled kernels compile with ``lineinfo`` on. On numba-cuda, line
-tables survive the LTO link, so one production-flag launch per
-algorithm carries per-line attribution. On MLIR, the LTO link strips
-line tables, so each algorithm is profiled twice in succession: an
+Profiled kernels compile with ``lineinfo`` on. The MLIR LTO link
+strips line tables, so each algorithm is profiled twice in succession: an
 ``-lto`` arm (the production build, no source attribution) directly
 followed by a ``-nolto`` arm (per-line attribution). The two arms
 land adjacently in one report for side-by-side comparison — the
@@ -25,7 +23,7 @@ the report at capture time.
 
 Examples
 --------
-Profile the complete two-problem, two-backend matrix::
+Profile both problems::
 
     python benchmarks/ncu_algorithm_comparison.py --problem all \
         --backend all
@@ -80,7 +78,7 @@ DEFAULT_OUTPUT = REPO_ROOT / "generated" / "ncu_algorithm_comparison"
 
 ALGORITHMS = ("tsit5", "kvaerno3", "radau", "ode23s")
 PROBLEMS = ("lorenz", "very-stiff")
-BACKENDS = ("numba-cuda", "mlir")
+BACKENDS = ("mlir",)
 
 SUMMARY_METRICS = (
     ("NCU duration (ms)", "gpu__time_duration.sum"),
@@ -271,12 +269,10 @@ def run_prefix(
 def backend_lto_mode(backend: str) -> str:
     """Return the LTO arms profiled on ``backend``.
 
-    numba-cuda keeps line tables through the LTO link, so one
-    production-flag arm suffices; the MLIR link strips them, so both
-    arms run in succession.
+    The MLIR link strips line tables, so both arms run in succession.
     """
 
-    return "both" if backend == "mlir" else "on"
+    return "both"
 
 
 def launch_count(algorithms: Sequence[str], lto_mode: str) -> int:
@@ -744,7 +740,6 @@ def run_matrix(args: argparse.Namespace) -> None:
                 prefix,
             )
             environment = os.environ.copy()
-            environment["CUBIE_CUDA_BACKEND"] = backend
             environment["PYTHONPATH"] = os.pathsep.join(
                 (str(REPO_ROOT / "src"), str(REPO_ROOT))
             )

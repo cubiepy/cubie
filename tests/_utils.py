@@ -7,8 +7,10 @@ from typing import Mapping, Optional, Union, Dict, Any, Callable
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda, int32, numba_from_dtype as from_dtype
-from cubie.cuda_simsafe import compile_kwargs
+from numba_cuda_mlir.types import int32
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
+from cubie._cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import MemoryManager
 from numpy.testing import assert_allclose

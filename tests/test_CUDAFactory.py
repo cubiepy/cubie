@@ -18,9 +18,8 @@ from cubie.CUDAFactory import (
     nested_config_fields,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import from_dtype as simsafe_dtype
-from cubie.cuda_simsafe import numba_from_dtype as from_dtype
+from cubie._cudasim_extensions import cuda
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 from numpy import dtype as np_dtype
 
 
@@ -574,17 +573,6 @@ def test_config_numba_precision():
     assert c.numba_precision == expected
 
 
-def test_config_simsafe_precision():
-    """simsafe_precision returns simsafe_dtype(np_dtype(precision))."""
-    @attrs.frozen
-    class _C(CUDAFactoryConfig):
-        pass
-
-    c = _C(precision=np.float64)
-    expected = simsafe_dtype(np_dtype(np.float64))
-    assert c.simsafe_precision == expected
-
-
 # ── CUDAFactory __init__ / setup / properties ──────────────── #
 
 
@@ -980,14 +968,6 @@ def test_factory_numba_precision_forwarding():
     assert f.numba_precision == f.compile_settings.numba_precision
 
 
-def test_factory_simsafe_precision_forwarding():
-    """simsafe_precision forwards to compile_settings.simsafe_precision."""
-    f = _make_factory()
-    cfg = CUDAFactoryConfig(precision=np.float32)
-    f.setup_compile_settings(cfg)
-    assert f.simsafe_precision == f.compile_settings.simsafe_precision
-
-
 def test_factory_shared_buffer_size(single_integrator_run):
     """shared_buffer_size delegates to buffer_registry."""
     expected = buffer_registry.shared_buffer_size(single_integrator_run)
@@ -1250,3 +1230,80 @@ def test_update_validates_a_value_equal_to_the_stored_one():
 
     with pytest.raises(TypeError):
         _C().update({"x": True})
+
+
+def test_unroll_flags_update_reads_field_keys():
+    """``unroll_*`` keys derive a replacement; other keys are ignored."""
+    from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
+
+    flags = UnrollFlags()
+    replacement, recognised, changed = flags.update(
+        {"unroll_norms": True, "unroll_stage": False, "lineinfo": True}
+    )
+    assert recognised == {"unroll_norms", "unroll_stage"}
+    assert changed == {"unroll_stage"}
+    assert replacement.unroll_norms == (True, None)
+    assert replacement.unroll_stage == (False, None)
+    assert flags.unroll_stage == (True, None)
+    assert ALL_UNROLL_PARAMETERS == {
+        "unroll_stage",
+        "unroll_step_element",
+        "unroll_accumulator",
+        "unroll_solver_element",
+        "unroll_norms",
+        "unroll_other_small",
+        "unroll_newton_exits",
+        "unroll_krylov_exits",
+    }
+
+    counted, recognised, changed = replacement.update(
+        {"unroll_stage": (True, 4), "unroll_norms": (True, None)}
+    )
+    assert recognised == {"unroll_stage", "unroll_norms"}
+    assert changed == {"unroll_stage"}
+    assert counted.unroll_stage == (True, 4)
+    assert counted.unroll_norms == (True, None)
+    assert counted.update({"unroll_stage": [True, 4]})[2] == set()
+
+
+def test_unroll_flag_converter_forms():
+    """Bools and pairs convert to ``(unroll, count)``; bad pairs raise."""
+    from cubie.CUDAFactory import (
+        UnrollChoice,
+        UnrollFlags,
+        unroll_flag_converter,
+    )
+
+    assert unroll_flag_converter(True) == (True, None)
+    assert unroll_flag_converter(False) == (False, None)
+    assert unroll_flag_converter((True, None)) == (True, None)
+    assert unroll_flag_converter((True, 4)) == (True, 4)
+    assert unroll_flag_converter([True, 4]) == (True, 4)
+    assert unroll_flag_converter((False, None)) == (False, None)
+    with pytest.raises(ValueError):
+        unroll_flag_converter((False, 4))
+    with pytest.raises(ValueError):
+        unroll_flag_converter((True, 0))
+    with pytest.raises(ValueError):
+        UnrollFlags(unroll_stage=(False, 2))
+    assert UnrollFlags(unroll_stage=(True, 2)) == UnrollFlags(
+        unroll_stage=[True, 2]
+    )
+    assert UnrollFlags(unroll_stage=True) == UnrollFlags(
+        unroll_stage=(True, None)
+    )
+    assert UnrollFlags() == UnrollFlags(
+        unroll_stage=True,
+        unroll_step_element=True,
+        unroll_accumulator=True,
+        unroll_solver_element=True,
+        unroll_norms=True,
+        unroll_other_small=True,
+        unroll_newton_exits=True,
+        unroll_krylov_exits=(True, 1),
+    )
+    assert unroll_flag_converter(UnrollChoice.FULL) == (True, None)
+    assert unroll_flag_converter(UnrollChoice.ROLLED) == (True, 1)
+    assert UnrollFlags(unroll_stage=UnrollChoice.ROLLED) == UnrollFlags(
+        unroll_stage=(True, 1)
+    )

@@ -22,7 +22,8 @@ See Also
 """
 from typing import Any, Callable
 
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
 from attrs import field, frozen
 
 from cubie._utils import PrecisionDType
@@ -31,7 +32,6 @@ from cubie.integrators.step_control.adaptive_step_controller import (
     BaseAdaptiveStepController,
     gain_converter,
 )
-from cubie.cuda_simsafe import selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 from cubie.integrators.step_control.base_step_controller import ControllerCache
@@ -177,17 +177,17 @@ class AdaptiveIController(BaseAdaptiveStepController):
                     (gain >= deadband_min)
                     and (gain <= deadband_max)
                 )
-                gain = selp(within_deadband, typed_one, gain)
+                gain = cuda.selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry with the undeadbanded gain.
             gain_reject = max(min_step_shrink, gaintmp)
-            gain = selp(accept, gain, gain_reject)
+            gain = cuda.selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size
             # info: on accept, freeze dt and report success.
             freeze = accept and truncated
             dt_new_raw = dt[0] * gain
-            dt[0] = selp(freeze, dt[0], clamp(dt_new_raw, dt_min, dt_max))
+            dt[0] = cuda.selp(freeze, dt[0], clamp(dt_new_raw, dt_min, dt_max))
 
             ret = (
                 success

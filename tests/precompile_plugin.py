@@ -1,12 +1,17 @@
 """Populate and enforce the shared CUDA test-kernel cache."""
 import importlib
-from importlib.util import find_spec
 import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
 
+from cuda.core._device import ComputeCapability
 import numpy as np
+from numba_cuda_mlir import cuda as backend_cuda
+from numba_cuda_mlir import tools as mlir_tools
+from numba_cuda_mlir.descriptor import MLIRDispatcher
+from numba_cuda_mlir.numba_cuda import types, typing
+from numba_cuda_mlir.numba_cuda.typing.typeof import typeof as _mlir_typeof
 
 from tests._precompile_hashing import (
     _function_key,
@@ -48,6 +53,7 @@ CACHE_DIR = Path(os.environ["CUBIE_KERNEL_CACHE_DIR"]).resolve()
 # Keep every kernel in the uploaded artifact.
 os.environ.setdefault("CUBIE_MAX_CACHE_ENTRIES", "0")
 
+
 if POPULATION:
     # No-op the numpy comparisons so tests reach every launch.
     import numpy.testing as _np_testing
@@ -70,28 +76,8 @@ if POPULATION:
         setattr(_np_testing, _assert_name, _population_no_op_assert)
 
 
-def _select_backend():
-    requested = os.environ.get("CUBIE_CUDA_BACKEND", "").strip().lower()
-    if requested == "mlir":
-        return "mlir"
-    if requested == "numba-cuda":
-        return "numba-cuda"
-    if requested:
-        raise RuntimeError(f"Unsupported CUBIE_CUDA_BACKEND: {requested!r}")
-    return "mlir" if find_spec("numba_cuda_mlir") else "numba-cuda"
-
-
-BACKEND = _select_backend()
-
-if BACKEND == "mlir":
-    from cuda.core._device import ComputeCapability  # noqa: E402
-    from numba_cuda_mlir import cuda as backend_cuda  # noqa: E402
-    from numba_cuda_mlir import tools as mlir_tools  # noqa: E402
-
-    if POPULATION:
-        mlir_tools._cached_cc = ComputeCapability(*TARGET_CC)
-else:
-    import numba.cuda as backend_cuda  # noqa: E402
+if POPULATION:
+    mlir_tools._cached_cc = ComputeCapability(*TARGET_CC)
 
 
 class _FakeStream:
@@ -173,9 +159,8 @@ if POPULATION:
     backend_cuda.stream = _fake_new_stream
     backend_cuda.external_stream = _fake_new_stream
 
-if POPULATION:
-    from cuda.core._device import ComputeCapability  # noqa: E402
 
+if POPULATION:
     # Driverless stand-in for the device cubie queries outside launches.
     _fake_device = SimpleNamespace(
         compute_capability=ComputeCapability(*TARGET_CC),
@@ -202,14 +187,8 @@ if POPULATION:
 
     backend_cuda.get_current_device = _fake_current_device
 
-if POPULATION and BACKEND == "numba-cuda":
-    import numba.cuda.dispatcher as nb_dispatcher  # noqa: E402
-    from numba.cuda.cudadrv import devices as nb_devices  # noqa: E402
 
-    nb_dispatcher.get_current_device = _fake_current_device
-    nb_devices.get_context = _fake_get_context
-
-if POPULATION and BACKEND == "mlir":
+if POPULATION:
     from numba_cuda_mlir.numba_cuda.cudadrv import (  # noqa: E402
         devices as mlir_devices,
     )
@@ -343,7 +322,7 @@ def _test_kernel_cache_class():
             self._function_key = _function_key(py_func)
 
         def _index_key(self, sig, codegen):
-            key = (
+            return (
                 sig,
                 codegen.magic_tuple(),
                 self._system_hash,
@@ -351,9 +330,6 @@ def _test_kernel_cache_class():
                 package_source_hash(),
                 self._function_key,
             )
-            if self._launch_config_key is not None:
-                key += (("launch_config", self._launch_config_key),)
-            return key
 
     _TEST_KERNEL_CACHE_CLASS = _TestKernelCache
     return _TestKernelCache
@@ -387,153 +363,84 @@ def _attach_pending():
         _attach_cache(_PENDING_DISPATCHERS.pop())
 
 
-if BACKEND == "numba-cuda":
-    from numba.cuda.cext import _dispatcher  # noqa: E402
-    from numba.cuda.dispatcher import (  # noqa: E402
-        CUDADispatcher,
-        _LAUNCH_CONFIG_KW,
-        _Kernel,
-    )
+_dispatcher_init = MLIRDispatcher.__init__
+_dispatcher_getitem = MLIRDispatcher.__getitem__
 
-    if POPULATION:
 
-        def _bind_target_cubin(self):
-            return self._codelibrary.get_cubin(cc=TARGET_CC)
+def _marshal_launch_arg(value):
+    """Normalize a launch argument the way the real launch does.
 
-        _Kernel.bind = _bind_target_cubin
-
-    _dispatcher_init = CUDADispatcher.__init__
-    _dispatcher_compile = CUDADispatcher.compile
-
-    def _init_dispatcher(self, *args, **kwargs):
-        _dispatcher_init(self, *args, **kwargs)
-        _attach_or_queue(self)
-
-    def _compile_dispatcher(self, *args, **kwargs):
-        _attach_pending()
-        _attach_cache(self)
-        return _dispatcher_compile(self, *args, **kwargs)
-
-    CUDADispatcher.__init__ = _init_dispatcher
-    CUDADispatcher.compile = _compile_dispatcher
-
-    def _precompile_numba(dispatcher, args, launch_config):
-        previous_args = launch_config._push_args(args)
-        try:
-            selected = dispatcher._select_launch_config_dispatcher(
-                launch_config
-            )
-            if selected is not dispatcher:
-                selected._cache = dispatcher._cache
-
-            _attach_pending()
-            _attach_cache(selected)
-            _dispatcher.Dispatcher._cuda_call(
-                selected,
-                *args,
-                **{_LAUNCH_CONFIG_KW: launch_config},
-            )
-            return None
-        finally:
-            launch_config._pop_args(previous_args)
-
-    def _numba_getitem(self, config):
-        dispatcher = self
-        config = list(config)
-        if len(config) >= 3 and isinstance(config[2], _FakeStream):
-            config[2] = 0
-        launch_config = dispatcher.configure(*config)
-
-        class _Shim:
-            def __call__(self, *args):
-                return _precompile_numba(
-                    dispatcher, args, launch_config
-                )
-
-        return _Shim()
-
-    if POPULATION:
-        CUDADispatcher.__getitem__ = _numba_getitem
-        CUDADispatcher.call = _precompile_numba
-else:
-    from numba_cuda_mlir.descriptor import MLIRDispatcher  # noqa: E402
-    from numba_cuda_mlir.numba_cuda import types, typing  # noqa: E402
-    from numba_cuda_mlir.numba_cuda.typing.typeof import (  # noqa: E402
-        typeof as _mlir_typeof,
-    )
-
-    _dispatcher_init = MLIRDispatcher.__init__
-    _dispatcher_getitem = MLIRDispatcher.__getitem__
-
-    def _marshal_launch_arg(value):
-        """Normalize a launch argument the way the real launch does.
-
-        Mirrors ``_ArgMarshaller._maybe_copy_to_device_item``'s scalar
-        rules in the installed cubie-numba-cuda-mlir wheel: numpy
-        integer scalars stay at their exact width (typing an
-        ``np.int32`` argument as ``int32``), float64 scalars become
-        Python floats, and numpy bools become Python bools before
-        typing. Population signatures must match, or GPU consumers
-        recompile with differently-typed scalar signatures.
-        """
-        if isinstance(value, (tuple, list)):
-            processed = [_marshal_launch_arg(item) for item in value]
-            if hasattr(value, "_fields"):
-                return type(value)(*processed)
-            return type(value)(processed)
-        if isinstance(value, (np.datetime64, np.timedelta64)):
-            return value
-        if isinstance(value, np.integer):
-            return value
-        if isinstance(value, (np.float16, np.float32)):
-            return value
-        if isinstance(value, np.floating):
-            return float(value)
-        if isinstance(value, np.bool_):
-            return bool(value)
+    Mirrors ``_ArgMarshaller._maybe_copy_to_device_item``'s scalar
+    rules in the installed cubie-numba-cuda-mlir wheel: numpy
+    integer scalars stay at their exact width (typing an
+    ``np.int32`` argument as ``int32``), float64 scalars become
+    Python floats, and numpy bools become Python bools before
+    typing. Population signatures must match, or GPU consumers
+    recompile with differently-typed scalar signatures.
+    """
+    if isinstance(value, (tuple, list)):
+        processed = [_marshal_launch_arg(item) for item in value]
+        if hasattr(value, "_fields"):
+            return type(value)(*processed)
+        return type(value)(processed)
+    if isinstance(value, (np.datetime64, np.timedelta64)):
         return value
+    if isinstance(value, np.integer):
+        return value
+    if isinstance(value, (np.float16, np.float32)):
+        return value
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    return value
 
-    def _init_dispatcher(self, *args, **kwargs):
-        _dispatcher_init(self, *args, **kwargs)
-        _attach_or_queue(self)
 
-    MLIRDispatcher.__init__ = _init_dispatcher
+def _init_dispatcher(self, *args, **kwargs):
+    _dispatcher_init(self, *args, **kwargs)
+    _attach_or_queue(self)
 
-    def _precompile_mlir(dispatcher, args):
-        _attach_pending()
-        _attach_cache(dispatcher)
-        argtypes = tuple(
-            _mlir_typeof(_marshal_launch_arg(arg)) for arg in args
-        )
-        if argtypes in dispatcher.overloads:
-            return None
 
-        dispatcher.targetoptions["chip"] = (
-            f"sm_{TARGET_CC[0]}{TARGET_CC[1]}"
-        )
-        signature = typing.signature(types.none, *argtypes)
-        dispatcher.compile(signature)
+MLIRDispatcher.__init__ = _init_dispatcher
+
+
+def _precompile_mlir(dispatcher, args):
+    _attach_pending()
+    _attach_cache(dispatcher)
+    argtypes = tuple(
+        _mlir_typeof(_marshal_launch_arg(arg)) for arg in args
+    )
+    if argtypes in dispatcher.overloads:
         return None
 
-    def _mlir_getitem(self, config):
-        dispatcher = self
+    dispatcher.targetoptions["chip"] = (
+        f"sm_{TARGET_CC[0]}{TARGET_CC[1]}"
+    )
+    signature = typing.signature(types.none, *argtypes)
+    dispatcher.compile(signature)
+    return None
 
-        class _Shim:
-            def __call__(self, *args):
-                return _precompile_mlir(dispatcher, args)
 
-        return _Shim()
+def _mlir_getitem(self, config):
+    dispatcher = self
 
-    if POPULATION:
-        MLIRDispatcher.__getitem__ = _mlir_getitem
-    else:
+    class _Shim:
+        def __call__(self, *args):
+            return _precompile_mlir(dispatcher, args)
 
-        def _cached_mlir_getitem(self, config):
-            _attach_pending()
-            _attach_cache(self)
-            return _dispatcher_getitem(self, config)
+    return _Shim()
 
-        MLIRDispatcher.__getitem__ = _cached_mlir_getitem
+
+if POPULATION:
+    MLIRDispatcher.__getitem__ = _mlir_getitem
+else:
+
+    def _cached_mlir_getitem(self, config):
+        _attach_pending()
+        _attach_cache(self)
+        return _dispatcher_getitem(self, config)
+
+    MLIRDispatcher.__getitem__ = _cached_mlir_getitem
 
 
 if POPULATION:
@@ -636,16 +543,16 @@ if POPULATION:
 
     # Placeholder host buffers are never page-locked.
     for _module_name in (
-        "cubie.cuda_simsafe",
+        "cubie.memory.driver_memory",
         "cubie.batchsolving.BatchInputHandler",
         "cubie.batchsolving.arrays.BaseArrayManager",
     ):
         importlib.import_module(_module_name).is_pinned_array = _never_pinned
 
-    import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
+    import cubie._utils as _cubie_utils  # noqa: E402
 
     # Fake device arrays take the device-input path, keeping their layout.
-    _real_is_device_array = _cuda_simsafe.is_device_array
+    _real_is_device_array = _cubie_utils.is_device_array
 
     def _population_is_device_array(value):
         if isinstance(value, _FakeDeviceArray):
@@ -653,7 +560,7 @@ if POPULATION:
         return _real_is_device_array(value)
 
     for _module_name in (
-        "cubie.cuda_simsafe",
+        "cubie._utils",
         "cubie.batchsolving.BatchInputHandler",
         "cubie.batchsolving.arrays.BatchInputArrays",
     ):

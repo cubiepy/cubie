@@ -38,8 +38,9 @@ from typing import Callable, Optional, Set
 
 from attrs import define, field
 from numpy import int32 as np_int32
-from cubie.cuda_simsafe import cuda, int32, float32, float64, bool_
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import boolean as bool_, float32, float64, int32
+from cubie._cudasim_extensions import cuda, fmin
+from cubie.backend.intrinsics import narrow_f64, unroll_if
 
 from cubie.CUDAFactory import (
     ALL_JIT_PARAMETERS,
@@ -49,13 +50,6 @@ from cubie.CUDAFactory import (
     build_config,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import (
-    activemask,
-    all_sync,
-    fmin,
-    narrow_f64,
-    selp,
-)
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie._utils import PrecisionDType
 from cubie.integrators.loops.ode_loop_config import ODELoopConfig
@@ -753,7 +747,7 @@ class IVPLoop(CUDAFactory):
                 if i < int32(2):
                     proposed_counters[i] = int32(0)
 
-            mask = activemask()
+            mask = cuda.activemask()
             # A failed initialisation ends the run at the t0 save.
             irrecoverable = init_failed
             at_end = False
@@ -791,7 +785,7 @@ class IVPLoop(CUDAFactory):
 
                 finished = finished or irrecoverable
 
-                if all_sync(mask, finished):
+                if cuda.all_sync(mask, finished):
                     return status
 
                 if not finished:
@@ -830,7 +824,7 @@ class IVPLoop(CUDAFactory):
                             next_event = fmin(next_event, next_save)
                             # and the f64 copy follows the f32 choice.
                             if fixed_mode:
-                                next_event64 = selp(
+                                next_event64 = cuda.selp(
                                     next_event == next_save,
                                     next_save64,
                                     next_event64,
@@ -841,7 +835,7 @@ class IVPLoop(CUDAFactory):
                                 next_event, next_update_summary
                             )
                             if fixed_mode:
-                                next_event64 = selp(
+                                next_event64 = cuda.selp(
                                     next_event == next_update_summary,
                                     next_summary64,
                                     next_event64,
@@ -874,7 +868,7 @@ class IVPLoop(CUDAFactory):
                             t_prec_proposal = narrow_time(t_proposal)
                     # Land the final at_end step exactly on t_end.
                     if save_last or summarise_last:
-                        t_prec_proposal = selp(
+                        t_prec_proposal = cuda.selp(
                             at_end, t_end, t_prec_proposal
                         )
                     time_advances = bool_(dt_eff > typed_zero)
@@ -920,7 +914,9 @@ class IVPLoop(CUDAFactory):
                         irrecoverable or (fixed_mode and step_failed)
                     )
                     for i in unroll_if(range(n_error), unroll_other_small):
-                        error[i] = selp(step_failed, precision(1e16), error[i])
+                        error[i] = cuda.selp(
+                            step_failed, precision(1e16), error[i]
+                        )
 
                     # Adjust dt based on calculated error if adaptive
                     if not fixed_mode:
@@ -972,14 +968,14 @@ class IVPLoop(CUDAFactory):
                     # test for stagnation - we might have one small step
                     # which doesn't nudge t if we're right up against a save
                     # boundary, so we call 2 stale t values in a row "stagnant"
-                    stagnant_counts = selp(
+                    stagnant_counts = cuda.selp(
                         time_advances,
                         int32(0),
                         int32(stagnant_counts + int32(1)),
                     )
 
                     stagnant = bool_(stagnant_counts >= int32(2))
-                    iteration_status = selp(
+                    iteration_status = cuda.selp(
                         stagnant,
                         int32(iteration_status | stagnation),
                         iteration_status,
@@ -994,7 +990,7 @@ class IVPLoop(CUDAFactory):
                     # bits from rejected-then-recovered attempts never reach
                     # the persistent word.  The fatal iteration's bits are
                     # committed before the reset, preserving diagnosability.
-                    status = selp(
+                    status = cuda.selp(
                         irrecoverable,
                         int32(status | iteration_status),
                         status,
@@ -1002,8 +998,8 @@ class IVPLoop(CUDAFactory):
                     if accept:
                         iteration_status = int32(0)
 
-                    t = selp(accept, t_proposal, t)
-                    t_prec = selp(accept, t_prec_proposal, t_prec)
+                    t = cuda.selp(accept, t_proposal, t)
+                    t_prec = cuda.selp(accept, t_prec_proposal, t_prec)
                     # Adaptive mode's next step time is available now.
                     if not fixed_mode:
                         t_next64 = t + float64(dt_raw)
@@ -1012,21 +1008,23 @@ class IVPLoop(CUDAFactory):
                     for i in unroll_if(range(n_states), unroll_step_element):
                         newv = state_proposal_buffer[i]
                         oldv = state_buffer[i]
-                        state_buffer[i] = selp(accept, newv, oldv)
+                        state_buffer[i] = cuda.selp(accept, newv, oldv)
 
                     for i in unroll_if(range(n_drivers), unroll_step_element):
                         new_drv = drivers_proposal_buffer[i]
                         old_drv = drivers_buffer[i]
-                        drivers_buffer[i] = selp(accept, new_drv, old_drv)
+                        drivers_buffer[i] = cuda.selp(accept, new_drv, old_drv)
 
                     for i in unroll_if(
                         range(n_observables), unroll_step_element
                     ):
                         new_obs = observables_proposal_buffer[i]
                         old_obs = observables_buffer[i]
-                        observables_buffer[i] = selp(accept, new_obs, old_obs)
+                        observables_buffer[i] = cuda.selp(
+                            accept, new_obs, old_obs
+                        )
 
-                    prev_step_accepted_flag = selp(
+                    prev_step_accepted_flag = cuda.selp(
                         accept,
                         int32(1),
                         int32(0),

@@ -43,8 +43,8 @@ from cubie.batchsolving.optimize import (
     resident_blocks_within_l2,
 )
 from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
-from cubie.cuda_backend import IS_MLIR
-from cubie.cuda_simsafe import cuda, is_device_array
+from cubie._utils import is_device_array
+from cubie._cudasim_extensions import cuda
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
 )
@@ -505,14 +505,10 @@ def test_compile_and_solve_device_input_layouts(
         ).registers_per_thread > 0
         assert solver.kernel.launchable_shapes(runs=runs)
         solver.compile()
-        specializations = dict(solver.kernel._cache.specializations)
         signature = solver.kernel.signature
         repeated = solver.solve(*device_inputs, duration=0.05)
         np.testing.assert_array_equal(repeated.state, expected_state)
         assert solver.kernel.signature is signature
-        assert solver.kernel._cache.specializations == specializations
-        if not IS_MLIR:
-            assert specializations[signature[:9]] is signature
 
 
 @pytest.mark.nocudasim
@@ -528,8 +524,6 @@ def test_signature_rebuilds_after_compile_setting_change(
     assert solver.kernel.cache_valid
     assert solver.kernel._cache is not original_cache
     assert signature == solver.kernel._cache.signature
-    if not IS_MLIR:
-        assert solver.kernel._cache.specializations[signature[:9]] is signature
 
 
 @pytest.mark.parametrize(

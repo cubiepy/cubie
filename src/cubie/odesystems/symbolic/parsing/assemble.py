@@ -30,7 +30,7 @@ from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
-from cubie.cuda_simsafe import devfunc_returns_nonfloat
+from cubie._utils import devfunc_returns_nonfloat
 
 
 def _observable_substitutions(

@@ -67,8 +67,9 @@ from cubie.CUDAFactory import (
     CUDAFactoryConfig,
     build_config,
 )
-from cubie.cuda_simsafe import cuda, int32, selp
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
 )
@@ -569,7 +570,7 @@ class DenseStagePredictor(CUDAFactory):
                     target_idx = (
                         (first_predicted + row_idx) * n + state_idx
                     )
-                    stage_increment[target_idx] = selp(
+                    stage_increment[target_idx] = cuda.selp(
                         apply_flag,
                         accumulator,
                         stage_increment[target_idx],

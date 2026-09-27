@@ -1,7 +1,5 @@
-"""Vendored third-party code for CuBIE compatibility.
+"""Vendored third-party code for CuBIE.
 
-This package contains code vendored from external libraries to use as
-compatibility shims or fallbacks for CuBIE when running in different
-environments (e.g., CUDASIM mode).
-Each vendored module includes a comment with the source and date.
+The CUDA simulator from numba-cuda and cellmlmanip; each records
+its source and snapshot date.
 """

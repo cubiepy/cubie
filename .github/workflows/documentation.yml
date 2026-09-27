@@ -13,8 +13,7 @@ permissions:
 jobs:
   docs:
     env:
-          NUMBA_ENABLE_CUDASIM: "1"        # run Numba’s GPU simulator on GPU-less runner
-          NUMBA_CUDA_USE_NVIDIA_BINDING: "0"
+          NUMBA_ENABLE_CUDASIM: "1"        # GPU-less runner
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -27,8 +26,7 @@ jobs:
         run: |
           source .venv/bin/activate
           pip install uv
-          # cuda13 adds numba-cuda, the only backend with a simulator.
-          uv pip install sphinx sphinx_rtd_theme myst_parser numba .[dev,cuda13]
+          uv pip install sphinx sphinx_rtd_theme myst_parser .[dev-cuda13]
 
       - name: Sphinx build
         run: |

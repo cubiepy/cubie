@@ -372,7 +372,7 @@ def assert_ivploop_config(loop, settings, tolerance):
     # - loop_shared_elements, loop_local_elements: computed
     # - saves_per_summary: computed
     # - drivers_fn, observables_fn: function references
-    # - precision, numba_precision, simsafe_precision: derived
+    # - precision, numba_precision: derived
 
 
 def assert_output_functions_config(output_functions, settings, tolerance):
@@ -487,7 +487,6 @@ def assert_step_algorithm_config(step_algorithm, settings, tolerance):
     # structure
     # - drivers_fn: function reference
     # - n_drivers: system property
-    # - simsafe_precision: derived
     # - settings_dict: internal storage
 
 

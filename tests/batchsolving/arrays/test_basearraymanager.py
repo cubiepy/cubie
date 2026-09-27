@@ -13,14 +13,14 @@ from cubie.batchsolving.arrays.BaseArrayManager import (
 from cubie.memory.array_requests import ArrayResponse, ArrayRequest
 from cubie.memory.mem_manager import MemoryManager
 from cubie.outputhandling.output_sizes import BatchOutputSizes
-from cubie.cuda_simsafe import DeviceNDArray
+from cubie._cudasim_extensions import DeviceNDArray
 from numpy import float32 as np_float32
 
 if environ.get("NUMBA_ENABLE_CUDASIM", "0") == "1":
     from numpy import zeros as pinned_array
     from numpy import zeros as device_array
 else:
-    from cubie.cuda_simsafe import cuda
+    from cubie._cudasim_extensions import cuda
 
     pinned_array = cuda.pinned_array
     device_array = cuda.device_array

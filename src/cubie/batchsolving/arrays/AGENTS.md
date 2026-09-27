@@ -57,7 +57,7 @@ slots are `"device"`.
   a buffer only with the sized shape and dtype and a backing the partition accepts
   (pinned only unchunked, pageable only when the policy would not pin it, memmap
   always).
-- Device-array inputs (`cuda_simsafe.is_device_array`) go to `_attach_device_inputs`:
+- Device-array inputs (`_utils.is_device_array`) go to `_attach_device_inputs`:
   exact shape and dtype or raise, attached as the kernel-facing array, tracked in
   `_device_inputs`, with no allocation or H2D. A slot's own device buffer supplied back
   queues nothing; a slot that reverts to host input is queued for reallocation.
@@ -104,8 +104,7 @@ close leaves resources attached for a retry. Finalizers do not capture the manag
 `_sizes` is a `BatchInputSizes`/`BatchOutputSizes`; `update_sizes` raises `TypeError` for
 another subtype, and `.nonzero` is applied in `update_from_solver`.
 `BatchInputSizes.driver_coefficients` comes from `kernel.coefficients_shape`, so every
-dimension is concrete. Under `CUDA_SIMULATION`, pinned and async-writeback paths treat
-events as complete.
+dimension is concrete.
 
 ## Dependencies
 ### Internal
@@ -113,6 +112,7 @@ events as complete.
   `chunk_buffer_pool.ChunkBufferPool`/`PinnedBuffer`); `cubie.outputhandling.output_sizes`
   (`ArraySizingClass`, `BatchInputSizes`, `BatchOutputSizes`); `cubie.batchsolving`
   (`ArrayTypes`); `cubie.batchsolving.writeback_watcher` (`WritebackWatcher`);
-  `cubie.cuda_simsafe` (`DeviceNDArrayBase`, `CUDA_SIMULATION`); `cubie._utils` (validators).
+  `cubie._cudasim_extensions` (`cuda`, `DeviceNDArrayBase`); `cubie.memory.driver_memory`
+  (`is_pinned_array`); `cubie._utils` (validators).
 ### External
-- `numpy`; `attrs`; `numba.cuda` (events in `OutputArrays.finalise`).
+- `numpy`; `attrs`; numba-cuda-mlir (events in `OutputArrays.finalise`).

@@ -44,15 +44,9 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import (
-    activemask,
-    all_sync,
-    any_sync,
-    unroll_if,
-    cuda,
-    int32,
-    selp,
-)
+from numba_cuda_mlir.types import int32
+from cubie.backend.intrinsics import unroll_if
+from cubie._cudasim_extensions import cuda
 from cubie.integrators.algorithms.ode_implicitstep import (
     ODEImplicitStep,
 )
@@ -419,9 +413,9 @@ class DAEInitialiser(CUDAFactory):
             last_lin_status = success
             iters_count = int32(0)
             total_lin_iters = int32(0)
-            mask = activemask()
+            mask = cuda.activemask()
             for _ in unroll_if(range(max_iters), unroll_newton_exits):
-                if all_sync(mask, converged | failed):
+                if cuda.all_sync(mask, converged | failed):
                     break
                 active = (not converged) & (not failed)
 
@@ -444,13 +438,13 @@ class DAEInitialiser(CUDAFactory):
                     lin_iters,
                 )
                 judged = active & (lin_status == success)
-                last_lin_status = selp(
+                last_lin_status = cuda.selp(
                     active, lin_status, last_lin_status
                 )
-                iters_count = selp(
+                iters_count = cuda.selp(
                     active, int32(iters_count + int32(1)), iters_count
                 )
-                total_lin_iters += selp(
+                total_lin_iters += cuda.selp(
                     active, lin_iters[0], int32(0)
                 )
 
@@ -481,7 +475,7 @@ class DAEInitialiser(CUDAFactory):
                         & (not small_step)
                         & (not found_step)
                     )
-                    if not any_sync(mask, active_bt):
+                    if not cuda.any_sync(mask, active_bt):
                         break
                     if active_bt:
                         for i in unroll_if(range(n), unroll_solver_element):
@@ -537,10 +531,10 @@ class DAEInitialiser(CUDAFactory):
                     )
                 )
 
-            fail_bits = selp(
+            fail_bits = cuda.selp(
                 failed, newton_divergence, max_iters_exceeded
             )
-            fail_bits = selp(
+            fail_bits = cuda.selp(
                 last_lin_status != success,
                 int32(fail_bits | last_lin_status),
                 fail_bits,
@@ -550,10 +544,10 @@ class DAEInitialiser(CUDAFactory):
 
             # Differential increments are exactly zero; commit all.
             for i in unroll_if(range(n), unroll_solver_element):
-                state[i] = state[i] + selp(
+                state[i] = state[i] + cuda.selp(
                     converged, increment[i], typed_zero
                 )
-            return selp(
+            return cuda.selp(
                 converged,
                 int32(0),
                 int32(fail_bits | dae_init_failed),

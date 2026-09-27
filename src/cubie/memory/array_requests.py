@@ -38,7 +38,7 @@ import attrs.validators as val
 import numpy as np
 
 from cubie._utils import opt_getype_validator, getype_validator
-from cubie.cuda_simsafe import DeviceNDArrayBase
+from cubie._cudasim_extensions import DeviceNDArrayBase
 
 
 @attrs.define

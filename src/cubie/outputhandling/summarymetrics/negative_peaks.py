@@ -15,7 +15,8 @@ See Also
 
 from numpy import dtype as np_dtype, int32 as np_int32
 
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
 
 from cubie.outputhandling.summarymetrics import summary_metrics
 from cubie.outputhandling.summarymetrics.metrics import (

@@ -13,9 +13,8 @@ See Also
     Global registry where this metric is registered.
 """
 
-from cubie.cuda_simsafe import cuda
+from cubie._cudasim_extensions import cuda
 
-from cubie.cuda_simsafe import selp
 from cubie.outputhandling.summarymetrics import summary_metrics
 from cubie.outputhandling.summarymetrics.metrics import (
     SummaryMetric,
@@ -105,7 +104,7 @@ class DxdtMin(SummaryMetric):
             update_flag = (derivative_unscaled < buffer[1]) and (
                 current_index >= 1
             )
-            buffer[1] = selp(update_flag, derivative_unscaled, buffer[1])
+            buffer[1] = cuda.selp(update_flag, derivative_unscaled, buffer[1])
             buffer[0] = value
 
         @cuda.jit(

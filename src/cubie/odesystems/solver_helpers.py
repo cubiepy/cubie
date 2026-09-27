@@ -47,7 +47,7 @@ from attrs import Factory, define, field, fields, frozen, validators
 
 from cubie._utils import inrangetype_validator
 from cubie.CUDAFactory import _CubieConfigBase
-from cubie.cuda_simsafe import UnrollFlag
+from cubie.backend.intrinsics import UnrollFlag
 from cubie.CUDAFactory import unroll_flag_converter
 
 __all__ = [

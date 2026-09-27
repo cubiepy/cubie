@@ -67,7 +67,7 @@ from numpy import (
 from numpy.typing import NDArray
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving import ArrayTypes
-from cubie.cuda_simsafe import DeviceNDArrayBase, Stream
+from cubie._cudasim_extensions import DeviceNDArrayBase, Stream
 from cubie.result_codes import decode_status_codes
 from cubie._utils import (
     slice_variable_dimension,
@@ -326,9 +326,7 @@ class SolveResult:
         default=None,
         validator=attrsval_optional(attrsval_instance_of(SolveSpec)),
     )
-    # A backend Stream on real hardware, the simulator's stream object
-    # under CUDASIM, or 0 for the legacy default stream — an isinstance
-    # validator cannot cover all three, so the field is unvalidated.
+    # A Stream, or 0 for the legacy default stream.
     stream: Optional[Union[Stream, int]] = field(default=None, eq=False)
     _singlevar_summary_legend: Optional[dict[int, str]] = field(
         default=attrsFactory(dict),

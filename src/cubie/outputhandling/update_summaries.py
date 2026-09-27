@@ -26,11 +26,12 @@ JIT-compiled functions without passing them as an iterable.
 
 from typing import Callable, Optional, Sequence, Union
 
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import UnrollFlag, unroll_if
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if, UnrollFlag
 from numpy.typing import ArrayLike
 
-from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
+from cubie.backend.jit import compile_kwargs, get_jit_kwargs
 from cubie.outputhandling.summarymetrics import summary_metrics
 
 

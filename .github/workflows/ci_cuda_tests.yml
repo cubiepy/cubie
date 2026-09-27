@@ -71,27 +71,16 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-      # The mlir lanes mirror the numba-cuda lanes, except that
-      # numba-cuda-mlir needs Python >= 3.11, so its lower-bound lanes
-      # run 3.11 where the numba-cuda lanes run 3.10.
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-cuda13, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-cuda13, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-cuda13, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-cuda13, backend: mlir}
     runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
     # Capabilities precompiled per OS: Windows runners are g5-only (cc 8.6).
     env:
@@ -138,14 +127,7 @@ jobs:
         shell: bash
         env:
           CUBIE_MAX_CACHE_ENTRIES: "0"
-          # Pin the backend to the lane's label. The precompile plugin
-          # and cubie resolve an unset CUBIE_CUDA_BACKEND with opposite
-          # preferences when both backends are importable (the plugin
-          # picks numba-cuda, cubie picks mlir), so an implicit
-          # resolution could cache kernels that do not match the
-          # artifact name or the GPU leg's backend.
-          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
-          PYTEST_MARKERS: ${{ matrix.backend == 'mlir' && 'not specific_algos and not sim_only' || 'not specific_algos and not sim_only and not mlir_only' }}
+          PYTEST_MARKERS: 'not specific_algos and not sim_only'
           # -p plugins are imported before pytest's pythonpath/conftest
           # machinery runs, and the pytest console script does not put
           # the cwd on sys.path, so the tests package must be exported
@@ -199,7 +181,7 @@ jobs:
             # batch-solver integration kernel. Production index keys
             # carry no function identity, so the check reads the stored
             # compile payloads: the kernel's mangled symbol embeds its
-            # qualname on both backends, and the batch-solver kernel is
+            # qualname, and the batch-solver kernel is
             # named per algorithm/system under the stable
             # BatchSolverKernel.build_kernel qualname path.
             python - "kernel-cache/cc$cc/kernels" <<'EOF'
@@ -260,22 +242,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda}
-          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir}
+          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-cuda13, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-cuda13, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-cuda13, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-cuda12, backend: mlir}
+          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-cuda13, backend: mlir}
     runs-on: ${{ matrix.os == 'linux' && 'ubuntu-latest' || 'windows-latest' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -309,13 +283,11 @@ jobs:
       # A reachable device passes every test, so every test would bank.
       - name: Assert this runner has no CUDA device
         shell: bash
-        env:
-          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
         run: |
           python - <<'EOF'
           import sys
 
-          from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+          from cubie._cudasim_extensions import CUDA_SIMULATION, cuda
 
           if CUDA_SIMULATION:
               print("the simulator is active; banking needs real cubie",
@@ -332,8 +304,7 @@ jobs:
       - name: Bank the driverless verdicts
         shell: bash
         env:
-          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
-          PYTEST_MARKERS: ${{ matrix.backend == 'mlir' && 'not specific_algos and not sim_only' || 'not specific_algos and not sim_only and not mlir_only' }}
+          PYTEST_MARKERS: 'not specific_algos and not sim_only'
           CUBIE_BANKED_OUT: ${{ github.workspace }}/verdicts/banked.json
           COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
           PYTHONPATH: ${{ github.workspace }}
@@ -420,27 +391,16 @@ jobs:
       # Param-set xdist grouping (conftest + --dist=loadgroup) keeps -n scaling near-linear.
       fail-fast: false
       max-parallel: 4
-      # The mlir lanes mirror the numba-cuda lanes, except that
-      # numba-cuda-mlir needs Python >= 3.11, so its lower-bound lanes
-      # run 3.11 where the numba-cuda lanes run 3.10.
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-linux}
-          - {os: linux, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-linux}
-          - {os: windows, python-version: "3.10", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-windows}
-          - {os: windows, python-version: "3.10", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-windows}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev12, backend: numba-cuda, fleet: gpu-windows}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev13, backend: numba-cuda, fleet: gpu-windows}
-          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-linux}
-          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-linux}
-          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-linux}
-          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-windows}
-          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
-          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-mlir12, backend: mlir, fleet: gpu-windows}
-          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-mlir13, backend: mlir, fleet: gpu-windows}
+          - {os: linux, python-version: "3.11", cuda: "12", extra: dev-cuda12, backend: mlir, fleet: gpu-linux}
+          - {os: linux, python-version: "3.11", cuda: "13", extra: dev-cuda13, backend: mlir, fleet: gpu-linux}
+          - {os: linux, python-version: "3.14", cuda: "12", extra: dev-cuda12, backend: mlir, fleet: gpu-linux}
+          - {os: linux, python-version: "3.14", cuda: "13", extra: dev-cuda13, backend: mlir, fleet: gpu-linux}
+          - {os: windows, python-version: "3.11", cuda: "12", extra: dev-cuda12, backend: mlir, fleet: gpu-windows}
+          - {os: windows, python-version: "3.11", cuda: "13", extra: dev-cuda13, backend: mlir, fleet: gpu-windows}
+          - {os: windows, python-version: "3.14", cuda: "12", extra: dev-cuda12, backend: mlir, fleet: gpu-windows}
+          - {os: windows, python-version: "3.14", cuda: "13", extra: dev-cuda13, backend: mlir, fleet: gpu-windows}
     # Windows fleet is g5.xlarge, the AMI bake family; Linux picks g4dn/g5/g6 by price-capacity.
     runs-on: runs-on/fleet=${{ matrix.fleet }}/env=production
 
@@ -592,8 +552,8 @@ jobs:
         # Coverage runs under `coverage run` rather than pytest-cov here:
         # `-p tests.precompile_plugin` imports cubie at plugin-registration
         # time, before pytest-cov could start, so pytest-cov would miss
-        # every import-time line (package __init__s, cuda_backend
-        # resolution, algorithm tableau tables). `coverage run` traces the
+        # every import-time line (package __init__s, backend patches,
+        # algorithm tableau tables). `coverage run` traces the
         # main process from startup; COVERAGE_PROCESS_START traces the
         # xdist worker subprocesses. --no-cov disables pytest-cov so the
         # two do not double-count. coverage auto-reads [tool.coverage.*]
@@ -602,11 +562,7 @@ jobs:
         env:
           CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/kernel-cache/kernels
           CUBIE_MAX_CACHE_ENTRIES: "0"
-          # Pin the backend to the lane's label so this leg always
-          # loads the cache the same-named precompile leg populated
-          # (see the precompile step for the divergence this avoids).
-          CUBIE_CUDA_BACKEND: ${{ matrix.backend }}
-          PYTEST_MARKERS: ${{ matrix.backend == 'mlir' && 'not specific_algos and not sim_only' || 'not specific_algos and not sim_only and not mlir_only' }}
+          PYTEST_MARKERS: 'not specific_algos and not sim_only'
           COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
           # Same as the precompile leg: -p plugin imports happen before
           # any pytest sys.path setup, so the repo root must be on
@@ -679,14 +635,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: linux, python-version: "3.10", cuda: "12", backend: numba-cuda}
-          - {os: linux, python-version: "3.10", cuda: "13", backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "12", backend: numba-cuda}
-          - {os: linux, python-version: "3.14", cuda: "13", backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "12", backend: numba-cuda}
-          - {os: windows, python-version: "3.10", cuda: "13", backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "12", backend: numba-cuda}
-          - {os: windows, python-version: "3.14", cuda: "13", backend: numba-cuda}
           - {os: linux, python-version: "3.11", cuda: "12", backend: mlir}
           - {os: linux, python-version: "3.11", cuda: "13", backend: mlir}
           - {os: linux, python-version: "3.14", cuda: "12", backend: mlir}

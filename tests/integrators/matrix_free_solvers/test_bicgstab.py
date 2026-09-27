@@ -2,8 +2,8 @@
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import compile_kwargs
+from cubie._cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 from numpy.testing import assert_allclose
 

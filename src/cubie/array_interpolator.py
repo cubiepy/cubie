@@ -60,11 +60,11 @@ from numpy import (
 )
 from numpy.linalg import solve as np_solve
 from attrs import cmp_using, define, field, fields, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie._cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if
 from numpy.typing import NDArray
 
-from cubie.cuda_simsafe import CUDA_SIMULATION, selp
 from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
@@ -522,8 +522,10 @@ class ArrayInterpolator(CUDAFactory):
                 in_range = (scaled >= precision(0.0)) and (
                     scaled <= num_segments
                 )
-                seg = selp(idx < int32(0), int32(0), idx)
-                seg = selp(seg >= num_segments, int32(num_segments - 1), seg)
+                seg = cuda.selp(idx < int32(0), int32(0), idx)
+                seg = cuda.selp(
+                    seg >= num_segments, int32(num_segments - 1), seg
+                )
                 tau = precision(scaled - precision(seg))
 
             # Evaluate polynomials using Horner's rule
@@ -568,8 +570,10 @@ class ArrayInterpolator(CUDAFactory):
                 in_range = (scaled >= precision(0.0)) and (
                     scaled <= num_segments
                 )
-                seg = selp(idx < int32(0), int32(0), idx)
-                seg = selp(seg >= num_segments, int32(num_segments - 1), seg)
+                seg = cuda.selp(idx < int32(0), int32(0), idx)
+                seg = cuda.selp(
+                    seg >= num_segments, int32(num_segments - 1), seg
+                )
                 tau = precision(scaled - precision(seg))
 
             for input_index in unroll_if(
@@ -668,24 +672,13 @@ class ArrayInterpolator(CUDAFactory):
         # no cover: end
 
         stream = default_memmgr.get_group_stream()
-        if CUDA_SIMULATION:  # pragma: no cover - simulated
-            # The simulator runs kernels on host memory: NumPy arrays
-            # pass straight in and the kernel writes the output array
-            # in place, so there is nothing to stage or copy back.
-            times_device = asarray(times)
-            coefficients_device = coefficients
-            out_device = empty(
-                (num_points, self.num_inputs),
-                dtype=self.precision,
-            )
-        else:
-            times_device = cuda.to_device(times, stream=stream)
-            coefficients_device = cuda.to_device(coefficients, stream=stream)
-            out_device = cuda.device_array(
-                (num_points, self.num_inputs),
-                dtype=self.precision,
-                stream=stream,
-            )
+        times_device = cuda.to_device(times, stream=stream)
+        coefficients_device = cuda.to_device(coefficients, stream=stream)
+        out_device = cuda.device_array(
+            (num_points, self.num_inputs),
+            dtype=self.precision,
+            stream=stream,
+        )
 
         threads_per_block = 128
         blocks_per_grid = (num_points + threads_per_block - 1) // (
@@ -697,9 +690,6 @@ class ArrayInterpolator(CUDAFactory):
             out_device,
         )
         stream.synchronize()
-
-        if CUDA_SIMULATION:  # pragma: no cover - simulated
-            return out_device
         return out_device.copy_to_host()
 
     def plot_interpolated(

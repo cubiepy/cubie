@@ -13,7 +13,8 @@ from pathlib import Path
 import numpy as np
 import cubie  # noqa: F401
 from cubie.backend.utils import INSTRUCTION_CACHE_BYTES, device_hardware
-from cubie.cuda_simsafe import compile_kwargs, cuda
+from cubie.backend.jit import compile_kwargs
+from cubie._cudasim_extensions import cuda
 
 ACCUMULATORS = 8
 KNEE_RATIO = 1.25
@@ -40,8 +41,9 @@ def build_kernel(trips: int, kernel_dir: Path):
     """Compile a kernel whose body is ``trips`` unrolled FMA groups."""
     lines = [
         "import numpy as np",
-        "from cubie.cuda_simsafe import cuda, from_dtype, unroll_if",
-        "float32 = from_dtype(np.dtype('float32'))",
+        "from numba_cuda_mlir.types import float32",
+        "from cubie.backend.intrinsics import unroll_if",
+        "from cubie._cudasim_extensions import cuda",
         f"m_trips = {trips}",
         "m_unroll = (True, None)",
         "",
