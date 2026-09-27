@@ -10,11 +10,8 @@ provided as an argument to "cache".
 
 Notes
 -----
-This module depends on numba-cuda-mlir internal classes and may
-require updates when its version changes. The cache base classes are
-numba-cuda-mlir's ``MLIRCacheImpl``/``MLIRCache``, re-exported by
-cubie.cuda_simsafe, whose compile-result scheme (cubin/PTX payloads)
-carries its own serialization.
+Built on numba-cuda-mlir's internal ``MLIRCacheImpl``/``MLIRCache``,
+which serialize cubin/PTX compile results.
 """
 
 import os
@@ -154,13 +151,8 @@ _BACKEND_ABI_DISTRIBUTIONS = (
 )
 """Distributions whose versions define the artifact ABI.
 
-Each inner tuple lists the alternative distributions that can provide
-one ABI component (numba-cuda-mlir ships as either cubie's wheel or
-the stock wheel, never both); the first installed alternative supplies
-the version, and a component with no installed alternative raises
-rather than silently dropping out of the fingerprint. Artifacts are
-cubin/PTX compile-result payloads whose scheme is owned by the
-numba-cuda-mlir package.
+Each tuple lists alternatives for one component; the first installed
+one supplies the version, and none installed raises.
 """
 
 
@@ -429,11 +421,7 @@ class CUBIECache(CUDACache):
         self.enable()
 
     def _index_key(self, sig, codegen):
-        """Return the CuBIE cache key.
-
-        Includes the cubie package source hash so package edits
-        invalidate cached kernels compiled from earlier source.
-        """
+        """Return the cache key, including the cubie source hash."""
         return (
             sig,
             codegen.magic_tuple(),

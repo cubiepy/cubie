@@ -3,8 +3,7 @@
 # vendored
 
 ## Purpose
-Third-party code CuBIE carries in-tree: the CUDA simulator from numba-cuda, running on
-numba-cuda-mlir, and cellmlmanip. Each snapshot records its upstream source and date.
+Third-party code: the CUDA simulator from numba-cuda (on numba-cuda-mlir) and cellmlmanip.
 
 ## Key Files
 | File | Description |
@@ -14,11 +13,9 @@ numba-cuda-mlir, and cellmlmanip. Each snapshot records its upstream source and 
 | `cellmlmanip/` | Vendored snapshot of cellmlmanip 0.3.6 (ModellingWebLab, BSD 3-Clause; `LICENSE` kept alongside). Parses CellML into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/cellml.py`. |
 
 ## cudasim
-- Upstream imports of `numba.cuda.*` point at the same modules inside numba-cuda-mlir
-  (`numba_cuda_mlir.numba_cuda.*`: `core.config`, `core.sigutils`, `np.numpy_support`,
-  `stubs`, `errors`, `types`); intra-package imports point at `cubie.vendored.cudasim`,
-  and the kernel-time module swap matches globals bound to this package.
-- Local modifications, which make it a drop-in `cuda` module for cubie:
+- `numba.cuda.*` imports point at `numba_cuda_mlir.numba_cuda.*`; the kernel-time
+  module swap replaces globals bound to this package.
+- Local modifications:
   - `__init__.py`: the `sys.modules["numba.cuda.*"]` aliasing is dropped; submodules
     import unconditionally.
   - `api.jit` accepts and ignores GPU-only options (`lineinfo`, `lto`,
@@ -33,8 +30,7 @@ numba-cuda-mlir, and cellmlmanip. Each snapshot records its upstream source and 
     to `FakeCUDAArray`.
   - `experimental.consteval` (new) returns its argument.
 - To update, re-snapshot upstream and re-apply the import rewrite and the list above.
-- numba-cuda is BSD 2-Clause; the notice is in each upstream file header and
-  `THIRD_PARTY_LICENSES`.
+- BSD 2-Clause; notice in each upstream file header and `THIRD_PARTY_LICENSES`.
 
 ## cellmlmanip
 - Local modifications: intra-package imports made relative (`from .x`), and a

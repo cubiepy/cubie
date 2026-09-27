@@ -13,7 +13,7 @@ permissions:
 jobs:
   docs:
     env:
-          NUMBA_ENABLE_CUDASIM: "1"        # run cubie's CUDA simulator on GPU-less runner
+          NUMBA_ENABLE_CUDASIM: "1"        # GPU-less runner
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

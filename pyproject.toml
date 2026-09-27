@@ -41,9 +41,8 @@ Homepage = "https://github.com/ccam80/cubie.git"
 Issues = "https://github.com/ccam80/cubie/issues"
 
 [project.optional-dependencies]
-# The CUDA backend, numba-cuda-mlir, is installed by extra so installs
-# stay clean. The bare 'mlir' extra installs the backend without
-# toolkit wheels, for machines with a system CUDA install.
+# The toolkit extras install numba-cuda-mlir and the toolkit wheels;
+# the bare 'mlir' extra uses a system CUDA install.
 #
 # The mlir* extras install cubie-numba-cuda-mlir: cubie's build of
 # numba-cuda-mlir carrying the native (C++) fixes pending upstream,

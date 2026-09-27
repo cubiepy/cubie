@@ -62,8 +62,7 @@ CuBIE:
 CUDASIM runs the CUDA kernels on the CPU in a single thread.  It is
 orders of magnitude slower than GPU execution but does not require a GPU.
 Useful for debugging logic errors and running in CI environments without
-GPUs.  The simulator is vendored from numba-cuda and runs on the same
-install as the GPU backend.
+GPUs.  It needs no extra install.
 
 .. note::
 

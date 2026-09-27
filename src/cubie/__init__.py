@@ -13,9 +13,7 @@ if find_spec("numba_cuda_mlir") is None:
         "CUDA install is present)."
     )
 
-# Apply the numba-cuda-mlir patches before anything can compile a
-# kernel: missing lowerings, frontend perf patches and the unroll_if
-# pass.
+# Patch numba-cuda-mlir before anything compiles.
 import cubie.backend._mlir_compat  # noqa: F401,E402
 import cubie.backend._mlir_cubie_extensions  # noqa: F401,E402
 

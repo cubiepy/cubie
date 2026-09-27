@@ -7,9 +7,7 @@ Source: numba_cuda/numba/cuda/simulator (package) and
 numba_cuda/numba/cuda/simulator_init.py (``is_available``,
 ``cuda_error``).
 
-``cubie.cuda_simsafe`` imports this package as its ``cuda`` module
-when ``NUMBA_ENABLE_CUDASIM=1``. Local modifications are listed in
-``cubie/vendored/AGENTS.md``.
+Local modifications are listed in ``cubie/vendored/AGENTS.md``.
 """
 
 import sys

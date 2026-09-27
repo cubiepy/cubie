@@ -1,18 +1,8 @@
-"""Shared CUDA import hub and simulation-safe helpers.
+"""CUDA import hub: every CUDA symbol CuBIE uses comes from here.
 
-This module is the single surface through which the rest of CuBIE
-reaches numba-cuda-mlir: the ``cuda`` module object, scalar types,
-``from_dtype``, driver classes, and cache base classes are all
-re-exported here so no other module imports the backend directly.
-
-Under ``NUMBA_ENABLE_CUDASIM=1`` the ``cuda`` module is the CUDA
-simulator vendored in :mod:`cubie.vendored.cudasim`, which runs device
-code as Python on the CPU; everything else still comes from
-numba-cuda-mlir. The simulator carries the CUDA-API stand-ins (warp
-intrinsics, ``stwt``, ``consteval``, driver classes, GPU-only ``jit``
-options), so the definitions here hold in both modes; only the
-host-side CuPy hooks and two device-semantics helpers
-(``fmax``/``fmin``, ``narrow_f64``) branch on the simulator.
+``cuda`` is ``numba_cuda_mlir.cuda``, or :mod:`cubie.vendored.cudasim`
+under ``NUMBA_ENABLE_CUDASIM=1``. Only the CuPy hooks, ``fmax``/``fmin``
+and ``narrow_f64`` differ under the simulator.
 
 Published Functions
 -------------------
@@ -168,8 +158,8 @@ def get_jit_kwargs(
     Returns
     -------
     dict
-        ``{"fastmath": set, "lineinfo": bool, "lto": bool,
-        "experimental_ast_transforms": True}`` rendered from the flags.
+        ``fastmath``, ``lineinfo``, ``lto`` and
+        ``experimental_ast_transforms`` keyword arguments.
     """
     if jit_flags is None:
         return _render_jit_kwargs(lineinfo_default())
@@ -300,11 +290,8 @@ def is_device_array(value: Any) -> bool:
     Returns
     -------
     bool
-        ``True`` for device arrays (Numba device arrays, CuPy arrays,
-        or any non-numpy object exposing
-        ``__cuda_array_interface__``; the simulator's fake device
-        arrays under CUDASIM), ``False`` for host numpy arrays and
-        everything else.
+        ``True`` for device arrays and objects exposing
+        ``__cuda_array_interface__``; ``False`` for host arrays.
     """
     if value is None or isinstance(value, np_ndarray):
         return False
