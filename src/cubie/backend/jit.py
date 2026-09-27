@@ -1,14 +1,13 @@
-"""Keyword arguments for ``cuda.jit`` on numba-cuda-mlir.
+"""Keyword arguments for ``cuda.jit``.
 
 Published Objects
 -----------------
 :data:`JIT_FLAG_DEFAULTS`
-    Default value of every managed jit flag except ``lineinfo``.
+    Default jit flags except ``lineinfo``.
 :data:`compile_kwargs`
-    Default keyword arguments for import-time ``@cuda.jit`` decorators.
+    Kwargs for import-time ``@cuda.jit`` decorators.
 :func:`get_jit_kwargs`
-    Render a ``JITFlags`` to ``cuda.jit`` keyword arguments; the
-    ``CUDAFactory.jit_kwargs`` property every build splats calls it.
+    Render a ``JITFlags`` to ``cuda.jit`` kwargs.
 """
 
 from types import MappingProxyType

@@ -1,22 +1,22 @@
 """Device and page-locked memory through the CUDA driver.
 
-Under the CUDA simulator these names are the stand-ins from
+Under CUDASIM these are the stand-ins from
 :mod:`cubie.cubie_cudasim_extensions`.
 
 Published Functions
 -------------------
 :func:`page_locked_block`
-    Page-locked host memory as a buffer.
+    Page-locked host buffer.
 :func:`stream_ordered_buffer`
-    Device memory from the stream-ordered pool, freed on its stream.
+    Pool device memory freed on its stream.
 :func:`pool_idle_bytes`
-    Bytes the device pool holds but no array uses.
+    Pool bytes no array uses.
 :func:`stream_idle`
-    Whether a stream's queued work has finished.
+    Whether a stream's work has finished.
 :func:`flush_deferred_frees`
     Run Numba's queued frees.
 :func:`is_pinned_array`
-    Whether a host array is backed by page-locked memory.
+    Whether a host array is page-locked.
 """
 
 from ctypes import c_void_p

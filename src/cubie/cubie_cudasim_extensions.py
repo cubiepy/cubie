@@ -1,10 +1,8 @@
-"""The ``cuda`` module, and cubie's extensions of the CUDA simulator.
+"""The ``cuda`` module and cubie's CUDA simulator extensions.
 
-``cuda`` is ``numba_cuda_mlir.cuda``. Under ``NUMBA_ENABLE_CUDASIM=1``
-it is the simulator vendored in :mod:`cubie.vendored.cudasim`, extended
-here with the CUDA API cubie's device code calls and the driver
-behaviour its host code reads. Import ``cuda`` from this module, never
-from ``cubie.vendored.cudasim``, so the extensions are always applied.
+``cuda`` is ``numba_cuda_mlir.cuda``, or the vendored simulator with
+the extensions below applied under ``NUMBA_ENABLE_CUDASIM=1``. Import
+``cuda`` from here, never from ``cubie.vendored.cudasim``.
 
 Published Objects
 -----------------
@@ -14,34 +12,27 @@ Published Objects
     The CUDA module.
 :class:`Stream`, :class:`DeviceNDArrayBase`, :class:`DeviceNDArray`,
 :class:`MappedNDArray`, :class:`CudaSupportError`
-    The stream, device-array and driver-error classes of ``cuda``.
+    Classes of ``cuda``.
 :func:`fmax`, :func:`fmin`
-    Maximum and minimum that drop a NaN operand on device and in the
-    simulator.
-
-Simulator Stand-ins
--------------------
-Replacements for the driver-memory helpers of
-:mod:`cubie.memory.driver_memory`, which imports them under the
-simulator: :func:`page_locked_block`, :func:`stream_ordered_buffer`,
+    Max and min that drop a NaN operand.
+:func:`page_locked_block`, :func:`stream_ordered_buffer`,
 :func:`pool_idle_bytes`, :func:`stream_idle`,
-:func:`flush_deferred_frees` and :func:`is_pinned_array`.
+:func:`flush_deferred_frees`, :func:`is_pinned_array`
+    Simulator stand-ins for :mod:`cubie.memory.driver_memory`.
 
 Simulator Extensions
 --------------------
-- ``cuda.jit`` ignores GPU-only options (``lineinfo``, ``lto``,
-  ``experimental_ast_transforms``, ...).
-- ``cuda.activemask`` reports every lane active; ``cuda.all_sync`` and
-  ``cuda.any_sync`` return the thread's own predicate; ``cuda.syncwarp``
-  does nothing; ``cuda.stwt`` is a plain store.
+- ``cuda.jit`` ignores GPU-only options.
+- ``activemask`` reports all lanes; ``all_sync``/``any_sync`` return
+  the thread's predicate; ``syncwarp`` does nothing; ``stwt`` stores.
 - ``cuda.experimental.consteval`` returns its argument.
-- Streams carry a null ``handle``, and ``cuda.cudadrv.driver.Stream``
-  is the stream class.
-- ``cuda.devicearray.DeviceNDArrayBase``, ``DeviceNDArray`` and
-  ``MappedNDArray`` are the simulator's device-array class.
-- Kernels report ``targetoptions`` as ``{"device": ...}``.
-- The context reports 1 GiB free of 8 GiB.
-- Local and shared arrays accept a Numba type in ``view``.
+- Streams have a null ``handle``; ``cuda.cudadrv.driver.Stream`` is
+  the stream class.
+- ``DeviceNDArrayBase``/``DeviceNDArray``/``MappedNDArray`` are the
+  simulator's device array.
+- Kernels report ``targetoptions``; the context reports 1 GiB free of
+  8 GiB.
+- Local and shared arrays take a Numba type in ``view``.
 """
 
 from ctypes import c_void_p

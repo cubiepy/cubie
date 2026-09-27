@@ -89,9 +89,8 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - Never call a `CUDAFactory.build()` directly — access compiled functions via the cached properties.
 - Never set/modify env vars in source (esp. `NUMBA_ENABLE_CUDASIM`); set them externally.
 - Module-scoped imports belong in the file header only; deliberate lazy imports of optional deps
-  (Qt) stay function-local. Import `cuda` from `cubie.cubie_cudasim_extensions`, which
-  also holds every CUDA-simulator stand-in; other CUDA symbols come from their owners or
-  `numba_cuda_mlir` directly.
+  (Qt) stay function-local. Import `cuda` from `cubie.cubie_cudasim_extensions`; simulator
+  stand-ins live there too.
 - In `CUDAFactory`/device-code files, use explicit imports with the project aliasing (`np_`,
   `attrsval_`, `attrs`-prefixed); store float config fields underscored and expose via a
   precision-casting property.
