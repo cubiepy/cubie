@@ -57,10 +57,8 @@ from cubie._utils import (
     getype_validator,
     opt_gttype_validator,
 )
-from cubie.cuda_simsafe import (
-    DeviceNDArrayBase,
-    is_pinned_array,
-)
+from cubie.cubie_cudasim_extensions import DeviceNDArrayBase
+from cubie.memory.driver_memory import is_pinned_array
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import (
     ArrayRequest,

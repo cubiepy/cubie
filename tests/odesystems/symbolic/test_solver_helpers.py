@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 import sympy as sp
 
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda
 
-from cubie.cuda_simsafe import compile_kwargs
-from cubie.cuda_simsafe import from_dtype
+from cubie.backend.jit import compile_kwargs
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 from cubie.memory import default_memmgr
 from cubie.odesystems.solver_helpers import (
     HelperVariant,

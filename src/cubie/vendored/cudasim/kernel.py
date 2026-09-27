@@ -161,10 +161,6 @@ class FakeCUDAKernel:
     def py_func(self):
         return self.fn
 
-    @property
-    def targetoptions(self):
-        return {"device": self._device}
-
 
 # Thread emulation
 

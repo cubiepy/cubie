@@ -60,11 +60,11 @@ from numpy import (
 )
 from numpy.linalg import solve as np_solve
 from attrs import cmp_using, define, field, fields, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie.backend.intrinsics import unroll_if
 from numpy.typing import NDArray
 
-from cubie.cuda_simsafe import CUDA_SIMULATION, selp
 from cubie.CUDAFactory import (
     CUDAFactory,
     CUDAFactoryConfig,
@@ -522,8 +522,10 @@ class ArrayInterpolator(CUDAFactory):
                 in_range = (scaled >= precision(0.0)) and (
                     scaled <= num_segments
                 )
-                seg = selp(idx < int32(0), int32(0), idx)
-                seg = selp(seg >= num_segments, int32(num_segments - 1), seg)
+                seg = cuda.selp(idx < int32(0), int32(0), idx)
+                seg = cuda.selp(
+                    seg >= num_segments, int32(num_segments - 1), seg
+                )
                 tau = precision(scaled - precision(seg))
 
             # Evaluate polynomials using Horner's rule
@@ -568,8 +570,10 @@ class ArrayInterpolator(CUDAFactory):
                 in_range = (scaled >= precision(0.0)) and (
                     scaled <= num_segments
                 )
-                seg = selp(idx < int32(0), int32(0), idx)
-                seg = selp(seg >= num_segments, int32(num_segments - 1), seg)
+                seg = cuda.selp(idx < int32(0), int32(0), idx)
+                seg = cuda.selp(
+                    seg >= num_segments, int32(num_segments - 1), seg
+                )
                 tau = precision(scaled - precision(seg))
 
             for input_index in unroll_if(

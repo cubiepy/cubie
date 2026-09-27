@@ -24,7 +24,9 @@ See Also
 from math import sqrt as math_sqrt
 
 from attrs import frozen
-from cubie.cuda_simsafe import cuda, int32, unroll_if
+from numba_cuda_mlir.types import int32
+from cubie.backend.intrinsics import unroll_if
+from cubie.cubie_cudasim_extensions import cuda, fmin
 from numpy import float32 as np_float32, float64 as np_float64
 
 from cubie._utils import PrecisionDType
@@ -34,7 +36,6 @@ from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverCache,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import activemask, all_sync, fmin, selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 
@@ -252,12 +253,12 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
             )
             tol2 = fmin(tol * tol, typed_largest)
 
-            mask = activemask()
+            mask = cuda.activemask()
             if zero_initial_guess:
                 # A zero guess leaves the residual equal to rhs.
                 converged = rhs_norm2 <= tol2
                 # Warp-uniform zero-iteration exit skips seeding.
-                if all_sync(mask, converged):
+                if cuda.all_sync(mask, converged):
                     krylov_iters_out[0] = int32(0)
                     return success
             else:
@@ -274,18 +275,18 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                     residual_i = rhs[i]
                 else:
                     ax = tmp[i]
-                    ax = selp(ax > dot_clamp, dot_clamp, ax)
-                    ax = selp(ax < -dot_clamp, -dot_clamp, ax)
+                    ax = cuda.selp(ax > dot_clamp, dot_clamp, ax)
+                    ax = cuda.selp(ax < -dot_clamp, -dot_clamp, ax)
                     residual_i = rhs[i] - ax
                 rhs[i] = residual_i
                 r0_hat[i] = residual_i
-                pi = selp(
+                pi = cuda.selp(
                     residual_i > dot_clamp, dot_clamp, residual_i
                 )
-                pi = selp(pi < -dot_clamp, -dot_clamp, pi)
+                pi = cuda.selp(pi < -dot_clamp, -dot_clamp, pi)
                 p[i] = pi
                 sq = residual_i * residual_i
-                sq = selp(sq > dot_clamp, dot_clamp, sq)
+                sq = cuda.selp(sq > dot_clamp, dot_clamp, sq)
                 rho_prev += sq
 
             # I6: initial convergence check on the seeded residual.
@@ -298,10 +299,10 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
             iter_count = int32(0)
 
             for _ in unroll_if(range(max_iters_val), unroll_krylov_exits):
-                if all_sync(mask, finished):
+                if cuda.all_sync(mask, finished):
                     break
 
-                iter_count = selp(
+                iter_count = cuda.selp(
                     not finished,
                     int32(iter_count + int32(1)),
                     iter_count,
@@ -316,10 +317,10 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                         base_state, t, h, a_ij, p, tmp, v,
                     )
                     for i in unroll_if(range(n_val), unroll_solver_element):
-                        tmp[i] = selp(
+                        tmp[i] = cuda.selp(
                             tmp[i] > dot_clamp, dot_clamp, tmp[i]
                         )
-                        tmp[i] = selp(
+                        tmp[i] = cuda.selp(
                             tmp[i] < -dot_clamp, -dot_clamp, tmp[i]
                         )
                 else:
@@ -335,12 +336,12 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 dot_r0v = typed_zero
                 for i in unroll_if(range(n_val), unroll_solver_element):
                     vi = v[i]
-                    vi = selp(vi > dot_clamp, dot_clamp, vi)
-                    vi = selp(vi < -dot_clamp, -dot_clamp, vi)
+                    vi = cuda.selp(vi > dot_clamp, dot_clamp, vi)
+                    vi = cuda.selp(vi < -dot_clamp, -dot_clamp, vi)
                     v[i] = vi
                     prod = r0_hat[i] * vi
-                    prod = selp(prod > dot_clamp, dot_clamp, prod)
-                    prod = selp(prod < -dot_clamp, -dot_clamp, prod)
+                    prod = cuda.selp(prod > dot_clamp, dot_clamp, prod)
+                    prod = cuda.selp(prod < -dot_clamp, -dot_clamp, prod)
                     dot_r0v += prod
                 # Pivot breakdown: <r0_hat, v> vanished relative to
                 # rho, so the quotient would exceed the clamp budget.
@@ -351,7 +352,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                     (not finished) and alpha_overflow
                 )
                 finished = converged or broken
-                alpha = selp(
+                alpha = cuda.selp(
                     (dot_r0v != typed_zero) and (not alpha_overflow),
                     rho_prev / dot_r0v,
                     typed_zero,
@@ -360,7 +361,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 # ── Step 4-5 fused: x += alpha*tmp and
                 # s = r - alpha*v. Frozen lanes multiply by zero
                 # instead of predicating each element.
-                alpha_eff = selp(finished, typed_zero, alpha)
+                alpha_eff = cuda.selp(finished, typed_zero, alpha)
                 for i in unroll_if(range(n_val), unroll_solver_element):
                     x[i] = x[i] + alpha_eff * tmp[i]
                     rhs[i] = rhs[i] - alpha_eff * v[i]
@@ -377,17 +378,17 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                         base_state, t, h, a_ij, rhs, s_hat, tmp,
                     )
                     for i in unroll_if(range(n_val), unroll_solver_element):
-                        s_hat[i] = selp(
+                        s_hat[i] = cuda.selp(
                             s_hat[i] > dot_clamp, dot_clamp, s_hat[i]
                         )
-                        s_hat[i] = selp(
+                        s_hat[i] = cuda.selp(
                             s_hat[i] < -dot_clamp, -dot_clamp, s_hat[i]
                         )
                 else:
                     for i in unroll_if(range(n_val), unroll_solver_element):
                         si = rhs[i]
-                        si = selp(si > dot_clamp, dot_clamp, si)
-                        si = selp(si < -dot_clamp, -dot_clamp, si)
+                        si = cuda.selp(si > dot_clamp, dot_clamp, si)
+                        si = cuda.selp(si < -dot_clamp, -dot_clamp, si)
                         s_hat[i] = si
 
                 # ── Step 8-9 fused: tmp = clamp(A(s_hat)),
@@ -400,20 +401,20 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 dot_tt = typed_zero
                 for i in unroll_if(range(n_val), unroll_solver_element):
                     ti = tmp[i]
-                    ti = selp(ti > dot_clamp, dot_clamp, ti)
-                    ti = selp(ti < -dot_clamp, -dot_clamp, ti)
+                    ti = cuda.selp(ti > dot_clamp, dot_clamp, ti)
+                    ti = cuda.selp(ti < -dot_clamp, -dot_clamp, ti)
                     tmp[i] = ti
                     prod = ti * rhs[i]
-                    prod = selp(prod > dot_clamp, dot_clamp, prod)
-                    prod = selp(prod < -dot_clamp, -dot_clamp, prod)
+                    prod = cuda.selp(prod > dot_clamp, dot_clamp, prod)
+                    prod = cuda.selp(prod < -dot_clamp, -dot_clamp, prod)
                     dot_ts += prod
                     sq = ti * ti
-                    sq = selp(sq > dot_clamp, dot_clamp, sq)
+                    sq = cuda.selp(sq > dot_clamp, dot_clamp, sq)
                     dot_tt += sq
                 # An overflowing quotient zeroes omega; the absolute
                 # omega floor in Step 14 then labels the breakdown.
                 omega_overflow = abs(dot_ts) > dot_tt * dot_clamp
-                omega = selp(
+                omega = cuda.selp(
                     (dot_tt != typed_zero) and (not omega_overflow),
                     dot_ts / dot_tt,
                     typed_zero,
@@ -421,7 +422,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
                 # ── Step 10-11 fused: x += omega*s_hat and
                 # r = s - omega*tmp, zero-multiplied when frozen.
-                omega_eff = selp(finished, typed_zero, omega)
+                omega_eff = cuda.selp(finished, typed_zero, omega)
                 for i in unroll_if(range(n_val), unroll_solver_element):
                     x[i] = x[i] + omega_eff * s_hat[i]
                     rhs[i] = rhs[i] - omega_eff * tmp[i]
@@ -434,8 +435,8 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                 rho_new = typed_zero
                 for i in unroll_if(range(n_val), unroll_solver_element):
                     prod = r0_hat[i] * rhs[i]
-                    prod = selp(prod > dot_clamp, dot_clamp, prod)
-                    prod = selp(prod < -dot_clamp, -dot_clamp, prod)
+                    prod = cuda.selp(prod > dot_clamp, dot_clamp, prod)
+                    prod = cuda.selp(prod < -dot_clamp, -dot_clamp, prod)
                     rho_new += prod
 
                 # ── Step 14-15: breakdown detection ──────
@@ -459,7 +460,7 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
                     (not finished) and beta_overflow
                 )
                 finished = converged or broken
-                beta = selp(
+                beta = cuda.selp(
                     not finished,
                     (rho_new / rho_prev) * (alpha / omega),
                     typed_zero,
@@ -467,27 +468,29 @@ class BiCGSTABSolver(IterativeLinearSolverBase):
 
                 # ── Step 17: p = r + beta*(p - omega*v) ──
                 for i in unroll_if(range(n_val), unroll_solver_element):
-                    p[i] = selp(
+                    p[i] = cuda.selp(
                         not finished,
                         rhs[i] + beta * (p[i] - omega * v[i]),
                         p[i],
                     )
-                    p[i] = selp(
+                    p[i] = cuda.selp(
                         p[i] > dot_clamp, dot_clamp, p[i]
                     )
-                    p[i] = selp(
+                    p[i] = cuda.selp(
                         p[i] < -dot_clamp, -dot_clamp, p[i]
                     )
 
                 # ── Step 18: rho_prev = rho_new ─────────
-                rho_prev = selp(
+                rho_prev = cuda.selp(
                     not finished, rho_new, rho_prev
                 )
 
             # ── Exit ────────────────────────────────────
-            final_status = selp(
+            final_status = cuda.selp(
                 converged, success,
-                selp(broken, bicgstab_breakdown, max_linear_iters_exceeded),
+                cuda.selp(
+                    broken, bicgstab_breakdown, max_linear_iters_exceeded
+                ),
             )
             krylov_iters_out[0] = iter_count
             return final_status

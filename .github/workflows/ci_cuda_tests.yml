@@ -287,7 +287,7 @@ jobs:
           python - <<'EOF'
           import sys
 
-          from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+          from cubie.cubie_cudasim_extensions import CUDA_SIMULATION, cuda
 
           if CUDA_SIMULATION:
               print("the simulator is active; banking needs real cubie",

@@ -24,7 +24,7 @@ from typing import Any, Optional, Tuple
 
 from attrs import frozen
 
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
 
 SASS_INSTRUCTION_BYTES = 16
 """Bytes per SASS instruction."""

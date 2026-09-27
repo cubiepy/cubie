@@ -460,9 +460,3 @@ def require_cuda_ndarray(obj):
     "Raises ValueError is is_cuda_ndarray(obj) evaluates False"
     if not is_cuda_ndarray(obj):
         raise ValueError("require an cuda ndarray object")
-
-
-# The device-array classes of the real driver module.
-DeviceNDArrayBase = FakeCUDAArray
-DeviceNDArray = FakeCUDAArray
-MappedNDArray = FakeCUDAArray

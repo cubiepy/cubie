@@ -84,8 +84,8 @@ Outputs require acceptance (`do_save &= accept`, likewise for summaries).
 ## Dependencies
 ### Internal
 - `cubie.CUDAFactory`; `cubie.buffer_registry`; `cubie._utils` (`PrecisionDType`,
-  `unpack_dict_values`, `build_config`, validators); `cubie.cuda_simsafe`
-  (`activemask`, `all_sync`, `selp`, `compile_kwargs`);
+  `unpack_dict_values`, `build_config`, validators); `cubie.cubie_cudasim_extensions`
+  (`cuda`, `fmin`); `cubie.backend` (`unroll_if`, `narrow_f64`, `compile_kwargs`);
   `cubie.outputhandling.output_config` (`OutputCompileFlags`).
 ### External
 - `numba` (`cuda.jit`, `int32`, `float64`, `bool_`); `numpy` (`int32 as np_int32`, for

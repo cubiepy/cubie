@@ -8,7 +8,7 @@ See Also
 
 from typing import Any, Callable, Dict
 
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda
 
 __all__ = ["name_and_compile_kernel"]
 

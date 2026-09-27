@@ -40,15 +40,15 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import evolve, field, validators, frozen
 from numpy import int32 as np_int32
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda
 from cubie.CUDAFactory import (
     UnrollChoice,
     build_config,
 )
-from cubie.cuda_simsafe import unroll_if
+from cubie.backend.intrinsics import unroll_if
 
 from cubie._utils import device_function_field, PrecisionDType
-from cubie.cuda_simsafe import activemask, all_sync
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
@@ -720,8 +720,8 @@ class DIRKStep(ODEImplicitStep):
             if first_same_as_last and multistage:
                 # Runtime branch: depends on previous step acceptance
                 if not first_step:
-                    mask = activemask()
-                    all_threads_accepted = all_sync(
+                    mask = cuda.activemask()
+                    all_threads_accepted = cuda.all_sync(
                         mask,
                         accepted_flag != int32(0),
                     )
@@ -841,7 +841,7 @@ class DIRKStep(ODEImplicitStep):
             # --------------------------------------------------------------- #
             #            Stages 1-s: must refresh all qtys                    #
             # --------------------------------------------------------------- #
-            mask = activemask()
+            mask = cuda.activemask()
             for prev_idx in unroll_if(
                 range(last_implicit_stage), unroll_stage
             ):

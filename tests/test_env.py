@@ -10,7 +10,7 @@ from cubie._env import (
 )
 from cubie.CUDAFactory import CUDAFactoryConfig
 from cubie.CUDAFactory import JITFlags
-from cubie.cuda_simsafe import compile_kwargs, get_jit_kwargs
+from cubie.backend.jit import compile_kwargs, get_jit_kwargs
 
 
 class TestEnvBool:

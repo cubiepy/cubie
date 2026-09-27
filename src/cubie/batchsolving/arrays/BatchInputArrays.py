@@ -38,11 +38,8 @@ from typing import Dict, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
-from cubie.cuda_simsafe import (
-    cuda,
-    CUDA_SIMULATION,
-    is_device_array,
-)
+from cubie._utils import is_device_array
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
 from cubie.batchsolving.writeback_watcher import WritebackWatcher

@@ -36,7 +36,8 @@ from math import sqrt as math_sqrt
 from typing import Callable, Optional, Set, Dict, Any
 
 from attrs import define, field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda
 from numpy import finfo as np_finfo
 from numpy import int32 as np_int32
 from numpy import ndarray
@@ -56,12 +57,7 @@ from cubie.CUDAFactory import (
     CUDADispatcherCache,
     build_config,
 )
-from cubie.cuda_simsafe import (
-    activemask,
-    all_sync,
-    unroll_if,
-    selp,
-)
+from cubie.backend.intrinsics import unroll_if
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
@@ -353,7 +349,7 @@ class NewtonKrylov(MatrixFreeSolver):
             # scratch buffer or a failed previous solve. Callers zero
             # the persistent scratch before the first solve.
             stored_theta = prev_theta_store[0]
-            prev_theta = selp(
+            prev_theta = cuda.selp(
                 stored_theta > typed_zero, stored_theta, typed_one
             )
 
@@ -371,9 +367,9 @@ class NewtonKrylov(MatrixFreeSolver):
             iters_count = int32(0)
             total_krylov_iters = int32(0)
             iteration = int32(0)
-            mask = activemask()
+            mask = cuda.activemask()
             for _ in unroll_if(range(max_iters), unroll_newton_exits):
-                if all_sync(mask, converged | failed):
+                if cuda.all_sync(mask, converged | failed):
                     break
                 iteration += int32(1)
                 active = (not converged) & (not failed)
@@ -414,11 +410,13 @@ class NewtonKrylov(MatrixFreeSolver):
                     krylov_iters_local,
                 )
 
-                total_krylov_iters += selp(
+                total_krylov_iters += cuda.selp(
                     active, krylov_iters_local[0], int32(0)
                 )
-                last_lin_status = selp(active, lin_status, last_lin_status)
-                iters_count = selp(
+                last_lin_status = cuda.selp(
+                    active, lin_status, last_lin_status
+                )
+                iters_count = cuda.selp(
                     active, int32(iters_count + int32(1)), iters_count
                 )
 
@@ -435,8 +433,8 @@ class NewtonKrylov(MatrixFreeSolver):
                 # nothing commits and no contraction evidence accrues.
                 judged = active & (lin_status == success)
                 history = ndz_prev > typed_zero
-                ndz_prev_safe = selp(history, ndz_prev, typed_one)
-                theta = selp(
+                ndz_prev_safe = cuda.selp(history, ndz_prev, typed_one)
+                theta = cuda.selp(
                     history,
                     max(theta_decay * prev_theta, ndz / ndz_prev_safe),
                     prev_theta,
@@ -471,7 +469,7 @@ class NewtonKrylov(MatrixFreeSolver):
                     & (not converged_floor)
                 )
                 for i in unroll_if(range(n_val), unroll_solver_element):
-                    stage_increment[i] = selp(
+                    stage_increment[i] = cuda.selp(
                         commit,
                         stage_increment[i] + delta[i],
                         stage_increment[i],
@@ -481,26 +479,26 @@ class NewtonKrylov(MatrixFreeSolver):
                     | converged_floor
                     | (commit & (eta_accept | small_first_step))
                 )
-                ndz_prev = selp(commit, ndz, typed_zero)
-                prev_theta = selp(judged & history, theta, prev_theta)
+                ndz_prev = cuda.selp(commit, ndz, typed_zero)
+                prev_theta = cuda.selp(judged & history, theta, prev_theta)
 
             # Store contraction history; failed solves reset it to 1.
-            prev_theta_store[0] = selp(
+            prev_theta_store[0] = cuda.selp(
                 converged, min(prev_theta, typed_one), typed_one
             )
 
-            fail_bits = selp(failed, int32(0), max_newton_iters_exceeded)
-            fail_bits = selp(
+            fail_bits = cuda.selp(failed, int32(0), max_newton_iters_exceeded)
+            fail_bits = cuda.selp(
                 failed | diverged,
                 int32(fail_bits | newton_divergence),
                 fail_bits,
             )
-            fail_bits = selp(
+            fail_bits = cuda.selp(
                 last_lin_status != success,
                 int32(fail_bits | last_lin_status),
                 fail_bits,
             )
-            final_status = selp(converged, success, fail_bits)
+            final_status = cuda.selp(converged, success, fail_bits)
 
             counters[0] += iters_count
             counters[1] += total_krylov_iters

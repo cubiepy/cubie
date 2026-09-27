@@ -38,7 +38,7 @@ from cubie.batchsolving.optimize import (
 )
 from cubie.cache_root import get_cache_root, set_cache_root
 from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollChoice
-from cubie.cuda_simsafe import CUDA_SIMULATION, cuda
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
 from cubie.buffer_registry import buffer_registry
 from cubie.time_logger import default_timelogger
 

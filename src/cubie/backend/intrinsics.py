@@ -1,4 +1,18 @@
-"""Cubie device intrinsics with numba-cuda-mlir typing and lowering."""
+"""Cubie device intrinsics with numba-cuda-mlir typing and lowering.
+
+Published Objects
+-----------------
+:func:`narrow_f64`
+    Narrow a float64 to float32 without flushing subnormal results.
+:func:`unroll_if`
+    ``unroll_if(range(n), flag[, count])``: ``flag`` sets whether MLIR
+    adds a loop-unroll hint, ``count`` its unroll count. The AST pass
+    in :mod:`cubie.backend._mlir_cubie_extensions` consumes the call.
+:data:`UnrollFlag`
+    One ``(unroll, count)`` pair, the ``flag`` argument.
+"""
+
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -39,3 +53,12 @@ def _lower_narrow_f64(builder, target, args, kwargs):
         builder.store_var(target, result)
         return
     type_convert(builder, target, args, kwargs)
+
+
+UnrollFlag = Tuple[bool, Optional[int]]
+"""Loop-group flag: ``(unroll, count)``."""
+
+
+def unroll_if(iterable, flag, count=None):
+    """Return ``iterable``; the UnrollIf pass consumes the call."""
+    return iterable

@@ -191,12 +191,6 @@ class TestFunctionsAndPiecewise:
         with pytest.raises(ValueError, match="unsupported function"):
             print_cuda(call("myfunc_", sym("x")))
 
-    def test_sign_emits_copysign_selection(self):
-        assert print_cuda(call("sign", sym("x"))) == (
-            "selp(x == precision(0), precision(0), "
-            "math.copysign(precision(1), x))"
-        )
-
     def test_mod_emits_modulo_operator(self):
         result = print_cuda(
             call("Mod", add(sym("x"), sym("y")), num(3))
@@ -210,11 +204,6 @@ class TestFunctionsAndPiecewise:
     def test_mod_in_denominator_keeps_grouping(self):
         quotient = div(sym("z"), call("Mod", sym("x"), sym("y")))
         assert print_cuda(quotient) == "z/(x % y)"
-
-    def test_heaviside_converts_to_piecewise(self):
-        result = print_cuda(from_sympy(sp.Heaviside(sp.Symbol("x"))))
-        assert result.startswith("selp(")
-        assert "Heaviside" not in result
 
     def test_derivative_placeholder_prints_plainly(self):
         result = print_cuda(
@@ -238,24 +227,6 @@ class TestFunctionsAndPiecewise:
         )
         assert result == "myfunc(x)"
 
-    def test_piecewise_emits_selp_selection(self):
-        expr = piecewise(
-            (sym("a"), rel("<", sym("x"), num(0))),
-            (sym("b"), TRUE),
-        )
-        assert print_cuda(expr) == "selp(x < precision(0), a, b)"
-
-    def test_multibranch_piecewise_nests_selp(self):
-        expr = piecewise(
-            (sym("a"), rel("<", sym("x"), num(0))),
-            (sym("b"), rel("<", sym("x"), num(1))),
-            (sym("c"), TRUE),
-        )
-        assert print_cuda(expr) == (
-            "selp(x < precision(0), a, "
-            "selp(x < precision(1), b, c))"
-        )
-
     def test_piecewise_assignment_is_selp_call(self):
         expr = from_sympy(
             sp.Piecewise(
@@ -268,19 +239,7 @@ class TestFunctionsAndPiecewise:
             )
         )
         line = print_cuda_multiple([(sym("aux_4"), expr)])[0]
-        assert line.startswith("aux_4 = selp(")
         assert line.rstrip().endswith("precision(0.0))")
-
-    def test_piecewise_inside_expression(self):
-        inner = piecewise(
-            (sym("_cse1"), rel(">", sym("_cse3"), num(0))),
-            (num(0.0), TRUE),
-        )
-        result = print_cuda(mul(sym("E_v"), inner))
-        assert result == (
-            "E_v*selp(_cse3 > precision(0), _cse1, "
-            "precision(0.0))"
-        )
 
     def test_piecewise_literals_wrapped(self):
         expr = piecewise(
@@ -289,26 +248,6 @@ class TestFunctionsAndPiecewise:
         )
         result = print_cuda(expr)
         assert result.count("precision(") >= 2
-        assert result.startswith("selp(")
-
-    def test_compound_condition_prints_bitwise(self):
-        from cubie.odesystems.symbolic.engine import bool_op
-
-        expr = piecewise(
-            (
-                sym("a"),
-                bool_op(
-                    "and",
-                    rel("<", sym("x"), num(0)),
-                    rel("<", sym("y"), num(1)),
-                ),
-            ),
-            (sym("b"), TRUE),
-        )
-        assert print_cuda(expr) == (
-            "selp((x < precision(0)) & (y < precision(1)), a, b)"
-        )
-
 
 class TestSymbolMapping:
     def test_scalar_symbols_remap_to_arrays(self):

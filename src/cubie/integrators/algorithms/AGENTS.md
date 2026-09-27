@@ -179,7 +179,7 @@ Rosenbrock-W ignores both flags.
 - `cubie.buffer_registry` — buffer allocation for shared/local memory.
 - `cubie.integrators.matrix_free_solvers` — `NewtonKrylov`, `LinearSolver` (owned by
   implicit steps).
-- `cubie.cuda_simsafe` — `all_sync`, `activemask` (FSAL warp votes).
+- `cubie.cubie_cudasim_extensions` — `cuda` (`cuda.all_sync`, `cuda.activemask` FSAL warp votes).
 - `cubie._utils` — `build_config`, `PrecisionDType`, validators.
 - Solver-helper device functions come from the ODE system via `get_solver_helper_fn`
   (role names `residual`, `linear_operator`, `neumann`/`jacobi`,

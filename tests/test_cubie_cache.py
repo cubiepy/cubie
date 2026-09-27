@@ -629,7 +629,7 @@ def test_index_save_retries_while_the_index_is_held_open(tmp_path):
     """A save denied by an open index handle lands once it closes."""
     from threading import Timer
 
-    from cubie.cuda_simsafe import IndexDataCacheFile
+    from numba_cuda_mlir.numba_cuda.core.caching import IndexDataCacheFile
     from cubie.cubie_cache import _retry_transient_io
 
     cache_file = IndexDataCacheFile(str(tmp_path), "kernels-abc", "stamp")

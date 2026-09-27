@@ -3,8 +3,8 @@
 import time
 
 import pytest
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import compile_kwargs
+from cubie.cubie_cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
 
 from cubie.time_logger import (
     CUDAEvent,

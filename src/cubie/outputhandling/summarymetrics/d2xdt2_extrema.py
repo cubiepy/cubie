@@ -15,9 +15,8 @@ See Also
     Global registry where this metric is registered.
 """
 
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda
 
-from cubie.cuda_simsafe import selp
 from cubie.outputhandling.summarymetrics import summary_metrics
 from cubie.outputhandling.summarymetrics.metrics import (
     SummaryMetric,
@@ -117,8 +116,12 @@ class D2xdt2Extrema(SummaryMetric):
             update_min = (
                 second_derivative_unscaled < buffer[3]
             ) and history_primed
-            buffer[2] = selp(update_max, second_derivative_unscaled, buffer[2])
-            buffer[3] = selp(update_min, second_derivative_unscaled, buffer[3])
+            buffer[2] = cuda.selp(
+                update_max, second_derivative_unscaled, buffer[2]
+            )
+            buffer[3] = cuda.selp(
+                update_min, second_derivative_unscaled, buffer[3]
+            )
             buffer[1] = buffer[0]
             buffer[0] = value
 

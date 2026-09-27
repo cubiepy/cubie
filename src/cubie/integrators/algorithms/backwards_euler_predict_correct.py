@@ -18,8 +18,9 @@ See Also
 
 from typing import Callable, Optional
 
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if
 
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.algorithms.backwards_euler import BackwardsEulerStep

@@ -28,8 +28,9 @@ See Also
 from typing import Callable, Optional
 
 from attrs import field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if
 
 from cubie._utils import PrecisionDType
 from cubie.CUDAFactory import build_config

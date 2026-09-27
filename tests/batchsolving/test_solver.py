@@ -43,7 +43,8 @@ from cubie.batchsolving.optimize import (
     resident_blocks_within_l2,
 )
 from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags
-from cubie.cuda_simsafe import cuda, is_device_array
+from cubie._utils import is_device_array
+from cubie.cubie_cudasim_extensions import cuda
 from cubie.integrators.matrix_free_solvers.bicgstab_solver import (
     BiCGSTABSolver,
 )

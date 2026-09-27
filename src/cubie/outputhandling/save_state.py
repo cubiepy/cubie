@@ -16,11 +16,12 @@ See Also
 
 from typing import Callable, Optional, Sequence, Union
 
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import UnrollFlag, unroll_if
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if, UnrollFlag
 from numpy.typing import ArrayLike
 
-from cubie.cuda_simsafe import get_jit_kwargs, stwt
+from cubie.backend.jit import get_jit_kwargs
 
 
 def save_state_factory(
@@ -128,24 +129,24 @@ def save_state_factory(
         """
         if save_state:
             for k in unroll_if(range(nstates), unroll):
-                stwt(
+                cuda.stwt(
                     output_states_slice,
                     k,
                     current_state[saved_state_indices[k]],
                 )
         if save_time:
             # Append time at the end of the state output
-            stwt(output_states_slice, nstates, current_step)
+            cuda.stwt(output_states_slice, nstates, current_step)
         if save_observables:
             for m in unroll_if(range(nobs), unroll):
-                stwt(
+                cuda.stwt(
                     output_observables_slice,
                     m,
                     current_observables[saved_observable_indices[m]],
                 )
         if save_counters:
             for i in unroll_if(range(ncounters), unroll):
-                stwt(output_counters_slice, i, current_counters[i])
+                cuda.stwt(output_counters_slice, i, current_counters[i])
         # no cover: stop
 
     return save_state_fn

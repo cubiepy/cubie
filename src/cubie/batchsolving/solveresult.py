@@ -67,7 +67,7 @@ from numpy import (
 from numpy.typing import NDArray
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving import ArrayTypes
-from cubie.cuda_simsafe import DeviceNDArrayBase, Stream
+from cubie.cubie_cudasim_extensions import DeviceNDArrayBase, Stream
 from cubie.result_codes import decode_status_codes
 from cubie._utils import (
     slice_variable_dimension,

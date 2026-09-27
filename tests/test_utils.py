@@ -3,14 +3,15 @@ from functools import lru_cache
 import attrs
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import compile_kwargs
+from cubie.cubie_cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
 from cubie._utils import (
     _expand_dtype,
     clamp_factory,
     ensure_nonzero_size,
     float_array_validator,
     in_attr,
+    is_devfunc,
     is_device_validator,
     mass_equal,
     merge_kwargs_into_settings,
@@ -21,7 +22,6 @@ from cubie._utils import (
     unpack_dict_values,
 )
 from cubie.CUDAFactory import build_config
-from cubie.cuda_simsafe import is_devfunc
 from cubie.memory import default_memmgr
 
 
@@ -915,3 +915,31 @@ def test_build_config_folds_loose_keys_into_nested_settings():
     )
     assert config.unroll.unroll_solver_element == (True, 2)
     assert config.jit_flags.lineinfo is True
+
+
+@pytest.mark.nocudasim
+def test_devfunc_returns_nonfloat_reads_compiled_overloads():
+    """Integer and boolean returns report True; float and uncompiled False."""
+    from cubie._utils import devfunc_returns_nonfloat
+    from cubie.cubie_cudasim_extensions import cuda
+
+    @cuda.jit("int32(float32)", device=True, inline=True)
+    def integer_return(x):
+        return 1
+
+    @cuda.jit("boolean(float32)", device=True, inline=True)
+    def boolean_return(x):
+        return x > 0.0
+
+    @cuda.jit("float32(float32)", device=True, inline=True)
+    def float_return(x):
+        return x * 2.0
+
+    @cuda.jit(device=True, inline=True)
+    def uncompiled(x):
+        return 1
+
+    assert devfunc_returns_nonfloat(integer_return) is True
+    assert devfunc_returns_nonfloat(boolean_return) is True
+    assert devfunc_returns_nonfloat(float_return) is False
+    assert devfunc_returns_nonfloat(uncompiled) is False

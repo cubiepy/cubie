@@ -45,7 +45,7 @@ Device functions and derivatives
 --------------------------------
 
 CUDA device functions are detected automatically if they are created with
-cuda.jit(..., device=True), with ``cuda`` from ``cubie.cuda_simsafe``. For differentiation, also provide a derivative
+cuda.jit(..., device=True), with ``cuda`` from ``cubie.cubie_cudasim_extensions``. For differentiation, also provide a derivative
 function in user_function_derivatives with the same key as the original function
 name.
 

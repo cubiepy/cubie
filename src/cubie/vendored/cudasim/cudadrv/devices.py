@@ -53,8 +53,12 @@ class FakeCUDAContext:
         pass
 
     def get_memory_info(self):
-        """Return a fixed 1 GiB free of 8 GiB total."""
-        return _MemoryInfo(1024**3, 8 * 1024**3)
+        """
+        Cross-platform free / total host memory is hard without external
+        dependencies, e.g. `psutil` - so return infinite memory to maintain API
+        type compatibility
+        """
+        return _MemoryInfo(float("inf"), float("inf"))
 
     def memalloc(self, sz):
         """

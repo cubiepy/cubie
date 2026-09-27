@@ -9,7 +9,7 @@ an identical system written without user functions.
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda
 
 from cubie import create_ODE_system, solve_ivp
 from cubie.odesystems.symbolic.codegen.dxdt import (

@@ -87,7 +87,7 @@ decorate with `@register_metric(summary_metrics)` and import the module in
 ### Internal
 - `cubie.CUDAFactory` (`CUDAFactory`, `CUDAFactoryConfig`, `CUDADispatcherCache`);
   `cubie._utils` (`gttype_validator`, `PrecisionDType`, `precision_converter`,
-  `precision_validator`); `cubie.cuda_simsafe` (`selp`, `compile_kwargs`).
+  `precision_validator`); `cubie.cubie_cudasim_extensions` (`cuda`); `cubie.backend.jit` (`compile_kwargs`).
 ### External
 - `numba` (`cuda.jit`, `int32`); `numpy` (`float32`, `floating`); `attrs`; `math`
   (`sqrt`, `fabs`).

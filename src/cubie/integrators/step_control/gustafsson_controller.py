@@ -31,7 +31,8 @@ See Also
 
 from typing import Callable
 
-from cubie.cuda_simsafe import cuda, int32
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda
 from attrs import field, frozen
 
 from cubie.buffer_registry import buffer_registry
@@ -43,7 +44,6 @@ from cubie._utils import (
     PrecisionDType,
     getype_validator,
 )
-from cubie.cuda_simsafe import selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 from cubie.integrators.step_control.base_step_controller import ControllerCache
 
@@ -202,7 +202,7 @@ class GustafssonController(BaseAdaptiveStepController):
 
             nrm2 = error_norm(error, state, state_prev)
             # A non-finite norm rejects at min gain, not clamp's max.
-            nrm2 = selp(nrm2 <= typed_large, nrm2, typed_large)
+            nrm2 = cuda.selp(nrm2 <= typed_large, nrm2, typed_large)
 
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)
@@ -228,11 +228,11 @@ class GustafssonController(BaseAdaptiveStepController):
                 within_deadband = (gain >= deadband_min) and (
                     gain <= deadband_max
                 )
-                gain = selp(within_deadband, typed_one, gain)
+                gain = cuda.selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry with the basic gain alone.
             gain_reject = clamp(gain_basic, min_step_shrink, max_step_growth)
-            gain = selp(accept, gain, gain_reject)
+            gain = cuda.selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size
             # info: on accept, freeze dt and report success. History
@@ -241,12 +241,14 @@ class GustafssonController(BaseAdaptiveStepController):
             freeze = accept and truncated
             commit_history = accept and not truncated
             dt_new_raw = current_dt * gain
-            dt[0] = selp(freeze, current_dt, clamp(dt_new_raw, dt_min, dt_max))
+            dt[0] = cuda.selp(
+                freeze, current_dt, clamp(dt_new_raw, dt_min, dt_max)
+            )
 
-            timestep_buffer[0] = selp(
+            timestep_buffer[0] = cuda.selp(
                 commit_history, current_dt, timestep_buffer[0]
             )
-            timestep_buffer[1] = selp(
+            timestep_buffer[1] = cuda.selp(
                 commit_history, nrm2, timestep_buffer[1]
             )
 

@@ -56,7 +56,6 @@ Dependencies
 
 - :class:`SymbolicODE` subclasses :class:`cubie.CUDAFactory` so integrator loops
   can request compiled CUDA device functions directly.
-- Precision handling relies on :mod:`cubie._utils` helpers and
-  :mod:`cubie.cuda_simsafe` to provide simulator-safe coercions.
+- Precision handling relies on :mod:`cubie._utils` helpers.
 - Generated kernels are consumed by :mod:`cubie.integrators` factories during
   loop construction.

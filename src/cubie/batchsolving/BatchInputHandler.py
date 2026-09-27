@@ -166,7 +166,8 @@ from numpy import (
 
 from numpy.typing import ArrayLike
 
-from cubie.cuda_simsafe import is_device_array, is_pinned_array
+from cubie._utils import is_device_array
+from cubie.memory.driver_memory import is_pinned_array
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory import default_memmgr
 from cubie.odesystems.baseODE import BaseODE

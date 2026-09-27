@@ -70,8 +70,11 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from cubie.buffer_registry import buffer_registry  # noqa: E402
-from cubie.cuda_simsafe import cuda, int32  # noqa: E402
-from cubie.cuda_simsafe import from_dtype  # noqa: E402
+from numba_cuda_mlir.types import int32  # noqa: E402
+from cubie.cubie_cudasim_extensions import cuda  # noqa: E402
+from numba_cuda_mlir.numba_cuda.np.numpy_support import (  # noqa: E402
+    from_dtype,
+)
 from cubie.integrators.algorithms.generic_dirk import DIRKStep  # noqa: E402
 from cubie.integrators.algorithms.generic_dirk_tableaus import (  # noqa: E402
     DIRK_TABLEAU_REGISTRY,

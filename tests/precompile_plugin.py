@@ -550,16 +550,16 @@ if POPULATION:
 
     # Placeholder host buffers are never page-locked.
     for _module_name in (
-        "cubie.cuda_simsafe",
+        "cubie.memory.driver_memory",
         "cubie.batchsolving.BatchInputHandler",
         "cubie.batchsolving.arrays.BaseArrayManager",
     ):
         importlib.import_module(_module_name).is_pinned_array = _never_pinned
 
-    import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
+    import cubie._utils as _cubie_utils  # noqa: E402
 
     # Fake device arrays take the device-input path, keeping their layout.
-    _real_is_device_array = _cuda_simsafe.is_device_array
+    _real_is_device_array = _cubie_utils.is_device_array
 
     def _population_is_device_array(value):
         if isinstance(value, _FakeDeviceArray):
@@ -567,7 +567,7 @@ if POPULATION:
         return _real_is_device_array(value)
 
     for _module_name in (
-        "cubie.cuda_simsafe",
+        "cubie._utils",
         "cubie.batchsolving.BatchInputHandler",
         "cubie.batchsolving.arrays.BatchInputArrays",
     ):

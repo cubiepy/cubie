@@ -47,8 +47,9 @@ from cubie.CUDAFactory import (
     UnrollChoice,
     build_config,
 )
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda
+from cubie.backend.intrinsics import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
 from numpy import int32 as np_int32

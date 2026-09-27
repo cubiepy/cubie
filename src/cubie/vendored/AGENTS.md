@@ -9,27 +9,17 @@ Third-party code: the CUDA simulator from numba-cuda (on numba-cuda-mlir) and ce
 | File | Description |
 |------|-------------|
 | `__init__.py` | Package docstring only; no exports. |
-| `cudasim/` | The CUDA simulator from NVIDIA/numba-cuda 0.30.4 (`numba_cuda/numba/cuda/simulator`, plus `is_available`/`cuda_error` from `simulator_init.py`), snapshot 2026-09-27. Runs device code as Python threads on the CPU. `cuda_simsafe` imports it as `cuda` when `NUMBA_ENABLE_CUDASIM=1`. |
+| `cudasim/` | The CUDA simulator from NVIDIA/numba-cuda 0.30.4 (`numba_cuda/numba/cuda/simulator`, plus `is_available`/`cuda_error` from `simulator_init.py`), snapshot 2026-09-27. Runs device code as Python threads on the CPU. `cubie_cudasim_extensions` extends it and serves it as `cuda` when `NUMBA_ENABLE_CUDASIM=1`. |
 | `cellmlmanip/` | Vendored snapshot of cellmlmanip 0.3.6 (ModellingWebLab, BSD 3-Clause; `LICENSE` kept alongside). Parses CellML into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/cellml.py`. |
 
 ## cudasim
 - `numba.cuda.*` imports point at `numba_cuda_mlir.numba_cuda.*`; the kernel-time
   module swap replaces globals bound to this package.
-- Local modifications:
-  - `__init__.py`: the `sys.modules["numba.cuda.*"]` aliasing is dropped; submodules
-    import unconditionally.
-  - `api.jit` accepts and ignores GPU-only options (`lineinfo`, `lto`,
-    `experimental_ast_transforms`, ...); `api.stwt` is a plain store; `api.stream` is
-    `cudadrv.driver.Stream`, a class with a null `handle`.
-  - `kernelapi.FakeCUDAModule` adds `activemask` (all lanes), `all_sync`/`any_sync`
-    (the thread's own predicate), `syncwarp` (no-op) and `stwt`. Local and shared
-    arrays are `TypedViewArray`s, whose `view` also takes a Numba type.
-  - `kernel.FakeCUDAKernel.targetoptions` reports `{"device": ...}`.
-  - `cudadrv.devices.FakeCUDAContext.get_memory_info` reports 1 GiB free of 8 GiB.
-  - `cudadrv.devicearray` aliases `DeviceNDArrayBase`/`DeviceNDArray`/`MappedNDArray`
-    to `FakeCUDAArray`.
-  - `experimental.consteval` (new) returns its argument.
-- To update, re-snapshot upstream and re-apply the import rewrite and the list above.
+- Local modifications: `__init__.py` drops the `sys.modules["numba.cuda.*"]` aliasing
+  and imports its submodules unconditionally. Cubie's additions to the simulator
+  live in `cubie/cubie_cudasim_extensions.py`, applied at its import.
+- To update, re-snapshot upstream and re-apply the import rewrite and the `__init__.py`
+  change.
 - BSD 2-Clause; notice in each upstream file header and `THIRD_PARTY_LICENSES`.
 
 ## cellmlmanip
@@ -42,7 +32,7 @@ Third-party code: the CUDA simulator from numba-cuda (on numba-cuda-mlir) and ce
   dependencies (`lxml`, `networkx`, `Pint`, `rdflib`) are cubie dependencies.
 
 ## Dependencies
-- `cudasim/`: none internal (consumed by `cuda_simsafe`). External: `numpy`,
+- `cudasim/`: none internal (consumed by `cubie_cudasim_extensions`). External: `numpy`,
   `numba_cuda_mlir.numba_cuda` (config, types, typing helpers).
 - `cellmlmanip/`: external `lxml`, `networkx`, `Pint`, `rdflib`, `sympy`; consumed by
   `cubie.odesystems.symbolic.parsing.cellml`.

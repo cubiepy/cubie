@@ -42,7 +42,7 @@ for name, svty in vector_types.items():
         setattr(sys.modules[__name__], alias, svty)
 del vector_types, name, svty, alias
 
-from . import cudadrv, dispatcher, experimental  # noqa: E402,F401
+from . import cudadrv, dispatcher  # noqa: E402,F401
 from . import bf16, compiler, _internal, memory_management  # noqa: E402,F401
 
 

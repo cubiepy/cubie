@@ -19,7 +19,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 import cubie as qb
-from cubie.cuda_simsafe import CUDA_SIMULATION
+from cubie.cubie_cudasim_extensions import CUDA_SIMULATION
 
 REPO = Path(__file__).resolve().parent.parent
 FABBRI_CELLML = (

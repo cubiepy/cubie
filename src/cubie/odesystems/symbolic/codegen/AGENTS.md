@@ -121,7 +121,7 @@ selection.
 The printer is `engine/printer.py`: numeric literals wrapped in `precision(...)` (array
 indices stay plain integers), integer powers as multiplication chains up to
 `_POW_CHAIN_LIMIT`, `CUDA_FUNCTIONS`, user-function aliases, Piecewise as branchless
-`selp`, and scalar-to-array remapping through a name-keyed symbol map (generators pass
+`cuda.selp`, and scalar-to-array remapping through a name-keyed symbol map (generators pass
 `sysir.arrayrefs`).
 
 ## Codegen hygiene

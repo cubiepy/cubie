@@ -7,26 +7,6 @@ provided to allow tests to import correctly.
 """
 
 
-from contextlib import contextmanager
-from ctypes import c_void_p
-
-
-class Stream:
-    """
-    The stream API is supported in the simulator - however, all execution
-    occurs synchronously, so synchronization requires no operation.
-    """
-
-    handle = c_void_p(0)
-
-    @contextmanager
-    def auto_synchronize(self):
-        yield
-
-    def synchronize(self):
-        pass
-
-
 def device_memset(dst, val, size, stream=0):
     dst.view("u1")[:size].fill(bytes([val])[0])
 

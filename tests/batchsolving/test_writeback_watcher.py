@@ -11,10 +11,9 @@ from cubie.batchsolving.writeback_watcher import (
     WritebackTask,
     WritebackWatcher,
 )
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import compile_kwargs
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie.backend.jit import compile_kwargs
 
-from cubie.cuda_simsafe import CUDA_SIMULATION
 from cubie.memory import MemoryManager
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool, PinnedBuffer
 

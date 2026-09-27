@@ -31,7 +31,7 @@ from math import prod
 
 from attrs import Factory as attrsFactory, define, field
 from attrs.validators import instance_of as attrsval_instance_of
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
 from numpy import (
     dtype as np_dtype,
     float32 as np_float32,
@@ -53,7 +53,6 @@ from cubie.batchsolving import ArrayTypes
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
 from cubie.batchsolving.writeback_watcher import WritebackWatcher
-from cubie.cuda_simsafe import CUDA_SIMULATION
 
 ChunkIndices = Union[slice, NDArray[np_integer]]
 

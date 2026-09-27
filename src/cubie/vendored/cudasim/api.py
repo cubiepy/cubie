@@ -20,7 +20,6 @@ from .cudadrv.linkable_code import (
     LTOIR,  # noqa: F401
 )  # noqa: F401
 from .kernel import FakeCUDAKernel
-from .cudadrv.driver import Stream
 from numba_cuda_mlir.numba_cuda.core import config
 from numba_cuda_mlir.numba_cuda.core.sigutils import is_signature
 from .args import In, Out, InOut  # noqa: F401
@@ -43,7 +42,18 @@ def is_fp8_supported():
     return False
 
 
-stream = Stream
+class stream:
+    """
+    The stream API is supported in the simulator - however, all execution
+    occurs synchronously, so synchronization requires no operation.
+    """
+
+    @contextmanager
+    def auto_synchronize(self):
+        yield
+
+    def synchronize(self):
+        pass
 
 
 # Default stream APIs. Since execution from the perspective of the host is
@@ -126,7 +136,6 @@ def jit(
     opt=None,
     cache=None,
     shared_memory_carveout=None,
-    **gpu_options,
 ):
     # Here for API compatibility
     if boundscheck:
@@ -174,7 +183,4 @@ ldcv = None
 stcg = None
 stcs = None
 stwb = None
-
-
-def stwt(array, index, value):
-    array[index] = value
+stwt = None

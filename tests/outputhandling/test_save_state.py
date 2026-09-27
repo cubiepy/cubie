@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from cubie.cuda_simsafe import cuda
-from cubie.cuda_simsafe import compile_kwargs
+from cubie.cubie_cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 
 from cubie.outputhandling.save_state import save_state_factory

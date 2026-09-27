@@ -62,17 +62,6 @@ class FakeCUDACg:
         return GridGroup()
 
 
-class TypedViewArray(np.ndarray):
-    """Array whose ``view`` also takes a Numba type, as device code may."""
-
-    def view(self, dtype=None, *args, **kwargs):
-        if isinstance(dtype, types.Type):
-            dtype = numpy_support.as_dtype(dtype)
-        if dtype is None:
-            return super().view(*args, **kwargs)
-        return super().view(dtype, *args, **kwargs)
-
-
 class FakeCUDALocal:
     """
     CUDA Local arrays
@@ -84,7 +73,7 @@ class FakeCUDALocal:
 
         if isinstance(dtype, types.Type):
             dtype = numpy_support.as_dtype(dtype)
-        return np.empty(shape, dtype).view(TypedViewArray)
+        return np.empty(shape, dtype)
 
 
 class FakeCUDAConst:
@@ -133,9 +122,7 @@ class FakeCUDAShared:
             # buffer (Numpy complains if the buffer is not a multiple of the
             # element size)
             count = self._dynshared_size // dtype.itemsize
-            return np.frombuffer(
-                self._dynshared.data, dtype=dtype, count=count
-            ).view(TypedViewArray)
+            return np.frombuffer(self._dynshared.data, dtype=dtype, count=count)
 
         # Otherwise, identify allocations by source file and line number
         # We pass the reference frame explicitly to work around
@@ -144,7 +131,7 @@ class FakeCUDAShared:
         caller = stack[-2][0:2]
         res = self._allocations.get(caller)
         if res is None:
-            res = np.empty(shape, dtype).view(TypedViewArray)
+            res = np.empty(shape, dtype)
             self._allocations[caller] = res
         return res
 
@@ -472,22 +459,6 @@ class FakeCUDAModule:
 
     def selp(self, a, b, c):
         return b if a else c
-
-    # Warp votes act per thread: every lane reports all-active.
-    def activemask(self):
-        return 0xFFFFFFFF
-
-    def all_sync(self, mask, predicate):
-        return predicate
-
-    def any_sync(self, mask, predicate):
-        return predicate
-
-    def syncwarp(self, mask=0xFFFFFFFF):
-        pass
-
-    def stwt(self, array, index, value):
-        array[index] = value
 
     def grid(self, n):
         bdim = self.blockDim

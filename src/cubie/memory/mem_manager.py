@@ -62,7 +62,13 @@ import os
 import sys
 
 from cubie.cache_root import get_cache_root
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import (
+    cuda,
+    CUDA_SIMULATION,
+    CudaSupportError,
+    DeviceNDArray,
+    Stream,
+)
 from cubie._utils import getype_validator, opt_getype_validator
 from attrs import define, Factory as attrsFactory, field
 from attrs.validators import (
@@ -81,12 +87,7 @@ from numpy import (
 from numpy.typing import DTypeLike
 from math import prod
 
-from cubie.cuda_simsafe import (
-    CUDA_SIMULATION,
-    CudaSupportError,
-    DeviceNDArray,
-    Stream,
-    current_mem_info,
+from cubie.memory.driver_memory import (
     flush_deferred_frees,
     page_locked_block,
     pool_idle_bytes,
@@ -1672,7 +1673,7 @@ class MemoryManager:
             (free_memory, total_memory) in bytes. Free memory includes
             bytes the device pool holds but no array uses.
         """
-        free, total = current_mem_info()
+        free, total = cuda.current_context().get_memory_info()
         return free + pool_idle_bytes(), total
 
     def get_stream_group(self, instance: object) -> str:

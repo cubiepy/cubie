@@ -39,11 +39,13 @@ from cubie._env import (
     kernel_cache_dir_default,
     max_cache_entries_default,
 )
-from cubie.cuda_simsafe import (  # noqa: F401
-    _CacheLocator,  # noqa: F401
-    CacheImpl,  # noqa: F401
-    CUDACache,
-    IndexDataCacheFile,  # noqa: F401
+from numba_cuda_mlir.caching import (
+    MLIRCacheImpl as CacheImpl,
+    MLIRCache as CUDACache,
+)
+from numba_cuda_mlir.numba_cuda.core.caching import (
+    _CacheLocator,
+    IndexDataCacheFile,
 )
 from cubie.cache_root import get_cache_root
 from cubie.time_logger import default_timelogger

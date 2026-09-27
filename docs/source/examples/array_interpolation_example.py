@@ -12,7 +12,7 @@ from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda
 from scipy.interpolate import CubicSpline
 
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples

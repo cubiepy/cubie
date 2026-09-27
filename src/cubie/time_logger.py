@@ -31,8 +31,7 @@ import time
 from time import perf_counter
 from typing import Optional, Any
 import attrs
-from cubie.cuda_simsafe import is_cudasim_enabled
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
 
 VERBOSITY_LEVELS = frozenset(
     {"silent", "default", "verbose", "debug", None, "None"}
@@ -125,7 +124,7 @@ class CUDAEvent:
         # Skip driver-event allocation when verbosity is None: every record/
         # elapsed method is a no-op then, so the batch kernel's 4 events/solve
         # would be created and discarded for nothing.
-        if self._verbosity is not None and not is_cudasim_enabled():
+        if self._verbosity is not None and not CUDA_SIMULATION:
             self._start_event = cuda.event()
             self._end_event = cuda.event()
         else:  # pragma: no cover - simulated / timing disabled
@@ -156,7 +155,7 @@ class CUDAEvent:
         if self._verbosity is None:
             return
 
-        if not is_cudasim_enabled():
+        if not CUDA_SIMULATION:
             self._start_event.record(stream)
         else:  # pragma: no cover - simulated
             self._start_time = perf_counter()
@@ -177,7 +176,7 @@ class CUDAEvent:
         if self._verbosity is None:
             return
 
-        if not is_cudasim_enabled():
+        if not CUDA_SIMULATION:
             self._end_event.record(stream)
         else:  # pragma: no cover - simulated
             self._end_time = perf_counter()
@@ -204,7 +203,7 @@ class CUDAEvent:
         if self._verbosity is None:
             return 0.0
 
-        if not is_cudasim_enabled():
+        if not CUDA_SIMULATION:
             if self._start_event is None or self._end_event is None:
                 return 0.0
             return cuda.event_elapsed_time(self._start_event, self._end_event)

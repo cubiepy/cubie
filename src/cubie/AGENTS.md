@@ -6,8 +6,8 @@ compiles CUDA device functions on the fly to integrate large numbers of systems 
 parallel on NVIDIA GPUs without the user writing CUDA. This package-root directory
 holds the cross-cutting infrastructure the entire codebase depends on: the
 `CUDAFactory` cached-compilation base class, the singleton `buffer_registry`, shared
-validators/converters (`_utils.py`), the CUDA-simulator compatibility layer
-(`cuda_simsafe.py`), file-based kernel caching (`cubie_cache.py`), and timing
+validators/converters (`_utils.py`), the `cuda` module and its CUDA-simulator
+extensions (`cubie_cudasim_extensions.py`), file-based kernel caching (`cubie_cache.py`), and timing
 (`time_logger.py`). `__init__.py` assembles the public API by star-importing the
 subpackages.
 
@@ -31,14 +31,14 @@ subpackages.
 | File | Description |
 |------|-------------|
 | `__init__.py` | Package entry point: checks numba-cuda-mlir is installed, imports `backend/_mlir_compat` and `backend/_mlir_cubie_extensions`, star-imports subpackages, defines `__all__` and `__version__`. |
-| `CUDAFactory.py` | Core cached-compilation framework: `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`; `update` merges, flattens groups and raises, `_update` is the subclass hook), `FrozenSettings` (frozen attrs base; `update(updates)` returns `(replacement, recognised, changed)` with converters and validators run on the replacement), `values_differ`, `build_config` (builds a config from a settings mapping; keys without a field go to its `FrozenSettings`-typed fields, e.g. `unroll_*`/`lineinfo`) and `nested_config_fields`, `JITFlags` (defaults from `cuda_simsafe.JIT_FLAG_DEFAULTS`), `UnrollFlags`/`UnrollChoice`/`unroll_flag_converter`/`ALL_UNROLL_PARAMETERS`, `CUDAFactoryConfig`/`_CubieConfigBase` (`FrozenSettings` snapshots whose `update` recurses into nested settings fields; carry the `jit_flags: JITFlags` and `unroll: UnrollFlags` compile settings every factory honours, with a read-only `lineinfo` passthrough; `init_kwargs` returns the `__init__` fields by `__init__` name without device-function slots), `CUDADispatcherCache`, and the `MultipleInstance*` variants. `CUDAFactory.settings_dict` merges every child factory's `settings_dict` (the `config_hash` children), writes the config's `init_kwargs` over them and keeps the class's `settings_keys` (a factory's loose-key set; `None` keeps every key); a factory that derives values overrides it to return them only as given. `copy()` is `type(self)(**settings_dict)`; factories that take a system override it. Hashing derives from `_serialize`. |
+| `CUDAFactory.py` | Core cached-compilation framework: `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`; `update` merges, flattens groups and raises, `_update` is the subclass hook), `FrozenSettings` (frozen attrs base; `update(updates)` returns `(replacement, recognised, changed)` with converters and validators run on the replacement), `values_differ`, `build_config` (builds a config from a settings mapping; keys without a field go to its `FrozenSettings`-typed fields, e.g. `unroll_*`/`lineinfo`) and `nested_config_fields`, `JITFlags` (defaults from `backend.jit.JIT_FLAG_DEFAULTS`), `UnrollFlags`/`UnrollChoice`/`unroll_flag_converter`/`ALL_UNROLL_PARAMETERS`, `CUDAFactoryConfig`/`_CubieConfigBase` (`FrozenSettings` snapshots whose `update` recurses into nested settings fields; carry the `jit_flags: JITFlags` and `unroll: UnrollFlags` compile settings every factory honours, with a read-only `lineinfo` passthrough; `init_kwargs` returns the `__init__` fields by `__init__` name without device-function slots), `CUDADispatcherCache`, and the `MultipleInstance*` variants. `CUDAFactory.settings_dict` merges every child factory's `settings_dict` (the `config_hash` children), writes the config's `init_kwargs` over them and keeps the class's `settings_keys` (a factory's loose-key set; `None` keeps every key); a factory that derives values overrides it to return them only as given. `copy()` is `type(self)(**settings_dict)`; factories that take a system override it. Hashing derives from `_serialize`. |
 | `_serialize.py` | Versioned typed canonical serializer: `canonical_bytes`/`canonical_digest` with explicit type tags and length prefixes over the compile-setting value domain (no `str()` fallback — unsupported values raise). Every semantic identity (values_hash, config_hash, helper source/member hashes, ODE constants fold) derives from it; `SCHEMA_VERSION` prefixes every digest. Value objects join via a `_cubie_canonical_()` method. |
 | `_env.py` | `CUBIE_*` environment-variable registry: `env_bool`, `lineinfo_default` (`CUBIE_LINEINFO`), `cache_dir_default` (`CUBIE_CACHE_DIR`), `kernel_cache_dir_default` (`CUBIE_KERNEL_CACHE_DIR`), `max_cache_entries_default` (`CUBIE_MAX_CACHE_ENTRIES`), `operation_ordering_default` (`CUBIE_OPERATION_ORDERING`, the codegen ordering-policy default consumed by every `operation_ordering` signature default), `block_schedule_default`/`active_block_schedule`/`set_active_block_schedule` (`CUBIE_BLOCK_SCHEDULE`, the typed-IR scheduler policy, default `anchor_dfs`; the active value folds into the kernel-cache fingerprint). Env values are defaults; explicit solver arguments always win. |
 | `cache_root.py` | Single source of truth for the on-disk cache root (`get_cache_root`/`set_cache_root`/`get_cache_root_override`; precedence: `set_cache_root` override → `CUBIE_CACHE_DIR` → `<cwd>/generated`). The codegen, CellML parse, and compiled-kernel caches all resolve through it. |
 | `buffer_registry.py` | Singleton `buffer_registry` (`BufferRegistry`) managing CUDA buffer metadata, layout, aliasing, and allocator generation; defines `CUDABuffer` and `BufferGroup`. |
-| `_utils.py` | Shared helpers: `PrecisionDType`, precision/buffer validators + converters, attrs validator factories, `device_function_field`, `merge_kwargs_into_settings`, `ensure_nonzero_size`, `slice_variable_dimension`, `clamp_factory`. |
-| `cuda_simsafe.py` | The CUDA import hub. `cuda` is `numba_cuda_mlir.cuda`, or the vendored simulator (`vendored/cudasim`) under `NUMBA_ENABLE_CUDASIM=1`; re-exports scalar types, `from_dtype`, driver classes (`Stream`, `DeviceNDArray*`, `CudaSupportError`) and the MLIR cache bases; owns `CUDA_SIMULATION`, `JIT_FLAG_DEFAULTS`, `compile_kwargs`, `get_jit_kwargs` (renders a `JITFlags` via the `CUDAFactory.jit_kwargs` property, the single sanctioned route to `@cuda.jit` kwargs), `UnrollFlag` (the `(unroll, count)` pair `unroll_if` reads), `is_devfunc`, `is_device_array`, the warp-intrinsic wrappers, `stwt`, `consteval`, `unroll_if`, `fmax`/`fmin` (NaN-dropping max/min on both device and simulator), and the CuPy-backed memory hooks (`cupy`/`cupyx`, `empty_pinned`, `current_mem_info`). Only the CuPy hooks and `fmax`/`fmin` branch on `CUDA_SIMULATION`. Every other module imports CUDA symbols from here, never from the backend package; driver and compiled-kernel queries live in `backend/utils.py`. |
-| `cubie_cache.py` | File-based persistence of compiled kernels: `CUBIECache*` and `toolchain_fingerprint`. `BatchSolverKernel.build_kernel()` constructs a `CUBIECache` from its config's hash-excluded `cache` settings plus `fn_hash`/`config_hash` and attaches it to the dispatcher. The source stamp folds a minimal ABI/toolchain fingerprint (schema version, Python ABI tag, block-schedule policy, numba-cuda-mlir version), not a full package freeze. Built on the MLIR cache bases from `cuda_simsafe` (the compile-result scheme). |
+| `_utils.py` | Shared helpers: `PrecisionDType`, precision/buffer validators + converters, attrs validator factories, `device_function_field`, `merge_kwargs_into_settings`, `ensure_nonzero_size`, `slice_variable_dimension`, `clamp_factory`, `is_devfunc`, `devfunc_returns_nonfloat`, `is_device_array`. |
+| `cubie_cudasim_extensions.py` | `cuda` is `numba_cuda_mlir.cuda`, or the vendored simulator (`vendored/cudasim`) under `NUMBA_ENABLE_CUDASIM=1` with cubie's extensions applied (GPU-only `jit` options ignored, warp votes, `stwt`, `experimental.consteval`, stream `handle`, `DeviceNDArray*` aliases, `targetoptions`, finite memory info, local/shared arrays whose `view` takes a Numba type). Also exports `CUDA_SIMULATION`, the classes `Stream`, `DeviceNDArrayBase`, `DeviceNDArray`, `MappedNDArray`, `CudaSupportError`, `fmax`/`fmin` (NaN-dropping max/min on device and simulator) and the simulator stand-ins for `memory/driver_memory.py`. Every module imports `cuda` from here, never from `vendored.cudasim`. |
+| `cubie_cache.py` | File-based persistence of compiled kernels: `CUBIECache*` and `toolchain_fingerprint`. `BatchSolverKernel.build_kernel()` constructs a `CUBIECache` from its config's hash-excluded `cache` settings plus `fn_hash`/`config_hash` and attaches it to the dispatcher. The source stamp folds a minimal ABI/toolchain fingerprint (schema version, Python ABI tag, block-schedule policy, numba-cuda-mlir version), not a full package freeze. Built on the MLIR cache bases `MLIRCache`/`MLIRCacheImpl` (the compile-result scheme). |
 | `time_logger.py` | `TimeLogger` (verbosity-gated timing; `"silent"` records CUDA events and prints nothing), `CUDAEvent` (GPU event pair with CUDASIM fallback), `TimingEvent`, `default_timelogger`. |
 | `result_codes.py` | `CUBIE_RESULT_CODES(IntFlag)` — the package-central status vocabulary OR-combined into the per-run status word — plus `decode_status_codes` for host-side decoding. |
 | `array_interpolator.py` | `ArrayInterpolator(CUDAFactory)`: builds piecewise-polynomial (spline) coefficients from sampled driver arrays and compiles `evaluate_all` (Horner evaluation of all drivers at `t`) and `evaluate_time_derivative`. Samples are the nested `drivers` compile setting, a `DriverSamples`: name-keyed columns with `t0` and `driver_sample_period`, equal by value, hashed by names, time base and sample count. `coefficients` is a cached build output. With no drivers the evaluators are `None` and the table is `(0, 0, order + 1)`. Owned by `BatchSolverKernel` as `driver_interpolator` (`Solver.driver_interpolator` is a passthrough); defines `ArrayInterpolatorConfig` (`boundary_condition=None` derives `periodic`/`clamped` from `wrap`), `InterpolatorCache`. `driver_sample_period` is the sample spacing; `dt` is the integrator timestep. |
@@ -46,7 +46,7 @@ subpackages.
 ## Subdirectories
 | Directory | Purpose |
 |-----------|---------|
-| `backend/` | numba-cuda-mlir compatibility shims, MLIR lowering for cubie device utilities, and the typed-IR block scheduler (see `backend/AGENTS.md`). |
+| `backend/` | numba-cuda-mlir compatibility shims, `cuda.jit` keyword arguments, cubie device intrinsics (`narrow_f64`, `unroll_if`) and their lowering, and the typed-IR block scheduler (see `backend/AGENTS.md`). |
 | `batchsolving/` | High-level batch integration API: `Solver`, `solve_ivp`, `BatchSolverKernel`, grid building, system interface, result containers, host/device array managers (see `batchsolving/AGENTS.md`). |
 | `integrators/` | Numerical integration components: `SingleIntegratorRun`, algorithm step factories, step controllers, matrix-free solvers, and CUDA loop builders (see `integrators/AGENTS.md`). |
 | `memory/` | GPU memory subsystem: `MemoryManager` singleton (`default_memmgr`), array request/response containers, stream groups, reused stream-ordered device and pinned allocations (see `memory/AGENTS.md`). |
@@ -153,8 +153,12 @@ Host-side shapes come from `ArraySizingClass` subclasses
 before allocating.
 
 ## Device code
-- Import every CUDA symbol from `cuda_simsafe`, never from `numba_cuda_mlir` or
-  `vendored.cudasim`.
+- Import `cuda` from `cubie_cudasim_extensions`, never from `numba_cuda_mlir` or
+  `vendored.cudasim`; call CUDA intrinsics through it (`cuda.selp`,
+  `cuda.all_sync`). Scalar types and `from_dtype` come from `numba_cuda_mlir`,
+  jit kwargs from `backend.jit`, `unroll_if` from `backend.intrinsics`.
+- A device function reads `cuda` as a module global: the simulator swaps it per
+  thread in the function's globals only.
 - Device-function bodies are bracketed with `# no cover: start` / `# no cover: end`
   (coverage cannot see compiled code); keep the brackets when editing.
 - Import NumPy scalar types with an `np_` prefix (`from numpy import float32 as
@@ -163,9 +167,9 @@ before allocating.
   from `compile_settings.unroll`; warp-voted iteration loops take
   `unroll_newton_exits` (Newton, DAE initialiser) or `unroll_krylov_exits` (Krylov);
   runtime-bounded loops use plain `range`.
-- Prefer `selp` over branches, except on closure constants, which the compiler prunes.
+- Prefer `cuda.selp` over branches, except on closure constants, which the compiler prunes.
 - All threads compute; gate their commits, not their participation.
-- Iteration exits are warp-coherent: `all_sync` or `any_sync`.
+- Iteration exits are warp-coherent: `cuda.all_sync` or `cuda.any_sync`.
 - Tests never `xfail`, `importorskip` or otherwise conditionally skip.
 
 ## Gotchas
@@ -177,8 +181,8 @@ before allocating.
 ## Dependencies
 ### Internal
 This root infrastructure is depended on by every subpackage. Within the root, the
-dependency order is roughly `cuda_simsafe` ← `_utils` ← `buffer_registry`,
-`CUDAFactory`; `cubie_cache` depends on `CUDAFactory`, `_utils`, `cuda_simsafe`,
+dependency order is roughly `cubie_cudasim_extensions`, `backend.jit` ← `_utils` ←
+`buffer_registry`, `CUDAFactory`; `cubie_cache` depends on `CUDAFactory`, `_utils`,
 `time_logger`, and `cache_root`. All three disk
 cache layers (codegen source, CellML parse, compiled kernels) resolve their
 base directory through `cache_root.get_cache_root()`; `set_cache_root()`

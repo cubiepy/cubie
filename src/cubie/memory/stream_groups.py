@@ -23,11 +23,9 @@ See Also
 """
 
 from typing import Any, Optional, Union
-from cubie.cuda_simsafe import cuda
+from cubie.cubie_cudasim_extensions import cuda, Stream
 import attrs
 import attrs.validators as val
-
-from cubie.cuda_simsafe import Stream
 
 
 @attrs.define

@@ -51,8 +51,8 @@ from numpy import (
     floating,
     int32 as np_int32,
 )
-from cubie.cuda_simsafe import cuda, float64
-from cubie.cuda_simsafe import int32
+from numba_cuda_mlir.types import float64, int32
+from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
 
 from attrs import define, field, evolve
 
@@ -71,7 +71,6 @@ from cubie.batchsolving.optimize import (
     default_launch,
     resident_blocks_within_l2,
 )
-from cubie.cuda_simsafe import is_cudasim_enabled
 from cubie.cubie_cache import CUBIECache
 
 from cubie.time_logger import CUDAEvent, default_timelogger
@@ -1080,7 +1079,7 @@ class BatchSolverKernel(CUDAFactory):
         )
 
         jit_kwargs = self.jit_kwargs
-        if config.max_registers is not None and not is_cudasim_enabled():
+        if config.max_registers is not None and not CUDA_SIMULATION:
             jit_kwargs["max_registers"] = config.max_registers
 
         # no cover: start

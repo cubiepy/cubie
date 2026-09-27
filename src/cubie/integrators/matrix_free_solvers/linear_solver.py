@@ -28,8 +28,9 @@ See Also
 from math import sqrt as math_sqrt
 
 from attrs import field, validators, frozen
-from cubie.cuda_simsafe import cuda, int32
-from cubie.cuda_simsafe import unroll_if
+from numba_cuda_mlir.types import int32
+from cubie.cubie_cudasim_extensions import cuda, fmin
+from cubie.backend.intrinsics import unroll_if
 
 from cubie._utils import PrecisionDType
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
@@ -38,7 +39,6 @@ from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverCache,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cuda_simsafe import activemask, all_sync, fmin, selp
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 
@@ -225,12 +225,12 @@ class MRLinearSolver(IterativeLinearSolverBase):
                 for i in unroll_if(range(n_val), unroll_solver_element):
                     rhs[i] = rhs[i] - temp[i]
                 acc = weighted_norm(rhs, state, base_state)
-            mask = activemask()
+            mask = cuda.activemask()
             converged = acc <= tol2
 
             iter_count = int32(0)
             for _ in unroll_if(range(max_iters_val), unroll_krylov_exits):
-                if all_sync(mask, converged):
+                if cuda.all_sync(mask, converged):
                     break
 
                 iter_count += int32(1)
@@ -291,7 +291,7 @@ class MRLinearSolver(IterativeLinearSolverBase):
                 converged = converged or (acc <= tol2)
 
             # Log "exceeded linear iters" status if still not converged
-            final_status = selp(
+            final_status = cuda.selp(
                 converged, success, max_linear_iters_exceeded
             )
             krylov_iters_out[0] = iter_count

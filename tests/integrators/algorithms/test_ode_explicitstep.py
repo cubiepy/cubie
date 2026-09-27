@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from cubie.cuda_simsafe import from_dtype
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 from numpy import dtype as np_dtype
 
 from cubie.integrators.algorithms.ode_explicitstep import (

@@ -31,7 +31,7 @@ from attrs.validators import (
 )
 from numpy import ndarray
 
-from cubie.cuda_simsafe import CUDA_SIMULATION
+from cubie.cubie_cudasim_extensions import CUDA_SIMULATION
 from cubie.memory.chunk_buffer_pool import PinnedBuffer, ChunkBufferPool
 
 

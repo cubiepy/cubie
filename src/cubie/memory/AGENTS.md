@@ -23,6 +23,7 @@ Supporting pieces:
 | `mem_manager.py` | `MemoryManager` (central allocator); `NoCudaDeviceError`; `InstanceMemorySettings` (per-instance registry entry); `ALL_MEMORY_MANAGER_PARAMETERS`; `MIN_AUTOPOOL_SIZE`; `c_contiguous_view` (C view of a flat device buffer). |
 | `array_requests.py` | `ArrayRequest` (shape/dtype/placement spec) and `ArrayResponse` (allocated arrays + chunk metadata). |
 | `stream_groups.py` | `StreamGroups` — maps instance ids to named groups, each backed by a CUDA stream. |
+| `driver_memory.py` | Driver calls through `cuda.bindings`: `stream_ordered_buffer`, `pool_idle_bytes`, `stream_idle`, `page_locked_block`, `flush_deferred_frees`, `is_pinned_array`. Under CUDASIM these names are the stand-ins from `cubie_cudasim_extensions`. |
 | `chunk_buffer_pool.py` | `PinnedBuffer` + `ChunkBufferPool` — reusable pinned staging buffers. Not exported from `__init__.py`. |
 
 ## Registration and pools
@@ -90,7 +91,7 @@ Supporting pieces:
   owner, their queued requests and the cached partition.
 
 ## Allocation provider
-Driver calls live in `cubie.cuda_simsafe`: `stream_ordered_buffer` (pool bytes freed on
+Driver calls live in `driver_memory.py`: `stream_ordered_buffer` (pool bytes freed on
 their stream when the last view dies), `pool_idle_bytes`, `stream_idle`,
 `page_locked_block`, `flush_deferred_frees`. `get_memory_info` reports device free memory
 plus the pool's idle bytes. `allocate_all` gives each `"device"` label a buffer that
@@ -136,8 +137,9 @@ paths). Buffers are charged to the pinned ledger.
 
 ## Dependencies
 ### Internal
-- `cubie.cuda_simsafe` (`Stream`, `DeviceNDArray`, `CUDA_SIMULATION`, `current_mem_info`,
-  the driver memory helpers); `cubie._utils` (validators in `array_requests.py`).
+- `cubie.cubie_cudasim_extensions` (`cuda`, `Stream`, `DeviceNDArray*`, `CudaSupportError`,
+  `CUDA_SIMULATION`, the driver-memory stand-ins); `cubie._utils` (validators in
+  `array_requests.py`).
 ### External
 - numba-cuda-mlir (context/stream management, kernel launch, page-locked blocks,
   driver copies); `cuda.bindings` (stream-ordered pool, pointer and stream queries);
