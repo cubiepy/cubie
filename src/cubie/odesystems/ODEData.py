@@ -101,11 +101,7 @@ def _runtime_values_converter(value: Any) -> Any:
 
 
 def _parameters_converter(value: Any) -> Any:
-    """Fully seal the parameter container held by this snapshot.
-
-    Parameter values change through ``BaseODE.update``, which keeps
-    the binding's fixed values in step.
-    """
+    """Fully seal the parameter container; values change via ``update``."""
     if value is None:
         return None
     return value.freeze(values_writable=False)
