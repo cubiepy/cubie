@@ -49,11 +49,11 @@ from cubie.CUDAFactory import (
     build_config,
 )
 from cubie.buffer_registry import buffer_registry
+from cubie.backend.intrinsics import narrow_f64
 from cubie.cuda_simsafe import (
     activemask,
     all_sync,
     fmin,
-    narrow_f64,
     selp,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES

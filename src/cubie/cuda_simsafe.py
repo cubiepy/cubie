@@ -1,8 +1,8 @@
 """CUDA import hub: every CUDA symbol CuBIE uses comes from here.
 
 ``cuda`` is ``numba_cuda_mlir.cuda``, or :mod:`cubie.vendored.cudasim`
-under ``NUMBA_ENABLE_CUDASIM=1``. Only the CuPy hooks, ``fmax``/``fmin``
-and ``narrow_f64`` differ under the simulator.
+under ``NUMBA_ENABLE_CUDASIM=1``. Only the CuPy hooks and
+``fmax``/``fmin`` differ under the simulator.
 
 Published Functions
 -------------------
@@ -23,7 +23,6 @@ Published Device Functions
     Wrappers around the CUDA intrinsics.
 ``stwt``
     The backend's store write-through hint.
-``narrow_f64``: narrow float64 to float32 without subnormal flushing.
 ``consteval``: compile-time loop marker; MLIR unrolls it.
 ``unroll_if``: ``unroll_if(range(n), flag[, count])``; ``flag`` sets
     whether MLIR adds a loop-unroll hint, ``count`` its unroll count.
@@ -420,15 +419,6 @@ def syncwarp(mask):
 
 stwt = cuda.stwt
 
-if CUDA_SIMULATION:  # pragma: no cover - simulated
-
-    def narrow_f64(value):
-        """Narrow float64 to float32 without subnormal flushing."""
-        return float32(value)
-
-else:
-    from cubie.backend._mlir_intrinsics import narrow_f64
-
 
 def unroll_if(iterable, flag, count=None):
     """Return ``iterable``; the UnrollIf pass consumes the call."""
@@ -472,7 +462,6 @@ __all__ = [
     "fmax",
     "fmin",
     "Stream",
-    "narrow_f64",
     "page_locked_block",
     "pool_idle_bytes",
     "stream_idle",

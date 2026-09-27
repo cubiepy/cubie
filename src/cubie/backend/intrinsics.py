@@ -1,4 +1,4 @@
-"""MLIR-backend typing and lowering for cubie device utilities."""
+"""Cubie device intrinsics with numba-cuda-mlir typing and lowering."""
 
 import numpy as np
 
