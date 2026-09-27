@@ -606,4 +606,4 @@ export NUMBA_ENABLE_CUDASIM="1"  # Bash
 ```
 
 Tests marked `nocudasim` require real CUDA and must be excluded when
-running in simulation mode (`-m "not nocudasim and not cupy"`).
+running in simulation mode (`-m "not nocudasim"`).

@@ -616,11 +616,6 @@ if POPULATION:
             lambda array: False
         )
 
-    # ``asarray`` stands in for the cupy grids tests hand to optimize.
-    import cupy as _cupy  # noqa: E402
-
-    _cupy.asarray = lambda a: _fake_device_array(np.array(a, copy=True))
-
     import cubie.cuda_simsafe as _cuda_simsafe  # noqa: E402
 
     # Fake device arrays take the device-input path, keeping their layout.

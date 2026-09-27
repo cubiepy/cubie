@@ -78,11 +78,11 @@ test = [
 # dev is the default-backend developer install (dev-mlir13). The
 # dev12/dev13 lanes install the deprecated numba-cuda backend, which
 # the CUDA simulator needs; simulator environments add it themselves
-# (e.g. `.[dev,cuda13]`). CuPy is for tests that pass CuPy arrays.
-dev12 = ["cubie[cuda12,test]", "cupy-cuda12x"]
-dev13 = ["cubie[cuda13,test]", "cupy-cuda13x"]
-dev-mlir12 = ["cubie[mlir-cuda12,test]", "cupy-cuda12x"]
-dev-mlir13 = ["cubie[mlir-cuda13,test]", "cupy-cuda13x"]
+# (e.g. `.[dev,cuda13]`).
+dev12 = ["cubie[cuda12,test]"]
+dev13 = ["cubie[cuda13,test]"]
+dev-mlir12 = ["cubie[mlir-cuda12,test]"]
+dev-mlir13 = ["cubie[mlir-cuda13,test]"]
 dev = ["cubie[dev-mlir13]"]
 optional = [
     "pandas",
@@ -97,7 +97,6 @@ testpaths = [
 ]
 markers = [
     "nocudasim: Will fail if run on the GPU simulator, only test on real GPU",
-    "cupy: Requires optional dependency CuPy, will fail if not installed",
     "slow: Marks tests that are slow to run, can be skipped with -m 'not slow'",
     "specific_algos: Marks tests covering non-default algorithm tableau aliases",
     "sim_only: Marks tests that can only run on the CUDA simulator (debug tests only, otherwise what's the point?)",

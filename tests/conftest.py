@@ -174,7 +174,7 @@ def pytest_collection_modifyitems(config, items):
     CUDA context stay at the very end, ungrouped, so the streams used
     in session-scoped fixtures don't disappear on them mid-run.
     """
-    final_basenames = {"test_cupyemm.py", "test_memmgmt.py"}
+    final_basenames = {"test_memmgmt.py"}
     grouped = []
     default = []
     final = []
