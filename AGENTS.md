@@ -12,12 +12,12 @@ Architecture is documented per directory under `src/cubie/**/AGENTS.md` (each mi
 the device-code optimisation conventions.
 
 ## Setup
-- `pip install -e .[dev]` from the repo root (use a venv; some deps are version-pinned).
-  `dev` is the mlir backend on the CUDA 13 toolkit (`dev-mlir13`).
-- **Python 3.11-3.14**, **CUDA 12 or 13** (via the `mlir-cuda12`/`mlir-cuda13` extras, or a
+- `pip install -e .[dev-cuda13]` from the repo root (use a venv; some deps are
+  version-pinned). `dev` uses a system CUDA toolkit; `dev-cuda12`/`dev-cuda13` install one.
+- **Python 3.11-3.14**, **CUDA 12 or 13** (via the `cuda12`/`cuda13` extras, or a
   system toolkit), **NVIDIA GPU (compute capability ≥6.0)**.
 - CPU-only dev/test without a GPU: set `NUMBA_ENABLE_CUDASIM=1` (the CUDA simulator
-  vendored from numba-cuda under `src/cubie/vendored/cudasim`; the `dev` install covers it).
+  vendored from numba-cuda under `src/cubie/vendored/cudasim`; the `dev` installs cover it).
   **CUDASIM is not production.** Behaviour under the simulator must never be considered when
   evaluating code: designs, fixes, and diagnostics are judged solely on their real-GPU
   behaviour. A path that works under CUDASIM but degrades or disappears on hardware is broken.
@@ -89,7 +89,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - Never call a `CUDAFactory.build()` directly — access compiled functions via the cached properties.
 - Never set/modify env vars in source (esp. `NUMBA_ENABLE_CUDASIM`); set them externally.
 - Module-scoped imports belong in the file header only; deliberate lazy imports of optional deps
-  (Qt) stay function-local. Import `cuda` from `cubie.cubie_cudasim_extensions`; simulator
+  (Qt) stay function-local. Import `cuda` from `cubie._cudasim_extensions`; simulator
   stand-ins live there too.
 - In `CUDAFactory`/device-code files, use explicit imports with the project aliasing (`np_`,
   `attrsval_`, `attrs`-prefixed); store float config fields underscored and expose via a
@@ -101,16 +101,14 @@ updating a PR; targeted subsets miss cross-cutting tests.
 ## Dependencies
 - **Core:** numpy>=2.0, attrs, sympy>=1.13.0. cellmlmanip is vendored under
   `src/cubie/vendored/cellmlmanip` (its `lxml`/`networkx`/`Pint>=0.24`/`rdflib` runtime deps are core).
-- **CUDA backend (installed by extra, so installs stay clean):** numba-cuda-mlir
-  (`mlir`/`mlir-cuda12`/`mlir-cuda13` extras — these install `cubie-numba-cuda-mlir`,
-  cubie's own build carrying the native-code fixes pending upstream, with the same
-  `numba_cuda_mlir` import package; never co-install it with the stock wheel, and treat
-  the installed wheel, not upstream numba-cuda-mlir source, as ground truth when
-  debugging how device code compiles). A backendless install fails at `import cubie`
-  with instructions. The CUDA simulator is vendored (`cubie.vendored.cudasim`) and runs
-  on the same install.
-- **CUDA toolkit:** supplied by the `mlir-cuda12`/`mlir-cuda13` extras or an existing
-  system install (the bare `mlir` extra uses whatever toolkit the backend finds).
+- **CUDA backend (core):** `cubie-numba-cuda-mlir`, cubie's own build of numba-cuda-mlir
+  carrying the native-code fixes pending upstream, with the same `numba_cuda_mlir` import
+  package; never co-install it with the stock wheel, and treat the installed wheel, not
+  upstream numba-cuda-mlir source, as ground truth when debugging how device code
+  compiles. A backendless environment fails at `import cubie` with instructions. The CUDA
+  simulator is vendored (`cubie.vendored.cudasim`) and runs on the same install.
+- **CUDA toolkit:** supplied by the `cuda12`/`cuda13` extras or an existing system
+  install (a plain `pip install cubie` uses whatever toolkit the backend finds).
 - **Device memory** comes from Numba and the device's stream-ordered pool through
   `cuda.bindings` (a dependency of numba-cuda-mlir).
 - **Optional:** pandas (DataFrame output), matplotlib (driver plots).

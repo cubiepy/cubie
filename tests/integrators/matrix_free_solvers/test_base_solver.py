@@ -1,6 +1,6 @@
 import numpy as np
 
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 import pytest
 
 from cubie.integrators.matrix_free_solvers.base_solver import (

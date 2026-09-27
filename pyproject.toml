@@ -34,6 +34,8 @@ dependencies = [
     "networkx",
     "Pint>=0.24",
     "rdflib",
+    # cubie's numba-cuda-mlir build; never co-install the stock wheel.
+    "cubie-numba-cuda-mlir==0.5.3.1",
 ]
 
 [project.urls]
@@ -41,19 +43,9 @@ Homepage = "https://github.com/ccam80/cubie.git"
 Issues = "https://github.com/ccam80/cubie/issues"
 
 [project.optional-dependencies]
-# The toolkit extras install numba-cuda-mlir and the toolkit wheels;
-# the bare 'mlir' extra uses a system CUDA install.
-#
-# The mlir* extras install cubie-numba-cuda-mlir: cubie's build of
-# numba-cuda-mlir carrying the native (C++) fixes pending upstream,
-# from the cubie-wheel branch of ccam80/numba-cuda-mlir (runbook:
-# CUBIE_WHEEL.md there). Same numba_cuda_mlir import package — never
-# co-install it with the stock wheel. Python-side fixes are applied
-# at runtime by cubie.backend._mlir_compat, written for this exact
-# wheel version.
-mlir = ["cubie-numba-cuda-mlir==0.5.3.1"] # system toolkit
-mlir-cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1"]
-mlir-cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1"]
+# The toolkit extras install the CUDA toolkit wheels with the backend.
+cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1"]
+cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1"]
 test = [
     "pytest",
     "pytest-cov",
@@ -66,10 +58,9 @@ test = [
     "matplotlib",
     "scipy",
 ]
-# dev is the CUDA 13 developer install (dev-mlir13).
-dev-mlir12 = ["cubie[mlir-cuda12,test]"]
-dev-mlir13 = ["cubie[mlir-cuda13,test]"]
-dev = ["cubie[dev-mlir13]"]
+dev = ["cubie[test]"]
+dev-cuda12 = ["cubie[cuda12,test]"]
+dev-cuda13 = ["cubie[cuda13,test]"]
 optional = [
     "pandas",
     "matplotlib"

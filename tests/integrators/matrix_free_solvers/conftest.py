@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 import pytest
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 

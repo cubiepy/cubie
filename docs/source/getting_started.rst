@@ -12,14 +12,12 @@ Install cubie using pip, selecting the toolkit that matches your setup:
 
 .. code-block:: bash
 
-   pip install cubie[mlir-cuda12]  # CUDA 12 toolkit
-   # pip install cubie[mlir-cuda13]  # CUDA 13 toolkit
+   pip install cubie[cuda12]  # CUDA 12 toolkit
+   # pip install cubie[cuda13]  # CUDA 13 toolkit
 
-The extra is required: it installs cubie's CUDA backend
-(numba-cuda-mlir) alongside the matching toolkit wheels, and a bare
-``pip install cubie`` has no backend to compile with. If your machine
-already has a system CUDA toolkit, ``pip install cubie[mlir]``
-installs the backend alone.
+The extra installs the CUDA toolkit wheels alongside cubie's CUDA
+backend (numba-cuda-mlir). If your machine already has a system CUDA
+toolkit, ``pip install cubie`` installs the backend alone.
 
 Basic Usage
 -----------

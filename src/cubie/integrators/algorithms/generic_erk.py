@@ -56,7 +56,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from attrs import field, validators, frozen
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.CUDAFactory import (
     UnrollChoice,
     build_config,

@@ -71,7 +71,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from cubie.buffer_registry import buffer_registry  # noqa: E402
 from numba_cuda_mlir.types import int32  # noqa: E402
-from cubie.cubie_cudasim_extensions import cuda  # noqa: E402
+from cubie._cudasim_extensions import cuda  # noqa: E402
 from numba_cuda_mlir.numba_cuda.np.numpy_support import (  # noqa: E402
     from_dtype,
 )

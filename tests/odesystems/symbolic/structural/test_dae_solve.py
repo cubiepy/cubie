@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from cubie import Solver, solve_ivp
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     RADAU_IIA_5_TABLEAU,

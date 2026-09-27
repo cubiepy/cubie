@@ -13,7 +13,7 @@ import pytest
 from tests._utils import FLOAT64_PRECISION
 from numpy.testing import assert_allclose
 from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 

@@ -104,8 +104,7 @@ close leaves resources attached for a retry. Finalizers do not capture the manag
 `_sizes` is a `BatchInputSizes`/`BatchOutputSizes`; `update_sizes` raises `TypeError` for
 another subtype, and `.nonzero` is applied in `update_from_solver`.
 `BatchInputSizes.driver_coefficients` comes from `kernel.coefficients_shape`, so every
-dimension is concrete. Under `CUDA_SIMULATION`, pinned and async-writeback paths treat
-events as complete.
+dimension is concrete.
 
 ## Dependencies
 ### Internal
@@ -113,7 +112,7 @@ events as complete.
   `chunk_buffer_pool.ChunkBufferPool`/`PinnedBuffer`); `cubie.outputhandling.output_sizes`
   (`ArraySizingClass`, `BatchInputSizes`, `BatchOutputSizes`); `cubie.batchsolving`
   (`ArrayTypes`); `cubie.batchsolving.writeback_watcher` (`WritebackWatcher`);
-  `cubie.cubie_cudasim_extensions` (`DeviceNDArrayBase`, `CUDA_SIMULATION`); `cubie.memory.driver_memory`
+  `cubie._cudasim_extensions` (`cuda`, `DeviceNDArrayBase`); `cubie.memory.driver_memory`
   (`is_pinned_array`); `cubie._utils` (validators).
 ### External
 - `numpy`; `attrs`; numba-cuda-mlir (events in `OutputArrays.finalise`).

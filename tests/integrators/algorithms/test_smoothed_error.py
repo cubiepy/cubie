@@ -7,7 +7,7 @@ import pytest
 
 from cubie.buffer_registry import buffer_registry
 from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
 from cubie.integrators.algorithms.crank_nicolson import CrankNicolsonStep

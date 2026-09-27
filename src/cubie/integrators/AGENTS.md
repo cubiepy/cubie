@@ -74,7 +74,7 @@ Solver updates the system before this chain runs. `build()` returns `loop_fn`;
 ### Internal
 - `cubie.CUDAFactory`; `cubie.buffer_registry`; `cubie._utils` (`PrecisionDType`,
   `unpack_dict_values`, `build_config`, tolerance validators, `tol_converter`);
-  `cubie.cubie_cudasim_extensions`; `cubie.backend`; `cubie.odesystems.ODEData` (`SystemSizes`), `baseODE`
+  `cubie._cudasim_extensions`; `cubie.backend`; `cubie.odesystems.ODEData` (`SystemSizes`), `baseODE`
   (TYPE_CHECKING); `cubie.outputhandling` (`OutputFunctions`, `OutputCompileFlags`); the
   four integrators subpackages.
 ### External

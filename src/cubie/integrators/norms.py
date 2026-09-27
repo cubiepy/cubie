@@ -5,7 +5,7 @@ from warnings import warn
 
 from numpy import asarray, finfo, int32 as np_int32, ndarray
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.intrinsics import unroll_if
 from attrs import define, field, Converter, frozen, validators
 

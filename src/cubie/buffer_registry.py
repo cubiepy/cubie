@@ -31,7 +31,7 @@ from attrs.validators import (
 )
 from numpy import dtype as np_dtype, float32 as np_float32
 
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.intrinsics import unroll_if, UnrollFlag
 from numba_cuda_mlir.types import float32, int32
 
@@ -1332,7 +1332,7 @@ class BufferRegistry:
 
         Returns a tuple of two device functions for use in CUDA kernels:
         - A shared memory allocator that returns cuda.shared.array(0, ...)
-        - A persistent local allocator that handles CUDASIM compatibility
+        - A persistent local allocator that returns cuda.local.array
 
         Parameters
         ----------

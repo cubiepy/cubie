@@ -521,7 +521,7 @@ def start_cuda_busy_work():
     from weakref import finalize
 
     from cuda.bindings import driver as cuda_driver
-    from cubie.cubie_cudasim_extensions import cuda
+    from cubie._cudasim_extensions import cuda
     from cubie.backend.jit import compile_kwargs
 
     @cuda.jit(**compile_kwargs)

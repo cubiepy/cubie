@@ -7,10 +7,9 @@ from importlib.util import find_spec
 
 if find_spec("numba_cuda_mlir") is None:
     raise ImportError(
-        "cubie needs its CUDA backend, numba-cuda-mlir. Install it "
-        "with 'pip install cubie[mlir-cuda12]' or 'cubie[mlir-cuda13]' "
-        "(the bare 'mlir' extra skips the toolkit wheels when a system "
-        "CUDA install is present)."
+        "cubie needs its CUDA backend, cubie-numba-cuda-mlir. Reinstall "
+        "cubie with 'pip install cubie', or 'pip install cubie[cuda12]' "
+        "or 'cubie[cuda13]' to install a CUDA toolkit with it."
     )
 
 # Patch numba-cuda-mlir before anything compiles.

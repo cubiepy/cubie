@@ -9,7 +9,7 @@ Third-party code: the CUDA simulator from numba-cuda (on numba-cuda-mlir) and ce
 | File | Description |
 |------|-------------|
 | `__init__.py` | Package docstring only; no exports. |
-| `cudasim/` | The CUDA simulator from NVIDIA/numba-cuda 0.30.4 (`numba_cuda/numba/cuda/simulator`, plus `is_available`/`cuda_error` from `simulator_init.py`), snapshot 2026-09-27. Runs device code as Python threads on the CPU. `cubie_cudasim_extensions` extends it and serves it as `cuda` when `NUMBA_ENABLE_CUDASIM=1`. |
+| `cudasim/` | The CUDA simulator from NVIDIA/numba-cuda 0.30.4 (`numba_cuda/numba/cuda/simulator`, plus `is_available`/`cuda_error` from `simulator_init.py`), snapshot 2026-09-27. Runs device code as Python threads on the CPU. `_cudasim_extensions` extends it and serves it as `cuda` when `NUMBA_ENABLE_CUDASIM=1`. |
 | `cellmlmanip/` | Vendored snapshot of cellmlmanip 0.3.6 (ModellingWebLab, BSD 3-Clause; `LICENSE` kept alongside). Parses CellML into SymPy via `load_model`. Consumed by `odesystems/symbolic/parsing/cellml.py`. |
 
 ## cudasim
@@ -17,7 +17,7 @@ Third-party code: the CUDA simulator from numba-cuda (on numba-cuda-mlir) and ce
   module swap replaces globals bound to this package.
 - Local modifications: `__init__.py` drops the `sys.modules["numba.cuda.*"]` aliasing
   and imports its submodules unconditionally. Cubie's additions to the simulator
-  live in `cubie/cubie_cudasim_extensions.py`, applied at its import.
+  live in `cubie/_cudasim_extensions.py`, applied at its import.
 - To update, re-snapshot upstream and re-apply the import rewrite and the `__init__.py`
   change.
 - BSD 2-Clause; notice in each upstream file header and `THIRD_PARTY_LICENSES`.
@@ -32,7 +32,7 @@ Third-party code: the CUDA simulator from numba-cuda (on numba-cuda-mlir) and ce
   dependencies (`lxml`, `networkx`, `Pint`, `rdflib`) are cubie dependencies.
 
 ## Dependencies
-- `cudasim/`: none internal (consumed by `cubie_cudasim_extensions`). External: `numpy`,
+- `cudasim/`: none internal (consumed by `_cudasim_extensions`). External: `numpy`,
   `numba_cuda_mlir.numba_cuda` (config, types, typing helpers).
 - `cellmlmanip/`: external `lxml`, `networkx`, `Pint`, `rdflib`, `sympy`; consumed by
   `cubie.odesystems.symbolic.parsing.cellml`.

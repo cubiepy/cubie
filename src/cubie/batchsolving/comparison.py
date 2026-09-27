@@ -37,7 +37,7 @@ from cubie.backend.utils import (
 )
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from numba_cuda_mlir.types import float32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.time_logger import default_timelogger
 
 logger = logging.getLogger(__name__)

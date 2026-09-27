@@ -43,7 +43,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip uv
-        python -m uv pip install --system -e .[dev]
+        python -m uv pip install --system -e .[dev-cuda13]
 
     - name: Lint with flake8
       run: |

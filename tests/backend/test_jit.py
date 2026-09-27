@@ -3,7 +3,7 @@ import pytest
 
 from cubie.CUDAFactory import JITFlags
 from cubie.backend.jit import compile_kwargs, get_jit_kwargs
-from cubie.cubie_cudasim_extensions import CUDA_SIMULATION
+from cubie._cudasim_extensions import CUDA_SIMULATION
 
 
 @pytest.mark.nocudasim

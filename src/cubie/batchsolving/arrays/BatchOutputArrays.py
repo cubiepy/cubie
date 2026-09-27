@@ -31,7 +31,7 @@ from math import prod
 
 from attrs import Factory as attrsFactory, define, field
 from attrs.validators import instance_of as attrsval_instance_of
-from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie._cudasim_extensions import cuda
 from numpy import (
     dtype as np_dtype,
     float32 as np_float32,
@@ -537,23 +537,16 @@ class OutputArrays(BaseArrayManager):
                 self.from_device(
                     [device_block], [buffer.array], stream=stream
                 )
-                if CUDA_SIMULATION:
-                    trim = tuple(
-                        slice(0, extent) for extent in host_block.shape
-                    )
-                    host_block[...] = buffer.array[trim]
-                    self._buffer_pool.release(buffer)
-                else:
-                    event = cuda.event()
-                    event.record(stream)
-                    self._watcher.submit(
-                        event=event,
-                        buffer=buffer,
-                        target_array=host_block,
-                        buffer_pool=self._buffer_pool,
-                        array_name=array_name,
-                        data_shape=host_block.shape,
-                    )
+                event = cuda.event()
+                event.record(stream)
+                self._watcher.submit(
+                    event=event,
+                    buffer=buffer,
+                    target_array=host_block,
+                    buffer_pool=self._buffer_pool,
+                    array_name=array_name,
+                    data_shape=host_block.shape,
+                )
             except BaseException:
                 # Drain any queued copy before the buffer is reusable.
                 try:

@@ -101,7 +101,7 @@ algorithm, signature, buffers or status logic.
 - `cubie.CUDAFactory` — `MultipleInstanceCUDAFactory` + config/cache bases.
 - `cubie.integrators.norms` — convergence norm device function.
 - `cubie.buffer_registry` — scratch buffer allocators.
-- `cubie.cubie_cudasim_extensions` — `cuda` (`cuda.activemask`, `cuda.all_sync`, `cuda.any_sync`, `cuda.selp`).
+- `cubie._cudasim_extensions` — `cuda` (`cuda.activemask`, `cuda.all_sync`, `cuda.any_sync`, `cuda.selp`).
 - `cubie._utils` — `build_config`, device/precision validators, `PrecisionDType`.
 - Consumed by `cubie.integrators.algorithms.*` (implicit steps).
 ### External

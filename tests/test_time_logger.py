@@ -3,7 +3,7 @@
 import time
 
 import pytest
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 
 from cubie.time_logger import (
@@ -540,22 +540,6 @@ class TestCUDAEvent:
         stream.synchronize()
         elapsed = event.elapsed_time_ms()
         assert elapsed >= 0.0
-
-    @pytest.mark.nocudasim
-    def test_elapsed_time_ms_zero_when_start_event_missing(self):
-        """elapsed_time_ms returns 0.0 when the start event is None."""
-        logger = TimeLogger(verbosity="default")
-        event = CUDAEvent(name="missing_start", timelogger=logger)
-        event._start_event = None
-        assert event.elapsed_time_ms() == 0.0
-
-    @pytest.mark.nocudasim
-    def test_elapsed_time_ms_zero_when_end_event_missing(self):
-        """elapsed_time_ms returns 0.0 when the end event is None."""
-        logger = TimeLogger(verbosity="default")
-        event = CUDAEvent(name="missing_end", timelogger=logger)
-        event._end_event = None
-        assert event.elapsed_time_ms() == 0.0
 
 
 class TestTimeLoggerExtra:

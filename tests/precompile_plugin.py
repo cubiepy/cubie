@@ -5,7 +5,13 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 
+from cuda.core._device import ComputeCapability
 import numpy as np
+from numba_cuda_mlir import cuda as backend_cuda
+from numba_cuda_mlir import tools as mlir_tools
+from numba_cuda_mlir.descriptor import MLIRDispatcher
+from numba_cuda_mlir.numba_cuda import types, typing
+from numba_cuda_mlir.numba_cuda.typing.typeof import typeof as _mlir_typeof
 
 from tests._precompile_hashing import (
     _function_key,
@@ -68,11 +74,6 @@ if POPULATION:
         "assert_string_equal",
     ):
         setattr(_np_testing, _assert_name, _population_no_op_assert)
-
-
-from cuda.core._device import ComputeCapability  # noqa: E402
-from numba_cuda_mlir import cuda as backend_cuda  # noqa: E402
-from numba_cuda_mlir import tools as mlir_tools  # noqa: E402
 
 
 if POPULATION:
@@ -160,8 +161,6 @@ if POPULATION:
 
 
 if POPULATION:
-    from cuda.core._device import ComputeCapability  # noqa: E402
-
     # Driverless stand-in for the device cubie queries outside launches.
     _fake_device = SimpleNamespace(
         compute_capability=ComputeCapability(*TARGET_CC),
@@ -363,12 +362,6 @@ def _attach_pending():
     while _PENDING_DISPATCHERS:
         _attach_cache(_PENDING_DISPATCHERS.pop())
 
-
-from numba_cuda_mlir.descriptor import MLIRDispatcher  # noqa: E402
-from numba_cuda_mlir.numba_cuda import types, typing  # noqa: E402
-from numba_cuda_mlir.numba_cuda.typing.typeof import (  # noqa: E402
-    typeof as _mlir_typeof,
-)
 
 _dispatcher_init = MLIRDispatcher.__init__
 _dispatcher_getitem = MLIRDispatcher.__getitem__

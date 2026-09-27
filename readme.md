@@ -43,12 +43,11 @@ that can fit into your computers RAM, to allow REALLY large solves.
 ## Installation
 
 ```console
-pip install "cubie[mlir-cuda13]"
+pip install "cubie[cuda13]"
 ```
 
-The extra in square brackets installs the required CUDA dependencies:
-`mlir-cuda13` for the CUDA 13 toolkit, `mlir-cuda12` for CUDA 12, or `mlir` to
-use a system CUDA install.
+The extra in square brackets installs a CUDA toolkit: `cuda13` for CUDA 13,
+`cuda12` for CUDA 12. Without it, `pip install cubie` uses a system CUDA install.
 
 CuBIE requires Python 3.11-3.14, an up-to-date NVIDIA driver, and an NVIDIA GPU
 with compute capability 6.0 or later. Pandas and Matplotlib support can be installed with

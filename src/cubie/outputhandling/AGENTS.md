@@ -78,7 +78,7 @@ metric contract is in `summarymetrics/AGENTS.md`.
 ### Internal
 - `cubie.CUDAFactory` (`CUDAFactory`, `CUDADispatcherCache`, `CUDAFactoryConfig`,
   `_CubieConfigBase`); `cubie._utils` (`PrecisionDType`, `opt_gttype_validator`);
-  `cubie.cubie_cudasim_extensions` (`cuda`); `cubie.backend.jit` (`compile_kwargs`); `cubie.outputhandling.summarymetrics`
+  `cubie._cudasim_extensions` (`cuda`); `cubie.backend.jit` (`compile_kwargs`); `cubie.outputhandling.summarymetrics`
   (`summary_metrics`).
 ### External
 - `numba` (`cuda.jit`, `int32`); `attrs` (`define`, `field`, `Factory`, `cmp_using`,

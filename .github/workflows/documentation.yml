@@ -26,7 +26,7 @@ jobs:
         run: |
           source .venv/bin/activate
           pip install uv
-          uv pip install sphinx sphinx_rtd_theme myst_parser .[dev]
+          uv pip install sphinx sphinx_rtd_theme myst_parser .[dev-cuda13]
 
       - name: Sphinx build
         run: |

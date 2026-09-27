@@ -39,7 +39,7 @@ from typing import Callable, Optional, Set
 from attrs import define, field
 from numpy import int32 as np_int32
 from numba_cuda_mlir.types import boolean as bool_, float32, float64, int32
-from cubie.cubie_cudasim_extensions import cuda, fmin
+from cubie._cudasim_extensions import cuda, fmin
 from cubie.backend.intrinsics import narrow_f64, unroll_if
 
 from cubie.CUDAFactory import (

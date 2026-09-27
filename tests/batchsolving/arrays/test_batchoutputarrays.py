@@ -8,7 +8,7 @@ from cubie.batchsolving.arrays.BatchOutputArrays import (
     OutputArrayContainer,
     OutputArrays,
 )
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.memory.mem_manager import HOST_STAGING_BYTES, MemoryManager
 from cubie.outputhandling.output_sizes import BatchOutputSizes
 

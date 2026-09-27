@@ -29,7 +29,7 @@ from typing import Callable, Optional
 
 from attrs import field, validators, frozen
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.intrinsics import unroll_if
 
 from cubie._utils import PrecisionDType

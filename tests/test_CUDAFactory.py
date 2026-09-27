@@ -18,7 +18,7 @@ from cubie.CUDAFactory import (
     nested_config_fields,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 from numpy import dtype as np_dtype
 

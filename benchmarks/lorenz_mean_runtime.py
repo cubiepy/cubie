@@ -115,7 +115,7 @@ import numpy as np
 
 import cubie as qb
 from cubie.cache_root import get_cache_root
-from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie._cudasim_extensions import cuda, CUDA_SIMULATION
 from cubie.time_logger import default_timelogger
 
 discarded_solves = 20

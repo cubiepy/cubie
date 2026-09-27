@@ -34,7 +34,7 @@ from cubie._utils import (
 )
 from cubie.buffer_registry import buffer_registry
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.integrators.matrix_free_solvers.linear_solver_base import (
     LinearSolverBase,
     LinearSolverBaseConfig,

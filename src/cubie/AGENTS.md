@@ -7,7 +7,7 @@ parallel on NVIDIA GPUs without the user writing CUDA. This package-root directo
 holds the cross-cutting infrastructure the entire codebase depends on: the
 `CUDAFactory` cached-compilation base class, the singleton `buffer_registry`, shared
 validators/converters (`_utils.py`), the `cuda` module and its CUDA-simulator
-extensions (`cubie_cudasim_extensions.py`), file-based kernel caching (`cubie_cache.py`), and timing
+extensions (`_cudasim_extensions.py`), file-based kernel caching (`cubie_cache.py`), and timing
 (`time_logger.py`). `__init__.py` assembles the public API by star-importing the
 subpackages.
 
@@ -37,9 +37,9 @@ subpackages.
 | `cache_root.py` | Single source of truth for the on-disk cache root (`get_cache_root`/`set_cache_root`/`get_cache_root_override`; precedence: `set_cache_root` override → `CUBIE_CACHE_DIR` → `<cwd>/generated`). The codegen, CellML parse, and compiled-kernel caches all resolve through it. |
 | `buffer_registry.py` | Singleton `buffer_registry` (`BufferRegistry`) managing CUDA buffer metadata, layout, aliasing, and allocator generation; defines `CUDABuffer` and `BufferGroup`. |
 | `_utils.py` | Shared helpers: `PrecisionDType`, precision/buffer validators + converters, attrs validator factories, `device_function_field`, `merge_kwargs_into_settings`, `ensure_nonzero_size`, `slice_variable_dimension`, `clamp_factory`, `is_devfunc`, `devfunc_returns_nonfloat`, `is_device_array`. |
-| `cubie_cudasim_extensions.py` | `cuda` is `numba_cuda_mlir.cuda`, or the vendored simulator (`vendored/cudasim`) under `NUMBA_ENABLE_CUDASIM=1` with cubie's extensions applied (GPU-only `jit` options ignored, warp votes, `stwt`, `experimental.consteval`, stream `handle`, `DeviceNDArray*` aliases, `targetoptions`, finite memory info, local/shared arrays whose `view` takes a Numba type). Also exports `CUDA_SIMULATION`, the classes `Stream`, `DeviceNDArrayBase`, `DeviceNDArray`, `MappedNDArray`, `CudaSupportError`, `fmax`/`fmin` (NaN-dropping max/min on device and simulator) and the simulator stand-ins for `memory/driver_memory.py`. Every module imports `cuda` from here, never from `vendored.cudasim`. |
+| `_cudasim_extensions.py` | `cuda` is `numba_cuda_mlir.cuda`, or the vendored simulator (`vendored/cudasim`) under `NUMBA_ENABLE_CUDASIM=1` with cubie's extensions applied (GPU-only `jit` options ignored, warp votes, `stwt`, `experimental.consteval`, stream `handle`, timed events that report complete, `DeviceNDArray*` aliases built over `MemoryPointer` host bytes, flat-byte driver copies, device attributes, kernels that compile to one empty-signature overload, finite memory info, local/shared arrays whose `view` takes a Numba type). `cuda_driver` is `cuda.bindings.driver`, or a simulated driver over host memory. Also exports `CUDA_SIMULATION`, the classes `Stream`, `DeviceNDArrayBase`, `DeviceNDArray`, `MappedNDArray`, `CudaSupportError` and `fmax`/`fmin` (NaN-dropping max/min on device and simulator). Every module imports `cuda` and `cuda_driver` from here; no other module branches on `CUDA_SIMULATION`. |
 | `cubie_cache.py` | File-based persistence of compiled kernels: `CUBIECache*` and `toolchain_fingerprint`. `BatchSolverKernel.build_kernel()` constructs a `CUBIECache` from its config's hash-excluded `cache` settings plus `fn_hash`/`config_hash` and attaches it to the dispatcher. The source stamp folds a minimal ABI/toolchain fingerprint (schema version, Python ABI tag, block-schedule policy, numba-cuda-mlir version), not a full package freeze. Built on the MLIR cache bases `MLIRCache`/`MLIRCacheImpl` (the compile-result scheme). |
-| `time_logger.py` | `TimeLogger` (verbosity-gated timing; `"silent"` records CUDA events and prints nothing), `CUDAEvent` (GPU event pair with CUDASIM fallback), `TimingEvent`, `default_timelogger`. |
+| `time_logger.py` | `TimeLogger` (verbosity-gated timing; `"silent"` records CUDA events and prints nothing), `CUDAEvent` (GPU event pair), `TimingEvent`, `default_timelogger`. |
 | `result_codes.py` | `CUBIE_RESULT_CODES(IntFlag)` — the package-central status vocabulary OR-combined into the per-run status word — plus `decode_status_codes` for host-side decoding. |
 | `array_interpolator.py` | `ArrayInterpolator(CUDAFactory)`: builds piecewise-polynomial (spline) coefficients from sampled driver arrays and compiles `evaluate_all` (Horner evaluation of all drivers at `t`) and `evaluate_time_derivative`. Samples are the nested `drivers` compile setting, a `DriverSamples`: name-keyed columns with `t0` and `driver_sample_period`, equal by value, hashed by names, time base and sample count. `coefficients` is a cached build output. With no drivers the evaluators are `None` and the table is `(0, 0, order + 1)`. Owned by `BatchSolverKernel` as `driver_interpolator` (`Solver.driver_interpolator` is a passthrough); defines `ArrayInterpolatorConfig` (`boundary_condition=None` derives `periodic`/`clamped` from `wrap`), `InterpolatorCache`. `driver_sample_period` is the sample spacing; `dt` is the integrator timestep. |
 
@@ -153,8 +153,8 @@ Host-side shapes come from `ArraySizingClass` subclasses
 before allocating.
 
 ## Device code
-- Import `cuda` from `cubie_cudasim_extensions`, never from `numba_cuda_mlir` or
-  `vendored.cudasim`; call CUDA intrinsics through it (`cuda.selp`,
+- Import `cuda` and `cuda_driver` from `_cudasim_extensions`, never from
+  `numba_cuda_mlir`, `cuda.bindings` or `vendored.cudasim`; call CUDA intrinsics through it (`cuda.selp`,
   `cuda.all_sync`). Scalar types and `from_dtype` come from `numba_cuda_mlir`,
   jit kwargs from `backend.jit`, `unroll_if` from `backend.intrinsics`.
 - Device-function bodies are bracketed with `# no cover: start` / `# no cover: end`
@@ -179,7 +179,7 @@ before allocating.
 ## Dependencies
 ### Internal
 This root infrastructure is depended on by every subpackage. Within the root, the
-dependency order is roughly `cubie_cudasim_extensions`, `backend.jit` ← `_utils` ←
+dependency order is roughly `_cudasim_extensions`, `backend.jit` ← `_utils` ←
 `buffer_registry`, `CUDAFactory`; `cubie_cache` depends on `CUDAFactory`, `_utils`,
 `time_logger`, and `cache_root`. All three disk
 cache layers (codegen source, CellML parse, compiled kernels) resolve their

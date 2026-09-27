@@ -26,7 +26,7 @@ from math import sqrt as math_sqrt
 from attrs import frozen
 from numba_cuda_mlir.types import int32
 from cubie.backend.intrinsics import unroll_if
-from cubie.cubie_cudasim_extensions import cuda, fmin
+from cubie._cudasim_extensions import cuda, fmin
 from numpy import float32 as np_float32, float64 as np_float64
 
 from cubie._utils import PrecisionDType

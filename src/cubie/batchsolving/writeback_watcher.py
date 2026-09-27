@@ -31,7 +31,6 @@ from attrs.validators import (
 )
 from numpy import ndarray
 
-from cubie.cubie_cudasim_extensions import CUDA_SIMULATION
 from cubie.memory.chunk_buffer_pool import PinnedBuffer, ChunkBufferPool
 
 
@@ -47,7 +46,7 @@ class WritebackTask:
     Attributes
     ----------
     event
-        CUDA event to query for completion (None in CUDASIM).
+        CUDA event to query for completion, or None.
     buffer
         Pinned buffer containing data to copy.
     target_array
@@ -340,7 +339,7 @@ class WritebackWatcher:
         TimeoutError
             If the deadline passes before the event fires.
         """
-        if not CUDA_SIMULATION and task.event is not None:
+        if task.event is not None:
             if deadline is None:
                 task.event.synchronize()
             else:
@@ -393,8 +392,8 @@ class WritebackWatcher:
         bool
             True if task completed, False if still pending.
         """
-        # In CUDASIM mode or event is None, treat as immediately complete
-        if CUDA_SIMULATION or task.event is None:
+        # A task without an event is complete
+        if task.event is None:
             is_complete = True
         else:
             # Query event for completion (returns True when complete)

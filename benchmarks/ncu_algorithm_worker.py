@@ -19,7 +19,7 @@ if os.environ.get("NUMBA_ENABLE_CUDASIM", "0") == "1":
     raise SystemExit("the NCU worker requires a real GPU")
 
 import cubie as qb  # noqa: E402
-from cubie.cubie_cudasim_extensions import cuda  # noqa: E402
+from cubie._cudasim_extensions import cuda  # noqa: E402
 from cubie.array_interpolator import DriverSamples  # noqa: E402
 from cubie.time_logger import default_timelogger  # noqa: E402
 from tests.system_fixtures import (  # noqa: E402

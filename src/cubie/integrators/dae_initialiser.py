@@ -46,7 +46,7 @@ from cubie._utils import (
 from cubie.buffer_registry import buffer_registry
 from numba_cuda_mlir.types import int32
 from cubie.backend.intrinsics import unroll_if
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.integrators.algorithms.ode_implicitstep import (
     ODEImplicitStep,
 )

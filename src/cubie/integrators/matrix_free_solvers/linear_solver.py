@@ -29,7 +29,7 @@ from math import sqrt as math_sqrt
 
 from attrs import field, validators, frozen
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda, fmin
+from cubie._cudasim_extensions import cuda, fmin
 from cubie.backend.intrinsics import unroll_if
 
 from cubie._utils import PrecisionDType

@@ -108,6 +108,6 @@ cache.
   source emitters); `cubie.odesystems.symbolic.parsing` (`parse_input`, `IndexedBases`,
   `ParsedEquations`, `JVPEquations`); `cubie.array_interpolator.ArrayInterpolator`
   (driver-array setup); `cubie._utils` (`PrecisionDType`), `cubie.time_logger.default_timelogger`,
-  `cubie.cubie_cudasim_extensions`, `cubie.backend.jit`, `cubie.backend.intrinsics` (in the generated module header), `cubie.gui.*` (lazy, optional).
+  `cubie._cudasim_extensions`, `cubie.backend.jit`, `cubie.backend.intrinsics` (in the generated module header), `cubie.gui.*` (lazy, optional).
 ### External
 - `sympy`; `numpy` (`float32`, `ndarray`); numba-cuda-mlir (generated header + precision types).

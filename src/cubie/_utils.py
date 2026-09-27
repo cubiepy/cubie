@@ -82,7 +82,7 @@ from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 
 from attrs import field, fields, validators, Attribute
 from cubie.backend.jit import compile_kwargs
-from cubie.cubie_cudasim_extensions import (
+from cubie._cudasim_extensions import (
     DeviceNDArrayBase,
     cuda,
     fmax,
@@ -405,9 +405,8 @@ def is_device_array(value: Any) -> bool:
     -------
     bool
         ``True`` for device arrays (Numba device arrays or any non-numpy
-        object exposing ``__cuda_array_interface__``; the simulator's
-        fake device arrays under CUDASIM), ``False`` for host numpy
-        arrays and everything else.
+        object exposing ``__cuda_array_interface__``), ``False`` for
+        host numpy arrays and everything else.
     """
     if value is None or isinstance(value, ndarray):
         return False

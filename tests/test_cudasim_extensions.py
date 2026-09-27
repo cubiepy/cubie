@@ -1,9 +1,8 @@
 """Tests for the cuda module and its simulator extensions."""
 import numpy as np
-import pytest
 
 from cubie.backend.jit import compile_kwargs
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.memory import default_memmgr
 
 
@@ -29,11 +28,3 @@ def test_warp_intrinsics_in_a_kernel():
     stream.synchronize()
     np.testing.assert_array_equal(out, [5.0, 3.0, 1.0, 1.0, 1.0])
 
-
-@pytest.mark.sim_only
-def test_consteval_passes_iterable_through_in_cudasim():
-    """consteval returns its argument unchanged under the simulator."""
-    consteval = cuda.experimental.consteval
-
-    assert list(consteval(range(3))) == [0, 1, 2]
-    assert consteval(7) == 7

@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
 from cubie._utils import is_device_array
-from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie._cudasim_extensions import cuda
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
 from cubie.batchsolving.writeback_watcher import WritebackWatcher
@@ -524,17 +524,14 @@ class InputArrays(BaseArrayManager):
                 self.to_device(
                     [buffer.array], [device_block], stream=stream
                 )
-                if CUDA_SIMULATION:
-                    self._buffer_pool.release(buffer)
-                else:
-                    event = cuda.event()
-                    event.record(stream)
-                    self._transfer_watcher.submit_release(
-                        event,
-                        buffer,
-                        self._buffer_pool,
-                        array_name,
-                    )
+                event = cuda.event()
+                event.record(stream)
+                self._transfer_watcher.submit_release(
+                    event,
+                    buffer,
+                    self._buffer_pool,
+                    array_name,
+                )
             except BaseException:
                 # Drain any queued copy before the buffer is reusable.
                 try:

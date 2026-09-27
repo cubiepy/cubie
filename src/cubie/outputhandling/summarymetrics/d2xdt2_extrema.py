@@ -15,7 +15,7 @@ See Also
     Global registry where this metric is registered.
 """
 
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 
 from cubie.outputhandling.summarymetrics import summary_metrics
 from cubie.outputhandling.summarymetrics.metrics import (

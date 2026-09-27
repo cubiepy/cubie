@@ -6,7 +6,7 @@ import warnings
 
 import numpy as np
 import pytest
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 from cubie.integrators.algorithms.generic_firk_tableaus import (
     GAUSS_LEGENDRE_2_TABLEAU,

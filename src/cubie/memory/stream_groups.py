@@ -23,7 +23,7 @@ See Also
 """
 
 from typing import Any, Optional, Union
-from cubie.cubie_cudasim_extensions import cuda, Stream
+from cubie._cudasim_extensions import cuda, Stream
 import attrs
 import attrs.validators as val
 
@@ -41,9 +41,9 @@ class StreamGroups:
     streams
         Dictionary mapping group names to CUDA streams. When omitted, each
         group, including "default", receives a dedicated stream from
-        ``cuda.stream()`` on first use. No group is ever backed
-        by the device-wide default stream, so work in one process never
-        orders against the CUDA null stream.
+        :func:`numba_cuda_mlir.cuda.stream` on first use. No group is
+        ever backed by the device-wide default stream, so work in one
+        process never orders against the CUDA null stream.
 
     Attributes
     ----------
@@ -150,7 +150,7 @@ class StreamGroups:
         Stream
             The group's dedicated CUDA stream. A missing group (or a
             group created without a stream) receives a fresh stream
-            from ``cuda.stream()``, never the device-wide
+            from :func:`numba_cuda_mlir.cuda.stream`, never the device-wide
             default stream.
         """
         if group not in self.groups:

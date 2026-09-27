@@ -12,7 +12,7 @@ Published Classes
     >>> logger.stop_event("build")  # doctest: +SKIP
 
 :class:`CUDAEvent`
-    CUDA event pair for GPU timeline timing with CUDASIM fallback.
+    CUDA event pair for GPU timeline timing.
 
 Module-Level Instances
 ----------------------
@@ -28,10 +28,9 @@ See Also
 """
 
 import time
-from time import perf_counter
 from typing import Optional, Any
 import attrs
-from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie._cudasim_extensions import cuda
 
 VERBOSITY_LEVELS = frozenset(
     {"silent", "default", "verbose", "debug", None, "None"}
@@ -85,7 +84,7 @@ class TimingEvent:
 
 
 class CUDAEvent:
-    """CUDA event pair for timing measurements with CUDASIM fallback.
+    """CUDA event pair for timing measurements.
 
     Parameters
     ----------
@@ -99,13 +98,9 @@ class CUDAEvent:
     name : str
         Event identifier
     _start_event : cuda.event or None
-        Start event object (CUDA mode)
+        Start event object
     _end_event : cuda.event or None
-        End event object (CUDA mode)
-    _start_time : float or None
-        Start timestamp (CUDASIM mode)
-    _end_time : float or None
-        End timestamp (CUDASIM mode)
+        End event object
     _verbosity : str or None
         TimeLogger verbosity (for no-op when None)
     """
@@ -124,14 +119,12 @@ class CUDAEvent:
         # Skip driver-event allocation when verbosity is None: every record/
         # elapsed method is a no-op then, so the batch kernel's 4 events/solve
         # would be created and discarded for nothing.
-        if self._verbosity is not None and not CUDA_SIMULATION:
+        if self._verbosity is not None:
             self._start_event = cuda.event()
             self._end_event = cuda.event()
-        else:  # pragma: no cover - simulated / timing disabled
+        else:
             self._start_event = None
             self._end_event = None
-        self._start_time = None
-        self._end_time = None
 
         self.register()
 
@@ -155,10 +148,7 @@ class CUDAEvent:
         if self._verbosity is None:
             return
 
-        if not CUDA_SIMULATION:
-            self._start_event.record(stream)
-        else:  # pragma: no cover - simulated
-            self._start_time = perf_counter()
+        self._start_event.record(stream)
 
     def record_end(self, stream) -> None:
         """Record end timestamp on given stream.
@@ -176,10 +166,7 @@ class CUDAEvent:
         if self._verbosity is None:
             return
 
-        if not CUDA_SIMULATION:
-            self._end_event.record(stream)
-        else:  # pragma: no cover - simulated
-            self._end_time = perf_counter()
+        self._end_event.record(stream)
 
     def elapsed_time_ms(self) -> float:
         """Calculate elapsed time in milliseconds.
@@ -193,24 +180,14 @@ class CUDAEvent:
         -----
         This method must NOT block or synchronize. It should be called
         AFTER the stream has been synchronized externally.
-        In CUDA mode, uses cuda.event_elapsed_time() which returns
-        immediately post-sync.
-        In CUDASIM mode, calculates from stored timestamps.
+        Uses cuda.event_elapsed_time(), which returns immediately
+        post-sync.
 
-        Returns 0.0 if verbosity is None or if both start and end have
-        not been recorded.
+        Returns 0.0 if verbosity is None.
         """
         if self._verbosity is None:
             return 0.0
-
-        if not CUDA_SIMULATION:
-            if self._start_event is None or self._end_event is None:
-                return 0.0
-            return cuda.event_elapsed_time(self._start_event, self._end_event)
-        else:  # pragma: no cover - simulated
-            if self._start_time is None or self._end_time is None:
-                return 0.0
-            return (self._end_time - self._start_time) * 1000.0
+        return cuda.event_elapsed_time(self._start_event, self._end_event)
 
 
 class TimeLogger:

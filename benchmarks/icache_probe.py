@@ -14,7 +14,7 @@ import numpy as np
 import cubie  # noqa: F401
 from cubie.backend.utils import INSTRUCTION_CACHE_BYTES, device_hardware
 from cubie.backend.jit import compile_kwargs
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 
 ACCUMULATORS = 8
 KNEE_RATIO = 1.25
@@ -43,7 +43,7 @@ def build_kernel(trips: int, kernel_dir: Path):
         "import numpy as np",
         "from numba_cuda_mlir.types import float32",
         "from cubie.backend.intrinsics import unroll_if",
-        "from cubie.cubie_cudasim_extensions import cuda",
+        "from cubie._cudasim_extensions import cuda",
         f"m_trips = {trips}",
         "m_unroll = (True, None)",
         "",

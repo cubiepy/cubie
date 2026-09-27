@@ -52,7 +52,7 @@ from numpy import (
     int32 as np_int32,
 )
 from numba_cuda_mlir.types import float64, int32
-from cubie.cubie_cudasim_extensions import cuda, CUDA_SIMULATION
+from cubie._cudasim_extensions import cuda
 
 from attrs import define, field, evolve
 
@@ -1079,7 +1079,7 @@ class BatchSolverKernel(CUDAFactory):
         )
 
         jit_kwargs = self.jit_kwargs
-        if config.max_registers is not None and not CUDA_SIMULATION:
+        if config.max_registers is not None:
             jit_kwargs["max_registers"] = config.max_registers
 
         # no cover: start

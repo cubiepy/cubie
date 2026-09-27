@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from scipy.interpolate import CubicSpline
 
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.memory.driver_memory import is_pinned_array
 
 from cubie.backend.jit import compile_kwargs

@@ -1,5 +1,5 @@
 import pytest
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.memory.array_requests import ArrayRequest
 from cubie.memory.mem_manager import InstanceMemorySettings, MemoryManager
 import numpy as np

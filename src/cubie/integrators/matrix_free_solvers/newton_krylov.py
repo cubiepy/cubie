@@ -37,7 +37,7 @@ from typing import Callable, Optional, Set, Dict, Any
 
 from attrs import define, field, validators, frozen
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from numpy import finfo as np_finfo
 from numpy import int32 as np_int32
 from numpy import ndarray

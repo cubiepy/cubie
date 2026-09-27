@@ -3,11 +3,12 @@ from functools import lru_cache
 import attrs
 import numpy as np
 import pytest
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 from cubie._utils import (
     _expand_dtype,
     clamp_factory,
+    devfunc_returns_nonfloat,
     ensure_nonzero_size,
     float_array_validator,
     in_attr,
@@ -21,7 +22,10 @@ from cubie._utils import (
     tol_converter,
     unpack_dict_values,
 )
-from cubie.CUDAFactory import build_config
+from cubie.CUDAFactory import CUDAFactoryConfig, build_config
+from cubie.integrators.step_control.fixed_step_controller import (
+    FixedStepControlConfig,
+)
 from cubie.memory import default_memmgr
 
 
@@ -495,9 +499,6 @@ class TestBuildConfig:
 
     def test_build_config_with_real_config_class(self):
         """Test build_config with actual cubie config class."""
-        from cubie.integrators.step_control.fixed_step_controller import (
-            FixedStepControlConfig
-        )
         config = build_config(
             FixedStepControlConfig,
             required={'precision': np.float32, 'n_states': 3, 'dt': 0.01},
@@ -904,8 +905,6 @@ def test_build_config_instance_label_invalid_for_class_raises():
 
 def test_build_config_folds_loose_keys_into_nested_settings():
     """Loose flag keys land in the config's nested settings."""
-    from cubie.CUDAFactory import CUDAFactoryConfig
-
     config = build_config(
         CUDAFactoryConfig,
         required={"precision": np.float32},
@@ -920,9 +919,6 @@ def test_build_config_folds_loose_keys_into_nested_settings():
 @pytest.mark.nocudasim
 def test_devfunc_returns_nonfloat_reads_compiled_overloads():
     """Integer and boolean returns report True; float and uncompiled False."""
-    from cubie._utils import devfunc_returns_nonfloat
-    from cubie.cubie_cudasim_extensions import cuda
-
     @cuda.jit("int32(float32)", device=True, inline=True)
     def integer_return(x):
         return 1

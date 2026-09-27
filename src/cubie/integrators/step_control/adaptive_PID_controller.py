@@ -33,7 +33,7 @@ See Also
 from typing import Any, Callable
 
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from attrs import field, frozen
 from cubie._utils import PrecisionDType
 from cubie.buffer_registry import buffer_registry

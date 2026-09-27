@@ -68,7 +68,7 @@ from cubie.CUDAFactory import (
     build_config,
 )
 from numba_cuda_mlir.types import int32
-from cubie.cubie_cudasim_extensions import cuda
+from cubie._cudasim_extensions import cuda
 from cubie.backend.intrinsics import unroll_if
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
