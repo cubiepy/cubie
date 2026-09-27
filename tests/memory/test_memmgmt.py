@@ -2394,7 +2394,7 @@ def test_idle_pinned_block_waits_while_a_group_stream_is_busy(
     address = array.ctypes.data
     # Earlier garbage would queue Numba frees that wait for the device.
     gc.collect()
-    mgr.release_idle_memory()
+    mgr.release_idle_memory(keep_recent=False)
     work, stream, done, release = start_cuda_busy_work()
     mgr.stream_groups.streams["busy"] = stream
     try:
@@ -2450,7 +2450,7 @@ def test_release_idle_memory_waits_for_busy_group_stream(
     array = mgr.allocate_pinned_array((96,), np.float64)
     # Earlier garbage would queue Numba frees that wait for the device.
     gc.collect()
-    mgr.release_idle_memory()
+    mgr.release_idle_memory(keep_recent=False)
     work, stream, done, release = start_cuda_busy_work()
     mgr.stream_groups.streams["busy"] = stream
     try:

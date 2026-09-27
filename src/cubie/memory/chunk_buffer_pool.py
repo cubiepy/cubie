@@ -59,6 +59,8 @@ def _staging_view(
     array: ndarray, shape: Tuple[int, ...], dtype: np_dtype
 ) -> Optional[ndarray]:
     """View the start of the allocation; ``None`` if too small."""
+    if array.shape == tuple(shape) and array.dtype == dtype:
+        return array
     root = array
     while isinstance(root.base, ndarray):
         root = root.base

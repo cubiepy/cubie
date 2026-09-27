@@ -1423,17 +1423,22 @@ class MemoryManager:
         idle since the previous call are kept unless ``keep_recent``
         is ``False``.
         """
+        if keep_recent and not (self._idle_pinned or self._pinned_releases):
+            return
         if not self._group_streams_idle():
             return
         with self._pinned_lock:
             self._apply_pinned_releases()
             generation = self._pinned_generation
+            idle = len(self._idle_pinned)
             self._idle_pinned = [
                 entry for entry in self._idle_pinned
                 if keep_recent and entry[2] == generation
             ]
+            freed = len(self._idle_pinned) < idle
             self._pinned_generation = generation + 1
-        flush_deferred_frees()
+        if freed or not keep_recent:
+            flush_deferred_frees()
 
     def _on_pinned_released(self, block: Any, nbytes: int) -> None:
         """Queue a collected pinned array's block without locking."""
