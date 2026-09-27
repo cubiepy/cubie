@@ -279,6 +279,20 @@ class BatchInputSizes(ArraySizingClass):
         obj = cls(initial_values, parameters, driver_coefficients)
         return obj
 
+    @property
+    def nonzero(self) -> "BatchInputSizes":
+        """Return a copy with every dimension at least one.
+
+        The (variable, run) tables keep their run count, so every run
+        indexes its own column of a table with no variables.
+        """
+        new_obj = super().nonzero
+        new_obj.initial_values = tuple(
+            max(1, size) for size in self.initial_values
+        )
+        new_obj.parameters = tuple(max(1, size) for size in self.parameters)
+        return new_obj
+
 
 @attrs.define
 class BatchOutputSizes(ArraySizingClass):

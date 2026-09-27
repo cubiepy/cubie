@@ -1,7 +1,7 @@
 """Inspect Python callables to extract ODE structure via AST analysis.
 
 Walks the abstract syntax tree of a user-provided function to identify
-state accesses, constant/parameter accesses, local assignments, return
+state accesses, parameter accesses, local assignments, return
 expressions, and function calls. Converts AST nodes to SymPy expressions.
 
 Published Functions
@@ -53,16 +53,16 @@ class FunctionInspection:
         All parameter names from the function signature.
     state_param
         Name of the state vector parameter (second positional arg).
-    constant_params
-        Names of constant/parameter arguments (third+ positional args).
+    parameter_args
+        Names of parameter arguments (third+ positional args).
     scalar_params
-        Subset of ``constant_params`` never accessed as containers
+        Subset of ``parameter_args`` never accessed as containers
         (no subscript or attribute access); each is treated as a
         scalar bound to the like-named declared symbol, matching
         SciPy's ``args=`` convention.
     state_accesses
         List of dicts with keys ``base``, ``key``, ``pattern_type``.
-    constant_accesses
+    parameter_accesses
         List of dicts with keys ``base``, ``key``, ``pattern_type``.
     assignments
         Mapping of local variable names to their AST expression nodes.
@@ -78,9 +78,9 @@ class FunctionInspection:
         self,
         param_names: List[str],
         state_param: str,
-        constant_params: List[str],
+        parameter_args: List[str],
         state_accesses: List[Dict[str, Any]],
-        constant_accesses: List[Dict[str, Any]],
+        parameter_accesses: List[Dict[str, Any]],
         assignments: Dict[str, ast.expr],
         return_node: ast.Return,
         function_calls: Set[str],
@@ -89,10 +89,10 @@ class FunctionInspection:
     ) -> None:
         self.param_names = param_names
         self.state_param = state_param
-        self.constant_params = constant_params
+        self.parameter_args = parameter_args
         self.scalar_params = scalar_params or []
         self.state_accesses = state_accesses
-        self.constant_accesses = constant_accesses
+        self.parameter_accesses = parameter_accesses
         self.assignments = assignments
         self.return_node = return_node
         self.function_calls = function_calls
@@ -103,12 +103,12 @@ class _OdeAstVisitor(ast.NodeVisitor):
     """Walk an ODE function body collecting access patterns."""
 
     def __init__(
-        self, state_param: str, constant_params: List[str]
+        self, state_param: str, parameter_args: List[str]
     ) -> None:
         self.state_param = state_param
-        self.constant_params = constant_params
+        self.parameter_args = parameter_args
         self.state_accesses: List[Dict[str, Any]] = []
-        self.constant_accesses: List[Dict[str, Any]] = []
+        self.parameter_accesses: List[Dict[str, Any]] = []
         self.assignments: Dict[str, ast.expr] = {}
         self.return_nodes: List[ast.Return] = []
         self.function_calls: Set[str] = set()
@@ -120,8 +120,8 @@ class _OdeAstVisitor(ast.NodeVisitor):
         entry = {"base": base, "key": key, "pattern_type": ptype}
         if base == self.state_param:
             self.state_accesses.append(entry)
-        elif base in self.constant_params:
-            self.constant_accesses.append(entry)
+        elif base in self.parameter_args:
+            self.parameter_accesses.append(entry)
 
     def _record_subscript(self, node: ast.Subscript) -> None:
         if not isinstance(node.value, ast.Name):
@@ -265,7 +265,7 @@ class _OdeAstVisitor(ast.NodeVisitor):
             ast.copy_location(ifexp, node)
             self.assignments[name] = ifexp
 
-        # Visit expressions for state/constant accesses and calls.
+        # Visit expressions for state/parameter accesses and calls.
         self._visit_exprs_in_stmts([node])
 
     def _visit_exprs_in_stmts(self, stmts: list) -> None:
@@ -594,7 +594,7 @@ class _OdeAstVisitor(ast.NodeVisitor):
     def visit_Global(self, node: ast.Global) -> None:
         raise NotImplementedError(
             "The 'global' statement is not supported in ODE "
-            "functions. Pass values as constants via the third "
+            "functions. Pass values as parameters via the third "
             "argument instead."
         )
 
@@ -839,7 +839,7 @@ class AstToSympyConverter:
                 f"must resolve to the time argument, a container "
                 f"access on the state or parameter arguments, a local "
                 f"assignment, or a declared observable. Declare "
-                f"'{name}' as a parameter, constant, or driver and "
+                f"'{name}' as a parameter or driver and "
                 f"access it through a container argument."
             )
         # Create a real symbol for unknown names
@@ -1060,7 +1060,7 @@ def inspect_ode_function(func: Callable) -> FunctionInspection:
 
     time_param = params[0]
     state_param = params[1]
-    constant_params = params[2:]
+    parameter_args = params[2:]
 
     # Warn on unconventional names
     if time_param != "t":
@@ -1075,7 +1075,7 @@ def inspect_ode_function(func: Callable) -> FunctionInspection:
             stacklevel=2,
         )
 
-    visitor = _OdeAstVisitor(state_param, constant_params)
+    visitor = _OdeAstVisitor(state_param, parameter_args)
     visitor.visit(func_def)
 
     if not visitor.return_nodes:
@@ -1092,16 +1092,16 @@ def inspect_ode_function(func: Callable) -> FunctionInspection:
     _validate_access_consistency(
         visitor.state_accesses, state_param
     )
-    for cp in constant_params:
+    for cp in parameter_args:
         cp_accesses = [
-            a for a in visitor.constant_accesses if a["base"] == cp
+            a for a in visitor.parameter_accesses if a["base"] == cp
         ]
         _validate_access_consistency(cp_accesses, cp)
 
     # Extra args never accessed as containers but referenced by bare
     # name are scalars bound to the like-named declared symbol
     # (SciPy's args= convention). Unreferenced args are ignored.
-    container_bases = {a["base"] for a in visitor.constant_accesses}
+    container_bases = {a["base"] for a in visitor.parameter_accesses}
     used_names = {
         node.id
         for node in ast.walk(func_def)
@@ -1109,16 +1109,16 @@ def inspect_ode_function(func: Callable) -> FunctionInspection:
     }
     scalar_params = [
         cp
-        for cp in constant_params
+        for cp in parameter_args
         if cp not in container_bases and cp in used_names
     ]
 
     return FunctionInspection(
         param_names=params,
         state_param=state_param,
-        constant_params=constant_params,
+        parameter_args=parameter_args,
         state_accesses=visitor.state_accesses,
-        constant_accesses=visitor.constant_accesses,
+        parameter_accesses=visitor.parameter_accesses,
         assignments=visitor.assignments,
         return_node=visitor.return_nodes[0],
         function_calls=visitor.function_calls,

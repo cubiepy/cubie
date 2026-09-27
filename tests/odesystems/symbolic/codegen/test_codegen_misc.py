@@ -82,7 +82,6 @@ def test_generate_analytical_jvp_without_cse():
     ib = IndexedBases.from_user_inputs(
         states=["p", "q"],
         parameters=["k"],
-        constants=[],
         observables=[],
         drivers=[],
     )

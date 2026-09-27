@@ -87,7 +87,7 @@ def test_repeat_chunked_solve_matches_first(
 
     n_runs = 5
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
     inits = np.ones((n_states, n_runs), dtype=precision)
     params = np.ones((n_params, n_runs), dtype=precision)
 
@@ -128,7 +128,7 @@ def test_chunked_results_match_unchunked(
         0.5, 1.5, (system.sizes.states, n_runs)
     ).astype(precision)
     params = rng.uniform(
-        0.5, 1.5, (system.sizes.parameters, n_runs)
+        0.5, 1.5, (system.num_parameters, n_runs)
     ).astype(precision)
     solve_kwargs = dict(
         drivers=driver_settings,
@@ -219,7 +219,7 @@ def test_chunked_solver_changes_to_unchunked_backing(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     chunked_params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
     first_result = solver.solve(inits, chunked_params, **solve_kwargs)
     assert solver.chunks > 1

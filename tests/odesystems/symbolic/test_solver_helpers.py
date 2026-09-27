@@ -42,8 +42,8 @@ from cubie.odesystems.symbolic.parsing.auxiliary_caching import (
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
-    COLLIDING_CONSTANTS_F32,
-    COLLIDING_CONSTANTS_F64,
+    COLLIDING_PARAMETERS_F32,
+    COLLIDING_PARAMETERS_F64,
     FLOAT64_PRECISION,
     HODGKIN_HUXLEY_SYSTEM,
     LINEAR_SYSTEM,
@@ -78,9 +78,9 @@ def operator_system(precision):
         "dx0 = a*x0 + b*x1",
         "dx1 = c*x0 + d*x1",
     ]
-    constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
+    parameters = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
     system = create_ODE_system(
-        dxdt, states=["x0", "x1"], constants=constants, precision=precision
+        dxdt, states=["x0", "x1"], parameters=parameters, precision=precision
     )
     return system
 
@@ -144,8 +144,10 @@ def cached_system():
         "dx0 = a*x0*x1 + b*sin(x0)",
         "dx1 = c*x0*x1 + d*cos(x1)",
     ]
-    constants = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
-    system = create_ODE_system(dxdt, states=["x0", "x1"], constants=constants)
+    parameters = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
+    system = create_ODE_system(
+        dxdt, states=["x0", "x1"], parameters=parameters
+    )
     return system
 
 
@@ -730,8 +732,8 @@ def test_operator_apply_dense(
     )
 
 
-def test_operator_apply_constants_folded(operator_system):
-    """Constants are literals in emitted source, never bindings."""
+def test_operator_apply_fixed_parameters_folded(operator_system):
+    """Fixed parameters are literals in emitted source, never bindings."""
     code = generate_linear_operator_code(
         operator_system.equations, operator_system.indices
     )
@@ -799,10 +801,10 @@ def test_cached_operator_apply_dense(
     out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
-    a = precision(cached_system.constants.values_dict["a"])
-    b = precision(cached_system.constants.values_dict["b"])
-    c = precision(cached_system.constants.values_dict["c"])
-    d = precision(cached_system.constants.values_dict["d"])
+    a = precision(cached_system.parameters.values_dict["a"])
+    b = precision(cached_system.parameters.values_dict["b"])
+    c = precision(cached_system.parameters.values_dict["c"])
+    d = precision(cached_system.parameters.values_dict["d"])
 
     x0, x1 = state_values
     jacobian = np.array(
@@ -1104,10 +1106,10 @@ def test_neumann_preconditioner_cached_expression(
     out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
-    a = precision(cached_system.constants.values_dict["a"])
-    b = precision(cached_system.constants.values_dict["b"])
-    c = precision(cached_system.constants.values_dict["c"])
-    d = precision(cached_system.constants.values_dict["d"])
+    a = precision(cached_system.parameters.values_dict["a"])
+    b = precision(cached_system.parameters.values_dict["b"])
+    c = precision(cached_system.parameters.values_dict["c"])
+    d = precision(cached_system.parameters.values_dict["d"])
 
     x0, x1 = state_values
     jacobian = np.array(
@@ -1221,7 +1223,7 @@ def test_stage_residual(
 
 
 def _colliding_system_f(point):
-    """Return the colliding-constants system derivative."""
+    """Return the colliding-parameters system derivative."""
     x0, x1 = point
     return np.array(
         [-2.5 * x0 + 0.75 * x1, -0.75 * x1],
@@ -1232,22 +1234,22 @@ def _colliding_system_f(point):
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        COLLIDING_CONSTANTS_F32,
-        COLLIDING_CONSTANTS_F64,
+        COLLIDING_PARAMETERS_F32,
+        COLLIDING_PARAMETERS_F64,
     ],
     indirect=True,
 )
-def test_solver_helper_preserves_colliding_constants(
+def test_solver_helper_preserves_colliding_parameters(
     system, residual_kernel, precision, tolerance
 ):
-    """Helper generation leaves beta/gamma constants untouched."""
+    """Helper generation leaves beta/gamma parameters untouched."""
 
     residual = system.get_solver_helper(
         role="residual", operator_beta=1.0, operator_gamma=1.0
     ).device_function
-    assert system.constants.values_array.dtype == np.dtype(precision)
-    assert system.constants.values_dict["beta"] == precision(2.5)
-    assert system.constants.values_dict["gamma"] == precision(0.75)
+    assert system.parameters.values_array.dtype == np.dtype(precision)
+    assert system.parameters.values_dict["beta"] == precision(2.5)
+    assert system.parameters.values_dict["gamma"] == precision(0.75)
 
     kernel = residual_kernel(residual)
     stage = np.zeros(2, dtype=precision)
@@ -1263,7 +1265,7 @@ def test_solver_helper_preserves_colliding_constants(
     out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
     # residual(u=0) = -h * f(base_state) with the system's own
-    # constants; the corrupted form would use beta = gamma = 1.
+    # parameters; the corrupted form would use beta = gamma = 1.
     expected = -_colliding_system_f(base)
     assert np.allclose(
         out,
@@ -1276,8 +1278,8 @@ def test_solver_helper_preserves_colliding_constants(
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
-        COLLIDING_CONSTANTS_F32,
-        COLLIDING_CONSTANTS_F64,
+        COLLIDING_PARAMETERS_F32,
+        COLLIDING_PARAMETERS_F64,
     ],
     indirect=True,
 )
@@ -1540,7 +1542,7 @@ def _cached_system_jacobian_diagonal(eval_point):
 
     dx0 = a*x0*x1 + b*sin(x0) -> J00 = a*x1 + b*cos(x0)
     dx1 = c*x0*x1 + d*cos(x1) -> J11 = c*x0 - d*sin(x1)
-    with constants a=0.5, b=1.3, c=-0.7, d=0.9.
+    with parameters a=0.5, b=1.3, c=-0.7, d=0.9.
     """
     x0, x1 = eval_point
     j00 = 0.5 * x1 + 1.3 * np.cos(x0)
@@ -2073,7 +2075,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
             "dx1 = -k1*x1 + x0*x0",
         ],
         states=["x0", "x1"],
-        constants={"k0": 1.0, "k1": 2.0},
+        parameters={"k0": 1.0, "k1": 2.0},
         precision=precision,
         name="mass_cache_key_sys",
     )
@@ -2083,7 +2085,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
             "0 = -k1*x1 + x0*x0 + x1**5",
         ],
         states=["x0", "x1"],
-        constants={"k0": 1.0, "k1": 2.0},
+        parameters={"k0": 1.0, "k1": 2.0},
         precision=precision,
         name="mass_cache_key_sys",
     )
@@ -2451,7 +2453,7 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     stream.synchronize()
 
     hg, m, nn, vm = (float(value) for value in state_values)
-    constants = system.constants.values_dict
+    values = system.parameters.values_dict
     alpha_m = 0.1 * (vm + 40.0) / (1.0 - np.exp(-(vm + 40.0) / 10.0))
     beta_m = 4.0 * np.exp(-(vm + 65.0) / 18.0)
     alpha_h = 0.07 * np.exp(-(vm + 65.0) / 20.0)
@@ -2464,11 +2466,11 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
             -(alpha_m + beta_m),
             -(alpha_n + beta_n),
             -(
-                constants["g_na"] * m**3 * hg
-                + constants["g_k"] * nn**4
-                + constants["g_l"]
+                values["g_na"] * m**3 * hg
+                + values["g_k"] * nn**4
+                + values["g_l"]
             )
-            / constants["c_m"],
+            / values["c_m"],
         ]
     )
     expected = vec / (1.0 - float(h) * float(a_ij) * diag_j)
@@ -2618,11 +2620,11 @@ def test_lu_solve_lu_nnz_survives_source_cache(precision):
         "dx0 = a*x0 + b*x1",
         "dx1 = c*x0 + d*x1",
     ]
-    constants = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
+    parameters = {"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0}
     first_system = create_ODE_system(
         dxdt,
         states=["x0", "x1"],
-        constants=constants,
+        parameters=parameters,
         precision=precision,
         name="lu_cache_roundtrip",
     )
@@ -2630,7 +2632,7 @@ def test_lu_solve_lu_nnz_survives_source_cache(precision):
     second_system = create_ODE_system(
         dxdt,
         states=["x0", "x1"],
-        constants=constants,
+        parameters=parameters,
         precision=precision,
         name="lu_cache_roundtrip",
     )

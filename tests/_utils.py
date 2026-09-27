@@ -32,6 +32,16 @@ from tests.integrators.cpu_reference import CPUAdaptiveController
 Array = NDArray[np.floating]
 
 
+def parse_input_swept(**kwargs):
+    """Return ``parse_input`` products with every parameter swept."""
+    from cubie.odesystems.ODEData import ParameterBinding
+    from cubie.odesystems.symbolic.parsing.parser import parse_input
+
+    *_, parsed_system = parse_input(**kwargs)
+    binding = ParameterBinding(swept=list(parsed_system.parameters))
+    return (*parsed_system.specialise(binding), parsed_system)
+
+
 class MockMemoryManager(MemoryManager):
     """Memory manager whose reported free memory is settable.
 
@@ -959,9 +969,11 @@ def run_device_loop(
     counters_output = np.zeros((save_samples, 4), dtype=np.int32)
 
     params = np.array(
-        system.parameters.values_array,
+        [
+            system.parameters.values_dict[name]
+            for name in system.swept_parameters
+        ],
         dtype=precision,
-        copy=True,
     )
     init_state = np.array(initial_state, dtype=precision, copy=True)
     status = np.zeros(1, dtype=np.int32)
@@ -2114,14 +2126,14 @@ LINEAR_SYSTEM = {"system_type": "linear"}
 # Transcendental-heavy testbed for the auxiliary-cache planner.
 HODGKIN_HUXLEY_SYSTEM = {"system_type": "hodgkin_huxley"}
 
-# The colliding-constants system shadows generated-code symbol
+# The colliding-parameters system shadows generated-code symbol
 # names; the collision handling must hold at both precisions.
-COLLIDING_CONSTANTS_F32 = {
-    "system_type": "colliding_constants", "precision": np.float32,
+COLLIDING_PARAMETERS_F32 = {
+    "system_type": "colliding_parameters", "precision": np.float32,
 }
 
-COLLIDING_CONSTANTS_F64 = {
-    "system_type": "colliding_constants", "precision": np.float64,
+COLLIDING_PARAMETERS_F64 = {
+    "system_type": "colliding_parameters", "precision": np.float64,
 }
 
 

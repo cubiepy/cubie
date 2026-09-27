@@ -4,6 +4,7 @@ import sympy as sp
 from numpy.testing import assert_array_equal
 
 from cubie._utils import is_devfunc
+from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_linear_operator_code,
@@ -25,8 +26,7 @@ def _helper_fn(system, role, **kwargs):
 def symbolic_input_simple():
     return {
         "observables": ["obs1", "obs2"],
-        "parameters": {"k1": 0.32, "k2": 0.91},
-        "constants": {"c1": 2.1, "c2": 1.8},
+        "parameters": {"k1": 0.32, "k2": 0.91, "c1": 2.1, "c2": 1.8},
         "drivers": {"d1": 0.9, "d2": 0.8},
         "states": {"x1": 0.5, "x2": 2.0},
         "dxdt": [
@@ -45,7 +45,6 @@ def simple_ode_strict(symbolic_input_simple, precision):
         dxdt=symbolic_input_simple["dxdt"],
         states=symbolic_input_simple["states"],
         parameters=symbolic_input_simple["parameters"],
-        constants=symbolic_input_simple["constants"],
         observables=symbolic_input_simple["observables"],
         drivers=symbolic_input_simple["drivers"],
         name="simpletest_strict",
@@ -71,16 +70,12 @@ def test_create_ODE_system_strict(
         precision=precision,
         states=symbolic_input_simple["states"],
         parameters=symbolic_input_simple["parameters"],
-        constants=symbolic_input_simple["constants"],
         observables=symbolic_input_simple["observables"],
         drivers=symbolic_input_simple["drivers"],
         name="simpletest_strict",
         strict=True,
     )
     sys2 = simple_ode_strict
-    assert_array_equal(
-        sys1.constants.values_array, sys2.constants.values_array
-    )
     assert_array_equal(
         sys1.parameters.values_array, sys2.parameters.values_array
     )
@@ -102,9 +97,6 @@ def test_create_ODE_system_nonstrict(
         name="simpletest_nonstrict",
     )
     sys2 = simple_ode_nonstrict
-    assert_array_equal(
-        sys1.constants.values_array, sys2.constants.values_array
-    )
     assert_array_equal(
         sys1.parameters.values_array, sys2.parameters.values_array
     )
@@ -204,8 +196,7 @@ def metadata_ode(precision):
         dxdt=["dx = -k * x + c + d1", "dy = k * x"],
         precision=precision,
         states={"x": 1.0, "y": 0.0},
-        parameters={"k": 0.1},
-        constants={"c": 0.5},
+        parameters={"k": 0.1, "c": 0.5},
         drivers=["d1"],
         name="symbolicode_metadata",
     )
@@ -295,14 +286,12 @@ class TestSympyStringEquivalence:
             dxdt=dxdt_sympy,
             states=['x'],
             parameters=['k'],
-            constants={'c': 1.0}
         )
 
         result_string = parse_input(
             dxdt=dxdt_string,
             states=['x'],
             parameters=['k'],
-            constants={'c': 1.0}
         )
 
         hash_sympy = result_sympy[4]
@@ -351,15 +340,13 @@ class TestSymbolicODEHash:
 
         dxdt = ["dx = -k * x", "dy = k * x"]
         states = {"x": 1.0, "y": 0.0}
-        parameters = {"k": 0.1}
-        constants = {"c": 2.0}
+        parameters = {"k": 0.1, "c": 2.0}
 
         # Create via parse_input (provides fn_hash)
         parsed_result = parse_input(
             dxdt=dxdt,
             states=list(states.keys()),
-            parameters=list(parameters.keys()),
-            constants=constants,
+            parameters=parameters,
         )
         expected_hash = parsed_result[4]
 
@@ -369,7 +356,6 @@ class TestSymbolicODEHash:
             precision=precision,
             states=states,
             parameters=parameters,
-            constants=constants,
             name="hash_fallback_test",
         )
 
@@ -420,8 +406,7 @@ class TestCacheSkipsCodegen:
             dxdt=["dx = -k * x", "dy = k * x + c"],
             precision=precision,
             states={"x": 1.0, "y": 0.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
+            parameters={"k": 0.1, "c": 0.5},
             name="cache_skip_codegen_test",
         )
 
@@ -442,8 +427,7 @@ class TestCacheSkipsCodegen:
             dxdt=["dx = -k * x", "dy = k * x + c"],
             precision=precision,
             states={"x": 1.0, "y": 0.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
+            parameters={"k": 0.1, "c": 0.5},
             name="cache_skip_codegen_test",
         )
 
@@ -467,6 +451,7 @@ class TestCacheSkipsCodegen:
             parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
+        first.bind(ParameterBinding(swept=["a", "b"]))
         _ = first.dxdt_fn
         first_source = first.gen_file.file_path.read_text()
 
@@ -474,17 +459,17 @@ class TestCacheSkipsCodegen:
             dxdt=equations,
             precision=precision,
             states={"x": 1.0, "y": 2.0},
-            parameters={"a": 3.0},
-            constants={"b": 4.0},
+            parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
+        second.bind(ParameterBinding(swept=["a"], fixed={"b": 4.0}))
         _ = second.dxdt_fn
         second_source = second.gen_file.file_path.read_text()
 
         assert first.fn_hash != second.fn_hash
         assert first_source != second_source
-        assert list(first.parameters.names) == ["a", "b"]
-        assert list(second.parameters.names) == ["a"]
+        assert first.swept_parameters == ("a", "b")
+        assert second.swept_parameters == ("a",)
 
     def test_reordered_declaration_is_one_system(self, precision):
         """The same names in a different order are one system."""
@@ -618,122 +603,95 @@ class TestCacheSkipsCodegen:
             assert f"residual_stacked_stages_s{source_hash}(" in source
 
 
-class TestConstantParameterConversion:
-    """Tests for converting constants to parameters and vice versa."""
+class TestParameterBinding:
+    """Tests for moving parameters between swept and fixed."""
 
-    def test_make_parameter_converts_constant(self, precision):
-        """Verify make_parameter moves a constant to parameters."""
-        ode = SymbolicODE.create(
-            dxdt=["dx = -k * x + c"],
-            precision=precision,
-            states={"x": 1.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
-            name="test_make_param",
-        )
-
-        assert "c" in ode.indices.constant_names
-        assert "c" not in ode.indices.parameter_names
-
-        ode.make_parameter("c")
-
-        assert "c" not in ode.indices.constant_names
-        assert "c" in ode.indices.parameter_names
-        assert ode.parameters["c"] == 0.5
-
-    def test_make_constant_converts_parameter(self, precision):
-        """Verify make_constant moves a parameter to constants."""
+    def test_sweeping_a_parameter_reads_it_from_the_table(self, precision):
+        """A swept parameter becomes a parameter-table row."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x + c"],
             precision=precision,
             states={"x": 1.0},
             parameters={"k": 0.1, "c": 0.5},
-            name="test_make_const",
+            name="test_sweep_param",
         )
 
-        assert "c" in ode.indices.parameter_names
-        assert "c" not in ode.indices.constant_names
+        assert ode.indices.parameter_names == []
 
-        ode.make_constant("c")
+        ode.bind(ParameterBinding(swept=["c"], fixed={"k": 0.1}))
 
-        assert "c" not in ode.indices.parameter_names
-        assert "c" in ode.indices.constant_names
-        assert ode.constants["c"] == 0.5
+        assert ode.indices.parameter_names == ["c"]
+        assert ode.parameters["c"] == precision(0.5)
 
-    def test_make_parameter_raises_for_unknown(self, metadata_ode):
-        """Verify make_parameter raises KeyError for unknown name."""
-        with pytest.raises(KeyError):
-            metadata_ode.make_parameter("nonexistent")
-
-    def test_make_constant_raises_for_unknown(self, metadata_ode):
-        """Verify make_constant raises KeyError for unknown name."""
-        with pytest.raises(KeyError):
-            metadata_ode.make_constant("nonexistent")
-
-    def test_roundtrip_conversion(self, precision):
-        """Verify constant->parameter->constant preserves value."""
+    def test_fixing_a_parameter_folds_its_value(self, precision):
+        """A fixed parameter leaves the parameter table."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x + c"],
             precision=precision,
             states={"x": 1.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
-            name="test_roundtrip",
+            parameters={"k": 0.1, "c": 0.5},
+            name="test_fix_param",
         )
+        ode.bind(ParameterBinding(swept=["c", "k"]))
+        assert ode.indices.parameter_names == ["c", "k"]
 
-        # Convert to parameter
-        ode.make_parameter("c")
-        assert ode.parameters["c"] == 0.5
+        ode.bind(ParameterBinding(swept=["k"], fixed={"c": 0.5}))
 
-        # Convert back to constant
-        ode.make_constant("c")
-        assert ode.constants["c"] == 0.5
+        assert ode.indices.parameter_names == ["k"]
+        assert ode.binding.fixed_values == {"c": 0.5}
 
-    def test_make_parameter_regenerates_source(self, precision):
-        """Generated source follows a constant-to-parameter move."""
+    def test_bind_raises_for_unknown_name(self, metadata_ode):
+        """A binding naming an unknown parameter raises ValueError."""
+        with pytest.raises(ValueError, match="do not match"):
+            metadata_ode.bind(
+                ParameterBinding(
+                    swept=["nonexistent"], fixed={"k": 0.1, "c": 0.5}
+                )
+            )
+
+    def test_sweeping_regenerates_source(self, precision):
+        """Generated source reads a swept parameter from the table."""
         ode = SymbolicODE.create(
             dxdt="dx = -k*x + c",
             precision=precision,
             states={"x": 1.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
-            name="constant_to_parameter_source",
+            parameters={"k": 0.1, "c": 0.5},
+            name="fixed_to_swept_source",
         )
+        ode.bind(ParameterBinding(swept=["k"], fixed={"c": 0.5}))
         _ = ode.dxdt_fn
 
-        ode.make_parameter("c")
+        ode.bind(ParameterBinding(swept=["c", "k"]))
         _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 
         assert "parameters[1]" in source
-        assert "precision(constants['c'])" not in source
 
-    def test_make_constant_regenerates_source(self, precision):
-        """Generated source follows a parameter-to-constant move."""
+    def test_fixing_regenerates_source(self, precision):
+        """Generated source folds a fixed parameter as a literal."""
         ode = SymbolicODE.create(
             dxdt="dx = -k*x + c",
             precision=precision,
             states={"x": 1.0},
             parameters={"k": 0.1, "c": 0.5},
-            name="parameter_to_constant_source",
+            name="swept_to_fixed_source",
         )
+        ode.bind(ParameterBinding(swept=["c", "k"]))
         _ = ode.dxdt_fn
 
-        ode.make_constant("c")
+        ode.bind(ParameterBinding(swept=["k"], fixed={"c": 0.5}))
         _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 
         # The parameter's value folds into the source as a literal.
         assert "precision(0.5)" in source
-        assert "constants['c']" not in source
-        assert "parameters[1]" not in source
 
 
 class TestValueSetters:
     """Tests for value setting methods."""
 
-    def test_set_parameter_value(self, precision):
-        """Verify set_parameter_value updates parameter correctly."""
+    def test_update_sets_parameter_value(self, precision):
+        """update sets a parameter's value by name."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x"],
             precision=precision,
@@ -742,57 +700,39 @@ class TestValueSetters:
             name="test_set_param",
         )
 
-        ode.set_parameter_value("k", 0.5)
+        ode.update(k=0.5)
         assert ode.parameters["k"] == 0.5
 
-    def test_set_constant_value(self, precision):
-        """Verify set_constant_value updates constant correctly."""
-        ode = SymbolicODE.create(
-            dxdt=["dx = -k * x + c"],
-            precision=precision,
-            states={"x": 1.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
-            name="test_set_const",
-        )
-
-        ode.set_constant_value("c", 1.0)
-        assert ode.constants["c"] == 1.0
-
-    def test_constants_getter_is_sealed_against_bypass(self, precision):
+    def test_parameters_getter_is_sealed_against_bypass(self, precision):
         """In-place mutation through the public getter raises.
 
-        The constants container held by the settings snapshot is
-        fully sealed, so the ``update_compile_settings`` bypass that
-        would leave the build cache valid with stale closure values
-        cannot happen; ``set_constants`` remains the write path and
+        ``update`` is the write path; a fixed parameter's new value
         changes ``config_hash``.
         """
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x + c"],
             precision=precision,
             states={"x": 1.0},
-            parameters={"k": 0.1},
-            constants={"c": 0.5},
-            name="test_sealed_constants",
+            parameters={"k": 0.1, "c": 0.5},
+            name="test_sealed_parameters",
         )
         _ = ode.dxdt_fn
         hash_before = ode.config_hash
 
         with pytest.raises(ValueError):
-            ode.constants.update_from_dict({"c": 2.0})
+            ode.parameters.update_from_dict({"c": 2.0})
         with pytest.raises(ValueError):
-            ode.constants["c"] = 2.0
+            ode.parameters["c"] = 2.0
         with pytest.raises(ValueError):
-            ode.constants.values_array[0] = 2.0
+            ode.parameters.values_array[0] = 2.0
         with pytest.raises(TypeError):
-            ode.constants.values_dict["c"] = 2.0
+            ode.parameters.values_dict["c"] = 2.0
 
-        assert ode.constants["c"] == precision(0.5)
+        assert ode.parameters["c"] == precision(0.5)
         assert ode.config_hash == hash_before
 
-        ode.set_constants({"c": 2.0})
-        assert ode.constants["c"] == precision(2.0)
+        ode.update({"c": 2.0})
+        assert ode.parameters["c"] == precision(2.0)
         assert ode.config_hash != hash_before
 
     def test_set_initial_value(self, precision):
@@ -812,21 +752,12 @@ class TestValueSetters:
 class TestInfoGetters:
     """Tests for information getter methods."""
 
-    def test_get_constants_info(self, metadata_ode):
-        """Verify get_constants_info returns correct structure."""
-        info = metadata_ode.get_constants_info()
-        assert len(info) == 1
-        assert info[0]["name"] == "c"
-        assert info[0]["value"] == 0.5
-        assert "unit" in info[0]
-
     def test_get_parameters_info(self, metadata_ode):
         """Verify get_parameters_info returns correct structure."""
         info = metadata_ode.get_parameters_info()
-        assert len(info) == 1
-        assert info[0]["name"] == "k"
-        assert info[0]["value"] == 0.1
-        assert "unit" in info[0]
+        assert [item["name"] for item in info] == ["c", "k"]
+        assert [item["value"] for item in info] == [0.5, 0.1]
+        assert all("unit" in item for item in info)
 
     def test_get_states_info(self, metadata_ode):
         """Verify get_states_info returns correct structure."""
@@ -846,7 +777,6 @@ class TestSymbolicODEConstructorDefaults:
             dxdt=["dx = -k * x"],
             states={"x": 1.0},
             parameters={"k": 0.5},
-            constants={},
             observables=[],
             strict=True,
         )
@@ -870,25 +800,6 @@ class TestSymbolicODEUnitAccessors:
     def test_driver_units_reports_declared_drivers(self, metadata_ode):
         """driver_units exposes units for declared drivers."""
         assert "d1" in metadata_ode.driver_units
-
-
-class TestSetConstantsKwargs:
-    """set_constants forwards keyword updates to the base class."""
-
-    def test_kwargs_only_updates_compiled_constant(self):
-        """A kwargs-only call updates the compiled constant value."""
-        ode = create_ODE_system(
-            dxdt=["dx = -k * x + c0"],
-            states={"x": 1.0},
-            parameters={"k": 0.5},
-            constants={"c0": 1.0},
-            precision=np.float32,
-            strict=True,
-            name="set_constants_kwargs_test",
-        )
-        recognised = ode.set_constants(None, c0=3.0)
-        assert recognised == {"c0"}
-        assert ode.constants.values_dict["c0"] == np.float32(3.0)
 
 
 class TestPreconditionerTypeValidation:

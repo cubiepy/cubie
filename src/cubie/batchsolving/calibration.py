@@ -645,6 +645,7 @@ def run_calibration(
     settling_time: float = 0.0,
     t0: float = 0.0,
     grid_type: str = "verbatim",
+    find_constant_params: bool = False,
     apply: bool = True,
     verbose: bool = True,
     auto_size: bool = True,
@@ -678,6 +679,8 @@ def run_calibration(
     grid_type
         Strategy for constructing the integration grid from inputs.
         Only used when dict inputs trigger grid construction.
+    find_constant_params
+        Compile in uniform rows of a host array ``parameters``.
     apply
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
@@ -717,7 +720,10 @@ def run_calibration(
         )
 
     inits, params = parent.build_grid(
-        initial_values, parameters, grid_type=grid_type
+        initial_values,
+        parameters,
+        grid_type=grid_type,
+        find_constant_params=find_constant_params,
     )
     if drivers is not None:
         parent.update(drivers=drivers)

@@ -359,7 +359,7 @@ class StructuralState:
         appearing in ``equations``.
     known_symbols
         Symbols with externally supplied values (parameters,
-        constants, drivers, and the time symbol).
+        drivers, and the time symbol).
     time_symbol
         The independent variable.
     known_derivative_map

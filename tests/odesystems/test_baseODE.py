@@ -4,17 +4,17 @@ import numpy as np
 import pytest
 
 from cubie.odesystems.baseODE import BaseODE
+from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
 
 @pytest.fixture
 def tiny_system():
-    """Return a minimal symbolic system with one constant (no compile)."""
+    """Return a minimal symbolic system with two parameters (no compile)."""
     return create_ODE_system(
         dxdt=["dx = -k * x + c0"],
         states={"x": 1.0},
-        parameters={"k": 0.5},
-        constants={"c0": 1.0},
+        parameters={"k": 0.5, "c0": 1.0},
         observables=[],
         precision=np.float32,
         strict=True,
@@ -31,15 +31,15 @@ def test_copy_is_an_independent_unbuilt_system(tiny_system):
     assert twin.cache_valid is False
     assert tiny_system.cache_valid is True
     twin.update(c0=3.0)
-    assert tiny_system.constants.values_dict["c0"] == 1.0
-    assert twin.constants.values_dict["c0"] == 3.0
+    assert tiny_system.parameters.values_dict["c0"] == 1.0
+    assert twin.parameters.values_dict["c0"] == 3.0
 
 
 class TestUpdate:
     """Cover the BaseODE.update dispatch branches."""
 
     def test_update_none_dict_with_kwargs(self, tiny_system):
-        """A None dict plus kwargs updates recognised constants."""
+        """A None dict plus kwargs updates recognised parameters."""
         recognised = tiny_system.update(None, c0=2.0)
         assert recognised == {"c0"}
 
@@ -52,38 +52,59 @@ class TestUpdate:
         with pytest.raises(KeyError, match="Unrecognized parameters"):
             tiny_system.update({"not_a_key": 1.0})
 
+    def test_update_binding_rebinds(self, tiny_system):
+        """A binding given to update is compiled into the system."""
+        binding = ParameterBinding(swept=["k"], fixed={"c0": 1.0})
+        recognised = tiny_system.update(binding=binding)
+        assert recognised == {"binding"}
+        assert tiny_system.binding == binding
 
-class TestSetConstants:
-    """Cover the BaseODE.set_constants branches directly.
 
-    ``SymbolicODE`` overrides ``set_constants``, so the base-class
-    branches are exercised against ``BaseODE`` directly.
-    """
+class TestSetParameterValues:
+    """Cover BaseODE.set_parameter_values."""
 
-    def test_none_dict_returns_empty_set(self, tiny_system):
-        """A None dict with no kwargs returns an empty set."""
-        assert BaseODE.set_constants(tiny_system, None) == set()
-
-    def test_kwargs_only_updates_constant(self, tiny_system):
-        """Base-class set_constants applies kwargs-only updates."""
-        recognised = BaseODE.set_constants(tiny_system, None, c0=7.0)
+    def test_fixed_value_follows_into_binding(self, tiny_system):
+        """A fixed parameter's new value is compiled in."""
+        recognised = tiny_system.set_parameter_values({"c0": 7.0})
         assert recognised == {"c0"}
-        assert tiny_system.constants.values_dict["c0"] == 7.0
+        assert tiny_system.parameters.values_dict["c0"] == 7.0
+        assert tiny_system.binding.fixed_values["c0"] == 7.0
 
-    def test_mixed_recognised_and_unknown_raises(self, tiny_system):
-        """A recognised key beside an unknown key raises KeyError."""
-        with pytest.raises(KeyError, match="Unrecognized parameters"):
-            BaseODE.set_constants(
-                tiny_system, {"c0": 1.0, "not_a_key": 1.0}
-            )
+    def test_swept_value_keeps_binding(self, tiny_system):
+        """A swept parameter's new value changes only its default."""
+        binding = ParameterBinding(swept=["k"], fixed={"c0": 1.0})
+        tiny_system.bind(binding)
+        tiny_system.set_parameter_values({"k": 3.0})
+        assert tiny_system.parameters.values_dict["k"] == 3.0
+        assert tiny_system.binding == binding
+
+    def test_unknown_name_raises(self, tiny_system):
+        """A name outside the system's parameters raises KeyError."""
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_parameter_values({"not_a_key": 1.0})
 
 
-class TestNumConstants:
-    """Cover the num_constants property."""
+class TestBind:
+    """Cover BaseODE.bind."""
 
-    def test_num_constants(self, tiny_system):
-        """num_constants reports the declared constant count."""
-        assert tiny_system.num_constants == 1
+    def test_new_binding_resizes_parameter_table(self, tiny_system):
+        """Sweeping a parameter adds a row to the parameter table."""
+        changed = tiny_system.bind(
+            ParameterBinding(swept=["k"], fixed={"c0": 1.0})
+        )
+        assert changed is True
+        assert tiny_system.sizes.parameters == 1
+        assert tiny_system.swept_parameters == ("k",)
+        assert tiny_system.num_parameters == 2
+
+    def test_same_binding_reports_no_change(self, tiny_system):
+        """Binding the current binding again changes nothing."""
+        assert tiny_system.bind(tiny_system.binding) is False
+
+    def test_binding_must_name_every_parameter(self, tiny_system):
+        """A binding missing a parameter raises ValueError."""
+        with pytest.raises(ValueError, match="do not match"):
+            tiny_system.bind(ParameterBinding(swept=["k"]))
 
 
 class TestGetSolverHelper:

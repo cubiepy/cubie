@@ -22,8 +22,8 @@ Module-Level Functions
 
 See Also
 --------
-:mod:`cubie.gui.constants_editor`
-    Companion editor for constants and parameters.
+:mod:`cubie.gui.parameters_editor`
+    Companion editor for parameters.
 :class:`~cubie.odesystems.symbolic.SymbolicODE`
     ODE system class consumed by the editor.
 """
@@ -37,7 +37,7 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtCore import Qt
 
-from cubie.gui.constants_editor import FloatLineEdit
+from cubie.gui.parameters_editor import FloatLineEdit
 
 if TYPE_CHECKING:
     from cubie.odesystems.symbolic import SymbolicODE

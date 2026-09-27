@@ -193,8 +193,8 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
      - ``max_registers``, ``blocksize``
      - :doc:`speed`
 
-A keyword argument that is neither a setting nor a constant of the
-system raises ``KeyError``. Constants are given by name, at
+A keyword argument that is neither a setting nor a parameter of the
+system raises ``KeyError``. Parameter values are given by name, at
 construction or through ``update``.
 
 Notes on selected parameters

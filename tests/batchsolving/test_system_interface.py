@@ -138,7 +138,7 @@ def test_parameter_indices_delegates(system_interface, system):
     """Delegates to parameters.get_indices."""
     names = system.parameters.names
     result = system_interface.parameter_indices(names)
-    expected = np.arange(system.sizes.parameters, dtype=np.int32)
+    expected = np.arange(system.num_parameters, dtype=np.int32)
     assert_array_equal(result, expected)
 
 

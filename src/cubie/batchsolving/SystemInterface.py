@@ -42,6 +42,7 @@ from numpy import (
     array as np_array,
 )
 from cubie.odesystems.baseODE import BaseODE
+from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.SystemValues import SystemValues
 
 
@@ -69,6 +70,11 @@ class SystemInterface:
     def parameters(self) -> SystemValues:
         """Parameter values, read live from the system."""
         return self._system.parameters
+
+    @property
+    def binding(self) -> ParameterBinding:
+        """The system's parameter binding, read live."""
+        return self._system.binding
 
     @property
     def states(self) -> SystemValues:
@@ -113,8 +119,8 @@ class SystemInterface:
 
         Notes
         -----
-        The method attempts to update both parameters and states. Updates are
-        applied to whichever :class:`SystemValues` object recognizes each key.
+        Parameter values go through the system's ``update`` so fixed
+        parameters recompile; state values update in place.
         """
         if updates is None:
             updates = {}
@@ -123,10 +129,18 @@ class SystemInterface:
         if not updates:
             return
 
-        all_unrecognized = set(updates.keys())
-        for values_object in (self.parameters, self.states):
-            recognized = values_object.update_from_dict(updates, silent=True)
-            all_unrecognized -= recognized
+        parameter_names = set(self.parameters.names)
+        parameter_updates = {
+            key: value
+            for key, value in updates.items()
+            if key in parameter_names
+        }
+        if parameter_updates:
+            self._system.update(parameter_updates)
+        all_unrecognized = set(updates.keys()) - set(parameter_updates)
+        all_unrecognized -= self.states.update_from_dict(
+            {key: updates[key] for key in all_unrecognized}, silent=True
+        )
 
         if all_unrecognized:
             if not silent:

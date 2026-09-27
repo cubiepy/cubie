@@ -5,8 +5,7 @@ Published Classes
 :class:`SymbolicODE`
     Concrete :class:`~cubie.odesystems.baseODE.BaseODE` subclass that
     generates CUDA device functions from SymPy equations. Handles
-    codegen caching, solver helper generation, and constant/parameter
-    conversion.
+    codegen caching, solver helper generation, and parameter binding.
 
     >>> from cubie.odesystems.symbolic.symbolicODE import (
     ...     create_ODE_system,
@@ -45,7 +44,6 @@ from typing import (
     Callable,
     Iterable,
     Optional,
-    Set,
     Union,
 )
 
@@ -70,6 +68,7 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
+from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -88,7 +87,6 @@ def _system_source_hash(equations, index_map) -> str:
 
     return hash_system_definition(
         equations,
-        index_map.constants.default_values,
         state_labels=index_map.state_names,
         dxdt_labels=index_map.dxdt_names,
         parameter_labels=index_map.parameter_names,
@@ -98,6 +96,18 @@ def _system_source_hash(equations, index_map) -> str:
         function_aliases=equations.function_aliases,
         nonfloat_functions=equations.nonfloat_functions,
     )
+
+
+def _unit_map(parameters: dict, units: Any) -> dict[str, str]:
+    """Return a unit string for every parameter name."""
+
+    if units is None:
+        units = {}
+    elif not isinstance(units, dict):
+        units = dict(zip(parameters, units))
+    return {
+        name: units.get(name, "dimensionless") for name in parameters
+    }
 
 
 def _operation_source_hash(fn_hash: str, operation_ordering: str) -> str:
@@ -114,7 +124,6 @@ def create_ODE_system(
     states: Optional[Union[dict[str, float], Iterable[str]]] = None,
     observables: Optional[Iterable[str]] = None,
     parameters: Optional[Union[dict[str, float], Iterable[str]]] = None,
-    constants: Optional[Union[dict[str, float], Iterable[str]]] = None,
     drivers: Optional[Union[Iterable[str], dict[str, Any]]] = None,
     user_functions: Optional[dict[str, Callable]] = None,
     user_function_derivatives: Optional[dict[str, Callable]] = None,
@@ -134,7 +143,7 @@ def create_ODE_system(
         strings in ``lhs = rhs`` form, or a Python callable. When a callable
         is provided its signature must be ``f(t, y, ...)`` where ``t`` is
         time, ``y`` is the state vector, and additional arguments map to
-        parameters or constants. State access patterns supported:
+        parameters or drivers. State access patterns supported:
         ``y[0]`` (positional), ``y["name"]`` (string), ``y.name``
         (attribute). The return value must be a list, tuple, or dict of
         derivative expressions.
@@ -145,10 +154,8 @@ def create_ODE_system(
         Observable variable labels to expose from the generated system.
     parameters
         Parameter labels either as an iterable or as a mapping to default
-        values.
-    constants
-        Constant labels either as an iterable or as a mapping to default
-        values.
+        values. A parameter that holds one value across a batch is
+        compiled into the generated code as a number.
     drivers
         External driver variable labels required at runtime. Accepts either
         an iterable of driver symbol names or a dictionary mapping driver
@@ -192,7 +199,6 @@ def create_ODE_system(
         states=states,
         observables=observables,
         parameters=parameters,
-        constants=constants,
         drivers=drivers,
         user_functions=user_functions,
         user_function_derivatives=user_function_derivatives,
@@ -213,7 +219,7 @@ class SymbolicODE(BaseODE):
     Parameters are provided as SymPy symbols and the differential equations are
     supplied as ``(lhs, rhs)`` tuples where the left-hand side is a derivative
     or observable symbol. Right-hand sides combine states, parameters,
-    constants, and intermediate observables.
+    drivers, and intermediate observables.
 
     Parameters
     ----------
@@ -221,14 +227,14 @@ class SymbolicODE(BaseODE):
         Parsed equations describing the system dynamics.
     all_indexed_bases
         Indexed base collections providing access to state, parameter,
-        constant, and observable metadata.
+        and observable metadata.
     all_symbols
         Mapping from symbol names to their :class:`sympy.Symbol` instances.
     precision
         Target floating-point precision used for generated kernels.
     fn_hash
-        Precomputed system hash. When omitted it is derived from the equations
-        and constants.
+        Precomputed system hash. When omitted it is derived from the
+        equations.
     user_functions
         Runtime callables referenced within the symbolic expressions.
     name
@@ -259,14 +265,14 @@ class SymbolicODE(BaseODE):
             solver mass matrix rides on ``equations.mass_matrix``.
         all_indexed_bases
             Indexed base collections providing access to state, parameter,
-            constant, and observable metadata.
+            and observable metadata.
         all_symbols
             Mapping from symbol names to their :class:`sympy.Symbol` instances.
         precision
             Target floating-point precision used for generated kernels.
         fn_hash
             Precomputed system hash. When omitted it is derived from the
-            equations and constants.
+            equations.
         user_functions
             Runtime callables referenced within the symbolic expressions.
         name
@@ -274,8 +280,9 @@ class SymbolicODE(BaseODE):
         operation_ordering
             Generated-operation ordering policy.
         parsed_system
-            Constants-symbolic checkpoint from the parser; rebuilt
-            from ``equations`` and re-specialised when omitted.
+            Parameter-symbolic checkpoint from the parser, whose
+            default binding produced ``equations``; rebuilt from
+            ``equations`` and re-specialised when omitted.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
@@ -295,6 +302,9 @@ class SymbolicODE(BaseODE):
                 fn_hash,
             ) = parsed_system.specialise()
         self._parsed_system = parsed_system
+        self._parameter_units = _unit_map(
+            parsed_system.parameters, parsed_system.parameter_units
+        )
 
         derived_mass_matrix = equations.mass_matrix
 
@@ -314,13 +324,13 @@ class SymbolicODE(BaseODE):
 
         super().__init__(
             initial_values=all_indexed_bases.state_values,
-            parameters=all_indexed_bases.parameter_values,
-            constants=all_indexed_bases.constant_values,
+            parameters=dict(sorted(parsed_system.parameters.items())),
             observables=all_indexed_bases.observable_names,
             precision=precision,
             num_drivers=ndriv,
             name=name,
             operation_ordering=operation_ordering,
+            binding=parsed_system.default_binding(),
         )
         self._seed_derived_mass(derived_mass_matrix)
         self.gen_file = ODEFile(
@@ -357,7 +367,6 @@ class SymbolicODE(BaseODE):
         states: Optional[Union[dict[str, float], Iterable[str]]] = None,
         observables: Optional[Iterable[str]] = None,
         parameters: Optional[Union[dict[str, float], Iterable[str]]] = None,
-        constants: Optional[Union[dict[str, float], Iterable[str]]] = None,
         drivers: Optional[Union[Iterable[str], dict[str, Any]]] = None,
         user_functions: Optional[dict[str, Callable]] = None,
         user_function_derivatives: Optional[dict[str, Callable]] = None,
@@ -365,7 +374,6 @@ class SymbolicODE(BaseODE):
         strict: bool = False,
         state_units: Optional[Union[dict[str, str], Iterable[str]]] = None,
         parameter_units: Optional[Union[dict[str, str], Iterable[str]]] = None,
-        constant_units: Optional[Union[dict[str, str], Iterable[str]]] = None,
         observable_units: Optional[
             Union[dict[str, str], Iterable[str]]
         ] = None,
@@ -391,9 +399,6 @@ class SymbolicODE(BaseODE):
         parameters
             Parameter labels either as an iterable or as a mapping to default
             values.
-        constants
-            Constant labels either as an iterable or as a mapping to default
-            values.
         drivers
             External driver variable labels required at runtime. May be an
             iterable of driver labels or a dictionary describing driver
@@ -415,8 +420,6 @@ class SymbolicODE(BaseODE):
             Optional units for states. Defaults to "dimensionless".
         parameter_units
             Optional units for parameters. Defaults to "dimensionless".
-        constant_units
-            Optional units for constants. Defaults to "dimensionless".
         observable_units
             Optional units for observables. Defaults to "dimensionless".
         driver_units
@@ -461,14 +464,12 @@ class SymbolicODE(BaseODE):
             states=states,
             observables=observables,
             parameters=parameters,
-            constants=constants,
             drivers=drivers,
             user_functions=user_functions,
             user_function_derivatives=user_function_derivatives,
             strict=strict,
             state_units=state_units,
             parameter_units=parameter_units,
-            constant_units=constant_units,
             observable_units=observable_units,
             driver_units=driver_units,
             state_priority=state_priority,
@@ -497,12 +498,7 @@ class SymbolicODE(BaseODE):
     @property
     def parameter_units(self) -> dict[str, str]:
         """Return units for parameters."""
-        return self.indices.parameters.units
-
-    @property
-    def constant_units(self) -> dict[str, str]:
-        """Return units for constants."""
-        return self.indices.constants.units
+        return dict(self._parameter_units)
 
     @property
     def observable_units(self) -> dict[str, str]:
@@ -638,43 +634,39 @@ class SymbolicODE(BaseODE):
             ),
         )
 
-    def _specialise(
-        self,
-        constant_values: dict[str, float],
-        parsed_system: ParsedSystem,
-    ) -> None:
-        """Derive the system's products for one set of constant values.
+    def _apply_binding(self, binding: ParameterBinding) -> None:
+        """Re-specialise the system for ``binding``.
 
-        Specialises the checkpoint, swaps in the derived equations,
-        layouts, and hash, and pushes the changed compile settings
-        in one call. ``parsed_system`` replaces the stored
-        checkpoint on success; nothing mutates on a raise.
+        Swaps in the derived equations, layouts and hash, and pushes
+        the changed compile settings in one call. Nothing changes on
+        a raise.
 
         Parameters
         ----------
-        constant_values
-            Complete mapping of constant names to their new values.
-        parsed_system
-            Checkpoint to specialise from.
+        binding
+            Swept names and fixed values covering every parameter.
         """
 
         precision = self.precision
         settings = self.compile_settings
-        current_params = settings.parameter_values
         (
             index_map,
             all_symbols,
             funcs,
             parsed,
             fn_hash,
-        ) = parsed_system.specialise(
-            constant_values,
+        ) = self._parsed_system.specialise(
+            binding,
             state_values=settings.initial_state_values,
         )
-        # Runtime parameter values survive re-specialisation.
-        index_map.parameters.update_values(current_params)
+        index_map.parameters.update_values(
+            {
+                name: value
+                for name, value in settings.parameter_values.items()
+                if name in binding.swept
+            }
+        )
 
-        self._parsed_system = parsed_system
         self.equations = parsed
         self.indices = index_map
         self.all_symbols = all_symbols
@@ -682,22 +674,10 @@ class SymbolicODE(BaseODE):
         self.fn_hash = fn_hash
         self.driver_defaults = index_map.drivers.default_values
 
-        updates: dict[str, Any] = {
-            "constants": SystemValues(
-                index_map.constant_values,
-                precision,
-                name="Constants",
-            )
-        }
+        updates: dict[str, Any] = {"binding": binding}
         if index_map.state_names != settings.initial_states.names:
             updates["initial_states"] = SystemValues(
                 index_map.state_values, precision, name="States"
-            )
-        if index_map.parameter_names != settings.parameters.names:
-            updates["parameters"] = SystemValues(
-                index_map.parameter_values,
-                precision,
-                name="Parameters",
             )
         if index_map.observable_names != settings.observables.names:
             updates["observables"] = SystemValues(
@@ -710,152 +690,6 @@ class SymbolicODE(BaseODE):
             mass = asarray(mass, dtype=precision)
         updates["mass"] = mass
         self.update_compile_settings(updates, silent=True)
-
-    def set_constants(
-        self,
-        updates_dict: Optional[dict[str, float]] = None,
-        silent: bool = False,
-        **kwargs: float,
-    ) -> Set[str]:
-        """Update constant values, re-specialising the system.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping from constant names to replacement values.
-        silent
-            When ``True`` suppress warnings for unknown labels.
-        **kwargs
-            Additional constant overrides supplied as keyword arguments.
-
-        Returns
-        -------
-        set[str]
-            Labels that were recognised and updated.
-
-        Notes
-        -----
-        A value change re-runs constant specialisation, so system
-        structure follows the new values.
-        """
-        updates = dict(updates_dict or {})
-        updates.update(kwargs)
-        if not updates:
-            return set()
-
-        # An update that rounds to the stored value is not a change.
-        precision = self.precision
-        current = self.compile_settings.constant_values
-        recognised = set(updates) & set(current)
-        unrecognised = set(updates) - recognised
-        changed = {
-            label
-            for label in recognised
-            if float(precision(updates[label])) != current[label]
-        }
-        if changed:
-            new_values = dict(current)
-            new_values.update(
-                {label: float(updates[label]) for label in recognised}
-            )
-            self._specialise(new_values, self._parsed_system)
-
-        if not silent and unrecognised:
-            raise KeyError(
-                f"Unrecognized parameters in update: {unrecognised}. "
-                "These parameters were not updated.",
-            )
-        return recognised
-
-    def make_parameter(self, name: str) -> None:
-        """Convert a constant to a swept parameter.
-
-        The symbol returns to the equations in place of the folded
-        literal; the current value becomes the parameter's default.
-
-        Parameters
-        ----------
-        name
-            Name of the constant to convert.
-
-        Raises
-        ------
-        KeyError
-            If the name is not found in constants.
-        """
-        current = dict(self.compile_settings.constant_values)
-        if name not in current:
-            raise KeyError(
-                f"{name} is not a constant of this system."
-            )
-        value = current.pop(name)
-        self._specialise(
-            current,
-            self._parsed_system.constant_to_parameter(name, value),
-        )
-
-    def make_constant(self, name: str) -> None:
-        """Convert a parameter to a compile-time constant.
-
-        The parameter's value folds into the source as a literal.
-
-        Parameters
-        ----------
-        name
-            Name of the parameter to convert.
-
-        Raises
-        ------
-        KeyError
-            If the name is not found in parameters.
-        """
-        parameter_values = self.compile_settings.parameter_values
-        if name not in parameter_values:
-            raise KeyError(
-                f"{name} is not a parameter of this system."
-            )
-        value = parameter_values[name]
-        current = dict(self.compile_settings.constant_values)
-        current[name] = value
-        self._specialise(
-            current,
-            self._parsed_system.parameter_to_constant(name, value),
-        )
-
-    def set_constant_value(self, name: str, value: float) -> None:
-        """Set the value of a constant.
-
-        Parameters
-        ----------
-        name
-            Name of the constant.
-        value
-            New value for the constant.
-
-        Raises
-        ------
-        KeyError
-            If the name is not found in constants.
-        """
-        self.set_constants({name: value})
-
-    def set_parameter_value(self, name: str, value: float) -> None:
-        """Set the default value of a parameter.
-
-        Parameters
-        ----------
-        name
-            Name of the parameter.
-        value
-            New default value for the parameter.
-
-        Raises
-        ------
-        KeyError
-            If the name is not found in parameters.
-        """
-        self.parameters[name] = value
-        self.indices.parameters.update_values({name: value})
 
     def set_initial_value(self, name: str, value: float) -> None:
         """Set the initial value of a state variable.
@@ -875,23 +709,6 @@ class SymbolicODE(BaseODE):
         self.initial_values[name] = value
         self.indices.states.update_values({name: value})
 
-    def get_constants_info(self) -> list[dict]:
-        """Return information about all constants.
-
-        Returns
-        -------
-        list of dict
-            Each dict contains 'name', 'value', and 'unit' keys.
-        """
-        result = []
-        for name in self.indices.constant_names:
-            result.append({
-                'name': name,
-                'value': self.constants.values_dict.get(name, 0.0),
-                'unit': self.constant_units.get(name, 'dimensionless'),
-            })
-        return result
-
     def get_parameters_info(self) -> list[dict]:
         """Return information about all parameters.
 
@@ -900,14 +717,15 @@ class SymbolicODE(BaseODE):
         list of dict
             Each dict contains 'name', 'value', and 'unit' keys.
         """
-        result = []
-        for name in self.indices.parameter_names:
-            result.append({
+        units = self.parameter_units
+        return [
+            {
                 'name': name,
-                'value': self.parameters.values_dict.get(name, 0.0),
-                'unit': self.parameter_units.get(name, 'dimensionless'),
-            })
-        return result
+                'value': value,
+                'unit': units.get(name, 'dimensionless'),
+            }
+            for name, value in self.parameters.values_dict.items()
+        ]
 
     def get_states_info(self) -> list[dict]:
         """Return information about all state variables.
@@ -926,13 +744,11 @@ class SymbolicODE(BaseODE):
             })
         return result
 
-    def constants_gui(self, blocking: bool = True) -> None:
+    def parameters_gui(self, blocking: bool = True) -> None:
         # no cover: start
-        """Launch a Qt GUI for editing constants and parameters.
+        """Launch a Qt GUI for editing parameter values.
 
-        The GUI displays all constants and parameters with their values and
-        units. Users can convert between constants and parameters using a
-        checkbox, and edit values directly.
+        The GUI displays every parameter with its value and unit.
 
         Parameters
         ----------
@@ -947,10 +763,10 @@ class SymbolicODE(BaseODE):
         Example
         -------
         >>> ode = load_cellml_model("model.cellml")
-        >>> ode.constants_gui()  # Opens editor dialog
+        >>> ode.parameters_gui()  # Opens editor dialog
         """
-        from cubie.gui.constants_editor import show_constants_editor
-        show_constants_editor(self, blocking=blocking)
+        from cubie.gui.parameters_editor import show_parameters_editor
+        show_parameters_editor(self, blocking=blocking)
         # no cover: end
 
     def states_gui(self, blocking: bool = True) -> None:
@@ -1052,7 +868,6 @@ class SymbolicODE(BaseODE):
 
         config = self.compile_settings
         precision = config.precision
-        constants = self.constants.values_dict
         available_args = {
             "precision": self.numba_precision,
             "order": request.preconditioner_order,
@@ -1061,22 +876,15 @@ class SymbolicODE(BaseODE):
             "unroll_other_small": request.unroll_other_small,
         }
         canonical_by_name = {
-            "constants": tuple(
-                (label, float(value))
-                for label, value in sorted(constants.items())
-            ),
             "precision": np_dtype(precision).name,
             "order": int(request.preconditioner_order),
             "lineinfo": bool(config.lineinfo),
             "unroll_solver_element": request.unroll_solver_element,
             "unroll_other_small": request.unroll_other_small,
         }
-        # Constant values always key the member: they fold into the
-        # generated source as numeric literals.
-        hash_arg_names = ("constants",) + tuple(role.factory_args)
         canonical_args = tuple(
             (name, canonical_by_name[name])
-            for name in hash_arg_names
+            for name in role.factory_args
         )
         member_hash = helper_member_hash(source_hash, canonical_args)
 

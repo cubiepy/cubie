@@ -6,9 +6,17 @@ Published Classes
     Frozen counts for each component category in an ODE system.
 
     >>> sizes = SystemSizes(states=4, observables=2, parameters=3,
-    ...                     constants=5, drivers=1)
+    ...                     drivers=1)
     >>> sizes.states
     4
+
+:class:`ParameterBinding`
+    The parameters a batch reads per run and the fixed values of the
+    rest.
+
+    >>> binding = ParameterBinding(swept=["k"], fixed={"g": 9.81})
+    >>> binding.swept
+    ('k',)
 
 :class:`ODEData`
     Bundle of :class:`SystemValues` instances and derived sizes for CUDA
@@ -18,8 +26,7 @@ Published Classes
     >>> data = ODEData.from_BaseODE_initargs(
     ...     precision=float32,
     ...     default_initial_values={"x": 0.0, "y": 1.0},
-    ...     default_parameters={"a": 0.5},
-    ...     default_constants={"g": 9.81},
+    ...     default_parameters={"a": 0.5, "g": 9.81},
     ...     default_observable_names={"v": 0.0},
     ... )
     >>> data.num_states
@@ -35,7 +42,7 @@ See Also
     Abstract ODE factory that owns an ``ODEData`` as compile settings.
 """
 
-from typing import Optional, Dict, Any, Set, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Set, Tuple
 
 from attrs import (
     Factory,
@@ -93,15 +100,80 @@ def _runtime_values_converter(value: Any) -> Any:
     return value.freeze(values_writable=True)
 
 
-def _constants_converter(value: Any) -> Any:
-    """Fully seal the constants container held by this snapshot.
+def _parameters_converter(value: Any) -> Any:
+    """Fully seal the parameter container held by this snapshot.
 
-    Constant values are compile-critical, so structure and values
-    both seal; updates flow through ``BaseODE.set_constants``.
+    Parameter values change through ``BaseODE.update``, which keeps
+    the binding's fixed values in step.
     """
     if value is None:
         return None
     return value.freeze(values_writable=False)
+
+
+def _sorted_names(names: Iterable[str]) -> Tuple[str, ...]:
+    """Return ``names`` as a sorted tuple of strings."""
+    return tuple(sorted(str(name) for name in names))
+
+
+def _sorted_items(values: Any) -> Tuple[Tuple[str, float], ...]:
+    """Return a mapping or pairs as sorted ``(name, float)`` pairs."""
+    items = values.items() if isinstance(values, Mapping) else values
+    return tuple(
+        sorted((str(name), float(value)) for name, value in items)
+    )
+
+
+@frozen
+class ParameterBinding:
+    """Split of a system's parameters for one batch.
+
+    Parameters
+    ----------
+    swept
+        Names read per run from the parameter table, in row order.
+    fixed
+        Names and values compiled into the generated source.
+    """
+
+    swept: Tuple[str, ...] = field(default=(), converter=_sorted_names)
+    fixed: Tuple[Tuple[str, float], ...] = field(
+        default=(), converter=_sorted_items
+    )
+
+    def __attrs_post_init__(self):
+        overlap = set(self.swept) & set(self.fixed_values)
+        if overlap:
+            raise ValueError(
+                f"Parameters {sorted(overlap)} are both swept and fixed."
+            )
+
+    @property
+    def fixed_values(self) -> Dict[str, float]:
+        """Fixed parameter values keyed by name."""
+        return dict(self.fixed)
+
+    @property
+    def names(self) -> Tuple[str, ...]:
+        """Every bound parameter name, sorted."""
+        return _sorted_names(set(self.swept) | set(self.fixed_values))
+
+    def with_fixed_values(
+        self, values: Mapping[str, float]
+    ) -> "ParameterBinding":
+        """Return this binding with new values for its fixed names.
+
+        Names that are swept or unbound are ignored.
+        """
+        fixed = self.fixed_values
+        fixed.update(
+            {
+                name: value
+                for name, value in values.items()
+                if name in fixed
+            }
+        )
+        return ParameterBinding(swept=self.swept, fixed=fixed)
 
 
 @define
@@ -115,9 +187,7 @@ class SystemSizes:
     observables
         Number of observable variables in the system.
     parameters
-        Number of parameters in the system.
-    constants
-        Number of constants in the system.
+        Number of parameters read per run from the parameter table.
     drivers
         Number of driver variables in the system.
 
@@ -130,7 +200,6 @@ class SystemSizes:
     states: int = field(validator=attrsval_instance_of(int))
     observables: int = field(validator=attrsval_instance_of(int))
     parameters: int = field(validator=attrsval_instance_of(int))
-    constants: int = field(validator=attrsval_instance_of(int))
     drivers: int = field(validator=attrsval_instance_of(int))
 
 
@@ -140,10 +209,8 @@ class ODEData(CUDAFactoryConfig):
 
     Parameters
     ----------
-    constants
-        System constants that do not change during simulation.
     parameters
-        Tunable system parameters that may vary between simulations.
+        Every parameter of the system with its default value.
     initial_states
         Initial state values for the ODE system.
     observables
@@ -153,6 +220,9 @@ class ODEData(CUDAFactoryConfig):
         :class:`numpy.float32`.
     num_drivers
         Number of driver or forcing functions. Defaults to ``1``.
+    binding
+        Parameters read per run, and the values compiled in for the
+        rest.
 
     Notes
     -----
@@ -166,16 +236,8 @@ class ODEData(CUDAFactoryConfig):
     order.
     """
 
-    constants: Optional[SystemValues] = field(
-        converter=_constants_converter,
-        validator=attrsval_optional(
-            attrsval_instance_of(
-                SystemValues,
-            ),
-        ),
-    )
     parameters: Optional[SystemValues] = field(
-        converter=_runtime_values_converter,
+        converter=_parameters_converter,
         validator=attrsval_optional(
             attrsval_instance_of(
                 SystemValues,
@@ -199,6 +261,10 @@ class ODEData(CUDAFactoryConfig):
         ),
     )
     num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
+    binding: ParameterBinding = field(
+        factory=ParameterBinding,
+        validator=attrsval_instance_of(ParameterBinding),
+    )
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
         validator=attrsval_in(OPERATION_ORDERINGS),
@@ -229,7 +295,6 @@ class ODEData(CUDAFactoryConfig):
             precision = replacement.precision
             reprecisioned = {}
             for name in (
-                "constants",
                 "parameters",
                 "initial_states",
                 "observables",
@@ -256,9 +321,9 @@ class ODEData(CUDAFactoryConfig):
         return self.parameters.n
 
     @property
-    def num_constants(self) -> int:
-        """Number of constants."""
-        return self.constants.n
+    def num_swept_parameters(self) -> int:
+        """Number of parameters read per run."""
+        return len(self.binding.swept)
 
     @property
     def sizes(self) -> SystemSizes:
@@ -266,8 +331,7 @@ class ODEData(CUDAFactoryConfig):
         return SystemSizes(
             states=self.num_states,
             observables=self.num_observables,
-            parameters=self.num_parameters,
-            constants=self.num_constants,
+            parameters=self.num_swept_parameters,
             drivers=self.num_drivers,
         )
 
@@ -275,11 +339,6 @@ class ODEData(CUDAFactoryConfig):
     def mass(self) -> Any:
         """Return the cached solver mass matrix."""
         return self._mass
-
-    @property
-    def constant_values(self) -> Dict[str, float]:
-        """Constant values as plain floats keyed by name."""
-        return self.constants.as_float_dict
 
     @property
     def parameter_values(self) -> Dict[str, float]:
@@ -297,14 +356,13 @@ class ODEData(CUDAFactoryConfig):
         precision: PrecisionDType,
         initial_values: Optional[Dict[str, float]] = None,
         parameters: Optional[Dict[str, float]] = None,
-        constants: Optional[Dict[str, float]] = None,
         observables: Optional[Dict[str, float]] = None,
         default_initial_values: Optional[Dict[str, float]] = None,
         default_parameters: Optional[Dict[str, float]] = None,
-        default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
+        binding: Optional[ParameterBinding] = None,
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
 
@@ -314,16 +372,12 @@ class ODEData(CUDAFactoryConfig):
             Initial values for state variables.
         parameters
             Parameter values for the system.
-        constants
-            Constants that are not expected to change during simulation.
         observables
             Auxiliary variables to track during simulation.
         default_initial_values
             Default initial values if ``initial_values`` omits entries.
         default_parameters
             Default parameter values if ``parameters`` omits entries.
-        default_constants
-            Default constant values if ``constants`` omits entries.
         default_observable_names
             Default observable names if ``observables`` omits entries.
         precision
@@ -334,6 +388,9 @@ class ODEData(CUDAFactoryConfig):
             Generated-operation ordering policy: stable ``"kahn"``,
             fixed ``"greedy"`` or ``"dfs"``, or thresholded
             ``"liveness_auto"`` selection.
+        binding
+            Parameter binding; ``None`` fixes every parameter at its
+            value.
 
         Returns
         -------
@@ -355,19 +412,15 @@ class ODEData(CUDAFactoryConfig):
             default_observable_names,
             name="Observables",
         )
-        constants = SystemValues(
-            constants,
-            precision,
-            default_constants,
-            name="Constants",
-        )
+        if binding is None:
+            binding = ParameterBinding(fixed=parameters.as_float_dict)
 
         return cls(
-            constants=constants,
             parameters=parameters,
             initial_states=init_values,
             observables=observables,
             precision=precision,
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
+            binding=binding,
         )

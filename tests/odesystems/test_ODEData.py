@@ -9,6 +9,7 @@ import sympy as sp
 from cubie.odesystems.ODEData import (
     ODEData,
     OPERATION_ORDERINGS,
+    ParameterBinding,
     SystemSizes,
 )
 
@@ -18,12 +19,11 @@ from cubie.odesystems.ODEData import (
 def test_system_sizes_construction():
     """All fields stored correctly on frozen attrs class."""
     sizes = SystemSizes(
-        states=3, observables=2, parameters=4, constants=5, drivers=1,
+        states=3, observables=2, parameters=4, drivers=1,
     )
     assert sizes.states == 3
     assert sizes.observables == 2
     assert sizes.parameters == 4
-    assert sizes.constants == 5
     assert sizes.drivers == 1
 
 
@@ -33,10 +33,9 @@ def test_system_sizes_construction():
         ("states", 1.5),
         ("observables", "x"),
         ("parameters", None),
-        ("constants", [1]),
         ("drivers", 2.0),
     ],
-    ids=["states", "observables", "parameters", "constants", "drivers"],
+    ids=["states", "observables", "parameters", "drivers"],
 )
 def test_system_sizes_validates_int(field, bad_value):
     """Each field rejects non-int values."""
@@ -44,7 +43,6 @@ def test_system_sizes_validates_int(field, bad_value):
         states=1,
         observables=1,
         parameters=1,
-        constants=1,
         drivers=1,
     )
     kwargs[field] = bad_value
@@ -63,8 +61,7 @@ def _make_odedata(
     return ODEData.from_BaseODE_initargs(
         precision=precision,
         default_initial_values={"x": 0.0, "y": 1.0},
-        default_parameters={"a": 0.5, "b": 0.3},
-        default_constants={"g": 9.81},
+        default_parameters={"a": 0.5, "b": 0.3, "g": 9.81},
         default_observable_names={"v": 0.0, "w": 0.0},
         num_drivers=num_drivers,
         operation_ordering=operation_ordering,
@@ -75,8 +72,7 @@ def test_odedata_construction():
     """ODEData stores SystemValues for each component."""
     data = _make_odedata()
     assert data.initial_states.n == 2
-    assert data.parameters.n == 2
-    assert data.constants.n == 1
+    assert data.parameters.n == 3
     assert data.observables.n == 2
 
 
@@ -123,7 +119,6 @@ def test_update_precision_propagates_to_all_containers():
     )
     assert "precision" in changed
     assert replacement.parameters.precision == np.float64
-    assert replacement.constants.precision == np.float64
     assert replacement.initial_states.precision == np.float64
     assert replacement.observables.precision == np.float64
     assert replacement.parameters.values_array.dtype == np.float64
@@ -147,8 +142,8 @@ def test_update_precision_noop_without_key():
     [
         ("num_states", 2),
         ("num_observables", 2),
-        ("num_parameters", 2),
-        ("num_constants", 1),
+        ("num_parameters", 3),
+        ("num_swept_parameters", 0),
     ],
 )
 def test_odedata_count_properties(prop, expected):
@@ -163,8 +158,7 @@ def test_odedata_sizes_returns_system_sizes():
     sizes = data.sizes
     assert sizes.states == 2
     assert sizes.observables == 2
-    assert sizes.parameters == 2
-    assert sizes.constants == 1
+    assert sizes.parameters == 0
     assert sizes.drivers == 3
 
 
@@ -214,14 +208,12 @@ def test_from_base_ode_initargs_handles_none_optional():
         precision=np.float32,
         default_initial_values={"x": 1.0},
         default_parameters=None,
-        default_constants=None,
         default_observable_names=None,
         num_drivers=0,
     )
     assert data.num_states == 1
     assert data.num_drivers == 0
     assert data.parameters.n == 0
-    assert data.constants.n == 0
     assert data.observables.n == 0
 
 
@@ -237,3 +229,59 @@ def test_from_base_ode_initargs_overrides_defaults():
     assert data.num_states == 2
     val = data.initial_states.values_dict["x"]
     assert float(val) == pytest.approx(5.0)
+
+
+# ── ParameterBinding ──────────────────────────────────────────── #
+
+def test_default_binding_fixes_every_parameter():
+    """Without a binding every parameter is fixed at its value."""
+    data = _make_odedata()
+    assert data.binding.swept == ()
+    assert data.binding.fixed_values == pytest.approx(
+        {"a": 0.5, "b": 0.3, "g": 9.81}
+    )
+
+
+def test_binding_sorts_names_and_values():
+    """Swept names and fixed pairs are held in sorted name order."""
+    binding = ParameterBinding(swept=["k", "c"], fixed={"z": 1, "a": 2})
+    assert binding.swept == ("c", "k")
+    assert binding.fixed == (("a", 2.0), ("z", 1.0))
+    assert binding.names == ("a", "c", "k", "z")
+
+
+def test_binding_rejects_swept_and_fixed_name():
+    """A name cannot be both swept and fixed."""
+    with pytest.raises(ValueError, match="both swept and fixed"):
+        ParameterBinding(swept=["a"], fixed={"a": 1.0})
+
+
+def test_with_fixed_values_updates_fixed_names_only():
+    """New values reach fixed names; swept names stay swept."""
+    binding = ParameterBinding(swept=["k"], fixed={"c": 1.0})
+    updated = binding.with_fixed_values({"c": 2.0, "k": 5.0})
+    assert updated.swept == ("k",)
+    assert updated.fixed_values == {"c": 2.0}
+
+
+def test_swept_count_sizes_the_parameter_table():
+    """sizes.parameters counts the swept parameters."""
+    data = _make_odedata()
+    data, _, changed = data.update(
+        {"binding": ParameterBinding(swept=["a", "b"], fixed={"g": 9.81})}
+    )
+    assert changed == {"binding"}
+    assert data.sizes.parameters == 2
+
+
+def test_binding_participates_in_identity():
+    """A different binding changes the snapshot's values_hash."""
+    data = _make_odedata()
+    swept, _, _ = data.update(
+        {"binding": ParameterBinding(swept=["a"], fixed={"b": 0.3, "g": 9.81})}
+    )
+    refixed, _, _ = data.update(
+        {"binding": ParameterBinding(fixed={"a": 0.5, "b": 0.4, "g": 9.81})}
+    )
+    assert swept.values_hash != data.values_hash
+    assert refixed.values_hash != data.values_hash

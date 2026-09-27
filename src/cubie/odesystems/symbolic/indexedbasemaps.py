@@ -11,10 +11,10 @@ Published Classes
 
 :class:`IndexedBases`
     Bundle of :class:`IndexedBaseMap` instances describing a full ODE
-    system (states, parameters, constants, observables, drivers, dxdt).
+    system (states, swept parameters, observables, drivers, dxdt).
 
     >>> ib = IndexedBases.from_user_inputs(
-    ...     states=["x"], parameters=["k"], constants=["g"],
+    ...     states=["x"], parameters=["k"],
     ...     observables=["v"], drivers=["u"],
     ... )
     >>> ib.state_names
@@ -284,7 +284,6 @@ class IndexedBases:
         self,
         states: IndexedBaseMap,
         parameters: IndexedBaseMap,
-        constants: IndexedBaseMap,
         observables: IndexedBaseMap,
         drivers: IndexedBaseMap,
         dxdt: IndexedBaseMap,
@@ -296,9 +295,7 @@ class IndexedBases:
         states
             Indexed base describing the system state vector.
         parameters
-            Indexed base describing tunable model parameters.
-        constants
-            Indexed base describing compile-time constants.
+            Indexed base describing the parameters read per run.
         observables
             Indexed base describing recorded observables.
         drivers
@@ -308,7 +305,6 @@ class IndexedBases:
         """
         self.states = states
         self.parameters = parameters
-        self.constants = constants
         self.observables = observables
         self.drivers = drivers
         self.dxdt = dxdt
@@ -325,13 +321,11 @@ class IndexedBases:
         cls,
         states: Union[dict[str, float], Iterable[str]],
         parameters: Union[dict, Iterable[str]],
-        constants: Union[dict, Iterable[str]],
         observables: Iterable[str],
         drivers: Iterable[str],
         real: bool = True,
         state_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
         parameter_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-        constant_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
         observable_units: Optional[
             Union[Dict[str, str], Iterable[str]]
         ] = None,
@@ -347,9 +341,6 @@ class IndexedBases:
         parameters
             Either a mapping of parameter names to default values or an
             iterable of parameter names.
-        constants
-            Either a mapping of constant names to default values or an
-            iterable of constant names.
         observables
             Iterable of observable names.
         drivers
@@ -360,8 +351,6 @@ class IndexedBases:
             Optional units for states. Defaults to "dimensionless".
         parameter_units
             Optional units for parameters. Defaults to "dimensionless".
-        constant_units
-            Optional units for constants. Defaults to "dimensionless".
         observable_units
             Optional units for observables. Defaults to "dimensionless".
         driver_units
@@ -372,8 +361,7 @@ class IndexedBases:
         IndexedBases
             Combined bundle of indexed bases for the symbolic ODE system.
         """
-        for group in (states, parameters, constants, observables,
-                      drivers):
+        for group in (states, parameters, observables, drivers):
             for name in group:
                 if str(name).startswith(RESERVED_CODEGEN_PREFIX):
                     raise ValueError(
@@ -396,13 +384,6 @@ class IndexedBases:
             param_names = list(parameters)
             param_defaults = None
 
-        if isinstance(constants, dict):
-            const_names = list(constants.keys())
-            const_defaults = [constants[name] for name in const_names]
-        else:
-            const_names = list(constants)
-            const_defaults = None
-
         states_ = IndexedBaseMap(
             "state", state_names, input_defaults=state_defaults, real=real,
             units=state_units
@@ -414,10 +395,6 @@ class IndexedBases:
             real=real,
             units=parameter_units
         )
-        constants_ = IndexedBaseMap(
-            "constants", const_names, input_defaults=const_defaults, real=real,
-            units=constant_units
-        )
         observables_ = IndexedBaseMap("observables", observables, real=real,
                                       units=observable_units)
         drivers_ = IndexedBaseMap("drivers", drivers, real=real,
@@ -425,27 +402,7 @@ class IndexedBases:
         dxdt_ = IndexedBaseMap(
             "out", [f"d{s}" for s in state_names], real=real
         )
-        return cls(
-            states_, parameters_, constants_, observables_, drivers_, dxdt_
-        )
-
-    def update_constants(
-        self, updates_dict: Optional[Dict[str, float]] = None, **kwargs: float
-    ) -> None:
-        """Update the constant defaults while preserving other entries.
-
-        Parameters
-        ----------
-        updates_dict
-            Mapping of constant names to replacement values.
-        **kwargs
-            Additional constant updates provided as keyword arguments.
-
-        Notes
-        -----
-        Silently ignores keys that are not found in the constants symbol table.
-        """
-        self.constants.update_values(updates_dict, **kwargs)
+        return cls(states_, parameters_, observables_, drivers_, dxdt_)
 
     @property
     def state_names(self) -> list[str]:
@@ -471,16 +428,6 @@ class IndexedBases:
     def parameter_values(self) -> Dict[sp.Symbol, float]:
         """Mapping of parameter symbols to default values."""
         return self.parameters.default_values
-
-    @property
-    def constant_names(self) -> list[str]:
-        """List of constant symbol names."""
-        return list(self.constants.symbol_map.keys())
-
-    @property
-    def constant_values(self) -> Dict[sp.Symbol, float]:
-        """Mapping of constant symbols to default values."""
-        return self.constants.default_values
 
     @property
     def observable_names(self) -> list[str]:
@@ -519,7 +466,6 @@ class IndexedBases:
         return {
             **self.states.symbol_map,
             **self.parameters.symbol_map,
-            **self.constants.symbol_map,
             **self.observables.symbol_map,
             **self.drivers.symbol_map,
             **self.dxdt.symbol_map,

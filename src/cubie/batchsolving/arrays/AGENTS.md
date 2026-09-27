@@ -102,7 +102,9 @@ close leaves resources attached for a retry. Finalizers do not capture the manag
 
 ## Sizes
 `_sizes` is a `BatchInputSizes`/`BatchOutputSizes`; `update_sizes` raises `TypeError` for
-another subtype, and `.nonzero` is applied in `update_from_solver`.
+another subtype, and `.nonzero` is applied in `update_from_solver`. The input tables keep
+their run count when they have no rows (`BatchInputSizes.nonzero`,
+`InputArrays._request_shape`), so every run reads its own column.
 `BatchInputSizes.driver_coefficients` comes from `kernel.coefficients_shape`, so every
 dimension is concrete.
 

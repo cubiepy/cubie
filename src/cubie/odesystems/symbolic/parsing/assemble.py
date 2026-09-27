@@ -117,7 +117,6 @@ def _finalise_symbols_and_products(
     )
     fn_hash = hash_system_definition(
         parsed_equations,
-        index_map.constants.default_values,
         state_labels=index_map.state_names,
         dxdt_labels=index_map.dxdt_names,
         parameter_labels=index_map.parameter_names,
@@ -135,7 +134,6 @@ def assemble_simplified(
     states: Dict[str, float],
     observables: List[str],
     parameters: Dict[str, float],
-    constants: Dict[str, float],
     driver_names: List[str],
     driver_dict: Optional[Dict[str, Any]],
     known_symbol_map: Dict[str, sp.Symbol],
@@ -145,25 +143,18 @@ def assemble_simplified(
     irreducible: Optional[Iterable[str]] = None,
     state_units=None,
     parameter_units=None,
-    constant_units=None,
     observable_units=None,
     driver_units=None,
     simplify_options: Optional[Dict[str, Any]] = None,
 ):
     """Structurally simplify a normalised system and package it.
 
-    Returns ``(index_map, all_symbols, funcs, parsed_equations,
-    fn_hash)``; the derived mass matrix rides on
-    ``parsed_equations.mass_matrix``. Solver states are held in sorted
-    name order.
+    ``parameters`` holds the swept parameters; fixed ones are already
+    literals in ``normalised``. Returns ``(index_map, all_symbols,
+    funcs, parsed_equations, fn_hash)``; the derived mass matrix rides
+    on ``parsed_equations.mass_matrix``. Solver states are held in
+    sorted name order.
     """
-
-    parameters = dict(parameters)
-    for name in normalised.new_params:
-        parameters.setdefault(name, 0.0)
-        known_symbol_map.setdefault(
-            name, sp.Symbol(name, real=True)
-        )
 
     unknown_syms = [
         ir.sym(name) for name in sorted(normalised.unknown_names)
@@ -272,12 +263,10 @@ def assemble_simplified(
     index_map = IndexedBases.from_user_inputs(
         final_state_values,
         parameters,
-        constants,
         final_observables,
         driver_names,
         state_units=state_units,
         parameter_units=parameter_units,
-        constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
     )

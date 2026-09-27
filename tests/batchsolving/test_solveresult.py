@@ -88,6 +88,7 @@ def solver_with_arrays(
     """Solver with actual arrays computed - ready for SolveResult instantiation
     """
     inits, params = batch_input_arrays
+    solver.compile(parameters=params)
     solver.kernel.run(
         duration=solver_settings["duration"],
         params=params,

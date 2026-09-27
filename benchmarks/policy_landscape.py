@@ -83,8 +83,7 @@ def build_lorenz():
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"rho": 21.0, "sigma": 10.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=PRECISION,
     )
@@ -128,10 +127,9 @@ def build_fabbri():
     system = cubie.load_cellml_model(
         str(FABBRI_CELLML),
         precision=PRECISION,
-        parameters=list(FABBRI_PARAMETERS),
         voltage_variable="Membrane$V_ode",
     )
-    system.set_constants({"Rate_modulation_experiments_ANS": 1.0})
+    system.update({"Rate_modulation_experiments_ANS": 1.0})
     return system
 
 
@@ -139,14 +137,14 @@ def build_chain(n, consts_per_eq, n_params=2):
     """Nonlinear nearest-neighbour ring chain of the placement bank."""
     rng = np.random.default_rng(1234)
     eqs = []
-    constants = {}
+    parameters = {f"p{j}": 1.0 for j in range(n_params)}
     for i in range(n):
         im1 = (i - 1) % n
         ip1 = (i + 1) % n
         terms = [f"0.2*x{im1} + 0.3*x{ip1}"]
         for c in range(consts_per_eq):
             cname = f"k{i}_{c}"
-            constants[cname] = float(rng.uniform(0.5, 5.0))
+            parameters[cname] = float(rng.uniform(0.5, 5.0))
             if c == 0:
                 terms.append(f"-{cname}*x{i}")
             else:
@@ -157,8 +155,7 @@ def build_chain(n, consts_per_eq, n_params=2):
     return cubie.create_ODE_system(
         dxdt=eqs,
         states={f"x{i}": 0.5 for i in range(n)},
-        parameters={f"p{j}": 1.0 for j in range(n_params)},
-        constants=constants,
+        parameters=parameters,
         precision=PRECISION,
         name=f"chain_{n}s_{consts_per_eq}c",
     )

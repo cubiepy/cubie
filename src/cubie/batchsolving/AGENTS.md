@@ -17,12 +17,12 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 ## Key Files
 | File | Description |
 |------|-------------|
-| `solver.py` | `Solver` + `solve_ivp()` — the public API. `solve_ivp` also accepts raw equations (callable / string / iterable of strings), building the system via `_system_from_equations` (state names from a `y0` dict, parameter defaults from a `parameters` dict; array `parameters` rejected). `Solver` owns `system_interface`, `input_handler` (`BatchInputHandler`), and `kernel` (`BatchSolverKernel`); `driver_interpolator` is a passthrough to the kernel-owned interpolator, and most getters are thin pass-throughs to `kernel`. `Solver.compile()` applies settings and compiles the kernel. `Solver.given` (a `SolverSettings`) and `Solver.effective` (an `EffectiveSettings`) are the settings the user set and the settings in use; `Solver.is_given(name)`; `Solver.settings_dict()` is the given record with the logger's level (multiprocessing safe with `for_new_process=True`); `Solver.copy()` is `Solver(system.copy(), **settings_dict())` at the current logging level; `optimisation_candidates(force)` keeps the given performance keys fixed. |
-| `solver_settings.py` | `SolverSettings`, one field per setting a Solver accepts (`None` = not given) on `_CubieConfigBase`, and `EffectiveSettings` (adds the names only resolution sets; its `as_kwargs` keeps a `None` interval or memory proportion, the `passes_none` fields). Given arrays are stored as read-only copies and lists as tuples. `clashing_names` lets `BaseODE` reject a constant named like a setting. |
+| `solver.py` | `Solver` + `solve_ivp()` — the public API. `solve_ivp` also accepts raw equations (callable / string / iterable of strings), building the system via `_system_from_equations` (state names from a `y0` dict, parameter defaults from a `parameters` dict; array `parameters` rejected). `Solver` owns `system_interface`, `input_handler` (`BatchInputHandler`), and `kernel` (`BatchSolverKernel`); `driver_interpolator` is a passthrough to the kernel-owned interpolator, and most getters are thin pass-throughs to `kernel`. `Solver.compile(initial_values, parameters, grid_type, find_constant_params)` applies settings, binds the system as a solve with those inputs would, and compiles the kernel; `build_grid` binds the system to the grid it returns. `Solver.binding`/`swept_parameters` expose the system's binding. `Solver.given` (a `SolverSettings`) and `Solver.effective` (an `EffectiveSettings`) are the settings the user set and the settings in use; `Solver.is_given(name)`; `Solver.settings_dict()` is the given record with the logger's level (multiprocessing safe with `for_new_process=True`); `Solver.copy()` is `Solver(system.copy(), **settings_dict())` at the current logging level; `optimisation_candidates(force)` keeps the given performance keys fixed. |
+| `solver_settings.py` | `SolverSettings`, one field per setting a Solver accepts (`None` = not given) on `_CubieConfigBase`, and `EffectiveSettings` (adds the names only resolution sets; its `as_kwargs` keeps a `None` interval or memory proportion, the `passes_none` fields). Given arrays are stored as read-only copies and lists as tuples. `clashing_names` lets `BaseODE` reject a parameter named like a setting. |
 | `resolve_defaults.py` | `resolve(given, system, interface)` returns the `EffectiveSettings` (algorithm, controller and gains, step bounds, family/tableau/DAE step defaults, inner tolerances, output indices via `VariableSelection`, loop intervals and flags). |
 | `BatchSolverKernel.py` | `BatchSolverKernel(CUDAFactory)` — the batch `@cuda.jit` kernel; maps each run to the `SingleIntegratorRun` device loop. Owns the `ArrayInterpolator` as a direct child factory (`driver_interpolator`, filled by the `drivers` setting; `update` refreshes the evaluator settings only when the interpolator's config hash changes; `run()` raises `ValueError` when the system declares drivers and none are given). `build_kernel()` attaches a `CUBIECache` built from the config's `cache` settings and `config_hash` to the dispatcher and keeps it for the flush-on-change path in `_invalidate_cache`. Defines `RunParams` (frozen: duration/warmup/t0/runs + chunk metadata) and `BatchSolverCache`; owns the `InputArrays`/`OutputArrays` managers and memory-manager registration. `compile()` records time parameters and compiles the kernel; `kernel_is_cached()` asks the disk cache instead. The constructor takes one flat dict (`BatchSolverKernel(system, **settings)`): the memory keys, its own config fields and everything the integrator's children take; the driver interpolator takes its keys from the same dict. `update` runs `memory_manager.update`, the interpolator, the integrator, then its own config with the integrator's `loop_fn` and compile flags. |
 | `BatchSolverConfig.py` | `BatchSolverConfig(CUDAFactoryConfig)` — holds `precision`, `loop_fn`, `compile_flags`, `coefficients_shape`, `max_registers`, `kernel_name`, `blocksize` and `auto_performance` (both `eq=False`), and the hash-excluded (`eq=False`) nested `cache: CacheSettings` (`cache_enabled`/`cache_mode`/`max_cache_entries`/`cache_dir`, loose keys in `ALL_CACHE_PARAMETERS`, all part of `ALL_KERNEL_PARAMETERS`); the field's converter accepts the `cache=` shorthand (bool, `"flush_on_change"`, or a directory) and loose keys evolve the nested object like `UnrollFlags`. `ActiveOutputs(_CubieConfigBase)` — booleans for which output arrays are produced, built via `ActiveOutputs.from_compile_flags(...)`. |
-| `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
+| `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays and the `ParameterBinding` they imply (`__call__` returns `(inits, params, binding)`; `binding(params, kind, find_constant_params)` computes the binding alone); assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
 | `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's `SystemValues`; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
 | `comparison.py` | `ComparisonRunner(solver, inits, params, duration, settling_time, t0)`: the candidate-timing runner `calibrate` and `optimize` share. Stages the batch on the device once, switches the solver itself between `Candidate`s through `Solver.update` (plus block size and residency) and times each with device-only solves. `compile(candidates)` returns the accepted candidates (a rejected one keeps its error, no time); `time(candidates)` runs the fixed protocol and returns `CandidateTiming`s; `warm()`, `size_batch(candidates, waves)` and `fit_batch(measured, target_ms, grow, shrink)` are the shared warm-up and batch sizing; `rank_timings` ranks by success tier then time; `close` restores the configuration at `open`. |
 | `calibration.py` | `Solver.calibrate` backend: `run_calibration` races `CandidateSpec`s (`algorithm` plus settings) in stages through a `ComparisonRunner` and returns a `CalibrationResult` (winner, ranking, per-candidate `CandidateResult`). Each stage's winner is the top of `rank_timings`; a configuration timed once is recalled by later stages. Sizes the batch at the given duration. |
@@ -39,7 +39,8 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ## Data flow
 `Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
-effective timing → `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
+effective timing → `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` and
+the binding → `system.bind(binding)`, then `update()` resyncs the kernel if it changed →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
 (which may split the batch into chunks) and launches per chunk. Results return through
@@ -47,7 +48,7 @@ effective timing → `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`par
 
 ## Solver settings
 `__init__` and `update` flatten the settings groups, record `given`, update the system
-(settings and constants by name), resolve, and pass `effective.as_kwargs()` (`None` for
+(settings and parameter values by name), resolve, and pass `effective.as_kwargs()` (`None` for
 every name not in effect) to `kernel.update`. The kernel fills a placement or unroll key
 given `None` from `kernel.performance_defaults()` under `auto_performance`; otherwise it
 falls to its declared default. `duration`, `settling_time` and `t0` are per-solve
@@ -60,6 +61,21 @@ accessors go on `kernel` with a `Solver` property.
 
 A system changed outside the Solver is `kernel.system_config_stale`; the next `update`
 pushes the whole effective record so every child re-reads its products.
+
+## Parameter binding
+The parameter table holds one row per swept parameter, in sorted name order; every
+other parameter is fixed and compiles in. The handler derives the binding per batch:
+- Dict grids: a single value, or a row that holds one value at system precision across
+  the grid, fixes that parameter at the given value; varying rows are swept; names not
+  given are fixed at their defaults. The grid's run count stands with no swept rows.
+- Host arrays: a row per currently swept parameter keeps the binding; any other height
+  is a row per system parameter (padded or trimmed with a warning) and sweeps every
+  row. `find_constant_params=True` fixes rows that hold one value.
+- Device arrays: a row per system parameter sweeps every row; a row per currently
+  swept parameter keeps the binding; any other height raises.
+- `None` fixes every parameter at its default.
+
+A binding change rebuilds the system and kernel; an unchanged binding reuses both.
 
 ## Teardown and memory pressure
 `Solver.close()` waits for its last run stream, drains staging work and deregisters the
@@ -121,8 +137,8 @@ loan, and returns a `DeviceSolveResult`: the kernel's device output buffers plus
 `kernel.stream`. The handles are views the next `solve()` overwrites. Single-chunk
 only; a chunked run raises `ValueError`. `solve_ivp` has no `on_device`.
 
-Device-array `initial_values`/`parameters` must be 2D with the exact variable count and
-dtype (`BatchInputHandler._process_device_inputs` raises otherwise) and attach directly
+Device-array `initial_values`/`parameters` must be 2D with the exact variable count (for
+`parameters`, a row per system or currently swept parameter) and dtype (`BatchInputHandler._process_device_inputs` raises otherwise) and attach directly
 through `InputArrays._attach_device_inputs`, with no host staging. A lone device input's
 host counterpart is paired verbatim. Device inputs are single-chunk only.
 `Solver.device_initial_values`/`device_parameters` return the last run's device inputs

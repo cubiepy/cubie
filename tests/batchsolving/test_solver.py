@@ -389,7 +389,11 @@ def test_compile_between_solves_keeps_the_batch_arrays(
     compiled = kernel.kernel
     batch_bytes = _batch_bytes(kernel)
 
-    solver.compile(drivers=driver_settings)
+    solver.compile(
+        parameters=simple_parameters,
+        grid_type="combinatorial",
+        drivers=driver_settings,
+    )
     kernel.launch_geometry()
     kernel.launchable_shapes()
     assert inputs.device_initial_values is device_inits
@@ -441,7 +445,11 @@ def test_compile_publishes_solve_specialization(
     driver_settings,
 ):
     """Compile publishes the exact specialization a solve reuses."""
-    solver_mutable.compile(drivers=driver_settings)
+    solver_mutable.compile(
+        parameters=simple_parameters,
+        grid_type="combinatorial",
+        drivers=driver_settings,
+    )
     dispatcher = solver_mutable.kernel.kernel
     keys_after_compile = set(dispatcher.overloads)
     assert len(keys_after_compile) == 1
@@ -475,7 +483,9 @@ def test_compile_and_solve_device_input_layouts(
     initial, parameters = solver.build_grid(
         simple_initial_values, simple_parameters
     )
-    solver.compile(drivers=driver_settings)
+    solver.compile(
+        simple_initial_values, simple_parameters, drivers=driver_settings
+    )
     for runs in (4, 8):
         columns = np.arange(runs) % initial.shape[1]
         inits = np.take(initial, columns, axis=1)
@@ -504,7 +514,7 @@ def test_compile_and_solve_device_input_layouts(
             solver.kernel.kernel, solver.kernel.signature
         ).registers_per_thread > 0
         assert solver.kernel.launchable_shapes(runs=runs)
-        solver.compile()
+        solver.compile(parameters=params)
         signature = solver.kernel.signature
         repeated = solver.solve(*device_inputs, duration=0.05)
         np.testing.assert_array_equal(repeated.state, expected_state)
@@ -740,7 +750,7 @@ def test_device_results_match_host(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     host = solver.solve(
@@ -791,7 +801,7 @@ def test_device_results_chunked_raises(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
     with pytest.raises(ValueError, match="single chunk"):
         low_mem_solver.solve(
@@ -821,7 +831,7 @@ def test_device_inputs_match_host_inputs(
         (system.sizes.states, n_runs)
     ).astype(precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     host_result = solver.solve(
@@ -875,7 +885,7 @@ def test_driverless_copy_solves_device_inputs_without_warning(
     """A copy staging device inputs attaches its empty driver table."""
     n_runs = 4
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
-    params = np.ones((system.sizes.parameters, n_runs), dtype=precision)
+    params = np.ones((system.num_parameters, n_runs), dtype=precision)
     twin = solver_mutable.copy()
     try:
         with warnings.catch_warnings():
@@ -910,7 +920,7 @@ def test_device_inputs_device_results_roundtrip(
     n_runs = 3
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     reference = solver.solve(
@@ -955,7 +965,7 @@ def test_device_inputs_chunked_raises(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
     with pytest.raises(ValueError, match="single chunk"):
         low_mem_solver.solve(
@@ -983,7 +993,7 @@ def test_resident_device_inputs_run_without_an_upload(
         0.5, 1.5, system.sizes.states * n_runs
     ).reshape((system.sizes.states, n_runs)).astype(precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     host = solver.solve(
@@ -1055,7 +1065,7 @@ def test_device_inputs_after_a_chunked_run_raise(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
     low_mem_solver.solve(
         inits,
@@ -1704,7 +1714,7 @@ def test_solve_ivp_positional_argument_order(
     The underlying routing is verified in test_batch_input_handler.py.
     """
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
 
     # Use distinctive values to verify routing
     states = np.full((n_states, 2), 1.5, dtype=system.precision)
@@ -2614,6 +2624,8 @@ def test_copy_rebuilds_the_same_kernel_on_its_own_system(
     solver, driver_settings
 ):
     """A copy hashes identically on a copied system."""
+    # Other solves on the shared system can leave it rebound.
+    solver.update()
     twin = solver.copy()
     try:
         assert twin.system is not solver.system
@@ -2852,8 +2864,8 @@ def test_repeat_solve_reuses_the_build_state(
     assert kernel.run_params.num_chunks == partition.num_chunks
     assert kernel.run_params.chunk_length == partition.chunk_length
 
-    name = list(system_restored.constants.names)[0]
-    value = float(system_restored.constants.values_dict[name])
+    name = system_restored.binding.fixed[0][0]
+    value = float(system_restored.parameters.values_dict[name])
     system_restored.update({name: 2.0 * value + 1.0})
     assert kernel.system_config_stale
     solver.solve(
@@ -2871,7 +2883,10 @@ def test_repeat_solve_reuses_the_build_state(
     rebuilt_legend = kernel.time_domain_legend
     assert rebuilt_legend is not legend
     assert rebuilt_legend == legend
-    assert float(kernel.system.constants.values_dict[name]) == (
+    assert float(kernel.system.parameters.values_dict[name]) == (
+        pytest.approx(2.0 * value + 1.0)
+    )
+    assert kernel.system.binding.fixed_values[name] == (
         pytest.approx(2.0 * value + 1.0)
     )
 
