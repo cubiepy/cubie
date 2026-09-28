@@ -2864,7 +2864,7 @@ def test_repeat_solve_reuses_the_build_state(
     assert kernel.run_params.num_chunks == partition.num_chunks
     assert kernel.run_params.chunk_length == partition.chunk_length
 
-    name = system_restored.binding.fixed[0][0]
+    name = sorted(system_restored.fixed_parameter_values)[0]
     value = float(system_restored.parameters.values_dict[name])
     system_restored.update({name: 2.0 * value + 1.0})
     assert kernel.system_config_stale
@@ -2886,7 +2886,7 @@ def test_repeat_solve_reuses_the_build_state(
     assert float(kernel.system.parameters.values_dict[name]) == (
         pytest.approx(2.0 * value + 1.0)
     )
-    assert kernel.system.binding.fixed_values[name] == (
+    assert kernel.system.fixed_parameter_values[name] == (
         pytest.approx(2.0 * value + 1.0)
     )
 

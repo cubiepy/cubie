@@ -10,14 +10,6 @@ Published Classes
     >>> sizes.states
     4
 
-:class:`ParameterBinding`
-    The parameters a batch reads per run and the fixed values of the
-    rest.
-
-    >>> binding = ParameterBinding(swept=["k"], fixed={"g": 9.81})
-    >>> binding.swept
-    ('k',)
-
 :class:`ODEData`
     Bundle of :class:`SystemValues` instances and derived sizes for CUDA
     compilation.
@@ -42,7 +34,7 @@ See Also
     Abstract ODE factory that owns an ``ODEData`` as compile settings.
 """
 
-from typing import Any, Dict, Iterable, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, Optional, Set, Tuple
 
 from attrs import (
     Factory,
@@ -107,77 +99,12 @@ def _parameters_converter(value: Any) -> Any:
     return value.freeze(values_writable=False)
 
 
-def _sorted_names(names: Iterable[str]) -> Tuple[str, ...]:
-    """Return ``names`` as a sorted tuple of strings."""
-    return tuple(sorted(str(name) for name in names))
-
-
 def _ordered_names(names: Iterable[str]) -> Tuple[str, ...]:
     """Return ``names`` as a tuple of strings, rejecting repeats."""
     ordered = tuple(str(name) for name in names)
     if len(set(ordered)) != len(ordered):
         raise ValueError(f"Swept parameters {list(ordered)} repeat a name.")
     return ordered
-
-
-def _sorted_items(values: Any) -> Tuple[Tuple[str, float], ...]:
-    """Return a mapping or pairs as sorted ``(name, float)`` pairs."""
-    items = values.items() if isinstance(values, Mapping) else values
-    return tuple(
-        sorted((str(name), float(value)) for name, value in items)
-    )
-
-
-@frozen
-class ParameterBinding:
-    """Split of a system's parameters for one batch.
-
-    Parameters
-    ----------
-    swept
-        Names read per run from the parameter table, in row order.
-    fixed
-        Names and values compiled into the generated source.
-    """
-
-    swept: Tuple[str, ...] = field(default=(), converter=_ordered_names)
-    fixed: Tuple[Tuple[str, float], ...] = field(
-        default=(), converter=_sorted_items
-    )
-
-    def __attrs_post_init__(self):
-        overlap = set(self.swept) & set(self.fixed_values)
-        if overlap:
-            raise ValueError(
-                f"Parameters {sorted(overlap)} are both swept and fixed."
-            )
-
-    @property
-    def fixed_values(self) -> Dict[str, float]:
-        """Fixed parameter values keyed by name."""
-        return dict(self.fixed)
-
-    @property
-    def names(self) -> Tuple[str, ...]:
-        """Every bound parameter name, sorted."""
-        return _sorted_names(set(self.swept) | set(self.fixed_values))
-
-    def with_fixed_values(
-        self, values: Mapping[str, float]
-    ) -> "ParameterBinding":
-        """Return this binding with new values for its fixed names.
-
-        Names that are swept or unbound are ignored.
-        """
-        fixed = self.fixed_values
-        fixed.update(
-            {
-                name: value
-                for name, value in values.items()
-                if name in fixed
-            }
-        )
-        return ParameterBinding(swept=self.swept, fixed=fixed)
 
 
 @define
@@ -224,9 +151,9 @@ class ODEData(CUDAFactoryConfig):
         :class:`numpy.float32`.
     num_drivers
         Number of driver or forcing functions. Defaults to ``1``.
-    binding
-        Parameters read per run, and the values compiled in for the
-        rest.
+    swept_parameters
+        Parameters read per run from the parameter table, in row
+        order. The rest compile in at their values in ``parameters``.
 
     Notes
     -----
@@ -265,9 +192,8 @@ class ODEData(CUDAFactoryConfig):
         ),
     )
     num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
-    binding: ParameterBinding = field(
-        factory=ParameterBinding,
-        validator=attrsval_instance_of(ParameterBinding),
+    swept_parameters: Tuple[str, ...] = field(
+        default=(), converter=_ordered_names
     )
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
@@ -278,9 +204,33 @@ class ODEData(CUDAFactoryConfig):
         converter=_mass_matrix_converter,
         eq=attrs_cmp_using(eq=mass_equal),
     )
+    # Identity of the compiled-in values, derived from ``parameters``.
+    _fixed_parameters: Tuple[Tuple[str, float], ...] = field(
+        default=(), init=False, repr=False
+    )
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
+        if self.parameters is None:
+            return
+        values = self.parameters.as_float_dict
+        unknown = set(self.swept_parameters) - set(values)
+        if unknown:
+            raise ValueError(
+                f"Swept parameters {sorted(unknown)} are not parameters "
+                "of this system."
+            )
+        object.__setattr__(
+            self,
+            "_fixed_parameters",
+            tuple(
+                sorted(
+                    (name, value)
+                    for name, value in values.items()
+                    if name not in self.swept_parameters
+                )
+            ),
+        )
 
     def update(
         self, updates_dict: dict = None, **kwargs
@@ -327,7 +277,7 @@ class ODEData(CUDAFactoryConfig):
     @property
     def num_swept_parameters(self) -> int:
         """Number of parameters read per run."""
-        return len(self.binding.swept)
+        return len(self.swept_parameters)
 
     @property
     def sizes(self) -> SystemSizes:
@@ -338,6 +288,11 @@ class ODEData(CUDAFactoryConfig):
             parameters=self.num_swept_parameters,
             drivers=self.num_drivers,
         )
+
+    @property
+    def fixed_parameter_values(self) -> Dict[str, float]:
+        """Values of the parameters compiled into generated code."""
+        return dict(self._fixed_parameters)
 
     @property
     def mass(self) -> Any:
@@ -366,7 +321,7 @@ class ODEData(CUDAFactoryConfig):
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
-        binding: Optional[ParameterBinding] = None,
+        swept_parameters: Iterable[str] = (),
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
 
@@ -392,9 +347,8 @@ class ODEData(CUDAFactoryConfig):
             Generated-operation ordering policy: stable ``"kahn"``,
             fixed ``"greedy"`` or ``"dfs"``, or thresholded
             ``"liveness_auto"`` selection.
-        binding
-            Parameter binding; ``None`` fixes every parameter at its
-            value.
+        swept_parameters
+            Parameters read per run, in row order; the rest compile in.
 
         Returns
         -------
@@ -416,8 +370,6 @@ class ODEData(CUDAFactoryConfig):
             default_observable_names,
             name="Observables",
         )
-        if binding is None:
-            binding = ParameterBinding(fixed=parameters.as_float_dict)
 
         return cls(
             parameters=parameters,
@@ -426,5 +378,5 @@ class ODEData(CUDAFactoryConfig):
             precision=precision,
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
-            binding=binding,
+            swept_parameters=swept_parameters,
         )

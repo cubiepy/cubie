@@ -15,7 +15,7 @@ Subpackages
     solver helpers that integrate with :mod:`cubie.integrators`.
 """
 
-from cubie.odesystems.ODEData import ODEData, ParameterBinding, SystemSizes
+from cubie.odesystems.ODEData import ODEData, SystemSizes
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.symbolic import (SymbolicODE, create_ODE_system,
@@ -25,7 +25,6 @@ __all__ = [
     "BaseODE",
     "ODECache",
     "ODEData",
-    "ParameterBinding",
     "SystemSizes",
     "SystemValues",
     "SymbolicODE",

@@ -36,7 +36,16 @@ See Also
 
 from abc import abstractmethod
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Set
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from attrs import define, field
 from numpy import float32
@@ -44,7 +53,7 @@ from numpy import float32
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType
 from cubie._env import operation_ordering_default
-from cubie.odesystems.ODEData import ODEData, ParameterBinding
+from cubie.odesystems.ODEData import ODEData
 from cubie.odesystems._mass_utils import mass_diagonal_flags
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -107,7 +116,7 @@ class BaseODE(CUDAFactory):
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
-        binding: Optional[ParameterBinding] = None,
+        swept_parameters: Iterable[str] = (),
     ) -> None:
         """Initialize the ODE system.
 
@@ -137,9 +146,8 @@ class BaseODE(CUDAFactory):
             (``liveness_auto`` when unset).
         name
             Printable identifier for the system. Defaults to ``None``.
-        binding
-            Parameter binding; ``None`` fixes every parameter at its
-            value.
+        swept_parameters
+            Parameters read per run, in row order; the rest compile in.
         """
         super().__init__()
         clashes = clashing_names(
@@ -160,7 +168,7 @@ class BaseODE(CUDAFactory):
             precision=precision,
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
-            binding=binding,
+            swept_parameters=swept_parameters,
         )
         self.setup_compile_settings(system_data)
         self.name = name
@@ -240,7 +248,7 @@ class BaseODE(CUDAFactory):
         settings = {
             key: value
             for key, value in updates.items()
-            if key not in names and key != "binding"
+            if key not in names and key != "swept_parameters"
         }
         recognised = self.update_compile_settings(settings, silent=True)
         if values:
@@ -250,7 +258,7 @@ class BaseODE(CUDAFactory):
     def set_parameter_values(
         self, values: Mapping[str, float]
     ) -> Set[str]:
-        """Set parameter values; fixed ones recompile at the new value.
+        """Set parameter values; each named parameter is compiled in.
 
         Parameters
         ----------
@@ -267,25 +275,8 @@ class BaseODE(CUDAFactory):
         KeyError
             If a name is not a parameter of the system.
         """
-        current = self.compile_settings.parameter_values
-        unknown = set(values) - set(current)
-        if unknown:
-            raise KeyError(
-                f"{sorted(unknown)} are not parameters of this system."
-            )
-        new_values = {name: float(value) for name, value in values.items()}
-        if any(current[name] != new_values[name] for name in new_values):
-            parameters = self.parameters.copy()
-            parameters.update_from_dict(new_values)
-            self.update_compile_settings(parameters=parameters, silent=True)
-            self.bind(self.binding.with_fixed_values(new_values))
+        self.bind(values=values)
         return set(values)
-
-    def default_binding(self) -> ParameterBinding:
-        """Return the binding that fixes every parameter at its value."""
-        return ParameterBinding(
-            fixed=self.compile_settings.parameter_values
-        )
 
     def set_swept_parameters(self, names: Iterable[str]) -> bool:
         """Sweep ``names`` in the given row order; fix the rest.
@@ -298,85 +289,92 @@ class BaseODE(CUDAFactory):
         Returns
         -------
         bool
-            Whether the binding changed.
+            Whether the system changed.
 
         Raises
         ------
         KeyError
             If a name is not a parameter of the system.
         """
-        swept = tuple(names)
-        values = self.compile_settings.parameter_values
-        unknown = set(swept) - set(values)
-        if unknown:
-            raise KeyError(
-                f"{sorted(unknown)} are not parameters of this system."
-            )
-        return self.bind(
-            ParameterBinding(
-                swept=swept,
-                fixed={
-                    name: value
-                    for name, value in values.items()
-                    if name not in swept
-                },
-            )
-        )
+        return self.bind(swept=names)
 
-    def bind(self, binding: ParameterBinding) -> bool:
-        """Compile ``binding`` into the system.
+    def set_initial_values(self, values: Mapping[str, float]) -> None:
+        """Set the stored initial values of the named states."""
+        self.initial_values.update_from_dict(values)
 
-        Fixed values become the system's parameter values.
+    def bind(
+        self,
+        swept: Optional[Iterable[str]] = None,
+        values: Optional[Mapping[str, float]] = None,
+    ) -> bool:
+        """Set parameter values and swept names, re-specialising once.
 
         Parameters
         ----------
-        binding
-            Swept names and fixed values covering every parameter.
+        swept
+            Parameters read per run, in row order. ``None`` keeps the
+            current names, less any given in ``values``.
+        values
+            Parameter names to new values. A named parameter is
+            compiled in unless ``swept`` lists it.
 
         Returns
         -------
         bool
-            Whether the binding changed.
+            Whether the system changed.
 
         Raises
         ------
-        ValueError
-            If the binding does not name every parameter exactly once.
+        KeyError
+            If a name is not a parameter of the system.
         """
-        expected = tuple(sorted(self.parameters.names))
-        if binding.names != expected:
-            raise ValueError(
-                f"Binding names {list(binding.names)} do not match the "
-                f"system's parameters {list(expected)}."
-            )
-        if binding == self.binding:
-            return False
+        values = {
+            str(name): float(value)
+            for name, value in (values or {}).items()
+        }
         stored = self.compile_settings.parameter_values
+        if swept is None:
+            swept = tuple(
+                name for name in self.swept_parameters if name not in values
+            )
+        else:
+            swept = tuple(str(name) for name in swept)
+        unknown = (set(values) | set(swept)) - set(stored)
+        if unknown:
+            raise KeyError(
+                f"{sorted(unknown)} are not parameters of this system."
+            )
         new_values = {
             name: value
-            for name, value in binding.fixed
+            for name, value in values.items()
             if stored[name] != value
         }
+        if swept == self.swept_parameters and not new_values:
+            return False
+        parameters = self.parameters
         if new_values:
-            parameters = self.parameters.copy()
+            parameters = parameters.copy()
             parameters.update_from_dict(new_values)
-            self.update_compile_settings(parameters=parameters, silent=True)
-        self._apply_binding(binding)
+        self._respecialise(swept, parameters)
         return True
 
-    def _apply_binding(self, binding: ParameterBinding) -> None:
-        """Store ``binding`` in the compile settings."""
-        self.update_compile_settings(binding=binding, silent=True)
+    def _respecialise(
+        self, swept: Tuple[str, ...], parameters: "SystemValues"
+    ) -> None:
+        """Store the swept names and parameter values."""
+        self.update_compile_settings(
+            swept_parameters=swept, parameters=parameters, silent=True
+        )
 
     @property
-    def binding(self) -> ParameterBinding:
-        """Parameters read per run and the values fixed for the rest."""
-        return self.compile_settings.binding
-
-    @property
-    def swept_parameters(self) -> tuple:
+    def swept_parameters(self) -> Tuple[str, ...]:
         """Parameter names read per run, in parameter-table row order."""
-        return self.compile_settings.binding.swept
+        return self.compile_settings.swept_parameters
+
+    @property
+    def fixed_parameter_values(self) -> Dict[str, float]:
+        """Values of the parameters compiled into generated code."""
+        return self.compile_settings.fixed_parameter_values
 
     @property
     def parameters(self) -> "SystemValues":

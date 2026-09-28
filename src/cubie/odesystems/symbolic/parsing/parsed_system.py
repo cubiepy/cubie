@@ -1,11 +1,10 @@
-"""Parameter-symbolic checkpoint and the binding specialisation pass."""
+"""Parameter-symbolic checkpoint and its specialisation pass."""
 
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import attrs
 import sympy as sp
 
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.parsing.assemble import assemble_simplified
 from cubie.odesystems.symbolic.parsing.normalise import (
@@ -143,23 +142,21 @@ class ParsedSystem:
             driver_units=index_map.drivers.units or None,
         )
 
-    def default_binding(self) -> ParameterBinding:
-        """Return the binding that fixes every parameter at its default."""
-
-        return ParameterBinding(fixed=self.parameters)
-
     def specialise(
         self,
-        binding: Optional[ParameterBinding] = None,
+        swept: Iterable[str] = (),
+        values: Optional[Dict[str, float]] = None,
         state_values: Optional[Dict[str, float]] = None,
     ):
-        """Assemble the system for one parameter binding.
+        """Assemble the system with ``swept`` read per run.
 
         Parameters
         ----------
-        binding
-            Swept names and fixed values; ``None`` fixes every
-            parameter at its default.
+        swept
+            Parameters read per run, in row order; the rest are
+            substituted as numbers.
+        values
+            Parameter values; defaults to the parsed values.
         state_values
             Overrides for declared-state initial values.
 
@@ -172,12 +169,12 @@ class ParsedSystem:
             ``parsed_equations.mass_matrix``.
         """
 
-        if binding is None:
-            binding = self.default_binding()
-        if set(binding.names) != set(self.parameters):
+        swept = tuple(swept)
+        values = {**self.parameters, **(values or {})}
+        unknown = (set(swept) | set(values)) - set(self.parameters)
+        if unknown:
             raise KeyError(
-                f"Binding names {list(binding.names)} do not match the "
-                f"system's parameters {sorted(self.parameters)}."
+                f"{sorted(unknown)} are not parameters of this system."
             )
 
         states = dict(self.states)
@@ -190,7 +187,13 @@ class ParsedSystem:
                 }
             )
 
-        rules = _literal_rules(binding.fixed_values)
+        rules = _literal_rules(
+            {
+                name: value
+                for name, value in values.items()
+                if name not in swept
+            }
+        )
         source = self.normalised
         folded_equations = [
             eq.xreplace(rules) for eq in source.equations
@@ -207,7 +210,7 @@ class ParsedSystem:
             derivative_names=source.derivative_names,
         )
 
-        swept = {name: self.parameters[name] for name in binding.swept}
+        swept_values = {name: values[name] for name in swept}
         (
             index_map,
             all_symbols,
@@ -218,7 +221,7 @@ class ParsedSystem:
             folded,
             states,
             list(self.observables),
-            swept,
+            swept_values,
             list(self.driver_names),
             self.driver_dict,
             dict(self.known_symbol_map),

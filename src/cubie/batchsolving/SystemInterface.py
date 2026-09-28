@@ -42,7 +42,6 @@ from numpy import (
     array as np_array,
 )
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.SystemValues import SystemValues
 
 
@@ -72,9 +71,9 @@ class SystemInterface:
         return self._system.parameters
 
     @property
-    def binding(self) -> ParameterBinding:
-        """The system's parameter binding, read live."""
-        return self._system.binding
+    def swept_parameters(self) -> Tuple[str, ...]:
+        """The system's swept parameter names, read live."""
+        return self._system.swept_parameters
 
     @property
     def states(self) -> SystemValues:
@@ -119,8 +118,8 @@ class SystemInterface:
 
         Notes
         -----
-        Parameter values go through the system's ``update`` so fixed
-        parameters recompile; state values update in place.
+        Parameter values go through the system's ``update``, which
+        compiles them in; state values update in place.
         """
         if updates is None:
             updates = {}

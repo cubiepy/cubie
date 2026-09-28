@@ -71,7 +71,6 @@ from cubie.batchsolving.solveresult import (
 )
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic import create_ODE_system
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples
 from cubie._utils import unpack_dict_values
@@ -591,12 +590,12 @@ class Solver:
         parameters
             A dict, or an array with a row per swept parameter (see
             :attr:`swept_parameters`) or per system parameter. A dict
-            sweeps entries that vary and fixes the rest at their given
-            or current values. A system-height array sweeps every row
+            sweeps entries that vary; every other parameter compiles
+            in at its given or stored value. A system-height array sweeps every row
             ``fix_constant_parameters`` does not fix. A swept-height
-            array keeps the swept set; ``None`` fixes every parameter.
-            Compiled-in values become the system's values. Device
-            arrays are accepted.
+            array keeps the swept set; ``None`` sweeps nothing. Values
+            given once are stored on the system. Device arrays are
+            accepted.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -677,13 +676,13 @@ class Solver:
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
 
-        inits, params, binding = self.input_handler(
+        inits, params, swept, values = self.input_handler(
             states=initial_values,
             params=parameters,
             kind=grid_type,
             fix_constant_parameters=fix_constant_parameters,
         )
-        self._bind(binding)
+        self._bind(swept, values)
 
         self.kernel.run(
             inits=inits,
@@ -734,11 +733,11 @@ class Solver:
         Parameters
         ----------
         initial_values
-            Initial values as in :meth:`solve`; they do not change
-            the compiled kernel.
+            Initial values as in :meth:`solve`; single values are
+            stored.
         parameters
             Parameter values as in :meth:`solve`; the kernel compiles
-            for the swept and fixed parameters they imply.
+            for the swept names and values they set.
         grid_type
             Grid strategy when dict inputs build a grid.
         fix_constant_parameters
@@ -759,8 +758,11 @@ class Solver:
         _reject_parameter_values(self.system, set(kwargs))
         self.update(**kwargs)
         self._bind(
-            self.input_handler.binding(
-                parameters, grid_type, fix_constant_parameters
+            *self.input_handler.binding(
+                initial_values,
+                parameters,
+                grid_type,
+                fix_constant_parameters,
             )
         )
 
@@ -819,13 +821,13 @@ class Solver:
         ... )
         >>> result = solver.solve(inits, params)  # Uses fast path
         """
-        inits, params, binding = self.input_handler(
+        inits, params, swept, values = self.input_handler(
             states=initial_values,
             params=parameters,
             kind=grid_type,
             fix_constant_parameters=fix_constant_parameters,
         )
-        self._bind(binding)
+        self._bind(swept, values)
         return inits, params
 
     def set_swept_parameters(self, names: Sequence[str]) -> None:
@@ -846,9 +848,20 @@ class Solver:
         if self.system.set_swept_parameters(names):
             self.update()
 
-    def _bind(self, binding: ParameterBinding) -> None:
-        """Compile ``binding`` into the system and refresh the kernel."""
-        if self.system.bind(binding):
+    def _bind(
+        self, swept: Tuple[str, ...], values: Dict[str, float]
+    ) -> None:
+        """Store ``values``, sweep ``swept`` and refresh the kernel."""
+        names = set(self.system.parameters.names)
+        states = {
+            name: value for name, value in values.items() if name not in names
+        }
+        if states:
+            self.system.set_initial_values(states)
+        parameters = {
+            name: value for name, value in values.items() if name in names
+        }
+        if self.system.bind(swept, parameters):
             self.update()
 
     def calibrate(
@@ -1363,9 +1376,9 @@ class Solver:
         return self.kernel.parameters
 
     @property
-    def binding(self) -> ParameterBinding:
-        """Swept parameters and the values compiled in for the rest."""
-        return self.system.binding
+    def fixed_parameter_values(self) -> Dict[str, float]:
+        """Values of the parameters compiled into the kernel."""
+        return self.system.fixed_parameter_values
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:

@@ -5,7 +5,6 @@ import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
 from cubie._cudasim_extensions import cuda
-from cubie.odesystems.ODEData import ParameterBinding
 
 
 def _solve(solver, inits, params, driver_settings, **kwargs):
@@ -33,7 +32,7 @@ def test_varying_dict_rows_are_swept(
         grid_type="verbatim",
     )
     assert solver_mutable.swept_parameters == (names[0],)
-    assert solver_mutable.binding.fixed_values[names[1]] == 0.5
+    assert solver_mutable.fixed_parameter_values[names[1]] == 0.5
     assert_array_equal(solver_mutable.parameters, [[1.0, 2.0]])
     assert not solver_mutable.kernel.system_config_stale
 
@@ -61,11 +60,11 @@ def test_build_grid_binds_the_solver(
     inits, params = solver_mutable.build_grid(
         None, simple_parameters, grid_type="verbatim"
     )
-    binding = solver_mutable.binding
-    assert binding.swept == tuple(sorted(simple_parameters))
-    assert params.shape[0] == len(binding.swept)
+    swept = solver_mutable.swept_parameters
+    assert swept == tuple(sorted(simple_parameters))
+    assert params.shape[0] == len(swept)
     _solve(solver_mutable, inits, params, driver_settings)
-    assert solver_mutable.binding == binding
+    assert solver_mutable.swept_parameters == swept
 
 
 def test_compile_binds_like_solve(
@@ -77,7 +76,7 @@ def test_compile_binds_like_solve(
         grid_type="verbatim",
         drivers=driver_settings,
     )
-    compiled = solver_mutable.binding
+    compiled = solver_mutable.swept_parameters
     compiled_kernel = solver_mutable.kernel.kernel
     _solve(
         solver_mutable,
@@ -86,7 +85,7 @@ def test_compile_binds_like_solve(
         driver_settings,
         grid_type="verbatim",
     )
-    assert solver_mutable.binding == compiled
+    assert solver_mutable.swept_parameters == compiled
     assert solver_mutable.kernel.kernel is compiled_kernel
 
 
@@ -103,7 +102,7 @@ def test_found_constant_rows_match_swept_rows(
     swept = _solve(
         solver_mutable, None, params, driver_settings, grid_type="verbatim"
     )
-    assert solver_mutable.binding == ParameterBinding(swept=names)
+    assert solver_mutable.swept_parameters == tuple(names)
 
     fixed = _solve(
         solver_mutable,
@@ -129,7 +128,7 @@ def test_parameter_value_update_recompiles_fixed_value(
     value = float(system_restored.parameters.values_dict[names[0]])
     solver_mutable.update({names[0]: 2.0 * value + 1.0})
     second = _solve(solver_mutable, None, None, driver_settings)
-    assert solver_mutable.binding.fixed_values[names[0]] == (
+    assert solver_mutable.fixed_parameter_values[names[0]] == (
         pytest.approx(2.0 * value + 1.0)
     )
     assert not np.array_equal(first, second)
@@ -188,3 +187,23 @@ def test_solve_rejects_parameter_values_as_options(
         _solve(
             solver_mutable, None, None, driver_settings, **{name: 1.0}
         )
+
+
+def test_single_values_become_stored_values(
+    solver_mutable, system_restored, driver_settings
+):
+    """Values given once are the system's stored values after a solve."""
+    system = system_restored
+    names = list(system.parameters.names)
+    state = system.initial_values.names[0]
+    _solve(
+        solver_mutable,
+        {state: 0.25},
+        {names[0]: [1.0, 2.0], names[1]: 0.75},
+        driver_settings,
+        grid_type="verbatim",
+    )
+    assert system.parameters.values_dict[names[1]] == 0.75
+    assert system.initial_values.values_dict[state] == 0.25
+    solver_mutable.set_swept_parameters([names[0]])
+    assert solver_mutable.fixed_parameter_values[names[1]] == 0.75

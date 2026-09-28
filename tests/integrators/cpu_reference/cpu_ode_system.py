@@ -6,7 +6,6 @@ import numpy as np
 import sympy as sp
 
 from cubie import SymbolicODE
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic.codegen.jacobian import generate_jacobian
 from cubie.odesystems.symbolic.engine import to_sympy
 from cubie.odesystems.symbolic.sym_utils import topological_sort
@@ -23,7 +22,7 @@ class CPUODESystem:
     def __init__(self, system: SymbolicODE) -> None:
         # Every parameter is a live input, so any run table maps by name.
         system = system.copy()
-        system.bind(ParameterBinding(swept=system.parameters.names))
+        system.bind(swept=system.parameters.names)
         self.system = system
         self.precision = system.precision
         self.n_states = system.sizes.states

@@ -20,10 +20,10 @@ attrs conventions.
 | File | Description |
 |------|-------------|
 | `baseODE.py` | `BaseODE(CUDAFactory)` abstract base and `ODECache(CUDADispatcherCache)` — the cache `build()` returns: `dxdt`, `observables`, their `operation_counts` (`BaseODE.operation_count`), and a `helpers: SolverHelperCache` member map. A `BaseODE` pickles and deep-copies without its build cache; `copy()` returns that deep copy. |
-| `ODEData.py` | `ODEData(CUDAFactoryConfig)` compile-settings bundle, `ParameterBinding` (frozen: `swept` names read per run, `fixed` name/value pairs compiled in) and `SystemSizes` (frozen per-category counts passed to kernels; `parameters` counts the swept ones). Holds only ODE-system state — solver-helper request parameters live with the requesting algorithm. |
+| `ODEData.py` | `ODEData(CUDAFactoryConfig)` compile-settings bundle (`swept_parameters` names read per run; `fixed_parameter_values` derives the compiled-in values for identity) and `SystemSizes` (frozen per-category counts passed to kernels; `parameters` counts the swept ones). Holds only ODE-system state — solver-helper request parameters live with the requesting algorithm. |
 | `solver_helpers.py` | Solver-helper contract: request axes `jacobian_at` (`stage`/`state`/`step`), `prefactored`, `stacked` map to the internal `HelperVariant`; declarative `SolverHelperRole` base with capability-derived `legal_variants()`; frozen `SolverHelperRequest`; `HelperResult` (device function, buffer sizes, `operation_count`); `OperationCounts` (per-role binary-operator counts, `total(names)`) and `device_function_operation_count`; mutable `SolverHelperCache`. `jacobian_at="step"` on a non-Jacobian role normalises to `"stage"`. |
 | `SystemValues.py` | `SystemValues` — name↔value mapping with dict/array access, precision coercion, and sympy-key conversion. |
-| `__init__.py` | Re-exports `BaseODE`, `ODECache`, `ODEData`, `ParameterBinding`, `SystemSizes`, `SystemValues`, and (from `symbolic/`) `SymbolicODE`, `create_ODE_system`, `load_cellml_model`. |
+| `__init__.py` | Re-exports `BaseODE`, `ODECache`, `ODEData`, `SystemSizes`, `SystemValues`, and (from `symbolic/`) `SymbolicODE`, `create_ODE_system`, `load_cellml_model`. |
 
 ## Subdirectories
 | Directory | Purpose |
@@ -39,17 +39,15 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 `NotImplementedError`; `SymbolicODE` overrides it.
 
 ## BaseODE updates and identity
-- A system has one set of parameters. `ODEData.binding` splits them for a batch: swept
-  names form the per-run parameter table (rows in the order `swept` gives), every other
-  parameter is fixed and its value compiles in. A new system fixes every parameter at
-  its value.
-- `BaseODE._update()` routes parameter names to `set_parameter_values()` (a fixed
-  parameter's new value moves into the binding); the rest go through
-  `update_compile_settings`. `set_swept_parameters(names)` sweeps `names` and fixes the
-  rest at their values.
-  `bind()` checks the binding names every parameter and calls `_apply_binding`, which
-  `SymbolicODE` overrides to re-specialise; fixed values become the parameter values. A
-  `precision` change re-materialises all three `SystemValues` through `ODEData.update`.
+- A system has one set of parameters with one value each, in `ODEData.parameters`.
+  `ODEData.swept_parameters` names the per-run table rows, in row order; every other
+  parameter compiles in at its value. A new system sweeps nothing.
+- `bind(swept, values)` stores values and sets the swept names, then calls
+  `_respecialise` once, which `SymbolicODE` overrides to re-derive the system. With
+  `swept=None` the named values leave the swept set. `set_parameter_values()` (the
+  route for parameter names in `update`) and `set_swept_parameters()` call it.
+  `set_initial_values()` stores initial values. A `precision` change re-materialises all
+  three `SystemValues` through `ODEData.update`.
 - The binding is part of `config_hash`; a `SystemValues` canonical identity is its
   names and precision only.
 - The mass matrix is a float64 array in `ODEData._mass` (`BaseODE.mass`); codegen reads

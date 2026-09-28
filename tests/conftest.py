@@ -362,18 +362,16 @@ def system(request, solver_settings_override, precision):
 
 @pytest.fixture(scope="function")
 def system_restored(system):
-    """Yield the chain system; restore its values and binding on exit.
+    """Yield the chain system; restore its values and swept names on exit.
 
     For tests that mutate a shared session system. Symbolic only.
     """
-    binding = system.binding
+    swept = system.swept_parameters
     states = dict(system.compile_settings.initial_state_values)
     parameters = dict(system.compile_settings.parameter_values)
     yield system
-    system.set_parameter_values(parameters)
-    system.bind(binding)
-    system.initial_values.update_from_dict(states, silent=True)
-    system.indices.states.update_values(states)
+    system.bind(swept=swept, values=parameters)
+    system.set_initial_values(states)
 
 
 @pytest.fixture(scope="function")
@@ -1381,12 +1379,11 @@ def system_interface_mutable(system) -> SystemInterface:
     """Yield a system-bound interface, restoring values afterwards."""
     interface = SystemInterface(system)
     saved_parameters = dict(system.parameters.values_dict)
-    saved_binding = system.binding
+    saved_swept = system.swept_parameters
     saved_states = dict(system.initial_values.values_dict)
     yield interface
-    system.set_parameter_values(saved_parameters)
-    system.bind(saved_binding)
-    system.initial_values.update_from_dict(saved_states, silent=True)
+    system.bind(swept=saved_swept, values=saved_parameters)
+    system.set_initial_values(saved_states)
 
 
 @pytest.fixture(scope="session")
@@ -1468,7 +1465,7 @@ def batch_input_arrays(
     """Return the batch's initial states and every parameter's values.
 
     The parameter array has a row per system parameter, so it solves
-    whatever the system's current binding.
+    whatever the system's swept names.
     """
     state_names = set(system.initial_values.names)
     param_names = set(system.parameters.names)
@@ -1480,16 +1477,16 @@ def batch_input_arrays(
         k: v for k, v in batch_request.items() if k in param_names
     }
 
-    inits, params, binding = input_handler(
+    inits, params, swept, values = input_handler(
         states=states_dict,
         params=params_dict,
         kind=batch_settings["kind"],
     )
-    fixed = binding.fixed_values
+    stored = system.parameters.values_dict
     rows = [
-        params[binding.swept.index(name)]
-        if name in binding.swept
-        else np.full(params.shape[1], fixed[name])
+        params[swept.index(name)]
+        if name in swept
+        else np.full(params.shape[1], values.get(name, stored[name]))
         for name in system.parameters.names
     ]
     return inits, np.asarray(rows, dtype=params.dtype)

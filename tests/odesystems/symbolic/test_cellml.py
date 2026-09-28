@@ -10,7 +10,6 @@ from cubie.odesystems.symbolic.parsing.cellml import (
 )
 from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
 from cubie._utils import is_devfunc
-from cubie.odesystems.ODEData import ParameterBinding
 
 
 def test_load_simple_cellml_model(basic_model):
@@ -176,7 +175,7 @@ def test_numeric_assignments_become_parameters(basic_model):
     """Variables with numeric assignments become fixed parameters."""
     values = basic_model.parameters.values_dict
     assert values["main_a"] == 0.5
-    assert basic_model.binding.fixed_values["main_a"] == 0.5
+    assert basic_model.fixed_parameter_values["main_a"] == 0.5
 
 
 def test_swept_numeric_assignment_reads_parameter_table(basic_model):
@@ -187,7 +186,7 @@ def test_swept_numeric_assignment_reads_parameter_table(basic_model):
         for name, value in model.parameters.values_dict.items()
         if name != "main_a"
     }
-    model.bind(ParameterBinding(swept=["main_a"], fixed=fixed))
+    model.bind(swept=["main_a"], values=fixed)
     assert model.indices.parameter_names == ["main_a"]
     assert model.indices.parameters.defaults["main_a"] == 0.5
 

@@ -9,7 +9,6 @@ import sympy as sp
 from cubie.odesystems.ODEData import (
     ODEData,
     OPERATION_ORDERINGS,
-    ParameterBinding,
     SystemSizes,
 )
 
@@ -231,63 +230,48 @@ def test_from_base_ode_initargs_overrides_defaults():
     assert float(val) == pytest.approx(5.0)
 
 
-# ── ParameterBinding ──────────────────────────────────────────── #
+# ── Swept parameters ──────────────────────────────────────────── #
 
-def test_default_binding_fixes_every_parameter():
-    """Without a binding every parameter is fixed at its value."""
+def _with_value(data, name, value):
+    """Return ``data`` with parameter ``name`` set to ``value``."""
+    parameters = data.parameters.copy()
+    parameters.update_from_dict({name: value})
+    return data.update(parameters=parameters)[0]
+
+
+def test_default_fixes_every_parameter():
+    """With nothing swept every parameter is compiled in."""
     data = _make_odedata()
-    assert data.binding.swept == ()
-    assert data.binding.fixed_values == pytest.approx(
+    assert data.swept_parameters == ()
+    assert data.fixed_parameter_values == pytest.approx(
         {"a": 0.5, "b": 0.3, "g": 9.81}
     )
 
 
-def test_binding_keeps_swept_order_and_sorts_fixed():
-    """Swept names keep their row order; fixed pairs are sorted."""
-    binding = ParameterBinding(swept=["k", "c"], fixed={"z": 1, "a": 2})
-    assert binding.swept == ("k", "c")
-    assert binding.fixed == (("a", 2.0), ("z", 1.0))
-    assert binding.names == ("a", "c", "k", "z")
-
-
-def test_binding_rejects_repeated_swept_name():
-    """A swept name can name one row only."""
-    with pytest.raises(ValueError, match="repeat"):
-        ParameterBinding(swept=["k", "k"])
-
-
-def test_binding_rejects_swept_and_fixed_name():
-    """A name cannot be both swept and fixed."""
-    with pytest.raises(ValueError, match="both swept and fixed"):
-        ParameterBinding(swept=["a"], fixed={"a": 1.0})
-
-
-def test_with_fixed_values_updates_fixed_names_only():
-    """New values reach fixed names; swept names stay swept."""
-    binding = ParameterBinding(swept=["k"], fixed={"c": 1.0})
-    updated = binding.with_fixed_values({"c": 2.0, "k": 5.0})
-    assert updated.swept == ("k",)
-    assert updated.fixed_values == {"c": 2.0}
-
-
-def test_swept_count_sizes_the_parameter_table():
-    """sizes.parameters counts the swept parameters."""
-    data = _make_odedata()
-    data, _, changed = data.update(
-        {"binding": ParameterBinding(swept=["a", "b"], fixed={"g": 9.81})}
-    )
-    assert changed == {"binding"}
+def test_swept_names_keep_their_order():
+    """Swept names keep their row order; the rest are compiled in."""
+    data, _, changed = _make_odedata().update(swept_parameters=["b", "a"])
+    assert changed == {"swept_parameters"}
+    assert data.swept_parameters == ("b", "a")
+    assert data.fixed_parameter_values == pytest.approx({"g": 9.81})
     assert data.sizes.parameters == 2
 
 
-def test_binding_participates_in_identity():
-    """A different binding changes the snapshot's values_hash."""
+def test_swept_names_reject_repeats_and_unknowns():
+    """A swept name names one row of a known parameter."""
     data = _make_odedata()
-    swept, _, _ = data.update(
-        {"binding": ParameterBinding(swept=["a"], fixed={"b": 0.3, "g": 9.81})}
-    )
-    refixed, _, _ = data.update(
-        {"binding": ParameterBinding(fixed={"a": 0.5, "b": 0.4, "g": 9.81})}
-    )
+    with pytest.raises(ValueError, match="repeat"):
+        data.update(swept_parameters=["a", "a"])
+    with pytest.raises(ValueError, match="not parameters"):
+        data.update(swept_parameters=["nope"])
+
+
+def test_compiled_in_values_participate_in_identity():
+    """Compiled-in values and swept names enter values_hash."""
+    data = _make_odedata()
+    swept = data.update(swept_parameters=["a"])[0]
+    refixed = _with_value(data, "a", 0.7)
+    swept_new_value = _with_value(swept, "a", 0.7)
     assert swept.values_hash != data.values_hash
     assert refixed.values_hash != data.values_hash
+    assert swept_new_value.values_hash == swept.values_hash

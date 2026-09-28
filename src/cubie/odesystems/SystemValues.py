@@ -256,8 +256,8 @@ class SystemValues:
 
         Only compile-critical structure enters the identity: the
         ordered names (sizes and indices are baked into generated
-        code) and the precision. Fixed parameter values enter the
-        owning system's identity through its parameter binding.
+        code) and the precision. Compiled-in parameter values enter
+        the owning system's identity through ``ODEData``.
         """
         from numpy import dtype as np_dtype
 

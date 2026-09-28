@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from cubie import create_ODE_system
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic.engine import expr as ir
 
 AMP_SETTINGS = {"system_type": "amp"}
@@ -58,13 +57,7 @@ def _dxdt_source(system):
 
 def _sweep_k(system):
     """Sweep ``k`` and fix every other parameter at its value."""
-    values = system.compile_settings.parameter_values
-    system.bind(
-        ParameterBinding(
-            swept=["k"],
-            fixed={name: v for name, v in values.items() if name != "k"},
-        )
-    )
+    system.set_swept_parameters(["k"])
 
 
 @pytest.mark.parametrize(
@@ -166,7 +159,7 @@ class TestRespecialisation:
 
     def test_sweeping_restores_symbol(self, system_restored):
         system = system_restored
-        system.bind(ParameterBinding(swept=["amp", "k"]))
+        system.bind(swept=["amp", "k"])
         source = _dxdt_source(system)
         # The swept symbol reads from the parameters array.
         assert system.swept_parameters == ("amp", "k")
@@ -177,9 +170,9 @@ class TestRespecialisation:
 
     def test_fixing_folds_value(self, system_restored):
         system = system_restored
-        system.bind(ParameterBinding(swept=["amp", "k"]))
+        system.bind(swept=["amp", "k"])
         _sweep_k(system)
-        assert system.binding.fixed_values == {"amp": 2.0}
+        assert system.fixed_parameter_values == {"amp": 2.0}
         source = _dxdt_source(system)
         assert (
             "out[0] = -(precision(3.0)*parameters[0]*state[0])"

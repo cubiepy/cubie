@@ -68,7 +68,6 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -280,9 +279,9 @@ class SymbolicODE(BaseODE):
         operation_ordering
             Generated-operation ordering policy.
         parsed_system
-            Parameter-symbolic checkpoint from the parser, whose
-            default binding produced ``equations``; rebuilt from
-            ``equations`` and re-specialised when omitted.
+            Parameter-symbolic checkpoint from the parser that
+            produced ``equations`` with every parameter compiled in;
+            rebuilt from ``equations`` and re-specialised when omitted.
         """
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
@@ -330,7 +329,6 @@ class SymbolicODE(BaseODE):
             num_drivers=ndriv,
             name=name,
             operation_ordering=operation_ordering,
-            binding=parsed_system.default_binding(),
         )
         self._seed_derived_mass(derived_mass_matrix)
         self.gen_file = ODEFile(
@@ -634,8 +632,10 @@ class SymbolicODE(BaseODE):
             ),
         )
 
-    def _apply_binding(self, binding: ParameterBinding) -> None:
-        """Re-specialise the system for ``binding``.
+    def _respecialise(
+        self, swept: tuple, parameters: SystemValues
+    ) -> None:
+        """Re-derive the system with ``swept`` read per run.
 
         Swaps in the derived equations, layouts and hash, and pushes
         the changed compile settings in one call. Nothing changes on
@@ -643,12 +643,15 @@ class SymbolicODE(BaseODE):
 
         Parameters
         ----------
-        binding
-            Swept names and fixed values covering every parameter.
+        swept
+            Parameters read per run, in row order.
+        parameters
+            Parameter values; the unswept ones compile in.
         """
 
         precision = self.precision
         settings = self.compile_settings
+        values = parameters.as_float_dict
         (
             index_map,
             all_symbols,
@@ -656,15 +659,9 @@ class SymbolicODE(BaseODE):
             parsed,
             fn_hash,
         ) = self._parsed_system.specialise(
-            binding,
+            swept,
+            values,
             state_values=settings.initial_state_values,
-        )
-        index_map.parameters.update_values(
-            {
-                name: value
-                for name, value in settings.parameter_values.items()
-                if name in binding.swept
-            }
         )
 
         self.equations = parsed
@@ -674,7 +671,10 @@ class SymbolicODE(BaseODE):
         self.fn_hash = fn_hash
         self.driver_defaults = index_map.drivers.default_values
 
-        updates: dict[str, Any] = {"binding": binding}
+        updates: dict[str, Any] = {
+            "swept_parameters": swept,
+            "parameters": parameters,
+        }
         if index_map.state_names != settings.initial_states.names:
             updates["initial_states"] = SystemValues(
                 index_map.state_values, precision, name="States"
@@ -706,8 +706,12 @@ class SymbolicODE(BaseODE):
         KeyError
             If the name is not found in states.
         """
-        self.initial_values[name] = value
-        self.indices.states.update_values({name: value})
+        self.set_initial_values({name: value})
+
+    def set_initial_values(self, values: dict[str, float]) -> None:
+        """Set the stored initial values of the named states."""
+        super().set_initial_values(values)
+        self.indices.states.update_values(values)
 
     def get_parameters_info(self) -> list[dict]:
         """Return information about all parameters.

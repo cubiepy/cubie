@@ -69,12 +69,12 @@ Mass-consuming helpers read
 `compile_settings.mass`, `None` or a 0/1 diagonal: a zero row selects the residual form,
 an identity row the plain form.
 
-## Parameter binding
+## Swept and fixed parameters
 Fixed parameter values substitute into the equations as IR literals at the head of the
 codegen pipeline (`parsing/parsed_system.py`); generated source never names a fixed
 parameter and device functions capture no value closures. Swept parameters stay symbols
 and read the per-run parameter table. `SymbolicODE._parsed_system` (a `ParsedSystem`)
-re-specialises on every binding change (`_apply_binding`): substitution, constructor
+re-specialises on every change of swept names or fixed values (`_respecialise`): substitution, constructor
 folding, structural simplification and tearing, updating the state layout and mass
 matrix, all pushed through one `update_compile_settings`. Live solvers take changes
 through `Solver.update`; a system changed directly resyncs at the next solve.

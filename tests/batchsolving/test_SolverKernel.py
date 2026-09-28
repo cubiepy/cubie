@@ -294,7 +294,7 @@ class TestTimingParameterValidation:
     ):
         """Test that save_every >= duration with save_last=True is valid."""
         inits = np.ones((3, 1), dtype=precision)
-        params = np.ones((3, 1), dtype=precision)
+        params = np.ones((system.num_parameters, 1), dtype=precision)
 
         # Should not raise when save_last is True (default when
         # save_every=None)

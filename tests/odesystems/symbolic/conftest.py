@@ -6,7 +6,6 @@ from cubie.odesystems.symbolic.indexedbasemaps import (
     IndexedBaseMap,
     IndexedBases,
 )
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
@@ -149,7 +148,7 @@ def observables_kernel_system(precision):
         name="observables_kernel_system",
     )
     c0 = system.parameters.values_dict["c0"]
-    system.bind(ParameterBinding(swept=["alpha", "beta"], fixed={"c0": c0}))
+    system.bind(swept=["alpha", "beta"], values={"c0": c0})
 
     return system
 

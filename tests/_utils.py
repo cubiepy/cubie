@@ -34,12 +34,11 @@ Array = NDArray[np.floating]
 
 def parse_input_swept(**kwargs):
     """Return ``parse_input`` products with every parameter swept."""
-    from cubie.odesystems.ODEData import ParameterBinding
     from cubie.odesystems.symbolic.parsing.parser import parse_input
 
     *_, parsed_system = parse_input(**kwargs)
-    binding = ParameterBinding(swept=list(parsed_system.parameters))
-    return (*parsed_system.specialise(binding), parsed_system)
+    swept = list(parsed_system.parameters)
+    return (*parsed_system.specialise(swept), parsed_system)
 
 
 class MockMemoryManager(MemoryManager):

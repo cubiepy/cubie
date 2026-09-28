@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
 
@@ -52,30 +51,28 @@ class TestUpdate:
         with pytest.raises(KeyError, match="Unrecognized parameters"):
             tiny_system.update({"not_a_key": 1.0})
 
-    def test_update_does_not_take_a_binding(self, tiny_system):
-        """A binding is set through bind, not update."""
-        binding = ParameterBinding(swept=["k"], fixed={"c0": 1.0})
-        with pytest.raises(KeyError, match="binding"):
-            tiny_system.update(binding=binding)
+    def test_update_does_not_take_swept_names(self, tiny_system):
+        """Swept names are set through set_swept_parameters."""
+        with pytest.raises(KeyError, match="swept_parameters"):
+            tiny_system.update(swept_parameters=["k"])
 
 
 class TestSetParameterValues:
     """Cover BaseODE.set_parameter_values."""
 
-    def test_fixed_value_follows_into_binding(self, tiny_system):
-        """A fixed parameter's new value is compiled in."""
+    def test_set_value_is_compiled_in(self, tiny_system):
+        """A parameter's new value is compiled in."""
         recognised = tiny_system.set_parameter_values({"c0": 7.0})
         assert recognised == {"c0"}
         assert tiny_system.parameters.values_dict["c0"] == 7.0
-        assert tiny_system.binding.fixed_values["c0"] == 7.0
+        assert tiny_system.fixed_parameter_values["c0"] == 7.0
 
-    def test_swept_value_keeps_binding(self, tiny_system):
-        """A swept parameter's new value changes only its default."""
-        binding = ParameterBinding(swept=["k"], fixed={"c0": 1.0})
-        tiny_system.bind(binding)
+    def test_setting_a_swept_value_fixes_it(self, tiny_system):
+        """A value set for a swept parameter compiles it in."""
+        tiny_system.set_swept_parameters(["k", "c0"])
         tiny_system.set_parameter_values({"k": 3.0})
-        assert tiny_system.parameters.values_dict["k"] == 3.0
-        assert tiny_system.binding == binding
+        assert tiny_system.swept_parameters == ("c0",)
+        assert tiny_system.fixed_parameter_values == {"k": 3.0}
 
     def test_unknown_name_raises(self, tiny_system):
         """A name outside the system's parameters raises KeyError."""
@@ -93,10 +90,8 @@ class TestSetSweptParameters:
         assert changed is True
         assert tiny_system.swept_parameters == ("k", "c0")
         assert tiny_system.indices.parameter_names == ["k", "c0"]
-        changed = tiny_system.set_swept_parameters(["k"])
-        assert tiny_system.binding == ParameterBinding(
-            swept=["k"], fixed={"c0": 2.0}
-        )
+        tiny_system.set_swept_parameters(["k"])
+        assert tiny_system.fixed_parameter_values == {"c0": 2.0}
 
     def test_same_names_report_no_change(self, tiny_system):
         """Sweeping the swept names again changes nothing."""
@@ -112,24 +107,24 @@ class TestSetSweptParameters:
 class TestBind:
     """Cover BaseODE.bind."""
 
-    def test_new_binding_resizes_parameter_table(self, tiny_system):
-        """Sweeping a parameter adds a row to the parameter table."""
-        changed = tiny_system.bind(
-            ParameterBinding(swept=["k"], fixed={"c0": 1.0})
-        )
+    def test_sweeps_and_stores_values_together(self, tiny_system):
+        """Swept names and values apply together; values are stored."""
+        changed = tiny_system.bind(swept=["k"], values={"c0": 4.0})
         assert changed is True
         assert tiny_system.sizes.parameters == 1
         assert tiny_system.swept_parameters == ("k",)
-        assert tiny_system.num_parameters == 2
+        assert tiny_system.parameters.values_dict["c0"] == 4.0
+        assert tiny_system.fixed_parameter_values == {"c0": 4.0}
 
-    def test_same_binding_reports_no_change(self, tiny_system):
-        """Binding the current binding again changes nothing."""
-        assert tiny_system.bind(tiny_system.binding) is False
+    def test_same_state_reports_no_change(self, tiny_system):
+        """Binding the current names and values changes nothing."""
+        values = tiny_system.fixed_parameter_values
+        assert tiny_system.bind(swept=(), values=values) is False
 
-    def test_binding_must_name_every_parameter(self, tiny_system):
-        """A binding missing a parameter raises ValueError."""
-        with pytest.raises(ValueError, match="do not match"):
-            tiny_system.bind(ParameterBinding(swept=["k"]))
+    def test_unknown_name_raises(self, tiny_system):
+        """A name outside the system's parameters raises KeyError."""
+        with pytest.raises(KeyError, match="nope"):
+            tiny_system.bind(swept=["nope"])
 
 
 class TestGetSolverHelper:

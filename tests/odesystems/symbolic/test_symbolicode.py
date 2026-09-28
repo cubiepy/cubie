@@ -4,7 +4,6 @@ import sympy as sp
 from numpy.testing import assert_array_equal
 
 from cubie._utils import is_devfunc
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_linear_operator_code,
@@ -451,7 +450,7 @@ class TestCacheSkipsCodegen:
             parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
-        first.bind(ParameterBinding(swept=["a", "b"]))
+        first.bind(swept=["a", "b"])
         _ = first.dxdt_fn
         first_source = first.gen_file.file_path.read_text()
 
@@ -462,7 +461,7 @@ class TestCacheSkipsCodegen:
             parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
-        second.bind(ParameterBinding(swept=["a"], fixed={"b": 4.0}))
+        second.bind(swept=["a"], values={"b": 4.0})
         _ = second.dxdt_fn
         second_source = second.gen_file.file_path.read_text()
 
@@ -618,7 +617,7 @@ class TestParameterBinding:
 
         assert ode.indices.parameter_names == []
 
-        ode.bind(ParameterBinding(swept=["c"], fixed={"k": 0.1}))
+        ode.bind(swept=["c"], values={"k": 0.1})
 
         assert ode.indices.parameter_names == ["c"]
         assert ode.parameters["c"] == precision(0.5)
@@ -632,22 +631,18 @@ class TestParameterBinding:
             parameters={"k": 0.1, "c": 0.5},
             name="test_fix_param",
         )
-        ode.bind(ParameterBinding(swept=["c", "k"]))
+        ode.bind(swept=["c", "k"])
         assert ode.indices.parameter_names == ["c", "k"]
 
-        ode.bind(ParameterBinding(swept=["k"], fixed={"c": 0.5}))
+        ode.bind(swept=["k"], values={"c": 0.5})
 
         assert ode.indices.parameter_names == ["k"]
-        assert ode.binding.fixed_values == {"c": 0.5}
+        assert ode.fixed_parameter_values == {"c": 0.5}
 
     def test_bind_raises_for_unknown_name(self, metadata_ode):
-        """A binding naming an unknown parameter raises ValueError."""
-        with pytest.raises(ValueError, match="do not match"):
-            metadata_ode.bind(
-                ParameterBinding(
-                    swept=["nonexistent"], fixed={"k": 0.1, "c": 0.5}
-                )
-            )
+        """Sweeping an unknown parameter raises KeyError."""
+        with pytest.raises(KeyError, match="nonexistent"):
+            metadata_ode.set_swept_parameters(["nonexistent"])
 
     def test_sweeping_regenerates_source(self, precision):
         """Generated source reads a swept parameter from the table."""
@@ -658,10 +653,10 @@ class TestParameterBinding:
             parameters={"k": 0.1, "c": 0.5},
             name="fixed_to_swept_source",
         )
-        ode.bind(ParameterBinding(swept=["k"], fixed={"c": 0.5}))
+        ode.bind(swept=["k"], values={"c": 0.5})
         _ = ode.dxdt_fn
 
-        ode.bind(ParameterBinding(swept=["c", "k"]))
+        ode.bind(swept=["c", "k"])
         _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 
@@ -676,10 +671,10 @@ class TestParameterBinding:
             parameters={"k": 0.1, "c": 0.5},
             name="swept_to_fixed_source",
         )
-        ode.bind(ParameterBinding(swept=["c", "k"]))
+        ode.bind(swept=["c", "k"])
         _ = ode.dxdt_fn
 
-        ode.bind(ParameterBinding(swept=["k"], fixed={"c": 0.5}))
+        ode.bind(swept=["k"], values={"c": 0.5})
         _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 

@@ -10,7 +10,6 @@ from cubie.odesystems.symbolic.parsing import (
     EquationWarning,
     parse_input,
 )
-from cubie.odesystems.ODEData import ParameterBinding
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     parse_input_swept,
@@ -334,7 +333,7 @@ class TestDerivativeBlockPolicy:
             simplify_options={"allow_parameter": False},
             name="policy_pivot",
         )
-        system.bind(ParameterBinding(swept=["p"]))
+        system.bind(swept=["p"])
         assert list(system.indices.states.symbol_map) == ["x", "y"]
         assert system.mass.tolist() == [[1.0, 0.0], [0.0, 0.0]]
         p = sp.Symbol("p", real=True)
