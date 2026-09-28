@@ -152,8 +152,7 @@ class ODEData(CUDAFactoryConfig):
     num_drivers
         Number of driver or forcing functions. Defaults to ``1``.
     swept_parameters
-        Parameters read per run from the parameter table, in row
-        order. The rest compile in at their values in ``parameters``.
+        Parameters read per run, in row order; the rest compile in.
 
     Notes
     -----
@@ -204,7 +203,7 @@ class ODEData(CUDAFactoryConfig):
         converter=_mass_matrix_converter,
         eq=attrs_cmp_using(eq=mass_equal),
     )
-    # Identity of the compiled-in values, derived from ``parameters``.
+    # Compiled-in values, derived from ``parameters`` for identity.
     _fixed_parameters: Tuple[Tuple[str, float], ...] = field(
         default=(), init=False, repr=False
     )

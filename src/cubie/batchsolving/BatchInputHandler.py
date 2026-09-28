@@ -23,12 +23,10 @@ Notes
 ``fix_constant_parameters``
     Fix array rows that hold one value across every run.
 
-It returns the initial values, the parameter table (one row per
-swept parameter, in row order), the swept names, and the values of
-states and parameters given one value, which the caller stores:
+It returns the initial values, the swept-row parameter table, the
+swept names and the single values given, which the caller stores:
 
-- a dict sweeps parameter entries that vary; entries holding one
-  value set that value;
+- a dict sweeps entries that vary; single-valued entries set values;
 - an array with a row per system parameter sweeps every row;
 - ``fix_constant_parameters`` sets an array's uniform rows as values;
 - a row per swept parameter keeps the swept names;
@@ -607,11 +605,9 @@ class BatchInputHandler:
         Returns
         -------
         tuple
-            ``(inits, params, swept, values)``: the initial state
-            array and the parameter table of swept rows, aligned for
-            batch execution; the swept names in row order; and the
-            values of the states and parameters given one value,
-            which the caller stores on the system.
+            ``(inits, params, swept, values)``: aligned initial
+            values and swept-row table, swept names in row order, and
+            single values given for states and parameters.
 
         Notes
         -----
@@ -775,10 +771,9 @@ class BatchInputHandler:
         Returns
         -------
         tuple
-            ``(swept, values, request, n_runs)``: swept names in row
-            order, single values by name, every multi-valued entry
-            keyed by name in the given order, and the verbatim run
-            count (``1`` for combinatorial grids).
+            ``(swept, values, request, n_runs)``: swept names, single
+            values, multi-valued entries by name, and the verbatim run
+            count (``1`` for combinatorial).
 
         Raises
         ------
@@ -868,10 +863,9 @@ class BatchInputHandler:
         Returns
         -------
         tuple
-            ``(params, swept_values, swept, values)``: the input
-            restricted to swept rows (``None`` when there is nothing
-            to read), the swept layout, the swept names, and the
-            values of fixed rows.
+            ``(params, swept_values, swept, values)``: the swept rows
+            (``None`` if none), their layout, names, and fixed-row
+            values.
 
         Raises
         ------

@@ -307,16 +307,15 @@ class BaseODE(CUDAFactory):
         swept: Optional[Iterable[str]] = None,
         values: Optional[Mapping[str, float]] = None,
     ) -> bool:
-        """Set parameter values and swept names, re-specialising once.
+        """Store parameter values and set swept names in one rebuild.
 
         Parameters
         ----------
         swept
             Parameters read per run, in row order. ``None`` keeps the
-            current names, less any given in ``values``.
+            current names less those in ``values``.
         values
-            Parameter names to new values. A named parameter is
-            compiled in unless ``swept`` lists it.
+            Parameter names to new values.
 
         Returns
         -------
