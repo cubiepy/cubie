@@ -118,7 +118,7 @@ def _unknown_names(
 
 
 def _reject_parameter_values(system: BaseODE, names: Set[str]) -> None:
-    """Raise when ``names`` give parameter values beside ``parameters``.
+    """Raise if ``names`` include a parameter of ``system``.
 
     Raises
     ------
@@ -589,16 +589,13 @@ class Solver:
             Numba) are used in place with no host-to-device transfer;
             they must already match the system precision.
         parameters
-            Parameter values for each run: a dict mapping names to
-            values, or an array with a row per swept parameter (see
+            A dict, or an array with a row per swept parameter (see
             :attr:`swept_parameters`) or per system parameter. A dict
-            sweeps the names whose values differ across runs and
-            compiles every other parameter in as a number, at its
-            given or current value. A row per system parameter sweeps
-            every row, except the rows ``fix_constant_parameters``
-            finds uniform. A row per swept parameter, or ``None``,
-            keeps the swept set; ``None`` runs the current values.
-            Device arrays are accepted as for ``initial_values``.
+            sweeps entries that vary and fixes the rest at their given
+            or current values. A system-height array sweeps every row
+            ``fix_constant_parameters`` does not fix. A swept-height
+            array or ``None`` keeps the swept set; ``None`` uses the
+            current values. Device arrays are accepted.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -831,11 +828,7 @@ class Solver:
         return inits, params
 
     def set_swept_parameters(self, names: Sequence[str]) -> None:
-        """Sweep ``names``, in this row order, and fix the rest.
-
-        Every other parameter is compiled in at its current value.
-        Arrays with one row per name, in this order, then solve with
-        the swept set unchanged, including device arrays.
+        """Sweep ``names`` in this row order; fix the rest at their values.
 
         Parameters
         ----------

@@ -25,21 +25,14 @@ Notes
 
 It returns the initial values, the parameter table and the
 :class:`~cubie.odesystems.ODEData.ParameterBinding` the table
-implies. The table holds one row per swept parameter, in the
-binding's row order. Only three inputs change which parameters are
-swept:
+implies, one row per swept parameter in binding order:
 
-- a dict sweeps the names whose values differ across runs and fixes
-  every other parameter at its given or current value;
-- an array with a row per system parameter sweeps every row, or,
-  with ``fix_constant_parameters``, every row that does not hold one
-  value across the runs;
-- ``fix_constant_parameters`` also fixes the uniform rows of an array
-  with a row per swept parameter.
-
-An array with a row per swept parameter, ``None`` and empty inputs
-keep the binding; ``None`` fills the swept rows with the current
-parameter values.
+- a dict sweeps entries that vary and fixes the rest at their given
+  or current values;
+- an array with a row per system parameter sweeps every row;
+- ``fix_constant_parameters`` fixes an array's uniform rows;
+- a row per swept parameter, ``None`` or empty input keeps the
+  binding; ``None`` uses the current values.
 
 When arrays are supplied directly they are treated as fully specified grids
 in (variable, run) format where each column represents a run configuration.
@@ -721,11 +714,7 @@ class BatchInputHandler:
         )
 
     def _row_order(self, names: set) -> Tuple[str, ...]:
-        """Return swept ``names`` in parameter-table row order.
-
-        The current binding's order is kept when it sweeps the same
-        names; otherwise the rows follow the system's parameter order.
-        """
+        """Order ``names`` as the current binding, else as the system."""
         current = self.interface.binding.swept
         if set(current) == names:
             return current
@@ -745,10 +734,8 @@ class BatchInputHandler:
     ) -> tuple[ParameterBinding, dict, int]:
         """Return the binding a dict parameter input implies.
 
-        Each entry is judged on its own values, so no grid is built:
-        an entry whose values differ is swept; a single value or a
-        uniform entry fixes its parameter, and parameters not given
-        are fixed at their current values.
+        Varying entries are swept; the rest are fixed at their given or
+        current values. No grid is built.
 
         Parameters
         ----------
@@ -851,8 +838,8 @@ class BatchInputHandler:
         """Bind an array parameter input to a parameter-table layout.
 
         ``None``, empty input and a row per swept parameter keep the
-        current binding; any other height is a row per system
-        parameter (padded or trimmed with a warning), all swept.
+        binding; other heights are padded or trimmed to a row per
+        system parameter, all swept.
 
         Parameters
         ----------

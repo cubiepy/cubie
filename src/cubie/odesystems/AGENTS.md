@@ -45,8 +45,8 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
   its value.
 - `BaseODE._update()` routes parameter names to `set_parameter_values()` (a fixed
   parameter's new value moves into the binding); the rest go through
-  `update_compile_settings`, and `binding` is not an update key.
-  `set_swept_parameters(names)` binds `names` swept and the rest fixed at their values.
+  `update_compile_settings`. `set_swept_parameters(names)` sweeps `names` and fixes the
+  rest at their values.
   `bind()` checks the binding names every parameter and calls `_apply_binding`, which
   `SymbolicODE` overrides to re-specialise. A
   `precision` change re-materialises all three `SystemValues` through `ODEData.update`.

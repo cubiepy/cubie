@@ -136,7 +136,6 @@ class ParameterBinding:
     ----------
     swept
         Names read per run from the parameter table, in row order.
-        The order is kept: it is the order of the table's rows.
     fixed
         Names and values compiled into the generated source.
     """

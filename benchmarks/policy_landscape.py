@@ -241,11 +241,7 @@ SYSTEMS = {
 
 
 def bind_arm(solver, system_name):
-    """Compile an arm for the grid's swept rows before it compiles.
-
-    Arms solve the grid's arrays only, so the grid's fixed values are
-    set on the solver ahead of them.
-    """
+    """Set the grid's fixed values and swept rows on an arm's solver."""
     entry = SYSTEMS[system_name]
     solver.update(entry.get("fixed", {}))
     solver.set_swept_parameters(entry["swept"])
