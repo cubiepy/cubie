@@ -72,7 +72,10 @@ other parameter is fixed and compiles in. Only `Solver.set_swept_parameters` and
 - Arrays: a row per swept parameter keeps the binding; a row per system parameter
   sweeps every row. Other host heights are padded or trimmed with a warning; other device
   heights raise. `fix_constant_parameters=True` fixes uniform host rows.
-- `None`, `{}` and empty arrays keep the binding at the current values.
+- `None`, `{}` and empty arrays fix every parameter at its value.
+
+`BaseODE.bind` writes fixed values into the system's parameter values, so one value per
+parameter is current.
 
 A binding change rebuilds the system and kernel; an unchanged binding reuses both.
 

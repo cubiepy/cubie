@@ -31,8 +31,10 @@ implies, one row per swept parameter in binding order:
   or current values;
 - an array with a row per system parameter sweeps every row;
 - ``fix_constant_parameters`` fixes an array's uniform rows;
-- a row per swept parameter, ``None`` or empty input keeps the
-  binding; ``None`` uses the current values.
+- a row per swept parameter keeps the binding;
+- ``None`` or empty input fixes every parameter at its value.
+
+Compiled-in values become the system's parameter values.
 
 When arrays are supplied directly they are treated as fully specified grids
 in (variable, run) format where each column represents a run configuration.
@@ -837,9 +839,9 @@ class BatchInputHandler:
     ) -> tuple[object, SystemValues, ParameterBinding]:
         """Bind an array parameter input to a parameter-table layout.
 
-        ``None``, empty input and a row per swept parameter keep the
-        binding; other heights are padded or trimmed to a row per
-        system parameter, all swept.
+        ``None`` and empty input fix every parameter; a row per swept
+        parameter keeps the binding; other heights are padded or
+        trimmed to a row per system parameter, all swept.
 
         Parameters
         ----------
@@ -858,6 +860,8 @@ class BatchInputHandler:
         """
         binding = self.interface.binding
         if not isinstance(params, (list, tuple, ndarray)):
+            if params is None:
+                binding = self._fixed_binding()
             return params, self._swept_values(binding.swept), binding
         arr = params if isinstance(params, ndarray) else np_asarray(params)
         if arr.ndim > 2:
@@ -866,7 +870,7 @@ class BatchInputHandler:
                 f"array."
             )
         if arr.size == 0 and arr.ndim < 2:
-            return None, self._swept_values(binding.swept), binding
+            return None, self._swept_values(()), self._fixed_binding()
         n_rows = arr.shape[0]
         if n_rows == len(binding.swept):
             fixed = binding.fixed_values
@@ -894,6 +898,10 @@ class BatchInputHandler:
         if arr.ndim == 1:
             return None, self._swept_values(swept), binding
         return grid[keep], self._swept_values(swept), binding
+
+    def _fixed_binding(self) -> ParameterBinding:
+        """Return the binding that fixes every parameter at its value."""
+        return ParameterBinding(fixed=self.parameters.values_dict)
 
     def _validate_device_array(
         self,

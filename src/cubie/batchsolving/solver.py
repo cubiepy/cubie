@@ -594,8 +594,9 @@ class Solver:
             sweeps entries that vary and fixes the rest at their given
             or current values. A system-height array sweeps every row
             ``fix_constant_parameters`` does not fix. A swept-height
-            array or ``None`` keeps the swept set; ``None`` uses the
-            current values. Device arrays are accepted.
+            array keeps the swept set; ``None`` fixes every parameter.
+            Compiled-in values become the system's values. Device
+            arrays are accepted.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.

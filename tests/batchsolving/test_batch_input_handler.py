@@ -283,14 +283,14 @@ def test_call_device_arrays_pass_through(input_handler, system):
 
 
 def test_call_device_states_none_params(input_handler, system):
-    """Device states pair with the swept rows at their values."""
+    """Device states pair with every parameter fixed."""
     n_states = system.sizes.states
     states = _FakeDeviceArray((n_states, 4), system.precision)
     result_s, result_p, binding = input_handler(states, None, "verbatim")
     assert result_s is states
-    assert result_p.shape == (len(system.swept_parameters), 4)
+    assert result_p.shape == (0, 4)
     assert result_p.dtype == system.precision
-    assert binding == system.binding
+    assert binding == ParameterBinding(fixed=system.parameters.values_dict)
 
 
 def test_call_device_states_single_column_params(input_handler, system):
@@ -757,12 +757,12 @@ def test_fill_aligned_combinatorial(input_handler):
 
 
 def test_call_none_returns_defaults(input_handler, system):
-    """Empty inputs return one run and keep the binding."""
+    """Empty inputs return one run with every parameter fixed."""
     inits, params, binding = input_handler(states=None, params=None)
     assert inits.shape[1] == 1
-    assert params.shape == (len(system.swept_parameters), 1)
+    assert params.shape == (0, 1)
     assert_allclose(inits[:, 0], system.initial_values.values_array)
-    assert binding == system.binding
+    assert binding == ParameterBinding(fixed=system.parameters.values_dict)
 
 
 def test_call_verbatim_mismatch_raises(input_handler, system):
@@ -1206,16 +1206,28 @@ def _sweep_reversed(system):
 
 
 @pytest.mark.parametrize("empty", [None, {}, np.empty(0)])
-def test_empty_params_keep_the_binding(system_restored, empty):
-    """No parameter input keeps the swept rows at their values."""
+def test_empty_params_fix_every_parameter(system_restored, empty):
+    """No parameter input compiles every parameter in."""
     system = system_restored
-    names = _sweep_reversed(system)
-    binding = system.binding
+    _sweep_reversed(system)
     handler = BatchInputHandler.from_system(system)
-    _, params, result_binding = handler(params=empty, kind="verbatim")
-    assert result_binding == binding
-    values = system.parameters.values_dict
-    assert_allclose(params[:, 0], [values[names[1]], values[names[0]]])
+    _, params, binding = handler(params=empty, kind="verbatim")
+    assert binding == ParameterBinding(fixed=system.parameters.values_dict)
+    assert params.shape == (0, 1)
+
+
+def test_bound_fixed_value_becomes_the_parameter_value(system_restored):
+    """A value compiled in from a dict is the system's value after."""
+    system = system_restored
+    names = list(system.parameters.names)
+    handler = BatchInputHandler.from_system(system)
+    _, _, binding = handler(
+        params={names[0]: [1.0, 2.0], names[1]: 5.0}, kind="verbatim"
+    )
+    system.bind(binding)
+    assert system.parameters.values_dict[names[1]] == 5.0
+    system.set_swept_parameters([names[0]])
+    assert system.binding == binding
 
 
 def test_dict_sweeping_the_swept_names_keeps_row_order(system_restored):

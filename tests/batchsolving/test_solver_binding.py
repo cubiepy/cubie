@@ -169,19 +169,14 @@ def test_set_swept_parameters_orders_the_table_rows(
     assert_array_equal(from_device, from_dict)
 
 
-def test_no_parameters_keep_the_swept_set(
+def test_no_parameters_fix_every_parameter(
     solver_mutable, system_restored, driver_settings
 ):
-    """A solve without parameters runs the swept rows' values."""
+    """A solve without parameters compiles every parameter in."""
     names = list(system_restored.parameters.names)
     solver_mutable.set_swept_parameters([names[0]])
-    binding = solver_mutable.binding
     _solve(solver_mutable, None, None, driver_settings)
-    assert solver_mutable.binding == binding
-    assert_array_equal(
-        solver_mutable.parameters,
-        [[system_restored.parameters.values_dict[names[0]]]],
-    )
+    assert solver_mutable.swept_parameters == ()
 
 
 def test_solve_rejects_parameter_values_as_options(

@@ -326,6 +326,8 @@ class BaseODE(CUDAFactory):
     def bind(self, binding: ParameterBinding) -> bool:
         """Compile ``binding`` into the system.
 
+        Fixed values become the system's parameter values.
+
         Parameters
         ----------
         binding
@@ -349,6 +351,16 @@ class BaseODE(CUDAFactory):
             )
         if binding == self.binding:
             return False
+        stored = self.compile_settings.parameter_values
+        new_values = {
+            name: value
+            for name, value in binding.fixed
+            if stored[name] != value
+        }
+        if new_values:
+            parameters = self.parameters.copy()
+            parameters.update_from_dict(new_values)
+            self.update_compile_settings(parameters=parameters, silent=True)
         self._apply_binding(binding)
         return True
 
