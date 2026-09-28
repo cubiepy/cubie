@@ -606,7 +606,7 @@ class TestParameterBinding:
     """Tests for moving parameters between swept and fixed."""
 
     def test_sweeping_a_parameter_reads_it_from_the_table(self, precision):
-        """A swept parameter becomes a parameter-table row."""
+        """A swept parameter is indexed in the parameters array."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x + c"],
             precision=precision,
@@ -623,7 +623,7 @@ class TestParameterBinding:
         assert ode.parameters["c"] == precision(0.5)
 
     def test_fixing_a_parameter_folds_its_value(self, precision):
-        """A fixed parameter leaves the parameter table."""
+        """A fixed parameter leaves the parameters array."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x + c"],
             precision=precision,
@@ -645,7 +645,7 @@ class TestParameterBinding:
             metadata_ode.set_swept_parameters(["nonexistent"])
 
     def test_sweeping_regenerates_source(self, precision):
-        """Generated source reads a swept parameter from the table."""
+        """Generated source reads a swept parameter from the array."""
         ode = SymbolicODE.create(
             dxdt="dx = -k*x + c",
             precision=precision,

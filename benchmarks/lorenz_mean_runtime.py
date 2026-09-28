@@ -350,7 +350,7 @@ def load_grid(solver, n_runs, grid_cache):
         if grid_cache is not None
         else None
     )
-    # The table's single row is rho; sigma and beta compile in.
+    # Only rho is swept; sigma and beta compile in.
     solver.set_swept_parameters(["rho"])
     if gfile is not None and os.path.exists(gfile):
         # Cached grids come back pinned, as build_grid returns them.

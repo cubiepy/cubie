@@ -591,11 +591,11 @@ class Solver:
             A dict, or an array with a row per swept parameter (see
             :attr:`swept_parameters`) or per system parameter. A dict
             sweeps entries that vary; every other parameter compiles
-            in at its given or stored value. A system-height array sweeps every row
-            ``fix_constant_parameters`` does not fix. A swept-height
-            array keeps the swept set; ``None`` sweeps nothing. Values
-            given once are stored on the system. Device arrays are
-            accepted.
+            in at its given or stored value. A system-height array
+            sweeps every row ``fix_constant_parameters`` does not fix.
+            A swept-height array keeps the swept set; ``None`` sweeps
+            nothing. Values given once are stored on the system.
+            Device arrays are accepted.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -831,12 +831,12 @@ class Solver:
         return inits, params
 
     def set_swept_parameters(self, names: Sequence[str]) -> None:
-        """Sweep ``names`` in this row order; fix the rest at their values.
+        """Sweep ``names`` in this order; fix the rest at their values.
 
         Parameters
         ----------
         names
-            Parameter names in parameter-table row order.
+            Swept parameter names, in the order of the parameters array.
 
         Raises
         ------
@@ -1382,7 +1382,7 @@ class Solver:
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
-        """Parameter names in parameter-table row order."""
+        """Swept parameter names, in the order of the parameters array."""
         return self.system.swept_parameters
 
     @property

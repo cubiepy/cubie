@@ -148,12 +148,12 @@ class ParsedSystem:
         values: Optional[Dict[str, float]] = None,
         state_values: Optional[Dict[str, float]] = None,
     ):
-        """Assemble the system with ``swept`` read per run.
+        """Assemble the system with ``swept`` swept.
 
         Parameters
         ----------
         swept
-            Parameters read per run, in row order; the rest are
+            Swept parameters, in order; the rest are
             substituted as numbers.
         values
             Parameter values; defaults to the parsed values.

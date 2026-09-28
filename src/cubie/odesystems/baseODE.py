@@ -147,7 +147,7 @@ class BaseODE(CUDAFactory):
         name
             Printable identifier for the system. Defaults to ``None``.
         swept_parameters
-            Parameters read per run, in row order; the rest compile in.
+            Swept parameters, in order; the rest compile in.
         """
         super().__init__()
         clashes = clashing_names(
@@ -279,12 +279,12 @@ class BaseODE(CUDAFactory):
         return set(values)
 
     def set_swept_parameters(self, names: Iterable[str]) -> bool:
-        """Sweep ``names`` in the given row order; fix the rest.
+        """Sweep ``names`` in the given order; fix the rest.
 
         Parameters
         ----------
         names
-            Parameter names in parameter-table row order.
+            Swept parameter names, in the order of the parameters array.
 
         Returns
         -------
@@ -312,7 +312,7 @@ class BaseODE(CUDAFactory):
         Parameters
         ----------
         swept
-            Parameters read per run, in row order. ``None`` keeps the
+            Swept parameters, in order. ``None`` keeps the
             current names less those in ``values``.
         values
             Parameter names to new values.
@@ -367,7 +367,7 @@ class BaseODE(CUDAFactory):
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
-        """Parameter names read per run, in parameter-table row order."""
+        """Swept parameter names, in the order of the parameters array."""
         return self.compile_settings.swept_parameters
 
     @property

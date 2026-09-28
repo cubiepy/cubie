@@ -1191,7 +1191,7 @@ def test_empty_params_sweep_nothing(system_restored, empty):
 
 
 def test_dict_sweeping_the_swept_names_keeps_row_order(system_restored):
-    """A dict sweeping the swept names keeps their row order."""
+    """A dict sweeping the swept names keeps their order."""
     system = system_restored
     names = _sweep_reversed(system)
     handler = BatchInputHandler.from_system(system)
@@ -1204,7 +1204,7 @@ def test_dict_sweeping_the_swept_names_keeps_row_order(system_restored):
 
 
 def test_device_swept_rows_follow_the_swept_order(system_restored):
-    """A device table with a row per swept name keeps the order."""
+    """A device array with a row per swept name keeps the order."""
     system = system_restored
     names = _sweep_reversed(system)
     handler = BatchInputHandler.from_system(system)
@@ -1217,7 +1217,7 @@ def test_device_swept_rows_follow_the_swept_order(system_restored):
 def test_device_system_height_params_sweep_every_row(
     input_handler, system
 ):
-    """A device table with a row per system parameter sweeps them all."""
+    """A device array with a row per system parameter sweeps them all."""
     params = _FakeDeviceArray(
         (system.num_parameters, 2), system.precision
     )

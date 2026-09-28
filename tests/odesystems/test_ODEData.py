@@ -249,7 +249,7 @@ def test_default_fixes_every_parameter():
 
 
 def test_swept_names_keep_their_order():
-    """Swept names keep their row order; the rest are compiled in."""
+    """Swept names keep their order; the rest are compiled in."""
     data, _, changed = _make_odedata().update(swept_parameters=["b", "a"])
     assert changed == {"swept_parameters"}
     assert data.swept_parameters == ("b", "a")

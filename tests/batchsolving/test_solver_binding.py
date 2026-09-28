@@ -137,7 +137,7 @@ def test_parameter_value_update_recompiles_fixed_value(
 def test_set_swept_parameters_orders_the_table_rows(
     solver_mutable, system_restored, driver_settings
 ):
-    """Swept-height arrays follow set_swept_parameters' row order."""
+    """Swept-height arrays follow set_swept_parameters' order."""
     names = list(system_restored.parameters.names)
     grid = {names[0]: [0.5, 1.0, 1.5], names[1]: [0.2, 0.4, 0.6]}
     from_dict = _solve(

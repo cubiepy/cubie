@@ -66,7 +66,7 @@ An array with a row per system parameter sweeps every row;
 array with a row per swept parameter keeps the swept set.
 
 For prebuilt arrays, including device arrays, name the swept
-parameters in row order first; the rest are fixed at their current
+parameters first, in the order of your array's rows; the rest are fixed at their current
 values:
 
 .. code-block:: python

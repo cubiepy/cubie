@@ -149,8 +149,8 @@ def assemble_simplified(
 ):
     """Structurally simplify a normalised system and package it.
 
-    ``parameters`` holds the swept parameters in parameter-table row
-    order; fixed ones are already literals in ``normalised``. Returns
+    ``parameters`` holds the swept parameters, in order; fixed ones
+    are already literals in ``normalised``. Returns
     ``(index_map, all_symbols, funcs, parsed_equations, fn_hash)``;
     the derived mass matrix rides on ``parsed_equations.mass_matrix``.
     Solver states are held in sorted name order.

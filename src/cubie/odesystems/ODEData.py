@@ -118,7 +118,7 @@ class SystemSizes:
     observables
         Number of observable variables in the system.
     parameters
-        Number of parameters read per run from the parameter table.
+        Number of swept parameters.
     drivers
         Number of driver variables in the system.
 
@@ -152,7 +152,7 @@ class ODEData(CUDAFactoryConfig):
     num_drivers
         Number of driver or forcing functions. Defaults to ``1``.
     swept_parameters
-        Parameters read per run, in row order; the rest compile in.
+        Swept parameters, in order; the rest compile in.
 
     Notes
     -----
@@ -275,7 +275,7 @@ class ODEData(CUDAFactoryConfig):
 
     @property
     def num_swept_parameters(self) -> int:
-        """Number of parameters read per run."""
+        """Number of swept parameters."""
         return len(self.swept_parameters)
 
     @property
@@ -347,7 +347,7 @@ class ODEData(CUDAFactoryConfig):
             fixed ``"greedy"`` or ``"dfs"``, or thresholded
             ``"liveness_auto"`` selection.
         swept_parameters
-            Parameters read per run, in row order; the rest compile in.
+            Swept parameters, in order; the rest compile in.
 
         Returns
         -------

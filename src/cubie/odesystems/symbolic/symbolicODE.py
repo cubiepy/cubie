@@ -5,7 +5,7 @@ Published Classes
 :class:`SymbolicODE`
     Concrete :class:`~cubie.odesystems.baseODE.BaseODE` subclass that
     generates CUDA device functions from SymPy equations. Handles
-    codegen caching, solver helper generation, and parameter binding.
+    codegen caching, solver helper generation, and swept parameters.
 
     >>> from cubie.odesystems.symbolic.symbolicODE import (
     ...     create_ODE_system,
@@ -635,7 +635,7 @@ class SymbolicODE(BaseODE):
     def _respecialise(
         self, swept: tuple, parameters: SystemValues
     ) -> None:
-        """Re-derive the system with ``swept`` read per run.
+        """Re-derive the system with ``swept`` swept.
 
         Swaps in the derived equations, layouts and hash, and pushes
         the changed compile settings in one call. Nothing changes on
@@ -644,7 +644,7 @@ class SymbolicODE(BaseODE):
         Parameters
         ----------
         swept
-            Parameters read per run, in row order.
+            Swept parameters, in order.
         parameters
             Parameter values; the unswept ones compile in.
         """

@@ -179,7 +179,7 @@ def test_numeric_assignments_become_parameters(basic_model):
 
 
 def test_swept_numeric_assignment_reads_parameter_table(basic_model):
-    """Sweeping a numeric assignment makes it a parameter-table row."""
+    """A numeric assignment can be swept."""
     model = basic_model.copy()
     fixed = {
         name: value

@@ -319,7 +319,7 @@ class InputArrays(BaseArrayManager):
         return True
 
     def _request_shape(self, label: str) -> Optional[tuple]:
-        """Shape to request for ``label``; tables keep their run count."""
+        """Shape to request for ``label``; run inputs keep their run count."""
         if label == "driver_coefficients":
             return super()._request_shape(label)
         host_array = self.host.get_managed_array(label).array

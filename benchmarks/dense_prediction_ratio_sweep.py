@@ -644,7 +644,7 @@ def main():
         systems = {}
         for probe_name, probe in PROBES.items():
             system = probe["builder"](precision)
-            # The overrides are the step kernel's one-run table.
+            # The overrides are swept, so the kernel reads them from params.
             overrides = probe["parameter_overrides"]
             system.set_swept_parameters(list(overrides))
             params = np.zeros(max(1, len(overrides)), dtype=precision)

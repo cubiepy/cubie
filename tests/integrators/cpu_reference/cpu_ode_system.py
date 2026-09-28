@@ -20,7 +20,7 @@ class CPUODESystem:
     """Evaluator for symbolic systems using compiled numerical functions."""
 
     def __init__(self, system: SymbolicODE) -> None:
-        # Every parameter is a live input, so any run table maps by name.
+        # Every parameter is swept, so any parameters array maps by name.
         system = system.copy()
         system.bind(swept=system.parameters.names)
         self.system = system

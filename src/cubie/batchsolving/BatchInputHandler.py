@@ -23,7 +23,7 @@ Notes
 ``fix_constant_parameters``
     Fix array rows that hold one value across every run.
 
-It returns the initial values, the swept-row parameter table, the
+It returns the initial values, the swept parameters array, the
 swept names and the single values given, which the caller stores:
 
 - a dict sweeps entries that vary; single-valued entries set values;
@@ -606,7 +606,7 @@ class BatchInputHandler:
         -------
         tuple
             ``(inits, params, swept, values)``: aligned initial
-            values and swept-row table, swept names in row order, and
+            values and swept parameters array, swept names in order, and
             single values given for states and parameters.
 
         Notes
@@ -713,7 +713,7 @@ class BatchInputHandler:
         return swept, {**values, **param_values}
 
     def _swept_values(self, names: Tuple[str, ...]) -> SystemValues:
-        """Return the parameter-table layout for swept ``names``."""
+        """Return the parameters-array layout for swept ``names``."""
         defaults = self.parameters.values_dict
         return SystemValues(
             {name: defaults[name] for name in names},
@@ -1278,7 +1278,7 @@ class BatchInputHandler:
         params_plan
             Plan for the params category.
         params_values
-            Parameter-table layout the params plan fills.
+            Parameters-array layout the params plan fills.
         kind
             Grid type: "combinatorial" or "verbatim".
         backed

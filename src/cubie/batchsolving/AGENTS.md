@@ -63,7 +63,7 @@ A system changed outside the Solver is `kernel.system_config_stale`; the next `u
 pushes the whole effective record so every child re-reads its products.
 
 ## Swept parameters
-The parameter table holds one row per swept parameter, in row order; the rest compile in
+The parameters array holds one row per swept parameter, in order; the rest compile in
 at their stored values. `Solver._bind` stores the handler's single values (states and
 parameters) and applies its swept names through `BaseODE.bind`.
 - Dicts: varying entries are swept; entries holding one value set that value. Rows keep

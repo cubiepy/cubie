@@ -283,7 +283,7 @@ class BatchInputSizes(ArraySizingClass):
     def nonzero(self) -> "BatchInputSizes":
         """Return a copy with every dimension at least one.
 
-        The (variable, run) tables keep their run count.
+        The (variable, run) inputs keep their run count.
         """
         new_obj = super().nonzero
         new_obj.initial_values = tuple(

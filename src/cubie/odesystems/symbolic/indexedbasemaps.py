@@ -301,7 +301,7 @@ class IndexedBases:
         states
             Indexed base describing the system state vector.
         parameters
-            Indexed base describing the parameters read per run.
+            Indexed base describing the swept parameters.
         observables
             Indexed base describing recorded observables.
         drivers

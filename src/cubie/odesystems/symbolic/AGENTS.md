@@ -27,9 +27,9 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | File | Description |
 |------|-------------|
 | `__init__.py` | Star-imports `codegen`, `parsing`, `indexedbasemaps`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
-| `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, parameter binding, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
+| `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, swept parameters, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
 | `helper_registry.py` | Concrete solver-helper roles: one `SolverHelperRole` subclass per role (`LinearOperator`, `NeumannPreconditioner`, `JacobiPreconditioner`, `LuSolve`, `LuPrepareBlocks`, `LuSmoothingSolve`, `Residual`, `InitResidual`, `InitLuSolve` (consistent-initialisation forms, PLAIN-only), `ApplyMass`, `EvaluateInvMassF`, `TimeDerivativeRHS`, internal `PrepareJac`), each declaring capabilities and implementing `generate`; Neumann also implements `validate`. Defines `helper_source_hash` and `helper_member_hash`. |
-| `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so alternating bindings keep their cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
+| `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so alternating swept sets keep their cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
 | `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`, sorted by name unless `sort=False`, as for swept parameters) and `IndexedBases` (bundle of state/swept-parameter/observable/driver/dxdt maps). Provides `from_user_inputs`, units, ref/index/symbol maps. |
 | `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `RESERVED_CODEGEN_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
 
@@ -73,18 +73,18 @@ an identity row the plain form.
 Fixed parameter values substitute into the equations as IR literals at the head of the
 codegen pipeline (`parsing/parsed_system.py`); generated source never names a fixed
 parameter and device functions capture no value closures. Swept parameters stay symbols
-and read the per-run parameter table. `SymbolicODE._parsed_system` (a `ParsedSystem`)
-re-specialises on every change of swept names or fixed values (`_respecialise`): substitution, constructor
-folding, structural simplification and tearing, updating the state layout and mass
-matrix, all pushed through one `update_compile_settings`. Live solvers take changes
+and are read from the parameters array. `SymbolicODE._parsed_system` (a `ParsedSystem`)
+re-specialises on every change of swept names or fixed values (`_respecialise`):
+substitution, constructor folding, structural simplification and tearing, updating the
+state layout and mass matrix, all pushed through one `update_compile_settings`. Live solvers take changes
 through `Solver.update`; a system changed directly resyncs at the next solve.
 
 ## build() and system identity
 `build()` recomputes the system hash first and switches `self.gen_file` to a fresh
 `ODEFile` when the source identity changed. The identity is `fn_hash` from
 `hash_system_definition`: equations (fixed values folded), name-sorted state, dxdt,
-driver and observable layouts, the swept-parameter layout in row order, derivative helpers and function
-aliases. Equations sort by LHS name, so string and SymPy input hit the same cache.
+driver and observable layouts, the swept-parameter layout in order, derivative helpers
+and function aliases. Equations sort by LHS name, so string and SymPy input hit the same cache.
 
 ## Gotchas
 - `ODEFile.function_is_cached` parses the file textually: it needs a top-level
