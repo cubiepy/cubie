@@ -350,17 +350,17 @@ def load_grid(solver, n_runs, grid_cache):
         if grid_cache is not None
         else None
     )
-    parameters = {"rho": np.linspace(0.0, 21.0, n_runs)}
+    # The table's single row is rho; sigma and beta compile in.
+    solver.set_swept_parameters(["rho"])
     if gfile is not None and os.path.exists(gfile):
-        # The cached table's single row is rho: bind the solver to it.
-        solver.compile(parameters=parameters)
         # Cached grids come back pinned, as build_grid returns them.
         with np.load(gfile) as grid:
             return tuple(
                 pinned_copy(grid[name]) for name in ("inits", "params")
             )
     inits, params = solver.build_grid(
-        initial_values=initial_conditions, parameters=parameters
+        initial_values=initial_conditions,
+        parameters={"rho": np.linspace(0.0, 21.0, n_runs)},
     )
     if gfile is not None:
         os.makedirs(grid_cache, exist_ok=True)

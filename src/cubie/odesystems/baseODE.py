@@ -36,7 +36,7 @@ See Also
 
 from abc import abstractmethod
 from copy import deepcopy
-from typing import Any, Callable, Dict, Mapping, Optional, Set
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Set
 
 from attrs import define, field
 from numpy import float32
@@ -219,20 +219,19 @@ class BaseODE(CUDAFactory):
         # return ODECache(dxdt=dxdt)
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Apply compile settings, parameter values, then a binding.
+        """Apply compile settings, then parameter values.
 
         Parameters
         ----------
         updates
-            Setting names, parameter names or ``binding`` to new
-            values.
+            Setting names or parameter names to new values.
         silent
             Whether :meth:`update` ignores unrecognised names.
 
         Returns
         -------
         set[str]
-            Names the settings, parameters and binding recognised.
+            Names the settings and parameters recognised.
         """
         names = set(self.parameters.names)
         values = {
@@ -246,9 +245,6 @@ class BaseODE(CUDAFactory):
         recognised = self.update_compile_settings(settings, silent=True)
         if values:
             recognised |= self.set_parameter_values(values)
-        if "binding" in updates:
-            self.bind(updates["binding"])
-            recognised.add("binding")
         return recognised
 
     def set_parameter_values(
@@ -289,6 +285,42 @@ class BaseODE(CUDAFactory):
         """Return the binding that fixes every parameter at its value."""
         return ParameterBinding(
             fixed=self.compile_settings.parameter_values
+        )
+
+    def set_swept_parameters(self, names: Iterable[str]) -> bool:
+        """Sweep ``names`` in the given row order; fix the rest.
+
+        Parameters
+        ----------
+        names
+            Parameter names in parameter-table row order.
+
+        Returns
+        -------
+        bool
+            Whether the binding changed.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        """
+        swept = tuple(names)
+        values = self.compile_settings.parameter_values
+        unknown = set(swept) - set(values)
+        if unknown:
+            raise KeyError(
+                f"{sorted(unknown)} are not parameters of this system."
+            )
+        return self.bind(
+            ParameterBinding(
+                swept=swept,
+                fixed={
+                    name: value
+                    for name, value in values.items()
+                    if name not in swept
+                },
+            )
         )
 
     def bind(self, binding: ParameterBinding) -> bool:

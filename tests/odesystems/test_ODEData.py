@@ -242,12 +242,18 @@ def test_default_binding_fixes_every_parameter():
     )
 
 
-def test_binding_sorts_names_and_values():
-    """Swept names and fixed pairs are held in sorted name order."""
+def test_binding_keeps_swept_order_and_sorts_fixed():
+    """Swept names keep their row order; fixed pairs are sorted."""
     binding = ParameterBinding(swept=["k", "c"], fixed={"z": 1, "a": 2})
-    assert binding.swept == ("c", "k")
+    assert binding.swept == ("k", "c")
     assert binding.fixed == (("a", 2.0), ("z", 1.0))
     assert binding.names == ("a", "c", "k", "z")
+
+
+def test_binding_rejects_repeated_swept_name():
+    """A swept name can name one row only."""
+    with pytest.raises(ValueError, match="repeat"):
+        ParameterBinding(swept=["k", "k"])
 
 
 def test_binding_rejects_swept_and_fixed_name():

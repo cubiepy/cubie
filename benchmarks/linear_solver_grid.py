@@ -154,6 +154,7 @@ def fabbri_grid(solver, n_runs: int):
     parameters = {
         FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
         FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
+        "Rate_modulation_experiments_ANS": 1.0,
     }
     return solver.build_grid(parameters=parameters)
 
@@ -205,7 +206,6 @@ SYSTEMS = {
             "dt_min": 1e-12,
             "dt_max": 1e-2,
         },
-        "parameter_values": {"Rate_modulation_experiments_ANS": 1.0},
     },
 }
 
@@ -244,11 +244,7 @@ def build_solver(system, algorithm, spec, correction, precond,
         elif variant == "prefactored":
             kwargs["inexact_newton"] = True
             kwargs["prefactored"] = True
-    solver = qb.Solver(system, **kwargs)
-    parameter_values = spec.get("parameter_values")
-    if parameter_values:
-        solver.update(parameter_values)
-    return solver
+    return qb.Solver(system, **kwargs)
 
 
 def solve_once(solver, inits, params, duration: float):

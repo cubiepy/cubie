@@ -54,11 +54,29 @@ compiled program itself, rather than taking up space in the scarce fast
 memory that needs to be able to change often. This means they require no
 memory traffic, and they free up more space to run more runs at once!
 
-A parameter given as a dict entry with one value, or left out of the
-batch's inputs, is fixed. When you pass a parameter array instead, every
-row is read from memory unless you pass ``find_constant_params=True``,
-which checks the array for rows that hold one value and compiles those
-in.
+The ``parameters`` input decides which parameters are swept. A dict
+sweeps the entries whose values differ across runs; an entry with one
+value, and every parameter left out, is fixed:
+
+.. code-block:: python
+
+   solver.solve(y0, {"rho": np.linspace(0, 28, 4096), "sigma": 10.0})
+
+An array with a row per system parameter sweeps every row, unless you
+pass ``fix_constant_parameters=True``, which compiles in the rows that
+hold one value. An array with a row per swept parameter keeps the swept
+set as it is, so repeated solves of the same shape never recompile.
+
+To prepare a batch of arrays you have already built, possibly on the
+GPU, name the swept parameters first, in the order of your array's
+rows:
+
+.. code-block:: python
+
+   solver.set_swept_parameters(["rho", "beta"])
+   solver.solve(device_inits, device_params)  # two parameter rows
+
+Every other parameter is compiled in at its current value.
 
 Profiling with TimeLogger
 -------------------------

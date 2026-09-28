@@ -149,11 +149,11 @@ def assemble_simplified(
 ):
     """Structurally simplify a normalised system and package it.
 
-    ``parameters`` holds the swept parameters; fixed ones are already
-    literals in ``normalised``. Returns ``(index_map, all_symbols,
-    funcs, parsed_equations, fn_hash)``; the derived mass matrix rides
-    on ``parsed_equations.mass_matrix``. Solver states are held in
-    sorted name order.
+    ``parameters`` holds the swept parameters in parameter-table row
+    order; fixed ones are already literals in ``normalised``. Returns
+    ``(index_map, all_symbols, funcs, parsed_equations, fn_hash)``;
+    the derived mass matrix rides on ``parsed_equations.mass_matrix``.
+    Solver states are held in sorted name order.
     """
 
     unknown_syms = [
@@ -269,6 +269,7 @@ def assemble_simplified(
         parameter_units=parameter_units,
         observable_units=observable_units,
         driver_units=driver_units,
+        sort_parameters=False,
     )
     if driver_dict is not None:
         index_map.drivers.set_passthrough_defaults(driver_dict)

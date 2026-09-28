@@ -47,7 +47,7 @@ def _reorder(values, order):
 
 
 class IndexedBaseMap:
-    """Map named symbols onto a SymPy indexed base, sorted by name."""
+    """Map named symbols onto a SymPy indexed base, sorted by default."""
 
     def __init__(
         self,
@@ -57,6 +57,7 @@ class IndexedBaseMap:
         length: int = 0,
         real: bool = True,
         units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
+        sort: bool = True,
     ) -> None:
         """Initialise an indexed base with optional default values.
 
@@ -78,9 +79,14 @@ class IndexedBaseMap:
             Can be a dictionary mapping symbol names to unit strings,
             or an iterable of unit strings. If None, defaults to
             "dimensionless" for all symbols.
+        sort
+            Hold the symbols in sorted name order; ``False`` keeps the
+            order of ``symbol_labels``.
         """
         labels = list(symbol_labels)
-        order = sorted(range(len(labels)), key=labels.__getitem__)
+        order = list(range(len(labels)))
+        if sort:
+            order.sort(key=labels.__getitem__)
         input_defaults = _reorder(input_defaults, order)
         units = _reorder(units, order)
         labels = [labels[index] for index in order]
@@ -330,6 +336,7 @@ class IndexedBases:
             Union[Dict[str, str], Iterable[str]]
         ] = None,
         driver_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
+        sort_parameters: bool = True,
     ) -> "IndexedBases":
         """Construct indexed bases from user-provided metadata.
 
@@ -355,6 +362,9 @@ class IndexedBases:
             Optional units for observables. Defaults to "dimensionless".
         driver_units
             Optional units for drivers. Defaults to "dimensionless".
+        sort_parameters
+            Hold parameters in sorted name order; ``False`` keeps the
+            order of ``parameters``.
 
         Returns
         -------
@@ -393,7 +403,8 @@ class IndexedBases:
             param_names,
             input_defaults=param_defaults,
             real=real,
-            units=parameter_units
+            units=parameter_units,
+            sort=sort_parameters,
         )
         observables_ = IndexedBaseMap("observables", observables, real=real,
                                       units=observable_units)

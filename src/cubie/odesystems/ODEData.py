@@ -112,6 +112,14 @@ def _sorted_names(names: Iterable[str]) -> Tuple[str, ...]:
     return tuple(sorted(str(name) for name in names))
 
 
+def _ordered_names(names: Iterable[str]) -> Tuple[str, ...]:
+    """Return ``names`` as a tuple of strings, rejecting repeats."""
+    ordered = tuple(str(name) for name in names)
+    if len(set(ordered)) != len(ordered):
+        raise ValueError(f"Swept parameters {list(ordered)} repeat a name.")
+    return ordered
+
+
 def _sorted_items(values: Any) -> Tuple[Tuple[str, float], ...]:
     """Return a mapping or pairs as sorted ``(name, float)`` pairs."""
     items = values.items() if isinstance(values, Mapping) else values
@@ -128,11 +136,12 @@ class ParameterBinding:
     ----------
     swept
         Names read per run from the parameter table, in row order.
+        The order is kept: it is the order of the table's rows.
     fixed
         Names and values compiled into the generated source.
     """
 
-    swept: Tuple[str, ...] = field(default=(), converter=_sorted_names)
+    swept: Tuple[str, ...] = field(default=(), converter=_ordered_names)
     fixed: Tuple[Tuple[str, float], ...] = field(
         default=(), converter=_sorted_items
     )

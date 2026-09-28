@@ -41,6 +41,7 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Union,
@@ -114,6 +115,22 @@ def _unknown_names(
 ) -> Set[str]:
     """Return the names neither a setting nor a parameter of ``system``."""
     return names - recognised - set(system.parameters.names)
+
+
+def _reject_parameter_values(system: BaseODE, names: Set[str]) -> None:
+    """Raise when ``names`` give parameter values beside ``parameters``.
+
+    Raises
+    ------
+    ValueError
+        If any of ``names`` is a parameter of ``system``.
+    """
+    given = sorted(names & set(system.parameters.names))
+    if given:
+        raise ValueError(
+            f"Parameters {given} were given as options; pass their "
+            "values in the parameters input."
+        )
 
 
 def _system_from_equations(
@@ -197,7 +214,7 @@ def solve_ivp(
     grid_type: str = "combinatorial",
     time_logging_level: Optional[str] = None,
     nan_error_trajectories: bool = True,
-    find_constant_params: bool = False,
+    fix_constant_parameters: bool = False,
     **kwargs: Any,
 ) -> SolveResult:
     """Solve a batch initial value problem.
@@ -257,11 +274,12 @@ def solve_ivp(
         codes are automatically set to NaN, protecting users from analyzing
         invalid data. When ``False``, all trajectories are returned with
         original values.
-    find_constant_params : bool, default=False
+    fix_constant_parameters : bool, default=False
         Compile in the rows of an array ``parameters`` input that hold
         one value across every run.
     **kwargs
         Additional keyword arguments passed to :class:`Solver`.
+        Parameter values belong in ``parameters``.
 
     Returns
     -------
@@ -280,6 +298,7 @@ def solve_ivp(
             precision=kwargs.pop("precision", None),
         )
 
+    _reject_parameter_values(system, set(kwargs))
     if save_variables is not None:
         kwargs.setdefault("save_variables", save_variables)
     if summarise_variables is not None:
@@ -311,7 +330,7 @@ def solve_ivp(
             t0=t0,
             grid_type=grid_type,
             nan_error_trajectories=nan_error_trajectories,
-            find_constant_params=find_constant_params,
+            fix_constant_parameters=fix_constant_parameters,
             **solve_options,
         )
         default_timelogger.stop_event("solve_ivp")
@@ -555,7 +574,7 @@ class Solver:
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
-        find_constant_params: bool = False,
+        fix_constant_parameters: bool = False,
         **kwargs: Any,
     ) -> Union[SolveResult, DeviceSolveResult]:
         """Solve a batch initial value problem.
@@ -570,14 +589,16 @@ class Solver:
             Numba) are used in place with no host-to-device transfer;
             they must already match the system precision.
         parameters
-            Parameter values for each run. Accepts dictionaries
-            mapping parameter names to values, or pre-built arrays
-            with a row per system parameter or per swept parameter
-            (see :attr:`swept_parameters`). Device arrays are
-            accepted as for ``initial_values``. A dict parameter that
-            holds one value across the batch, and every parameter
-            not given, is compiled into the generated code as a
-            number.
+            Parameter values for each run: a dict mapping names to
+            values, or an array with a row per swept parameter (see
+            :attr:`swept_parameters`) or per system parameter. A dict
+            sweeps the names whose values differ across runs and
+            compiles every other parameter in as a number, at its
+            given or current value. A row per system parameter sweeps
+            every row, except the rows ``fix_constant_parameters``
+            finds uniform. A row per swept parameter, or ``None``,
+            keeps the swept set; ``None`` runs the current values.
+            Device arrays are accepted as for ``initial_values``.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -603,12 +624,18 @@ class Solver:
             arrays and return a :class:`DeviceSolveResult` holding the
             solver's device output buffers plus the CUDA stream the
             solve ran on; see Notes. Default ``False``.
-        find_constant_params
+        fix_constant_parameters
             Compile in the rows of a host array ``parameters`` input
             that hold one value across every run. Default ``False``.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
-            Arguments" in the docs for possibilities.
+            Arguments" in the docs for possibilities. Parameter values
+            belong in ``parameters``.
+
+        Raises
+        ------
+        ValueError
+            If ``kwargs`` name a parameter of the system.
 
         Returns
         -------
@@ -643,6 +670,7 @@ class Solver:
         and the next ``solve()`` on this solver overwrites them. A
         chunked run raises ``ValueError``.
         """
+        _reject_parameter_values(self.system, set(kwargs))
         if drivers is not None:
             kwargs["drivers"] = drivers
         self.update(**kwargs)
@@ -655,7 +683,7 @@ class Solver:
             states=initial_values,
             params=parameters,
             kind=grid_type,
-            find_constant_params=find_constant_params,
+            fix_constant_parameters=fix_constant_parameters,
         )
         self._bind(binding)
 
@@ -698,7 +726,7 @@ class Solver:
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
         grid_type: str = "verbatim",
-        find_constant_params: bool = False,
+        fix_constant_parameters: bool = False,
         optimize_candidates: bool = False,
         max_parallel: int = 4,
         **kwargs: Any,
@@ -715,19 +743,26 @@ class Solver:
             for the swept and fixed parameters they imply.
         grid_type
             Grid strategy when dict inputs build a grid.
-        find_constant_params
+        fix_constant_parameters
             Compile in uniform rows of a host array ``parameters``.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
             Maximum compilations to run in parallel.
         **kwargs
-            Options forwarded to :meth:`update`.
+            Options forwarded to :meth:`update`; parameter values
+            belong in ``parameters``.
+
+        Raises
+        ------
+        ValueError
+            If ``kwargs`` name a parameter of the system.
         """
+        _reject_parameter_values(self.system, set(kwargs))
         self.update(**kwargs)
         self._bind(
             self.input_handler.binding(
-                parameters, grid_type, find_constant_params
+                parameters, grid_type, fix_constant_parameters
             )
         )
 
@@ -751,7 +786,7 @@ class Solver:
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
         grid_type: str = "verbatim",
-        find_constant_params: bool = False,
+        fix_constant_parameters: bool = False,
     ) -> Tuple[ndarray, ndarray]:
         """Build parameter and state grids and bind the solver to them.
 
@@ -767,7 +802,7 @@ class Solver:
             Strategy for constructing the grid. ``"combinatorial"``
             produces all combinations while ``"verbatim"`` preserves
             column-wise pairings. Default is ``"verbatim"``.
-        find_constant_params
+        fix_constant_parameters
             Compile in uniform rows of a host array ``parameters``.
 
         Returns
@@ -790,15 +825,37 @@ class Solver:
             states=initial_values,
             params=parameters,
             kind=grid_type,
-            find_constant_params=find_constant_params,
+            fix_constant_parameters=fix_constant_parameters,
         )
         self._bind(binding)
         return inits, params
 
+    def set_swept_parameters(self, names: Sequence[str]) -> None:
+        """Sweep ``names``, in this row order, and fix the rest.
+
+        Every other parameter is compiled in at its current value.
+        Arrays with one row per name, in this order, then solve with
+        the swept set unchanged, including device arrays.
+
+        Parameters
+        ----------
+        names
+            Parameter names in parameter-table row order.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name repeats.
+        """
+        if self.system.set_swept_parameters(names):
+            self.update()
+
     def _bind(self, binding: ParameterBinding) -> None:
         """Compile ``binding`` into the system and refresh the kernel."""
-        self.system.bind(binding)
-        self.update()
+        if self.system.bind(binding):
+            self.update()
 
     def calibrate(
         self,
@@ -809,7 +866,7 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        find_constant_params: bool = False,
+        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         auto_size: bool = True,
@@ -853,7 +910,7 @@ class Solver:
             Strategy for constructing the integration grid from
             inputs. Only used when dict inputs trigger grid
             construction.
-        find_constant_params
+        fix_constant_parameters
             Compile in uniform rows of a host array ``parameters``.
         apply
             Apply the winner's configuration to this solver when
@@ -894,7 +951,7 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
-            find_constant_params=find_constant_params,
+            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             auto_size=auto_size,
@@ -912,7 +969,7 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        find_constant_params: bool = False,
+        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
@@ -943,7 +1000,7 @@ class Solver:
             Initial integration time. Default ``0.0``.
         grid_type
             Grid strategy when dict inputs build a grid.
-        find_constant_params
+        fix_constant_parameters
             Compile in uniform rows of a host array ``parameters``.
         apply
             Apply the fastest settings to this solver. Default ``True``.
@@ -983,7 +1040,7 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
-            find_constant_params=find_constant_params,
+            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             force=force,

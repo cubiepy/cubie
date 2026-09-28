@@ -283,15 +283,14 @@ def test_call_device_arrays_pass_through(input_handler, system):
 
 
 def test_call_device_states_none_params(input_handler, system):
-    """Device states pair with every parameter fixed at its default."""
+    """Device states pair with the swept rows at their values."""
     n_states = system.sizes.states
     states = _FakeDeviceArray((n_states, 4), system.precision)
     result_s, result_p, binding = input_handler(states, None, "verbatim")
     assert result_s is states
-    assert result_p.shape == (0, 4)
+    assert result_p.shape == (len(system.swept_parameters), 4)
     assert result_p.dtype == system.precision
-    assert binding.swept == ()
-    assert binding.fixed_values == system.parameters.as_float_dict
+    assert binding == system.binding
 
 
 def test_call_device_states_single_column_params(input_handler, system):
@@ -758,14 +757,12 @@ def test_fill_aligned_combinatorial(input_handler):
 
 
 def test_call_none_returns_defaults(input_handler, system):
-    """Empty inputs return one run with every parameter fixed."""
+    """Empty inputs return one run and keep the binding."""
     inits, params, binding = input_handler(states=None, params=None)
     assert inits.shape[1] == 1
-    assert params.shape == (0, 1)
+    assert params.shape == (len(system.swept_parameters), 1)
     assert_allclose(inits[:, 0], system.initial_values.values_array)
-    assert binding == ParameterBinding(
-        fixed=system.parameters.values_dict
-    )
+    assert binding == system.binding
 
 
 def test_call_verbatim_mismatch_raises(input_handler, system):
@@ -1150,15 +1147,15 @@ def test_system_height_array_sweeps_every_row(input_handler, system):
     assert binding == ParameterBinding(swept=system.parameters.names)
 
 
-def test_find_constant_params_fixes_uniform_rows(input_handler, system):
-    """find_constant_params fixes array rows that hold one value."""
+def test_fix_constant_parameters_fixes_uniform_rows(input_handler, system):
+    """fix_constant_parameters fixes array rows that hold one value."""
     names = list(system.parameters.names)
     params = np.full(
         (system.num_parameters, 3), 7.0, dtype=system.precision
     )
     params[0] = [1.0, 2.0, 3.0]
     _, result, binding = input_handler(
-        params=params, kind="verbatim", find_constant_params=True
+        params=params, kind="verbatim", fix_constant_parameters=True
     )
     assert binding.swept == (names[0],)
     assert binding.fixed_values == {name: 7.0 for name in names[1:]}
@@ -1182,12 +1179,67 @@ def test_swept_height_array_keeps_binding(system_restored):
     assert result is params
 
 
-def test_binding_matches_call_without_a_grid(input_handler, system):
+@pytest.mark.parametrize("kind", ["verbatim", "combinatorial"])
+def test_binding_matches_call_without_a_grid(input_handler, system, kind):
     """binding() returns the binding __call__ reports."""
     names = list(system.parameters.names)
-    request = {names[0]: [1.0, 2.0], names[1]: [3.0, 3.0]}
-    _, _, called = input_handler(params=request, kind="verbatim")
-    assert input_handler.binding(request, "verbatim") == called
+    request = {names[0]: [1.0, 2.0], names[1]: [3.0, 3.0], names[2]: 4.0}
+    _, _, called = input_handler(params=request, kind=kind)
+    assert input_handler.binding(request, kind) == called
+
+
+def test_binding_rejects_ragged_verbatim_entries(input_handler, system):
+    """Verbatim entries of different lengths cannot pair."""
+    names = list(system.parameters.names)
+    with pytest.raises(ValueError, match="same number of values"):
+        input_handler.binding(
+            {names[0]: [1.0, 2.0], names[1]: [3.0, 4.0, 5.0]},
+            "verbatim",
+        )
+
+
+def _sweep_reversed(system):
+    """Sweep the first two parameters, second first."""
+    names = list(system.parameters.names)
+    system.set_swept_parameters([names[1], names[0]])
+    return names
+
+
+@pytest.mark.parametrize("empty", [None, {}, np.empty(0)])
+def test_empty_params_keep_the_binding(system_restored, empty):
+    """No parameter input keeps the swept rows at their values."""
+    system = system_restored
+    names = _sweep_reversed(system)
+    binding = system.binding
+    handler = BatchInputHandler.from_system(system)
+    _, params, result_binding = handler(params=empty, kind="verbatim")
+    assert result_binding == binding
+    values = system.parameters.values_dict
+    assert_allclose(params[:, 0], [values[names[1]], values[names[0]]])
+
+
+def test_dict_sweeping_the_swept_names_keeps_row_order(system_restored):
+    """A dict sweeping the swept names keeps the binding's row order."""
+    system = system_restored
+    names = _sweep_reversed(system)
+    handler = BatchInputHandler.from_system(system)
+    _, params, binding = handler(
+        params={names[0]: [1.0, 2.0], names[1]: [3.0, 4.0]},
+        kind="verbatim",
+    )
+    assert binding.swept == (names[1], names[0])
+    assert_array_equal(params, [[3.0, 4.0], [1.0, 2.0]])
+
+
+def test_device_swept_rows_follow_the_binding_order(system_restored):
+    """A device table with a row per swept name keeps the binding."""
+    system = system_restored
+    _sweep_reversed(system)
+    handler = BatchInputHandler.from_system(system)
+    params = _FakeDeviceArray((2, 3), system.precision)
+    _, result, binding = handler(None, params, "verbatim")
+    assert result is params
+    assert binding == system.binding
 
 
 def test_device_system_height_params_sweep_every_row(

@@ -40,12 +40,15 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 
 ## BaseODE updates and identity
 - A system has one set of parameters. `ODEData.binding` splits them for a batch: swept
-  names form the per-run parameter table (sorted rows), every other parameter is fixed
-  and its value compiles in. A new system fixes every parameter at its value.
+  names form the per-run parameter table (rows in the order `swept` gives), every other
+  parameter is fixed and its value compiles in. A new system fixes every parameter at
+  its value.
 - `BaseODE._update()` routes parameter names to `set_parameter_values()` (a fixed
-  parameter's new value moves into the binding) and `binding` to `bind()`; the rest go
-  through `update_compile_settings`. `bind()` checks the binding names every parameter
-  and calls `_apply_binding`, which `SymbolicODE` overrides to re-specialise. A
+  parameter's new value moves into the binding); the rest go through
+  `update_compile_settings`, and `binding` is not an update key.
+  `set_swept_parameters(names)` binds `names` swept and the rest fixed at their values.
+  `bind()` checks the binding names every parameter and calls `_apply_binding`, which
+  `SymbolicODE` overrides to re-specialise. A
   `precision` change re-materialises all three `SystemValues` through `ODEData.update`.
 - The binding is part of `config_hash`; a `SystemValues` canonical identity is its
   names and precision only.

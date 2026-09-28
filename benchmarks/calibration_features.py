@@ -101,6 +101,7 @@ def fabbri_grid(n_runs: int):
     return None, {
         "Rate_modulation_experiments_ACh": ach.ravel()[:n_runs],
         "Rate_modulation_experiments_Iso_cas": iso.ravel()[:n_runs],
+        "Rate_modulation_experiments_ANS": 1.0,
     }
 
 
@@ -149,7 +150,6 @@ SYSTEMS = {
             "dt_min": 1e-12,
             "dt_max": 1e-2,
         },
-        "parameter_values": {"Rate_modulation_experiments_ANS": 1.0},
     },
 }
 
@@ -206,9 +206,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             output_types=["state"],
             **spec["solver_kwargs"],
         )
-        parameter_values = spec.get("parameter_values")
-        if parameter_values:
-            solver.update(parameter_values)
         initial_values, parameters = spec["grid"](args.n_runs)
         try:
             report = solver.calibrate(

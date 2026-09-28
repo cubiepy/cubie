@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose, assert_array_equal
 
+from cubie._cudasim_extensions import cuda
 from cubie.odesystems.ODEData import ParameterBinding
 
 
@@ -110,7 +111,7 @@ def test_found_constant_rows_match_swept_rows(
         params,
         driver_settings,
         grid_type="verbatim",
-        find_constant_params=True,
+        fix_constant_parameters=True,
     )
     assert solver_mutable.swept_parameters == (names[0],)
     assert_allclose(
@@ -123,6 +124,7 @@ def test_parameter_value_update_recompiles_fixed_value(
 ):
     """A new value for a fixed parameter reaches the next solve."""
     names = list(system_restored.parameters.names)
+    solver_mutable.set_swept_parameters([])
     first = _solve(solver_mutable, None, None, driver_settings)
     value = float(system_restored.parameters.values_dict[names[0]])
     solver_mutable.update({names[0]: 2.0 * value + 1.0})
@@ -131,3 +133,63 @@ def test_parameter_value_update_recompiles_fixed_value(
         pytest.approx(2.0 * value + 1.0)
     )
     assert not np.array_equal(first, second)
+
+
+def test_set_swept_parameters_orders_the_table_rows(
+    solver_mutable, system_restored, driver_settings
+):
+    """Swept-height arrays follow set_swept_parameters' row order."""
+    names = list(system_restored.parameters.names)
+    grid = {names[0]: [0.5, 1.0, 1.5], names[1]: [0.2, 0.4, 0.6]}
+    from_dict = _solve(
+        solver_mutable, None, grid, driver_settings, grid_type="verbatim"
+    )
+    solver_mutable.set_swept_parameters([names[1], names[0]])
+    assert solver_mutable.swept_parameters == (names[1], names[0])
+    compiled_kernel = solver_mutable.kernel.kernel
+    table = np.array(
+        [grid[names[1]], grid[names[0]]], dtype=system_restored.precision
+    )
+    from_array = _solve(solver_mutable, None, table, driver_settings)
+    assert solver_mutable.swept_parameters == (names[1], names[0])
+    assert solver_mutable.kernel.kernel is compiled_kernel
+    assert_array_equal(from_array, from_dict)
+
+    inits = np.tile(
+        system_restored.initial_values.values_array[:, np.newaxis],
+        (1, 3),
+    ).astype(system_restored.precision)
+    from_device = _solve(
+        solver_mutable,
+        cuda.to_device(inits),
+        cuda.to_device(table),
+        driver_settings,
+    )
+    assert solver_mutable.swept_parameters == (names[1], names[0])
+    assert_array_equal(from_device, from_dict)
+
+
+def test_no_parameters_keep_the_swept_set(
+    solver_mutable, system_restored, driver_settings
+):
+    """A solve without parameters runs the swept rows' values."""
+    names = list(system_restored.parameters.names)
+    solver_mutable.set_swept_parameters([names[0]])
+    binding = solver_mutable.binding
+    _solve(solver_mutable, None, None, driver_settings)
+    assert solver_mutable.binding == binding
+    assert_array_equal(
+        solver_mutable.parameters,
+        [[system_restored.parameters.values_dict[names[0]]]],
+    )
+
+
+def test_solve_rejects_parameter_values_as_options(
+    solver_mutable, system_restored, driver_settings
+):
+    """Parameter values go in the parameters input, not options."""
+    name = system_restored.parameters.names[0]
+    with pytest.raises(ValueError, match="parameters input"):
+        _solve(
+            solver_mutable, None, None, driver_settings, **{name: 1.0}
+        )

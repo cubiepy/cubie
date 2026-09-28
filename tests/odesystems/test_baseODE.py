@@ -52,12 +52,11 @@ class TestUpdate:
         with pytest.raises(KeyError, match="Unrecognized parameters"):
             tiny_system.update({"not_a_key": 1.0})
 
-    def test_update_binding_rebinds(self, tiny_system):
-        """A binding given to update is compiled into the system."""
+    def test_update_does_not_take_a_binding(self, tiny_system):
+        """A binding is set through bind, not update."""
         binding = ParameterBinding(swept=["k"], fixed={"c0": 1.0})
-        recognised = tiny_system.update(binding=binding)
-        assert recognised == {"binding"}
-        assert tiny_system.binding == binding
+        with pytest.raises(KeyError, match="binding"):
+            tiny_system.update(binding=binding)
 
 
 class TestSetParameterValues:
@@ -82,6 +81,32 @@ class TestSetParameterValues:
         """A name outside the system's parameters raises KeyError."""
         with pytest.raises(KeyError, match="not_a_key"):
             tiny_system.set_parameter_values({"not_a_key": 1.0})
+
+
+class TestSetSweptParameters:
+    """Cover BaseODE.set_swept_parameters."""
+
+    def test_sweeps_names_in_order_and_fixes_the_rest(self, tiny_system):
+        """The names are swept in the given order; the rest fix."""
+        tiny_system.update(c0=2.0)
+        changed = tiny_system.set_swept_parameters(["k", "c0"])
+        assert changed is True
+        assert tiny_system.swept_parameters == ("k", "c0")
+        assert tiny_system.indices.parameter_names == ["k", "c0"]
+        changed = tiny_system.set_swept_parameters(["k"])
+        assert tiny_system.binding == ParameterBinding(
+            swept=["k"], fixed={"c0": 2.0}
+        )
+
+    def test_same_names_report_no_change(self, tiny_system):
+        """Sweeping the swept names again changes nothing."""
+        tiny_system.set_swept_parameters(["c0"])
+        assert tiny_system.set_swept_parameters(["c0"]) is False
+
+    def test_unknown_name_raises(self, tiny_system):
+        """A name outside the system's parameters raises KeyError."""
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_swept_parameters(["not_a_key"])
 
 
 class TestBind:
