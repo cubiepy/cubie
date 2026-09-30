@@ -1,17 +1,9 @@
-"""Trial the ``peaks`` summary metric against dense voltage saves.
+"""Compare the ``peaks`` summary metric with dense voltage saves.
 
-Part 1 (values): on a ``side`` x ``side`` subset of the grid, integrate
-from the initial state once with dense voltage saves at the finest
-cadence and once per cadence with only ``peaks[n]`` on the voltage.
-At equal cadence both runs clamp steps to the same sample grid, so the
-metric's peak sample indices must equal the dense trace's local-maximum
-indices exactly. At coarser cadences, the metric's peak times (sample
-times from the float32-accumulated grid) are compared with the
-parabola-refined dense peak times.
-
-Part 2 (performance): on the full 256 x 256 grid, the kernel time of
-each configuration over ``--perf-duration`` seconds, best of
-``--repeats``, with a ``save_last``-only baseline that never clamps.
+Part 1, on a ``side`` x ``side`` grid subset: at the finest cadence the
+metric's peak indices must equal the dense trace's; at coarser cadences
+its peak times are matched to parabola-refined dense peaks. Part 2 times
+each configuration on the full grid, best of ``--repeats``.
 
 Usage::
 
@@ -57,7 +49,6 @@ def last_solver(system):
     return common.make_solver(
         system,
         output_types=["state"],
-        save_last=True,
         time_logging_level="default",
     )
 
@@ -139,9 +130,11 @@ def main():
             # Update k lands on save row k + 1.
             same = [
                 np.array_equal(m + 1, d)
-                for m, d in zip(indices, dense_idx)
+                for m, d, bad in zip(indices, dense_idx, failed | dense_failed)
+                if not bad
             ]
             row["index_match_runs"] = int(np.sum(same))
+            row["index_compared_runs"] = len(same)
             row["grid_matches_saves"] = bool(
                 np.array_equal(
                     grid[:n_samples].astype(np.float32),
@@ -149,24 +142,39 @@ def main():
                 )
             )
         errors = []
-        count_mismatch = 0
-        for m, refined in zip(indices, dense_refined):
-            times = grid[m]
-            if times.size != refined.size:
-                count_mismatch += 1
+        interval_errors = []
+        missing = extra = 0
+        compared = 0
+        for run in range(n_runs):
+            if failed[run] or dense_failed[run]:
                 continue
-            errors.append(times - refined)
-        errors = np.concatenate(errors) if errors else np.array([0.0])
-        row["count_mismatch_runs"] = count_mismatch
+            compared += 1
+            times = grid[indices[run]]
+            refined = dense_refined[run]
+            if times.size == 0 or refined.size == 0:
+                missing += refined.size
+                extra += times.size
+                continue
+            # Nearest metric peak to each dense peak, within 50 ms.
+            nearest = np.abs(times[None, :] - refined[:, None]).argmin(1)
+            delta = times[nearest] - refined
+            matched = np.abs(delta) < 0.05
+            missing += int((~matched).sum())
+            extra += times.size - np.unique(nearest[matched]).size
+            errors.append(delta[matched])
+            both = matched[1:] & matched[:-1]
+            interval_errors.append(np.diff(delta)[both])
+        errors = np.concatenate(errors)
+        interval_errors = np.concatenate(interval_errors)
+        row["runs_compared"] = compared
+        row["dense_peaks_unmatched"] = missing
+        row["metric_peaks_unmatched"] = extra
+        row["peaks_matched"] = int(errors.size)
         row["abs_error_ms_median"] = float(np.median(np.abs(errors)) * 1e3)
         row["abs_error_ms_max"] = float(np.max(np.abs(errors)) * 1e3)
-        interval_errors = []
-        for m, refined in zip(indices, dense_refined):
-            if m.size == refined.size and m.size > 1:
-                interval_errors.append(
-                    np.diff(grid[m]) - np.diff(refined)
-                )
-        interval_errors = np.concatenate(interval_errors)
+        row["interval_error_ms_median"] = float(
+            np.median(np.abs(interval_errors)) * 1e3
+        )
         row["interval_error_ms_max"] = float(
             np.max(np.abs(interval_errors)) * 1e3
         )

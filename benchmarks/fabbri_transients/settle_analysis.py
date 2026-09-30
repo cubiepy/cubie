@@ -1,10 +1,7 @@
 """Settling-time analysis of ``settle.py`` output.
 
-For each run, the steady cycle length is the median of the last
-``--tail`` cycle lengths. A run has settled at tolerance ``tol`` from
-the start of the first cycle after which every cycle length stays
-within ``tol`` of the steady value. Prints the settling-time
-distribution per tolerance and plots cycle length against time.
+A run settles at tolerance ``tol`` from the first peak after which every
+cycle length stays within ``tol`` of the median of the last ``--tail``.
 
 Usage::
 

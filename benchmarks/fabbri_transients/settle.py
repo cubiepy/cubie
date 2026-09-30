@@ -1,10 +1,7 @@
-"""Time to a steady periodic state from the model's initial conditions.
+"""Time to a steady periodic state from the CellML initial state.
 
-Integrates a ``side`` x ``side`` subset of the ACh/Iso grid (evenly
-spaced indices of the full 256-point axes) from the CellML initial
-state, saving membrane voltage densely. Peak times are the vertices of
-parabolas through each sampled local maximum; cycle lengths are the
-differences of successive peak times. Writes peak times per run to
+Integrates a ``side`` x ``side`` subset of the grid, saving voltage
+densely, and writes parabola-refined peak times per run to
 ``results/settle_peaks_<side>_<duration>s.npz``.
 
 Usage::

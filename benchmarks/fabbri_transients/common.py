@@ -1,11 +1,8 @@
 """Shared setup for the Fabbri-Linder transient analysis.
 
-The system is the Fabbri-Linder human sinoatrial node model with the
-autonomic cascade switched on (``ANS = 1``). With the cascade on, the
-autonomic inputs are ``ACh_cas`` and ``Iso_cas`` (nanomolar), which set
-the cAMP/PKA drive of the ANS-gated current and flux branches; those
-two are the swept parameters. Every run uses rosenbrock23 at
-``atol = rtol = 1e-6`` in float32.
+ANS is on, so ``ACh_cas`` and ``Iso_cas`` (nM) drive the autonomic
+branches; they are the swept parameters. Solves use rosenbrock23,
+``atol = rtol = 1e-6``, float32.
 """
 
 from pathlib import Path
@@ -29,13 +26,11 @@ VOLTAGE = "Membrane$V_ode"
 VOLTAGE_LABEL = "Membrane_V_ode"
 
 GRID_SIDE = 256
-# Linear axes to ~2.3x (ACh) and ~3.4x (Iso) the cascade's
-# half-saturation constants (43.5 nM, 58.6 nM in the cAMP component).
+# Axes span ~2-3x the cascade half-saturations (43.5, 58.6 nM).
 ACH_RANGE = (0.0, 100.0)
 ISO_RANGE = (0.0, 200.0)
 
-# Step bounds as in linear_solver_grid.py's fabbri entry: the default
-# dt_min (1e-6 s) ends ~10% of runs with STEP_TOO_SMALL within 300 s.
+# Step bounds from linear_solver_grid.py's fabbri entry.
 SOLVER_SETTINGS = {
     "algorithm": "rosenbrock23",
     "atol": 1e-6,
@@ -131,25 +126,27 @@ def dense_peaks(time, voltage):
     Returns
     -------
     list of ndarray
-        Per run, the sample index of every strict local maximum (the
-        rule the ``peaks`` summary metric applies) and the time of the
-        vertex of the parabola through it and its neighbours.
+        Per run, local-maximum sample indices under the ``peaks``
+        metric's rule, and parabola-refined peak times.
     """
-    prev = voltage[:-2]
-    mid = voltage[1:-1]
-    nxt = voltage[2:]
-    is_peak = (mid > prev) & (mid > nxt)
     time = np.asarray(time, dtype=np.float64)
     indices = []
     refined = []
     for run in range(voltage.shape[1]):
-        idx = np.flatnonzero(is_peak[:, run]) + 1
-        indices.append(idx)
+        trace = voltage[:, run]
+        ends = np.append(
+            np.flatnonzero(trace[1:] != trace[:-1]), trace.size - 1
+        )
+        values = trace[ends]
+        is_peak = (values[1:-1] > values[:-2]) & (values[1:-1] > values[2:])
+        end = ends[1:-1][is_peak]
+        start = ends[:-2][is_peak] + 1
+        indices.append(end)
         refined.append(
             parabola_vertex(
-                time[idx - 1], time[idx], time[idx + 1],
-                voltage[idx - 1, run], voltage[idx, run],
-                voltage[idx + 1, run],
+                time[start - 1], 0.5 * (time[start] + time[end]),
+                time[end + 1], trace[start - 1], trace[end],
+                trace[end + 1],
             )
         )
     return indices, refined
@@ -168,12 +165,9 @@ def parabola_vertex(x0, x1, x2, y0, y1, y2):
 
 
 def float32_sample_grid(interval, n_samples, t_start=0.0, t_end=None):
-    """Return the loop's float32-accumulated sample times.
+    """Return the time of each summary update ``k``.
 
-    The loop advances its next sample time as
-    ``min(next + interval, t_end)`` in run precision, so late samples
-    drift from ``t_start + k * interval``. Sample ``k`` of the
-    returned array is the time of summary update ``k``.
+    The loop accumulates ``min(next + interval, t_end)`` in float32.
     """
     step = np.float32(interval)
     end = np.float32(np.inf if t_end is None else t_end)
