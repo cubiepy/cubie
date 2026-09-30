@@ -768,34 +768,34 @@ def calculate_single_summary_array(
                     summary_index += 2
 
 
+def _plateau_ends(signal: np.ndarray) -> np.ndarray:
+    """Return the last index of every run of equal values."""
+    changes = np.flatnonzero(signal[1:] != signal[:-1])
+    return np.append(changes, signal.size - 1)
+
+
 def local_maxima(signal: np.ndarray) -> np.ndarray:
     """Find local maxima in a signal.
 
-    Returns indices of local maxima. The +1 offset corrects for the
-    signal[1:-1] slicing used in the comparison (flatnonzero returns
-    indices into the sliced array, not the original signal).
+    Returns indices of local maxima. A run of equal values counts as
+    one sample, reported at its last index, as the device metric does.
     """
-    return (
-        np.flatnonzero(
-            (signal[1:-1] > signal[:-2]) & (signal[1:-1] > signal[2:])
-        )
-        + 1  # Correct for signal[1:-1] indexing offset
-    )
+    ends = _plateau_ends(signal)
+    values = signal[ends]
+    peaks = (values[1:-1] > values[:-2]) & (values[1:-1] > values[2:])
+    return ends[1:-1][peaks]
 
 
 def local_minima(signal: np.ndarray) -> np.ndarray:
     """Find local minima in a signal.
 
-    Returns indices of local minima. The +1 offset corrects for the
-    signal[1:-1] slicing used in the comparison (flatnonzero returns
-    indices into the sliced array, not the original signal).
+    Returns indices of local minima. A run of equal values counts as
+    one sample, reported at its last index, as the device metric does.
     """
-    return (
-        np.flatnonzero(
-            (signal[1:-1] < signal[:-2]) & (signal[1:-1] < signal[2:])
-        )
-        + 1  # Correct for signal[1:-1] indexing offset
-    )
+    ends = _plateau_ends(signal)
+    values = signal[ends]
+    troughs = (values[1:-1] < values[:-2]) & (values[1:-1] < values[2:])
+    return ends[1:-1][troughs]
 
 
 def deterministic_array(precision, size: Union[int, tuple[int]], scale=1.0):

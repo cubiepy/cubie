@@ -32,8 +32,8 @@ class Peaks(SummaryMetric):
 
     Notes
     -----
-    The buffer stores the two previous values, a peak counter, and slots for
-    the recorded peak indices. The algorithm assumes ``0.0`` does not occur in
+    The buffer stores the previous value, the last value that differed
+    from it, a peak counter, and slots for the recorded peak indices. The algorithm assumes ``0.0`` does not occur in
     valid data so it can serve as an initial sentinel.
     """
 
@@ -91,8 +91,9 @@ class Peaks(SummaryMetric):
             value
                 float. New value to analyse for peak detection.
             buffer
-                device array. Layout ``[prev, prev_prev, counter,
-                times...]``.
+                device array. Layout ``[prev, before, counter,
+                times...]``; ``before`` is the last value that
+                differed from ``prev``.
             current_index
                 int. Current integration step index, used to record peaks.
             customisable_variable
@@ -100,9 +101,10 @@ class Peaks(SummaryMetric):
 
             Notes
             -----
-            Detects peaks when the prior value exceeds both the current and
-            second-prior values. Peak indices are stored after the
-            counter.
+            Detects a peak when the prior value exceeds both the current
+            value and the last value before it that differed from it, so
+            a run of equal values counts once, at its last sample. Peak
+            indices are stored after the counter.
             """
             npeaks = customisable_variable
             prev = buffer[0]
@@ -122,8 +124,9 @@ class Peaks(SummaryMetric):
                     # Bingo
                     int_slots[1 + peak_counter] = current_index - int32(1)
                     int_slots[0] = peak_counter + int32(1)
-            buffer[0] = value  # Update previous value
-            buffer[1] = prev  # Update previous previous value
+            buffer[0] = value
+            # A repeated value keeps the value before the plateau.
+            buffer[1] = cuda.selp(value != prev, prev, prev_prev)
 
         @cuda.jit(
             # [
