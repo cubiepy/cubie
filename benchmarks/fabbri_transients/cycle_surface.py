@@ -1,9 +1,4 @@
-"""Write an interactive surface page of steady-state cycle length.
-
-Usage::
-
-    python benchmarks/fabbri_transients/cycle_surface.py OUT_HTML
-"""
+"""Write a steady-state cycle-length surface page: ``cycle_surface.py OUT``."""
 
 import json
 import sys
