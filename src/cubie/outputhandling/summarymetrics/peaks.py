@@ -33,8 +33,9 @@ class Peaks(SummaryMetric):
     Notes
     -----
     The buffer stores the previous value, the last value that differed
-    from it, a peak counter, and slots for the recorded peak indices. The algorithm assumes ``0.0`` does not occur in
-    valid data so it can serve as an initial sentinel.
+    from it, a peak counter, and slots for the recorded peak indices.
+    The algorithm assumes ``0.0`` does not occur in valid data so it can
+    serve as an initial sentinel.
     """
 
     def __init__(self, precision) -> None:
