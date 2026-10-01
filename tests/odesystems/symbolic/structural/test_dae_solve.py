@@ -184,12 +184,14 @@ def test_neumann_rejected_on_torn_system(torn_dae_system):
 @pytest.mark.parametrize(
     "solver_settings_override", [TORN_RADAU], indirect=True
 )
-def test_singular_mass_defaults_reapplied_on_swap(solver_mutable):
-    # The DAE overlay re-applies on algorithm swap.
+def test_singular_mass_defaults_reapplied_on_swap(solver_mutable, system):
+    # The DAE overlay and the mass flags re-apply on algorithm swap.
     solver_mutable.update({"algorithm": "backwards_euler"})
     step = solver_mutable.kernel.single_integrator._algo_step
     for key, value in DAE_SOLVER_DEFAULTS.items():
         assert getattr(step, key) == value
+    assert step.compile_settings.mass_flags == system.mass_diagonal_flags
+    assert step.compile_settings.has_algebraic_rows
 
 
 @pytest.mark.parametrize(

@@ -137,9 +137,8 @@ class ImplicitStepConfig(BaseStepConfig):
 
     Notes
     -----
-    The mass matrix is not an algorithm parameter: it belongs to the
-    ODE system, and mass-consuming solver helpers read it from the
-    system when generated through ``get_solver_helper_fn``.
+    Mass-consuming solver helpers read the mass matrix from the system
+    when generated through ``get_solver_helper_fn``.
     """
 
     _operator_beta: float = field(

@@ -1881,7 +1881,7 @@ class CPURosenbrockWStep(CPUStep):
         ) * gamma * dt_value
 
         lhs_matrix = (
-            self._identity - dt_value * gamma * jacobian_now
+            self.dense_mass_matrix() - dt_value * gamma * jacobian_now
         )
         stage_increment, converged, niters = self.linear_solve(
             lhs_matrix,
@@ -1931,10 +1931,11 @@ class CPURosenbrockWStep(CPUStep):
                     correction += (
                         coeff * stage_increments[predecessor]
                     )
+            correction = self.mass_matrix_apply(correction)
             rhs_vector = (rhs_vector + correction * idt) * gamma * dt_value
 
             lhs_matrix = (
-                self._identity
+                self.dense_mass_matrix()
                 - dt_value * gamma * jacobian_now
             )
             initial_guess = stage_increments[stage_index - 1].copy()

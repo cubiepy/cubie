@@ -391,6 +391,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         has_error = self.uses_error
         use_smoothed_error = self.smooth_error
         apply_mass = config.apply_mass_fn
+        has_algebraic_rows = config.has_algebraic_rows
+        mass_diagonal = config.mass_diagonal
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
@@ -695,6 +697,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                             prior_idx = predecessor_idx * n + idx
                             prior_val = stage_store[prior_idx]
                             correction += c_coeff * prior_val
+                    if has_algebraic_rows:
+                        # The coupling carries M; zero-mass rows drop it.
+                        correction *= mass_diagonal[idx]
 
                     f_stage_val = stage_rhs[idx]
                     deriv_val = stage_gamma * time_derivative[idx]
