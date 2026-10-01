@@ -645,7 +645,7 @@ class ComparisonRunner:
         self.emit(f"batch: {self.runs} runs")
 
     def batch_cap(self) -> int:
-        """Runs that fit in memory at the staged batch's bytes per run."""
+        """Runs that fit in one chunk at the staged bytes per run."""
         kernel = self._solver.kernel
         manager = kernel.memory_manager
         allocated = sum(
@@ -655,8 +655,13 @@ class ComparisonRunner:
         available = manager.get_available_memory(
             manager.get_stream_group(kernel)
         )
+        free, _ = manager.get_memory_info()
+        # The solve's own buffers are reusable.
+        budget = manager.allocatable_bytes(
+            available + allocated, free + allocated
+        )
         bytes_per_run = (allocated + self.staged_bytes) / self.runs
-        return int((available + allocated) // bytes_per_run)
+        return int(budget // bytes_per_run)
 
     def fit_batch(
         self, measured: float, target_ms: float, grow: bool, shrink: bool

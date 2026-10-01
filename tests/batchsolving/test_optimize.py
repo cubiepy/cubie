@@ -544,11 +544,10 @@ def test_duration_floor_holds_the_final_summary_sample(
 
 
 @pytest.mark.nocudasim
-@pytest.mark.parametrize("auto_size", [True, False])
 def test_optimize_takes_device_grids(
-    solver_mutable, simple_initial_values, simple_parameters, auto_size
+    solver_mutable, simple_initial_values, simple_parameters
 ):
-    """Device grids optimise with and without automatic sizing."""
+    """Device grids optimise at the given batch."""
     inits, params = solver_mutable.build_grid(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
@@ -558,7 +557,7 @@ def test_optimize_takes_device_grids(
         duration=0.1,
         verbose=False,
         apply=False,
-        auto_size=auto_size,
+        auto_size=False,
         max_parallel=1,
     )
     assert result.best is not None

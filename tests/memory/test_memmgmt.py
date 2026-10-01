@@ -2791,6 +2791,31 @@ def test_get_chunk_parameters_balances_chunks(mgr, memory_client):
     [{"free": 400 * 1024**2, "total": 8 * 1024**3}],
     indirect=True,
 )
+def test_get_chunk_parameters_splits_at_allocatable_bytes(
+    mgr, memory_client
+):
+    """A request below allocatable_bytes is one chunk; one above splits."""
+    inst = memory_client
+    mgr.register(inst, stream_group="test")
+    mgr.allocation_granule_bytes = ALLOCATION_GRANULE_BYTES
+    free, _ = mgr.get_memory_info()
+    budget = mgr.allocatable_bytes(mgr.get_available_memory("test"), free)
+    under = (budget - 1) // 4
+    over = budget // 4 + 1
+
+    assert mgr.get_chunk_parameters(
+        _run_axis_request(inst, under), under, "test"
+    ) == (under, 1)
+    assert mgr.get_chunk_parameters(
+        _run_axis_request(inst, over), over, "test"
+    )[1] == 2
+
+
+@pytest.mark.parametrize(
+    "fixed_mem_override",
+    [{"free": 400 * 1024**2, "total": 8 * 1024**3}],
+    indirect=True,
+)
 def test_get_chunk_parameters_granule_floor(mgr, memory_client):
     """390 MB against 400 MiB free chunks once the 32 MiB granule applies."""
     inst = memory_client

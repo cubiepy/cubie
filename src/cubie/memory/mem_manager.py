@@ -2117,6 +2117,29 @@ class MemoryManager:
         settings = self.registry.get(instance_id)
         return settings is not None and settings.owner_id == owner_id
 
+    def allocatable_bytes(self, available: int, free: int) -> int:
+        """Bytes an allocation may take without chunking.
+
+        Parameters
+        ----------
+        available
+            Bytes available to the stream group.
+        free
+            Free device bytes plus the requester's own buffers.
+
+        Returns
+        -------
+        int
+            ``min(available × (1 - CHUNK_HEADROOM_FRACTION), free -
+            allocation_granule_bytes)``.
+        """
+        # The granule floor applies to physical free memory only.
+        fractional_headroom = int(available * CHUNK_HEADROOM_FRACTION)
+        return min(
+            available - fractional_headroom,
+            free - self.allocation_granule_bytes,
+        )
+
     def get_chunk_parameters(
         self,
         requests: Dict[str, Dict],
@@ -2208,11 +2231,8 @@ class MemoryManager:
         # trust whichever allows more, since pool-held blocks satisfy
         # allocations without showing up as free device memory.
         available_memory = max(available_memory, physical_headroom)
-        # The granule floor applies to physical free memory only.
-        fractional_headroom = int(available_memory * CHUNK_HEADROOM_FRACTION)
-        allocatable = min(
-            available_memory - fractional_headroom,
-            free_effective - self.allocation_granule_bytes,
+        allocatable = self.allocatable_bytes(
+            available_memory, free_effective
         )
         headroom = available_memory - allocatable
         if request_size < allocatable:

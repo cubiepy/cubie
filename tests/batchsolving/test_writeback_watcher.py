@@ -346,20 +346,22 @@ def test_process_task_pending_event_returns_false_until_recorded():
     """A real, still-running CUDA event causes _process_task to report
     not-yet-complete (returns False) without copying data, then True
     once the stream is synchronized."""
-    stream, event = _record_busy_event()
+    # Deferred frees would sync the device and finish the event.
+    with cuda.defer_cleanup():
+        stream, event = _record_busy_event()
 
-    w = WritebackWatcher()
-    buf = _make_pinned_buffer(fill=55.0)
-    target = np.zeros((4, 3), dtype=np.float32)
-    pool = _make_pool()
-    task = WritebackTask(
-        event=event, buffer=buf, target_array=target,
-        buffer_pool=pool, array_name="state",
-    )
+        w = WritebackWatcher()
+        buf = _make_pinned_buffer(fill=55.0)
+        target = np.zeros((4, 3), dtype=np.float32)
+        pool = _make_pool()
+        task = WritebackTask(
+            event=event, buffer=buf, target_array=target,
+            buffer_pool=pool, array_name="state",
+        )
 
-    result = w._process_task(task)
-    assert result is False
-    np.testing.assert_array_equal(target, 0.0)
+        result = w._process_task(task)
+        assert result is False
+        np.testing.assert_array_equal(target, 0.0)
 
     stream.synchronize()
     result2 = w._process_task(task)
@@ -416,18 +418,20 @@ def test_poll_loop_drain_requeues_still_pending_task_on_shutdown():
 @pytest.mark.nocudasim
 def test_shutdown_timeout_keeps_live_thread_handle():
     """A timed-out shutdown keeps the draining thread reachable."""
-    _, event = _record_busy_event()
-    w = WritebackWatcher()
-    buf = _make_pinned_buffer(fill=18.0)
-    target = np.zeros((4, 3), dtype=np.float32)
-    pool = _make_pool()
-    w.submit(event, buf, target, pool, "state")
+    # Deferred frees would sync the device and finish the event.
+    with cuda.defer_cleanup():
+        _, event = _record_busy_event()
+        w = WritebackWatcher()
+        buf = _make_pinned_buffer(fill=18.0)
+        target = np.zeros((4, 3), dtype=np.float32)
+        pool = _make_pool()
+        w.submit(event, buf, target, pool, "state")
 
-    with pytest.raises(TimeoutError, match="did not stop"):
-        w.shutdown(timeout=0.0)
+        with pytest.raises(TimeoutError, match="did not stop"):
+            w.shutdown(timeout=0.0)
 
-    assert w._thread is not None
-    assert w._thread.is_alive()
+        assert w._thread is not None
+        assert w._thread.is_alive()
     w.shutdown()
     np.testing.assert_array_equal(target, 18.0)
 
