@@ -64,6 +64,9 @@ def test_shared_stage_increment_gets_its_own_window(system):
     store = group.shared_layout["stage_store"]
     increment = group.shared_layout["stage_increment"]
     assert increment.stop - increment.start == 3
+    # ROS3P's third stage repeats its second.
+    derivative = group.shared_layout["stage_derivative"]
+    assert derivative.stop - derivative.start == 3
     assert (
         increment.start >= store.stop or increment.stop <= store.start
     )
