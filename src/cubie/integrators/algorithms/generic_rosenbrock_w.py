@@ -406,9 +406,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.
         accumulates_output = tableau.accumulates_output
-        accumulates_error = tableau.accumulates_error
+        accumulates_error = self.accumulates_error
         b_row = tableau.b_matches_a_row
-        b_hat_row = tableau.b_hat_matches_a_row
+        b_hat_row = self.error_row
         if b_row is not None:
             b_row = int32(b_row)
         if b_hat_row is not None:
@@ -584,7 +584,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     proposed_state[idx] += (
                         stage_increment[idx] * solution_weights[int32(0)]
                     )
-                if has_error and accumulates_error:
+                if accumulates_error:
                     error[idx] += (
                         stage_increment[idx] * error_weights[int32(0)]
                     )
@@ -733,16 +733,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                         increment = stage_increment[idx]
                         proposed_state[idx] += solution_weight * increment
 
-                if has_error:
-                    if accumulates_error:
-                        # Standard accumulation path for error
-                        error_weight = error_weights[stage_idx]
-                        for idx in unroll_if(range(n), unroll_step_element):
-                            increment = stage_increment[idx]
-                            error[idx] += error_weight * increment
+                if accumulates_error:
+                    error_weight = error_weights[stage_idx]
+                    for idx in unroll_if(range(n), unroll_step_element):
+                        increment = stage_increment[idx]
+                        error[idx] += error_weight * increment
 
             # ----------------------------------------------------------- #
-            if not accumulates_error:
+            if b_hat_row is not None:
                 for idx in unroll_if(range(n), unroll_step_element):
                     error[idx] = proposed_state[idx] - error[idx]
 

@@ -1040,6 +1040,22 @@ class BaseAlgorithmStep(CUDAFactory):
         return np_zeros(tableau.stage_count, dtype=precision)
 
     @property
+    def error_row(self) -> Optional[int]:
+        """Return the ``a`` row holding the embedded solution, else ``None``.
+
+        ``None`` also when the compiled step writes no error estimate.
+        """
+        tableau = self.tableau
+        if tableau is None or not self.uses_error:
+            return None
+        return tableau.b_hat_matches_a_row
+
+    @property
+    def accumulates_error(self) -> bool:
+        """Return whether the compiled step sums the error over stages."""
+        return self.uses_error and self.error_row is None
+
+    @property
     def tableau(self) -> Optional[ButcherTableau]:
         """Return the configured tableau; None on tableau-less steps."""
 

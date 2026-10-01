@@ -281,6 +281,8 @@ def test_n_error_fixed_controller_on_embedded_tableau(
     assert step.uses_error is False
     assert all(weight == 0.0 for weight in step.error_weights)
     assert len(step.error_weights) == step.tableau.stage_count
+    assert step.error_row is None
+    assert not step.accumulates_error
     assert run.n_error == 0
     assert run._loop.compile_settings.n_error == 0
 
@@ -304,11 +306,13 @@ def test_uses_error_follows_controller_swap(
         step.compile_settings.precision
     )
     assert tuple(step.error_weights) == tuple(tableau_weights)
+    assert step.error_row == step.tableau.b_hat_matches_a_row
     assert run.n_error == system.sizes.states
     assert run._loop.compile_settings.n_error == system.sizes.states
     run.update({"step_controller": "fixed"})
     assert step.is_adaptive is False
     assert step.uses_error is False
+    assert step.error_row is None
     assert all(weight == 0.0 for weight in step.error_weights)
     assert run.n_error == 0
     assert run._loop.compile_settings.n_error == 0
