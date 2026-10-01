@@ -6,8 +6,7 @@ Published Classes
     Configuration container for the BDF step.
 
 :class:`BDFStep`
-    Variable-step BDF of fixed maximum order: one Newton solve per
-    step against a stored history of accepted states.
+    Variable-step BDF; one Newton solve per step.
 
 Constants
 ---------
@@ -392,8 +391,7 @@ class BDFStep(ODEImplicitStep):
                         stage_increment[i] + dt_scalar * proposed_state[i],
                         stage_increment[i],
                     )
-            # The error buffer keeps the starting increment until the
-            # estimate, which differences increments to keep precision.
+            # The error buffer holds the starting increment.
             for i in unroll_if(range(n), unroll_step_element):
                 stage_increment[i] -= stage_base[i]
                 if has_error:

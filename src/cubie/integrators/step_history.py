@@ -1,13 +1,7 @@
-"""CUDA factory for the past-state history of multistep methods.
+"""CUDA factory for the accepted-state history of BDF steps.
 
-:class:`StepHistory` owns the persistent past states and step sizes of
-a BDF step and compiles one device function that commits the last
-accepted step, picks the order the history supports, and writes the
-corrector base state and the predictor.
-
-The history commits lazily: the step passes the loop's acceptance of
-its previous proposal, and the accepted state enters the history at
-the start of the next step. Rejected proposals never reach it.
+The history commits a proposal at the start of the next step, once the
+loop reports it accepted.
 
 Published Classes
 -----------------
@@ -104,24 +98,17 @@ class StepHistory(CUDAFactory):
                 prediction, shared, persistent_local)
             -> (corrector_step, error_scale, restart)
 
-    Slot ``j`` of the history holds the state ``j`` accepted steps
-    before the current one; interval ``j`` is the step that ended at
-    slot ``j - 1``, and interval 0 holds the step last attempted. A
-    new step longer than order one's ratio limit times interval 1
-    drops slot 1, so a short step clamped onto an output time joins
-    the step before it.
+    Slot ``j`` holds the state ``j`` accepted steps back; interval
+    ``j`` ends at slot ``j - 1``; interval 0 is the last attempt. A step
+    longer than ``ratio_limits[0]`` times interval 1 drops slot 1.
 
-    The order is the largest one with ``order + 1`` stored states whose
-    step ratios, from the new step back across those states, are within
-    the tableau's ``ratio_limits``. ``base_state`` receives the
-    corrector's history sum, so the new state ``y`` solves
-    ``M (y - base_state) = corrector_step * f(y)``. ``prediction``
-    receives the interpolant through the order's states plus one,
-    extrapolated to the step end, and ``error_scale`` turns
-    ``y - prediction`` into the local error estimate. When no order
-    qualifies, ``restart`` is set: the step runs order one,
-    ``prediction`` is the start state for the caller to extend with an
-    explicit Euler step, and ``error_scale`` is one half.
+    The order is the largest with ``order + 1`` stored states and every
+    step ratio across them within ``ratio_limits``. The new state ``y``
+    solves ``M (y - base_state) = corrector_step * f(y)``;
+    ``error_scale * (y - prediction)`` is the local error. With no
+    qualifying order, ``restart`` is set, the order is one,
+    ``prediction`` is the start state (the caller adds an explicit
+    Euler step) and ``error_scale`` is one half.
     """
 
     def __init__(
@@ -287,8 +274,7 @@ class StepHistory(CUDAFactory):
             )
             stored = cuda.selp(first, int32(1), stored)
 
-            # A jump past order one's limit drops the state before the
-            # short step, joining that step to the one before it.
+            # A jump past order one's limit joins the last two steps.
             merge = (stored > int32(2)) and not (
                 step_size <= ratio_limits[0] * intervals[1]
             )
@@ -336,8 +322,7 @@ class StepHistory(CUDAFactory):
             # ------------------------------------------------------- #
             #     Largest order the history and step ratios support   #
             # ------------------------------------------------------- #
-            # Order q needs q + 1 stored states and every step at most
-            # its limit times the step before it, back across them.
+            # Order q needs q + 1 states and each step within its limit.
             positive_step = step_size > typed_zero
             order = int32(0)
             supported = True

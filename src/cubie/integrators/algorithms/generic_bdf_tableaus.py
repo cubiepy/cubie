@@ -3,8 +3,7 @@
 Published Classes
 -----------------
 :class:`BDFTableau`
-    One implicit stage at the step end, with the formula's maximum
-    order and step-ratio limits.
+    Maximum order and step-ratio limits of a BDF step.
 
 Functions
 ---------
@@ -82,8 +81,7 @@ def _parasitic_radius(order: int, ratio: float) -> float:
 def zero_stable_ratio_limit(order: int) -> float:
     """Return the largest constant step ratio keeping ``order`` zero-stable.
 
-    Bisects the step ratio on the recurrence's parasitic roots; BDF1 has
-    none and returns ``inf``.
+    Bisects on the parasitic roots; ``inf`` for order one.
     """
     if order < 2:
         return inf
@@ -101,10 +99,8 @@ def zero_stable_ratio_limit(order: int) -> float:
 class BDFTableau(ButcherTableau):
     """Backward differentiation formula up to ``order``.
 
-    Each step solves one implicit stage at the step end, so the
-    Butcher arrays are those of backward Euler; ``order`` is the
-    highest order the step runs. The error estimate compares the
-    corrector with a history predictor instead of stage weights.
+    The arrays are backward Euler's one step-end stage; ``order`` is
+    the highest order the step runs.
 
     References
     ----------
@@ -138,20 +134,14 @@ class BDFTableau(ButcherTableau):
 
     @property
     def history_length(self) -> int:
-        """Return the stored states: the predictor's plus a spare.
-
-        The spare keeps a full-order history after a short step merges
-        into the one before it.
-        """
+        """Return the stored states: the predictor's plus one spare."""
         return self.order + 2
 
     @property
     def ratio_limits(self) -> Tuple[float, ...]:
         """Return the step-ratio limit of orders 1 to ``order``.
 
-        Order ``q`` interpolates ``q + 1`` stored states; every ratio of
-        consecutive steps across them must be within this limit. Order
-        one takes the BDF2 limit, as its predictor spans two steps.
+        Order one takes the BDF2 limit.
         """
         return tuple(
             zero_stable_ratio_limit(max(order, 2))

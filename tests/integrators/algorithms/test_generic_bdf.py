@@ -92,11 +92,7 @@ def _history_run(steps, accepted, starts):
 
 
 def test_history_is_exact_for_cubics_across_a_rejection():
-    """Full-order corrector and predictor reproduce a cubic.
-
-    The fifth call's proposal is rejected; the retry from the same
-    start must see the history the rejection left untouched.
-    """
+    """A cubic stays exact at full order across a rejected attempt."""
     steps = [0.10, 0.12, 0.11, 0.13, 0.20, 0.12, 0.125]
     accepted = [1, 1, 1, 1, 1, 0, 1]
     starts = [0.0, 0.10, 0.22, 0.33, 0.46, 0.46, 0.58]
