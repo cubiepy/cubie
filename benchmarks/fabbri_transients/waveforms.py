@@ -31,10 +31,15 @@ def main():
     parser.add_argument("--duration", type=float, default=60.0)
     parser.add_argument("--save-every", type=float, default=2.0**-10)
     parser.add_argument("--sources-per-solve", type=int, default=25)
+    parser.add_argument("--states", default=None,
+                        help="npz holding the start states (default: input)")
+    parser.add_argument("--state-key", default="final_state")
     args = parser.parse_args()
 
     system = common.build_system()
     data = np.load(common.RESULTS / args.input)
+    phases = np.load(common.RESULTS / args.states) if args.states else data
+    start_states = phases[args.state_key]
     side = int(np.sqrt(data["ach"].size))
     ach_axis = data["ach"][:side]
     iso_axis = data["iso"][::side]
@@ -62,7 +67,7 @@ def main():
     for first in range(0, sources.size, args.sources_per_solve):
         chunk = sources[first:first + args.sources_per_solve]
         inits = np.ascontiguousarray(
-            np.repeat(data["final_state"][:, chunk], targets.size, axis=1),
+            np.repeat(start_states[:, chunk], targets.size, axis=1),
             dtype=np.float32,
         )
         result, kernel_ms, _ = common.timed_solve(
@@ -93,6 +98,20 @@ def main():
         )
     solver.close()
     np.save(args.out_dir / "failed.npy", failed)
+    has_peak = np.isfinite(data["peak_times"][sources]).any(axis=1)
+    prev_peak = np.full(sources.size, np.nan)
+    prev_peak[has_peak] = np.nanmax(
+        data["peak_times"][sources[has_peak]], axis=1
+    ) - float(data["char"])
+    if args.state_key != "final_state":
+        # Phase starts measure back from the phase time to its peak.
+        phase = args.state_key.replace("_state", "")
+        found = phases["found"][sources]
+        prev_peak = np.where(
+            found,
+            phases["peak_time"][sources] - phases[f"{phase}_time"][sources],
+            np.nan,
+        )
     np.savez(
         args.out_dir / "grid.npz",
         sources=sources, targets=targets,
@@ -100,12 +119,12 @@ def main():
         target_ach=data["ach"][targets], target_iso=data["iso"][targets],
         source_cl=data["steady_cl"][sources],
         target_cl=data["steady_cl"][targets],
-        source_prev_peak=np.nanmax(data["peak_times"][sources], axis=1)
-        - float(data["char"]),
+        source_prev_peak=prev_peak,
     )
     (args.out_dir / "settings.json").write_text(json.dumps({
         "input": args.input, "duration_s": args.duration,
-        "save_every_s": args.save_every, "state_key": "final_state",
+        "save_every_s": args.save_every, "states": args.states,
+        "state_key": args.state_key,
         "shape": [int(sources.size), int(targets.size), int(n_samples)],
     }, indent=2))
 

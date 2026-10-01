@@ -40,6 +40,9 @@ class Run:
             "failed": self.failed.astype(int).tolist(),
             "duration": float(self.time[-1]),
             "n_samples": int(self.time.size),
+            "state_key": json.loads(
+                (run_dir / "settings.json").read_text()
+            ).get("state_key", "final_state"),
         }
 
     def traces(self, sources, targets, t0, t1, order=0):

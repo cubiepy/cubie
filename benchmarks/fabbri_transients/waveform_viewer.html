@@ -39,8 +39,8 @@ select:disabled { opacity: .45; }
 <body>
 <main>
   <h1>Switch waveforms</h1>
-  <p>Each source starts from its settled state and switches to the target's
-  ACh and Iso at t = 0. Pick the axis to sweep; the other three stay fixed.
+  <p>Each source starts from the state named under the plot and switches to
+  the target's ACh and Iso at t = 0. Pick the axis to sweep; the other three stay fixed.
   In the line view, zooming the time axis reloads that span at full
   float32 resolution. The derivative toggle adds dV/dt and d²V/dt² panels,
   differenced from the full-resolution samples; a parameter set keeps its
@@ -131,7 +131,10 @@ function describe(list) {
   const fixed = Object.keys(KEYS).filter(k => k !== sweep).map(k =>
     `${AXES[k].replace(" (nM)", "")} ${meta[KEYS[k]][+$(k).value]}`);
   const nFailed = list.filter(q => meta.failed[q.src][q.tgt]).length;
-  let text = fixed.join(" · ");
+  const starts = {final_state: "settled state", peak_state: "voltage peak",
+    trough_state: "trough", mid_state: "halfway between peaks"};
+  let text = `Start: ${starts[meta.state_key] || meta.state_key} · `
+    + fixed.join(" · ");
   if (!sweep.startsWith("s"))
     text += ` · source CL ${cl(meta.source_cl[p.src])}`;
   if (nFailed) text += ` · ${nFailed} failed run(s)`;
