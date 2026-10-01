@@ -55,10 +55,12 @@ button:focus-visible, select:focus-visible {
   point's parameters (target), and the first three peaks after the switch
   were recorded. Peaks are sampled every __CADENCE__ s. Interval 1 runs
   from the source's last peak before the switch to the first peak after
-  it; intervals 2 and 3 are the next two. When a source's peak falls on
-  the switch itself, interval 1 starts at the switch. Expected intervals
-  come from relaunching each grid point with its own parameters, measured
-  the same way. This page holds every __STRIDE__th source on each axis.
+  it; intervals 2 and 3 are the next two. The start toggle picks the
+  source state the switch begins from: the settled state, or the
+  source's voltage peak, trough, or halfway point between peaks. When a
+  source's peak falls on the switch itself, interval 1 starts at the
+  switch. Expected intervals come from relaunching each grid point from
+  the same start with its own parameters, measured the same way. This page holds every __STRIDE__th source on each axis.
   Rotating any 3D plot rotates them all.</p>
   <h2>Steady state</h2>
   <div class="row">
@@ -74,7 +76,9 @@ button:focus-visible, select:focus-visible {
   </div>
   <h2>Switch from a chosen source</h2>
   <div class="controls">
-    <span>Interval</span>
+    <span>Start</span>
+    <span id="starts" class="controls"></span>
+    <span class="gap">Interval</span>
     <button id="i1" aria-pressed="true">1</button>
     <button id="i2" aria-pressed="false">2</button>
     <button id="i3" aria-pressed="false">3</button>
@@ -117,6 +121,9 @@ const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement)
   .getPropertyValue(n).trim();
 let interval = 0, view = "3d", peaks = null;
+let set = Object.keys(D.sets)[0];
+const loaded = {};
+const current = () => D.sets[set];
 let camera = { eye: { x: 1.6, y: -1.6, z: 0.9 } }, syncing = false;
 
 // Each row: its elements and its source as [ACh option, Iso option].
@@ -229,7 +236,7 @@ const sourceIndex = row => row.source[1] * S + row.source[0];
 function measured(row) {
   // Sample counts k -> time k * cadence after the switch; 0 = no peak.
   const s = sourceIndex(row), base = s * T * 3, out = new Float64Array(T);
-  const prev = D.src_prev_peak[s];
+  const prev = current().src_prev_peak[s];
   for (let t = 0; t < T; t++) {
     const k = [0, 1, 2].map(j => peaks[base + t * 3 + j]);
     let a, b;
@@ -250,18 +257,19 @@ function drawSteady() {
   plot($("p-cl"), grid(D.cycle), "ms", "cycle %{z:.1f} ms");
   plot($("p-camp"), grid(D.camp), "mM", "cAMP %{z:.5f} mM");
   $("t-exp").textContent = `Expected interval ${interval + 1} (ms)`;
-  plot($("p-exp"), grid(D.expected[interval]), "ms",
+  plot($("p-exp"), grid(current().expected[interval]), "ms",
     "expected %{z:.1f} ms");
 }
 
 function drawRow(row) {
-  const k = interval + 1, expected = D.expected[interval], el = row.el;
+  const k = interval + 1, expected = current().expected[interval];
+  const el = row.el;
   el["t-meas"].textContent = `Measured interval ${k} after the switch (ms)`;
   el["t-ratio"].textContent = `Measured / expected, interval ${k}`;
   el["t-src"].textContent = `Measured / source's interval ${k}`;
   const si = D.src_ach_index[row.source[0]];
   const sj = D.src_iso_index[row.source[1]];
-  const s = sourceIndex(row), prev = D.src_prev_peak[s];
+  const s = sourceIndex(row), prev = current().src_prev_peak[s];
   const cyc = D.cycle[sj * N + si];
   el.source.innerHTML =
     `source <b>ACh ${D.ach[si].toFixed(2)} nM, Iso ${D.iso[sj].toFixed(2)}` +
@@ -313,21 +321,46 @@ new MutationObserver(drawAll).observe(document.documentElement,
   { attributes: true, attributeFilter: ["data-theme"] });
 drawAll();
 
-// Little-endian uint16 sample counts, base64 in two parts.
-Promise.all(["switch_peaks_0.txt", "switch_peaks_1.txt"].map(name =>
-  fetch(name).then(r => {
-    if (!r.ok) throw new Error(`${name} request returned ${r.status}`);
-    return r.text();
-  }))).then(parts => {
-  const bytes = parts.map(text => Uint8Array.from(atob(text.trim()),
-    ch => ch.charCodeAt(0)));
-  const all = new Uint8Array(bytes[0].length + bytes[1].length);
-  all.set(bytes[0]);
-  all.set(bytes[1], bytes[0].length);
-  peaks = new Uint16Array(all.buffer);
-  $("status").textContent = "";
-  rows.forEach(drawRow);
-}).catch(err => {
-  $("status").textContent = `Switch data did not load: ${err.message}.`;
+// Little-endian uint16 sample counts, base64 in two parts per start.
+function load(name) {
+  if (loaded[name]) return Promise.resolve(loaded[name]);
+  $("status").textContent =
+    `Loading ${D.sets[name].label.toLowerCase()} data...`;
+  return Promise.all(D.sets[name].files.map(file =>
+    fetch(file).then(r => {
+      if (!r.ok) throw new Error(`${file} request returned ${r.status}`);
+      return r.text();
+    }))).then(parts => {
+    const bytes = parts.map(text => Uint8Array.from(atob(text.trim()),
+      ch => ch.charCodeAt(0)));
+    const all = new Uint8Array(bytes[0].length + bytes[1].length);
+    all.set(bytes[0]);
+    all.set(bytes[1], bytes[0].length);
+    loaded[name] = new Uint16Array(all.buffer);
+    $("status").textContent = "";
+    return loaded[name];
+  });
+}
+function choose(name) {
+  set = name;
+  peaks = null;
+  Object.keys(D.sets).forEach(k => $(`start-${k}`).setAttribute(
+    "aria-pressed", String(k === name)));
+  drawAll();
+  load(name).then(data => {
+    if (set !== name) return;
+    peaks = data;
+    rows.forEach(drawRow);
+  }).catch(err => {
+    $("status").textContent = `Switch data did not load: ${err.message}.`;
+  });
+}
+Object.entries(D.sets).forEach(([k, v]) => {
+  const b = document.createElement("button");
+  b.id = `start-${k}`;
+  b.textContent = v.label;
+  b.onclick = () => choose(k);
+  $("starts").appendChild(b);
 });
+choose(set);
 </script>
