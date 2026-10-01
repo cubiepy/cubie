@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Switch Waveforms</title>
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1a2230; --muted: #5a6577;
+  --line: #d9dee6; --accent: #256abf;
+  --font-body: system-ui, sans-serif; --font-data: ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #11151c; --surface: #171c25; --fg: #e4e8ef; --muted: #98a2b3;
+  --line: #2a3140; --accent: #5598e7; color-scheme: dark } }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); padding: 16px; }
+main { max-width: 1800px; margin: 0 auto; display: grid; gap: 12px; }
+h1 { font-size: 1.3rem; margin: 0; font-weight: 600; }
+p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 90ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls span { font-size: .78rem; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); }
+.gap { margin-left: 12px; }
+button, select, input { font: inherit; font-size: .9rem; padding: 6px 10px;
+  border-radius: 6px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); }
+input { width: 6em; }
+button { cursor: pointer; }
+button[aria-pressed="true"] { border-color: var(--accent);
+  color: var(--accent); font-weight: 600; }
+select:disabled { opacity: .45; }
+#plot { width: 100%; height: 72vh; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; }
+.stats { font-family: var(--font-data); font-size: .85rem;
+  color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Switch waveforms</h1>
+  <p>Each source starts from its settled state and switches to the target's
+  ACh and Iso at t = 0. Pick the axis to sweep; the other three stay fixed.
+  In the line view, zooming the time axis reloads that span at full
+  float32 resolution.</p>
+  <div class="controls">
+    <span>Sweep</span><span id="sweeps" class="controls"></span>
+    <span class="gap">View</span>
+    <button id="v3d" aria-pressed="true">3D surface</button>
+    <button id="v2d" aria-pressed="false">Lines</button>
+  </div>
+  <div class="controls">
+    <span>Source ACh</span><select id="sa"></select>
+    <span>Source Iso</span><select id="si"></select>
+    <span class="gap">Target ACh</span><select id="ta"></select>
+    <span>Target Iso</span><select id="ti"></select>
+  </div>
+  <div class="controls">
+    <span>Time (s)</span><input id="t0" type="number" step="any" value="0">
+    <span>to</span><input id="t1" type="number" step="any" value="15">
+    <button id="load">Load</button>
+    <button data-span="5">0-5</button>
+    <button data-span="15">0-15</button>
+    <button data-span="60">0-60</button>
+  </div>
+  <div id="plot"></div>
+  <div id="status" class="stats">Loading grid...</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+const AXES = {
+  sa: "Source ACh (nM)", si: "Source Iso (nM)",
+  ta: "Target ACh (nM)", ti: "Target Iso (nM)",
+};
+const KEYS = {sa: "source_ach", si: "source_iso",
+  ta: "target_ach", ti: "target_iso"};
+let meta = null, sweep = "ta", view = "3d", busy = false;
+const $ = id => document.getElementById(id);
+const css = name => getComputedStyle(document.documentElement)
+  .getPropertyValue(name).trim();
+
+function sourceIndex(a, i) { return i * meta.source_ach.length + a; }
+function targetIndex(a, i) { return i * meta.target_ach.length + a; }
+
+function pairs() {
+  const sel = Object.fromEntries(
+    Object.keys(KEYS).map(k => [k, +$(k).value]));
+  const values = meta[KEYS[sweep]];
+  return values.map((v, k) => {
+    const s = {...sel, [sweep]: k};
+    return {value: v, src: sourceIndex(s.sa, s.si),
+      tgt: targetIndex(s.ta, s.ti)};
+  });
+}
+
+async function fetchTraces(list, t0, t1) {
+  const url = `/traces?sources=${list.map(p => p.src)}`
+    + `&targets=${list.map(p => p.tgt)}&t0=${t0}&t1=${t1}`;
+  const buf = await (await fetch(url)).arrayBuffer();
+  const [rows, cols] = new Uint32Array(buf, 0, 2);
+  const time = new Float64Array(buf, 8, cols);
+  const volts = new Float32Array(buf, 8 + 8 * cols, rows * cols);
+  const out = [];
+  for (let r = 0; r < rows; r++)
+    out.push(volts.subarray(r * cols, (r + 1) * cols));
+  return {time, traces: out};
+}
+
+function describe(list) {
+  const p = list[0];
+  const cl = v => v == null ? "no beat" : `${(v * 1e3).toFixed(0)} ms`;
+  const fixed = Object.keys(KEYS).filter(k => k !== sweep).map(k =>
+    `${AXES[k].replace(" (nM)", "")} ${meta[KEYS[k]][+$(k).value]}`);
+  const nFailed = list.filter(q => meta.failed[q.src][q.tgt]).length;
+  let text = fixed.join(" · ");
+  if (!sweep.startsWith("s"))
+    text += ` · source CL ${cl(meta.source_cl[p.src])}`;
+  if (nFailed) text += ` · ${nFailed} failed run(s)`;
+  return text;
+}
+
+async function draw(range) {
+  if (busy) return;
+  busy = true;
+  const list = pairs();
+  const t0 = range ? range[0] : +$("t0").value;
+  const t1 = range ? range[1] : +$("t1").value;
+  $("status").textContent = "Loading traces...";
+  const {time, traces} = await fetchTraces(list, t0, t1);
+  const t = Array.from(time);
+  const font = {color: css("--fg"), family: "system-ui"};
+  const base = {paper_bgcolor: css("--surface"),
+    plot_bgcolor: css("--surface"), font,
+    margin: {l: 60, r: 20, t: 20, b: 50}};
+  const values = list.map(p => p.value);
+  if (view === "3d") {
+    const ticks = values.map(v => Math.log10(v));
+    Plotly.react("plot", [{type: "surface", x: t, y: ticks,
+      z: traces.map(r => Array.from(r)), colorscale: "Viridis",
+      colorbar: {title: "V (mV)"}}], {...base, scene: {
+        xaxis: {title: "Time after switch (s)"},
+        yaxis: {title: AXES[sweep], tickvals: ticks,
+          ticktext: values.map(v => v.toPrecision(3))},
+        zaxis: {title: "V (mV)"}}});
+  } else {
+    const n = traces.length;
+    const data = traces.map((r, k) => ({type: "scattergl", mode: "lines",
+      x: t, y: Array.from(r), name: values[k].toPrecision(3),
+      line: {width: 1, color: `hsl(${240 - 240 * k / Math.max(n - 1, 1)},`
+        + ` 70%, 50%)`}}));
+    Plotly.react("plot", data, {...base,
+      xaxis: {title: "Time after switch (s)", range: [t0, t1],
+        gridcolor: css("--line")},
+      yaxis: {title: "V (mV)", gridcolor: css("--line")},
+      legend: {title: {text: AXES[sweep]}}});
+  }
+  bindZoom();
+  $("status").textContent = `${describe(list)} · ${t.length} points `
+    + `per trace over ${t0}-${t1} s`;
+  busy = false;
+}
+
+function setSweep(k) {
+  sweep = k;
+  for (const b of $("sweeps").children)
+    b.setAttribute("aria-pressed", b.dataset.k === k);
+  for (const key of Object.keys(KEYS)) $(key).disabled = key === sweep;
+  draw();
+}
+
+async function init() {
+  meta = await (await fetch("/meta")).json();
+  for (const k of Object.keys(KEYS)) {
+    meta[KEYS[k]].forEach((v, i) => $(k).add(new Option(v.toPrecision(4), i)));
+    $(k).onchange = () => draw();
+    const b = document.createElement("button");
+    b.textContent = AXES[k].replace(" (nM)", "");
+    b.dataset.k = k;
+    b.onclick = () => setSweep(k);
+    $("sweeps").append(b);
+  }
+  $("sa").value = meta.source_ach.findIndex(v => Math.abs(v - 63.1) < 1);
+  $("si").value = 1; $("ti").value = 1;
+  $("t1").value = Math.min(15, meta.duration);
+  $("load").onclick = () => draw();
+  for (const b of document.querySelectorAll("[data-span]"))
+    b.onclick = () => { $("t0").value = 0;
+      $("t1").value = Math.min(+b.dataset.span, meta.duration); draw(); };
+  for (const [id, v] of [["v3d", "3d"], ["v2d", "2d"]])
+    $(id).onclick = () => { view = v;
+      $("v3d").setAttribute("aria-pressed", v === "3d");
+      $("v2d").setAttribute("aria-pressed", v === "2d");
+      Plotly.purge("plot"); $("plot").zoomBound = false; draw(); };
+  setSweep("ta");
+}
+
+function bindZoom() {
+  if (view !== "2d" || $("plot").zoomBound) return;
+  $("plot").zoomBound = true;
+  $("plot").on("plotly_relayout", ev => {
+    const lo = ev["xaxis.range[0]"], hi = ev["xaxis.range[1]"];
+    if (lo !== undefined) draw([lo, hi]);
+    else if (ev["xaxis.autorange"]) draw();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
