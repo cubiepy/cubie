@@ -45,6 +45,8 @@ button:focus-visible, select:focus-visible {
   font-size: .85rem; color: var(--muted); }
 .stats b { color: var(--fg); font-weight: 600; }
 .rowhead { margin: 10px 0 0; font-size: .95rem; font-weight: 600; }
+.empty { height: 100%; display: grid; place-items: center; padding: 16px;
+  text-align: center; color: var(--muted); font-size: .9rem; }
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <main>
@@ -158,7 +160,19 @@ function linkCamera(el) {
   });
 }
 
-function plot(el, z, label, hover, scale, range) {
+function showEmpty(el, text) {
+  Plotly.purge(el);
+  delete el.dataset.linked;
+  el.innerHTML = `<div class="empty">${text}</div>`;
+}
+
+function plot(el, z, label, hover, scale, range, emptyText) {
+  if (!z.some(r => r.some(v => v !== null))) {
+    showEmpty(el, emptyText || "No values for this selection.");
+    return;
+  }
+  const blank = el.querySelector(".empty");
+  if (blank) blank.remove();
   const fg = css("--fg"), muted = css("--muted"), line = css("--line");
   const surf = css("--surface");
   const axis = t => ({ title: { text: t, font: { color: muted } },
@@ -194,8 +208,13 @@ function plot(el, z, label, hover, scale, range) {
     layout.xaxis = axis("ACh (nM)");
     layout.yaxis = axis("Iso (nM)");
   }
-  Plotly.react(el, [trace], layout, { responsive: true, displaylogo: false });
-  linkCamera(el);
+  try {
+    Plotly.react(el, [trace], layout,
+      { responsive: true, displaylogo: false });
+    linkCamera(el);
+  } catch (err) {
+    showEmpty(el, `This plot could not be drawn: ${err.message}`);
+  }
 }
 
 const sourceIndex = row => row.source[1] * S + row.source[0];
@@ -207,7 +226,10 @@ function measured(row) {
   for (let t = 0; t < T; t++) {
     const k = [0, 1, 2].map(j => peaks[base + t * 3 + j]);
     let a, b;
-    if (interval === 0) { a = prev; b = k[0] ? k[0] * D.cadence : NaN; }
+    if (interval === 0) {
+      a = prev === null ? NaN : prev;
+      b = k[0] ? k[0] * D.cadence : NaN;
+    }
     else {
       a = k[interval - 1] ? k[interval - 1] * D.cadence : NaN;
       b = k[interval] ? k[interval] * D.cadence : NaN;
@@ -245,15 +267,21 @@ function drawRow(row) {
   }
   const m = measured(row);
   // Expected and measured share one height and colour range.
-  const shared = lim(finite(expected).concat(finite(m)));
+  const both = finite(expected).concat(finite(m));
+  const shared = both.length ? lim(both) : null;
   plot(el["p-exp"], grid(expected), "ms", "expected %{z:.1f} ms", null,
     shared);
-  plot(el["p-meas"], grid(m), "ms", "measured %{z:.1f} ms", null, shared);
+  const noPrev = interval === 0 && prev === null;
+  plot(el["p-meas"], grid(m), "ms", "measured %{z:.1f} ms", null, shared,
+    noPrev ? "The source does not beat, so interval 1 has no start."
+      : "No target beats this many times within 15 s.");
   const own = expected[sj * N + si];
-  plot(el["p-src"], grid(m.map(v => v / own)), "ratio",
-    "ratio %{z:.4f}", diverge);
+  plot(el["p-src"], grid(m.map(v => own === null ? NaN : v / own)),
+    "ratio", "ratio %{z:.4f}", diverge, null,
+    "The source does not beat, so it has no interval to compare.");
   plot(el["p-ratio"], grid(m.map((v, t) => v / expected[t])), "ratio",
-    "ratio %{z:.3f}", diverge);
+    "ratio %{z:.3f}", diverge, null,
+    "No target has both a measured and an expected interval.");
 }
 
 const drawAll = () => { drawSteady(); rows.forEach(drawRow); };
