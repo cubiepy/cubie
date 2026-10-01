@@ -211,6 +211,8 @@ class StepHistory(CUDAFactory):
         n = int32(config.n_states)
         max_order = int32(config.max_order)
         history_length = int32(config.history_length)
+        history_slots = int(config.history_length)
+        order_slots = int(config.max_order)
         ratio_limits = config.ratio_limits
         unroll_stage = config.unroll.unroll_stage
         unroll_step_element = config.unroll.unroll_step_element
@@ -305,7 +307,7 @@ class StepHistory(CUDAFactory):
             #       Inverse distances from the step end to each state #
             # ------------------------------------------------------- #
             # rho[m] = step_size / (t_end - t_m); rho[0] is one.
-            rho = cuda.local.array(history_length, numba_precision)
+            rho = cuda.local.array(history_slots, numba_precision)
             rho[0] = typed_one
             elapsed = step_size
             for m in unroll_if(
@@ -360,7 +362,7 @@ class StepHistory(CUDAFactory):
             for m in unroll_if(range(max_order), unroll_other_small):
                 leading += cuda.selp(m < corrector_order, rho[m], typed_zero)
 
-            corrector = cuda.local.array(max_order, numba_precision)
+            corrector = cuda.local.array(order_slots, numba_precision)
             for j in unroll_if(range(max_order), unroll_other_small):
                 power = typed_one
                 spread = typed_one
@@ -376,7 +378,7 @@ class StepHistory(CUDAFactory):
                     in_formula, power / scale, typed_zero
                 )
 
-            predictor = cuda.local.array(history_length, numba_precision)
+            predictor = cuda.local.array(history_slots, numba_precision)
             for j in unroll_if(range(history_length), unroll_other_small):
                 numerator = typed_one
                 denominator = typed_one
