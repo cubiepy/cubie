@@ -46,7 +46,7 @@ select:disabled { opacity: .45; }
   <div class="controls">
     <span>Sweep</span><span id="sweeps" class="controls"></span>
     <span class="gap">View</span>
-    <button id="v3d" aria-pressed="true">3D surface</button>
+    <button id="v3d" aria-pressed="true">3D lines</button>
     <button id="v2d" aria-pressed="false">Lines</button>
   </div>
   <div class="controls">
@@ -135,13 +135,17 @@ async function draw(range) {
   const values = list.map(p => p.value);
   if (view === "3d") {
     const ticks = values.map(v => Math.log10(v));
-    Plotly.react("plot", [{type: "surface", x: t, y: ticks,
-      z: traces.map(r => Array.from(r)), colorscale: "Viridis",
-      colorbar: {title: "V (mV)"}}], {...base, scene: {
+    const n = traces.length;
+    Plotly.react("plot", traces.map((r, k) => ({type: "scatter3d",
+      mode: "lines", x: t, y: new Array(t.length).fill(ticks[k]),
+      z: Array.from(r), name: values[k].toPrecision(3),
+      line: {width: 2, color: `hsl(${240 - 240 * k / Math.max(n - 1, 1)},`
+        + ` 70%, 50%)`}})), {...base, scene: {
         xaxis: {title: "Time after switch (s)"},
         yaxis: {title: AXES[sweep], tickvals: ticks,
           ticktext: values.map(v => v.toPrecision(3))},
-        zaxis: {title: "V (mV)"}}});
+        zaxis: {title: "V (mV)"}},
+      legend: {title: {text: AXES[sweep]}}});
   } else {
     const n = traces.length;
     const data = traces.map((r, k) => ({type: "scattergl", mode: "lines",
