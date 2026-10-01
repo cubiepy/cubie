@@ -42,7 +42,8 @@ select:disabled { opacity: .45; }
   <p>Each source starts from the state named under the plot and switches to
   the target's ACh and Iso at t = 0. Pick the axis to sweep; the other three stay fixed.
   In the line view, zooming the time axis reloads that span at full
-  float32 resolution. The derivative toggle adds dV/dt and d²V/dt² panels,
+  float32 resolution; zoom and camera persist while the plotted sets
+  change, and Load or a time preset resets the time axis. The derivative toggle adds dV/dt and d²V/dt² panels,
   differenced from the full-resolution samples; a parameter set keeps its
   colour in every panel, and colours spread across the selected sets.</p>
   <div class="controls">
@@ -93,6 +94,7 @@ const AXES = {
 const KEYS = {sa: "source_ach", si: "source_iso",
   ta: "target_ach", ti: "target_iso"};
 let meta = null, sweep = "ta", view = "3d", busy = false, diffs = false;
+let zoomRange = null, timeKey = 0;
 const ORDERS = ["V (mV)", "dV/dt (mV/ms)", "d²V/dt² (mV/ms²)"];
 const $ = id => document.getElementById(id);
 const css = name => getComputedStyle(document.documentElement)
@@ -142,12 +144,13 @@ function describe(list) {
 }
 
 async function draw(range) {
+  if (range) zoomRange = range;
   if (busy) return;
   busy = true;
   const k0 = +$("k0").value, k1 = +$("k1").value;
   const list = pairs().slice(Math.min(k0, k1), Math.max(k0, k1) + 1);
-  const t0 = range ? range[0] : +$("t0").value;
-  const t1 = range ? range[1] : +$("t1").value;
+  const t0 = zoomRange ? zoomRange[0] : +$("t0").value;
+  const t1 = zoomRange ? zoomRange[1] : +$("t1").value;
   $("status").textContent = "Loading traces...";
   const orders = diffs ? [0, 1, 2] : [0];
   const sets = await Promise.all(
@@ -172,7 +175,7 @@ async function draw(range) {
   const ticks = values.map(v => Math.log10(v));
   const data = [];
   const layout = {...base, legend: {title: {text: AXES[sweep]}},
-    uirevision: view === "3d" ? "3d" : undefined};
+    uirevision: "keep"};
   orders.forEach((o, i) => {
     const suffix = i ? String(i + 1) : "";
     sets[i].traces.forEach((r, k) => {
@@ -187,6 +190,7 @@ async function draw(range) {
     });
     if (view === "3d") {
       layout["scene" + suffix] = {domain: {x: [0, 1], y: band(i)},
+        uirevision: "keep",
         xaxis: {title: "Time after switch (s)"},
         yaxis: {title: AXES[sweep], tickvals: ticks,
           ticktext: values.map(v => v.toPrecision(3))},
@@ -194,10 +198,12 @@ async function draw(range) {
     } else {
       layout["xaxis" + suffix] = {range: [t0, t1],
         gridcolor: css("--line"), anchor: "y" + suffix,
+        uirevision: `t${timeKey}`,
         matches: i ? "x" : undefined, showticklabels: i === rows - 1,
         title: i === rows - 1 ? "Time after switch (s)" : undefined};
       layout["yaxis" + suffix] = {title: ORDERS[o], domain: band(i),
-        range: zrange(o), gridcolor: css("--line")};
+        range: zrange(o), gridcolor: css("--line"),
+        uirevision: `${o}:${$(`z${o}a`).value}:${$(`z${o}b`).value}`};
     }
   });
   Plotly.react("plot", data, layout);
@@ -235,11 +241,12 @@ async function init() {
   $("sa").value = meta.source_ach.findIndex(v => Math.abs(v - 63.1) < 1);
   $("si").value = 1; $("ti").value = 1;
   $("t1").value = Math.min(15, meta.duration);
-  $("load").onclick = () => draw();
+  const resetTime = () => { zoomRange = null; timeKey += 1; };
+  $("load").onclick = () => { resetTime(); draw(); };
   for (const id of ["k0", "k1", "z0a", "z0b", "z1a", "z1b", "z2a", "z2b"])
     $(id).onchange = () => draw();
   for (const b of document.querySelectorAll("[data-span]"))
-    b.onclick = () => { $("t0").value = 0;
+    b.onclick = () => { resetTime(); $("t0").value = 0;
       $("t1").value = Math.min(+b.dataset.span, meta.duration); draw(); };
   for (const [id, v] of [["v3d", "3d"], ["v2d", "2d"]])
     $(id).onclick = () => { view = v;
@@ -247,8 +254,7 @@ async function init() {
       $("v2d").setAttribute("aria-pressed", v === "2d");
       Plotly.purge("plot"); $("plot").zoomBound = false; draw(); };
   $("diffs").onclick = () => { diffs = !diffs;
-    $("diffs").setAttribute("aria-pressed", diffs);
-    Plotly.purge("plot"); $("plot").zoomBound = false; draw(); };
+    $("diffs").setAttribute("aria-pressed", diffs); draw(); };
   setSweep("ta");
 }
 
@@ -258,8 +264,9 @@ function bindZoom() {
   $("plot").on("plotly_relayout", ev => {
     const key = Object.keys(ev).find(k => /^xaxis\d*\.range\[0\]$/.test(k));
     if (key) draw([ev[key], ev[key.replace("[0]", "[1]")]]);
-    else if (Object.keys(ev).some(k => /^xaxis\d*\.autorange$/.test(k)))
-      draw();
+    else if (Object.keys(ev).some(k => /^xaxis\d*\.autorange$/.test(k))) {
+      zoomRange = null; timeKey += 1; draw();
+    }
   });
 }
 
