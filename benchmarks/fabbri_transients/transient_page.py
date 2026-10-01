@@ -1,5 +1,6 @@
 """Write the transient surfaces page: ``transient_page.py OUT_DIR RUN_DIR``."""
 
+import base64
 import json
 import sys
 from pathlib import Path
@@ -164,9 +165,9 @@ function plot(id, z, label, hover, scale) {
 }
 function measured() {
   // Sample counts k -> time k * cadence after the switch; 0 = no peak.
-  const s = src[1] * S + src[0], base = s * N * 3, out = new Float64Array(N);
-  const prev = D.src_prev_peak[s];
-  for (let t = 0; t < N; t++) {
+  const T = N * N, s = src[1] * S + src[0], base = s * T * 3;
+  const out = new Float64Array(T), prev = D.src_prev_peak[s];
+  for (let t = 0; t < T; t++) {
     const k = [0, 1, 2].map(j => peaks[base + t * 3 + j]);
     let a, b;
     if (interval === 0) { a = prev; b = k[0] ? k[0] * D.cadence : NaN; }
@@ -231,11 +232,18 @@ new MutationObserver(redraw).observe(document.documentElement,
   { attributes: true, attributeFilter: ["data-theme"] });
 drawSteady();
 drawSwitch();
-fetch("switch_peaks.bin").then(r => {
-  if (!r.ok) throw new Error(`switch data request returned ${r.status}`);
-  return r.arrayBuffer();
-}).then(buf => {
-  peaks = new Uint16Array(buf);
+// Little-endian uint16 sample counts, base64 in two parts.
+Promise.all(["switch_peaks_0.txt", "switch_peaks_1.txt"].map(name =>
+  fetch(name).then(r => {
+    if (!r.ok) throw new Error(`${name} request returned ${r.status}`);
+    return r.text();
+  }))).then(parts => {
+  const bytes = parts.map(text => Uint8Array.from(atob(text.trim()),
+    ch => ch.charCodeAt(0)));
+  const all = new Uint8Array(bytes[0].length + bytes[1].length);
+  all.set(bytes[0]);
+  all.set(bytes[1], bytes[0].length);
+  peaks = new Uint16Array(all.buffer);
   $("status").textContent = "";
   drawSwitch();
 }).catch(err => {
@@ -287,7 +295,12 @@ def main():
         counts[k] = np.where(
             np.isfinite(times), np.rint(times / cadence), 0
         ).astype(np.uint16)
-    counts.tofile(out_dir / "switch_peaks.bin")
+    raw = counts.astype("<u2").tobytes()
+    half = (len(raw) // 4) * 2
+    for part, chunk in enumerate((raw[:half], raw[half:])):
+        (out_dir / f"switch_peaks_{part}.txt").write_text(
+            base64.b64encode(chunk).decode("ascii")
+        )
 
     beats = np.isfinite(data["peak_times"]).sum(axis=1) >= 3
     payload = {
@@ -309,8 +322,7 @@ def main():
         .replace("__STRIDE__", str(STRIDE))
     )
     (out_dir / "index.html").write_text(page, encoding="utf-8")
-    print(f"wrote {out_dir}; switch data "
-          f"{(out_dir / 'switch_peaks.bin').stat().st_size / 1e6:.1f} MB")
+    print(f"wrote {out_dir}; switch data {len(raw) / 1e6:.1f} MB")
 
 
 if __name__ == "__main__":
