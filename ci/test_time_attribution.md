@@ -62,3 +62,24 @@ Same 153 GPU tests, `-n 4`, warm caches, precompile plugin, RTX 4070 SUPER:
 |---|---|---|
 | py3.11 (C tracer) | 13.5 s | 30 s |
 | py3.14 (sys.monitoring) | 13.7 s | 14.7 s |
+
+## Existing-test growth: root cause
+
+#951 (74d2bd7e, 2026-09-15) made `effective_settings`, which every
+settings fixture depends on, build a full session `Solver` per parameter
+set. #1008 resolves the settings without building a kernel. Full GPU
+suite, `-n 4`, warm kernel cache, precompile plugin, RTX 4070 SUPER:
+
+| | existing tests (summed) | new tests (summed) | suite wall |
+|---|---|---|---|
+| 5f31d6c2 (2026-09-07) | 102 s | – | 38 s |
+| main (ff1d6a11) | 142–147 s | 59–70 s | 63–64 s |
+| #1008 | 103–115 s | 54–58 s | 48–52 s |
+
+## Codegen cost per system (solver construction, no profiler)
+
+| System | Algorithm | Helper codegen |
+|---|---|---|
+| three-state nonlinear | radau_iia_3 | 0.14 s |
+| large (100 states) | dirk | 0.42 s |
+| large (100 states) | radau_iia_3 | 2.76 s (lu_solve 1.63 s) |
