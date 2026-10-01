@@ -487,25 +487,19 @@ class ButcherTableau:
         return typed_precision(value)
 
     @property
-    def repeated_stages(self) -> Tuple[int, ...]:
-        """Return the stages that evaluate at the previous stage's point.
+    def repeated_stage(self) -> Optional[int]:
+        """Return the first stage evaluating at its predecessor's point.
 
         Such a stage shares its predecessor's node and ``a`` row, so its
-        right-hand side equals the predecessor's.
+        right-hand side equals the predecessor's. ``None`` when no stage
+        repeats.
         """
-        return tuple(
-            stage
-            for stage in range(1, self.stage_count)
-            if self.c[stage] == self.c[stage - 1]
-            and tuple(self.a[stage]) == tuple(self.a[stage - 1])
-        )
-
-    def stage_repeat_flags(self) -> np_ndarray:
-        """Return int32 repeat flags per stage plus a trailing zero."""
-        flags = np_zeros(self.stage_count + 1, dtype=np_int32)
-        for stage in self.repeated_stages:
-            flags[stage] = 1
-        return flags
+        for stage in range(1, self.stage_count):
+            if self.c[stage] == self.c[stage - 1] and tuple(
+                self.a[stage]
+            ) == tuple(self.a[stage - 1]):
+                return stage
+        return None
 
     @property
     def explicit_first_stage(self) -> bool:
@@ -737,15 +731,16 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         return self.tableau.can_reuse_accepted_start
 
     @property
-    def repeated_stages(self) -> Tuple[int, ...]:
-        """Return the stages that reuse the previous stage's evaluation.
+    def repeated_stage(self) -> Optional[int]:
+        """Return the stage reusing its predecessor's evaluation.
 
-        Empty when the algorithm is not tableau-based.
+        ``None`` when no stage repeats or the algorithm is not
+        tableau-based.
         """
 
         if self.tableau is None:
-            return ()
-        return self.tableau.repeated_stages
+            return None
+        return self.tableau.repeated_stage
 
     @property
     def stage_count(self) -> int:

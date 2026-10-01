@@ -264,7 +264,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         buffer_registry.register(
             "stage_derivative",
             self,
-            n if config.repeated_stages else 0,
+            0 if config.repeated_stage is None else n,
             config.stage_rhs_location,
         )
 
@@ -417,9 +417,12 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         accumulates_error = tableau.accumulates_error
         b_row = tableau.b_matches_a_row
         b_hat_row = tableau.b_hat_matches_a_row
-        has_repeated_stages = bool(config.repeated_stages)
-        stage_one_repeats = 1 in config.repeated_stages
-        repeat_flags = tableau.stage_repeat_flags()
+        repeated_stage = config.repeated_stage
+        stage_one_repeats = repeated_stage == 1
+        repeat_source = None
+        if repeated_stage is not None:
+            repeat_source = int32(repeated_stage - 1)
+            repeated_stage = int32(repeated_stage)
         if b_row is not None:
             b_row = int32(b_row)
         if b_hat_row is not None:
@@ -645,16 +648,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 for idx in unroll_if(range(n), unroll_step_element):
                     stage_increment[idx] = stage_store[stage_offset + idx]
 
-                repeats_previous = False
-                next_repeats = False
-                if has_repeated_stages:
-                    repeats_previous = repeat_flags[stage_idx] != int32(0)
-                    next_repeats = (
-                        repeat_flags[stage_idx + int32(1)] != int32(0)
-                    )
-
                 # A repeated stage reuses its predecessor's f.
-                if not repeats_previous:
+                if repeated_stage != stage_idx:
                     if has_evaluate_driver_at_t:
                         drivers_fn(
                             stage_time,
@@ -723,9 +718,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                             correction += c_coeff * prior_val
 
                     f_stage_val = stage_rhs[idx]
-                    if repeats_previous:
+                    if repeated_stage == stage_idx:
                         f_stage_val = stage_derivative[idx]
-                    if next_repeats:
+                    if repeat_source == stage_idx:
                         stage_derivative[idx] = f_stage_val
                     deriv_val = stage_gamma * time_derivative[idx]
                     rhs_value = f_stage_val + correction * inv_dt + deriv_val

@@ -81,8 +81,7 @@ def test_repeated_stages_follow_shared_rows_and_nodes():
         c=(0.0, 0.5, 0.5),
         order=1,
     )
-    assert tableau.repeated_stages == (2,)
-    assert tuple(tableau.stage_repeat_flags()) == (0, 0, 1, 0)
+    assert tableau.repeated_stage == 2
 
     shifted = ButcherTableau(
         a=((0.0, 0.0, 0.0), (0.5, 0.0, 0.0), (0.5, 0.0, 0.0)),
@@ -90,4 +89,4 @@ def test_repeated_stages_follow_shared_rows_and_nodes():
         c=(0.0, 0.5, 1.0),
         order=1,
     )
-    assert shifted.repeated_stages == ()
+    assert shifted.repeated_stage is None
