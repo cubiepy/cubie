@@ -82,9 +82,8 @@ resolves a name or `ButcherTableau` to the right factory.
   registries into valid `algorithm` names. `ButcherTableau.__attrs_post_init__` checks
   that `b` and `b_hat` sum to 1.
 - Tableau properties drive compile-time shortcuts; use them rather than hand-rolling:
-  `b_matches_a_row` copies a stage state instead of accumulating; the step's
-  `error_row`/`accumulates_error` (base step, `None`/`False` when no error compiles
-  in) do the same for the error;
+  `b_matches_a_row` copies a stage state instead of accumulating; the base step's
+  `error_row`/`accumulates_error` do the same for the error;
   `first_same_as_last`/`can_reuse_accepted_start` enable FSAL stage-0 reuse (gated on
   `all_sync(activemask(), accepted_flag != 0)`); `explicit_first_stage` and
   `DIRKTableau.last_implicit_stage` split stage 0, the Newton loop and trailing explicit
