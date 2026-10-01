@@ -1,6 +1,6 @@
 <title>Fabbri Switch Transients</title>
 <style>
-/* Layout: steady-state pair, controls, then a three-panel transient row. */
+/* Layout: steady-state pair, shared controls, two three-panel source rows. */
 :root {
   --bg: #f6f7f9; --surface: #ffffff; --fg: #1a2230; --muted: #5a6577;
   --line: #d9dee6; --accent: #256abf;
@@ -44,6 +44,7 @@ button:focus-visible, select:focus-visible {
 .stats { font-family: var(--font-data); font-variant-numeric: tabular-nums;
   font-size: .85rem; color: var(--muted); }
 .stats b { color: var(--fg); font-weight: 600; }
+.rowhead { margin: 10px 0 0; font-size: .95rem; font-weight: 600; }
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
 <main>
@@ -52,9 +53,11 @@ button:focus-visible, select:focus-visible {
   point's parameters (target), and the first three peaks after the switch
   were recorded. Peaks are sampled every __CADENCE__ s. Interval 1 runs
   from the source's last peak before the switch to the first peak after
-  it; intervals 2 and 3 are the next two. Expected intervals come from
-  relaunching each grid point with its own parameters, measured the same
-  way. This page holds every __STRIDE__th source on each axis.</p>
+  it; intervals 2 and 3 are the next two. When a source's peak falls on
+  the switch itself, interval 1 starts at the switch. Expected intervals
+  come from relaunching each grid point with its own parameters, measured
+  the same way. This page holds every __STRIDE__th source on each axis.
+  Rotating any 3D plot rotates them all.</p>
   <h2>Steady state</h2>
   <div class="row">
     <div class="panel"><h3>Cycle length (ms)</h3>
@@ -64,11 +67,9 @@ button:focus-visible, select:focus-visible {
       <div id="p-camp" class="plot" role="img"
         aria-label="Steady-state cAMP median"></div></div>
   </div>
-  <h2>Switch from one source</h2>
+  <h2>Switch from a chosen source</h2>
   <div class="controls">
-    <span>Source ACh (nM)</span><select id="sach"></select>
-    <span class="gap">Source Iso (nM)</span><select id="siso"></select>
-    <span class="gap">Interval</span>
+    <span>Interval</span>
     <button id="i1" aria-pressed="true">1</button>
     <button id="i2" aria-pressed="false">2</button>
     <button id="i3" aria-pressed="false">3</button>
@@ -76,20 +77,28 @@ button:focus-visible, select:focus-visible {
     <button id="v3d" aria-pressed="true">3D surface</button>
     <button id="v2d" aria-pressed="false">Top-down map</button>
   </div>
-  <div id="source" class="stats"></div>
-  <div class="row">
-    <div class="panel"><h3 id="t-exp">Expected interval (ms)</h3>
-      <div id="p-exp" class="plot" role="img"
-        aria-label="Expected interval per target"></div></div>
-    <div class="panel"><h3 id="t-meas">Measured interval (ms)</h3>
-      <div id="p-meas" class="plot" role="img"
-        aria-label="Measured interval per target"></div></div>
-    <div class="panel"><h3 id="t-ratio">Measured / expected</h3>
-      <div id="p-ratio" class="plot" role="img"
-        aria-label="Measured over expected interval"></div></div>
-  </div>
+  <div id="rows"></div>
   <div id="status" class="stats">Loading switch data...</div>
 </main>
+<template id="row-template">
+  <h3 class="rowhead"></h3>
+  <div class="controls">
+    <span>ACh (nM)</span><select class="sach"></select>
+    <span class="gap">Iso (nM)</span><select class="siso"></select>
+  </div>
+  <div class="stats source"></div>
+  <div class="row">
+    <div class="panel"><h3 class="t-exp"></h3>
+      <div class="plot p-exp" role="img"
+        aria-label="Expected interval per target"></div></div>
+    <div class="panel"><h3 class="t-meas"></h3>
+      <div class="plot p-meas" role="img"
+        aria-label="Measured interval per target"></div></div>
+    <div class="panel"><h3 class="t-ratio"></h3>
+      <div class="plot p-ratio" role="img"
+        aria-label="Measured over expected interval"></div></div>
+  </div>
+</template>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <script>
 const D = __DATA__;
@@ -97,24 +106,56 @@ const ramp = [[0, "#cde2fb"], [0.17, "#9ec5f4"], [0.33, "#6da7ec"],
   [0.5, "#3987e5"], [0.67, "#256abf"], [0.83, "#184f95"],
   [1, "#0d366b"]];
 const diverge = [[0, "#1c5cab"], [0.5, "#e4e6ea"], [1, "#b2462e"]];
-const N = D.ach.length, S = D.src_ach_index.length;
-let interval = 0, view = "3d", src = [Math.floor(S / 2), 0], peaks = null;
+const N = D.ach.length, S = D.src_ach_index.length, T = N * N;
+const ticks = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000];
+const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement)
   .getPropertyValue(n).trim();
-const ticks = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000];
-function grid(flat, f) {
-  const rows = [];
+let interval = 0, view = "3d", peaks = null;
+let camera = { eye: { x: 1.6, y: -1.6, z: 0.9 } }, syncing = false;
+
+// Each row: its elements and its source as [ACh option, Iso option].
+const rows = [[Math.floor(S / 2), 0], [Math.floor(S / 2), S - 1]].map(
+  (source, n) => {
+    const frag = $("row-template").content.cloneNode(true);
+    const q = c => frag.querySelector("." + c);
+    const row = { source, el: {} };
+    ["sach", "siso", "source", "t-exp", "t-meas", "t-ratio", "p-exp",
+      "p-meas", "p-ratio"].forEach(c => { row.el[c] = q(c); });
+    frag.querySelector(".rowhead").textContent = `Source ${n + 1}`;
+    $("rows").appendChild(frag);
+    return row;
+  });
+
+function grid(flat) {
+  const out = [];
   for (let r = 0; r < N; r++) {
-    const row = [];
+    const line = [];
     for (let c = 0; c < N; c++) {
       const v = flat[r * N + c];
-      row.push(v === null || !isFinite(v) ? null : (f ? f(v) : v));
+      line.push(v === null || !isFinite(v) ? null : v);
     }
-    rows.push(row);
+    out.push(line);
   }
-  return rows;
+  return out;
 }
-function plot(id, z, label, hover, scale) {
+
+function linkCamera(el) {
+  if (el.dataset.linked) return;
+  el.dataset.linked = "1";
+  el.on("plotly_relayout", ev => {
+    const cam = ev["scene.camera"];
+    if (!cam || syncing) return;
+    camera = cam;
+    syncing = true;
+    const others = [...document.querySelectorAll(".plot")].filter(
+      o => o !== el && o.layout && o.layout.scene);
+    Promise.all(others.map(o => Plotly.relayout(o, { "scene.camera": cam })))
+      .finally(() => { syncing = false; });
+  });
+}
+
+function plot(el, z, label, hover, scale) {
   const fg = css("--fg"), muted = css("--muted"), line = css("--line");
   const surf = css("--surface");
   const axis = t => ({ title: { text: t, font: { color: muted } },
@@ -141,19 +182,23 @@ function plot(id, z, label, hover, scale) {
       zaxis: { title: { text: label, font: { color: muted } },
         tickfont: { color: muted }, gridcolor: line,
         backgroundcolor: surf, showbackground: true },
-      camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } },
+      camera: camera,
       aspectmode: "manual", aspectratio: { x: 1, y: 1, z: 0.7 } };
   } else {
     layout.margin = { l: 55, r: 10, t: 10, b: 45 };
     layout.xaxis = axis("ACh (nM)");
     layout.yaxis = axis("Iso (nM)");
   }
-  Plotly.react(id, [trace], layout, { responsive: true, displaylogo: false });
+  Plotly.react(el, [trace], layout, { responsive: true, displaylogo: false });
+  linkCamera(el);
 }
-function measured() {
+
+const sourceIndex = row => row.source[1] * S + row.source[0];
+
+function measured(row) {
   // Sample counts k -> time k * cadence after the switch; 0 = no peak.
-  const T = N * N, s = src[1] * S + src[0], base = s * T * 3;
-  const out = new Float64Array(T), prev = D.src_prev_peak[s];
+  const s = sourceIndex(row), base = s * T * 3, out = new Float64Array(T);
+  const prev = D.src_prev_peak[s];
   for (let t = 0; t < T; t++) {
     const k = [0, 1, 2].map(j => peaks[base + t * 3 + j]);
     let a, b;
@@ -166,59 +211,59 @@ function measured() {
   }
   return out;
 }
+
 function drawSteady() {
-  plot("p-cl", grid(D.cycle), "ms", "cycle %{z:.1f} ms");
-  plot("p-camp", grid(D.camp), "mM", "cAMP %{z:.5f} mM");
+  plot($("p-cl"), grid(D.cycle), "ms", "cycle %{z:.1f} ms");
+  plot($("p-camp"), grid(D.camp), "mM", "cAMP %{z:.5f} mM");
 }
-function drawSwitch() {
-  const k = interval + 1;
-  const expected = D.expected[interval];
-  document.getElementById("t-exp").textContent =
-    `Expected interval ${k} (ms)`;
-  document.getElementById("t-meas").textContent =
-    `Measured interval ${k} after the switch (ms)`;
-  document.getElementById("t-ratio").textContent =
-    `Measured / expected, interval ${k}`;
-  const si = D.src_ach_index[src[0]], sj = D.src_iso_index[src[1]];
-  const s = src[1] * S + src[0];
-  const prev = D.src_prev_peak[s];
-  document.getElementById("source").innerHTML =
-    `source <b>ACh ${D.ach[si].toFixed(2)} nM, Iso ` +
-    `${D.iso[sj].toFixed(2)} nM</b>; steady cycle <b>` +
-    `${isFinite(D.cycle[sj * N + si]) && D.cycle[sj * N + si] !== null
-      ? D.cycle[sj * N + si].toFixed(1) + " ms" : "none"}</b>; last peak ` +
-    `<b>${isFinite(prev) && prev !== null
-      ? (-prev * 1e3).toFixed(1) + " ms" : "none"}</b> before the switch`;
-  plot("p-exp", grid(expected), "ms", "expected %{z:.1f} ms");
+
+function drawRow(row) {
+  const k = interval + 1, expected = D.expected[interval], el = row.el;
+  el["t-exp"].textContent = `Expected interval ${k} (ms)`;
+  el["t-meas"].textContent = `Measured interval ${k} after the switch (ms)`;
+  el["t-ratio"].textContent = `Measured / expected, interval ${k}`;
+  const si = D.src_ach_index[row.source[0]];
+  const sj = D.src_iso_index[row.source[1]];
+  const s = sourceIndex(row), prev = D.src_prev_peak[s];
+  const cyc = D.cycle[sj * N + si];
+  el.source.innerHTML =
+    `source <b>ACh ${D.ach[si].toFixed(2)} nM, Iso ${D.iso[sj].toFixed(2)}` +
+    ` nM</b>; steady cycle <b>${cyc === null ? "none" :
+      cyc.toFixed(1) + " ms"}</b>; last peak <b>${prev === null ? "none" :
+      (-prev * 1e3).toFixed(1) + " ms"}</b> before the switch`;
+  plot(el["p-exp"], grid(expected), "ms", "expected %{z:.1f} ms");
   if (!peaks) return;
-  const m = measured();
-  plot("p-meas", grid(m), "ms", "measured %{z:.1f} ms");
-  const ratio = m.map((v, t) => v / expected[t]);
-  plot("p-ratio", grid(ratio), "ratio", "ratio %{z:.3f}", diverge);
+  const m = measured(row);
+  plot(el["p-meas"], grid(m), "ms", "measured %{z:.1f} ms");
+  plot(el["p-ratio"], grid(m.map((v, t) => v / expected[t])), "ratio",
+    "ratio %{z:.3f}", diverge);
 }
-const $ = id => document.getElementById(id);
+
+const drawAll = () => { drawSteady(); rows.forEach(drawRow); };
+
 function fill(sel, idx, axis, start) {
   idx.forEach((v, n) => { const o = document.createElement("option");
     o.value = n; o.textContent = axis[v].toPrecision(3);
     if (n === start) o.selected = true; sel.appendChild(o); });
 }
-fill($("sach"), D.src_ach_index, D.ach, src[0]);
-fill($("siso"), D.src_iso_index, D.iso, src[1]);
-$("sach").onchange = e => { src[0] = +e.target.value; drawSwitch(); };
-$("siso").onchange = e => { src[1] = +e.target.value; drawSwitch(); };
+rows.forEach(row => {
+  fill(row.el.sach, D.src_ach_index, D.ach, row.source[0]);
+  fill(row.el.siso, D.src_iso_index, D.iso, row.source[1]);
+  row.el.sach.onchange = e => { row.source[0] = +e.target.value; drawRow(row); };
+  row.el.siso.onchange = e => { row.source[1] = +e.target.value; drawRow(row); };
+});
 function group(ids, set) {
   ids.forEach((id, n) => { $(id).onclick = () => { set(n);
     ids.forEach((o, m) => $(o).setAttribute("aria-pressed",
-      String(m === n))); drawSteady(); drawSwitch(); }; });
+      String(m === n))); drawAll(); }; });
 }
 group(["i1", "i2", "i3"], n => { interval = n; });
 group(["v3d", "v2d"], n => { view = n ? "2d" : "3d"; });
-const redraw = () => { drawSteady(); drawSwitch(); };
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw);
-new MutationObserver(redraw).observe(document.documentElement,
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+new MutationObserver(drawAll).observe(document.documentElement,
   { attributes: true, attributeFilter: ["data-theme"] });
-drawSteady();
-drawSwitch();
+drawAll();
+
 // Little-endian uint16 sample counts, base64 in two parts.
 Promise.all(["switch_peaks_0.txt", "switch_peaks_1.txt"].map(name =>
   fetch(name).then(r => {
@@ -232,7 +277,7 @@ Promise.all(["switch_peaks_0.txt", "switch_peaks_1.txt"].map(name =>
   all.set(bytes[1], bytes[0].length);
   peaks = new Uint16Array(all.buffer);
   $("status").textContent = "";
-  drawSwitch();
+  rows.forEach(drawRow);
 }).catch(err => {
   $("status").textContent = `Switch data did not load: ${err.message}.`;
 });

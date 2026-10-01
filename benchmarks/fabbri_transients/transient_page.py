@@ -44,6 +44,9 @@ def main():
     prev[has_peak] = np.nanmax(char_peaks[has_peak], axis=1) - char
 
     diagonal = np.array([peaks[s, s] for s in range(n)], dtype=np.float64)
+    # A peak on the switch is missed on both sides; it sits at 0 s.
+    on_switch = (diagonal[:, 0] - prev) > 1.5 * data["steady_cl"]
+    prev[on_switch] = 0.0
     expected = np.stack([
         diagonal[:, 0] - prev,
         diagonal[:, 1] - diagonal[:, 0],
