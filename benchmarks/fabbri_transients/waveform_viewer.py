@@ -42,11 +42,18 @@ class Run:
             "n_samples": int(self.time.size),
         }
 
-    def traces(self, sources, targets, t0, t1):
-        """Return times and voltages; long spans keep block min/max."""
+    def traces(self, sources, targets, t0, t1, order=0):
+        """Return times and V or its ``order``-th derivative (mV/ms^n)."""
         lo, hi = np.searchsorted(self.time, [t0, t1])
         hi = max(hi, lo + 2)
-        block = self.voltage[sources, targets, lo:hi].astype(np.float32)
+        pad_lo, pad_hi = max(lo - order, 0), min(hi + order, self.time.size)
+        block = self.voltage[sources, targets, pad_lo:pad_hi].astype(
+            np.float64
+        )
+        step_ms = 1e3 * (self.time[1] - self.time[0])
+        for _ in range(order):
+            block = np.gradient(block, step_ms, axis=1)
+        block = block[:, lo - pad_lo : lo - pad_lo + hi - lo]
         time = self.time[lo:hi]
         stride = int(np.ceil(block.shape[1] / MAX_POINTS))
         if stride <= 2:
@@ -95,7 +102,8 @@ def make_handler(run: Run):
                     [int(v) for v in query["targets"].split(",")]
                 )
                 time, block = run.traces(
-                    sources, targets, float(query["t0"]), float(query["t1"])
+                    sources, targets, float(query["t0"]), float(query["t1"]),
+                    int(query.get("order", 0)),
                 )
                 header = np.array(block.shape, dtype="<u4").tobytes()
                 body = (
