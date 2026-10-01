@@ -10,6 +10,7 @@ from cubie.integrators.algorithms.generic_rosenbrock_w import (
 from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
     DEFAULT_ROSENBROCK_TABLEAU,
     RODAS3P_TABLEAU,
+    ROS2_TABLEAU,
     ROS3P_TABLEAU,
 )
 
@@ -48,6 +49,8 @@ def test_operator_gamma_follows_the_tableau(
     assert step._helper_request_kwargs()["operator_gamma"] == float(
         precision(RODAS3P_TABLEAU.gamma)
     )
+    run.update({"tableau": ROS2_TABLEAU})
+    assert run._algo_step.operator_gamma == precision(ROS2_TABLEAU.gamma)
 
 
 def test_shared_stage_increment_gets_its_own_window(system):
