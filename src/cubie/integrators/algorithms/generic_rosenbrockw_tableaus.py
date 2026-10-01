@@ -387,14 +387,8 @@ def _rosenbrock_32_tableau() -> RosenbrockTableau:
 ROSENBROCK_32_SCIML_TABLEAU = _rosenbrock_32_tableau()
 
 
-# --------------------------------------------------------------------------
-# Tableaus below map OrdinaryDiffEq.jl's RodasTableau fields directly:
-# - SciML/OrdinaryDiffEq.jl (commit 739379950dc33ccd6bb427931225013aca5486b7)
-#   lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl
-#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl
-# --------------------------------------------------------------------------
+# Below: OrdinaryDiffEq.jl@739379950dc3 RodasTableau fields, unchanged.
 # ROS2: Verwer et al. (1999), SIAM J. Sci. Comput. 20(4).
-# Julia ROS2RodasTableau (RosenbrockTableaus package).
 ROS2_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0),
@@ -415,7 +409,6 @@ ROS2_TABLEAU = _julia_tableau(
 
 
 # ROS2PR: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
-# Julia ROS2PRRodasTableau (RosenbrockTableaus package).
 ROS2PR_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -438,7 +431,6 @@ ROS2PR_TABLEAU = _julia_tableau(
 
 
 # ROS2S: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
-# Julia ROS2SRodasTableau (RosenbrockTableaus package).
 ROS2S_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -469,7 +461,6 @@ ROS2S_TABLEAU = _julia_tableau(
 
 
 # ROS3: Hairer & Wanner, Solving ODEs II (1996).
-# Julia ROS3RodasTableau (RosenbrockTableaus package).
 ROS3_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -496,7 +487,6 @@ ROS3_TABLEAU = _julia_tableau(
 
 
 # ROS3PR: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
-# Julia ROS3PRRodasTableau (RosenbrockTableaus package).
 ROS3PR_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -519,7 +509,6 @@ ROS3PR_TABLEAU = _julia_tableau(
 
 
 # Scholz4_7: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
-# Julia Scholz4_7RodasTableau (RosenbrockTableaus package).
 SCHOLZ4_7_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -546,7 +535,6 @@ SCHOLZ4_7_TABLEAU = _julia_tableau(
 
 
 # ROS34PW1a: Rang & Angermann (2005), BIT 45, 761-787.
-# Julia ROS34PW1aRodasTableau (RosenbrockTableaus package).
 ROS34PW1A_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -581,7 +569,6 @@ ROS34PW1A_TABLEAU = _julia_tableau(
 
 
 # ROS34PW1b: Rang & Angermann (2005), BIT 45, 761-787.
-# Julia ROS34PW1bRodasTableau (RosenbrockTableaus package).
 ROS34PW1B_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -616,7 +603,6 @@ ROS34PW1B_TABLEAU = _julia_tableau(
 
 
 # ROS34PW2: Rang & Angermann (2005), BIT 45, 761-787.
-# Julia ROS34PW2RodasTableau (RosenbrockTableaus package).
 ROS34PW2_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -651,7 +637,6 @@ ROS34PW2_TABLEAU = _julia_tableau(
 
 
 # ROS34PW3: Rang & Angermann (2005), BIT 45, 761-787.
-# Julia ROS34PW3RodasTableau (Rosenbrock package).
 ROS34PW3_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -691,7 +676,6 @@ ROS34PW3_TABLEAU = _julia_tableau(
 
 
 # ROS34PRw: Rang (2015), doi:10.1016/j.cam.2015.03.010.
-# Julia ROS34PRwRodasTableau (RosenbrockTableaus package).
 ROS34PRW_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -726,7 +710,6 @@ ROS34PRW_TABLEAU = _julia_tableau(
 
 
 # ROS3PRL: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
-# Julia ROS3PRLRodasTableau (RosenbrockTableaus package).
 ROS3PRL_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -761,7 +744,6 @@ ROS3PRL_TABLEAU = _julia_tableau(
 
 
 # ROS3PRL2: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
-# Julia ROS3PRL2RodasTableau (RosenbrockTableaus package).
 ROS3PRL2_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -796,7 +778,6 @@ ROS3PRL2_TABLEAU = _julia_tableau(
 
 
 # ROK4a: Tranquilli & Sandu (2014), doi:10.1137/130923336.
-# Julia ROK4aRodasTableau (Rosenbrock package).
 ROK4A_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -836,7 +817,6 @@ ROK4A_TABLEAU = _julia_tableau(
 
 
 # RosShamp4: Shampine (1982), ACM TOMS 8(2), 93-113.
-# Julia RosShamp4RodasTableau (RosenbrockTableaus package).
 ROSSHAMP4_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -866,7 +846,6 @@ ROSSHAMP4_TABLEAU = _julia_tableau(
 
 
 # Veldd4: van Veldhuizen (1984), Computing 32, 229.
-# Julia Veldd4RodasTableau (RosenbrockTableaus package).
 VELDD4_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -906,7 +885,6 @@ VELDD4_TABLEAU = _julia_tableau(
 
 
 # Velds4: van Veldhuizen (1984), Computing 32, 229.
-# Julia Velds4RodasTableau (RosenbrockTableaus package).
 VELDS4_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -941,7 +919,6 @@ VELDS4_TABLEAU = _julia_tableau(
 
 
 # GRK4T: Kaps & Rentrop (1979), Numer. Math. 33, 55.
-# Julia GRK4TRodasTableau (RosenbrockTableaus package).
 GRK4T_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -981,7 +958,6 @@ GRK4T_TABLEAU = _julia_tableau(
 
 
 # GRK4A: Kaps & Rentrop (1979), Numer. Math. 33, 55.
-# Julia GRK4ARodasTableau (RosenbrockTableaus package).
 GRK4A_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -1021,7 +997,6 @@ GRK4A_TABLEAU = _julia_tableau(
 
 
 # Ros4LStab: Hairer & Wanner, Solving ODEs II (1996).
-# Julia Ros4LStabRodasTableau (RosenbrockTableaus package).
 ROS4LSTAB_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -1061,7 +1036,6 @@ ROS4LSTAB_TABLEAU = _julia_tableau(
 
 
 # RosenbrockW6S4OS: doi:10.1016/j.cam.2009.09.017.
-# Julia RosenbrockW6S4OSRodasTableau (RosenbrockTableaus package).
 ROSENBROCKW6S4OS_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1146,7 +1120,6 @@ ROSENBROCKW6S4OS_TABLEAU = _julia_tableau(
 
 
 # Rodas3: Sandu et al. (1997), Atmos. Environ. 31(19), 3151-3166.
-# Julia Rodas3RodasTableau (RosenbrockTableaus package).
 RODAS3_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -1171,7 +1144,6 @@ RODAS3_TABLEAU = _julia_tableau(
 
 
 # Rodas3d: Yu, Gu, Xu & Lu (2024), arXiv:2312.02809.
-# Julia Rodas3dRodasTableau (RosenbrockTableaus package).
 RODAS3D_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -1196,7 +1168,6 @@ RODAS3D_TABLEAU = _julia_tableau(
 
 
 # Rodas23W: Steinebach (2024), Proceedings of the JuliaCon Conferences.
-# Julia Rodas23WRodasTableau (Rosenbrock package).
 RODAS23W_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1223,7 +1194,6 @@ RODAS23W_TABLEAU = _julia_tableau(
 
 
 # Rodas4: Hairer & Wanner, Solving ODEs II (1996).
-# Julia Rodas4Tableau (RosenbrockTableaus package).
 RODAS4_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1291,7 +1261,6 @@ RODAS4_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas42: Hairer & Wanner, Solving ODEs II (1996).
-# Julia Rodas42Tableau (RosenbrockTableaus package).
 RODAS42_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1359,7 +1328,6 @@ RODAS42_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas4P: Steinebach (1995), Preprint 1741, TH Darmstadt.
-# Julia Rodas4PTableau (RosenbrockTableaus package).
 RODAS4P_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1427,7 +1395,6 @@ RODAS4P_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas4P2: Steinebach (2020), Progress in DAEs II, 165-184.
-# Julia Rodas4P2Tableau (RosenbrockTableaus package).
 RODAS4P2_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1495,7 +1462,6 @@ RODAS4P2_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas4PW: Steinebach (2026), in preparation.
-# Julia Rodas4PWTableau (RosenbrockTableaus package).
 RODAS4PW_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1687,7 +1653,6 @@ RODAS4PW_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas5: Di Marzo (1993), MSc thesis, University of Geneva.
-# Julia Rodas5Tableau (RosenbrockTableaus package).
 RODAS5_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1825,7 +1790,6 @@ RODAS5_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas5P: Steinebach (2023), BIT 63, 27.
-# Julia Rodas5PTableau (Rosenbrock package).
 RODAS5P_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1963,7 +1927,6 @@ RODAS5P_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas5Pe: Steinebach (2024), Proceedings of the JuliaCon Conferences.
-# Julia Rodas5PeTableau (Rosenbrock package).
 RODAS5PE_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -2122,9 +2085,8 @@ RODAS5PE_TABLEAU = _julia_tableau(
 
 
 # Rodas6P: Steinebach (2025), arXiv:2511.21252.
-# Julia Rodas6PTableau (Rosenbrock package).
-# Stages 17-19 feed only Julia's dense output and are dropped.
 RODAS6P_TABLEAU = _stiffly_accurate_tableau(
+    # Stages 17-19 feed only Julia's dense output and are dropped.
     a=(
         (
             0.0,
