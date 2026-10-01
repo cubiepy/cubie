@@ -161,7 +161,8 @@ def parabola_vertex(x0, x1, x2, y0, y1, y2):
     den = left * (y1 - y2) - right * (y1 - y0)
     with np.errstate(divide="ignore", invalid="ignore"):
         shift = np.where(den != 0, 0.5 * num / den, 0.0)
-    return x1 - shift
+    # Keep the vertex between the outer samples.
+    return np.clip(x1 - shift, x0, x2)
 
 
 def float32_sample_grid(interval, n_samples, t_start=0.0, t_end=None):

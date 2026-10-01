@@ -73,7 +73,7 @@ button:focus-visible { outline: 2px solid var(--accent);
     <div>grid step <b>ACh 0.392 nM, Iso 0.784 nM</b></div>
   </div>
 </main>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <script>
 const D = __DATA__;
 const ramp = [[0, "#cde2fb"], [0.17, "#9ec5f4"], [0.33, "#6da7ec"],
