@@ -44,7 +44,7 @@ select:disabled { opacity: .45; }
   In the line view, zooming the time axis reloads that span at full
   float32 resolution. The derivative toggle adds dV/dt and d²V/dt² panels,
   differenced from the full-resolution samples; a parameter set keeps its
-  colour in every panel.</p>
+  colour in every panel, and colours spread across the selected sets.</p>
   <div class="controls">
     <span>Sweep</span><span id="sweeps" class="controls"></span>
     <span class="gap">View</span>
@@ -158,10 +158,9 @@ async function draw(range) {
     plot_bgcolor: css("--surface"), font,
     margin: {l: 70, r: 20, t: 20, b: 50}};
   const values = list.map(p => p.value);
-  const all = meta[KEYS[sweep]];
   const hue = v => {
-    const k = all.indexOf(v);
-    return `hsl(${240 - 240 * k / Math.max(all.length - 1, 1)}, 70%, 50%)`;
+    const k = values.indexOf(v);
+    return `hsl(${240 - 240 * k / Math.max(values.length - 1, 1)}, 70%, 50%)`;
   };
   const zrange = o => {
     const zr = [$(`z${o}a`).value, $(`z${o}b`).value];
