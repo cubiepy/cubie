@@ -67,3 +67,27 @@ def test_floating_point_tolerance():
     assert result is not None, (
         "Expected match within tolerance for floating-point values"
     )
+
+
+def test_repeated_stages_follow_shared_rows_and_nodes():
+    """A stage sharing its predecessor's row and node repeats it."""
+    from cubie.integrators.algorithms.base_algorithm_step import (
+        ButcherTableau,
+    )
+
+    tableau = ButcherTableau(
+        a=((0.0, 0.0, 0.0), (0.5, 0.0, 0.0), (0.5, 0.0, 0.0)),
+        b=(0.0, 0.5, 0.5),
+        c=(0.0, 0.5, 0.5),
+        order=1,
+    )
+    assert tableau.repeated_stages == (2,)
+    assert tuple(tableau.stage_repeat_flags()) == (0, 0, 1, 0)
+
+    shifted = ButcherTableau(
+        a=((0.0, 0.0, 0.0), (0.5, 0.0, 0.0), (0.5, 0.0, 0.0)),
+        b=(0.0, 0.5, 0.5),
+        c=(0.0, 0.5, 1.0),
+        order=1,
+    )
+    assert shifted.repeated_stages == ()
