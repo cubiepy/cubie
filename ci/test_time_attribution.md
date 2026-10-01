@@ -1,10 +1,7 @@
 # GPU test-time attribution, 2026-09-07 → 2026-09-30
 
-Baseline: CUDA tests run 34156642070 (5f31d6c2, 2026-09-07). Current: run
-36774161837 (ff1d6a11, 2026-09-30). Windows legs only (g5.xlarge every run).
-Times are JUnit per-test seconds, summed over the 4 xdist workers, for tests
-executed on the GPU leg (banked CPU-runner cases excluded). JUnit time includes
-fixture setup, so a session fixture's build lands on the first test using it.
+Runs 34156642070 (5f31d6c2) and 36774161837 (ff1d6a11), Windows g5.xlarge legs.
+Times: JUnit seconds summed over workers, GPU-leg tests only, setup included.
 
 ## Pytest step wall time (Windows, mean of cuda12 and cuda13 legs)
 
@@ -51,8 +48,7 @@ fixture setup, so a session fixture's build lands on the first test using it.
 | algorithms.test_generic_dirk | +3.2 | +5.3 |
 | batchsolving.test_solver | +3.1 | +6.0 |
 
-TestControllerNumerical::test_matches_cpu[*-i]: four cases, 0.0 → 7.3 s each
-on py3.14.
+TestControllerNumerical::test_matches_cpu[*-i]: 0.0 → 7.3 s each in CI; +1 s locally.
 
 ## Coverage tracing cost
 
@@ -65,10 +61,8 @@ Same 153 GPU tests, `-n 4`, warm caches, precompile plugin, RTX 4070 SUPER:
 
 ## Existing-test growth: root cause
 
-#951 (74d2bd7e, 2026-09-15) made `effective_settings`, which every
-settings fixture depends on, build a full session `Solver` per parameter
-set. #1008 resolves the settings without building a kernel. Full GPU
-suite, `-n 4`, warm kernel cache, precompile plugin, RTX 4070 SUPER:
+`effective_settings` builds a full `Solver` per parameter set (#951); #1008 resolves without one.
+Full GPU suite, `-n 4`, warm kernel cache, precompile plugin, RTX 4070 SUPER:
 
 | | existing tests (summed) | new tests (summed) | suite wall |
 |---|---|---|---|
