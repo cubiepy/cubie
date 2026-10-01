@@ -62,7 +62,11 @@ from cubie.batchsolving.optimize import (
     OptimizeResult,
     run_optimization,
 )
-from cubie.batchsolving.resolve_defaults import check_duration, resolve
+from cubie.batchsolving.resolve_defaults import (
+    EffectiveSettings,
+    check_duration,
+    resolve,
+)
 from cubie.batchsolving.solveresult import (
     DeviceSolveResult,
     SolveResult,
@@ -115,6 +119,48 @@ def _unknown_names(
     constants = system.constants
     constant_names = set(constants.names) if constants is not None else set()
     return names - recognised - constant_names
+
+
+def resolve_solver_settings(
+    system: BaseODE, settings: Dict[str, Any]
+) -> Tuple[SolverSettings, EffectiveSettings, SystemInterface]:
+    """Resolve keyword settings for ``system`` without building a kernel.
+
+    Parameters
+    ----------
+    system
+        The system to solve; it takes the settings that name its own
+        fields.
+    settings
+        Keyword settings as :class:`Solver` accepts them; ``None``
+        values are dropped.
+
+    Returns
+    -------
+    tuple
+        The given :class:`SolverSettings`, the resolved
+        :class:`EffectiveSettings` and the system's
+        :class:`SystemInterface`.
+
+    Raises
+    ------
+    KeyError
+        A name that is neither a setting nor a constant of ``system``.
+    """
+    settings = {
+        key: value for key, value in settings.items() if value is not None
+    }
+    settings, _ = unpack_dict_values(settings)
+    given, recognised, _ = SolverSettings().update(settings)
+    unknown = _unknown_names(system, set(settings), recognised)
+    if unknown:
+        raise KeyError(
+            f"Unrecognized keyword arguments: {sorted(unknown)}"
+        )
+    interface = SystemInterface(system)
+    # Update the system first: the chain reads its precision.
+    system.update(settings, silent=True)
+    return given, resolve(given, system, interface), interface
 
 
 def _system_from_equations(
@@ -421,23 +467,11 @@ class Solver:
             "time_logging_level": time_logging_level,
             **kwargs,
         }
-        settings = {
-            key: value for key, value in settings.items() if value is not None
-        }
-        settings, _ = unpack_dict_values(settings)
-        given, recognised, _ = SolverSettings().update(settings)
-        unknown = _unknown_names(system, set(settings), recognised)
-        if unknown:
-            raise KeyError(
-                f"Unrecognized keyword arguments: {sorted(unknown)}"
-            )
+        self.given, self.effective, self.system_interface = (
+            resolve_solver_settings(system, settings)
+        )
         # Set global time logging level
         default_timelogger.set_verbosity(time_logging_level)
-        self.given = given
-        self.system_interface = SystemInterface(system)
-        # Update the system first: the chain reads its precision.
-        system.update(settings, silent=True)
-        self.effective = resolve(self.given, system, self.system_interface)
         self.kernel = BatchSolverKernel(system, **self.effective.as_kwargs())
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
         self.input_handler = BatchInputHandler(
