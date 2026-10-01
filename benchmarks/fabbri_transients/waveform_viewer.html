@@ -42,9 +42,9 @@ select:disabled { opacity: .45; }
   <p>Each source starts from its settled state and switches to the target's
   ACh and Iso at t = 0. Pick the axis to sweep; the other three stay fixed.
   In the line view, zooming the time axis reloads that span at full
-  float32 resolution. The derivative toggle overlays dV/dt (dashed) and
-  d²V/dt² (dotted) on each voltage line, differenced from the
-  full-resolution samples and multiplied by the gains below.</p>
+  float32 resolution. The derivative toggle adds dV/dt and d²V/dt² panels,
+  differenced from the full-resolution samples; a parameter set keeps its
+  colour in every panel.</p>
   <div class="controls">
     <span>Sweep</span><span id="sweeps" class="controls"></span>
     <span class="gap">View</span>
@@ -69,12 +69,17 @@ select:disabled { opacity: .45; }
   <div class="controls">
     <span>Swept from</span><select id="k0"></select>
     <span>to</span><select id="k1"></select>
-    <span class="gap">Magnitude</span>
-    <input id="z0" type="number" step="any" placeholder="auto">
-    <span>to</span><input id="z1" type="number" step="any" placeholder="auto">
-    <span class="gap">Gain dV/dt</span>
-    <input id="g1" type="number" step="any" value="1">
-    <span>d²V/dt²</span><input id="g2" type="number" step="any" value="1">
+  </div>
+  <div class="controls">
+    <span>V (mV)</span>
+    <input id="z0a" type="number" step="any" placeholder="auto">
+    <span>to</span><input id="z0b" type="number" step="any" placeholder="auto">
+    <span class="gap">dV/dt (mV/ms)</span>
+    <input id="z1a" type="number" step="any" placeholder="auto">
+    <span>to</span><input id="z1b" type="number" step="any" placeholder="auto">
+    <span class="gap">d²V/dt² (mV/ms²)</span>
+    <input id="z2a" type="number" step="any" placeholder="auto">
+    <span>to</span><input id="z2b" type="number" step="any" placeholder="auto">
   </div>
   <div id="plot"></div>
   <div id="status" class="stats">Loading grid...</div>
@@ -88,11 +93,7 @@ const AXES = {
 const KEYS = {sa: "source_ach", si: "source_iso",
   ta: "target_ach", ti: "target_iso"};
 let meta = null, sweep = "ta", view = "3d", busy = false, diffs = false;
-const ORDERS = [
-  {name: "V", dash: "solid"},
-  {name: "dV/dt", dash: "dash"},
-  {name: "d²V/dt²", dash: "dot"},
-];
+const ORDERS = ["V (mV)", "dV/dt (mV/ms)", "d²V/dt² (mV/ms²)"];
 const $ = id => document.getElementById(id);
 const css = name => getComputedStyle(document.documentElement)
   .getPropertyValue(name).trim();
@@ -159,40 +160,44 @@ async function draw(range) {
     const k = all.indexOf(v);
     return `hsl(${240 - 240 * k / Math.max(all.length - 1, 1)}, 70%, 50%)`;
   };
-  const gains = [1, +$("g1").value || 1, +$("g2").value || 1];
-  const zr = [$("z0").value, $("z1").value];
-  const zrange = zr.every(v => v !== "") ? zr.map(Number) : undefined;
-  const label = o => o === 0 ? "V (mV)"
-    : `${ORDERS[o].name} × ${gains[o]}`;
-  const zTitle = orders.map(label).join(", ");
+  const zrange = o => {
+    const zr = [$(`z${o}a`).value, $(`z${o}b`).value];
+    return zr.every(v => v !== "") ? zr.map(Number) : undefined;
+  };
+  const rows = orders.length;
+  const band = i => [1 - (i + 1) / rows + (i < rows - 1 ? 0.03 : 0),
+    1 - i / rows - (i > 0 ? 0.03 : 0)];
   const ticks = values.map(v => Math.log10(v));
   const data = [];
-  orders.forEach((o, i) => sets[i].traces.forEach((r, k) => {
-    const y = Array.from(r, x => x * gains[o]);
-    const common = {mode: "lines", name: values[k].toPrecision(3),
-      legendgroup: String(k), showlegend: i === 0,
-      hovertemplate: `${AXES[sweep]} ${values[k].toPrecision(3)} · `
-        + `${label(o)}: %{${view === "3d" ? "z" : "y"}:.4g}<extra></extra>`,
-      line: {width: view === "3d" ? 2 : 1, color: hue(values[k]),
-        dash: ORDERS[o].dash}};
-    data.push(view === "3d"
-      ? {...common, type: "scatter3d", x: t,
-        y: new Array(t.length).fill(ticks[k]), z: y}
-      : {...common, type: "scattergl", x: t, y});
-  }));
   const layout = {...base, legend: {title: {text: AXES[sweep]}},
     uirevision: view === "3d" ? "3d" : undefined};
-  if (view === "3d") {
-    layout.scene = {xaxis: {title: "Time after switch (s)"},
-      yaxis: {title: AXES[sweep], tickvals: ticks,
-        ticktext: values.map(v => v.toPrecision(3))},
-      zaxis: {title: zTitle, range: zrange}};
-  } else {
-    layout.xaxis = {title: "Time after switch (s)", range: [t0, t1],
-      gridcolor: css("--line")};
-    layout.yaxis = {title: zTitle, range: zrange,
-      gridcolor: css("--line")};
-  }
+  orders.forEach((o, i) => {
+    const suffix = i ? String(i + 1) : "";
+    sets[i].traces.forEach((r, k) => {
+      const common = {mode: "lines", name: values[k].toPrecision(3),
+        legendgroup: String(k), showlegend: i === 0,
+        line: {width: view === "3d" ? 2 : 1, color: hue(values[k])}};
+      data.push(view === "3d"
+        ? {...common, type: "scatter3d", scene: "scene" + suffix, x: t,
+          y: new Array(t.length).fill(ticks[k]), z: Array.from(r)}
+        : {...common, type: "scattergl", xaxis: "x" + suffix,
+          yaxis: "y" + suffix, x: t, y: Array.from(r)});
+    });
+    if (view === "3d") {
+      layout["scene" + suffix] = {domain: {x: [0, 1], y: band(i)},
+        xaxis: {title: "Time after switch (s)"},
+        yaxis: {title: AXES[sweep], tickvals: ticks,
+          ticktext: values.map(v => v.toPrecision(3))},
+        zaxis: {title: ORDERS[o], range: zrange(o)}};
+    } else {
+      layout["xaxis" + suffix] = {range: [t0, t1],
+        gridcolor: css("--line"), anchor: "y" + suffix,
+        matches: i ? "x" : undefined, showticklabels: i === rows - 1,
+        title: i === rows - 1 ? "Time after switch (s)" : undefined};
+      layout["yaxis" + suffix] = {title: ORDERS[o], domain: band(i),
+        range: zrange(o), gridcolor: css("--line")};
+    }
+  });
   Plotly.react("plot", data, layout);
   bindZoom();
   $("status").textContent = `${describe(list)} · ${t.length} points `
@@ -229,7 +234,7 @@ async function init() {
   $("si").value = 1; $("ti").value = 1;
   $("t1").value = Math.min(15, meta.duration);
   $("load").onclick = () => draw();
-  for (const id of ["k0", "k1", "z0", "z1", "g1", "g2"])
+  for (const id of ["k0", "k1", "z0a", "z0b", "z1a", "z1b", "z2a", "z2b"])
     $(id).onchange = () => draw();
   for (const b of document.querySelectorAll("[data-span]"))
     b.onclick = () => { $("t0").value = 0;
