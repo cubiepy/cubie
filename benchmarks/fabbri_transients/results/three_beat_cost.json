@@ -1,0 +1,24 @@
+[
+  {
+    "config": "final state only",
+    "runs": 65536,
+    "duration_s": 15.0,
+    "kernel_s": 0.9939436645507812
+  },
+  {
+    "config": "peaks[3] sampled every 0.000244 s",
+    "runs": 65536,
+    "duration_s": 15.0,
+    "kernel_s": 2.516380859375,
+    "runs_with_3_peaks": 65395,
+    "output_bytes": 786432
+  },
+  {
+    "config": "peaks[3] sampled every 0.000977 s",
+    "runs": 65536,
+    "duration_s": 15.0,
+    "kernel_s": 1.1977099609375,
+    "runs_with_3_peaks": 65396,
+    "output_bytes": 786432
+  }
+]
