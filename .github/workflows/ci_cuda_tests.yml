@@ -306,13 +306,18 @@ jobs:
         env:
           PYTEST_MARKERS: 'not specific_algos and not sim_only'
           CUBIE_BANKED_OUT: ${{ github.workspace }}/verdicts/banked.json
-          COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
+          # Coverage runs on py3.14 only; empty leaves the workers untraced.
+          COVERAGE_PROCESS_START: ${{ matrix.python-version == '3.14' && format('{0}/pyproject.toml', github.workspace) || '' }}
           PYTHONPATH: ${{ github.workspace }}
         run: |
           set -u
           mkdir -p verdicts
+          runner=(python)
+          if [ -n "$COVERAGE_PROCESS_START" ]; then
+            runner=(python -m coverage run)
+          fi
           set +e
-          python -m coverage run -m pytest \
+          "${runner[@]}" -m pytest \
             -m "$PYTEST_MARKERS" \
             -p tests.banked_plugin -n logical --no-cov \
             --junitxml=verdicts/junit.xml
@@ -355,8 +360,10 @@ jobs:
             verdicts/raw.xml --only verdicts/banked.json
           rm verdicts/raw.xml
           # This upload carries the banked tests' coverage.
-          python -m coverage combine
-          python -m coverage xml -o verdicts/coverage.xml
+          if [ -n "$COVERAGE_PROCESS_START" ]; then
+            python -m coverage combine
+            python -m coverage xml -o verdicts/coverage.xml
+          fi
 
       - name: Upload banked verdicts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -365,7 +372,7 @@ jobs:
           path: verdicts
 
       - name: Upload coverage to Codecov
-        if: always()
+        if: always() && matrix.python-version == '3.14'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: verdicts/coverage.xml
@@ -563,7 +570,8 @@ jobs:
           CUBIE_KERNEL_CACHE_DIR: ${{ github.workspace }}/kernel-cache/kernels
           CUBIE_MAX_CACHE_ENTRIES: "0"
           PYTEST_MARKERS: 'not specific_algos and not sim_only'
-          COVERAGE_PROCESS_START: ${{ github.workspace }}/pyproject.toml
+          # Coverage runs on py3.14 only; empty leaves the workers untraced.
+          COVERAGE_PROCESS_START: ${{ matrix.python-version == '3.14' && format('{0}/pyproject.toml', github.workspace) || '' }}
           # Same as the precompile leg: -p plugin imports happen before
           # any pytest sys.path setup, so the repo root must be on
           # PYTHONPATH for `tests.precompile_plugin` to import.
@@ -576,17 +584,23 @@ jobs:
           NUMBA_CPU_NAME: generic
           NUMBA_CPU_FEATURES: ""
         run: |
+          runner=(python)
+          if [ -n "$COVERAGE_PROCESS_START" ]; then
+            runner=(python -m coverage run)
+          fi
           set +e
-          python -m coverage run -m pytest \
+          "${runner[@]}" -m pytest \
             -m "$PYTEST_MARKERS" \
             -p tests.precompile_plugin -p tests.banked_plugin \
             -n logical --no-cov \
             --junitxml=pytest-gpu.xml
           status=$?
           coverage_status=0
-          python -m coverage combine || coverage_status=$?
-          if (( coverage_status == 0 )); then
-            python -m coverage xml -o coverage.xml || coverage_status=$?
+          if [ -n "$COVERAGE_PROCESS_START" ]; then
+            python -m coverage combine || coverage_status=$?
+            if (( coverage_status == 0 )); then
+              python -m coverage xml -o coverage.xml || coverage_status=$?
+            fi
           fi
           # Report the whole suite: this leg plus the banked cases.
           python ci/tools/merge_junit.py pytest-results.xml \
@@ -660,7 +674,7 @@ jobs:
           name: pytest-${{ matrix.os }}-py${{ matrix.python-version }}-cuda${{ matrix.cuda }}-${{ matrix.backend }}
 
       - name: Upload coverage to Codecov
-        if: steps.fetch.outcome == 'success'
+        if: steps.fetch.outcome == 'success' && matrix.python-version == '3.14'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.xml
