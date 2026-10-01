@@ -42,8 +42,9 @@ select:disabled { opacity: .45; }
   <p>Each source starts from its settled state and switches to the target's
   ACh and Iso at t = 0. Pick the axis to sweep; the other three stay fixed.
   In the line view, zooming the time axis reloads that span at full
-  float32 resolution. The derivative toggle adds dV/dt and d²V/dt² panels,
-  differenced from the full-resolution samples, one colour per order.</p>
+  float32 resolution. The derivative toggle overlays dV/dt (dashed) and
+  d²V/dt² (dotted) on each voltage line, differenced from the
+  full-resolution samples and multiplied by the gains below.</p>
   <div class="controls">
     <span>Sweep</span><span id="sweeps" class="controls"></span>
     <span class="gap">View</span>
@@ -65,6 +66,16 @@ select:disabled { opacity: .45; }
     <button data-span="15">0-15</button>
     <button data-span="60">0-60</button>
   </div>
+  <div class="controls">
+    <span>Swept from</span><select id="k0"></select>
+    <span>to</span><select id="k1"></select>
+    <span class="gap">Magnitude</span>
+    <input id="z0" type="number" step="any" placeholder="auto">
+    <span>to</span><input id="z1" type="number" step="any" placeholder="auto">
+    <span class="gap">Gain dV/dt</span>
+    <input id="g1" type="number" step="any" value="1">
+    <span>d²V/dt²</span><input id="g2" type="number" step="any" value="1">
+  </div>
   <div id="plot"></div>
   <div id="status" class="stats">Loading grid...</div>
 </main>
@@ -78,9 +89,9 @@ const KEYS = {sa: "source_ach", si: "source_iso",
   ta: "target_ach", ti: "target_iso"};
 let meta = null, sweep = "ta", view = "3d", busy = false, diffs = false;
 const ORDERS = [
-  {title: "V (mV)", color: "#256abf"},
-  {title: "dV/dt (mV/ms)", color: "#c2410c"},
-  {title: "d²V/dt² (mV/ms²)", color: "#15803d"},
+  {name: "V", dash: "solid"},
+  {name: "dV/dt", dash: "dash"},
+  {name: "d²V/dt²", dash: "dot"},
 ];
 const $ = id => document.getElementById(id);
 const css = name => getComputedStyle(document.documentElement)
@@ -129,7 +140,8 @@ function describe(list) {
 async function draw(range) {
   if (busy) return;
   busy = true;
-  const list = pairs();
+  const k0 = +$("k0").value, k1 = +$("k1").value;
+  const list = pairs().slice(Math.min(k0, k1), Math.max(k0, k1) + 1);
   const t0 = range ? range[0] : +$("t0").value;
   const t1 = range ? range[1] : +$("t1").value;
   $("status").textContent = "Loading traces...";
@@ -142,45 +154,44 @@ async function draw(range) {
     plot_bgcolor: css("--surface"), font,
     margin: {l: 70, r: 20, t: 20, b: 50}};
   const values = list.map(p => p.value);
-  const n = list.length;
-  const hue = k => `hsl(${240 - 240 * k / Math.max(n - 1, 1)}, 70%, 50%)`;
-  const color = (o, k) => diffs ? ORDERS[o].color : hue(k);
-  const rows = orders.length;
-  const band = o => [1 - (o + 1) / rows + (o < rows - 1 ? 0.03 : 0),
-    1 - o / rows - (o > 0 ? 0.03 : 0)];
+  const all = meta[KEYS[sweep]];
+  const hue = v => {
+    const k = all.indexOf(v);
+    return `hsl(${240 - 240 * k / Math.max(all.length - 1, 1)}, 70%, 50%)`;
+  };
+  const gains = [1, +$("g1").value || 1, +$("g2").value || 1];
+  const zr = [$("z0").value, $("z1").value];
+  const zrange = zr.every(v => v !== "") ? zr.map(Number) : undefined;
+  const label = o => o === 0 ? "V (mV)"
+    : `${ORDERS[o].name} × ${gains[o]}`;
+  const zTitle = orders.map(label).join(", ");
+  const ticks = values.map(v => Math.log10(v));
   const data = [];
-  const layout = {...base, showlegend: !diffs,
-    legend: {title: {text: AXES[sweep]}}};
+  orders.forEach((o, i) => sets[i].traces.forEach((r, k) => {
+    const y = Array.from(r, x => x * gains[o]);
+    const common = {mode: "lines", name: values[k].toPrecision(3),
+      legendgroup: String(k), showlegend: i === 0,
+      hovertemplate: `${AXES[sweep]} ${values[k].toPrecision(3)} · `
+        + `${label(o)}: %{${view === "3d" ? "z" : "y"}:.4g}<extra></extra>`,
+      line: {width: view === "3d" ? 2 : 1, color: hue(values[k]),
+        dash: ORDERS[o].dash}};
+    data.push(view === "3d"
+      ? {...common, type: "scatter3d", x: t,
+        y: new Array(t.length).fill(ticks[k]), z: y}
+      : {...common, type: "scattergl", x: t, y});
+  }));
+  const layout = {...base, legend: {title: {text: AXES[sweep]}},
+    uirevision: view === "3d" ? "3d" : undefined};
   if (view === "3d") {
-    const ticks = values.map(v => Math.log10(v));
-    orders.forEach((o, i) => {
-      const scene = i ? `scene${i + 1}` : "scene";
-      sets[i].traces.forEach((r, k) => data.push({type: "scatter3d",
-        mode: "lines", scene, x: t, y: new Array(t.length).fill(ticks[k]),
-        z: Array.from(r), name: values[k].toPrecision(3),
-        legendgroup: String(k), showlegend: i === 0,
-        line: {width: 2, color: color(o, k)}}));
-      layout[scene] = {domain: {x: [0, 1], y: band(i)},
-        xaxis: {title: "Time after switch (s)"},
-        yaxis: {title: AXES[sweep], tickvals: ticks,
-          ticktext: values.map(v => v.toPrecision(3))},
-        zaxis: {title: ORDERS[o].title}};
-    });
+    layout.scene = {xaxis: {title: "Time after switch (s)"},
+      yaxis: {title: AXES[sweep], tickvals: ticks,
+        ticktext: values.map(v => v.toPrecision(3))},
+      zaxis: {title: zTitle, range: zrange}};
   } else {
-    orders.forEach((o, i) => {
-      const suffix = i ? String(i + 1) : "";
-      sets[i].traces.forEach((r, k) => data.push({type: "scattergl",
-        mode: "lines", xaxis: "x" + suffix, yaxis: "y" + suffix, x: t,
-        y: Array.from(r), name: values[k].toPrecision(3),
-        legendgroup: String(k), showlegend: i === 0,
-        line: {width: 1, color: color(o, k)}}));
-      layout["xaxis" + suffix] = {range: [t0, t1], gridcolor: css("--line"),
-        anchor: "y" + suffix, matches: i ? "x" : undefined,
-        showticklabels: i === rows - 1,
-        title: i === rows - 1 ? "Time after switch (s)" : undefined};
-      layout["yaxis" + suffix] = {title: ORDERS[o].title,
-        domain: band(i), gridcolor: css("--line")};
-    });
+    layout.xaxis = {title: "Time after switch (s)", range: [t0, t1],
+      gridcolor: css("--line")};
+    layout.yaxis = {title: zTitle, range: zrange,
+      gridcolor: css("--line")};
   }
   Plotly.react("plot", data, layout);
   bindZoom();
@@ -191,6 +202,12 @@ async function draw(range) {
 
 function setSweep(k) {
   sweep = k;
+  for (const id of ["k0", "k1"]) {
+    $(id).innerHTML = "";
+    meta[KEYS[k]].forEach((v, i) =>
+      $(id).add(new Option(v.toPrecision(4), i)));
+  }
+  $("k1").value = meta[KEYS[k]].length - 1;
   for (const b of $("sweeps").children)
     b.setAttribute("aria-pressed", b.dataset.k === k);
   for (const key of Object.keys(KEYS)) $(key).disabled = key === sweep;
@@ -212,6 +229,8 @@ async function init() {
   $("si").value = 1; $("ti").value = 1;
   $("t1").value = Math.min(15, meta.duration);
   $("load").onclick = () => draw();
+  for (const id of ["k0", "k1", "z0", "z1", "g1", "g2"])
+    $(id).onchange = () => draw();
   for (const b of document.querySelectorAll("[data-span]"))
     b.onclick = () => { $("t0").value = 0;
       $("t1").value = Math.min(+b.dataset.span, meta.duration); draw(); };
