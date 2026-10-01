@@ -12,10 +12,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", type=float, default=15.0)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument("--input", default="steady_state.npz")
     args = parser.parse_args()
 
     system = common.build_system()
-    data = np.load(common.RESULTS / "steady_state.npz")
+    data = np.load(common.RESULTS / args.input)
     state = np.ascontiguousarray(data["final_state"], dtype=np.float32)
     params = common.parameter_array(system, data["ach"], data["iso"])
     configs = [("final state only", {"output_types": ["state"]})]
@@ -58,7 +59,7 @@ def main():
             row["output_bytes"] = int(output_bytes)
         rows.append(row)
         print(json.dumps(row), flush=True)
-    out = common.RESULTS / "three_beat_cost.json"
+    out = common.RESULTS / args.input.replace(".npz", "_three_beat.json")
     out.write_text(json.dumps(rows, indent=2))
 
 

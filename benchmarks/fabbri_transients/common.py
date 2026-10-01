@@ -50,17 +50,16 @@ def build_system():
     )
 
 
-def axes(side: int = GRID_SIDE):
+def axes(side: int = GRID_SIDE, ach_range=ACH_RANGE, iso_range=ISO_RANGE,
+         log: bool = False):
     """Return the ACh and Iso axis values for a ``side`` x ``side`` grid."""
-    return (
-        np.linspace(*ACH_RANGE, side),
-        np.linspace(*ISO_RANGE, side),
-    )
+    space = np.geomspace if log else np.linspace
+    return space(*ach_range, side), space(*iso_range, side)
 
 
-def grid_values(side: int = GRID_SIDE):
+def grid_values(side: int = GRID_SIDE, **axis_settings):
     """Return flattened ACh/Iso values, ACh varying fastest."""
-    ach, iso = axes(side)
+    ach, iso = axes(side, **axis_settings)
     ach_grid, iso_grid = np.meshgrid(ach, iso)
     return ach_grid.ravel(), iso_grid.ravel()
 

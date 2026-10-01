@@ -48,16 +48,27 @@ def main():
     parser.add_argument("--char", type=float, default=10.0)
     parser.add_argument("--cadence", type=float, default=2.0**-12)
     parser.add_argument("--side", type=int, default=common.GRID_SIDE)
+    parser.add_argument("--ach-range", type=float, nargs=2,
+                        default=common.ACH_RANGE)
+    parser.add_argument("--iso-range", type=float, nargs=2,
+                        default=common.ISO_RANGE)
+    parser.add_argument("--log", action="store_true")
+    parser.add_argument("--out", default="steady_state.npz")
     args = parser.parse_args()
 
     system = common.build_system()
-    ach, iso = common.grid_values(args.side)
+    ach, iso = common.grid_values(
+        args.side, ach_range=args.ach_range, iso_range=args.iso_range,
+        log=args.log,
+    )
     n_runs = ach.size
     params = common.parameter_array(system, ach, iso)
     state = common.initial_state_array(system, n_runs)
     failed = np.zeros(n_runs, dtype=bool)
 
-    solver = common.make_solver(system, output_types=["state"])
+    solver = common.make_solver(
+        system, output_types=["state"], time_logging_level="default"
+    )
     n_segments = int(round(args.settle / args.segment))
     start = perf_counter()
     for segment in range(n_segments):
@@ -86,6 +97,7 @@ def main():
         summarise_variables=[common.VOLTAGE_LABEL],
         sample_summaries_every=args.cadence,
         summarise_every=args.char,
+        time_logging_level="default",
     )
     result, kernel_ms, _ = common.timed_solve(
         solver, state, params, args.char, nan_error_trajectories=False
@@ -115,7 +127,7 @@ def main():
         f"{np.nanmax(spread) * 1e3:.3f} ms"
     )
     common.RESULTS.mkdir(exist_ok=True)
-    out = common.RESULTS / "steady_state.npz"
+    out = common.RESULTS / args.out
     np.savez_compressed(
         out,
         ach=ach,
@@ -129,6 +141,7 @@ def main():
         settle=args.settle,
         char=args.char,
         cadence=args.cadence,
+        log_grid=args.log,
     )
     print(f"wrote {out}")
 

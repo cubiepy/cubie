@@ -1,4 +1,4 @@
-"""Write a steady-state cycle-length surface page: ``cycle_surface.py OUT``."""
+"""Write a cycle-length surface page: ``cycle_surface.py OUT [NPZ]``."""
 
 import json
 import sys
@@ -56,7 +56,7 @@ button:focus-visible { outline: 2px solid var(--accent);
   is the median cycle length over 10 s after settling 1200 s from the
   CellML initial state (rosenbrock23, atol = rtol = 1e-6, float32).
   Peak times are sampled every 0.000244 s. Gaps are runs that do not
-  beat. Log axes omit the zero-concentration row and column.</p>
+  beat.__NOTE__</p>
   <div class="controls">
     <span>Height scale</span>
     <button id="lin" aria-pressed="true">Linear</button>
@@ -73,7 +73,7 @@ button:focus-visible { outline: 2px solid var(--accent);
   <div class="stats">
     <div>beating runs <b>__NBEAT__ / 65536</b></div>
     <div>cycle length <b>__MIN__ to __MAX__ ms</b></div>
-    <div>grid step <b>ACh 0.392 nM, Iso 0.784 nM</b></div>
+    <div>grid <b>__GRID__</b></div>
   </div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
@@ -85,7 +85,7 @@ const ramp = [[0, "#cde2fb"], [0.17, "#9ec5f4"], [0.33, "#6da7ec"],
 const zLog = D.z.map(r => r.map(v => v === null ? null : Math.log10(v)));
 const logTicks = { tickvals: [2.5, 2.7, 3, 3.3, 3.5],
   ticktext: ["316", "501", "1000", "1995", "3162"] };
-let scale = "lin", view = "3d", axes = "lin";
+let scale = "lin", view = "3d", axes = D.log ? "log" : "lin";
 const css = n => getComputedStyle(document.documentElement)
   .getPropertyValue(n).trim();
 function draw() {
@@ -93,7 +93,7 @@ function draw() {
   const surf = css("--surface");
   const log = scale === "log";
   // Log axes cannot place zero; drop the zero row and column.
-  const cut = axes === "log" ? 1 : 0;
+  const cut = axes === "log" && !D.log ? 1 : 0;
   const trim = rows => rows.slice(cut).map(r => r.slice(cut));
   const trace = {
     type: view === "3d" ? "surface" : "heatmap",
@@ -110,7 +110,7 @@ function draw() {
   };
   const axis = t => ({ title: { text: t, font: { color: muted } },
     tickfont: { color: muted }, gridcolor: line, zerolinecolor: line });
-  const ticks = [0.3, 1, 3, 10, 30, 100, 200];
+  const ticks = [0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000];
   const xy = t => Object.assign(axis(t), axes === "log"
     ? { type: "log", tickvals: ticks, ticktext: ticks.map(String) }
     : { type: "linear" });
@@ -145,6 +145,10 @@ pick($("log"), $("lin"), () => { scale = "log"; });
 pick($("v3d"), $("v2d"), () => { view = "3d"; });
 pick($("axlin"), $("axlog"), () => { axes = "lin"; });
 pick($("axlog"), $("axlin"), () => { axes = "log"; });
+if (D.log) {
+  $("axlog").setAttribute("aria-pressed", "true");
+  $("axlin").setAttribute("aria-pressed", "false");
+}
 pick($("v2d"), $("v3d"), () => { view = "2d"; });
 matchMedia("(prefers-color-scheme: dark)")
   .addEventListener("change", draw);
@@ -155,8 +159,21 @@ draw();
 """
 
 
+def grid_text(data, side, log_grid):
+    """Describe the grid's size, spacing and ranges."""
+    ach = data["ach"].reshape(side, side)[0]
+    iso = data["iso"].reshape(side, side)[:, 0]
+    spacing = "log-spaced" if log_grid else "linear"
+    return (
+        f"{side} x {side} {spacing}, ACh {ach[0]:g}-{ach[-1]:g} nM, "
+        f"Iso {iso[0]:g}-{iso[-1]:g} nM"
+    )
+
+
 def main():
-    data = np.load(common.RESULTS / "steady_state.npz")
+    name = sys.argv[2] if len(sys.argv) > 2 else "steady_state.npz"
+    data = np.load(common.RESULTS / name)
+    log_grid = bool(data["log_grid"]) if "log_grid" in data else False
     side = int(np.sqrt(data["ach"].size))
     beats = np.isfinite(data["peak_times"]).sum(axis=1) >= 3
     cycle = np.where(beats, data["steady_cl"] * 1e3, np.nan)
@@ -170,6 +187,7 @@ def main():
             "ach": data["ach"].reshape(side, side)[0].round(4).tolist(),
             "iso": data["iso"].reshape(side, side)[:, 0].round(4).tolist(),
             "z": rows,
+            "log": log_grid,
         },
         separators=(",", ":"),
     )
@@ -178,6 +196,9 @@ def main():
         .replace("__NBEAT__", str(int(beats.sum())))
         .replace("__MIN__", f"{np.nanmin(cycle):.0f}")
         .replace("__MAX__", f"{np.nanmax(cycle):.0f}")
+        .replace("__GRID__", grid_text(data, side, log_grid))
+        .replace("__NOTE__", "" if log_grid else (
+            " Log axes omit the zero-concentration row and column."))
     )
     with open(sys.argv[1], "w", encoding="utf-8") as handle:
         handle.write(page)
