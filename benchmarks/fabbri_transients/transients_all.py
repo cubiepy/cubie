@@ -19,11 +19,15 @@ def main():
     parser.add_argument("--cadence", type=float, default=2.0**-12)
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--stop", type=int, default=None)
+    parser.add_argument("--states", default=None,
+                        help="npz holding the start states (default: input)")
+    parser.add_argument("--state-key", default="final_state")
     args = parser.parse_args()
 
     system = common.build_system()
     data = np.load(common.RESULTS / args.input)
-    states = np.ascontiguousarray(data["final_state"], dtype=np.float32)
+    source = np.load(common.RESULTS / args.states) if args.states else data
+    states = np.ascontiguousarray(source[args.state_key], dtype=np.float32)
     n_grid = states.shape[1]
     targets = common.parameter_array(system, data["ach"], data["iso"])
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -38,6 +42,7 @@ def main():
     )
     (args.out_dir / "settings.json").write_text(json.dumps({
         "input": args.input, "batch": args.batch,
+        "states": args.states, "state_key": args.state_key,
         "duration_s": args.duration, "cadence_s": args.cadence,
     }, indent=2))
 
