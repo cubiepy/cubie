@@ -56,11 +56,14 @@ button:focus-visible { outline: 2px solid var(--accent);
   is the median cycle length over 10 s after settling 1200 s from the
   CellML initial state (rosenbrock23, atol = rtol = 1e-6, float32).
   Peak times are sampled every 0.000244 s. Gaps are runs that do not
-  beat.</p>
+  beat. Log axes omit the zero-concentration row and column.</p>
   <div class="controls">
     <span>Height scale</span>
     <button id="lin" aria-pressed="true">Linear</button>
     <button id="log" aria-pressed="false">Log</button>
+    <span class="gap">ACh / Iso axes</span>
+    <button id="axlin" aria-pressed="true">Linear</button>
+    <button id="axlog" aria-pressed="false">Log</button>
     <span class="gap">View</span>
     <button id="v3d" aria-pressed="true">3D surface</button>
     <button id="v2d" aria-pressed="false">Top-down map</button>
@@ -82,16 +85,20 @@ const ramp = [[0, "#cde2fb"], [0.17, "#9ec5f4"], [0.33, "#6da7ec"],
 const zLog = D.z.map(r => r.map(v => v === null ? null : Math.log10(v)));
 const logTicks = { tickvals: [2.5, 2.7, 3, 3.3, 3.5],
   ticktext: ["316", "501", "1000", "1995", "3162"] };
-let scale = "lin", view = "3d";
+let scale = "lin", view = "3d", axes = "lin";
 const css = n => getComputedStyle(document.documentElement)
   .getPropertyValue(n).trim();
 function draw() {
   const fg = css("--fg"), muted = css("--muted"), line = css("--line");
   const surf = css("--surface");
   const log = scale === "log";
+  // Log axes cannot place zero; drop the zero row and column.
+  const cut = axes === "log" ? 1 : 0;
+  const trim = rows => rows.slice(cut).map(r => r.slice(cut));
   const trace = {
     type: view === "3d" ? "surface" : "heatmap",
-    x: D.ach, y: D.iso, z: log ? zLog : D.z, customdata: D.z,
+    x: D.ach.slice(cut), y: D.iso.slice(cut),
+    z: trim(log ? zLog : D.z), customdata: trim(D.z),
     colorscale: ramp, connectgaps: false,
     hovertemplate: "ACh %{x:.2f} nM<br>Iso %{y:.2f} nM<br>" +
       "cycle %{customdata:.1f} ms<extra></extra>",
@@ -103,6 +110,10 @@ function draw() {
   };
   const axis = t => ({ title: { text: t, font: { color: muted } },
     tickfont: { color: muted }, gridcolor: line, zerolinecolor: line });
+  const ticks = [0.3, 1, 3, 10, 30, 100, 200];
+  const xy = t => Object.assign(axis(t), axes === "log"
+    ? { type: "log", tickvals: ticks, ticktext: ticks.map(String) }
+    : { type: "linear" });
   const layout = { paper_bgcolor: surf, plot_bgcolor: surf,
     font: { family: "IBM Plex Sans, system-ui, sans-serif", color: fg },
     hoverlabel: { font: { family: "IBM Plex Mono, monospace" } } };
@@ -110,15 +121,16 @@ function draw() {
     const box = t => Object.assign(axis(t),
       { backgroundcolor: surf, showbackground: true });
     layout.margin = { l: 0, r: 0, t: 0, b: 0 };
-    layout.scene = { xaxis: box("ACh_cas (nM)"),
-      yaxis: box("Iso_cas (nM)"),
+    layout.scene = {
+      xaxis: Object.assign(box("ACh_cas (nM)"), xy("ACh_cas (nM)")),
+      yaxis: Object.assign(box("Iso_cas (nM)"), xy("Iso_cas (nM)")),
       zaxis: Object.assign(box("cycle length (ms)"), log ? logTicks : {}),
       camera: { eye: { x: 1.6, y: -1.6, z: 0.9 } },
       aspectmode: "manual", aspectratio: { x: 1, y: 1, z: 0.7 } };
   } else {
     layout.margin = { l: 60, r: 10, t: 10, b: 50 };
-    layout.xaxis = axis("ACh_cas (nM)");
-    layout.yaxis = axis("Iso_cas (nM)");
+    layout.xaxis = xy("ACh_cas (nM)");
+    layout.yaxis = xy("Iso_cas (nM)");
   }
   Plotly.react("plot", [trace], layout,
     { responsive: true, displaylogo: false });
@@ -131,6 +143,8 @@ function pick(on, off, set) {
 pick($("lin"), $("log"), () => { scale = "lin"; });
 pick($("log"), $("lin"), () => { scale = "log"; });
 pick($("v3d"), $("v2d"), () => { view = "3d"; });
+pick($("axlin"), $("axlog"), () => { axes = "lin"; });
+pick($("axlog"), $("axlin"), () => { axes = "log"; });
 pick($("v2d"), $("v3d"), () => { view = "2d"; });
 matchMedia("(prefers-color-scheme: dark)")
   .addEventListener("change", draw);
