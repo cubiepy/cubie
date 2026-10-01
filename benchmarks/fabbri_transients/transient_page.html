@@ -16,7 +16,7 @@
 body { background: var(--bg); color: var(--fg);
   font-family: var(--font-body); padding-inline: 16px;
   padding-block: 20px 32px; }
-main { max-width: 1500px; margin: 0 auto; display: grid; gap: 14px; }
+main { max-width: 1800px; margin: 0 auto; display: grid; gap: 14px; }
 h1 { font-size: 1.35rem; margin: 0; text-wrap: balance;
   font-weight: 600; }
 h2 { font-size: 1rem; margin: 6px 0 0; font-weight: 600; }
@@ -35,7 +35,7 @@ button[aria-pressed="true"] { border-color: var(--accent);
 button:focus-visible, select:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px; }
 .row { display: grid; gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .panel { min-width: 0; display: grid; gap: 4px; }
 .panel h3 { margin: 0; font-size: .85rem; font-weight: 600;
   color: var(--muted); }
@@ -97,6 +97,9 @@ button:focus-visible, select:focus-visible {
     <div class="panel"><h3 class="t-ratio"></h3>
       <div class="plot p-ratio" role="img"
         aria-label="Measured over expected interval"></div></div>
+    <div class="panel"><h3 class="t-src"></h3>
+      <div class="plot p-src" role="img"
+        aria-label="Measured over the source's interval"></div></div>
   </div>
 </template>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
@@ -120,8 +123,8 @@ const rows = [[Math.floor(S / 2), 0], [Math.floor(S / 2), S - 1]].map(
     const frag = $("row-template").content.cloneNode(true);
     const q = c => frag.querySelector("." + c);
     const row = { source, el: {} };
-    ["sach", "siso", "source", "t-exp", "t-meas", "t-ratio", "p-exp",
-      "p-meas", "p-ratio"].forEach(c => { row.el[c] = q(c); });
+    ["sach", "siso", "source", "t-exp", "t-meas", "t-ratio", "t-src",
+      "p-exp", "p-meas", "p-ratio", "p-src"].forEach(c => { row.el[c] = q(c); });
     frag.querySelector(".rowhead").textContent = `Source ${n + 1}`;
     $("rows").appendChild(frag);
     return row;
@@ -155,7 +158,7 @@ function linkCamera(el) {
   });
 }
 
-function plot(el, z, label, hover, scale) {
+function plot(el, z, label, hover, scale, range) {
   const fg = css("--fg"), muted = css("--muted"), line = css("--line");
   const surf = css("--surface");
   const axis = t => ({ title: { text: t, font: { color: muted } },
@@ -170,6 +173,7 @@ function plot(el, z, label, hover, scale) {
       font: { color: muted } }, tickfont: { color: muted },
       outlinewidth: 0, len: 0.75, thickness: 12 } };
   if (scale) { trace.cmid = 1; }
+  if (range) { trace.cmin = range[0]; trace.cmax = range[1]; }
   const layout = { paper_bgcolor: surf, plot_bgcolor: surf,
     font: { family: "IBM Plex Sans, system-ui, sans-serif", color: fg,
       size: 11 },
@@ -181,7 +185,8 @@ function plot(el, z, label, hover, scale) {
     layout.scene = { xaxis: box("ACh (nM)"), yaxis: box("Iso (nM)"),
       zaxis: { title: { text: label, font: { color: muted } },
         tickfont: { color: muted }, gridcolor: line,
-        backgroundcolor: surf, showbackground: true },
+        backgroundcolor: surf, showbackground: true,
+        range: range || undefined },
       camera: camera,
       aspectmode: "manual", aspectratio: { x: 1, y: 1, z: 0.7 } };
   } else {
@@ -222,6 +227,7 @@ function drawRow(row) {
   el["t-exp"].textContent = `Expected interval ${k} (ms)`;
   el["t-meas"].textContent = `Measured interval ${k} after the switch (ms)`;
   el["t-ratio"].textContent = `Measured / expected, interval ${k}`;
+  el["t-src"].textContent = `Measured / source's interval ${k}`;
   const si = D.src_ach_index[row.source[0]];
   const sj = D.src_iso_index[row.source[1]];
   const s = sourceIndex(row), prev = D.src_prev_peak[s];
@@ -231,10 +237,21 @@ function drawRow(row) {
     ` nM</b>; steady cycle <b>${cyc === null ? "none" :
       cyc.toFixed(1) + " ms"}</b>; last peak <b>${prev === null ? "none" :
       (-prev * 1e3).toFixed(1) + " ms"}</b> before the switch`;
-  plot(el["p-exp"], grid(expected), "ms", "expected %{z:.1f} ms");
-  if (!peaks) return;
+  const finite = a => Array.from(a).filter(v => v !== null && isFinite(v));
+  const lim = vals => [Math.min(...vals), Math.max(...vals)];
+  if (!peaks) {
+    plot(el["p-exp"], grid(expected), "ms", "expected %{z:.1f} ms");
+    return;
+  }
   const m = measured(row);
-  plot(el["p-meas"], grid(m), "ms", "measured %{z:.1f} ms");
+  // Expected and measured share one height and colour range.
+  const shared = lim(finite(expected).concat(finite(m)));
+  plot(el["p-exp"], grid(expected), "ms", "expected %{z:.1f} ms", null,
+    shared);
+  plot(el["p-meas"], grid(m), "ms", "measured %{z:.1f} ms", null, shared);
+  const own = expected[sj * N + si];
+  plot(el["p-src"], grid(m.map(v => v / own)), "ratio",
+    "ratio %{z:.4f}", diverge);
   plot(el["p-ratio"], grid(m.map((v, t) => v / expected[t])), "ratio",
     "ratio %{z:.3f}", diverge);
 }
