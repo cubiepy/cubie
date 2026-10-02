@@ -33,7 +33,6 @@ from numpy import ndarray
 
 from cubie._utils import (
     device_function_field,
-    getype_validator,
     inrangetype_validator,
 )
 from cubie.buffer_registry import buffer_registry
@@ -147,7 +146,7 @@ class ImplicitStepConfig(BaseStepConfig):
         default=1.0, validator=inrangetype_validator(float, 0, 1)
     )
     _operator_gamma: float = field(
-        default=1.0, validator=getype_validator(float, 0)
+        default=1.0, validator=inrangetype_validator(float, 0, 1)
     )
     _preconditioner_order: Optional[int] = field(
         default=None,
