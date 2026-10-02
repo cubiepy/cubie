@@ -109,6 +109,9 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     stage_store_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
+    repeated_stage_rhs_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
     base_state_placeholder_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -260,6 +263,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             config.cached_auxiliaries_location,
         )
 
+        # Holds f for a stage whose successor repeats it.
+        buffer_registry.register(
+            "repeated_stage_rhs",
+            self,
+            0 if config.repeated_stage is None else n,
+            config.repeated_stage_rhs_location,
+        )
+
         # Persists across steps; its lifetime bars aliasing stage_store.
         buffer_registry.register(
             "stage_increment",
@@ -409,6 +420,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         accumulates_error = tableau.accumulates_error
         b_row = tableau.b_matches_a_row
         b_hat_row = tableau.b_hat_matches_a_row
+        repeated_stage = config.repeated_stage
+        has_repeated_stage = repeated_stage is not None
+        stage_one_repeats = repeated_stage == 1
+        repeat_source = None
+        if has_repeated_stage:
+            repeat_source = int32(repeated_stage - 1)
+            repeated_stage = int32(repeated_stage)
         if b_row is not None:
             b_row = int32(b_row)
         if b_hat_row is not None:
@@ -425,6 +443,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         alloc_stage_store = getalloc("stage_store", self)
         alloc_cached_auxiliaries = getalloc("cached_auxiliaries", self)
         alloc_stage_increment = getalloc("stage_increment", self)
+        alloc_repeated_stage_rhs = getalloc("repeated_stage_rhs", self)
         alloc_base_state_placeholder = getalloc("base_state_placeholder", self)
         alloc_krylov_iters_out = getalloc("krylov_iters_out", self)
 
@@ -477,6 +496,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 shared, persistent_local
             )
             stage_increment = alloc_stage_increment(shared, persistent_local)
+            repeated_stage_rhs = alloc_repeated_stage_rhs(
+                shared, persistent_local
+            )
             base_state_placeholder = alloc_base_state_placeholder(
                 shared, persistent_local
             )
@@ -551,6 +573,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             for idx in unroll_if(range(n), unroll_step_element):
                 # No accumulated contributions at stage 0.
                 f_value = stage_rhs[idx]
+                if stage_one_repeats:
+                    repeated_stage_rhs[idx] = f_value
                 rhs_value = (
                     f_value + gamma_stages[0] * time_derivative[idx]
                 ) * dt_scalar
@@ -628,30 +652,38 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 for idx in unroll_if(range(n), unroll_step_element):
                     stage_increment[idx] = stage_store[stage_offset + idx]
 
-                # Get t + c_i * dt parts
-                if has_evaluate_driver_at_t:
-                    drivers_fn(
-                        stage_time,
-                        driver_coeffs,
+                # A repeated stage reuses its predecessor's f.
+                reuses_rhs = False
+                if has_repeated_stage:
+                    if repeated_stage == stage_idx:
+                        reuses_rhs = True
+                if reuses_rhs:
+                    for idx in unroll_if(range(n), unroll_step_element):
+                        stage_rhs[idx] = repeated_stage_rhs[idx]
+                else:
+                    if has_evaluate_driver_at_t:
+                        drivers_fn(
+                            stage_time,
+                            driver_coeffs,
+                            proposed_drivers,
+                        )
+
+                    observables_fn(
+                        stage_increment,
+                        parameters,
                         proposed_drivers,
+                        proposed_observables,
+                        stage_time,
                     )
 
-                observables_fn(
-                    stage_increment,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_time,
-                )
-
-                dxdt_fn(
-                    stage_increment,
-                    parameters,
-                    proposed_drivers,
-                    proposed_observables,
-                    stage_rhs,
-                    stage_time,
-                )
+                    dxdt_fn(
+                        stage_increment,
+                        parameters,
+                        proposed_drivers,
+                        proposed_observables,
+                        stage_rhs,
+                        stage_time,
+                    )
 
                 # Capture precalculated outputs here, before overwrite
                 if b_row == stage_idx:
@@ -697,6 +729,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                             correction += c_coeff * prior_val
 
                     f_stage_val = stage_rhs[idx]
+                    if has_repeated_stage:
+                        if repeat_source == stage_idx:
+                            repeated_stage_rhs[idx] = f_stage_val
                     deriv_val = stage_gamma * time_derivative[idx]
                     rhs_value = f_stage_val + correction * inv_dt + deriv_val
                     stage_rhs[idx] = rhs_value * dt_scalar * gamma
