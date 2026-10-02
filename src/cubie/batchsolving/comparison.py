@@ -27,7 +27,9 @@ from attrs import define, field
 from numpy import arange as np_arange
 from numpy import asarray as np_asarray
 from numpy import count_nonzero as np_count_nonzero
+from numpy import dtype as np_dtype
 from numpy import int32 as np_int32
+from numpy import intp as np_intp
 from numpy import ndarray
 from numpy import take as np_take
 
@@ -38,6 +40,10 @@ from cubie.backend.utils import (
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from numba_cuda_mlir.types import float32
 from cubie._cudasim_extensions import cuda
+from cubie.memory.mem_manager import (
+    CHUNK_HEADROOM_FRACTION,
+    host_headroom_bytes,
+)
 from cubie.time_logger import default_timelogger
 
 logger = logging.getLogger(__name__)
@@ -66,6 +72,9 @@ SUCCESS_TIER_FRACTION = 0.95
 
 TIMED_WAVES_FLOOR = 2
 """Fewest occupancy waves a timed batch fills at any launch."""
+
+HOST_BYTES_PER_RUN = np_dtype(np_intp).itemsize + np_dtype(np_int32).itemsize
+"""Host bytes per run besides the grid: the repeat index and status code."""
 
 WORKER_STARTUP_SECONDS = 12.0
 """Wall seconds a spawned worker spends importing cubie.
@@ -645,7 +654,7 @@ class ComparisonRunner:
         self.emit(f"batch: {self.runs} runs")
 
     def batch_cap(self) -> int:
-        """Runs that fit in memory at the staged batch's bytes per run."""
+        """Runs that fit in one chunk and in host memory."""
         kernel = self._solver.kernel
         manager = kernel.memory_manager
         allocated = sum(
@@ -655,8 +664,22 @@ class ComparisonRunner:
         available = manager.get_available_memory(
             manager.get_stream_group(kernel)
         )
-        bytes_per_run = (allocated + self.staged_bytes) / self.runs
-        return int((available + allocated) // bytes_per_run)
+        free, _ = manager.get_memory_info()
+        # The solve's own buffers are reusable; keep the chunk headroom.
+        device_budget = min(
+            (available + allocated) * (1 - CHUNK_HEADROOM_FRACTION),
+            free + allocated - manager.allocation_granule_bytes,
+        )
+        grid_per_run = self.staged_bytes / self.runs
+        device_per_run = allocated / self.runs + grid_per_run
+        # Windows charges device bytes to RAM; staging adds index and grid.
+        host_per_run = device_per_run + grid_per_run + HOST_BYTES_PER_RUN
+        return int(
+            min(
+                device_budget / device_per_run,
+                host_headroom_bytes() / host_per_run,
+            )
+        )
 
     def fit_batch(
         self, measured: float, target_ms: float, grow: bool, shrink: bool
