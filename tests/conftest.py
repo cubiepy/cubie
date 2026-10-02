@@ -8,6 +8,7 @@ import pytest
 
 from tests._utils import (
     _build_solver_instance,
+    _solver_kwargs,
     _build_cpu_step_controller,
     _get_algorithm_order,
     _get_algorithm_tableau,
@@ -27,6 +28,8 @@ from cubie.odesystems.solver_helpers import PRECONDITIONER_ROLES
 from cubie._utils import merge_kwargs_into_settings
 from cubie.integrators.step_control import get_controller
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
+from cubie.batchsolving.resolve_defaults import resolve
+from cubie.batchsolving.solver_settings import SolverSettings
 from cubie.integrators.algorithms.base_algorithm_step import (
     ALL_ALGORITHM_STEP_PARAMETERS,
 )
@@ -898,9 +901,16 @@ def cpu_driver_evaluator(
 
 
 @pytest.fixture(scope="session")
-def effective_settings(solver):
-    """The settings in effect on the session solver."""
-    return solver.effective.as_kwargs()
+def effective_settings(
+    system, solver_settings, driver_settings, thread_mem_manager
+):
+    """The settings a session solver would run with; builds no kernel."""
+    settings = _solver_kwargs(
+        solver_settings, driver_settings, thread_mem_manager
+    )
+    given, _, _ = SolverSettings().update(settings)
+    system.update(settings, silent=True)
+    return resolve(given, system, SystemInterface(system)).as_kwargs()
 
 
 @pytest.fixture(scope="session")

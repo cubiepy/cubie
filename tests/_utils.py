@@ -1341,13 +1341,12 @@ NON_SOLVER_SETTINGS = {
 }
 
 
-def _build_solver_instance(
-    system: SymbolicODE,
+def _solver_kwargs(
     solver_settings: Dict[str, Any],
     driver_settings: Optional[Dict[str, Any]],
     memory_manager: Optional[Any] = None,
-) -> Solver:
-    """Instantiate :class:`Solver` configured with ``solver_settings``."""
+) -> Dict[str, Any]:
+    """Return the :class:`Solver` keyword arguments for a session set."""
     settings = {
         key: value
         for key, value in solver_settings.items()
@@ -1357,7 +1356,20 @@ def _build_solver_instance(
         settings.update(memory_manager=memory_manager)
     if driver_settings is not None:
         settings.update(drivers=driver_settings)
-    return Solver(system, **settings)
+    return settings
+
+
+def _build_solver_instance(
+    system: SymbolicODE,
+    solver_settings: Dict[str, Any],
+    driver_settings: Optional[Dict[str, Any]],
+    memory_manager: Optional[Any] = None,
+) -> Solver:
+    """Instantiate :class:`Solver` configured with ``solver_settings``."""
+    return Solver(
+        system,
+        **_solver_kwargs(solver_settings, driver_settings, memory_manager),
+    )
 
 
 def _resolved_controller_gains(controller) -> Dict[str, float]:
