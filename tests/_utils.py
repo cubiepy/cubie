@@ -72,6 +72,9 @@ MID_RUN_PARAMS = {
 # genuinely unique set stays at its test with a comment naming the
 # test condition that requires it.
 
+# BDF runs its tableau's growth cap, not the spine's.
+BDF_GROWTH_UNSET = {"max_step_growth": None}
+
 # One representative algorithm/controller combo per algorithm family.
 # STEP_CASES wraps these for the per-algorithm numerical tests, and
 # ALGORITHM_CHAIN_SETS below merges them over MID_RUN_PARAMS — tests
@@ -93,6 +96,9 @@ ALGORITHM_CONTROLLER_COMBOS = {
     "erk": {"algorithm": "erk", "step_controller": "pid"},
     "dirk": {"algorithm": "dirk", "step_controller": "fixed"},
     "firk": {"algorithm": "firk", "step_controller": "fixed"},
+    "bdf": {
+        "algorithm": "bdf", "step_controller": "i", **BDF_GROWTH_UNSET,
+    },
 }
 
 # Precision flip; the float32 case is the unparametrised default.
@@ -259,6 +265,20 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "dt_min": 1e-6,
         "dt": 1e-3,
         "dt_max": 0.5,
+    },
+    # Specific BDF tableaus
+    "bdf-bdf1": {
+        "algorithm": "bdf1", "step_controller": "i", **BDF_GROWTH_UNSET,
+    },
+    "bdf-bdf2-fixed": {"algorithm": "bdf2", "step_controller": "fixed"},
+    "bdf-bdf3": {
+        "algorithm": "bdf3", "step_controller": "i", **BDF_GROWTH_UNSET,
+    },
+    "bdf-bdf4": {
+        "algorithm": "bdf4", "step_controller": "i", **BDF_GROWTH_UNSET,
+    },
+    "bdf-bdf5": {
+        "algorithm": "bdf5", "step_controller": "i", **BDF_GROWTH_UNSET,
     },
     # Specific Rosenbrock-W tableaus
     "rosenbrock-ros3p": {"algorithm": "ros3p", "step_controller": "pid"},
@@ -1444,10 +1464,6 @@ def _get_algorithm_order(
         resolve_alias,
         resolve_supplied_tableau,
     )
-    from cubie.integrators.algorithms.generic_rosenbrock_w import (
-        GenericRosenbrockWStep,
-        DEFAULT_ROSENBROCK_TABLEAU,
-    )
 
     if isinstance(algorithm_name_or_tableau, str):
         algorithm_type, tableau = resolve_alias(algorithm_name_or_tableau)
@@ -1456,9 +1472,9 @@ def _get_algorithm_order(
             algorithm_name_or_tableau
         )
 
-    # For rosenbrock without explicit tableau, use default
-    if algorithm_type is GenericRosenbrockWStep and tableau is None:
-        tableau = DEFAULT_ROSENBROCK_TABLEAU
+    # A bare family alias runs the family's default tableau.
+    if tableau is None:
+        tableau = algorithm_type.default_tableau
 
     # Extract order from tableau if available
     if tableau is not None and hasattr(tableau, "order"):
@@ -2018,6 +2034,89 @@ def run_dense_predictor_step(
     kernel[1, 1, stream](device_vector, precision(step_ratio), flag)
     stream.synchronize()
     return device_vector.copy_to_host()
+
+
+@lru_cache(maxsize=None)
+def _step_history_kernel(device_fn, persistent_len, numba_precision):
+    @cuda.jit(**compile_kwargs)
+    def kernel(states, steps, accepted, base_out, prediction_out, scalars):
+        idx = cuda.grid(1)
+        if idx > 0:
+            return
+        shared = cuda.shared.array(0, dtype=numba_precision)
+        persistent = cuda.local.array(
+            persistent_len, dtype=numba_precision
+        )
+        for i in range(persistent_len):
+            persistent[i] = numba_precision(0.0)
+        for call in range(steps.shape[0]):
+            first = int32(1) if call == 0 else int32(0)
+            corrector_step, error_scale, restart = device_fn(
+                states[call],
+                steps[call],
+                first,
+                accepted[call],
+                base_out[call],
+                prediction_out[call],
+                shared,
+                persistent,
+            )
+            scalars[call, 0] = corrector_step
+            scalars[call, 1] = error_scale
+            scalars[call, 2] = numba_precision(1.0) if restart else (
+                numba_precision(0.0)
+            )
+
+    return kernel
+
+
+def run_step_history(
+    device_fn, states, steps, accepted, precision, persistent_len
+):
+    """Call a step history device function once per row on the GPU.
+
+    Parameters
+    ----------
+    device_fn : callable
+        Compiled history device function.
+    states : numpy.ndarray
+        ``(calls, n)`` start state of each call.
+    steps : numpy.ndarray
+        Step size of each call.
+    accepted : numpy.ndarray
+        Whether the loop accepted the previous call's proposal.
+    precision : type
+        Floating-point type of the device arrays.
+    persistent_len : int
+        Length of the history's persistent local buffer.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        Per-call base states, predictions and ``(corrector_step,
+        error_scale, restart)`` rows.
+    """
+    kernel = _step_history_kernel(
+        device_fn, max(1, int(persistent_len)), from_dtype(precision)
+    )
+    states = np.array(states, dtype=precision, copy=True)
+    calls = states.shape[0]
+    d_states = cuda.to_device(states)
+    d_steps = cuda.to_device(np.array(steps, dtype=precision))
+    d_accepted = cuda.to_device(np.array(accepted, dtype=np.int32))
+    d_base = cuda.to_device(np.zeros_like(states))
+    d_prediction = cuda.to_device(np.zeros_like(states))
+    d_scalars = cuda.to_device(np.zeros((calls, 3), dtype=precision))
+    stream = default_memmgr.get_group_stream()
+    kernel[1, 1, stream](
+        d_states, d_steps, d_accepted, d_base, d_prediction, d_scalars
+    )
+    stream.synchronize()
+    return (
+        d_base.copy_to_host(),
+        d_prediction.copy_to_host(),
+        d_scalars.copy_to_host(),
+    )
 
 
 # ---- pool sets migrated from per-file definitions ---- #
