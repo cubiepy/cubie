@@ -716,16 +716,6 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         return self._mass_flags
 
     @property
-    def has_algebraic_rows(self) -> bool:
-        """Return ``True`` when any state has a zero mass diagonal."""
-        return not all(self.mass_flags)
-
-    @property
-    def mass_diagonal(self) -> np_ndarray:
-        """Return the mass diagonal as an array in the precision."""
-        return np_array(self.mass_flags, dtype=self.precision)
-
-    @property
     def first_same_as_last(self) -> bool:
         """Return ``True`` when the first and last stages align.
 

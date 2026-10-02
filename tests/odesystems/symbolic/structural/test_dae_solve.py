@@ -191,7 +191,6 @@ def test_singular_mass_defaults_reapplied_on_swap(solver_mutable, system):
     for key, value in DAE_SOLVER_DEFAULTS.items():
         assert getattr(step, key) == value
     assert step.compile_settings.mass_flags == system.mass_diagonal_flags
-    assert step.compile_settings.has_algebraic_rows
 
 
 @pytest.mark.parametrize(
@@ -285,6 +284,10 @@ TORN_INIT_SHAMPINE = {
     "dae_initialisation": "shampine",
 }
 TORN_INIT_NONE = {**TORN_INIT_COMMON, "dae_initialisation": "none"}
+TORN_ROSENBROCK = {
+    "precision": np.float32,
+    "output_types": ["state", "time"],
+}
 UNSOLVABLE_INIT = {
     **TORN_INIT_COMMON,
     "system_type": "torn_unsolvable",
@@ -326,6 +329,28 @@ def test_brown_init_corrects_inconsistent_algebraic_start(solver):
     assert counters[0, 1, 0] >= 1
     assert counters[0, 2, 0] == 0
     assert counters[1, 2, 0] >= 1
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [
+        {**TORN_INIT_COMMON, **TORN_ROSENBROCK, "algorithm": algorithm}
+        for algorithm in ("ros3p", "rodas3p")
+    ],
+    indirect=True,
+)
+def test_rosenbrock_holds_the_constraint(solver):
+    # Every saved point sits on the algebraic constraint.
+    result, _ = _solve_torn(solver, 2.0, 0.0)
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = np.asarray(result.time_domain_array, dtype=np.float64)
+    residual = _torn_constraint_residual(
+        trajectory[:, legend["x0"], 0], trajectory[:, legend["x1"], 0]
+    )
+    assert np.abs(residual).max() < 1e-5
+    assert result.status_messages == {}
 
 
 @pytest.mark.parametrize(

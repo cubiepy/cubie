@@ -134,11 +134,6 @@ class ImplicitStepConfig(BaseStepConfig):
         Buffer location for the step-start Jacobian cache.
     helper_operation_counts
         Operator counts of the helpers the last build requested.
-
-    Notes
-    -----
-    Mass-consuming solver helpers read the mass matrix from the system
-    when generated through ``get_solver_helper_fn``.
     """
 
     _operator_beta: float = field(
