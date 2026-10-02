@@ -2143,8 +2143,8 @@ class MemoryManager:
         -------
         int
             ``min((1 - CHUNK_HEADROOM_FRACTION) × available, free -
-            allocation_granule_bytes)``, counting the instances' buffers
-            as free.
+            allocation_granule_bytes)``; the instances' buffers count as
+            free.
 
         Raises
         ------
@@ -2183,11 +2183,7 @@ class MemoryManager:
         free: int,
         released: int = 0,
     ) -> Tuple[int, int]:
-        """Return the group's available bytes and its allocatable bytes.
-
-        ``released`` bytes, evicted since ``free`` was read, count as
-        free.
-        """
+        """Return available and allocatable bytes; ``released`` is free."""
         free_effective = self._reclaimable_free(instance_ids, free)
         free_effective += released
         cap_headroom = self._cap_headroom(stream_group)
