@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.2](https://github.com/cubiepy/cubie/compare/v0.15.1...v0.15.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* **algorithms:** Rosenbrock stage solves share the step-start Jacobian ([#1002](https://github.com/cubiepy/cubie/issues/1002)) ([d3e5b86](https://github.com/cubiepy/cubie/commit/d3e5b86d5bd9d1271d0eb41dd08a51ab6ade8468))
+* **batchsolving:** batch-size max matches allocator's; busy-event tests defer frees so they don't sync ([#1006](https://github.com/cubiepy/cubie/issues/1006)) ([450ba7c](https://github.com/cubiepy/cubie/commit/450ba7c1a8e45935656178cfd85583432491f356))
+
 ## [0.15.1](https://github.com/cubiepy/cubie/compare/v0.14.2...v0.15.1) (2026-09-27)
 
 
