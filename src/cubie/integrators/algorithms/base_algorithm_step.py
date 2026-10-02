@@ -384,10 +384,7 @@ class ButcherTableau:
         self,
         precision: PrecisionDType,
     ) -> Optional[np_ndarray]:
-        """Return weights replacing the embedded estimate when smoothing.
-
-        ``None`` when smoothing filters the embedded estimate instead.
-        """
+        """Return weights that replace the estimate when smoothing."""
         return None
 
     @property
@@ -1068,11 +1065,7 @@ class BaseAlgorithmStep(CUDAFactory):
 
     @property
     def error_row(self) -> Optional[int]:
-        """Return the ``a`` row holding the embedded solution, else ``None``.
-
-        ``None`` also when the step writes no error estimate or smoothed
-        weights replace the embedded one.
-        """
+        """Return the ``a`` row the step captures as its error solution."""
         tableau = self.tableau
         if tableau is None or not self.uses_error:
             return None
