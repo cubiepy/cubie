@@ -523,9 +523,9 @@ class DIRKStep(ODEImplicitStep):
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.
         accumulates_output = tableau.accumulates_output
-        accumulates_error = tableau.accumulates_error
+        accumulates_error = self.accumulates_error
         b_row = tableau.b_matches_a_row
-        b_hat_row = tableau.b_hat_matches_a_row
+        b_hat_row = self.error_row
         if b_row is not None:
             b_row = int32(b_row)
         if b_hat_row is not None:
@@ -665,7 +665,7 @@ class DIRKStep(ODEImplicitStep):
             end_time = current_time + dt_scalar
 
             for idx in unroll_if(range(n), unroll_step_element):
-                if has_error and accumulates_error:
+                if accumulates_error:
                     error[idx] = typed_zero
 
             status_code = success

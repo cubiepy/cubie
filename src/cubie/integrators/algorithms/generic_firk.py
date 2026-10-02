@@ -154,11 +154,6 @@ class FIRKStepConfig(ImplicitStepConfig):
         return self.tableau.stage_count
 
     @property
-    def smoothed_error_weights(self) -> tuple:
-        """Return the smoothed error weights cast to precision."""
-        return self.tableau.smoothed_error_weights(self.precision)
-
-    @property
     def solver_width(self) -> int:
         """Return the coupled solver width across all stages."""
 
@@ -596,7 +591,6 @@ class FIRKStep(ODEImplicitStep):
         stage_count = int32(self.stage_count)
 
         has_evaluate_driver_at_t = drivers_fn is not None
-        has_error = self.uses_error
 
         precision = config.precision
         stage_rhs_coeffs = tableau.a_flat(precision)
@@ -608,19 +602,16 @@ class FIRKStep(ODEImplicitStep):
 
         # Direct assignment when a stage state equals b or b_hat.
         accumulates_output = tableau.accumulates_output
-        accumulates_error = tableau.accumulates_error
+        accumulates_error = self.accumulates_error
         b_row = tableau.b_matches_a_row
-        b_hat_row = tableau.b_hat_matches_a_row
+        b_hat_row = self.error_row
         if b_row is not None:
             b_row = int32(b_row)
-        if b_hat_row is not None:
+        captures_error = b_hat_row is not None
+        if captures_error:
             b_hat_row = int32(b_hat_row)
 
         smoothing_gamma = config.smoothing_gamma
-        if use_smoothed_error:
-            # Smoothed error always accumulates.
-            error_weights = config.smoothed_error_weights
-            accumulates_error = True
 
         ends_at_one = stage_time_fractions[-1] == numba_precision(1.0)
         max_step_ratio = tableau.dense_prediction_ratio_limit(
@@ -773,7 +764,7 @@ class FIRKStep(ODEImplicitStep):
             for idx in unroll_if(range(n), unroll_step_element):
                 if accumulates_output:
                     proposed_state[idx] = state[idx]
-                if has_error and accumulates_error:
+                if accumulates_error:
                     error[idx] = typed_zero
 
             # Fill stage_drivers_stack if driver arrays provided
@@ -844,7 +835,7 @@ class FIRKStep(ODEImplicitStep):
                     if b_row == stage_idx:
                         for idx in unroll_if(range(n), unroll_step_element):
                             proposed_state[idx] = stage_state[idx]
-                if not accumulates_error:
+                if captures_error:
                     if b_hat_row == stage_idx:
                         for idx in unroll_if(range(n), unroll_step_element):
                             error[idx] = stage_state[idx]
@@ -868,7 +859,7 @@ class FIRKStep(ODEImplicitStep):
                         solution_acc = temp
                     proposed_state[idx] = state[idx] + solution_acc
 
-            if has_error and accumulates_error:
+            if accumulates_error:
                 # Standard accumulation path for error
                 for idx in unroll_if(range(n), unroll_step_element):
                     error_acc = typed_zero
@@ -938,7 +929,7 @@ class FIRKStep(ODEImplicitStep):
                 end_time,
             )
 
-            if not accumulates_error:
+            if captures_error:
                 for idx in unroll_if(range(n), unroll_step_element):
                     error[idx] = proposed_state[idx] - error[idx]
 
