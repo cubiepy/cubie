@@ -54,7 +54,11 @@ from cubie.backend.intrinsics import unroll_if
 from cubie.result_codes import CUBIE_RESULT_CODES
 from numpy import int32 as np_int32
 
-from cubie._utils import device_function_field, PrecisionDType
+from cubie._utils import (
+    device_function_field,
+    getype_validator,
+    PrecisionDType,
+)
 from cubie.integrators.algorithms.base_algorithm_step import (
     StepCache,
     AlgorithmDefaults,
@@ -101,6 +105,10 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     """Configuration describing the Rosenbrock-W integrator."""
 
     tableau: RosenbrockTableau = field(default=DEFAULT_ROSENBROCK_TABLEAU)
+    # Takes the tableau gamma, which can exceed 1.
+    _operator_gamma: float = field(
+        default=1.0, validator=getype_validator(float, 0)
+    )
     time_derivative_fn: Optional[Callable] = device_function_field()
     driver_derivative_fn: Optional[Callable] = device_function_field()
     stage_rhs_location: str = field(
