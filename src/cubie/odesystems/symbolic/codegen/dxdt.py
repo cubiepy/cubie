@@ -242,7 +242,7 @@ def generate_dxdt_fac_code(
     equations
         Parsed equations describing ``dx/dt`` assignments.
     index_map
-        Indexed bases that provide both symbol references and constants.
+        Indexed bases that provide symbol references.
     func_name
         Name of the generated factory function.
     cse
@@ -363,7 +363,7 @@ def generate_observables_fac_code(
     equations
         Parsed equations describing observable assignments.
     index_map
-        Indexed bases that provide symbol and constant lookups.
+        Indexed bases that provide symbol lookups.
     func_name
         Name of the generated factory function.
     cse

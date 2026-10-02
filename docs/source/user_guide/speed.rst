@@ -7,7 +7,7 @@ To get the best performance from Cubie, try to:
 
 - Solve many problems at once (thousands if possible).
 - Reduce the number of variables and samples you save or summarise.
-- Set all parameters that you're not changing between solves to be `constants`.
+- Only give a range of values for the parameters you want to sweep.
 - Reuse existing Solvers.
 
 Parallelism
@@ -43,18 +43,36 @@ up your solves:
    built in summary metrics to calculate these on the GPU during the solve. You
    don't even need to save the state history at all!
 
-Constants
----------
+Fixed parameters
+----------------
 When you tell Cubie about your problem, you provide some symbols/variables
 that are input-only - they don't change during the solve. If you're
-brute-forcing a parameter study, you will want to be able to start an IVP from
-a bunch of different values for some of these parameters. However, you may
-have more parameters that you're not interested in changing between solves.
-If you mark these as `constants` when defining your system of ODEs, Cubie
-puts them in a different place in memory - rather than taking up space in
-the scarce fast memory that needs to be able to change often, they go into
-the compiled program itself. This means they require no memory traffic, and
-they free up more space to run more runs at once!
+brute-forcing a parameter study, you will want to start an IVP from a bunch
+of different values for some of these parameters, and leave the rest at one
+value. Every parameter that holds one value across a batch goes into the
+compiled program itself, rather than taking up space in the scarce fast
+memory that needs to be able to change often. This means they require no
+memory traffic, and they free up more space to run more runs at once!
+
+A dict sweeps entries whose values differ across runs; single values
+and parameters left out are fixed:
+
+.. code-block:: python
+
+   solver.solve(y0, {"rho": np.linspace(0, 28, 4096), "sigma": 10.0})
+
+An array with a row per system parameter sweeps every row;
+``fix_constant_parameters=True`` fixes rows that hold one value. An
+array with a row per swept parameter keeps the swept set.
+
+For prebuilt arrays, including device arrays, name the swept
+parameters first, in the order of your array's rows; the rest are fixed at their current
+values:
+
+.. code-block:: python
+
+   solver.set_swept_parameters(["rho", "beta"])
+   solver.solve(device_inits, device_params)  # two parameter rows
 
 Profiling with TimeLogger
 -------------------------

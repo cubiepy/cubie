@@ -36,12 +36,20 @@ See Also
 
 from abc import abstractmethod
 from copy import deepcopy
-from typing import Any, Callable, Dict, Optional, Set
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from attrs import define, field
 from numpy import float32
 
-from cubie._serialize import canonical_digest
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType
 from cubie._env import operation_ordering_default
@@ -101,15 +109,14 @@ class BaseODE(CUDAFactory):
         precision: PrecisionDType = float32,
         initial_values: Optional[Dict[str, float]] = None,
         parameters: Optional[Dict[str, float]] = None,
-        constants: Optional[Dict[str, float]] = None,
         observables: Optional[Dict[str, float]] = None,
         default_initial_values: Optional[Dict[str, float]] = None,
         default_parameters: Optional[Dict[str, float]] = None,
-        default_constants: Optional[Dict[str, float]] = None,
         default_observable_names: Optional[Dict[str, float]] = None,
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
+        swept_parameters: Iterable[str] = (),
     ) -> None:
         """Initialize the ODE system.
 
@@ -119,16 +126,12 @@ class BaseODE(CUDAFactory):
             Initial values for state variables.
         parameters
             Parameter values for the system.
-        constants
-            Constants that are not expected to change between simulations.
         observables
             Observable values to track.
         default_initial_values
             Default initial values if ``initial_values`` omits entries.
         default_parameters
             Default parameter values if ``parameters`` omits entries.
-        default_constants
-            Default constant values if ``constants`` omits entries.
         default_observable_names
             Default observable names if ``observables`` omits entries.
         precision
@@ -143,28 +146,29 @@ class BaseODE(CUDAFactory):
             (``liveness_auto`` when unset).
         name
             Printable identifier for the system. Defaults to ``None``.
+        swept_parameters
+            Swept parameters, in order; the rest compile in.
         """
         super().__init__()
         clashes = clashing_names(
-            {**(default_constants or {}), **(constants or {})}
+            {**(default_parameters or {}), **(parameters or {})}
         )
         if clashes:
             raise ValueError(
-                f"Constants {sorted(clashes)} share names with Solver "
+                f"Parameters {sorted(clashes)} share names with Solver "
                 "settings and could not be given by name; rename them."
             )
         system_data = ODEData.from_BaseODE_initargs(
             initial_values=initial_values,
             parameters=parameters,
-            constants=constants,
             observables=observables,
             default_initial_values=default_initial_values,
             default_parameters=default_parameters,
-            default_constants=default_constants,
             default_observable_names=default_observable_names,
             precision=precision,
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
+            swept_parameters=swept_parameters,
         )
         self.setup_compile_settings(system_data)
         self.name = name
@@ -201,7 +205,6 @@ class BaseODE(CUDAFactory):
             "--"
             f"\n{self.states},"
             f"\n{self.parameters},"
-            f"\n{self.constants},"
             f"\n{self.observables},"
             f"\n{self.num_drivers})"
         )
@@ -218,84 +221,159 @@ class BaseODE(CUDAFactory):
 
         Notes
         -----
-        Bring constants into local (outer) scope before defining ``dxdt``
-        because CUDA device functions cannot reference ``self``.
+        Bring compile settings into local (outer) scope before defining
+        ``dxdt`` because CUDA device functions cannot reference ``self``.
         """
         # return ODECache(dxdt=dxdt)
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Apply compile settings, then constant values.
+        """Apply compile settings, then parameter values.
 
         Parameters
         ----------
         updates
-            Setting names to new values.
+            Setting names or parameter names to new values.
         silent
             Whether :meth:`update` ignores unrecognised names.
 
         Returns
         -------
         set[str]
-            Names the settings and :meth:`set_constants` recognised.
-
-        Notes
-        -----
-        Constant values go through :meth:`set_constants`, which updates
-        a copy of the constants container.
+            Names the settings and parameters recognised.
         """
-        recognised = self.update_compile_settings(updates, silent=True)
-        return recognised | self.set_constants(updates, silent=True)
+        names = set(self.parameters.names)
+        values = {
+            key: value for key, value in updates.items() if key in names
+        }
+        settings = {
+            key: value
+            for key, value in updates.items()
+            if key not in names and key != "swept_parameters"
+        }
+        recognised = self.update_compile_settings(settings, silent=True)
+        if values:
+            recognised |= self.set_parameter_values(values)
+        return recognised
 
-    def set_constants(
-        self,
-        updates_dict: Optional[Dict[str, float]] = None,
-        silent: bool = False,
-        **kwargs: float,
+    def set_parameter_values(
+        self, values: Mapping[str, float]
     ) -> Set[str]:
-        """Update constant values in the system.
+        """Set parameter values; each named parameter is compiled in.
 
         Parameters
         ----------
-        updates_dict
-            Mapping from constant names to their new values.
-        silent
-            Set to ``True`` to suppress warnings about missing keys.
-        **kwargs
-            Additional constant updates provided as keyword arguments. These
-            override entries in ``updates_dict``.
+        values
+            Parameter names to new values.
 
         Returns
         -------
         set of str
-            Labels that were recognized and updated.
+            Names that were recognised.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
         """
-        if updates_dict is None:
-            updates_dict = {}
-        updates_dict = updates_dict.copy()
-        if kwargs:
-            updates_dict.update(kwargs)
-        if updates_dict == {}:
-            return set()
+        self.bind(values=values)
+        return set(values)
 
-        const = self.compile_settings.constants
-        recognised = set(updates_dict.keys()) & const.values_dict.keys()
-        unrecognised = set(updates_dict.keys()) - recognised
-        if recognised:
-            # The held container is sealed: modify a copy and pass it
-            # through the write boundary.
-            new_const = const.copy()
-            new_const.update_from_dict(
-                {key: updates_dict[key] for key in recognised}
+    def set_swept_parameters(self, names: Iterable[str]) -> bool:
+        """Sweep ``names`` in the given order; fix the rest.
+
+        Parameters
+        ----------
+        names
+            Swept parameter names, in the order of the parameters array.
+
+        Returns
+        -------
+        bool
+            Whether the system changed.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        """
+        return self.bind(swept=names)
+
+    def set_initial_values(self, values: Mapping[str, float]) -> None:
+        """Set the stored initial values of the named states."""
+        self.initial_values.update_from_dict(values)
+
+    def bind(
+        self,
+        swept: Optional[Iterable[str]] = None,
+        values: Optional[Mapping[str, float]] = None,
+    ) -> bool:
+        """Store parameter values and set swept names in one rebuild.
+
+        Parameters
+        ----------
+        swept
+            Swept parameters, in order. ``None`` keeps the
+            current names less those in ``values``.
+        values
+            Parameter names to new values.
+
+        Returns
+        -------
+        bool
+            Whether the system changed.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        """
+        values = {
+            str(name): float(value)
+            for name, value in (values or {}).items()
+        }
+        stored = self.compile_settings.parameter_values
+        if swept is None:
+            swept = tuple(
+                name for name in self.swept_parameters if name not in values
             )
-            self.update_compile_settings(constants=new_const, silent=True)
-
-        if not silent and unrecognised:
+        else:
+            swept = tuple(str(name) for name in swept)
+        unknown = (set(values) | set(swept)) - set(stored)
+        if unknown:
             raise KeyError(
-                f"Unrecognized parameters in update: {unrecognised}. "
-                "These parameters were not updated.",
+                f"{sorted(unknown)} are not parameters of this system."
             )
+        new_values = {
+            name: value
+            for name, value in values.items()
+            if stored[name] != value
+        }
+        if swept == self.swept_parameters and not new_values:
+            return False
+        parameters = self.parameters
+        if new_values:
+            parameters = parameters.copy()
+            parameters.update_from_dict(new_values)
+        self._respecialise(swept, parameters)
+        return True
 
-        return recognised
+    def _respecialise(
+        self, swept: Tuple[str, ...], parameters: "SystemValues"
+    ) -> None:
+        """Store the swept names and parameter values."""
+        self.update_compile_settings(
+            swept_parameters=swept, parameters=parameters, silent=True
+        )
+
+    @property
+    def swept_parameters(self) -> Tuple[str, ...]:
+        """Swept parameter names, in the order of the parameters array."""
+        return self.compile_settings.swept_parameters
+
+    @property
+    def fixed_parameter_values(self) -> Dict[str, float]:
+        """Values of the parameters compiled into generated code."""
+        return self.compile_settings.fixed_parameter_values
 
     @property
     def parameters(self) -> "SystemValues":
@@ -318,11 +396,6 @@ class BaseODE(CUDAFactory):
         return self.compile_settings.observables
 
     @property
-    def constants(self) -> "SystemValues":
-        """Constant values configured for the system."""
-        return self.compile_settings.constants
-
-    @property
     def num_states(self) -> int:
         """Number of state variables."""
         return self.compile_settings.num_states
@@ -336,11 +409,6 @@ class BaseODE(CUDAFactory):
     def num_parameters(self) -> int:
         """Number of parameters."""
         return self.compile_settings.num_parameters
-
-    @property
-    def num_constants(self) -> int:
-        """Number of constants."""
-        return self.compile_settings.num_constants
 
     @property
     def num_drivers(self) -> int:
@@ -382,26 +450,6 @@ class BaseODE(CUDAFactory):
         """Binary-operator count of the ``dxdt`` and observables sources."""
         return self.get_cached_output("operation_counts").total(
             ("dxdt", "observables")
-        )
-
-    @property
-    def _constants_hash(self) -> str:
-        """Hash of the current constant values."""
-        const_values = tuple()
-        if self.constants is not None:
-            const_values = tuple(
-                (name, float(value))
-                for name, value in sorted(
-                    self.constants.values_dict.items()
-                )
-            )
-        return canonical_digest(const_values)
-
-    @property
-    def config_hash(self):
-        """Configuration hash incorporating constant values."""
-        return canonical_digest(
-            ("cubie-ode-config", super().config_hash, self._constants_hash)
         )
 
     def get_solver_helper(

@@ -30,8 +30,7 @@ def torn_dae_system():
 @pytest.fixture(scope="session")
 def simple_system_defaults():
     states = {"one": 0.9, "foo": 0.5}
-    parameters = {"zebra": 0.2, "fox": 0.4}
-    constants = {"apple": 0.43, "linen": 0.32}
+    parameters = {"zebra": 0.2, "fox": 0.4, "apple": 0.43, "linen": 0.32}
     drivers = ["driver1"]
     observables = ["safari", "zoo"]
 
@@ -52,7 +51,6 @@ def simple_system_defaults():
     return (
         states,
         parameters,
-        constants,
         drivers,
         observables,
         dxdt_str,
@@ -65,14 +63,13 @@ def simple_symbols_dict(simple_system_defaults):
     (
         states,
         parameters,
-        constants,
         drivers,
         observables,
         dxdt_str,
         dxdt_list,
     ) = simple_system_defaults
     ib = IndexedBases.from_user_inputs(
-        states, parameters, constants, observables, drivers
+        states, parameters, observables, drivers
     )
     symbols = ib.all_symbols
     return symbols
@@ -83,7 +80,7 @@ def simple_symbols():
     """Basic SymPy symbols for testing."""
     x, y, z = sp.symbols("x y z", real=True)
     a, b, c = sp.symbols("a b c", real=True)
-    return {"states": [x, y], "params": [a, b], "constants": [c], "aux": [z]}
+    return {"states": [x, y], "params": [a, b, c], "aux": [z]}
 
 
 @pytest.fixture
@@ -110,7 +107,7 @@ def complex_equations(indexed_bases):
     y = indexed_bases.states.symbol_map["y"]
     a = indexed_bases.parameters.symbol_map["a"]
     b = indexed_bases.parameters.symbol_map["b"]
-    c = indexed_bases.constants.symbol_map["c"]
+    c = indexed_bases.parameters.symbol_map["c"]
     dx = indexed_bases.dxdt.symbol_map["dx"]
     dy = indexed_bases.dxdt.symbol_map["dy"]
     obs = indexed_bases.observables.symbol_map["obs1"]
@@ -139,14 +136,19 @@ def observables_kernel_system(precision):
     system = SymbolicODE.create(
         dxdt=dxdt_lines,
         states={"x": precision(0.0), "y": precision(0.0)},
-        parameters={"alpha": precision(0.0), "beta": precision(0.0)},
-        constants={"c0": precision(1.1)},
+        parameters={
+            "alpha": precision(0.0),
+            "beta": precision(0.0),
+            "c0": precision(1.1),
+        },
         drivers={"drive": precision(0.0)},
         observables=["obs_rate", "obs_total"],
         precision=precision,
         strict=True,
         name="observables_kernel_system",
     )
+    c0 = system.parameters.values_dict["c0"]
+    system.bind(swept=["alpha", "beta"], values={"c0": c0})
 
     return system
 
@@ -163,15 +165,13 @@ def indexed_base_map():
 def indexed_bases():
     """Sample IndexedBases for testing."""
     states = ["x", "y"]
-    parameters = ["a", "b"]
-    constants = ["c", "d"]
+    parameters = ["a", "b", "c", "d"]
     observables = ["obs1"]
     drivers = ["driver1"]
 
     return IndexedBases.from_user_inputs(
         states=states,
         parameters=parameters,
-        constants=constants,
         observables=observables,
         drivers=drivers,
     )
@@ -190,8 +190,8 @@ def linear_system_equations(indexed_bases):
     y = indexed_bases.states.symbol_map["y"]
     a = indexed_bases.parameters.symbol_map["a"]
     b = indexed_bases.parameters.symbol_map["b"]
-    c = indexed_bases.constants.symbol_map["c"]
-    d = indexed_bases.constants.symbol_map["d"]
+    c = indexed_bases.parameters.symbol_map["c"]
+    d = indexed_bases.parameters.symbol_map["d"]
     dx = indexed_bases.dxdt.symbol_map["dx"]
     dy = indexed_bases.dxdt.symbol_map["dy"]
 
@@ -223,13 +223,12 @@ def nonlinear_equations(indexed_bases):
 def bare_indexed_bases():
     """IndexedBases with two states and two parameters only.
 
-    No constants, observables, or drivers: codegen tests use this to
+    No observables or drivers: codegen tests use this to
     reach the no-observable and no-driver generator branches.
     """
     return IndexedBases.from_user_inputs(
         states=["x", "y"],
         parameters=["a", "b"],
-        constants=[],
         observables=[],
         drivers=[],
     )
@@ -237,11 +236,10 @@ def bare_indexed_bases():
 
 @pytest.fixture(scope="session")
 def solver_scaling_collision_indexed_bases():
-    """IndexedBases with constants named like solver scalings."""
+    """IndexedBases with parameters named like solver scalings."""
     return IndexedBases.from_user_inputs(
         states={"x": 1.0},
-        parameters={},
-        constants={"beta": 2.0, "gamma": 3.0},
+        parameters={"beta": 2.0, "gamma": 3.0},
         observables=[],
         drivers=[],
     )
@@ -251,11 +249,11 @@ def solver_scaling_collision_indexed_bases():
 def solver_scaling_collision_equations(
     solver_scaling_collision_indexed_bases,
 ):
-    """One-state equation using colliding beta/gamma constants."""
+    """One-state equation using colliding beta/gamma parameters."""
     ib = solver_scaling_collision_indexed_bases
     x = ib.states.symbol_map["x"]
-    beta = ib.constants.symbol_map["beta"]
-    gamma = ib.constants.symbol_map["gamma"]
+    beta = ib.parameters.symbol_map["beta"]
+    gamma = ib.parameters.symbol_map["gamma"]
     dx = ib.dxdt.symbol_map["dx"]
     return ParsedEquations.from_equations(
         [(dx, beta * x + gamma)],
@@ -370,7 +368,6 @@ def observable_driver_indexed_bases():
     return IndexedBases.from_user_inputs(
         states=["x", "y"],
         parameters=["a", "b"],
-        constants=[],
         observables=["obs1"],
         drivers=["driver1"],
     )
@@ -426,7 +423,6 @@ def single_observable_indexed_bases():
     return IndexedBases.from_user_inputs(
         states=["x"],
         parameters=["a"],
-        constants=[],
         observables=["obs1"],
         drivers=[],
     )

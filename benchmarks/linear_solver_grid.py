@@ -89,8 +89,7 @@ def build_lorenz_system():
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"rho": 21.0, "sigma": 10.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=precision,
     )
@@ -126,7 +125,6 @@ def build_fabbri_system():
     return qb.load_cellml_model(
         str(FABBRI_CELLML),
         precision=precision,
-        parameters=list(FABBRI_PARAMETERS),
         voltage_variable="Membrane$V_ode",
     )
 
@@ -156,6 +154,7 @@ def fabbri_grid(solver, n_runs: int):
     parameters = {
         FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
         FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
+        "Rate_modulation_experiments_ANS": 1.0,
     }
     return solver.build_grid(parameters=parameters)
 
@@ -207,7 +206,6 @@ SYSTEMS = {
             "dt_min": 1e-12,
             "dt_max": 1e-2,
         },
-        "constants": {"Rate_modulation_experiments_ANS": 1.0},
     },
 }
 
@@ -246,11 +244,7 @@ def build_solver(system, algorithm, spec, correction, precond,
         elif variant == "prefactored":
             kwargs["inexact_newton"] = True
             kwargs["prefactored"] = True
-    solver = qb.Solver(system, **kwargs)
-    constants = spec.get("constants")
-    if constants:
-        solver.update(constants)
-    return solver
+    return qb.Solver(system, **kwargs)
 
 
 def solve_once(solver, inits, params, duration: float):

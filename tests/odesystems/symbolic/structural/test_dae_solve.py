@@ -25,7 +25,7 @@ from cubie.integrators.algorithms.ode_implicitstep import (
 from cubie.memory import default_memmgr
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests.system_fixtures import (
-    TRANSAMP_CONSTANTS,
+    TRANSAMP_PARAMETERS,
     TRANSAMP_DC_STATES,
 )
 from tests._utils import (
@@ -229,8 +229,9 @@ def _ring_constraint_residuals(values):
 
 def _solve_ring(solver, system):
     inits = np.zeros((system.sizes.states, 1), dtype=np.float64)
-    params = np.full((1, 1), 0.5, dtype=np.float64)
-    result = solver.solve(inits, params, duration=2e-6)
+    result = solver.solve(
+        inits, {"Uin1_amplitude": 0.5}, duration=2e-6
+    )
     legend = {
         label: idx for idx, label in result.time_domain_legend.items()
     }
@@ -512,7 +513,7 @@ TRANSAMP_REFERENCE = {
 
 def _transamp_consistent_derivatives():
     """Solve y'(0) from the differentiated node constraints."""
-    k = TRANSAMP_CONSTANTS
+    k = TRANSAMP_PARAMETERS
     y = TRANSAMP_DC_STATES
     drive_rate = 0.1 * 628.3185307179587
 
@@ -586,8 +587,7 @@ def test_diode_line_solves(solver, system):
     """The mid-size semi-explicit DAE integrates cleanly."""
     t_end = 0.3
     inits = np.zeros((system.sizes.states, 1), dtype=np.float32)
-    params = np.full((1, 1), 1.0, dtype=np.float32)
-    result = solver.solve(inits, params, duration=t_end)
+    result = solver.solve(inits, {"amp": 1.0}, duration=t_end)
     legend = {
         label: idx for idx, label in result.time_domain_legend.items()
     }

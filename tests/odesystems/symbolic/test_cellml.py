@@ -171,61 +171,29 @@ def test_custom_units_for_symbolic_ode():
     assert ode.observable_units == {"y": "meters"}
 
 
-def test_numeric_assignments_become_constants(basic_model):
-    """Verify variables with numeric assignments become constants by default.
-    """
-    # Variable 'a' has numeric value 0.5 in the CellML model
-    # It should become a constant
-    constants_map = basic_model.indices.constants.index_map
-    assert len(constants_map) > 0
-
-    # Check that 'main_a' is in constants (name is sanitized)
-    constant_names = [str(k) for k in constants_map.keys()]
-    assert "main_a" in constant_names
-
-    # Check that the default value is correct
-    constants_defaults = basic_model.indices.constants.defaults
-    assert constants_defaults is not None
-    assert "main_a" in constants_defaults
-    assert constants_defaults["main_a"] == 0.5
+def test_numeric_assignments_become_parameters(basic_model):
+    """Variables with numeric assignments become fixed parameters."""
+    values = basic_model.parameters.values_dict
+    assert values["main_a"] == 0.5
+    assert basic_model.fixed_parameter_values["main_a"] == 0.5
 
 
-def test_numeric_assignments_as_parameters(basic_model_param_main_a):
-    """Verify variables with numeric assignments become parameters if
-    specified.
-    """
-    # 'main_a' should now be a parameter instead of a constant
-    parameters_map = basic_model_param_main_a.indices.parameters.index_map
-    parameter_names = [str(k) for k in parameters_map.keys()]
-    assert "main_a" in parameter_names
-
-    # Check that the default value is correct
-    parameters_defaults = basic_model_param_main_a.indices.parameters.defaults
-    assert parameters_defaults is not None
-    assert "main_a" in parameters_defaults
-    assert parameters_defaults["main_a"] == 0.5
-
-    # Should not be in constants
-    constants_map = basic_model_param_main_a.indices.constants.index_map
-    constant_names = [str(k) for k in constants_map.keys()]
-    assert "main_a" not in constant_names
-
-
-def test_parameters_dict_preserves_numeric_values(basic_model_parameters_dict):
-    """Verify numeric values are preserved when parameters is a dict."""
-    # The user-provided value doesnt take precedence - users can override
-    # these per run.
-    parameters_defaults = (
-        basic_model_parameters_dict.indices.parameters.defaults
-    )
-    assert parameters_defaults is not None
-    assert "main_a" in parameters_defaults
-    assert parameters_defaults["main_a"] == 0.5
+def test_swept_numeric_assignment_reads_parameter_table(basic_model):
+    """A numeric assignment can be swept."""
+    model = basic_model.copy()
+    fixed = {
+        name: value
+        for name, value in model.parameters.values_dict.items()
+        if name != "main_a"
+    }
+    model.bind(swept=["main_a"], values=fixed)
+    assert model.indices.parameter_names == ["main_a"]
+    assert model.indices.parameters.defaults["main_a"] == 0.5
 
 
 def test_non_numeric_algebraic_equations_remain(beeler_reuter_model):
     # The Beeler-Reuter model has complex algebraic equations These should
-    # remain as equations, not become constants We can check by ensuring there
+    # remain as equations, not become parameters We can check by ensuring there
     # are equations beyond just the differential ones
 
     # Model has 8 state variables, so 8 differential equations
@@ -329,7 +297,7 @@ def test_cache_invalidated_on_file_change(
     cache = CellMLCache("basic_ode", str(tmp_cellml))
     # Compute args_hash for default arguments (precision=np.float32)
     args_hash = cache.compute_cache_key(
-        None, None, np.float32, "basic_ode", fix_singularities=False
+        None, np.float32, "basic_ode", fix_singularities=False
     )
     assert not cache.cache_valid(args_hash), (
         "Cache should be invalid after file change"
@@ -343,7 +311,7 @@ def test_cache_invalidated_on_file_change(
     # Verify new cache is valid (need fresh CellMLCache for updated file hash)
     cache2 = CellMLCache("basic_ode", str(tmp_cellml))
     args_hash2 = cache2.compute_cache_key(
-        None, None, np.float32, "basic_ode", fix_singularities=False
+        None, np.float32, "basic_ode", fix_singularities=False
     )
     assert cache2.cache_valid(args_hash2), (
         "Cache should be valid after re-parse"
@@ -404,13 +372,6 @@ def test_sanitize_symbol_name_leading_underscore_digit():
     assert _sanitize_symbol_name("_2x") == "var_2x"
 
 
-def test_load_with_parameters_dict(basic_model_parameters_dict):
-    """A parameters dict is accepted and merged with CellML values."""
-    values = basic_model_parameters_dict.parameters.values_dict
-    assert "user_param" in values
-    assert values["user_param"] == 1.5
-
-
 def test_underscore_component_names_load(cellml_fixtures_dir):
     """Variables qualified by a leading-underscore component load."""
     model = load_cellml_model(
@@ -431,7 +392,7 @@ def test_multiple_time_variables_raise(cellml_fixtures_dir):
         )
 
 
-def test_constant_as_observable_raises(cellml_fixtures_dir):
+def test_parameter_as_observable_raises(cellml_fixtures_dir):
     """Requesting a numeric-valued variable as an observable raises."""
     with pytest.raises(ValueError, match="no defining equation"):
         load_cellml_model(
@@ -471,7 +432,6 @@ def test_early_cache_hit_restores_mass(
     cache = CellMLCache("basic_ode", path)
     args_hash = cache.compute_cache_key(
         None,
-        None,
         model_precision,
         "basic_ode",
         fix_singularities=False,
@@ -503,61 +463,14 @@ def test_early_cache_hit_restores_mass(
     )
 
 
-def test_unknown_parameter_name_reuses_effective_cache(
+def test_parameter_layout_is_canonical(
     cellml_fixtures_dir, isolated_cache_root
 ):
-    """Unknown parameter names do not change the parsed system."""
-    path = str(cellml_fixtures_dir / "basic_ode.cellml")
-    baseline = load_cellml_model(path, fix_singularities=False)
-    aliased = load_cellml_model(
-        path,
-        parameters=["not_in_model"],
-        fix_singularities=False,
-    )
-    assert aliased.fn_hash == baseline.fn_hash
-    assert "not_in_model" not in aliased.parameters.values_dict
-
-
-def test_parameters_as_list(basic_model_param_main_a):
-    """A parameters list promotes named constants to parameters."""
-    values = basic_model_param_main_a.parameters.values_dict
-    assert "main_a" in values
-    assert values["main_a"] == 0.5
-
-
-@pytest.mark.parametrize("reverse", [False, True])
-def test_parameter_layout_is_canonical(
-    cellml_fixtures_dir, isolated_cache_root, reverse
-):
-    """Parameter array order is sorted, whatever order was declared."""
-    declared = [
-        "sodium_current_g_Na",
-        "membrane_C",
-        "stimulus_protocol_IstimStart",
-        "slow_inward_current_g_s",
-    ]
-    if reverse:
-        declared = declared[::-1]
+    """Parameter order is sorted by name."""
     model = load_cellml_model(
         str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml"),
-        parameters=declared,
         fix_singularities=False,
     )
-    assert list(model.parameters.names) == sorted(declared)
+    names = list(model.parameters.names)
+    assert names == sorted(names)
 
-
-def test_reordered_declaration_is_one_system(
-    cellml_fixtures_dir, isolated_cache_root
-):
-    """The same parameter set is one system however it is ordered."""
-    path = str(cellml_fixtures_dir / "beeler_reuter_model_1977.cellml")
-    declared = ["membrane_C", "sodium_current_g_Na"]
-    first = load_cellml_model(
-        path, parameters=declared, fix_singularities=False
-    )
-    second = load_cellml_model(
-        path, parameters=declared[::-1], fix_singularities=False
-    )
-    assert list(first.parameters.names) == sorted(declared)
-    assert list(second.parameters.names) == sorted(declared)
-    assert first.fn_hash == second.fn_hash

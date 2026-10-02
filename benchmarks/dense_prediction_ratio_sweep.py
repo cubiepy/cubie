@@ -644,13 +644,13 @@ def main():
         systems = {}
         for probe_name, probe in PROBES.items():
             system = probe["builder"](precision)
-            params = system.parameters.values_array.astype(
-                precision
-            ).copy()
-            for key, value in probe["parameter_overrides"].items():
-                params[
-                    system.parameters.get_index_of_key(key)
-                ] = value
+            # The overrides are swept, so the kernel reads them from params.
+            overrides = probe["parameter_overrides"]
+            system.set_swept_parameters(list(overrides))
+            params = np.zeros(max(1, len(overrides)), dtype=precision)
+            params[:len(overrides)] = [
+                overrides[name] for name in system.swept_parameters
+            ]
             state = np.asarray(
                 system.initial_values.values_array, dtype=precision
             ).copy()

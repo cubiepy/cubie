@@ -17,7 +17,7 @@ See Also
 --------
 :class:`~cubie.odesystems.ODEData.ODEData`
     Data container that stores ``SystemValues`` instances for each
-    component category (states, parameters, constants, observables).
+    component category (states, parameters, observables).
 :class:`~cubie.odesystems.baseODE.BaseODE`
     Abstract ODE factory exposing ``SystemValues`` via properties.
 """
@@ -232,9 +232,9 @@ class SystemValues:
         Configuration snapshots apply this through their field
         converters, so every container a snapshot holds is sealed at
         the write boundary. Values stay writable for containers
-        whose stored values are runtime data (parameters, states,
-        observables); the constants container seals fully because
-        constant values are compile-critical. :meth:`copy` and
+        whose stored values are runtime data (states, observables);
+        the parameter container seals fully because fixed parameter
+        values are compile-critical. :meth:`copy` and
         :meth:`with_precision` return unfrozen copies for the
         copy-and-replace update path.
         """
@@ -256,10 +256,8 @@ class SystemValues:
 
         Only compile-critical structure enters the identity: the
         ordered names (sizes and indices are baked into generated
-        code) and the precision. Stored values are runtime data —
-        constant values, the one value set that is compile-critical,
-        are folded into the owning system's ``config_hash``
-        separately.
+        code) and the precision. Compiled-in parameter values enter
+        the owning system's identity through ``ODEData``.
         """
         from numpy import dtype as np_dtype
 
@@ -364,8 +362,7 @@ class SystemValues:
                     raise KeyError(
                         f"'{parameter_key}' not found in this SystemValues"
                         f" object. Double check that you're looking in the"
-                        f" right place (i.e. states, or parameters, or "
-                        f"constants)",
+                        f" right place (i.e. states or parameters)",
                     )
         else:
             raise TypeError(
@@ -600,14 +597,13 @@ class SystemValues:
             Raised when a value cannot be cast to ``precision``.
         ValueError
             Raised when this instance is a fully sealed snapshot
-            member (constants held by a settings snapshot).
+            member (parameters held by a settings snapshot).
         """
         if self._snapshot_frozen and not self._values_writable:
             raise ValueError(
                 "These values are sealed by a settings snapshot. "
-                "Update them through the owning system (for "
-                "constants: set_constants() or update()), which "
-                "derives a replacement snapshot and rebuilds."
+                "Update them through the owning system's update(), "
+                "which derives a replacement snapshot and rebuilds."
             )
         if values_dict is None:
             values_dict = {}
@@ -629,7 +625,7 @@ class SystemValues:
                     f"Parameter key(s) {unrecognised} not found in this "
                     f"SystemValues object. Double check that "
                     f"you're looking in the right place (i.e. states"
-                    f", or parameters, or constants)",
+                    f" or parameters)",
                 )
         if any(
             not isinstance(value, (int, float, np_integer,

@@ -20,6 +20,9 @@ class CPUODESystem:
     """Evaluator for symbolic systems using compiled numerical functions."""
 
     def __init__(self, system: SymbolicODE) -> None:
+        # Every parameter is swept, so any parameters array maps by name.
+        system = system.copy()
+        system.bind(swept=system.parameters.names)
         self.system = system
         self.precision = system.precision
         self.n_states = system.sizes.states
@@ -32,7 +35,6 @@ class CPUODESystem:
         indexed = system.indices
         self._state_index = indexed.states.index_map
         self._parameter_index = indexed.parameters.index_map
-        self._constant_index = indexed.constants.index_map
         self._driver_index = indexed.drivers.index_map
         self._observable_index = indexed.observables.index_map
 
@@ -62,7 +64,6 @@ class CPUODESystem:
         self._base_symbols: Set[sp.Symbol] = set().union(
             self._state_index.keys(),
             self._parameter_index.keys(),
-            self._constant_index.keys(),
             self._driver_index.keys(),
             {TIME_SYMBOL},
         )
@@ -129,7 +130,7 @@ class CPUODESystem:
         )
 
     def _prepare_fast_paths(self) -> None:
-        """Precompute symbol slots, constant base buffer, and evaluation plans.
+        """Precompute symbol slots, the base buffer, and evaluation plans.
 
         This avoids per-call dictionary construction and expensive symbol
         lookups.
@@ -154,9 +155,6 @@ class CPUODESystem:
 
         add_symbols(sorted_symbols(self._state_index))
         add_symbols(sorted_symbols(self._parameter_index))
-        # Constants are immutable; include them early so their slots are fixed
-        # and prefilled.
-        add_symbols(sorted_symbols(self._constant_index))
         add_symbols(sorted_symbols(self._driver_index))
         # Ensure all equation LHS (observables, dx, and intermediates) have
         # slots.
@@ -191,13 +189,9 @@ class CPUODESystem:
             lhs: symbol_to_slot[lhs] for lhs, _ in self._equations
         }
 
-        # Build a base buffer with constants prefilled; other entries are
-        # zero-initialized.
-        base = np.zeros(nslots, dtype=self.precision)
-        const_values = self.system.constants.values_dict
-        for sym in self._constant_index.keys():
-            base[symbol_to_slot[sym]] = self.precision(const_values[str(sym)])
-        self._base_value_buffer = base
+        # Fixed parameters are literals in the equations, so every entry
+        # starts at zero.
+        self._base_value_buffer = np.zeros(nslots, dtype=self.precision)
 
         # Precompute evaluation plans: specialized for arity 0/1/2/Many to
         # avoid tuple handling. Plan entry: (lhs_slot:int,
@@ -273,11 +267,9 @@ class CPUODESystem:
         # observables)
         def sv_layout(include_observables: bool):
             syms: list[sp.Symbol] = []
-            # States, Parameters, Constants, Drivers in index order for
-            # determinism
+            # States, Parameters, Drivers in index order for determinism
             syms.extend(sorted_symbols(self._state_index))
             syms.extend(sorted_symbols(self._parameter_index))
-            syms.extend(sorted_symbols(self._constant_index))
             syms.extend(sorted_symbols(self._driver_index))
             if include_observables and self._observable_index:
                 syms.extend(sorted_symbols(self._observable_index))
@@ -349,7 +341,7 @@ class CPUODESystem:
         return ordered
 
     def _alloc_buffer(self) -> np.ndarray:
-        """Return a fresh working buffer seeded with constants."""
+        """Return a fresh working buffer."""
         return self._base_value_buffer.copy()
 
     def _fill_value_buffer(
@@ -409,7 +401,7 @@ class CPUODESystem:
     ) -> Dict[sp.Symbol, float]:
         """Reconstruct the symbol->value dict matching previous semantics.
 
-        Includes base symbols (states, params, constants, drivers, time),
+        Includes base symbols (states, params, drivers, time),
         optionally observables, and any evaluated dx symbols will be added by
         the callers after equation evaluation.
         """
@@ -429,7 +421,7 @@ class CPUODESystem:
     ) -> Array:
         """Evaluate the observable expressions for the current state."""
 
-        # Prepare working buffer seeded with constants; fill dynamic inputs.
+        # Prepare a working buffer; fill dynamic inputs.
         work = self._alloc_buffer()
         self._fill_value_buffer(
             work,

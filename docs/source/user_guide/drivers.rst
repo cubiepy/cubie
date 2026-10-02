@@ -34,12 +34,14 @@ like this:
         di = p.feedback_strength * y.x + p.feedback_offset
         return {"x": dx, "v": dv, "T": dT, "i": di}
 
-    constants = {
+    parameters = {
         "k": 0.1,
         "c": 0.01,
         "alpha": 0.5,
         "beta": 0.1,
         "pi": np.pi,
+        "feedback_strength": 0.5,
+        "feedback_offset": 0.1,
     }
     initial_conditions = {
         "x": 0,    # initial position
@@ -47,15 +49,10 @@ like this:
         "T": 0,    # initial temperature
         "i": 0,    # initial current
     }
-    parameters = {
-        "feedback_strength": 0.5,
-        "feedback_offset": 0.1,
-    }
 
     sys = qb.create_ODE_system(
         cantilever,
         parameters=parameters,
-        constants=constants,
         states=initial_conditions,
         name="MEMSCantilever",
     )
@@ -102,8 +99,7 @@ an example of how to do this:
 
     sys = qb.create_ODE_system(
         driven,
-        constants={"k": 1.0},
-        parameters={"amplitude": 1.0},
+        parameters={"k": 1.0, "amplitude": 1.0},
         states={"x": 0.0},
         drivers=["drive_signal"],
         name="DrivenSystem",

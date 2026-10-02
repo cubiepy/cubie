@@ -65,7 +65,7 @@ from tests._utils import (
     run_device_loop,
 )
 from tests.system_fixtures import (
-    build_colliding_constants_system,
+    build_colliding_parameters_system,
     build_coupled_oscillator_system,
     build_diagonally_dominant_system,
     build_hodgkin_huxley_system,
@@ -87,7 +87,7 @@ from tests.system_fixtures import (
     build_ring_modulator_index2_system,
     build_ring_modulator_index2_scaled_system,
     build_scaled_cs_system,
-    build_amp_constant_system,
+    build_amp_system,
     build_toggle_system,
     build_diode_line_system,
     build_transistor_amplifier_system,
@@ -320,8 +320,8 @@ def system(request, solver_settings_override, precision):
         return build_medium_nonlinear_system(precision)
     if model_type == "constant_deriv":
         return build_three_state_constant_deriv_system(precision)
-    if model_type == "colliding_constants":
-        return build_colliding_constants_system(precision)
+    if model_type == "colliding_parameters":
+        return build_colliding_parameters_system(precision)
     if model_type == "diagonally_dominant":
         return build_diagonally_dominant_system(precision)
     if model_type == "hodgkin_huxley":
@@ -352,8 +352,8 @@ def system(request, solver_settings_override, precision):
         return build_diode_line_system(precision)
     if model_type == "transistor_amplifier":
         return build_transistor_amplifier_system(precision)
-    if model_type == "amp_constant":
-        return build_amp_constant_system(precision)
+    if model_type == "amp":
+        return build_amp_system(precision)
     if model_type == "toggle":
         return build_toggle_system(precision)
     if not isinstance(model_type, str):
@@ -365,22 +365,16 @@ def system(request, solver_settings_override, precision):
 
 @pytest.fixture(scope="function")
 def system_restored(system):
-    """Yield the chain system; restore its specialisation on exit.
+    """Yield the chain system; restore its values and swept names on exit.
 
     For tests that mutate a shared session system. Symbolic only.
     """
-    checkpoint = system._parsed_system
-    constants = dict(system.compile_settings.constant_values)
+    swept = system.swept_parameters
     states = dict(system.compile_settings.initial_state_values)
     parameters = dict(system.compile_settings.parameter_values)
-    config_hash = system.config_hash
     yield system
-    if system.config_hash != config_hash:
-        system._specialise(constants, checkpoint)
-    system.parameters.update_from_dict(parameters, silent=True)
-    system.initial_values.update_from_dict(states, silent=True)
-    system.indices.parameters.update_values(parameters)
-    system.indices.states.update_values(states)
+    system.bind(swept=swept, values=parameters)
+    system.set_initial_values(states)
 
 
 @pytest.fixture(scope="function")
@@ -582,7 +576,7 @@ def chunked_solved_solver(
 
     n_runs = 5
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
 
     inits = np.ones((n_states, n_runs), dtype=precision)
     params = np.ones((n_params, n_runs), dtype=precision)
@@ -616,7 +610,7 @@ def unchunked_solved_solver(
     solver = unchunking_solver
     n_runs = 5
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
 
     inits = np.ones((n_states, n_runs), dtype=precision)
     params = np.ones((n_params, n_runs), dtype=precision)
@@ -1395,10 +1389,11 @@ def system_interface_mutable(system) -> SystemInterface:
     """Yield a system-bound interface, restoring values afterwards."""
     interface = SystemInterface(system)
     saved_parameters = dict(system.parameters.values_dict)
+    saved_swept = system.swept_parameters
     saved_states = dict(system.initial_values.values_dict)
     yield interface
-    system.parameters.update_from_dict(saved_parameters, silent=True)
-    system.initial_values.update_from_dict(saved_states, silent=True)
+    system.bind(swept=saved_swept, values=saved_parameters)
+    system.set_initial_values(saved_states)
 
 
 @pytest.fixture(scope="session")
@@ -1477,7 +1472,11 @@ def batch_input_arrays(
     input_handler,
     system,
 ) -> tuple[Array, Array]:
-    """Return the initial state and parameter arrays for the batch run."""
+    """Return the batch's initial states and every parameter's values.
+
+    The parameter array has a row per system parameter, so it solves
+    whatever the system's swept names.
+    """
     state_names = set(system.initial_values.names)
     param_names = set(system.parameters.names)
 
@@ -1488,11 +1487,19 @@ def batch_input_arrays(
         k: v for k, v in batch_request.items() if k in param_names
     }
 
-    return input_handler(
+    inits, params, swept, values = input_handler(
         states=states_dict,
         params=params_dict,
         kind=batch_settings["kind"],
     )
+    stored = system.parameters.values_dict
+    rows = [
+        params[swept.index(name)]
+        if name in swept
+        else np.full(params.shape[1], values.get(name, stored[name]))
+        for name in system.parameters.names
+    ]
+    return inits, np.asarray(rows, dtype=params.dtype)
 
 
 @attrs.define
@@ -1603,27 +1610,6 @@ def basic_model_custom(cellml_fixtures_dir):
         str(cellml_fixtures_dir / "basic_ode.cellml"),
         name="custom_model",
         precision=np.float64,
-        fix_singularities=False,
-    )
-
-
-@pytest.fixture(scope="session")
-def basic_model_param_main_a(cellml_fixtures_dir):
-    """basic_ode with its numeric constant promoted to a parameter."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
-        parameters=["main_a"],
-        fix_singularities=False,
-    )
-
-
-@pytest.fixture(scope="session")
-def basic_model_parameters_dict(cellml_fixtures_dir):
-    """basic_ode with a parameters dict naming one known and one new
-    symbol."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
-        parameters={"main_a": 1.0, "user_param": 1.5},
         fix_singularities=False,
     )
 

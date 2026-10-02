@@ -1108,14 +1108,12 @@ def test_system_ir_reflects_index_layout():
     index_map = IndexedBases.from_user_inputs(
         states={"x": 1.0},
         parameters={"k": 2.0},
-        constants={"c": 3.0},
         observables=[],
         drivers=[],
     )
     remapped = IndexedBases.from_user_inputs(
         states={"x": 1.0},
         parameters={"k": 2.0, "c": 3.0},
-        constants={},
         observables=[],
         drivers=[],
     )

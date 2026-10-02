@@ -268,7 +268,7 @@ class InputArrays(BaseArrayManager):
             slot = self.device.get_managed_array(name)
             expected = tuple(getattr(self._sizes, name))
             shape = tuple(arr.shape)
-            if shape != expected:
+            if tuple(max(1, size) for size in shape) != expected:
                 raise ValueError(
                     f"Device input '{name}' has shape {shape}; "
                     f"expected {expected}."
@@ -317,6 +317,15 @@ class InputArrays(BaseArrayManager):
         if self._needs_reallocation:
             self.allocate()
         return True
+
+    def _request_shape(self, label: str) -> Optional[tuple]:
+        """Shape to request for ``label``; run inputs keep their run count."""
+        if label == "driver_coefficients":
+            return super()._request_shape(label)
+        host_array = self.host.get_managed_array(label).array
+        if host_array is None:
+            return None
+        return tuple(max(1, size) for size in host_array.shape)
 
     def _matches_slot(self, name: str, array: NDArray) -> bool:
         """Return whether ``array`` is the attached, dtype-current slot."""

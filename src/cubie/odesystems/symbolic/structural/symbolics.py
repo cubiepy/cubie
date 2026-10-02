@@ -190,7 +190,7 @@ def total_derivative(
         if known is not None:
             terms.append(ir.mul(ir.diff(expr, atom), known))
         # Symbols that are neither unknowns nor known time-dependent
-        # quantities are constants/parameters: derivative zero.
+        # quantities are parameters: derivative zero.
     return ir.add(*terms)
 
 

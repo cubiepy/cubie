@@ -1,4 +1,4 @@
-"""Constants-symbolic checkpoint and the constant-specialisation pass."""
+"""Parameter-symbolic checkpoint and its specialisation pass."""
 
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
@@ -11,35 +11,34 @@ from cubie.odesystems.symbolic.parsing.normalise import (
     NormalisedSystem,
     normalise_input,
 )
+from cubie.odesystems.symbolic.sym_utils import RESERVED_CODEGEN_PREFIX
 
 
 def _literal_rules(
-    constant_values: Dict[str, float],
+    fixed_values: Dict[str, float],
 ) -> Dict[ir.Expr, ir.Expr]:
-    """Return the IR substitution map for ``constant_values``."""
+    """Return the IR substitution map for ``fixed_values``."""
 
     return {
         ir.sym(str(name)): ir.num(float(value))
-        for name, value in constant_values.items()
+        for name, value in fixed_values.items()
     }
 
 
 @attrs.define
 class ParsedSystem:
-    """Constants-symbolic checkpoint of a parsed system.
+    """Parameter-symbolic checkpoint of a parsed system.
 
     Parameters
     ----------
     normalised
-        The :class:`~.normalise.NormalisedSystem`, constants symbolic.
+        The :class:`~.normalise.NormalisedSystem`, parameters symbolic.
     states
         Declared plus inferred states mapped to initial values.
     observables
         Declared observable names.
     parameters
         Parameter names mapped to default values.
-    constants
-        Constant names mapped to their declared default values.
     driver_names, driver_dict
         Driver labels and the optional driver settings dictionary.
     known_symbol_map
@@ -49,8 +48,7 @@ class ParsedSystem:
     state_priority, irreducible, simplify_options
         Options forwarded to
         :func:`~..structural.simplify.structural_simplify`.
-    state_units, parameter_units, constant_units, observable_units,
-    driver_units
+    state_units, parameter_units, observable_units, driver_units
         Unit annotations forwarded to the assembler.
     """
 
@@ -58,7 +56,6 @@ class ParsedSystem:
     states: Dict[str, float]
     observables: List[str]
     parameters: Dict[str, float]
-    constants: Dict[str, float]
     driver_names: List[str]
     driver_dict: Optional[Dict[str, Any]]
     known_symbol_map: Dict[str, Any]
@@ -69,9 +66,16 @@ class ParsedSystem:
     simplify_options: Optional[Dict[str, Any]] = None
     state_units: Any = None
     parameter_units: Any = None
-    constant_units: Any = None
     observable_units: Any = None
     driver_units: Any = None
+
+    def __attrs_post_init__(self):
+        for name in self.parameters:
+            if str(name).startswith(RESERVED_CODEGEN_PREFIX):
+                raise ValueError(
+                    f"Name '{name}' is reserved: user symbols cannot "
+                    f"start with '{RESERVED_CODEGEN_PREFIX}'."
+                )
 
     @classmethod
     def from_parsed_equations(
@@ -101,10 +105,6 @@ class ParsedSystem:
             str(name): float(value)
             for name, value in index_map.parameter_values.items()
         }
-        constants = {
-            str(name): float(value)
-            for name, value in index_map.constant_values.items()
-        }
         observables = list(index_map.observable_names)
         driver_defaults = {
             str(name): value
@@ -113,9 +113,7 @@ class ParsedSystem:
         driver_names = list(driver_defaults)
         known_symbol_map = {
             name: sp.Symbol(name, real=True)
-            for name in (
-                list(parameters) + list(constants) + driver_names
-            )
+            for name in list(parameters) + driver_names
         }
         unknown_names = set(states) | set(observables)
         normalised = normalise_input(
@@ -133,7 +131,6 @@ class ParsedSystem:
             states=states,
             observables=observables,
             parameters=parameters,
-            constants=constants,
             driver_names=driver_names,
             driver_dict=driver_defaults or None,
             known_symbol_map=known_symbol_map,
@@ -141,65 +138,25 @@ class ParsedSystem:
             user_function_derivatives=user_function_derivatives,
             state_units=index_map.states.units or None,
             parameter_units=index_map.parameters.units or None,
-            constant_units=index_map.constants.units or None,
             observable_units=index_map.observables.units or None,
             driver_units=index_map.drivers.units or None,
         )
 
-    def constant_to_parameter(
-        self, name: str, default: float
-    ) -> "ParsedSystem":
-        """Return a checkpoint with constant ``name`` re-categorised.
-
-        Parameters
-        ----------
-        name
-            Constant to convert into a swept parameter.
-        default
-            Default value recorded for the new parameter.
-        """
-
-        constants = dict(self.constants)
-        constants.pop(name, None)
-        parameters = dict(self.parameters)
-        parameters[name] = float(default)
-        return attrs.evolve(
-            self, constants=constants, parameters=parameters
-        )
-
-    def parameter_to_constant(
-        self, name: str, value: float
-    ) -> "ParsedSystem":
-        """Return a checkpoint with parameter ``name`` re-categorised.
-
-        Parameters
-        ----------
-        name
-            Parameter to convert into a compile-time constant.
-        value
-            Declared value for the new constant.
-        """
-
-        parameters = dict(self.parameters)
-        parameters.pop(name, None)
-        constants = dict(self.constants)
-        constants[name] = float(value)
-        return attrs.evolve(
-            self, constants=constants, parameters=parameters
-        )
-
     def specialise(
         self,
-        constant_values: Optional[Dict[str, float]] = None,
+        swept: Iterable[str] = (),
+        values: Optional[Dict[str, float]] = None,
         state_values: Optional[Dict[str, float]] = None,
     ):
-        """Assemble the system for one set of constant values.
+        """Assemble the system with ``swept`` swept.
 
         Parameters
         ----------
-        constant_values
-            Constant values to fold as literals; defaults to the
-            declared defaults.
+        swept
+            Swept parameters, in order; the rest are
+            substituted as numbers.
+        values
+            Parameter values; defaults to the parsed values.
         state_values
             Overrides for declared-state initial values.
 
@@ -207,19 +164,18 @@ class ParsedSystem:
         -------
         tuple
             ``(index_map, all_symbols, funcs, parsed_equations,
-            fn_hash)``; the derived mass matrix rides on
+            fn_hash)``; ``index_map.parameters`` holds the swept
+            parameters and the derived mass matrix rides on
             ``parsed_equations.mass_matrix``.
         """
 
-        values = dict(self.constants)
-        if constant_values is not None:
-            unknown = set(constant_values) - set(values)
-            if unknown:
-                raise KeyError(
-                    f"Unknown constants in specialisation: "
-                    f"{sorted(unknown)}"
-                )
-            values.update(constant_values)
+        swept = tuple(swept)
+        values = {**self.parameters, **(values or {})}
+        unknown = (set(swept) | set(values)) - set(self.parameters)
+        if unknown:
+            raise KeyError(
+                f"{sorted(unknown)} are not parameters of this system."
+            )
 
         states = dict(self.states)
         if state_values is not None:
@@ -231,7 +187,13 @@ class ParsedSystem:
                 }
             )
 
-        rules = _literal_rules(values)
+        rules = _literal_rules(
+            {
+                name: value
+                for name, value in values.items()
+                if name not in swept
+            }
+        )
         source = self.normalised
         folded_equations = [
             eq.xreplace(rules) for eq in source.equations
@@ -248,12 +210,18 @@ class ParsedSystem:
             derivative_names=source.derivative_names,
         )
 
-        return assemble_simplified(
+        swept_values = {name: values[name] for name in swept}
+        (
+            index_map,
+            all_symbols,
+            funcs,
+            parsed_equations,
+            fn_hash,
+        ) = assemble_simplified(
             folded,
             states,
             list(self.observables),
-            dict(self.parameters),
-            values,
+            swept_values,
             list(self.driver_names),
             self.driver_dict,
             dict(self.known_symbol_map),
@@ -263,8 +231,10 @@ class ParsedSystem:
             irreducible=self.irreducible,
             state_units=self.state_units,
             parameter_units=self.parameter_units,
-            constant_units=self.constant_units,
             observable_units=self.observable_units,
             driver_units=self.driver_units,
             simplify_options=self.simplify_options,
         )
+        # Inlined non-device callables keep their entries.
+        funcs = {**(self.user_functions or {}), **(funcs or {})}
+        return index_map, all_symbols, funcs, parsed_equations, fn_hash

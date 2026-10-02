@@ -25,8 +25,8 @@ from cubie.integrators.algorithms.generic_firk_tableaus import (
 )
 
 from tests.system_fixtures import (
-    TORN_DRIVER_CONSTANTS,
-    TORN_TIME_CONSTANTS,
+    TORN_DRIVER_PARAMETERS,
+    TORN_TIME_PARAMETERS,
 )
 
 # gamma0 and DD from Hairer & Wanner's radau5.f.
@@ -343,7 +343,7 @@ TORN_DRIVER_SETTINGS = {
 def _oracle_jacobian(state, driver):
     """Dense Jacobian of the torn driver oracle at ``state``."""
     x0, x1 = float(state[0]), float(state[1])
-    k = TORN_DRIVER_CONSTANTS
+    k = TORN_DRIVER_PARAMETERS
     return np.array(
         [
             [k["a"] * x1 + driver, k["a"] * x0 + k["b"]],
@@ -629,7 +629,7 @@ def _step_oracle_f(state, time):
     algebraic residual (constrained to zero by the mass structure).
     """
     x0, x1 = float(state[0]), float(state[1])
-    k = TORN_TIME_CONSTANTS
+    k = TORN_TIME_PARAMETERS
     return np.array(
         [
             k["a"] * x0 * x1 + k["b"] * x1 + k["e"] * time * x0,
@@ -641,7 +641,7 @@ def _step_oracle_f(state, time):
 def _step_oracle_jacobian(state, time):
     """Dense Jacobian of the torn time-dependent oracle."""
     x0, x1 = float(state[0]), float(state[1])
-    k = TORN_TIME_CONSTANTS
+    k = TORN_TIME_PARAMETERS
     return np.array(
         [
             [k["a"] * x1 + k["e"] * time, k["a"] * x0 + k["b"]],
@@ -652,7 +652,7 @@ def _step_oracle_jacobian(state, time):
 
 def _torn_time_consistent_x1(x0):
     """Solve the torn_time residual for x1 at the given x0."""
-    k = TORN_TIME_CONSTANTS
+    k = TORN_TIME_PARAMETERS
     z = 0.0
     for _ in range(100):
         residual = k["c"] * x0 * x0 + k["d"] * z + z**5

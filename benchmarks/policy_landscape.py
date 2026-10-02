@@ -83,8 +83,7 @@ def build_lorenz():
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"rho": 21.0, "sigma": 10.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=PRECISION,
     )
@@ -121,32 +120,31 @@ FABBRI_PARAMETERS = (
     "Rate_modulation_experiments_ACh",
     "Rate_modulation_experiments_Iso_cas",
 )
+# Autonomic modulation on.
+FABBRI_FIXED = {"Rate_modulation_experiments_ANS": 1.0}
 
 
 def build_fabbri():
-    """The Fabbri-Linder sinoatrial model with autonomic modulation on."""
-    system = cubie.load_cellml_model(
+    """The Fabbri-Linder sinoatrial model."""
+    return cubie.load_cellml_model(
         str(FABBRI_CELLML),
         precision=PRECISION,
-        parameters=list(FABBRI_PARAMETERS),
         voltage_variable="Membrane$V_ode",
     )
-    system.set_constants({"Rate_modulation_experiments_ANS": 1.0})
-    return system
 
 
 def build_chain(n, consts_per_eq, n_params=2):
     """Nonlinear nearest-neighbour ring chain of the placement bank."""
     rng = np.random.default_rng(1234)
     eqs = []
-    constants = {}
+    parameters = {f"p{j}": 1.0 for j in range(n_params)}
     for i in range(n):
         im1 = (i - 1) % n
         ip1 = (i + 1) % n
         terms = [f"0.2*x{im1} + 0.3*x{ip1}"]
         for c in range(consts_per_eq):
             cname = f"k{i}_{c}"
-            constants[cname] = float(rng.uniform(0.5, 5.0))
+            parameters[cname] = float(rng.uniform(0.5, 5.0))
             if c == 0:
                 terms.append(f"-{cname}*x{i}")
             else:
@@ -157,8 +155,7 @@ def build_chain(n, consts_per_eq, n_params=2):
     return cubie.create_ODE_system(
         dxdt=eqs,
         states={f"x{i}": 0.5 for i in range(n)},
-        parameters={f"p{j}": 1.0 for j in range(n_params)},
-        constants=constants,
+        parameters=parameters,
         precision=PRECISION,
         name=f"chain_{n}s_{consts_per_eq}c",
     )
@@ -185,6 +182,7 @@ def grid_fabbri(solver, n_runs):
         parameters={
             FABBRI_PARAMETERS[0]: ach.ravel()[index],
             FABBRI_PARAMETERS[1]: iso.ravel()[index],
+            **FABBRI_FIXED,
         }
     )
 
@@ -204,41 +202,50 @@ FABBRI_TOLS = {"atol": 1e-6, "rtol": 1e-4, "dt_min": 1e-12, "dt_max": 1e-2}
 SYSTEMS = {
     "lorenz": dict(
         build=build_lorenz, grid=grid_param("rho", 0.0, 21.0),
-        n_states=3, kwargs=TIGHT, erk_duration=512.0,
+        swept=("rho",), n_states=3, kwargs=TIGHT, erk_duration=512.0,
     ),
     "lorenz96_10": dict(
         build=lambda: build_lorenz96(10), grid=grid_param("F", 0.0, 16.0),
-        n_states=10, kwargs=TIGHT, erk_duration=32.0,
+        swept=("F",), n_states=10, kwargs=TIGHT, erk_duration=32.0,
     ),
     "lorenz96_20": dict(
         build=lambda: build_lorenz96(20), grid=grid_param("F", 0.0, 16.0),
-        n_states=20, kwargs=TIGHT, erk_duration=32.0,
+        swept=("F",), n_states=20, kwargs=TIGHT, erk_duration=32.0,
     ),
     "lorenz96_40": dict(
         build=lambda: build_lorenz96(40), grid=grid_param("F", 0.0, 16.0),
-        n_states=40, kwargs=TIGHT, erk_duration=32.0,
+        swept=("F",), n_states=40, kwargs=TIGHT, erk_duration=32.0,
     ),
     "chain20": dict(
         build=lambda: build_chain(20, 3), grid=grid_chain,
-        n_states=20, kwargs=TIGHT, erk_duration=51.2,
+        swept=("p0", "p1"), n_states=20, kwargs=TIGHT, erk_duration=51.2,
     ),
     "chain32": dict(
         build=lambda: build_chain(32, 3), grid=grid_chain,
-        n_states=32, kwargs=TIGHT, erk_duration=25.6,
+        swept=("p0", "p1"), n_states=32, kwargs=TIGHT, erk_duration=25.6,
     ),
     "chain32_c8": dict(
         build=lambda: build_chain(32, 8), grid=grid_chain,
-        n_states=32, kwargs=TIGHT, erk_duration=51.2,
+        swept=("p0", "p1"), n_states=32, kwargs=TIGHT, erk_duration=51.2,
     ),
     "chain64": dict(
         build=lambda: build_chain(64, 3), grid=grid_chain,
-        n_states=64, kwargs=TIGHT, erk_duration=51.2,
+        swept=("p0", "p1"), n_states=64, kwargs=TIGHT, erk_duration=51.2,
     ),
     "fabbri": dict(
-        build=build_fabbri, grid=grid_fabbri,
-        n_states=35, kwargs=FABBRI_TOLS, erk_duration=1.0,
+        build=build_fabbri, grid=grid_fabbri, swept=FABBRI_PARAMETERS,
+        fixed=FABBRI_FIXED, n_states=35, kwargs=FABBRI_TOLS,
+        erk_duration=1.0,
     ),
 }
+
+
+def bind_arm(solver, system_name):
+    """Set the grid's fixed values and swept rows on an arm's solver."""
+    entry = SYSTEMS[system_name]
+    solver.update(entry.get("fixed", {}))
+    solver.set_swept_parameters(entry["swept"])
+
 
 # --- algorithms --------------------------------------------------------
 
@@ -531,6 +538,7 @@ def _compile_worker(payload):
         solver = build_solver(
             system, system_name, algo_name, spec, duration
         )
+        bind_arm(solver, system_name)
         solver.compile()
         return (
             system_name, algo_name, label, solver.kernel.config_hash,
@@ -763,6 +771,7 @@ def _build_arm(arm, system, system_name, algo_name, duration):
         deepcopy(system), system_name, algo_name, arm.spec, duration
     )
     arm.solver = solver
+    bind_arm(solver, system_name)
     solver.compile()
     solver.kernel.launch_geometry(REFERENCE_BLOCKSIZE)
     return solver

@@ -1,4 +1,4 @@
-"""Constant-value specialisation of generated source."""
+"""Parameter-binding specialisation of generated source."""
 
 import warnings
 
@@ -8,7 +8,7 @@ import pytest
 from cubie import create_ODE_system
 from cubie.odesystems.symbolic.engine import expr as ir
 
-AMP_SETTINGS = {"system_type": "amp_constant"}
+AMP_SETTINGS = {"system_type": "amp"}
 
 TOGGLE_SETTINGS = {"system_type": "toggle"}
 
@@ -55,15 +55,21 @@ def _dxdt_source(system):
     return system.gen_file.file_path.read_text(encoding="utf-8")
 
 
+def _sweep_k(system):
+    """Sweep ``k`` and fix every other parameter at its value."""
+    system.set_swept_parameters(["k"])
+
+
 @pytest.mark.parametrize(
     "solver_settings_override", [AMP_SETTINGS], indirect=True
 )
 class TestLiteralFolding:
-    """Constants appear in source as literals only."""
+    """Fixed parameters appear in source as literals only."""
 
-    def test_values_folded_and_never_named(self, system):
-        # The constant folds into the source as a literal.
-        source = _dxdt_source(system)
+    def test_values_folded_and_never_named(self, system_restored):
+        # The fixed parameter folds into the source as a literal.
+        _sweep_k(system_restored)
+        source = _dxdt_source(system_restored)
         assert (
             "out[0] = -(precision(3.0)*parameters[0]*state[0])"
             in source
@@ -73,7 +79,7 @@ class TestLiteralFolding:
         system = create_ODE_system(
             ["dx = -x + c0 * y", "dy = x - y"],
             states={"x": 1.0, "y": 0.0},
-            constants={"c0": 0.0},
+            parameters={"c0": 0.0},
             precision=precision,
             name="fold_zero_prunes",
         )
@@ -81,26 +87,26 @@ class TestLiteralFolding:
         # The coupling term is gone entirely.
         assert "out[0] = -state[0]" in source
 
-    def test_callable_input_folds_constants(self, precision):
+    def test_callable_input_folds_parameters(self, precision):
         def rhs(t, y, c):
             return [-c.rate * y[0]]
 
         system = create_ODE_system(
             rhs,
             states={"x": 1.0},
-            constants={"rate": 0.25},
+            parameters={"rate": 0.25},
             precision=precision,
             name="fold_callable",
         )
         source = _dxdt_source(system)
         assert "out[0] = -(precision(0.25)*state[0])" in source
 
-    def test_constant_hash_varies_with_value(self, system_restored):
+    def test_fixed_value_hash_varies_with_value(self, system_restored):
         system = system_restored
         default_hash = system.fn_hash
-        system.set_constants({"amp": 4.0})
+        system.update({"amp": 4.0})
         assert system.fn_hash != default_hash
-        system.set_constants({"amp": 2.0})
+        system.update({"amp": 2.0})
         assert system.fn_hash == default_hash
 
 
@@ -108,13 +114,14 @@ class TestLiteralFolding:
     "solver_settings_override", [TOGGLE_SETTINGS], indirect=True
 )
 class TestBranchPruning:
-    """Constant-condition Piecewise branches disappear from source."""
+    """Fixed-condition Piecewise branches disappear from source."""
 
     def test_toggle_selects_single_branch(self, system_restored):
         # Only the surviving branch reaches codegen.
+        _sweep_k(system_restored)
         on = _dxdt_source(system_restored)
         assert "out[0] = -(parameters[0]*state[0])" in on
-        system_restored.set_constants({"tog": 0.0})
+        system_restored.update({"tog": 0.0})
         off = _dxdt_source(system_restored)
         assert (
             "out[0] = -(precision(2)*parameters[0]*state[0])" in off
@@ -125,47 +132,47 @@ class TestBranchPruning:
     "solver_settings_override", [AMP_SETTINGS], indirect=True
 )
 class TestRespecialisation:
-    """set_constants re-runs specialisation from the checkpoint."""
+    """A binding or fixed-value change re-runs specialisation."""
 
     def test_value_change_regenerates_source(self, system_restored):
         system = system_restored
+        _sweep_k(system)
         first_hash = system.fn_hash
         first = _dxdt_source(system)
         assert "precision(3.0)" in first
-        system.set_constants({"amp": 4.0})
+        system.update({"amp": 4.0})
         assert system.fn_hash != first_hash
         second = _dxdt_source(system)
         assert "precision(5.0)" in second
-        assert float(system.constants["amp"]) == 4.0
+        assert float(system.parameters["amp"]) == 4.0
 
     def test_unchanged_value_keeps_hash(self, system_restored):
         system = system_restored
         first_hash = system.fn_hash
-        recognised = system.set_constants({"amp": 2.0})
+        recognised = system.update({"amp": 2.0})
         assert recognised == {"amp"}
         assert system.fn_hash == first_hash
 
-    def test_unknown_constant_raises(self, system):
+    def test_unknown_parameter_raises(self, system):
         with pytest.raises(KeyError, match="Unrecognized"):
-            system.set_constants({"not_a_constant": 1.0})
+            system.update({"not_a_parameter": 1.0})
 
-    def test_make_parameter_restores_symbol(self, system_restored):
+    def test_sweeping_restores_symbol(self, system_restored):
         system = system_restored
-        system.make_parameter("amp")
-        assert "amp" in system.parameters.values_dict
+        system.bind(swept=["amp", "k"])
         source = _dxdt_source(system)
-        # The freed symbol reads from the parameters array again.
-        assert list(system.parameters.names) == ["amp", "k"]
+        # The swept symbol reads from the parameters array.
+        assert system.swept_parameters == ("amp", "k")
         assert (
             "out[0] = -(parameters[1]*state[0]"
             "*(parameters[0] + precision(1.0)))"
         ) in source
 
-    def test_make_constant_folds_value(self, system_restored):
+    def test_fixing_folds_value(self, system_restored):
         system = system_restored
-        system.make_parameter("amp")
-        system.make_constant("amp")
-        assert "amp" in system.constants.values_dict
+        system.bind(swept=["amp", "k"])
+        _sweep_k(system)
+        assert system.fixed_parameter_values == {"amp": 2.0}
         source = _dxdt_source(system)
         assert (
             "out[0] = -(precision(3.0)*parameters[0]*state[0])"
@@ -177,14 +184,14 @@ class TestRespecialisation:
     "solver_settings_override", [SCALED_CS_SETTINGS], indirect=True
 )
 class TestStructuralRespecialisation:
-    """Constant changes re-run structural simplification."""
+    """Fixed-value changes re-run structural simplification."""
 
     def test_zero_coefficient_yields_singular_mass(self, system):
         assert system.mass is not None
         diag = np.diag(np.asarray(system.mass))
         assert 0.0 in diag
 
-    def test_constant_change_restructures_system(
+    def test_fixed_value_change_restructures_system(
         self, system_restored
     ):
         system = system_restored
@@ -192,7 +199,7 @@ class TestStructuralRespecialisation:
         assert system.mass is not None
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            system.set_constants({"Cs": 2e-2})
+            system.update({"Cs": 2e-2})
         assert system.mass is None
         new_states = list(system.initial_values.values_dict)
         assert set(new_states) == {"U3", "I1", "I3"}
@@ -203,7 +210,7 @@ class TestStructuralRespecialisation:
         # And back: the row turns algebraic again.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            system.set_constants({"Cs": 0.0})
+            system.update({"Cs": 0.0})
         assert system.mass is not None
 
     def test_state_values_survive_respecialisation(
@@ -212,9 +219,9 @@ class TestStructuralRespecialisation:
         system = system_restored
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            system.set_constants({"Cs": 2e-2})
+            system.update({"Cs": 2e-2})
             system.set_initial_value("U3", 0.75)
-            system.set_constants({"Cs": 4e-2})
+            system.update({"Cs": 4e-2})
         assert float(
             system.initial_values.values_dict["U3"]
         ) == pytest.approx(0.75)
@@ -228,7 +235,7 @@ class TestStructuralSortKey:
         system = create_ODE_system(
             "dx = -x + 3.57/(1.0 + 18003.4*ACh**(-1.6951))",
             states={"x": 1.0},
-            constants={"ACh": 0.0},
+            parameters={"ACh": 0.0},
             precision=np.float64,
             name="sort_key_zero_pow",
         )
@@ -291,7 +298,7 @@ class TestEngineConditionFolding:
 
 
 class TestLiveSolverRespecialisation:
-    """A live Solver follows constant updates through Solver.update."""
+    """A live Solver follows parameter updates through Solver.update."""
 
     @pytest.mark.parametrize(
         "solver_settings_override", [AMP_LIVE_SETTINGS], indirect=True
@@ -323,7 +330,7 @@ class TestLiveSolverRespecialisation:
     ):
         # A directly mutated system resyncs at the next solve.
         solver_mutable.solve({"x": [1.0]}, {"k": [1.0]}, duration=1.0)
-        system_restored.set_constants({"amp": 3.0})
+        system_restored.update({"amp": 3.0})
         resynced = solver_mutable.solve(
             {"x": [1.0]}, {"k": [1.0]}, duration=1.0
         ).time_domain_array.copy()

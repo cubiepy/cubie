@@ -9,12 +9,11 @@ from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
 @pytest.fixture
 def tiny_system():
-    """Return a minimal symbolic system with one constant (no compile)."""
+    """Return a minimal symbolic system with two parameters (no compile)."""
     return create_ODE_system(
         dxdt=["dx = -k * x + c0"],
         states={"x": 1.0},
-        parameters={"k": 0.5},
-        constants={"c0": 1.0},
+        parameters={"k": 0.5, "c0": 1.0},
         observables=[],
         precision=np.float32,
         strict=True,
@@ -31,15 +30,15 @@ def test_copy_is_an_independent_unbuilt_system(tiny_system):
     assert twin.cache_valid is False
     assert tiny_system.cache_valid is True
     twin.update(c0=3.0)
-    assert tiny_system.constants.values_dict["c0"] == 1.0
-    assert twin.constants.values_dict["c0"] == 3.0
+    assert tiny_system.parameters.values_dict["c0"] == 1.0
+    assert twin.parameters.values_dict["c0"] == 3.0
 
 
 class TestUpdate:
     """Cover the BaseODE.update dispatch branches."""
 
     def test_update_none_dict_with_kwargs(self, tiny_system):
-        """A None dict plus kwargs updates recognised constants."""
+        """A None dict plus kwargs updates recognised parameters."""
         recognised = tiny_system.update(None, c0=2.0)
         assert recognised == {"c0"}
 
@@ -52,38 +51,80 @@ class TestUpdate:
         with pytest.raises(KeyError, match="Unrecognized parameters"):
             tiny_system.update({"not_a_key": 1.0})
 
+    def test_update_does_not_take_swept_names(self, tiny_system):
+        """Swept names are set through set_swept_parameters."""
+        with pytest.raises(KeyError, match="swept_parameters"):
+            tiny_system.update(swept_parameters=["k"])
 
-class TestSetConstants:
-    """Cover the BaseODE.set_constants branches directly.
 
-    ``SymbolicODE`` overrides ``set_constants``, so the base-class
-    branches are exercised against ``BaseODE`` directly.
-    """
+class TestSetParameterValues:
+    """Cover BaseODE.set_parameter_values."""
 
-    def test_none_dict_returns_empty_set(self, tiny_system):
-        """A None dict with no kwargs returns an empty set."""
-        assert BaseODE.set_constants(tiny_system, None) == set()
-
-    def test_kwargs_only_updates_constant(self, tiny_system):
-        """Base-class set_constants applies kwargs-only updates."""
-        recognised = BaseODE.set_constants(tiny_system, None, c0=7.0)
+    def test_set_value_is_compiled_in(self, tiny_system):
+        """A parameter's new value is compiled in."""
+        recognised = tiny_system.set_parameter_values({"c0": 7.0})
         assert recognised == {"c0"}
-        assert tiny_system.constants.values_dict["c0"] == 7.0
+        assert tiny_system.parameters.values_dict["c0"] == 7.0
+        assert tiny_system.fixed_parameter_values["c0"] == 7.0
 
-    def test_mixed_recognised_and_unknown_raises(self, tiny_system):
-        """A recognised key beside an unknown key raises KeyError."""
-        with pytest.raises(KeyError, match="Unrecognized parameters"):
-            BaseODE.set_constants(
-                tiny_system, {"c0": 1.0, "not_a_key": 1.0}
-            )
+    def test_setting_a_swept_value_fixes_it(self, tiny_system):
+        """A value set for a swept parameter compiles it in."""
+        tiny_system.set_swept_parameters(["k", "c0"])
+        tiny_system.set_parameter_values({"k": 3.0})
+        assert tiny_system.swept_parameters == ("c0",)
+        assert tiny_system.fixed_parameter_values == {"k": 3.0}
+
+    def test_unknown_name_raises(self, tiny_system):
+        """A name outside the system's parameters raises KeyError."""
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_parameter_values({"not_a_key": 1.0})
 
 
-class TestNumConstants:
-    """Cover the num_constants property."""
+class TestSetSweptParameters:
+    """Cover BaseODE.set_swept_parameters."""
 
-    def test_num_constants(self, tiny_system):
-        """num_constants reports the declared constant count."""
-        assert tiny_system.num_constants == 1
+    def test_sweeps_names_in_order_and_fixes_the_rest(self, tiny_system):
+        """The names are swept in the given order; the rest fix."""
+        tiny_system.update(c0=2.0)
+        changed = tiny_system.set_swept_parameters(["k", "c0"])
+        assert changed is True
+        assert tiny_system.swept_parameters == ("k", "c0")
+        assert tiny_system.indices.parameter_names == ["k", "c0"]
+        tiny_system.set_swept_parameters(["k"])
+        assert tiny_system.fixed_parameter_values == {"c0": 2.0}
+
+    def test_same_names_report_no_change(self, tiny_system):
+        """Sweeping the swept names again changes nothing."""
+        tiny_system.set_swept_parameters(["c0"])
+        assert tiny_system.set_swept_parameters(["c0"]) is False
+
+    def test_unknown_name_raises(self, tiny_system):
+        """A name outside the system's parameters raises KeyError."""
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_swept_parameters(["not_a_key"])
+
+
+class TestBind:
+    """Cover BaseODE.bind."""
+
+    def test_sweeps_and_stores_values_together(self, tiny_system):
+        """Swept names and values apply together; values are stored."""
+        changed = tiny_system.bind(swept=["k"], values={"c0": 4.0})
+        assert changed is True
+        assert tiny_system.sizes.parameters == 1
+        assert tiny_system.swept_parameters == ("k",)
+        assert tiny_system.parameters.values_dict["c0"] == 4.0
+        assert tiny_system.fixed_parameter_values == {"c0": 4.0}
+
+    def test_same_state_reports_no_change(self, tiny_system):
+        """Binding the current names and values changes nothing."""
+        values = tiny_system.fixed_parameter_values
+        assert tiny_system.bind(swept=(), values=values) is False
+
+    def test_unknown_name_raises(self, tiny_system):
+        """A name outside the system's parameters raises KeyError."""
+        with pytest.raises(KeyError, match="nope"):
+            tiny_system.bind(swept=["nope"])
 
 
 class TestGetSolverHelper:
