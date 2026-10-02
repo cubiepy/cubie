@@ -648,17 +648,13 @@ class ComparisonRunner:
         """Runs that fit in one chunk at the staged bytes per run."""
         kernel = self._solver.kernel
         manager = kernel.memory_manager
+        arrays = (kernel.input_arrays, kernel.output_arrays)
         allocated = sum(
-            manager.get_registration(arrays).allocated_bytes
-            for arrays in (kernel.input_arrays, kernel.output_arrays)
+            manager.get_registration(instance).allocated_bytes
+            for instance in arrays
         )
-        available = manager.get_available_memory(
-            manager.get_stream_group(kernel)
-        )
-        free, _ = manager.get_memory_info()
-        # The solve's own buffers are reusable.
         budget = manager.allocatable_bytes(
-            available + allocated, free + allocated
+            manager.get_stream_group(kernel), arrays
         )
         bytes_per_run = (allocated + self.staged_bytes) / self.runs
         return int(budget // bytes_per_run)

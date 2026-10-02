@@ -2798,8 +2798,7 @@ def test_get_chunk_parameters_splits_at_allocatable_bytes(
     inst = memory_client
     mgr.register(inst, stream_group="test")
     mgr.allocation_granule_bytes = ALLOCATION_GRANULE_BYTES
-    free, _ = mgr.get_memory_info()
-    budget = mgr.allocatable_bytes(mgr.get_available_memory("test"), free)
+    budget = mgr.allocatable_bytes("test", [inst])
     under = (budget - 1) // 4
     over = budget // 4 + 1
 
