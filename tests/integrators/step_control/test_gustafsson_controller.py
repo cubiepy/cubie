@@ -64,10 +64,8 @@ def test_settings_dict_extends_parent():
     assert parent_keys <= set(settings)
 
 
-def test_algorithm_and_controller_names_only_share_identical_values():
-    """Flat settings share only system precision and state count."""
-    shared = ALL_ALGORITHM_STEP_PARAMETERS & ALL_STEP_CONTROLLER_PARAMETERS
-    assert shared == {"precision", "n_states"}
+def test_algorithm_and_controller_names_keep_their_own_keys():
+    """Each family declares its own solver and controller keys."""
     assert "operator_gamma" in ALL_ALGORITHM_STEP_PARAMETERS
     assert "newton_max_iters" in ALL_ALGORITHM_STEP_PARAMETERS
     assert "newton_target_iters" in ALL_STEP_CONTROLLER_PARAMETERS

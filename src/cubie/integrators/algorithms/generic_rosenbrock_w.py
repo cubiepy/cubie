@@ -52,7 +52,7 @@ from cubie._cudasim_extensions import cuda
 from cubie.backend.intrinsics import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
-from numpy import int32 as np_int32
+from numpy import array as np_array, int32 as np_int32
 
 from cubie._utils import device_function_field, PrecisionDType
 from cubie.integrators.algorithms.base_algorithm_step import (
@@ -391,10 +391,12 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         has_error = self.uses_error
         use_smoothed_error = self.smooth_error
         apply_mass = config.apply_mass_fn
+        has_algebraic_rows = not all(config.mass_flags)
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
         precision = config.precision
+        mass_diagonal = np_array(config.mass_flags, dtype=precision)
         a_coeffs = tableau.typed_columns(tableau.a, precision)
         C_coeffs = tableau.typed_columns(tableau.C, precision)
         gamma_stages = tableau.typed_gamma_stages(precision)
@@ -695,6 +697,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                             prior_idx = predecessor_idx * n + idx
                             prior_val = stage_store[prior_idx]
                             correction += c_coeff * prior_val
+                    if has_algebraic_rows:
+                        # The coupling carries M; zero-mass rows drop it.
+                        correction *= mass_diagonal[idx]
 
                     f_stage_val = stage_rhs[idx]
                     deriv_val = stage_gamma * time_derivative[idx]
