@@ -1,5 +1,8 @@
 """Unit tests for ButcherTableau row-matching properties."""
 
+from cubie.integrators.algorithms.base_algorithm_step import (
+    ButcherTableau,
+)
 from cubie.integrators.algorithms.generic_rosenbrockw_tableaus import (
     ROS3P_TABLEAU,
 )
@@ -71,10 +74,6 @@ def test_floating_point_tolerance():
 
 def test_repeated_stages_follow_shared_rows_and_nodes():
     """A stage sharing its predecessor's row and node repeats it."""
-    from cubie.integrators.algorithms.base_algorithm_step import (
-        ButcherTableau,
-    )
-
     tableau = ButcherTableau(
         a=((0.0, 0.0, 0.0), (0.5, 0.0, 0.0), (0.5, 0.0, 0.0)),
         b=(0.0, 0.5, 0.5),

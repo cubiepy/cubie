@@ -109,6 +109,9 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     stage_store_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
+    repeated_stage_rhs_location: str = field(
+        default="local", validator=validators.in_(["local", "shared"])
+    )
     base_state_placeholder_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -262,10 +265,10 @@ class GenericRosenbrockWStep(ODEImplicitStep):
 
         # Holds f for a stage whose successor repeats it.
         buffer_registry.register(
-            "stage_derivative",
+            "repeated_stage_rhs",
             self,
             0 if config.repeated_stage is None else n,
-            config.stage_rhs_location,
+            config.repeated_stage_rhs_location,
         )
 
         # Persists across steps; its lifetime bars aliasing stage_store.
@@ -418,9 +421,10 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         b_row = tableau.b_matches_a_row
         b_hat_row = tableau.b_hat_matches_a_row
         repeated_stage = config.repeated_stage
+        has_repeated_stage = repeated_stage is not None
         stage_one_repeats = repeated_stage == 1
         repeat_source = None
-        if repeated_stage is not None:
+        if has_repeated_stage:
             repeat_source = int32(repeated_stage - 1)
             repeated_stage = int32(repeated_stage)
         if b_row is not None:
@@ -439,7 +443,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         alloc_stage_store = getalloc("stage_store", self)
         alloc_cached_auxiliaries = getalloc("cached_auxiliaries", self)
         alloc_stage_increment = getalloc("stage_increment", self)
-        alloc_stage_derivative = getalloc("stage_derivative", self)
+        alloc_repeated_stage_rhs = getalloc("repeated_stage_rhs", self)
         alloc_base_state_placeholder = getalloc("base_state_placeholder", self)
         alloc_krylov_iters_out = getalloc("krylov_iters_out", self)
 
@@ -492,7 +496,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 shared, persistent_local
             )
             stage_increment = alloc_stage_increment(shared, persistent_local)
-            stage_derivative = alloc_stage_derivative(
+            repeated_stage_rhs = alloc_repeated_stage_rhs(
                 shared, persistent_local
             )
             base_state_placeholder = alloc_base_state_placeholder(
@@ -570,7 +574,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 # No accumulated contributions at stage 0.
                 f_value = stage_rhs[idx]
                 if stage_one_repeats:
-                    stage_derivative[idx] = f_value
+                    repeated_stage_rhs[idx] = f_value
                 rhs_value = (
                     f_value + gamma_stages[0] * time_derivative[idx]
                 ) * dt_scalar
@@ -649,7 +653,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     stage_increment[idx] = stage_store[stage_offset + idx]
 
                 # A repeated stage reuses its predecessor's f.
-                if repeated_stage != stage_idx:
+                reuses_rhs = False
+                if has_repeated_stage:
+                    if repeated_stage == stage_idx:
+                        reuses_rhs = True
+                if reuses_rhs:
+                    for idx in unroll_if(range(n), unroll_step_element):
+                        stage_rhs[idx] = repeated_stage_rhs[idx]
+                else:
                     if has_evaluate_driver_at_t:
                         drivers_fn(
                             stage_time,
@@ -718,10 +729,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                             correction += c_coeff * prior_val
 
                     f_stage_val = stage_rhs[idx]
-                    if repeated_stage == stage_idx:
-                        f_stage_val = stage_derivative[idx]
-                    if repeat_source == stage_idx:
-                        stage_derivative[idx] = f_stage_val
+                    if has_repeated_stage:
+                        if repeat_source == stage_idx:
+                            repeated_stage_rhs[idx] = f_stage_val
                     deriv_val = stage_gamma * time_derivative[idx]
                     rhs_value = f_stage_val + correction * inv_dt + deriv_val
                     stage_rhs[idx] = rhs_value * dt_scalar * gamma
