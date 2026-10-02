@@ -126,8 +126,9 @@ earlier stage's row). `predictor_fn` arrives through compile settings;
   otherwise it compiles out, and an unsupported request warns.
   `FIRKStep.family_defaults(tableau)` turns it on for Radau.
 - `smoothing_gamma` is `a[-1][-1]` on `ButcherTableau` and the sole real eigenvalue of
-  `a` on `RadauIIATableau`, computed exactly and rounded once. The tableau also derives
-  `smoothed_error_weights`.
+  `a` on `RadauIIATableau`, computed exactly and rounded once. A tableau that derives
+  `smoothed_error_weights` (Radau) replaces the embedded estimate while smoothing: the
+  base step's `error_weights` returns them and `error_row` is `None`.
 - DIRK and FIRK own an `error_solver` (width `n_states`, `AT_STATE` helpers, aliased
   into `solver_shared`) when `owns_error_solver`, registered only while smoothing is
   on. It has `instance_label="error"`, reads `error_atol`, `error_rtol`,

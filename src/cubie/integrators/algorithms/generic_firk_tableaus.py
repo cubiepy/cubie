@@ -73,13 +73,6 @@ class FIRKTableau(ButcherTableau):
         super().__attrs_post_init__()
         self._validate_weight_sums()
 
-    def smoothed_error_weights(
-        self,
-        precision: PrecisionDType,
-    ) -> Optional[np_ndarray]:
-        """Return smoothed error weights; ``None`` without a derivation."""
-        return None
-
 
 @lru_cache(maxsize=None)
 def _sole_real_eigenvalue(

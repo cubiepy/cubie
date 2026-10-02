@@ -154,11 +154,6 @@ class FIRKStepConfig(ImplicitStepConfig):
         return self.tableau.stage_count
 
     @property
-    def smoothed_error_weights(self) -> tuple:
-        """Return the smoothed error weights cast to precision."""
-        return self.tableau.smoothed_error_weights(self.precision)
-
-    @property
     def solver_width(self) -> int:
         """Return the coupled solver width across all stages."""
 
@@ -612,12 +607,11 @@ class FIRKStep(ODEImplicitStep):
         b_hat_row = self.error_row
         if b_row is not None:
             b_row = int32(b_row)
-        if b_hat_row is not None:
+        captures_error = b_hat_row is not None
+        if captures_error:
             b_hat_row = int32(b_hat_row)
 
         smoothing_gamma = config.smoothing_gamma
-        if use_smoothed_error:
-            error_weights = config.smoothed_error_weights
 
         ends_at_one = stage_time_fractions[-1] == numba_precision(1.0)
         max_step_ratio = tableau.dense_prediction_ratio_limit(
@@ -841,9 +835,10 @@ class FIRKStep(ODEImplicitStep):
                     if b_row == stage_idx:
                         for idx in unroll_if(range(n), unroll_step_element):
                             proposed_state[idx] = stage_state[idx]
-                if b_hat_row == stage_idx:
-                    for idx in unroll_if(range(n), unroll_step_element):
-                        error[idx] = stage_state[idx]
+                if captures_error:
+                    if b_hat_row == stage_idx:
+                        for idx in unroll_if(range(n), unroll_step_element):
+                            error[idx] = stage_state[idx]
 
             # Kahan summation to reduce floating point errors
             # see https://en.wikipedia.org/wiki/Kahan_summation_algorithm
@@ -934,7 +929,7 @@ class FIRKStep(ODEImplicitStep):
                 end_time,
             )
 
-            if b_hat_row is not None:
+            if captures_error:
                 for idx in unroll_if(range(n), unroll_step_element):
                     error[idx] = proposed_state[idx] - error[idx]
 
@@ -987,13 +982,6 @@ class FIRKStep(ODEImplicitStep):
         """Return ``True`` when the tableau supplies an error estimate."""
 
         return self.tableau.has_error_estimate
-
-    @property
-    def error_row(self) -> Optional[int]:
-        """Return the embedded-solution row; ``None`` while smoothing."""
-        if self.smooth_error:
-            return None
-        return super().error_row
 
     @property
     def stage_count(self) -> int:

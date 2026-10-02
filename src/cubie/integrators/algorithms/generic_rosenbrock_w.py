@@ -411,7 +411,8 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         b_hat_row = self.error_row
         if b_row is not None:
             b_row = int32(b_row)
-        if b_hat_row is not None:
+        captures_error = b_hat_row is not None
+        if captures_error:
             b_hat_row = int32(b_hat_row)
 
         # Get allocators from buffer registry
@@ -654,12 +655,14 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 )
 
                 # Capture precalculated outputs here, before overwrite
-                if b_row == stage_idx:
-                    for idx in unroll_if(range(n), unroll_step_element):
-                        proposed_state[idx] = stage_increment[idx]
-                if b_hat_row == stage_idx:
-                    for idx in unroll_if(range(n), unroll_step_element):
-                        error[idx] = stage_increment[idx]
+                if not accumulates_output:
+                    if b_row == stage_idx:
+                        for idx in unroll_if(range(n), unroll_step_element):
+                            proposed_state[idx] = stage_increment[idx]
+                if captures_error:
+                    if b_hat_row == stage_idx:
+                        for idx in unroll_if(range(n), unroll_step_element):
+                            error[idx] = stage_increment[idx]
 
                 # Overwrite the final accumulator slice with time-derivative
                 if stage_idx == stage_count - int32(1):
@@ -740,7 +743,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                         error[idx] += error_weight * increment
 
             # ----------------------------------------------------------- #
-            if b_hat_row is not None:
+            if captures_error:
                 for idx in unroll_if(range(n), unroll_step_element):
                     error[idx] = proposed_state[idx] - error[idx]
 
