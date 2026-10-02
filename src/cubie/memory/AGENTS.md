@@ -112,8 +112,8 @@ arrays; device arrays must be allocated through `allocate_queue` first.
   calls no hook; callers keep their last partition.
 - Chunking replaces `shape[chunk_axis_index]` with `chunk_length`; `unchunkable=True`
   keeps the full shape.
-- `get_chunk_parameters` offers `allocatable_bytes`: `min((1 − CHUNK_HEADROOM_FRACTION) ×
-  available, free − allocation_granule_bytes)`; `num_chunks` is what the largest fitting chunk
+- `get_chunk_parameters` offers `min((1 − CHUNK_HEADROOM_FRACTION) × available, physical
+  free − allocation_granule_bytes)` bytes; `num_chunks` is what the largest fitting chunk
   needs and `chunk_length = ceil(runs / num_chunks)`. Tests faking `get_memory_info` at
   byte scale pass `allocation_granule_bytes=0`.
 - `ArrayRequest.dtype` must be exactly `float64`/`float32`/`int32` and `memory` one of

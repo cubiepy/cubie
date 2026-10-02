@@ -52,16 +52,7 @@ from collections import deque
 from tempfile import mkstemp
 from threading import Lock
 from functools import partial
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Any, Optional, Callable, Dict, Set, Tuple, Union
 from warnings import warn
 from copy import deepcopy
 from inspect import ismethod
@@ -2126,84 +2117,6 @@ class MemoryManager:
         settings = self.registry.get(instance_id)
         return settings is not None and settings.owner_id == owner_id
 
-    def allocatable_bytes(
-        self, stream_group: str, instances: Iterable[object]
-    ) -> int:
-        """Bytes ``instances`` may allocate in one chunk.
-
-        Parameters
-        ----------
-        stream_group
-            Name of the stream group allocating.
-        instances
-            Registered instances whose current buffers the allocation
-            replaces.
-
-        Returns
-        -------
-        int
-            ``min((1 - CHUNK_HEADROOM_FRACTION) × available, free -
-            allocation_granule_bytes)``; the instances' buffers count as
-            free.
-
-        Raises
-        ------
-        NoCudaDeviceError
-            If no device answers the probe.
-        """
-        self._require_device()
-        free, _ = self.get_memory_info()
-        instance_ids = [id(instance) for instance in instances]
-        return self._chunk_budget(stream_group, instance_ids, free)[1]
-
-    def _cap_headroom(self, stream_group: str) -> Optional[int]:
-        """Unused cap bytes of the group in active mode, else ``None``."""
-        if self._mode != "active":
-            return None
-        members = self.stream_groups.get_instances_in_group(stream_group)
-        return sum(
-            self.registry[member].cap - self.registry[member].allocated_bytes
-            for member in members
-        )
-
-    def _reclaimable_free(
-        self, instance_ids: Iterable[int], free: int
-    ) -> int:
-        """Free bytes plus the bytes the instances' buffers hold."""
-        return free + sum(
-            self.registry[instance_id].allocated_bytes
-            for instance_id in instance_ids
-            if instance_id in self.registry
-        )
-
-    def _chunk_budget(
-        self,
-        stream_group: str,
-        instance_ids: Iterable[int],
-        free: int,
-        released: int = 0,
-    ) -> Tuple[int, int]:
-        """Return available and allocatable bytes; ``released`` is free."""
-        free_effective = self._reclaimable_free(instance_ids, free)
-        free_effective += released
-        cap_headroom = self._cap_headroom(stream_group)
-        physical_headroom = (
-            free_effective
-            if cap_headroom is None
-            else min(free_effective, cap_headroom)
-        )
-        # Pool-held blocks serve allocations without showing as free.
-        available = max(
-            self.get_available_memory(stream_group), physical_headroom
-        )
-        # The granule floor applies to physical free memory only.
-        fractional_headroom = int(available * CHUNK_HEADROOM_FRACTION)
-        allocatable = min(
-            available - fractional_headroom,
-            free_effective - self.allocation_granule_bytes,
-        )
-        return available, allocatable
-
     def get_chunk_parameters(
         self,
         requests: Dict[str, Dict],
@@ -2247,7 +2160,15 @@ class MemoryManager:
         """
         self._require_device()
         free, _ = self.get_memory_info()
-        cap_headroom = self._cap_headroom(stream_group)
+        available_memory = self.get_available_memory(stream_group)
+        cap_headroom = None
+        if self._mode == "active":
+            members = self.stream_groups.get_instances_in_group(stream_group)
+            cap_headroom = sum(
+                self.registry[member].cap
+                - self.registry[member].allocated_bytes
+                for member in members
+            )
         chunkable_size, unchunkable_size = get_portioned_request_size(
             requests,
         )
@@ -2258,7 +2179,12 @@ class MemoryManager:
         # allocation, so their bytes are usable for it: without this
         # credit a same-size reallocation reads as a shortage of its
         # own footprint.
-        free_effective = self._reclaimable_free(requests, free)
+        own_reclaimable = sum(
+            self.registry[instance_id].allocated_bytes
+            for instance_id in requests
+            if instance_id in self.registry
+        )
+        free_effective = free + own_reclaimable
 
         # Evict only for a genuine physical VRAM shortage that eviction
         # can fix. A configured cap (active mode) is a policy limit:
@@ -2268,13 +2194,25 @@ class MemoryManager:
         cap_allows_request = (
             cap_headroom is None or request_size < cap_headroom
         )
-        released = 0
         if physical_shortage and cap_allows_request:
             released = self._evict_idle_owners(
                 set(requests.keys()), request_size - free_effective + 1
             )
-        available_memory, allocatable = self._chunk_budget(
-            stream_group, requests, free, released
+            free_effective += released
+        physical_headroom = (
+            free_effective
+            if cap_headroom is None
+            else min(free_effective, cap_headroom)
+        )
+        # Group accounting and the physical probe are both estimates;
+        # trust whichever allows more, since pool-held blocks satisfy
+        # allocations without showing up as free device memory.
+        available_memory = max(available_memory, physical_headroom)
+        # The granule floor applies to physical free memory only.
+        fractional_headroom = int(available_memory * CHUNK_HEADROOM_FRACTION)
+        allocatable = min(
+            available_memory - fractional_headroom,
+            free_effective - self.allocation_granule_bytes,
         )
         headroom = available_memory - allocatable
         if request_size < allocatable:
