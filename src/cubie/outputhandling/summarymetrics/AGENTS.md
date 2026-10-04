@@ -23,7 +23,7 @@ and dispatches buffer sizing, offsets, and device functions for a requested metr
 | `rms` | 1 / 1 | sum of squares → `sqrt(sum/summarise_every)`. |
 | `std` | 3 / 1 | shifted-data algorithm (`[shift, Σ, Σ²]`). |
 | `max_magnitude` | 1 / 1 | max `abs(value)`; sentinel `0.0`. |
-| `peaks` / `negative_peaks` | `3+n` / `n` | local maxima/minima step indices; a plateau counts once, at its last sample; request `"peaks[5]"`. |
+| `peaks` / `negative_peaks` | `3+n` / `n` | local maxima/minima step indices; request `"peaks[5]"`. |
 | `extrema` | 2 / 2 | max+min; substitutes `{max,min}`. |
 | `mean_std` | 3 / 2 | substitutes `{mean,std}`. |
 | `mean_std_rms` | 3 / 3 | substitutes `{mean,std,rms}`. |
