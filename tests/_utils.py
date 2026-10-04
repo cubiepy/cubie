@@ -498,13 +498,12 @@ def calculate_single_summary_array(
                 if output_type.startswith("peaks"):
                     n_peaks = output_type.split("[", 1)[1].split("]", 1)[0]
                     n_peaks = int(n_peaks) if n_peaks else 0
-                    # Use the last two samples, like the live version does
-                    start_index = i * samples_per_summary - 2 if i > 0 else 0
                     maxima = (
-                        local_maxima(
-                            input_array[start_index:end_index, j],
+                        window_extrema(
+                            local_maxima(input_array[:, j]),
+                            i,
+                            samples_per_summary,
                         )[:n_peaks]
-                        + start_index
                         + peak_index_offset  # Offset for sliced array indexing
                     )
                     output_start_index = (
@@ -577,15 +576,14 @@ def calculate_single_summary_array(
                     summary_index += 2
 
                 if output_type.startswith("negative_peaks"):
-                    # Use the last two samples, like the live version does
-                    start_index = i * samples_per_summary - 2 if i > 0 else 0
                     n_peaks = output_type.split("[", 1)[1].split("]", 1)[0]
                     n_peaks = int(n_peaks) if n_peaks else 0
                     minima = (
-                        local_minima(
-                            input_array[start_index:end_index, j],
+                        window_extrema(
+                            local_minima(input_array[:, j]),
+                            i,
+                            samples_per_summary,
                         )[:n_peaks]
-                        + start_index
                         + peak_index_offset  # Offset for sliced array indexing
                     )
                     output_start_index = (
@@ -768,34 +766,44 @@ def calculate_single_summary_array(
                     summary_index += 2
 
 
+def window_extrema(
+    indices: np.ndarray, window: int, samples_per_summary: int
+) -> np.ndarray:
+    """Return the extremum indices recorded in one summary window.
+
+    An extremum at index ``p`` is recorded by the update at ``p + 1``.
+    """
+    return indices[(indices + 1) // samples_per_summary == window]
+
+
+def _plateau_ends(signal: np.ndarray) -> np.ndarray:
+    """Return the last index of every run of equal values."""
+    changes = np.flatnonzero(signal[1:] != signal[:-1])
+    return np.append(changes, signal.size - 1)
+
+
 def local_maxima(signal: np.ndarray) -> np.ndarray:
     """Find local maxima in a signal.
 
-    Returns indices of local maxima. The +1 offset corrects for the
-    signal[1:-1] slicing used in the comparison (flatnonzero returns
-    indices into the sliced array, not the original signal).
+    Returns indices of local maxima. A run of equal values counts as
+    one sample, reported at its last index, as the device metric does.
     """
-    return (
-        np.flatnonzero(
-            (signal[1:-1] > signal[:-2]) & (signal[1:-1] > signal[2:])
-        )
-        + 1  # Correct for signal[1:-1] indexing offset
-    )
+    ends = _plateau_ends(signal)
+    values = signal[ends]
+    peaks = (values[1:-1] > values[:-2]) & (values[1:-1] > values[2:])
+    return ends[1:-1][peaks]
 
 
 def local_minima(signal: np.ndarray) -> np.ndarray:
     """Find local minima in a signal.
 
-    Returns indices of local minima. The +1 offset corrects for the
-    signal[1:-1] slicing used in the comparison (flatnonzero returns
-    indices into the sliced array, not the original signal).
+    Returns indices of local minima. A run of equal values counts as
+    one sample, reported at its last index, as the device metric does.
     """
-    return (
-        np.flatnonzero(
-            (signal[1:-1] < signal[:-2]) & (signal[1:-1] < signal[2:])
-        )
-        + 1  # Correct for signal[1:-1] indexing offset
-    )
+    ends = _plateau_ends(signal)
+    values = signal[ends]
+    troughs = (values[1:-1] < values[:-2]) & (values[1:-1] < values[2:])
+    return ends[1:-1][troughs]
 
 
 def deterministic_array(precision, size: Union[int, tuple[int]], scale=1.0):

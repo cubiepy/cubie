@@ -32,9 +32,10 @@ class Peaks(SummaryMetric):
 
     Notes
     -----
-    The buffer stores the two previous values, a peak counter, and slots for
-    the recorded peak indices. The algorithm assumes ``0.0`` does not occur in
-    valid data so it can serve as an initial sentinel.
+    The buffer stores the previous value, the last different value, a
+    peak counter, and slots for the recorded peak indices. The algorithm
+    assumes ``0.0`` does not occur in valid data so it can serve as an
+    initial sentinel.
     """
 
     def __init__(self, precision) -> None:
@@ -91,7 +92,7 @@ class Peaks(SummaryMetric):
             value
                 float. New value to analyse for peak detection.
             buffer
-                device array. Layout ``[prev, prev_prev, counter,
+                device array. Layout ``[prev, last_different, counter,
                 times...]``.
             current_index
                 int. Current integration step index, used to record peaks.
@@ -100,9 +101,9 @@ class Peaks(SummaryMetric):
 
             Notes
             -----
-            Detects peaks when the prior value exceeds both the current and
-            second-prior values. Peak indices are stored after the
-            counter.
+            Records the prior index when the prior value is above both
+            the current value and the last different value. Peak indices
+            are stored after the counter.
             """
             npeaks = customisable_variable
             prev = buffer[0]
@@ -122,8 +123,9 @@ class Peaks(SummaryMetric):
                     # Bingo
                     int_slots[1 + peak_counter] = current_index - int32(1)
                     int_slots[0] = peak_counter + int32(1)
-            buffer[0] = value  # Update previous value
-            buffer[1] = prev  # Update previous previous value
+            buffer[0] = value
+            # A repeated value keeps the value before the plateau.
+            buffer[1] = cuda.selp(value != prev, prev, prev_prev)
 
         @cuda.jit(
             # [

@@ -34,6 +34,7 @@ def output_test_settings(output_test_settings_overrides, precision):
         "output_types": ["state"],
         "precision": precision,
         "test_shared_mem": True,
+        "sample_repeats": 1,
     }
     output_test_settings_dict.update(**output_test_settings_overrides)
     return output_test_settings_dict
@@ -70,18 +71,26 @@ def random_scale(request):
 
 @pytest.fixture(scope="function")
 def input_arrays(output_test_settings, random_scale):
-    """Deterministic input state and observable arrays for tests."""
+    """Deterministic input state and observable arrays for tests.
+
+    Each sample repeats ``sample_repeats`` times, so a setting above 1
+    turns every extremum and monotone stretch into runs of equal values.
+    """
     num_states = output_test_settings["num_states"]
     num_observables = output_test_settings["num_observables"]
     num_samples = output_test_settings["num_samples"]
     precision = output_test_settings["precision"]
+    repeats = output_test_settings["sample_repeats"]
+    num_distinct = -(-num_samples // repeats)
 
     states = deterministic_array(
-        precision, (num_samples, num_states), random_scale
+        precision, (num_distinct, num_states), random_scale
     )
     observables = deterministic_array(
-        precision, (num_samples, num_observables), random_scale
+        precision, (num_distinct, num_observables), random_scale
     )
+    states = np.repeat(states, repeats, axis=0)[:num_samples]
+    observables = np.repeat(observables, repeats, axis=0)[:num_samples]
 
     return states, observables
 
@@ -532,6 +541,11 @@ LONG_RUN_OUTPUT_SETTINGS = {
     "num_summaries": 100,
 }
 
+PLATEAU_OUTPUT_SETTINGS = {
+    **LONG_RUN_OUTPUT_SETTINGS,
+    "sample_repeats": 3,
+}
+
 LONG_WINDOW_OUTPUT_SETTINGS = {
     "output_types": ALL_SUMMARY_TYPES,
     "num_samples": 500,
@@ -542,8 +556,8 @@ LONG_WINDOW_OUTPUT_SETTINGS = {
 @pytest.mark.parametrize("random_scale", [1e1], indirect=True)
 @pytest.mark.parametrize(
     "output_test_settings_overrides",
-    [LONG_RUN_OUTPUT_SETTINGS],
-    ids=["large_dataset"],
+    [LONG_RUN_OUTPUT_SETTINGS, PLATEAU_OUTPUT_SETTINGS],
+    ids=["large_dataset", "plateaus"],
     indirect=True,
 )
 def test_all_summaries_long_run(compare_input_output):
@@ -664,6 +678,7 @@ def test_no_summarys(compare_input_output):
     [
         {"output_types": ["mean", "max", "rms"]},
         {"output_types": ["peaks[10]"]},
+        {"output_types": ["peaks[10]"], "sample_repeats": 2},
         {
             "output_types": [
                 "state",
@@ -685,6 +700,7 @@ def test_no_summarys(compare_input_output):
     ids=[
         "basic_summaries",
         "peaks_only",
+        "peaks_plateaus",
         "all",
         "state_and_mean",
     ],
