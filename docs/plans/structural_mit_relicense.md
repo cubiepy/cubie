@@ -90,41 +90,60 @@ Ancestry below was checked by the presence of the corresponding functions in the
 
 ## Functionality loss
 
-Measured by running `structural_simplify` and the structural test directory with each item replaced in-process by an emulation of its specification (items 1, 3, 6), or removed (items 1, 2):
+Each item was replaced in-process by an emulation of its specification (items 1, 3, 6) or removed (items 1, 2), and the simplified systems and solves compared with current `main`. "Modia" is the outcome if item 1 is dropped rather than rewritten; "no exact matching" if item 2 is dropped.
 
-| Change | Structural tests (real GPU, 129) | Behaviour change |
+**Item 2 dropped: explicit ODEs become DAEs.** `dx + dy = -x; dy + dz = -y; 0 = x + y - z`:
+- Current: explicit ODE `dy = -x - x_t`, `dz = -x`, with `x = z - y` and `x_t = y - 2x` observed; no residual, no mass matrix.
+- No exact matching: index-1 DAE with one residual (iteration variable `y_t`) under a singular mass matrix, so only implicit algorithms can solve it.
+- Modia: index-1 DAE with one residual (iteration variable `x_t`).
+
+**Item 1 dropped: different iteration variables, same DAE size.**
+- Transistor amplifier (Test Set II-2): both forms have differential `y2, y3, y5, y6, y8` and three residuals. Current iterates on `y2_t, y5_t, y7_t`; Modia on `y1_t, y4_t, y7_t`.
+- The current mass flags `(T, F, T, T, F, T, F, T)` become `(F, T, T, F, T, T, F, T)` over the name-sorted states, which now hold `y1_t, y4_t` in place of `y2_t, y5_t`.
+- Float32 radau_iia_5, the Test Set reference at t = 0.2: max absolute error 8.2e-4 current, 3.6e-4 Modia, 1.4e-4 with items 1, 3 and 6 as specified. All solves succeed and all are within the 2e-3 tolerance.
+- `dz = w; 0 = x + y + w; 0 = 2x + 2y - w; 0 = w^5 + w - z` with `conservative=True`: current iterates on `w, x` with `y = -(w + x)` observed; Modia iterates on `w, y` with `x = -(w + y)` observed.
+
+**Linear-SCC inlining deleted instead of ported.** The `structural_simplify(..., inline_linear_sccs=True)` option disappears.
+
+**Tests these changes break:**
+
+| Test | What it checks | Fails under |
 |---|---|---|
-| Items 1, 3, 6 as specified above | 129 pass | Item 3 changes which integer-linear combination a reduced row keeps (ring modulator index 2, below); none observed elsewhere |
-| Item 1 not reimplemented (Modia in its place) | 4 fail: `test_conservative_excludes_nonunit_rows`, `test_integer_constraint_block_solves_explicitly`, `test_transistor_amplifier_init_and_reference`, `test_ring_modulator_index2_backwards_euler` | Different torn variables; the amplifier selects different algebraic states (its mass flags differ) |
-| Item 2 not reimplemented | 2 fail: `test_exact_scc_matching_singular_warns`, `test_integer_constraint_block_solves_explicitly` | Integer-linear SCCs (e.g. `u + 2v = x; 3u - v = 1`) stay as residual rows instead of solving explicitly |
-| Item 8 inlining deleted instead of ported | `test_inline_linear_scc_solves_analytically` | `structural_simplify(..., inline_linear_sccs=True)` no longer exists |
+| `test_integer_constraint_block_solves_explicitly` | No residuals, plus the correct explicit right-hand sides | No exact matching; Modia. The system becomes a DAE |
+| `test_exact_scc_matching_singular_warns` | Calls `exact_scc_matching` directly | No exact matching. The function is gone |
+| `test_conservative_excludes_nonunit_rows` | Balance, then reads `y` from the observed equations | Modia: `y` is an iteration variable instead |
+| `test_transistor_amplifier_init_and_reference` | First asserts the mass-flag tuple, then initial derivatives and the reference at t = 0.2 | Modia fails the first assertion. The reference check passes when run separately (above) |
+| `test_ring_modulator_index2_backwards_euler` | Reads `UD1` from the saved states | Modia: `UD1` is observed, not saved. The float64 2 us solve agrees with current to 1.1e-14 on the 12 shared states |
+| `test_inline_linear_scc_solves_analytically` | Calls `structural_simplify` with `inline_linear_sccs=True` | Inlining deleted |
 
-Without item 6's spec the ordering is still order-independent on the systems below: 12 shuffles of equations and unknowns gave one result each under current and specified ordering.
+With items 1, 3 and 6 implemented as specified, all 129 structural tests pass on real GPU.
 
 ## Measured effect on the GPUODEBenchmarks DAE problems
 
-NAND gate (14 states, `c9` swept) and ring modulator with `Cs = 0` (index 2, `Uin1_amplitude` swept), as defined in `GPUODEBenchmarks/runner_scripts/cubie_systems.py`.
+Problems as defined in `GPUODEBenchmarks/runner_scripts/cubie_systems.py`:
+- NAND gate: Test Set, 14 node voltages, `C(y) y' = f(y, t)`, `c9` swept over 2.5e-5 to 1e-4, 80 time units.
+- Ring modulator, index 2: Test Set II-3 with `Cs = 0`, so the four capacitor rows are algebraic; `Uin1_amplitude` swept over 0 to 0.5; 1 ms.
 
 | | NAND gate | Ring modulator, index 2 |
 |---|---|---|
-| Current result | 14 differential, 8 algebraic (`y3_t`, `y4_t`, `y5_t`, `y8_t`, `y9_t`, `y10_t`, `y13_t`, `y14_t`), 33 observed | 10 differential, 4 algebraic (`U5`, `UD1`, `UD2`, `UD3`), 12 observed |
-| Carpanzano SCCs (variables, torn) | (3, 3), (5, 3) | (8, 3), (8, 1) |
-| Exact SCC matching | never eligible (no integer-linear SCC) | never eligible |
-| Items 1, 3, 6 as specified | identical system | same states; one residual row changes form (`-U5 - U6 - UD1 - UD4` becomes `U6 - U4 - U7 - UD2 - Uin2`; residual operations 25 -> 26), `U4`/`U6` observed through the other constraint |
-| Item 1 replaced by Modia | identical system | algebraic `U6`, `UD2`, `UD3`, `UD4`; residuals become the linear current balances with the diode exponentials observed (residual operations 25 -> 18) |
-| Item 2 removed | identical system | identical system |
-| Linear-SCC inlining enabled (off by default and in the benchmarks) | 6 algebraic | 3 algebraic |
+| Current result | 14 differential; 8 residuals iterating on `y3_t, y4_t, y5_t, y8_t, y9_t, y10_t, y13_t, y14_t`; 33 observed | 10 differential; 4 residuals iterating on `U5, UD1, UD2, UD3`; 12 observed |
+| Exact SCC matching | never applies (no integer-linear SCC) | never applies |
+| Items 1, 3, 6 as specified | identical system | same states; the residual `-U5 - U6 - UD1 - UD4` is replaced by `U6 - U4 - U7 - UD2 - Uin2` (the same constraint, eliminated through the other diode-voltage relation) |
+| Modia | identical system | iterates on `U6, UD2, UD3, UD4`; residuals become the linear current balances, with the diode exponentials observed |
+| Item 2 dropped | identical system | identical system |
 
-Float32 solves of 1024 trajectories on an RTX 4070 SUPER:
+Solves on an RTX 4070 SUPER, 1024 trajectories over the problem's swept parameter (first 1024 points of the benchmark's 131072-point grid), float32:
 
-| Configuration | Current | Items 1, 3, 6 as specified | Modia | Item 2 removed |
+| Problem and solver | Current | Items 1, 3, 6 as specified | Modia | Item 2 dropped |
 |---|---|---|---|---|
-| NAND, crank_nicolson, PI, tol 1e-2 | 0.20% failed | 0.20% | 0.20% | 0.20% |
-| NAND, crank_nicolson, PI, tol 1e-3 | 6.15% failed | 6.15% | 6.15% | 6.15% |
-| Ring index 2, backwards_euler, fixed 1e-7 s | 100% failed (Newton) | 100% | 100% | 100% |
-| Ring index 2, radau_iia_5, fixed 1e-7 s | 100% failed (Newton) | 100% | 100% | 100% |
+| NAND gate, crank_nicolson, PI controller, tolerance 1e-2 | 0.20% of trajectories failed | 0.20% | 0.20% | 0.20% |
+| NAND gate, crank_nicolson, PI controller, tolerance 1e-3 | 6.15% failed | 6.15% | 6.15% | 6.15% |
+| Ring modulator index 2, backwards_euler, fixed step 1e-7 s | 100% failed (Newton) | 100% | 100% | 100% |
+| Ring modulator index 2, radau_iia_5, fixed step 1e-7 s | 100% failed (Newton) | 100% | 100% | 100% |
 
-The NAND gate reaches the same simplified system under every variant, so its kernels and results are unchanged. The ring modulator in index-2 form fails every float32 trajectory on current `main` (radau_iia_5 and rodas3p adaptive at 1e-4 and 1e-6 as well), so the rollback cannot change its solve outcome in the benchmark; `test_ring_modulator_index2_backwards_euler` (float64, 2 us) passes on real GPU under the specified rewrite.
+- The NAND gate's simplified system is identical under every variant, so its kernels and results are unchanged.
+- The index-2 ring modulator fails every float32 trajectory on current `main` (also radau_iia_5 and rodas3p adaptive at 1e-4 and 1e-6), so no variant can change its benchmark outcome.
+- In the repository's float64 configuration (backwards Euler, fixed step 1e-7 s, 2 us, `Uin1_amplitude = 0.5`), the specified rewrite agrees with current to 5.6e-13 on all 14 states and Modia to 1.1e-14 on the 12 shared states.
 
 ## Sequence
 
