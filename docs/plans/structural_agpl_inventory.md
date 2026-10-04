@@ -1,6 +1,6 @@
 # AGPL inventory of `structural/`
 
-Which code in `src/cubie/odesystems/symbolic/structural/` derives from AGPL-licensed Julia code, what replacing it with the MIT-licensed equivalent loses, and what rewriting it from scratch loses.
+AGPL-derived code in `src/cubie/odesystems/symbolic/structural/`, the loss from its MIT equivalent, and the decision for each piece.
 
 ## How the code was classified
 
@@ -12,7 +12,7 @@ Which code in `src/cubie/odesystems/symbolic/structural/` derives from AGPL-lice
 | ModelingToolkit.jl (MTK) | MIT at every commit. c4177c335 (2025-12-02) is the last commit before its tearing and reassembly code moved into ModelingToolkitTearing |
 | BipartiteGraphs.jl | MIT |
 
-Code that is the same as the MIT releases (StateSelection.jl 74df007e, MTK at any commit, BipartiteGraphs.jl) is usable under MIT. Code with no counterpart in those releases came from the AGPL code. Each function was compared against the MIT releases; the file docstrings also name their sources, and `system_structure.py` and `reassemble.py` call themselves ports of ModelingToolkitTearing.
+Code matching an MIT release is usable under MIT; code with no MIT counterpart came from the AGPL code.
 
 ## Files that are MIT-clean
 
