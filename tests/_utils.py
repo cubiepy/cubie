@@ -498,13 +498,12 @@ def calculate_single_summary_array(
                 if output_type.startswith("peaks"):
                     n_peaks = output_type.split("[", 1)[1].split("]", 1)[0]
                     n_peaks = int(n_peaks) if n_peaks else 0
-                    # Use the last two samples, like the live version does
-                    start_index = i * samples_per_summary - 2 if i > 0 else 0
                     maxima = (
-                        local_maxima(
-                            input_array[start_index:end_index, j],
+                        window_extrema(
+                            local_maxima(input_array[:, j]),
+                            i,
+                            samples_per_summary,
                         )[:n_peaks]
-                        + start_index
                         + peak_index_offset  # Offset for sliced array indexing
                     )
                     output_start_index = (
@@ -577,15 +576,14 @@ def calculate_single_summary_array(
                     summary_index += 2
 
                 if output_type.startswith("negative_peaks"):
-                    # Use the last two samples, like the live version does
-                    start_index = i * samples_per_summary - 2 if i > 0 else 0
                     n_peaks = output_type.split("[", 1)[1].split("]", 1)[0]
                     n_peaks = int(n_peaks) if n_peaks else 0
                     minima = (
-                        local_minima(
-                            input_array[start_index:end_index, j],
+                        window_extrema(
+                            local_minima(input_array[:, j]),
+                            i,
+                            samples_per_summary,
                         )[:n_peaks]
-                        + start_index
                         + peak_index_offset  # Offset for sliced array indexing
                     )
                     output_start_index = (
@@ -766,6 +764,16 @@ def calculate_single_summary_array(
                         i, j * summary_size_per_state + summary_index + 1
                     ] = _d2xdt2_min
                     summary_index += 2
+
+
+def window_extrema(
+    indices: np.ndarray, window: int, samples_per_summary: int
+) -> np.ndarray:
+    """Return the extremum indices recorded in one summary window.
+
+    An extremum at index ``p`` is recorded by the update at ``p + 1``.
+    """
+    return indices[(indices + 1) // samples_per_summary == window]
 
 
 def _plateau_ends(signal: np.ndarray) -> np.ndarray:

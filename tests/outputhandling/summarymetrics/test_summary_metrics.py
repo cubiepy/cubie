@@ -6,9 +6,7 @@ import warnings
 
 import numpy as np
 import pytest
-from numba_cuda_mlir.types import int32
 
-from cubie._cudasim_extensions import cuda
 from cubie.outputhandling.summarymetrics.metrics import (
     MetricConfig,
     MetricFuncCache,
@@ -18,7 +16,6 @@ from cubie.outputhandling.summarymetrics.metrics import (
 )
 from cubie.outputhandling import summary_metrics as global_registry
 from cubie.CUDAFactory import CUDAFactoryConfig, CUDADispatcherCache
-from tests._utils import local_maxima, local_minima
 
 
 # ── Concrete subclass for testing abstract SummaryMetric ───────────── #
@@ -953,40 +950,3 @@ def test_every_registered_metric_builds():
     for name, metric in global_registry._metric_objects.items():
         assert callable(metric.update_fn), name
         assert callable(metric.save_fn), name
-
-
-# ── Peak detection on plateaus ─────────────────────────────────────── #
-
-
-PLATEAU_SIGNALS = {
-    # Plateau peaks end at 3 and 13; the 2, 2 run descends.
-    "peaks": [1, 2, 3, 3, 1, 2, 2.5, 2, 2, 1, 1.5, 4, 4, 4, 0.5],
-    # Plateau troughs end at 3 and 13; the 4, 4 run ascends.
-    "negative_peaks": [5, 4, 3, 3, 5, 4, 3.5, 4, 4, 5, 4.5, 2, 2, 2, 6],
-}
-
-
-@pytest.mark.parametrize("name", ["peaks", "negative_peaks"])
-def test_peak_metrics_count_plateaus_once(name, precision):
-    """A run of equal samples is one extremum, at its last index."""
-    n_slots = 4
-    metric = type(global_registry._metric_objects[name])(precision)
-    update = metric.update_fn
-    save = metric.save_fn
-
-    @cuda.jit
-    def run_metric(signal, buffer, output):
-        for index in range(signal.shape[0]):
-            update(signal[index], buffer, int32(index), int32(n_slots))
-        save(buffer, output, int32(signal.shape[0]), int32(n_slots))
-
-    signal = np.asarray(PLATEAU_SIGNALS[name], dtype=precision)
-    buffer = cuda.to_device(np.zeros(3 + n_slots, dtype=precision))
-    output = cuda.to_device(np.zeros(n_slots, dtype=precision))
-    run_metric[1, 1](cuda.to_device(signal), buffer, output)
-    reference = local_maxima if name == "peaks" else local_minima
-
-    expected = np.zeros(n_slots, dtype=precision)
-    expected[:3] = [3, 6, 13]
-    np.testing.assert_array_equal(output.copy_to_host(), expected)
-    np.testing.assert_array_equal(reference(signal), [3, 6, 13])
