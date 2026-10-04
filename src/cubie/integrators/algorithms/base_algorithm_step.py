@@ -708,6 +708,15 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         ),
     )
 
+    def __attrs_post_init__(self) -> None:
+        """Check the mass flags carry one entry per state."""
+        super().__attrs_post_init__()
+        if len(self.mass_flags) != self.n_states:
+            raise ValueError(
+                "mass_flags must carry one flag per state: got "
+                f"{len(self.mass_flags)} flags for n_states={self.n_states}."
+            )
+
     @property
     def mass_flags(self) -> Tuple[bool, ...]:
         """Return the per-state mass flags; every row when unset."""
