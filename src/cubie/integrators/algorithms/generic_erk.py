@@ -310,7 +310,6 @@ class ERKStep(ODEExplicitStep):
         has_evaluate_driver_at_t = drivers_fn is not None
         first_same_as_last = self.first_same_as_last
         multistage = stage_count > 1
-        has_error = self.uses_error
 
         precision = config.precision
         stage_rhs_coeffs = tableau.typed_columns(tableau.a, precision)
@@ -328,7 +327,8 @@ class ERKStep(ODEExplicitStep):
         b_hat_row = self.error_row
         if b_row is not None:
             b_row = int32(b_row)
-        if b_hat_row is not None:
+        captures_error = b_hat_row is not None
+        if captures_error:
             b_hat_row = int32(b_hat_row)
 
         # Get allocators from buffer registry
@@ -469,9 +469,8 @@ class ERKStep(ODEExplicitStep):
                 increment = stage_rhs[idx]
                 if accumulates_output:
                     proposed_state[idx] += solution_weights[0] * increment
-                if has_error:
-                    if accumulates_error:
-                        error[idx] = error[idx] + error_weights[0] * increment
+                if accumulates_error:
+                    error[idx] = error[idx] + error_weights[0] * increment
 
             for idx in unroll_if(
                 range(accumulator_length), unroll_accumulator
@@ -544,17 +543,16 @@ class ERKStep(ODEExplicitStep):
                         increment = stage_rhs[idx]
                         proposed_state[idx] += solution_weight * increment
 
-                    if has_error:
-                        if accumulates_error:
-                            increment = stage_rhs[idx]
-                            error[idx] += error_weight * increment
+                    if accumulates_error:
+                        increment = stage_rhs[idx]
+                        error[idx] += error_weight * increment
 
             if b_row is not None:
                 for idx in unroll_if(range(n), unroll_step_element):
                     proposed_state[idx] = stage_accumulator[
                         (b_row - 1) * n + idx
                     ]
-            if b_hat_row is not None:
+            if captures_error:
                 for idx in unroll_if(range(n), unroll_step_element):
                     error[idx] = stage_accumulator[(b_hat_row - 1) * n + idx]
             # ----------------------------------------------------------- #
@@ -564,13 +562,12 @@ class ERKStep(ODEExplicitStep):
                     proposed_state[idx] = (
                         proposed_state[idx] * dt_scalar + state[idx]
                     )
-                if has_error:
-                    # Scale error if accumulated
-                    if accumulates_error:
-                        error[idx] *= dt_scalar
-                    # Or form error from difference if captured from a-row
-                    else:
-                        error[idx] = proposed_state[idx] - error[idx]
+                # Scale error if accumulated
+                if accumulates_error:
+                    error[idx] *= dt_scalar
+                # Or form error from difference if captured from a-row
+                elif captures_error:
+                    error[idx] = proposed_state[idx] - error[idx]
 
             if has_evaluate_driver_at_t:
                 drivers_fn(
