@@ -4,6 +4,8 @@ Goal: every file under `src/cubie/odesystems/symbolic/structural/` derives only 
 
 Line references are against `main` at e59cab6c.
 
+`structural_agpl_inventory.md` lists every AGPL-derived piece by file, what its MIT equivalent loses, and the decision for each.
+
 ## Sources
 
 | Source | Licence | Usable range |
