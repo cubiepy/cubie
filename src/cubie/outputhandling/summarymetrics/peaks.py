@@ -32,10 +32,10 @@ class Peaks(SummaryMetric):
 
     Notes
     -----
-    The buffer stores the previous value, the last value that differed
-    from it, a peak counter, and slots for the recorded peak indices.
-    The algorithm assumes ``0.0`` does not occur in valid data so it can
-    serve as an initial sentinel.
+    The buffer stores the previous value, the last different value, a
+    peak counter, and slots for the recorded peak indices. The algorithm
+    assumes ``0.0`` does not occur in valid data so it can serve as an
+    initial sentinel.
     """
 
     def __init__(self, precision) -> None:
@@ -92,9 +92,8 @@ class Peaks(SummaryMetric):
             value
                 float. New value to analyse for peak detection.
             buffer
-                device array. Layout ``[prev, before, counter,
-                times...]``; ``before`` is the last value that
-                differed from ``prev``.
+                device array. Layout ``[prev, last_different, counter,
+                times...]``.
             current_index
                 int. Current integration step index, used to record peaks.
             customisable_variable
@@ -102,10 +101,9 @@ class Peaks(SummaryMetric):
 
             Notes
             -----
-            Detects a peak when the prior value exceeds both the current
-            value and the last value before it that differed from it, so
-            a run of equal values counts once, at its last sample. Peak
-            indices are stored after the counter.
+            Records the prior index when the prior value is above both
+            the current value and the last different value. Peak indices
+            are stored after the counter.
             """
             npeaks = customisable_variable
             prev = buffer[0]
