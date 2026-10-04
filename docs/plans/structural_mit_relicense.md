@@ -13,7 +13,6 @@ Line references are against `main` at e59cab6c.
 | `SciML/ModelingToolkit.jl` | MIT at every commit, including HEAD | any commit. c4177c335 (2025-12-02) is the last commit carrying `src/structural_transformation/` tearing, reassembly and `trivial_tearing!`; perfect-alias elimination (`eliminate_perfect_aliases!`, `union_with_sign!`, `pick_alias_target`, `alias_elimination!`) is in `src/systems/alias_elimination.jl` at later commits (c49d619f6 2026-03-20 onward) |
 | `SciML/BipartiteGraphs.jl` | MIT | any commit |
 | `ModiaSim/Modia.jl` | MIT (Copyright (c) 2017-2018 ModiaSim developers) | the Modia tearing core, as carried in StateSelection.jl 74df007e `src/modia_tearing.jl` |
-| Carpanzano, E. (2000), "Order Reduction of General Nonlinear DAE Systems by Automatic Tearing", Math. Comput. Model. Dyn. Syst. 6(2):145-168 | paper | algorithm and heuristics |
 
 MTK code after c4177c335 calls `StateSelection.rm_eqs_vars!`, `StateSelection.get_new_mm` and `StateSelection.trivial_tearing!`; the call sites (arguments, return values, order of calls in `_mtkcompile!`) are MIT, the implementations are AGPL.
 
@@ -26,23 +25,18 @@ MTK code after c4177c335 calls `StateSelection.rm_eqs_vars!`, `StateSelection.ge
 
 ## Work items
 
-### 1. Carpanzano tearing (`tearing.py:511-806`, `dummy_derivatives.py:337-380`)
+### 1. Carpanzano tearing removed; Modia is the default (`tearing.py:511-806`, `dummy_derivatives.py:337-380`)
 
-No MIT ancestor. Delete `find_single_solvable_eq`, `carpanzano_tear_scc`, `CarpanzanoTearing`. Reimplement from Carpanzano (2000).
+No MIT ancestor. Delete `find_single_solvable_eq`, `carpanzano_tear_scc` and `CarpanzanoTearing`. Tearing after dummy-derivative selection is `ModiaTearing` (item 7) with item 2's exact matching applied to each SCC before Modia tears it: `_tear_with_dummies` passes `mm` to the tearing, and each SCC that item 2 matches exactly is not torn further.
 
-Specification:
-- Input: one SCC (variables, equations), the incidence graph, the solvable-edge subgraph, the matching (all SCC variables unassigned on entry).
-- Variables solvable from no equation of the SCC leave the candidate set first.
-- Loop while candidates remain: match any equation incident on exactly one candidate via a solvable edge, derivative variables first; otherwise choose a tear variable: among the minimum-incidence equations, a candidate present but not solvable there; else the candidate of maximum incidence, then fewest solvable equations; ties broken by item-6 rank. Remove the chosen variable from the candidates.
-- Output: matching with solved variables assigned and tear variables unassigned.
-- Default tearing after dummy-derivative selection stays Carpanzano.
+Assertions that pin which variables Carpanzano tears are deleted; the numerical checks in those tests stay. `test_conservative_excludes_nonunit_rows` loses its check that `y` is observed in terms of `x`. `test_transistor_amplifier_init_and_reference` loses the mass-flag tuple, the algebraic-set equality and the initial-derivative checks keyed by Carpanzano's dummy-derivative names, and keeps the Test Set reference check at t = 0.2. `test_ring_modulator_index2_backwards_euler` reads the diode voltages it checks from the saved states or observables, whichever holds them.
 
 ### 2. Exact integer-linear SCC matching (`tearing.py:409-508`, `singularity_removal.py:183-233`, `system_structure.py:563-677`, `simplify.py:194-205`)
 
 No MIT ancestor; MIT `eq_derivative!` (MTK c4177c335 `symbolics_tearing.jl`) does not maintain `mm`. Delete `exact_scc_matching`, `RestrictedBareissContext`, `_eq_derivative_mm`, the `mm` append in `eq_derivative` (`system_structure.py:617-627`) and `_apply_linear_rewrites`. Reimplement:
 - Square SCC (n >= 2) whose equations are all rows of `mm`, each row's columns equal to the equation's incidence: fraction-free Bareiss (`clil.bareiss`) on those rows with pivot columns restricted to the SCC's variables, derivative variables preferred; no unrestricted tier.
 - Full rank: replace each equation's row in `mm`, the incidence graph and the solvable graph by its reduced row; match each equation to its pivot; return `(equation, columns, coefficients)` rewrites, which `structural_simplify` writes into `eqs` and `original_eqs` as `0 ~ sum(coefficient * variable)` before reassembly.
-- Rank deficient: warn and fall back to item 1.
+- Rank deficient: warn and leave the SCC to Modia tearing.
 - Pantelides differentiation keeps `mm` in sync: a differentiated `mm` row has the same coefficients on each variable's derivative column; a differentiated equation that is not an `mm` row but whose derivative is integer-linear in its incidence is appended to `mm`. A row with a variable that has no derivative column raises.
 
 ### 3. Bareiss pivot policy (`singularity_removal.py:47-127, 130-180, 279-402, 442-453`)
@@ -97,7 +91,7 @@ Each item was replaced in-process by an emulation of its specification (items 1,
 - No exact matching: index-1 DAE with one residual (iteration variable `y_t`) under a singular mass matrix, so only implicit algorithms can solve it.
 - Modia: index-1 DAE with one residual (iteration variable `x_t`).
 
-**Item 1 dropped: different iteration variables, same DAE size.**
+**Item 1 (Carpanzano dropped, Modia tears): different iteration variables, same DAE size.**
 - Transistor amplifier (Test Set II-2): both forms have differential `y2, y3, y5, y6, y8` and three residuals. Current iterates on `y2_t, y5_t, y7_t`; Modia on `y1_t, y4_t, y7_t`.
 - The current mass flags `(T, F, T, T, F, T, F, T)` become `(F, T, T, F, T, T, F, T)` over the name-sorted states, which now hold `y1_t, y4_t` in place of `y2_t, y5_t`.
 - Float32 radau_iia_5, the Test Set reference at t = 0.2: max absolute error 8.2e-4 current, 3.6e-4 Modia, 1.4e-4 with items 1, 3 and 6 as specified. All solves succeed and all are within the 2e-3 tolerance.
@@ -155,7 +149,7 @@ Solves on an RTX 4070 SUPER, 1024 trajectories over the problem's swept paramete
 
 ## Documentation and notices
 
-- Module docstrings name only the MIT sources and the Pantelides / Mattsson-Söderlind / Carpanzano papers; `tearing.py`'s docstring drops `carpanzano_tearing.jl`, and `structural/AGENTS.md` drops ModelingToolkitTearing.
+- Module docstrings name only the MIT sources and the Pantelides / Mattsson-Söderlind papers; `tearing.py`'s docstring drops Carpanzano, and `structural/AGENTS.md` drops ModelingToolkitTearing.
 - `THIRD_PARTY_LICENSES` gains: StateSelection.jl, MIT, Copyright (c) JuliaHub, Inc. and other contributors; ModelingToolkit.jl, MIT, Copyright (c) 2018-2026 Yingbo Ma, Christopher Rackauckas, Julia Computing, and contributors; Modia.jl, MIT, Copyright (c) 2017-2018 ModiaSim developers (Modia tearing in `tearing.py`).
 
 ## Done criteria
