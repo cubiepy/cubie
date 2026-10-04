@@ -96,7 +96,6 @@ class SolverSettings(_CubieConfigBase):
     prev_theta_location: Optional[str] = None
     previous_step_size_location: Optional[str] = None
     r0_hat_location: Optional[str] = None
-    repeated_stage_rhs_location: Optional[str] = None
     residual_location: Optional[str] = None
     s_hat_location: Optional[str] = None
     stage_accumulator_location: Optional[str] = None

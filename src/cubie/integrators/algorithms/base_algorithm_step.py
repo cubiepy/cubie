@@ -130,7 +130,6 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     # Rosenbrock buffer location parameters
     "stage_store_location",
     "cached_auxiliaries_location",
-    "repeated_stage_rhs_location",
     # BackwardsEuler buffer location parameters
     "increment_cache_location",
     # CrankNicolson buffer location parameters

@@ -59,15 +59,11 @@ def test_shared_stage_increment_gets_its_own_window(system):
         tableau=ROS3P_TABLEAU,
         stage_rhs_location="shared",
         stage_store_location="shared",
-        repeated_stage_rhs_location="shared",
     )
     group = buffer_registry._groups[step]
     store = group.shared_layout["stage_store"]
     increment = group.shared_layout["stage_increment"]
     assert increment.stop - increment.start == 3
-    # ROS3P's third stage repeats its second.
-    repeated = group.shared_layout["repeated_stage_rhs"]
-    assert repeated.stop - repeated.start == 3
     assert (
         increment.start >= store.stop or increment.stop <= store.start
     )

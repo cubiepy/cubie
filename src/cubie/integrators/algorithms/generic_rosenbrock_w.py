@@ -109,9 +109,6 @@ class RosenbrockWStepConfig(ImplicitStepConfig):
     stage_store_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
-    repeated_stage_rhs_location: str = field(
-        default="local", validator=validators.in_(["local", "shared"])
-    )
     base_state_placeholder_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
@@ -261,14 +258,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             self,
             0,
             config.cached_auxiliaries_location,
-        )
-
-        # Holds f for a stage whose successor repeats it.
-        buffer_registry.register(
-            "repeated_stage_rhs",
-            self,
-            0 if config.repeated_stage is None else n,
-            config.repeated_stage_rhs_location,
         )
 
         # Persists across steps; its lifetime bars aliasing stage_store.
@@ -424,8 +413,10 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         has_repeated_stage = repeated_stage is not None
         stage_one_repeats = repeated_stage == 1
         repeat_source = None
+        repeat_offset = None
         if has_repeated_stage:
             repeat_source = int32(repeated_stage - 1)
+            repeat_offset = int32(repeated_stage * n)
             repeated_stage = int32(repeated_stage)
         if b_row is not None:
             b_row = int32(b_row)
@@ -443,7 +434,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         alloc_stage_store = getalloc("stage_store", self)
         alloc_cached_auxiliaries = getalloc("cached_auxiliaries", self)
         alloc_stage_increment = getalloc("stage_increment", self)
-        alloc_repeated_stage_rhs = getalloc("repeated_stage_rhs", self)
         alloc_base_state_placeholder = getalloc("base_state_placeholder", self)
         alloc_krylov_iters_out = getalloc("krylov_iters_out", self)
 
@@ -496,9 +486,6 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 shared, persistent_local
             )
             stage_increment = alloc_stage_increment(shared, persistent_local)
-            repeated_stage_rhs = alloc_repeated_stage_rhs(
-                shared, persistent_local
-            )
             base_state_placeholder = alloc_base_state_placeholder(
                 shared, persistent_local
             )
@@ -573,12 +560,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             for idx in unroll_if(range(n), unroll_step_element):
                 # No accumulated contributions at stage 0.
                 f_value = stage_rhs[idx]
-                if stage_one_repeats:
-                    repeated_stage_rhs[idx] = f_value
                 rhs_value = (
                     f_value + gamma_stages[0] * time_derivative[idx]
                 ) * dt_scalar
                 stage_rhs[idx] = rhs_value * gamma
+                # Park f in the repeated stage's unused slot.
+                if stage_one_repeats:
+                    stage_store[repeat_offset + idx] = f_value
 
             krylov_iters_out[0] = int32(0)
 
@@ -626,8 +614,16 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     current_time + dt_scalar * stage_time_fractions[stage_idx]
                 )
 
+                reuses_rhs = False
+                if has_repeated_stage:
+                    if repeated_stage == stage_idx:
+                        reuses_rhs = True
+
                 # Get base state for F(t + c_i * dt, Y_n + sum(a_ij * K_j))
                 for idx in unroll_if(range(n), unroll_step_element):
+                    # A repeated stage takes f from its slot first.
+                    if reuses_rhs:
+                        stage_rhs[idx] = stage_store[repeat_offset + idx]
                     stage_store[stage_offset + idx] = state[idx]
 
                 # Accumulate contributions from predecessor stages Loop over
@@ -653,14 +649,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     stage_increment[idx] = stage_store[stage_offset + idx]
 
                 # A repeated stage reuses its predecessor's f.
-                reuses_rhs = False
-                if has_repeated_stage:
-                    if repeated_stage == stage_idx:
-                        reuses_rhs = True
-                if reuses_rhs:
-                    for idx in unroll_if(range(n), unroll_step_element):
-                        stage_rhs[idx] = repeated_stage_rhs[idx]
-                else:
+                if not reuses_rhs:
                     if has_evaluate_driver_at_t:
                         drivers_fn(
                             stage_time,
@@ -729,12 +718,13 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                             correction += c_coeff * prior_val
 
                     f_stage_val = stage_rhs[idx]
-                    if has_repeated_stage:
-                        if repeat_source == stage_idx:
-                            repeated_stage_rhs[idx] = f_stage_val
                     deriv_val = stage_gamma * time_derivative[idx]
                     rhs_value = f_stage_val + correction * inv_dt + deriv_val
                     stage_rhs[idx] = rhs_value * dt_scalar * gamma
+                    # Park f in the repeated stage's unused slot.
+                    if has_repeated_stage:
+                        if repeat_source == stage_idx:
+                            stage_store[repeat_offset + idx] = f_stage_val
 
                 # Use previous stage's solution as a guess for this stage
                 previous_base = prev_idx * n
