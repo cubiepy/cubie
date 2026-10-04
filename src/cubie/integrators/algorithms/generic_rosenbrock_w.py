@@ -52,7 +52,7 @@ from cubie._cudasim_extensions import cuda
 from cubie.backend.intrinsics import unroll_if
 
 from cubie.result_codes import CUBIE_RESULT_CODES
-from numpy import int32 as np_int32
+from numpy import array as np_array, int32 as np_int32
 
 from cubie._utils import (
     device_function_field,
@@ -399,10 +399,22 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         has_error = self.uses_error
         use_smoothed_error = self.smooth_error
         apply_mass = config.apply_mass_fn
+        has_algebraic_rows = not all(config.mass_flags)
         typed_zero = numba_precision(0.0)
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
 
         precision = config.precision
+        mass_flags = config.mass_flags
+        differential_rows = np_array(
+            [row for row, flag in enumerate(mass_flags) if flag],
+            dtype=np_int32,
+        )
+        algebraic_rows = np_array(
+            [row for row, flag in enumerate(mass_flags) if not flag],
+            dtype=np_int32,
+        )
+        differential_count = int32(len(differential_rows))
+        algebraic_count = int32(len(algebraic_rows))
         a_coeffs = tableau.typed_columns(tableau.a, precision)
         C_coeffs = tableau.typed_columns(tableau.C, precision)
         gamma_stages = tableau.typed_gamma_stages(precision)
@@ -692,8 +704,24 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                     for idx in unroll_if(range(n), unroll_step_element):
                         time_derivative[idx] *= dt_scalar
 
+                if has_algebraic_rows:
+                    # Algebraic rows have zero mass, so they take no C-term.
+                    for row in unroll_if(
+                        range(algebraic_count), unroll_step_element
+                    ):
+                        idx = algebraic_rows[row]
+                        deriv_val = stage_gamma * time_derivative[idx]
+                        rhs_value = stage_rhs[idx] + deriv_val
+                        stage_rhs[idx] = rhs_value * dt_scalar * gamma
+
                 # Add C_ij*K_j/dt + dt * gamma_i * d/dt terms to rhs
-                for idx in unroll_if(range(n), unroll_step_element):
+                for row in unroll_if(
+                    range(differential_count), unroll_step_element
+                ):
+                    if has_algebraic_rows:
+                        idx = differential_rows[row]
+                    else:
+                        idx = row
                     correction = numba_precision(0.0)
                     # Loop over all stages for static loop bounds
                     for predecessor_idx in unroll_if(

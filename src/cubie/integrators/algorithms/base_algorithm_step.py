@@ -64,6 +64,7 @@ from cubie._utils import (
     getype_validator,
     is_device_validator,
     opt_getype_validator,
+    optional_tuple_converter,
     precision_converter,
     PrecisionDType,
 )
@@ -83,6 +84,7 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "algorithm",
     "precision",
     "n_states",
+    "mass_flags",
     "attempt_dense_prediction",
     "dxdt_fn",
     "observables_fn",
@@ -200,9 +202,9 @@ components use this set to filter kwargs before forwarding.
    * - ``operator_gamma``
      - :class:`ImplicitStepConfig`
      - Stage-operator coefficient on the Jacobian term.
-   * - ``M``
-     - :class:`ImplicitStepConfig`
-     - Mass matrix for residual and Jacobian actions.
+   * - ``mass_flags``
+     - :class:`BaseStepConfig`
+     - Per-state mass-diagonal flags, ``True`` for a differential row.
    * - ``preconditioner_order``
      - :class:`ImplicitStepConfig`
      - Order of the truncated preconditioner series.
@@ -665,6 +667,9 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
         Number of state entries advanced by each step call.
     n_drivers
         Number of external driver signals consumed by the step (>= 0).
+    mass_flags
+        Per-state mass-diagonal flags, ``True`` for a differential
+        row; defaults to all ``True``.
     is_adaptive
         Whether the step controller is adaptive.
     dxdt_fn
@@ -682,6 +687,16 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
 
     n_states: int = field(default=1, validator=getype_validator(int, 1))
     n_drivers: int = field(default=0, validator=getype_validator(int, 0))
+    _mass_flags: Optional[Tuple[bool, ...]] = field(
+        default=None,
+        converter=optional_tuple_converter,
+        validator=validators.optional(
+            validators.deep_iterable(
+                validators.instance_of(bool),
+                validators.instance_of(tuple),
+            )
+        ),
+    )
     is_adaptive: bool = field(
         default=True, validator=validators.instance_of(bool)
     )
@@ -699,6 +714,22 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
             validators.instance_of(ButcherTableau)
         ),
     )
+
+    def __attrs_post_init__(self) -> None:
+        """Check the mass flags carry one entry per state."""
+        super().__attrs_post_init__()
+        if len(self.mass_flags) != self.n_states:
+            raise ValueError(
+                "mass_flags must carry one flag per state: got "
+                f"{len(self.mass_flags)} flags for n_states={self.n_states}."
+            )
+
+    @property
+    def mass_flags(self) -> Tuple[bool, ...]:
+        """Return the per-state mass flags; every row when unset."""
+        if self._mass_flags is None:
+            return (True,) * self.n_states
+        return self._mass_flags
 
     @property
     def first_same_as_last(self) -> bool:
@@ -779,6 +810,7 @@ class BaseAlgorithmStep(CUDAFactory):
             precision=system.precision,
             n_states=system.sizes.states,
             n_drivers=system.sizes.drivers,
+            mass_flags=system.mass_diagonal_flags,
             dxdt_fn=system.dxdt_fn,
             observables_fn=system.observables_fn,
             get_solver_helper_fn=system.get_solver_helper,
