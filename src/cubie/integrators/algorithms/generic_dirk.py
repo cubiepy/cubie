@@ -506,7 +506,6 @@ class DIRKStep(ODEImplicitStep):
 
         # Compile-time toggles
         has_evaluate_driver_at_t = drivers_fn is not None
-        has_error = self.uses_error
         multistage = stage_count > 1
         first_same_as_last = self.first_same_as_last
         can_reuse_accepted_start = self.can_reuse_accepted_start
@@ -523,12 +522,13 @@ class DIRKStep(ODEImplicitStep):
         # Replace streaming accumulation with direct assignment when
         # stage matches b or b_hat row in coupling matrix.
         accumulates_output = tableau.accumulates_output
-        accumulates_error = tableau.accumulates_error
+        accumulates_error = self.accumulates_error
         b_row = tableau.b_matches_a_row
-        b_hat_row = tableau.b_hat_matches_a_row
+        b_hat_row = self.error_row
         if b_row is not None:
             b_row = int32(b_row)
-        if b_hat_row is not None:
+        captures_error = b_hat_row is not None
+        if captures_error:
             b_hat_row = int32(b_hat_row)
 
         explicit_first_stage = tableau.explicit_first_stage
@@ -665,7 +665,7 @@ class DIRKStep(ODEImplicitStep):
             end_time = current_time + dt_scalar
 
             for idx in unroll_if(range(n), unroll_step_element):
-                if has_error and accumulates_error:
+                if accumulates_error:
                     error[idx] = typed_zero
 
             status_code = success
@@ -825,13 +825,12 @@ class DIRKStep(ODEImplicitStep):
                 elif b_row == int32(0):
                     # Direct assignment when stage 0 matches b_row
                     proposed_state[idx] = stage_base[idx]
-                if has_error:
-                    if accumulates_error:
-                        # Standard accumulation
-                        error[idx] += error_weight * rhs_value
-                    elif b_hat_row == int32(0):
-                        # Direct assignment for error
-                        error[idx] = stage_base[idx]
+                if accumulates_error:
+                    # Standard accumulation
+                    error[idx] += error_weight * rhs_value
+                elif b_hat_row == int32(0):
+                    # Direct assignment for error
+                    error[idx] = stage_base[idx]
 
             for idx in unroll_if(
                 range(accumulator_length), unroll_accumulator
@@ -923,11 +922,10 @@ class DIRKStep(ODEImplicitStep):
                     elif b_row == stage_idx:
                         proposed_state[idx] = stage_base[idx]
 
-                    if has_error:
-                        if accumulates_error:
-                            error[idx] += error_weight * increment
-                        elif b_hat_row == stage_idx:
-                            error[idx] = stage_base[idx]
+                    if accumulates_error:
+                        error[idx] += error_weight * increment
+                    elif b_hat_row == stage_idx:
+                        error[idx] = stage_base[idx]
 
             # Trailing explicit stages: evaluated after the Newton stages.
             if explicit_last_stage:
@@ -996,11 +994,10 @@ class DIRKStep(ODEImplicitStep):
                         elif b_row == stage_idx:
                             proposed_state[idx] = stage_base[idx]
 
-                        if has_error:
-                            if accumulates_error:
-                                error[idx] += error_weight * increment
-                            elif b_hat_row == stage_idx:
-                                error[idx] = stage_base[idx]
+                        if accumulates_error:
+                            error[idx] += error_weight * increment
+                        elif b_hat_row == stage_idx:
+                            error[idx] = stage_base[idx]
 
             # --------------------------------------------------------------- #
 
@@ -1008,11 +1005,10 @@ class DIRKStep(ODEImplicitStep):
                 if accumulates_output:
                     proposed_state[idx] *= dt_scalar
                     proposed_state[idx] += state[idx]
-                if has_error:
-                    if accumulates_error:
-                        error[idx] *= dt_scalar
-                    else:
-                        error[idx] = proposed_state[idx] - error[idx]
+                if accumulates_error:
+                    error[idx] *= dt_scalar
+                elif captures_error:
+                    error[idx] = proposed_state[idx] - error[idx]
 
             if use_smoothed_error:
                 # Solve (M - g*h*J) x = M @ raw at the final stage.

@@ -380,6 +380,13 @@ class ButcherTableau:
         """Return whether the tableau defines a smoothed error estimate."""
         return False
 
+    def smoothed_error_weights(
+        self,
+        precision: PrecisionDType,
+    ) -> Optional[np_ndarray]:
+        """Return weights that replace the estimate when smoothing."""
+        return None
+
     @property
     def stage_count(self) -> int:
         """Return the number of stages described by the tableau."""
@@ -1028,6 +1035,20 @@ class BaseAlgorithmStep(CUDAFactory):
         return bool(self.has_error_estimate and self.is_adaptive)
 
     @property
+    def smooth_error(self) -> bool:
+        """Return whether error smoothing compiles into the step."""
+        return False
+
+    @property
+    def smoothed_error_weights(self) -> Optional[np_ndarray]:
+        """Return the tableau's smoothed weights while smoothing, else None."""
+        if not self.smooth_error:
+            return None
+        return self.tableau.smoothed_error_weights(
+            self.compile_settings.precision
+        )
+
+    @property
     def error_weights(self) -> Optional[np_ndarray]:
         """Return the error weights in run precision; zeros when unused."""
 
@@ -1035,9 +1056,27 @@ class BaseAlgorithmStep(CUDAFactory):
         if tableau is None:
             return None
         precision = self.compile_settings.precision
-        if self.uses_error:
-            return tableau.error_weights(precision)
-        return np_zeros(tableau.stage_count, dtype=precision)
+        if not self.uses_error:
+            return np_zeros(tableau.stage_count, dtype=precision)
+        smoothed = self.smoothed_error_weights
+        if smoothed is not None:
+            return smoothed
+        return tableau.error_weights(precision)
+
+    @property
+    def error_row(self) -> Optional[int]:
+        """Return the ``a`` row the step captures as its error solution."""
+        tableau = self.tableau
+        if tableau is None or not self.uses_error:
+            return None
+        if self.smoothed_error_weights is not None:
+            return None
+        return tableau.b_hat_matches_a_row
+
+    @property
+    def accumulates_error(self) -> bool:
+        """Return whether the compiled step sums the error over stages."""
+        return self.uses_error and self.error_row is None
 
     @property
     def tableau(self) -> Optional[ButcherTableau]:

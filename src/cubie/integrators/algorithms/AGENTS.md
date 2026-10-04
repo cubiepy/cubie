@@ -82,7 +82,8 @@ resolves a name or `ButcherTableau` to the right factory.
   registries into valid `algorithm` names. `ButcherTableau.__attrs_post_init__` checks
   that `b` and `b_hat` sum to 1.
 - Tableau properties drive compile-time shortcuts; use them rather than hand-rolling:
-  `b_matches_a_row`/`b_hat_matches_a_row` copy a stage state instead of accumulating;
+  `b_matches_a_row` copies a stage state instead of accumulating; the base step's
+  `error_row`/`accumulates_error` do the same for the error;
   `first_same_as_last`/`can_reuse_accepted_start` enable FSAL stage-0 reuse (gated on
   `all_sync(activemask(), accepted_flag != 0)`); `explicit_first_stage` and
   `DIRKTableau.last_implicit_stage` split stage 0, the Newton loop and trailing explicit
@@ -125,8 +126,8 @@ earlier stage's row). `predictor_fn` arrives through compile settings;
   otherwise it compiles out, and an unsupported request warns.
   `FIRKStep.family_defaults(tableau)` turns it on for Radau.
 - `smoothing_gamma` is `a[-1][-1]` on `ButcherTableau` and the sole real eigenvalue of
-  `a` on `RadauIIATableau`, computed exactly and rounded once. The tableau also derives
-  `smoothed_error_weights`.
+  `a` on `RadauIIATableau`, computed exactly and rounded once. While smoothing, Radau's
+  `smoothed_error_weights` are the step's `error_weights` and `error_row` is `None`.
 - DIRK and FIRK own an `error_solver` (width `n_states`, `AT_STATE` helpers, aliased
   into `solver_shared`) when `owns_error_solver`, registered only while smoothing is
   on. It has `instance_label="error"`, reads `error_atol`, `error_rtol`,
