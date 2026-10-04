@@ -357,17 +357,19 @@ def test_block_size_change_clears_the_pinned_residency(solver_mutable):
     [{"algorithm": "bogacki-shampine-32", "stage_rhs_location": "local"}],
     indirect=True,
 )
+# The manager reports 128 MiB free, so auto-size stops at that cap.
+@pytest.mark.parametrize("forced_free_mem", [128 * 1024**2], indirect=True)
 def test_optimize_times_candidates_and_applies_the_fastest(
-    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+    low_mem_solver, simple_initial_values, simple_parameters, driver_settings
 ):
     """Both placements are timed; the fastest launch is applied."""
-    assert solver_mutable.optimisation_candidates() == (
+    assert low_mem_solver.optimisation_candidates() == (
         {"state_location": "local"},
         {"state_location": "shared"},
     )
     verbosity = default_timelogger.verbosity
     waves = 2
-    result = solver_mutable.optimize(
+    result = low_mem_solver.optimize(
         simple_initial_values,
         parameters=simple_parameters,
         drivers=driver_settings,
@@ -385,7 +387,7 @@ def test_optimize_times_candidates_and_applies_the_fastest(
         "shared",
     }
     assert min(launch.waves for launch in timed) >= waves
-    outputs = solver_mutable.kernel.output_arrays
+    outputs = low_mem_solver.kernel.output_arrays
     for _, slot in outputs.host.iter_managed_arrays():
         assert slot.array is None
     for launch in result.launches:
@@ -398,7 +400,7 @@ def test_optimize_times_candidates_and_applies_the_fastest(
         **result.best.settings,
         "blocksize": result.best.blocksize,
     }
-    kernel = solver_mutable.kernel
+    kernel = low_mem_solver.kernel
     assert kernel.compile_settings.blocksize == result.best.blocksize
     assert kernel.resident_blocks == result.best.resident_blocks
     loop = kernel.single_integrator._loop
@@ -414,16 +416,16 @@ def test_optimize_times_candidates_and_applies_the_fastest(
     # The duration ramps to the given; a batch still short of the
     # target there grows toward it.
     assert result.duration == pytest.approx(0.1)
-    most = most_resident_runs(solver_mutable.kernel)
+    most = most_resident_runs(low_mem_solver.kernel)
     assert result.runs >= waves * most
     assert result.runs > waves * most or result.best.best_ms >= 20.0
     assert "best" in result.summary()
     # Size the compiled candidates at two waves of the most concurrent.
     candidates = [
         Candidate(settings_label(settings), dict(settings))
-        for settings in solver_mutable.optimisation_candidates()
+        for settings in low_mem_solver.optimisation_candidates()
     ]
-    runner = _runner(solver_mutable, simple_initial_values, simple_parameters)
+    runner = _runner(low_mem_solver, simple_initial_values, simple_parameters)
     with runner:
         runner.compile(candidates)
         assert runner.warm() >= WARM_MS
