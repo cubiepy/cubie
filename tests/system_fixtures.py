@@ -458,7 +458,7 @@ def build_colliding_constants_system(precision: np_dtype) -> BaseODE:
 
 
 # ---------------------------------------------------------------------------
-# Lorenz system pinned by the Julia golden-reference gate
+# Lorenz system with rho as a parameter
 # ---------------------------------------------------------------------------
 
 LORENZ_JULIA_EQUATIONS = [
@@ -473,7 +473,7 @@ LORENZ_JULIA_CONSTANTS = {"sigma": 10.0, "beta": 8.0 / 3.0}
 
 
 def build_lorenz_julia_system(precision: np_dtype) -> BaseODE:
-    """Return the Lorenz system used by the Julia reference gate."""
+    """Return the Lorenz system with rho as a parameter."""
 
     system = create_ODE_system(
         dxdt=LORENZ_JULIA_EQUATIONS,
