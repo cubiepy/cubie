@@ -268,6 +268,10 @@ SPECIFIC_ALGORITHM_COMBOS = {
     "rosenbrock-rodas3p": {
         "algorithm": "rodas3p", "step_controller": "pid",
     },
+    # b_hat matches an a row with no error buffer to write it to.
+    "rosenbrock-rodas4-fixed": {
+        "algorithm": "rodas4", "step_controller": "fixed",
+    },
 }
 
 STEP_CASES = [

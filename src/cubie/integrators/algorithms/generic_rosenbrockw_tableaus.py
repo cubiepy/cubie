@@ -152,20 +152,15 @@ def _stiffly_accurate_tableau(
     )
 
 
-# --------------------------------------------------------------------------
-# ROS3P (Rang & Angermann 2005), constants and structure cross-checked with:
-# - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)
-#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl (ROS3PTableau)
-#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl
-# --------------------------------------------------------------------------
-def _ros3p_tableau() -> RosenbrockTableau:
-    """Return the three-stage third-order ROS3P tableau.
+# Julia sources at OrdinaryDiffEq.jl@739379950dc3, under lib/:
+# Tableaus = OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl
+# Rosenbrock = OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl
 
-    References
-    ----------
-    - Rang, J., & Angermann, L. (2005). New Rosenbrock–W methods of order 3.
-    - SciML/OrdinaryDiffEq.jl ROS3PTableau (see link above).
-    """
+
+# ROS3P: Lang & Verwer (2001), BIT 41, 731-738.
+# Tableaus:270 ROS3PRodasTableau; fields unchanged.
+def _ros3p_tableau() -> RosenbrockTableau:
+    """Return the three-stage third-order ROS3P tableau."""
 
     gamma = 0.5 + sqrt(3.0) / 6.0
     igamma = 1.0 / gamma
@@ -208,15 +203,10 @@ def _ros3p_tableau() -> RosenbrockTableau:
 ROS3P_TABLEAU = _ros3p_tableau()
 
 
-# --------------------------------------------------------------------------
-# RODAS3P (p=3) — Kaps-Rentrop type
-# Source of constants:
-# - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)
-#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl (Rodas3PTableau)
-#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl
-# --------------------------------------------------------------------------
+# Rodas3P: Steinebach (2024), Proceedings of the JuliaCon Conferences.
+# Tableaus:395 Rodas3PRodasTableau; fields unchanged.
 def _rodas3p_tableau() -> RosenbrockTableau:
-    """Return the five-stage third-order RODAS3P tableau (Kaps–Rentrop p=3)."""
+    """Return the five-stage third-order RODAS3P tableau."""
 
     gamma = 1.0 / 3.0
 
@@ -261,17 +251,8 @@ def _rodas3p_tableau() -> RosenbrockTableau:
 
 RODAS3P_TABLEAU = _rodas3p_tableau()
 
-# --------------------------------------------------------------------------
-# Rosenbrock23 (3-stage, order 2 with order-3 error estimate) — SciML
-# variant. Untransformed coefficients from:
-# - SciML/OrdinaryDiffEq.jl (commit c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813)
-#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl
-#   (Rosenbrock23Tableau: c32=6+sqrt(2), d=1/(2+sqrt(2)))
-#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl
-# - Algorithm form and residuals:
-#   lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_perform_step.jl (perform_step!
-#   for Rosenbrock23)
-#   https://github.com/SciML/OrdinaryDiffEq.jl/blob/c174fbc1b07c252fe8ec8ad5b6e4d5fb9979c813/lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_perform_step.jl
+# Rosenbrock23: Shampine & Reichelt (1997), SIAM J. Sci. Comput. 18(1).
+# Rosenbrock:6 Rosenbrock23Tableau; k-form transformed as below.
 #
 # SciML expresses the method in gradient form (stage vectors k_i,
 # W k = f(...) with explicit -J k couplings). This module's step uses
@@ -283,7 +264,6 @@ RODAS3P_TABLEAU = _rodas3p_tableau()
 # alpha = [[0],[1/2],[0,1]], b_k = (0,1,0), e_k = (1/6,-1/3,1/6),
 # and per-stage time-derivative weights (d, 0, -d) — the row sums of
 # Gamma.
-# --------------------------------------------------------------------------
 def _rosenbrock_23_sciml_tableau() -> RosenbrockTableau:
     """Return the transformed 3-stage Rosenbrock 23 tableau (order 2)."""
 
@@ -338,6 +318,8 @@ def _rosenbrock_23_sciml_tableau() -> RosenbrockTableau:
 ROSENBROCK_23_SCIML_TABLEAU = _rosenbrock_23_sciml_tableau()
 
 
+# Rosenbrock32: Shampine & Reichelt (1997), SIAM J. Sci. Comput. 18(1).
+# Rosenbrock:17 Rosenbrock32Tableau; k-form transformed as Rosenbrock23.
 def _rosenbrock_32_tableau() -> RosenbrockTableau:
     """Return the transformed 3-stage Rosenbrock 32 tableau (order 3).
 
@@ -362,7 +344,7 @@ def _rosenbrock_32_tableau() -> RosenbrockTableau:
         (-2.0 * inv_d, -(14.0 + 8.0 * sqrt2), 0.0),
     )
 
-    # (1/6, 4/6, 1/6) @ inv(Gamma), inv(Gamma) = [[1,0,0],[1,1,0],[2,c32,1]]/d
+    # b = (1/6, 4/6, 1/6) @ inv(Gamma), Gamma as in Rosenbrock23.
     b = (
         7.0 * inv_d / 6.0,
         (10.0 + sqrt2) * inv_d / 6.0,
@@ -387,8 +369,8 @@ def _rosenbrock_32_tableau() -> RosenbrockTableau:
 ROSENBROCK_32_SCIML_TABLEAU = _rosenbrock_32_tableau()
 
 
-# Below: OrdinaryDiffEq.jl@739379950dc3 RodasTableau fields, unchanged.
 # ROS2: Verwer et al. (1999), SIAM J. Sci. Comput. 20(4).
+# Tableaus:621 ROS2RodasTableau; fields unchanged.
 ROS2_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0),
@@ -409,6 +391,7 @@ ROS2_TABLEAU = _julia_tableau(
 
 
 # ROS2PR: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
+# Tableaus:641 ROS2PRRodasTableau; fields unchanged.
 ROS2PR_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -431,6 +414,7 @@ ROS2PR_TABLEAU = _julia_tableau(
 
 
 # ROS2S: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
+# Tableaus:664 ROS2SRodasTableau; fields unchanged.
 ROS2S_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -461,6 +445,7 @@ ROS2S_TABLEAU = _julia_tableau(
 
 
 # ROS3: Hairer & Wanner, Solving ODEs II (1996).
+# Tableaus:687 ROS3RodasTableau; fields unchanged.
 ROS3_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -487,6 +472,7 @@ ROS3_TABLEAU = _julia_tableau(
 
 
 # ROS3PR: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
+# Tableaus:709 ROS3PRRodasTableau; fields unchanged.
 ROS3PR_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -509,6 +495,7 @@ ROS3PR_TABLEAU = _julia_tableau(
 
 
 # Scholz4_7: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
+# Tableaus:733 Scholz4_7RodasTableau; fields unchanged.
 SCHOLZ4_7_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0),
@@ -535,6 +522,7 @@ SCHOLZ4_7_TABLEAU = _julia_tableau(
 
 
 # ROS34PW1a: Rang & Angermann (2005), BIT 45, 761-787.
+# Tableaus:757 ROS34PW1aRodasTableau; fields unchanged.
 ROS34PW1A_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -569,6 +557,7 @@ ROS34PW1A_TABLEAU = _julia_tableau(
 
 
 # ROS34PW1b: Rang & Angermann (2005), BIT 45, 761-787.
+# Tableaus:785 ROS34PW1bRodasTableau; fields unchanged.
 ROS34PW1B_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -603,6 +592,7 @@ ROS34PW1B_TABLEAU = _julia_tableau(
 
 
 # ROS34PW2: Rang & Angermann (2005), BIT 45, 761-787.
+# Tableaus:814 ROS34PW2RodasTableau; fields unchanged.
 ROS34PW2_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -637,6 +627,7 @@ ROS34PW2_TABLEAU = _julia_tableau(
 
 
 # ROS34PW3: Rang & Angermann (2005), BIT 45, 761-787.
+# Rosenbrock:242 ROS34PW3RodasTableau; fields unchanged.
 ROS34PW3_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -676,6 +667,7 @@ ROS34PW3_TABLEAU = _julia_tableau(
 
 
 # ROS34PRw: Rang (2015), doi:10.1016/j.cam.2015.03.010.
+# Tableaus:843 ROS34PRwRodasTableau; fields unchanged.
 ROS34PRW_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -710,6 +702,7 @@ ROS34PRW_TABLEAU = _julia_tableau(
 
 
 # ROS3PRL: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
+# Tableaus:872 ROS3PRLRodasTableau; fields unchanged.
 ROS3PRL_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -744,6 +737,7 @@ ROS3PRL_TABLEAU = _julia_tableau(
 
 
 # ROS3PRL2: Rang (2014), doi:10.24355/dbbs.084-201408121139-0.
+# Tableaus:900 ROS3PRL2RodasTableau; fields unchanged.
 ROS3PRL2_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -778,6 +772,7 @@ ROS3PRL2_TABLEAU = _julia_tableau(
 
 
 # ROK4a: Tranquilli & Sandu (2014), doi:10.1137/130923336.
+# Rosenbrock:266 ROK4aRodasTableau; fields unchanged.
 ROK4A_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -817,6 +812,7 @@ ROK4A_TABLEAU = _julia_tableau(
 
 
 # RosShamp4: Shampine (1982), ACM TOMS 8(2), 93-113.
+# Tableaus:453 RosShamp4RodasTableau; fields unchanged.
 ROSSHAMP4_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -846,6 +842,7 @@ ROSSHAMP4_TABLEAU = _julia_tableau(
 
 
 # Veldd4: van Veldhuizen (1984), Computing 32, 229.
+# Tableaus:481 Veldd4RodasTableau; fields unchanged.
 VELDD4_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -885,6 +882,7 @@ VELDD4_TABLEAU = _julia_tableau(
 
 
 # Velds4: van Veldhuizen (1984), Computing 32, 229.
+# Tableaus:509 Velds4RodasTableau; fields unchanged.
 VELDS4_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -919,6 +917,7 @@ VELDS4_TABLEAU = _julia_tableau(
 
 
 # GRK4T: Kaps & Rentrop (1979), Numer. Math. 33, 55.
+# Tableaus:537 GRK4TRodasTableau; fields unchanged.
 GRK4T_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -958,6 +957,7 @@ GRK4T_TABLEAU = _julia_tableau(
 
 
 # GRK4A: Kaps & Rentrop (1979), Numer. Math. 33, 55.
+# Tableaus:565 GRK4ARodasTableau; fields unchanged.
 GRK4A_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -997,6 +997,7 @@ GRK4A_TABLEAU = _julia_tableau(
 
 
 # Ros4LStab: Hairer & Wanner, Solving ODEs II (1996).
+# Tableaus:593 Ros4LStabRodasTableau; fields unchanged.
 ROS4LSTAB_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -1036,6 +1037,7 @@ ROS4LSTAB_TABLEAU = _julia_tableau(
 
 
 # RosenbrockW6S4OS: doi:10.1016/j.cam.2009.09.017.
+# Tableaus:928 RosenbrockW6S4OSRodasTableau; fields unchanged.
 ROSENBROCKW6S4OS_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1120,6 +1122,7 @@ ROSENBROCKW6S4OS_TABLEAU = _julia_tableau(
 
 
 # Rodas3: Sandu et al. (1997), Atmos. Environ. 31(19), 3151-3166.
+# Tableaus:318 Rodas3RodasTableau; fields unchanged.
 RODAS3_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -1144,6 +1147,7 @@ RODAS3_TABLEAU = _julia_tableau(
 
 
 # Rodas3d: Yu, Gu, Xu & Lu (2024), arXiv:2312.02809.
+# Tableaus:360 Rodas3dRodasTableau; fields unchanged.
 RODAS3D_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0),
@@ -1168,6 +1172,7 @@ RODAS3D_TABLEAU = _julia_tableau(
 
 
 # Rodas23W: Steinebach (2024), Proceedings of the JuliaCon Conferences.
+# Rosenbrock:188 Rodas23WRodasTableau; fields unchanged.
 RODAS23W_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1194,6 +1199,7 @@ RODAS23W_TABLEAU = _julia_tableau(
 
 
 # Rodas4: Hairer & Wanner, Solving ODEs II (1996).
+# Tableaus:106 Rodas4Tableau; fields unchanged.
 RODAS4_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1261,6 +1267,7 @@ RODAS4_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas42: Hairer & Wanner, Solving ODEs II (1996).
+# Tableaus:142 Rodas42Tableau; fields unchanged.
 RODAS42_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1328,6 +1335,7 @@ RODAS42_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas4P: Steinebach (1995), Preprint 1741, TH Darmstadt.
+# Tableaus:178 Rodas4PTableau; fields unchanged.
 RODAS4P_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1395,6 +1403,7 @@ RODAS4P_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas4P2: Steinebach (2020), Progress in DAEs II, 165-184.
+# Tableaus:215 Rodas4P2Tableau; fields unchanged.
 RODAS4P2_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1462,6 +1471,7 @@ RODAS4P2_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas4PW: Steinebach (2026), in preparation.
+# Tableaus:257 Rodas4PWTableau; fields unchanged.
 RODAS4PW_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1653,6 +1663,7 @@ RODAS4PW_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas5: Di Marzo (1993), MSc thesis, University of Geneva.
+# Tableaus:65 Rodas5Tableau; fields unchanged.
 RODAS5_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1790,6 +1801,7 @@ RODAS5_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas5P: Steinebach (2023), BIT 63, 27.
+# Rosenbrock:64 Rodas5PTableau; fields unchanged.
 RODAS5P_TABLEAU = _stiffly_accurate_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -1927,6 +1939,7 @@ RODAS5P_TABLEAU = _stiffly_accurate_tableau(
 
 
 # Rodas5Pe: Steinebach (2024), Proceedings of the JuliaCon Conferences.
+# Rosenbrock:75 Rodas5PeTableau; fields unchanged.
 RODAS5PE_TABLEAU = _julia_tableau(
     a=(
         (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -2085,8 +2098,8 @@ RODAS5PE_TABLEAU = _julia_tableau(
 
 
 # Rodas6P: Steinebach (2025), arXiv:2511.21252.
+# Rosenbrock:161 Rodas6PTableau; dense-output stages 17-19 dropped.
 RODAS6P_TABLEAU = _stiffly_accurate_tableau(
-    # Stages 17-19 feed only Julia's dense output and are dropped.
     a=(
         (
             0.0,

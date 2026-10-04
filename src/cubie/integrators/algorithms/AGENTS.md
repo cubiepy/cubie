@@ -32,7 +32,7 @@ resolves a name or `ButcherTableau` to the right factory.
 | `generic_firk.py` | `FIRKStep` + `FIRKStepConfig`: fully-implicit RK; all stages as one coupled `n*stages` Newton system; dense-predictor warm starts; Kahan-summed output accumulation. |
 | `generic_firk_tableaus.py` | `FIRKTableau` + `RadauIIATableau` (adds the smoothed estimate, gated on `inv(a)` having a sole real eigenvalue — odd stage counts only); Gauss-Legendre 2 (default, errorless) and 4, Radau IIA 3/5/9; `compute_embedded_weights` (moment conditions over any node set). |
 | `generic_rosenbrock_w.py` | `GenericRosenbrockWStep` + `RosenbrockWStepConfig`: linearly-implicit Rosenbrock-W using a cached Jacobian and a **linear** (not Newton) solve per stage; needs `driver_derivative_fn` and time-derivative helpers. |
-| `generic_rosenbrockw_tableaus.py` | `RosenbrockTableau` (adds `C`, `gamma`, `gamma_stages`) + ROS3P (default), RODAS3P, SciML Rosenbrock23/32, and OrdinaryDiffEq.jl's ROS/Rodas tableaus mapped field for field (`_julia_tableau`: `b_hat = b - btilde`; `_stiffly_accurate_tableau`: `b = (A_s, 1)`, `b_hat = A_s`). |
+| `generic_rosenbrockw_tableaus.py` | `RosenbrockTableau` (adds `C`, `gamma`, `gamma_stages`); ROS3P (default), RODAS3P, Rosenbrock23/32, and OrdinaryDiffEq.jl's ROS/Rodas set. |
 | `backwards_euler.py` | `BackwardsEulerStep` + config: single-stage implicit, order 1, fixed-step; persistent `increment_cache` warm-starts Newton. |
 | `backwards_euler_predict_correct.py` | `BackwardsEulerPCStep`: subclass adding an explicit forward-Euler predictor before the Newton corrector. |
 | `crank_nicolson.py` | `CrankNicolsonStep` + config: order-2 adaptive implicit; two implicit solves per step (CN + backward Euler), the difference giving the embedded error estimate. |
