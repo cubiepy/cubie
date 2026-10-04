@@ -4,7 +4,7 @@ Goal: every file under `src/cubie/odesystems/symbolic/structural/` derives only 
 
 ## Sources
 
-`structural/` was ported in #605 (2026-07-14) from the July 2026 versions of the packages below. Code matching an MIT release is usable under MIT; code with no MIT counterpart came from the AGPL code.
+`structural/` was ported in #605 from the July 2026 versions of these packages; code with no MIT counterpart is AGPL-derived.
 
 | Source | Licence | Usable |
 |---|---|---|
@@ -25,7 +25,7 @@ Goal: every file under `src/cubie/odesystems/symbolic/structural/` derives only 
 
 MIT-clean and unchanged: `bipartite.py` (BipartiteGraphs.jl); `diffgraph.py`, `clil.py`, `pantelides.py`, `consistency.py`, `errors.py` (StateSelection.jl 74df007e); `digraph.py` (BipartiteGraphs.jl, Graphs.jl); `derivative_block.py` (cubie, #843).
 
-AGPL-derived pieces in the other files. Everything else in those files matches an MIT release and stays.
+AGPL-derived pieces in the other files; the rest of each file stays.
 
 | File | AGPL-derived piece | Decision |
 |---|---|---|
@@ -102,7 +102,7 @@ Nothing in `src` calls these: `PivotInfo` and `return_pivots`; `trivial_tearing`
 
 ## Measured effect
 
-Items 1 and 3 to 6 were emulated together in-process on current `main` (item 2 as the current exact matching) and run through the full simulator suite and three DAE problems:
+Items 1 and 3 to 6 emulated together on current `main` (current exact matching for item 2), on the full simulator suite and three DAE problems:
 - NAND gate: Test Set; 14 node voltages, `C(y) y' = f(y, t)`.
 - Ring modulator, index 2: Test Set II-3 with the four capacitors removed.
 - Transistor amplifier: Test Set II-2; 8 node voltages; float32 radau_iia_5, against the Test Set reference at t = 0.2.
