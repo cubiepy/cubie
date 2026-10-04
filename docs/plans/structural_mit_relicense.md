@@ -75,7 +75,11 @@ MIT MTK consumes `canonical_ranks` (`pick_alias_target`); its construction is AG
 ### 8. Reassembly (`reassemble.py:296-329, 548-726, 727-898`)
 
 - Dummy-derivative singleton SCC insertion: MTK c4177c335 inserts the singleton SCC solving `D(x) = x_t` immediately before the SCC `D(x)` was in. cubie's rule: before the earlier of that SCC and the SCC containing `D(D(x))`; at equal positions, longer derivative chains first. Rewrite from this rule.
-- Linear-SCC inlining: `inline_linear_sccs`, `analytical_linear_scc_limit`, `find_alg_eqs_vars`, `is_linear_scc` and `get_linear_scc_linsol` are in MTK c4177c335 `symbolics_tearing.jl` (MIT). Port the option from there. cubie's elimination of torn rows inside the SCC (`reassemble.py:779-859`) has no MIT ancestor; reimplement it from this specification: each SCC equation already matched to an SCC variable defines that variable as a linear combination of the others; substitute those definitions into the remaining rows and solve the reduced system when its size is at most `analytical_linear_scc_limit`, subject to the `allow_symbolic`/`allow_parameter` division policy.
+- Linear-SCC inlining is removed: `inline_linear_sccs` and `analytical_linear_scc_limit` (from `structural_simplify`, `default_reassemble` and `generate_system_equations`), `_get_linear_scc_linsol`, `symbolics.solve_linear_system`, and `test_inline_linear_scc_solves_analytically`.
+
+### 9. Unused code removed
+
+Nothing in `src` calls these; delete them: `PivotInfo` and `structural_singularity_removal`'s `return_pivots`; `trivial_tearing`'s `mm` parameter and branch (item 4); `tearing_with_dummy_derivatives`; `partial_state_selection_graph`, `_partial_state_selection_graph`, `_pss_graph_modia`, `_ascend_dg`, `_DiffData`; `BipartiteGraph.delete_dsts`; `SparseMatrixCLIL.getindex`; `DerivativeRegistry.register_known`; `SystemStructure.isalgvar`, `isdiffvar`, `algeqs`.
 
 ## Unchanged
 
@@ -99,7 +103,7 @@ Each item was replaced in-process by an emulation of its specification (items 1,
 - Float32 radau_iia_5, the Test Set reference at t = 0.2: max absolute error 8.2e-4 current, 3.6e-4 Modia, 1.4e-4 with items 1, 3 and 6 as specified. All solves succeed and all are within the 2e-3 tolerance.
 - `dz = w; 0 = x + y + w; 0 = 2x + 2y - w; 0 = w^5 + w - z` with `conservative=True`: current iterates on `w, x` with `y = -(w + x)` observed; Modia iterates on `w, y` with `x = -(w + y)` observed.
 
-**Linear-SCC inlining deleted instead of ported.** The `structural_simplify(..., inline_linear_sccs=True)` option disappears.
+**Linear-SCC inlining removed.** The `structural_simplify(..., inline_linear_sccs=True)` option disappears; it is off by default and unused by the benchmarks.
 
 **Tests these changes break:**
 
@@ -146,7 +150,7 @@ Solves on an RTX 4070 SUPER, 1024 trajectories over the problem's swept paramete
 1. Items 5, 6, 7 (ports and specifications; no algorithm change).
 2. Items 3 and 4.
 3. Item 2, then item 1.
-4. Item 8.
+4. Items 8 and 9.
 5. Run `tests/odesystems/symbolic/structural/`, then the full simulator and real-GPU suites.
 
 ## Documentation and notices

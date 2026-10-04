@@ -51,7 +51,7 @@ Measurements: each replacement was emulated on top of the decided design (Carpan
 |---|---|---|---|
 | Carpanzano tearing | Modia tearing | Different choice of which variables Newton iterates on; same number of them. All three problems solve as before. | Decided: drop Carpanzano |
 | Exact integer-linear SCC matching | none | Blocks of integer-coefficient linear equations stay as equations Newton solves instead of being solved exactly. `dx + dy = -x; dy + dz = -y; 0 = x + y - z` becomes a DAE needing an implicit solver instead of an explicit ODE. | Decided: rewrite |
-| Linear-SCC inlining | MTK c4177c335 version | Not measured; off by default and unused by the benchmarks | Decided: port from MTK |
+| Linear-SCC inlining | MTK c4177c335 version | Off by default and unused by the benchmarks | Decided: remove |
 | Integer coefficients up to 127 in the integer subsystem | only ±1 coefficients | Relations with other integer coefficients lose exact checking. `dz = w; 0 = x + y + w; 0 = 2x + 2y - w; 0 = w^5 + w - z` (forces `w = 0`, leaves `x`, `y` undetermined) is accepted and fails at solve time instead of being rejected at construction. `dx = -3x; dy = -3y; 0 = x - y` (consistent, redundant) is rejected as having too many equations instead of being reduced to one state. NAND, ring modulator, amplifier: unchanged. | Rewrite (the requirement is one sentence) |
 | Canonical variable ranks (tie-breaks between variables of equal state priority) | no ranks; ties go to variable order | The transistor amplifier integrates the diode currents instead of node voltages 2 and 5, so Newton must invert the exponential diode law for those voltages every step; every run fails (Newton divergence, step too small). NAND, ring modulator: unchanged. | Rewrite: a rank scheme designed from scratch (sort by name, then derivative order) gives the amplifier the same simplified system as the current ranks, which solves to the reference with max error 3.6e-4 |
 | Equation sort key | sort equations by their printed form | NAND: equations come out in a different order, same states and residuals. Others unchanged. No test changes. | MIT version |
@@ -62,7 +62,7 @@ Measurements: each replacement was emulated on top of the decided design (Carpan
 | Integer-matrix rebasing with alias substitution (`get_new_mm`) | drop rows holding removed variables | None measured | MIT version |
 | Integer-matrix sync during Pantelides | none | Required by exact SCC matching | Rewrite with exact SCC matching |
 | Index-map helpers, `rm_eqs_vars` | MTK c4177c335 `alias_elimination!` / `trivial_tearing!` bookkeeping, BipartiteGraphs.jl `delete_srcs!` | Same behaviour | MIT version |
-| `PivotInfo`, `return_pivots` | none | Unused by the pipeline | Delete |
+| `PivotInfo`, `return_pivots`, `trivial_tearing`'s integer-matrix branch | none | Unused by the pipeline | Decided: remove, with all other code nothing in `src` calls |
 
 Test fallout of the MIT versions (beyond the tests that read Carpanzano's variable names): ±1-only coefficients fail `test_singular_integer_block_raises`, `test_alias_target_prefers_priority` and `test_exact_scc_matching_singular_warns`; removing canonical ranks fails `test_sum_of_parameters_coefficient_reduces_like_a_number` (the amplifier grows from 8 to 10 states). Every other MIT version passes the full simulator suite.
 
