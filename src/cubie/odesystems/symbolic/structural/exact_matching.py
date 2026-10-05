@@ -13,67 +13,20 @@ Published Functions
 """
 
 import warnings
-from typing import Callable, List, Optional, Tuple
+from typing import Callable
 
-from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.structural.bipartite import _always_true
 from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
     bareiss,
-    bareiss_update_virtual_colswap_clil,
 )
 from cubie.odesystems.symbolic.structural.digraph import find_var_sccs
-from cubie.odesystems.symbolic.structural.singularity_removal import (
-    find_masked_pivot,
-)
 from cubie.odesystems.symbolic.structural.system_structure import (
-    Equation,
     StructuralState,
 )
 from cubie.odesystems.symbolic.structural.tearing import (
     build_var_eq_matching,
 )
-
-
-def _display_name(state: StructuralState, var: ir.Sym) -> str:
-    """Name of ``var`` with one prime per derivative order."""
-
-    base, order = state.registry.base_and_order(var)
-    return base.name + "'" * order
-
-
-def _reduce_block(
-    block: SparseMatrixCLIL,
-    scc_cols: List[bool],
-    derivative_cols: List[bool],
-) -> int:
-    """Bareiss-reduce ``block`` on its SCC columns; return the rank.
-
-    Each step pivots on a derivative column when a remaining row holds
-    one, and on any SCC column otherwise. Row ``k`` of the result holds
-    its pivot column and no earlier pivot column.
-    """
-
-    def find_pivot(
-        matrix: SparseMatrixCLIL, k: int
-    ) -> Optional[Tuple[Tuple[int, int], int]]:
-        pivot = find_masked_pivot(derivative_cols, matrix, k)
-        if pivot is None:
-            pivot = find_masked_pivot(scc_cols, matrix, k)
-        return pivot
-
-    def swaprows(matrix: SparseMatrixCLIL, i: int, j: int) -> None:
-        matrix.swaprows(i, j)
-
-    def update(matrix, k, swapto, pivot, last_pivot) -> None:
-        bareiss_update_virtual_colswap_clil(
-            matrix, k, swapto[1], pivot, last_pivot
-        )
-
-    rank, _, _ = bareiss(
-        block, find_pivot, swaprows=swaprows, update=update
-    )
-    return rank
 
 
 def match_linear_sccs(
@@ -105,13 +58,11 @@ def match_linear_sccs(
         Predicate selecting the variables that may be solved for.
     """
 
-    structure = state.structure
-    graph = structure.graph
-    solvable_graph = structure.solvable_graph
+    graph = state.structure.graph
     mm = state.mm
     mm_rows = {eq: i for i, eq in enumerate(mm.nzrows)}
     var_eq_matching, _ = build_var_eq_matching(
-        structure, varfilter, _always_true
+        graph, varfilter, _always_true
     )
 
     for scc in find_var_sccs(graph, var_eq_matching):
@@ -138,10 +89,8 @@ def match_linear_sccs(
         derivative_cols = [
             in_scc and isder(v) for v, in_scc in enumerate(scc_cols)
         ]
-        if _reduce_block(block, scc_cols, derivative_cols) < len(eqs):
-            names = ", ".join(
-                _display_name(state, state.fullvars[v]) for v in scc
-            )
+        if len(bareiss(block, [derivative_cols, scc_cols])) < len(eqs):
+            names = ", ".join(state.fullvars[v].name for v in scc)
             warnings.warn(
                 "Integer-linear equations are singular in the "
                 f"variables they solve ({names}); tearing them "
@@ -155,10 +104,5 @@ def match_linear_sccs(
             row = mm_rows[eq]
             mm.row_cols[row] = list(cols)
             mm.row_vals[row] = list(vals)
-            rhs = ir.add(
-                *[c * state.fullvars[v] for c, v in zip(vals, cols)]
-            )
-            state.eqs[eq] = Equation(ir.ZERO, rhs)
+            state.rewrite_from_row(eq, cols, vals)
             state.original_eqs[eq] = state.eqs[eq]
-            graph.set_neighbors(eq, cols)
-            solvable_graph.set_neighbors(eq, cols)

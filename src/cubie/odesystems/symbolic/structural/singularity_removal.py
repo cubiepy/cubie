@@ -183,10 +183,9 @@ def structural_singularity_removal(
 ) -> SparseMatrixCLIL:
     """Run the integer-linear singularity removal pass.
 
-    Factorises the integer-linear subsystem exactly, applies the
+    Factorises the integer-linear subsystem exactly and applies the
     underconstrained-variable hook to purely-linear variables that
-    were not pivoted, and updates the incidence and solvable graphs
-    with the reduced row contents.
+    were not pivoted.
 
     Returns the reduced :class:`SparseMatrixCLIL`.
     """
@@ -206,11 +205,4 @@ def structural_singularity_removal(
         if v in rk1vars:
             continue
         ils = variable_underconstrained(structure, ils, v)
-
-    for ei, e in enumerate(ils.nzrows):
-        structure.graph.set_neighbors(e, ils.row_cols[ei])
-    if structure.solvable_graph is not None:
-        for ei, e in enumerate(ils.nzrows):
-            structure.solvable_graph.set_neighbors(e, ils.row_cols[ei])
-
     return ils

@@ -600,6 +600,19 @@ class StructuralState:
         for ieq in range(graph.nsrcs()):
             self.find_eq_solvables(ieq, **kwargs)
 
+    def rewrite_from_row(
+        self, ieq: int, cols: List[int], vals: List[int]
+    ) -> None:
+        """Rewrite equation ``ieq`` as ``0 ~ sum(vals * variables)``.
+
+        The equation becomes incident on, and solvable for, ``cols``.
+        """
+
+        rhs = ir.add(*[c * self.fullvars[v] for c, v in zip(vals, cols)])
+        self.eqs[ieq] = Equation(ir.ZERO, rhs)
+        self.structure.graph.set_neighbors(ieq, cols)
+        self.structure.solvable_graph.set_neighbors(ieq, cols)
+
     def linear_subsys_adjmat(self, **kwargs) -> SparseMatrixCLIL:
         """Identify integer-coefficient homogeneous linear equations.
 
