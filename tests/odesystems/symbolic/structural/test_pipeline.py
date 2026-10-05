@@ -296,6 +296,24 @@ class TestCoefficientAdmission:
             state.var2idx[v] for v in syms("x y")
         )
 
+    @pytest.mark.parametrize("conservative", [False, True])
+    def test_cancelled_coefficient_drops_incidence(self, conservative):
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "t"})
+        state = StructuralState(
+            [Equation(ir.ZERO, (x + 1) * y - x * y - z)],
+            [x, y, z],
+            registry,
+            set(),
+            T,
+        )
+        mm = state.linear_subsys_adjmat(conservative=conservative)
+        y_z = [state.var2idx[y], state.var2idx[z]]
+        assert state.structure.graph.s_neighbors(0) == y_z
+        assert mm.nzrows == [0]
+        assert mm.row_cols[0] == y_z
+        assert mm.row_vals[0] == [1, -1]
+
     def test_conservative_admits_unit_coefficients_only(self):
         x, y = syms("x y")
         state = self._state(2)

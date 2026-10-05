@@ -49,7 +49,6 @@ Published Functions
     Rank of each variable by base name, then derivative order.
 """
 
-import warnings
 from typing import (
     Dict,
     Iterable,
@@ -529,10 +528,7 @@ class StructuralState:
         if s.solvable_graph is not None:
             to_rm = []
             coeffs = []
-            solv_kwargs = {
-                "may_be_zero": True,
-                "allow_symbolic": False,
-            }
+            solv_kwargs = {"allow_symbolic": False}
             solv_kwargs.update(kwargs)
             all_int_vars, rem = self.find_eq_solvables(
                 eq_diff, to_rm, coeffs, **solv_kwargs
@@ -571,7 +567,6 @@ class StructuralState:
         ieq: int,
         to_rm: Optional[List[int]] = None,
         coeffs: Optional[List[int]] = None,
-        may_be_zero: bool = True,
         allow_symbolic: bool = False,
         allow_parameter: bool = True,
         conservative: bool = False,
@@ -584,15 +579,12 @@ class StructuralState:
         ieq
             Equation index.
         to_rm
-            Filled, when ``may_be_zero`` is true, with the incident
-            variables whose coefficient is zero; their incidence
-            edges are removed.
+            Filled with the incident variables whose coefficient is
+            zero; their incidence edges are removed.
         coeffs
             Filled with the integer coefficients of the incident
             variables, aligned with the equation's incidence after
             zero-coefficient removal.
-        may_be_zero
-            Whether an incident variable may have a zero coefficient.
         allow_symbolic, allow_parameter
             Division policy for symbolic coefficients.
         conservative
@@ -618,8 +610,7 @@ class StructuralState:
         s = self.structure
         graph = s.graph
         solvable_graph = s.solvable_graph
-        eq = self.eqs[ieq]
-        term = eq.residual()
+        term = self.eqs[ieq].residual()
         all_int_vars = True
 
         for j in list(graph.s_neighbors(ieq)):
@@ -640,26 +631,22 @@ class StructuralState:
                 solvable_graph.add_edge(ieq, j)
                 continue
             term = b
+            # The IR keeps cancelling terms apart, so a zero
+            # coefficient means the variable is absent.
+            if ir.is_zero(a):
+                to_rm.append(j)
+                continue
             a_int = ir.int_value(a)
             if a_int is not None and abs(a_int) > MAX_INTEGER_COEFFICIENT:
                 a_int = None
-            if conservative and a_int not in (-1, 0, 1):
+            if conservative and a_int not in (-1, 1):
                 all_int_vars = False
                 continue
             if a_int is None:
                 all_int_vars = False
-            elif coeffs is not None and (a_int != 0 or not may_be_zero):
+            elif coeffs is not None:
                 coeffs.append(a_int)
-            if not ir.is_zero(a):
-                solvable_graph.add_edge(ieq, j)
-                continue
-            if may_be_zero:
-                to_rm.append(j)
-            else:
-                warnings.warn(
-                    f"Internal error: variable {var} was marked as "
-                    f"being in {eq}, but was actually zero"
-                )
+            solvable_graph.add_edge(ieq, j)
         for j in to_rm:
             graph.rem_edge(ieq, j)
         return all_int_vars, term
