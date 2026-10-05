@@ -26,6 +26,11 @@ Published Classes
     Full transformation state: structure plus the symbolic equations,
     variables, derivative registry, and bookkeeping updated by the
     passes.
+
+Published Functions
+-------------------
+:func:`variable_ranks`
+    Rank of each variable by base name, then derivative order.
 """
 
 import warnings
@@ -139,6 +144,42 @@ def _old_to_new_indices(n: int, dels: List[int]) -> Tuple[List[int], int]:
     return old_to_new, idx
 
 
+def _rank_key(var: ir.Sym, registry: DerivativeRegistry) -> Tuple[str, int]:
+    """Base name and derivative order of ``var``."""
+
+    base, order = registry.base_and_order(var)
+    return base.name, order
+
+
+def variable_ranks(
+    variables: Sequence[ir.Sym], registry: DerivativeRegistry
+) -> List[int]:
+    """Rank of each variable by base name, then derivative order.
+
+    Parameters
+    ----------
+    variables
+        The unknowns, base symbols and derivative symbols alike.
+    registry
+        Registry resolving each derivative symbol's base and order.
+
+    Returns
+    -------
+    list[int]
+        The position of each variable in ``variables`` sorted by
+        (base name, derivative order).
+    """
+
+    ordered = sorted(
+        range(len(variables)),
+        key=lambda i: _rank_key(variables[i], registry),
+    )
+    ranks = [0] * len(variables)
+    for rank, i in enumerate(ordered):
+        ranks[i] = rank
+    return ranks
+
+
 class SystemStructure:
     """Integer-graph structural information about a DAE.
 
@@ -158,7 +199,8 @@ class SystemStructure:
         Per-variable state-selection priority (higher is more likely
         to stay a state).
     canonical_ranks
-        Per-variable rank used as a tie-break.
+        Per-variable rank (see :func:`variable_ranks`), breaking ties
+        between equal state priorities.
     """
 
     def __init__(
@@ -312,7 +354,7 @@ class StructuralState:
 
         # Derivative symbols and their chains first.
         dervars = [v for v in occurring if registry.is_derivative(v)]
-        dervars.sort(key=lambda v: _canonical_sort_key(v, registry))
+        dervars.sort(key=lambda v: _rank_key(v, registry))
         for v in dervars:
             addvar(v)
         for v in dervars:
@@ -323,9 +365,7 @@ class StructuralState:
                     break
                 addvar(lower)
                 chain = lower
-        for v in sorted(
-            occurring, key=lambda v: _canonical_sort_key(v, registry)
-        ):
+        for v in sorted(occurring, key=lambda v: _rank_key(v, registry)):
             addvar(v)
         # Declared unknowns that do not occur are dropped (mirrors
         # MTK: variables not present in the equations are removed).
@@ -341,7 +381,7 @@ class StructuralState:
             if lower is not None and lower in self.var2idx:
                 var_to_diff[self.var2idx[lower]] = i
 
-        canonical_ranks = self._build_canonical_ranks()
+        canonical_ranks = variable_ranks(fullvars, registry)
         priorities = self._build_state_priorities(
             state_priorities or {}, var_to_diff
         )
@@ -427,6 +467,7 @@ class StructuralState:
         self.fullvars.append(dsym)
         self.var2idx[dsym] = var_diff
         s.state_priorities.append(s.state_priorities[v])
+        s.canonical_ranks.append(s.canonical_ranks[v])
         self.always_present.append(self.always_present[v])
         if self.mm is not None:
             self.mm.ncols += 1
@@ -531,11 +572,34 @@ class StructuralState:
     ) -> Tuple[bool, ir.Expr]:
         """Populate the solvable graph for equation ``ieq``.
 
-        Returns ``(all_int_vars, remainder)`` where ``all_int_vars``
-        reports whether every unknown enters linearly with a small
-        integer coefficient and ``remainder`` is the residual after
-        peeling those terms (zero for a homogeneous integer-linear
-        equation).
+        Parameters
+        ----------
+        ieq
+            Equation index.
+        to_rm
+            Filled, when ``may_be_zero`` is true, with the incident
+            variables whose coefficient is zero; their incidence
+            edges are removed.
+        coeffs
+            Filled with the integer coefficients of the incident
+            variables, aligned with the equation's incidence after
+            zero-coefficient removal.
+        may_be_zero
+            Whether an incident variable may have a zero coefficient.
+        allow_symbolic, allow_parameter
+            Division policy for symbolic coefficients.
+        conservative
+            Admit only coefficients of magnitude one, both into the
+            integer row and as solvable edges.
+
+        Returns
+        -------
+        tuple
+            ``(all_int_vars, remainder)``: whether every unknown
+            enters linearly with an integer coefficient of magnitude
+            at most 127, and the residual after peeling the terms
+            with numeric coefficients (zero for a homogeneous
+            integer-linear equation).
         """
 
         if to_rm is None:
@@ -569,9 +633,15 @@ class StructuralState:
                 solvable_graph.add_edge(ieq, j)
                 continue
             term = b
-            if coeffs is not None and (a_int != 0 or not may_be_zero):
+            a_int = as_small_int(a)
+            if conservative and a_int not in (-1, 0, 1):
+                all_int_vars = False
+                continue
+            if a_int is None:
+                all_int_vars = False
+            elif coeffs is not None and (a_int != 0 or not may_be_zero):
                 coeffs.append(a_int)
-            if a_int != 0:
+            if not ir.is_zero(a):
                 solvable_graph.add_edge(ieq, j)
                 continue
             if may_be_zero:

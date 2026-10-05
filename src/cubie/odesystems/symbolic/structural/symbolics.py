@@ -11,6 +11,8 @@ All expressions are engine IR nodes
 (:mod:`cubie.odesystems.symbolic.engine`); SymPy input converts to IR
 at the parse boundary before any of these primitives run.
 
+:func:`as_small_int` is cubie's own.
+
 Published Classes
 -----------------
 :class:`DerivativeRegistry`
@@ -22,6 +24,9 @@ Published Functions
 :func:`linear_expansion`
     Decompose ``expr`` as ``a*var + b`` with ``a``, ``b`` free of
     ``var``, or report nonlinearity.
+
+:func:`as_small_int`
+    Integer value of a numeric literal of magnitude at most 127.
 
 :func:`solve_linear`
     Solve a linear equation for a variable.
@@ -88,6 +93,35 @@ def linear_expansion(
         return (ir.mul(a, rest_prod), ir.mul(b, rest_prod), True)
     # Pow, calls, piecewise, ... containing var: nonlinear.
     return (ZERO, ZERO, False)
+
+
+def as_small_int(expr: ir.Expr) -> Optional[int]:
+    """Integer value of a numeric literal of magnitude at most 127.
+
+    Parameters
+    ----------
+    expr
+        Expression to read.
+
+    Returns
+    -------
+    int or None
+        The value of ``expr`` when it is a numeric literal holding an
+        integer of magnitude at most 127, else ``None``.
+    """
+
+    if not isinstance(expr, ir.Num):
+        return None
+    value = expr.value
+    if isinstance(value, float):
+        if not value.is_integer():
+            return None
+        value = int(value)
+    elif not isinstance(value, int):
+        return None
+    if abs(value) > 127:
+        return None
+    return value
 
 
 def solve_linear(
