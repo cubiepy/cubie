@@ -12,6 +12,9 @@ from cubie.odesystems.symbolic.structural.clil import (
     exactdiv,
     nullspace_rank,
 )
+from cubie.odesystems.symbolic.structural.singularity_removal import (
+    do_bareiss,
+)
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
     as_small_int,
@@ -95,6 +98,34 @@ class TestClil:
         assert rank == 2
         assert col_order[:2] == [0, 1]
         assert sorted(col_order) == [0, 1, 2]
+
+
+class TestBareissPivoting:
+    def test_fewest_nonzeros_row_pivots_first(self):
+        mm = SparseMatrixCLIL(
+            3,
+            6,
+            [0, 1, 2],
+            [[0, 1, 2], [3, 4], [5]],
+            [[1, 1, 1], [1, 1], [1]],
+        )
+        allowed = [True] * 6
+        _, _, rank3, pivots = do_bareiss(mm, None, allowed, allowed)
+        assert pivots == [5, 3, 0]
+        assert rank3 == 3
+
+    def test_pivot_stages_follow_masks(self):
+        # Column 0 is not linear, so the single-entry row cannot
+        # pivot in the first stage; the two-entry row pivots on
+        # column 1 and the remaining row waits for the second stage.
+        mm = SparseMatrixCLIL(2, 2, [0, 1], [[0], [0, 1]], [[1], [1, 1]])
+        mold = mm.copy()
+        rank1, rank2, rank3, pivots = do_bareiss(
+            mm, mold, [False, True], [True, False]
+        )
+        assert pivots == [1, 0]
+        assert (rank1, rank2, rank3) == (1, 2, 2)
+        assert mold.nzrows == mm.nzrows == [1, 0]
 
 
 class TestLinearExpansion:
