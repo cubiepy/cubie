@@ -1035,7 +1035,7 @@ class TestConsistencyErrors:
         with pytest.raises(ExtraVariablesSystemError):
             structural_simplify(state)
 
-    def test_underdetermined_tearing_only_mode(self):
+    def test_underdetermined_tearing_only_mode_rejected(self):
         x, z = syms("x z")
         registry = DerivativeRegistry({"x", "z", "t"})
         dx = registry.derivative(x)
@@ -1045,11 +1045,10 @@ class TestConsistencyErrors:
             set(),
             T,
         )
-        with pytest.warns(UserWarning):
-            result = structural_simplify(
-                state, fully_determined=False
-            )
-        assert x in result.states
+        with pytest.raises(
+            ExtraVariablesSystemError, match=r"Sym\(z\)"
+        ):
+            structural_simplify(state, fully_determined=False)
 
 
 def _mentions_internal_derivative(result):

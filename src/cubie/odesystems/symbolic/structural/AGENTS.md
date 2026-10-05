@@ -90,8 +90,11 @@ and `rm_eqs_vars` renumbers everything: use its `old_to_new` maps and rebuild `m
 alternating pre-tearing and tearing matches (`torn_partner`), so each residual row
 depends on its own state; `mass_matrix` is `None` for fully torn systems, else the singular
 diagonal as nested float lists. Observed assignments are topologically sorted. Balanced
-inputs always pair residuals with algebraic states; `fully_determined=False` outputs may
-not.
+inputs always pair residuals with algebraic states. `fully_determined=False` results must
+match residuals to algebraic states one to one through the states each residual reads
+(directly or via observed assignments); otherwise `ExtraEquationsSystemError`,
+`ExtraVariablesSystemError` or, when both are left over, `InvalidSystemError` names the
+unpaired residuals and states.
 
 ## Dependencies
 ### Internal
