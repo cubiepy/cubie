@@ -11,8 +11,7 @@ The equation order at construction is ported from ModelingToolkit.jl
 ``TearingState``). ``StructuralState.rm_eqs_vars`` is ported from the
 equation renumbering and graph rebuild of ModelingToolkit.jl (commit
 c4177c335, ``src/systems/alias_elimination.jl``,
-``alias_elimination!``) and from BipartiteGraphs.jl
-(``src/bipartite_graph.jl``, ``delete_dsts!``).
+``alias_elimination!``).
 
 Published Classes
 -----------------
@@ -645,39 +644,35 @@ class StructuralState:
         """
 
         s = self.structure
-        graph = s.graph
-        solvable_graph = s.solvable_graph
-        var_dels = sorted(set(vars_to_rm))
         old_to_new_eq, n_new_eqs = _old_to_new_indices(
-            graph.nsrcs(), sorted(set(eqs_to_rm))
+            s.graph.nsrcs(), sorted(set(eqs_to_rm))
         )
         old_to_new_var, n_new_vars = _old_to_new_indices(
-            graph.ndsts(), var_dels
+            s.graph.ndsts(), sorted(set(vars_to_rm))
         )
 
-        new_graph = BipartiteGraph(n_new_eqs, graph.ndsts())
-        new_solvable_graph = None
-        if solvable_graph is not None:
-            new_solvable_graph = BipartiteGraph(n_new_eqs, graph.ndsts())
+        def renumbered(graph: BipartiteGraph) -> BipartiteGraph:
+            new_graph = BipartiteGraph(n_new_eqs, n_new_vars)
+            for e, ne in enumerate(old_to_new_eq):
+                if ne < 0:
+                    continue
+                new_graph.set_neighbors(
+                    ne,
+                    [
+                        old_to_new_var[v]
+                        for v in graph.s_neighbors(e)
+                        if old_to_new_var[v] >= 0
+                    ],
+                )
+            return new_graph
+
         new_eq_to_diff = DiffGraph(n_new_eqs, with_badj=True)
         for i, ieq in enumerate(old_to_new_eq):
             if ieq < 0:
                 continue
-            new_graph.set_neighbors(ieq, graph.s_neighbors(i))
-            if new_solvable_graph is not None:
-                new_solvable_graph.set_neighbors(
-                    ieq, solvable_graph.s_neighbors(i)
-                )
             deq = s.eq_to_diff[i]
             if deq is not None and old_to_new_eq[deq] >= 0:
                 new_eq_to_diff[ieq] = old_to_new_eq[deq]
-
-        # Delete the variable vertices, renumbering the rows.
-        new_graph.invview().delete_srcs(var_dels, rm_verts=True)
-        if new_solvable_graph is not None:
-            new_solvable_graph.invview().delete_srcs(
-                var_dels, rm_verts=True
-            )
 
         new_var_to_diff = DiffGraph(n_new_vars, with_badj=True)
         for iv, i in enumerate(old_to_new_var):
@@ -699,8 +694,9 @@ class StructuralState:
         s.state_priorities[:] = [s.state_priorities[v] for v in kept_vars]
         s.canonical_ranks[:] = [s.canonical_ranks[v] for v in kept_vars]
 
-        s.graph = new_graph
-        s.solvable_graph = new_solvable_graph
+        s.graph = renumbered(s.graph)
+        if s.solvable_graph is not None:
+            s.solvable_graph = renumbered(s.solvable_graph)
         s.eq_to_diff = new_eq_to_diff
         s.var_to_diff = new_var_to_diff
         return old_to_new_eq, old_to_new_var
