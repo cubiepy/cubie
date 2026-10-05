@@ -825,15 +825,12 @@ class TestPantelidesAndDummyDerivatives:
         )
 
     def test_pendulum_priorities_select_states(self):
-        state, symbols = self.make_pendulum()
-        y, vy = symbols[1], symbols[3]
-        state.structure.state_priorities = [
-            10 if state.fullvars[i] in (y, vy) else 0
-            for i in range(len(state.fullvars))
-        ]
+        # Without priorities y and vy are kept; priority keeps x and vx.
+        x, vx = syms("x vx")
+        state, _ = self.make_pendulum(priorities={x: 10, vx: 10})
         result = structural_simplify(state)
-        assert y in result.differential_states
-        assert vy in result.differential_states
+        assert x in result.differential_states
+        assert vx in result.differential_states
 
     def test_pendulum_bare_index_reduction(self):
         # dummy_derivative=False runs bare Pantelides index
