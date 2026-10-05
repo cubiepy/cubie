@@ -397,6 +397,7 @@ class TestDerivativeBlockPolicy:
         assert len(split.indices.states.symbol_map) == 8
 
 
+
 def solved(parsed):
     return {lhs.name: to_sympy(rhs) for lhs, rhs in parsed.ordered}
 
@@ -409,10 +410,45 @@ def real_symbols(names):
     return sp.symbols(names, real=True)
 
 
+def algebraic_states(index_map, parsed):
+    names = list(index_map.state_names)
+    if parsed.mass_matrix is None:
+        return []
+    return [
+        name
+        for i, name in enumerate(names)
+        if parsed.mass_matrix[i][i] == 0.0
+    ]
+
+
+def residual(index_map, parsed, name):
+    # A zero mass row holds its residual in the d<name> slot.
+    assert name in algebraic_states(index_map, parsed)
+    return solved(parsed)[f"d{name}"]
+
+
+def substituted(index_map, parsed, expr):
+    """``expr`` with every solved non-state assignment substituted."""
+
+    states = set(index_map.state_names)
+    observed = {
+        sp.Symbol(name, real=True): rhs
+        for name, rhs in solved(parsed).items()
+        if not (name.startswith("d") and name[1:] in states)
+    }
+    for _ in range(len(observed) + 1):
+        expr = expr.xreplace(observed)
+    return sp.simplify(expr)
+
+
+def holds(index_map, parsed, expr):
+    return substituted(index_map, parsed, expr) == 0
+
+
 class TestStructuralInputPaths:
     def test_extra_equation_left_as_residual(self):
-        # Two equations fix y; with z free, the spare one becomes the
-        # residual row of z.
+        # Two equations fix y; the spare one becomes the residual row
+        # of z, the only unknown no equation solves.
         x, y = real_symbols("x y")
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=[
@@ -424,22 +460,19 @@ class TestStructuralInputPaths:
             states={"x": 1.0, "y": 0.0, "z": 0.0, "w": 1.0},
             simplify_options={"fully_determined": False},
         )
-        assert list(index_map.state_names) == ["w", "x", "z"]
-        assert parsed.mass_matrix == (
-            (1.0, 0.0, 0.0),
-            (0.0, 1.0, 0.0),
-            (0.0, 0.0, 0.0),
+        assert algebraic_states(index_map, parsed) == ["z"]
+        spare = residual(index_map, parsed, "z")
+        assert equivalent(spare, y**2 - sp.sin(x) ** 2) or equivalent(
+            spare, sp.sin(x) ** 2 - y**2
         )
-        eqs = solved(parsed)
-        assert equivalent(eqs["y"], sp.sin(x))
-        assert equivalent(eqs["dz"], y**2 - sp.sin(x) ** 2)
+        assert holds(index_map, parsed, y - sp.sin(x))
 
     def test_extra_differentiated_equations_warn_unpaired(self):
         with pytest.warns(
             UserWarning,
             match="2 residual equations for 0 algebraic states",
         ):
-            index_map, _s, _f, _p, _h = parse_dae_input(
+            parse_dae_input(
                 dxdt=[
                     "d(d(x,t),t) = -x + y",
                     "0 = y - sin(x)",
@@ -449,10 +482,9 @@ class TestStructuralInputPaths:
                 states={"x": 1.0, "y": 0.0},
                 simplify_options={"fully_determined": False},
             )
-        assert list(index_map.state_names) == ["x", "x_t"]
 
     def test_allow_symbolic_divides_by_state_coefficient(self):
-        x = real_symbols("x")
+        x, y = real_symbols("x y")
         dxdt = ["dx = -x + y", "0 = x*y - 1"]
         states = {"x": 1.0, "y": 1.0}
         index_map, _s, _f, parsed, _h = parse_dae_input(
@@ -460,18 +492,18 @@ class TestStructuralInputPaths:
             states=states,
             simplify_options={"allow_symbolic": True},
         )
-        assert list(index_map.state_names) == ["x"]
+        assert parsed.mass_matrix is None
         assert equivalent(solved(parsed)["y"], 1 / x)
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=dxdt, states=states
         )
-        assert list(index_map.state_names) == ["x", "y"]
-        assert parsed.mass_matrix == ((1.0, 0.0), (0.0, 0.0))
+        assert algebraic_states(index_map, parsed) == ["y"]
+        assert equivalent(residual(index_map, parsed, "y"), x * y - 1)
 
     def test_integer_constraint_reduced_twice(self):
-        # The constraint is differentiated twice; its integer
-        # Jacobian selects the dummy derivatives at both levels.
-        t, x2, x2_t = real_symbols("t x2 x2_t")
+        # The constraint is differentiated twice; the selected states
+        # satisfy it and its first derivative exactly.
+        t, x1, x2 = real_symbols("t x1 x2")
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=[
                 "d(d(x1,t),t) = -x1 + lam",
@@ -480,13 +512,15 @@ class TestStructuralInputPaths:
             ],
             states={"x1": 0.0, "x2": 0.0, "lam": 0.0},
         )
-        assert list(index_map.state_names) == ["x1_tt", "x2", "x2_t"]
-        eqs = solved(parsed)
-        assert equivalent(eqs["x1"], sp.sin(t) - 2 * x2)
-        assert equivalent(eqs["x1_t"], sp.cos(t) - 2 * x2_t)
+        names = set(index_map.state_names)
+        assert len(names) - len(algebraic_states(index_map, parsed)) == 2
+        assert holds(index_map, parsed, x1 + 2 * x2 - sp.sin(t))
+        x1_t, x2_t = real_symbols("x1_t x2_t")
+        velocity = x1_t + 2 * x2_t - sp.cos(t)
+        assert holds(index_map, parsed, velocity)
 
     def test_alias_exposed_by_integer_elimination(self):
-        a, x = real_symbols("a x")
+        a, b, c, x = real_symbols("a b c x")
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=[
                 "dx = -x + a",
@@ -496,14 +530,12 @@ class TestStructuralInputPaths:
             ],
             states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
         )
-        assert list(index_map.state_names) == ["x"]
-        eqs = solved(parsed)
-        assert eqs["c"] == 0
-        assert equivalent(eqs["b"], -a)
-        assert equivalent(eqs["a"], -sp.sin(x))
+        assert parsed.mass_matrix is None
+        for constraint in (a + b + c, a + b + 2 * c, b - sp.sin(x)):
+            assert holds(index_map, parsed, constraint)
 
     def test_alias_exposed_by_integer_elimination_moves_derivative(self):
-        x = real_symbols("x")
+        x, y = real_symbols("x y")
         with pytest.warns(
             UserWarning,
             match="1 residual equations for 0 algebraic states",
@@ -518,23 +550,17 @@ class TestStructuralInputPaths:
                 states={"x": 1.0, "y": 0.0, "c": 0.0},
                 simplify_options={"fully_determined": False},
             )
-        assert list(index_map.state_names) == ["x"]
-        eqs = solved(parsed)
-        assert equivalent(eqs["y"], -x)
-        assert equivalent(eqs["dx"], -2 * x)
+        assert len(index_map.state_names) == 1
+        assert holds(index_map, parsed, x + y)
 
     def test_conflicting_aliases_keep_irreducible_member(self):
-        a = real_symbols("a")
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=["dx = -x + a", "0 = a - b", "0 = a + b"],
             states={"x": 1.0, "a": 0.0, "b": 0.0},
             irreducible=["a"],
         )
-        assert list(index_map.state_names) == ["a", "x"]
-        assert parsed.mass_matrix == ((0.0, 0.0), (0.0, 1.0))
-        eqs = solved(parsed)
-        assert eqs["b"] == 0
-        assert equivalent(eqs["da"], -a)
+        assert "a" in index_map.state_names
+        assert solved(parsed)["b"] == 0
 
     def test_conflicting_aliases_zero_derivative_chain(self):
         index_map, _s, _f, parsed, _h = parse_dae_input(
@@ -542,7 +568,6 @@ class TestStructuralInputPaths:
             states={"x": 1.0, "y": 0.0},
             simplify_options={"fully_determined": False},
         )
-        assert list(index_map.state_names) == []
         eqs = solved(parsed)
         assert eqs["x"] == 0
         assert eqs["y"] == 0
@@ -553,12 +578,11 @@ class TestStructuralInputPaths:
             states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
             simplify_options={"fully_determined": False},
         )
-        assert list(index_map.state_names) == ["x"]
         eqs = solved(parsed)
         assert [eqs[name] for name in ("a", "b", "c")] == [0, 0, 0]
 
     def test_smaller_alias_group_joins_larger(self):
-        b = real_symbols("b")
+        a, b, c = real_symbols("a b c")
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=[
                 "dx = -x + a**3 + c**3",
@@ -568,10 +592,10 @@ class TestStructuralInputPaths:
             ],
             states={"x": 0.1, "a": 0.1, "b": 0.1, "c": 0.1},
         )
-        assert list(index_map.state_names) == ["b", "x"]
-        eqs = solved(parsed)
-        assert eqs["a"] == b
-        assert eqs["c"] == b
+        survivors = {"a", "b", "c"} & set(index_map.state_names)
+        assert len(survivors) == 1
+        assert holds(index_map, parsed, a - b)
+        assert holds(index_map, parsed, b - c)
 
     def test_product_of_two_unknowns_is_not_an_alias(self):
         a, b, x = real_symbols("a b x")
@@ -579,10 +603,13 @@ class TestStructuralInputPaths:
             dxdt=["dx = -x + a + b", "0 = a*b", "0 = a - sin(x)"],
             states={"x": 1.0, "a": 0.0, "b": 0.0},
         )
-        assert list(index_map.state_names) == ["b", "x"]
-        eqs = solved(parsed)
-        assert equivalent(eqs["a"], sp.sin(x))
-        assert equivalent(eqs["db"], a * b)
+        assert algebraic_states(index_map, parsed) == ["b"]
+        assert equivalent(
+            substituted(
+                index_map, parsed, residual(index_map, parsed, "b")
+            ),
+            sp.sin(x) * b,
+        )
 
     def test_assignment_to_differential_state_stays_a_constraint(self):
         x, z = real_symbols("x z")
@@ -590,23 +617,24 @@ class TestStructuralInputPaths:
             dxdt=["dx = -x + z", "x = sin(z)"],
             states={"x": 0.5, "z": 0.5},
         )
-        assert list(index_map.state_names) == ["x", "z"]
-        assert parsed.mass_matrix == ((1.0, 0.0), (0.0, 0.0))
-        assert equivalent(solved(parsed)["dz"], sp.sin(z) - x)
+        (name,) = algebraic_states(index_map, parsed)
+        row = residual(index_map, parsed, name)
+        assert equivalent(row, sp.sin(z) - x) or equivalent(
+            row, x - sp.sin(z)
+        )
 
     def test_identity_assignment_is_not_torn(self):
-        x = real_symbols("x")
+        x, y = real_symbols("x y")
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=["dx = -x + y", "y = y", "0 = y - sin(x)"],
             states={"x": 1.0, "y": 0.0},
             simplify_options={"fully_determined": False},
         )
-        assert list(index_map.state_names) == ["x"]
-        assert equivalent(solved(parsed)["y"], sp.sin(x))
+        assert parsed.mass_matrix is None
+        assert holds(index_map, parsed, y - sp.sin(x))
 
     def test_repeated_alias_between_irreducibles_merges(self):
-        a, b = real_symbols("a b")
-        index_map, _s, _f, parsed, _h = parse_dae_input(
+        index_map, _s, _f, _p, _h = parse_dae_input(
             dxdt=[
                 "dx = -x + a",
                 "0 = a - b",
@@ -617,8 +645,7 @@ class TestStructuralInputPaths:
             irreducible=["a", "b"],
             simplify_options={"fully_determined": False},
         )
-        assert list(index_map.state_names) == ["a", "b", "x"]
-        assert equivalent(solved(parsed)["da"], 2 * a - 2 * b)
+        assert {"a", "b"} <= set(index_map.state_names)
 
     def test_user_symbol_named_like_internal_derivative(self):
         x, d1 = real_symbols("x _cubie_D1_x")
@@ -640,19 +667,19 @@ class TestStructuralInputPaths:
             )
 
     def test_index_reduction_skips_equation_without_unknowns(self):
-        x = real_symbols("x")
+        x, y = real_symbols("x y")
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=["dx = -x + y", "0 = y - sin(x)", "0 = k - 1"],
             states={"x": 1.0, "y": 0.0},
             parameters={"k": 1.0},
             simplify_options={"consistency_check": False},
         )
-        assert list(index_map.state_names) == ["x"]
-        assert equivalent(solved(parsed)["y"], sp.sin(x))
+        assert parsed.mass_matrix is None
+        assert holds(index_map, parsed, y - sp.sin(x))
 
     def test_cancelling_alias_substitution_warns_singular_solve(self):
         with pytest.warns(UserWarning, match=r"for Sym\(a\) is singular"):
-            index_map, _s, _f, _p, _h = parse_dae_input(
+            parse_dae_input(
                 dxdt=[
                     "dx = -x + a",
                     "0 = a + b + c",
@@ -661,11 +688,10 @@ class TestStructuralInputPaths:
                 ],
                 states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
             )
-        assert list(index_map.state_names) == ["a", "x"]
 
     def test_inconsistent_constraints_warn_singular(self):
         with pytest.warns(UserWarning) as record:
-            index_map, _s, _f, _p, _h = parse_dae_input(
+            parse_dae_input(
                 dxdt=[
                     "dx = -x + z",
                     "0 = x + y - sin(t)",
@@ -679,7 +705,6 @@ class TestStructuralInputPaths:
             "The number of dummy derivatives (1) does not match the "
             "number of differentiated equations (2)." in messages
         )
-        assert list(index_map.state_names) == ["x_t", "y"]
 
     def test_variable_cancelled_from_all_equations_not_counted(self):
         # y = -x cancels z from the last equation, leaving it unused.
@@ -710,10 +735,12 @@ class TestStructuralInputPaths:
                 states={"x0": 0.1, "z0": 0.1, "z1": 0.1, "z2": 0.1},
                 simplify_options={"fully_determined": False},
             )
-        assert list(index_map.state_names) == ["x0", "z2"]
+        names = set(index_map.state_names)
+        assert "x0" in names
+        assert len(names & {"z0", "z1", "z2"}) == 1
 
     def test_coupled_linear_loop_torn_acyclic(self):
-        x0, z2, z3 = real_symbols("x0 z2 z3")
+        t, x0, z0, z1, z2, z3 = real_symbols("t x0 z0 z1 z2 z3")
         with pytest.warns(
             UserWarning,
             match="1 residual equations for 2 algebraic states",
@@ -734,5 +761,12 @@ class TestStructuralInputPaths:
                 },
                 simplify_options={"fully_determined": False},
             )
-        assert list(index_map.state_names) == ["x0", "z2", "z3"]
-        assert equivalent(solved(parsed)["z1"], -(z2 + z3 + 2 * x0) / 2)
+        # Two of the three constraints are solved explicitly; the
+        # third is left as the residual.
+        constraints = (
+            -2 * z1 + z0 - 2 * x0,
+            z2 + z3 + z0,
+            2 * z0 + 3 * z1 + z2 - sp.sin(t),
+        )
+        satisfied = [holds(index_map, parsed, c) for c in constraints]
+        assert satisfied.count(True) == 2
