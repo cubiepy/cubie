@@ -298,7 +298,7 @@ def generate_derivative_variables(
     for v_t, dv in v_t_dvs:
         i, j = v_to_scc[dv]
         var_sccs[i][j] = v_t
-        if v_t < len(v_to_scc) and v_to_scc[v_t] is not None:
+        if v_t < len(v_to_scc):
             i2, j2 = v_to_scc[v_t]
             idxs_to_remove.setdefault(i2, []).append(j2)
         # Emit D(x) first, so later equations read its solution.
