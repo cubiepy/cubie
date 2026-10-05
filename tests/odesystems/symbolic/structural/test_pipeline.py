@@ -864,6 +864,39 @@ class TestPantelidesAndDummyDerivatives:
         for sym, rhs in plain.items():
             assert sp.simplify(to_sympy(cancelled[sym] - rhs)) == 0
 
+    def test_second_order_pendulum_bare_index_reduction(self):
+        # Bare reduction of the pendulum given in second-order form
+        # integrates the given accelerations and keeps the
+        # acceleration-level constraint.
+        x, y, lam, g = syms("x y lam g")
+        registry = DerivativeRegistry({"x", "y", "lam", "g", "t"})
+        dx, dy = registry.derivative(x), registry.derivative(y)
+        state = StructuralState(
+            [
+                Equation(registry.derivative(dx), lam * x),
+                Equation(registry.derivative(dy), lam * y - g),
+                Equation(ir.ZERO, x**2 + y**2 - 1),
+            ],
+            [x, y, lam],
+            registry,
+            {g},
+            T,
+        )
+        result = structural_simplify(state, dummy_derivative=False)
+        assert result.algebraic_states == [lam]
+        x_t, y_t = result.dxdt[x], result.dxdt[y]
+        assert set(result.differential_states) == {x, y, x_t, y_t}
+        assert sp.simplify(to_sympy(result.dxdt[x_t] - lam * x)) == 0
+        assert sp.simplify(to_sympy(result.dxdt[y_t] - (lam * y - g))) == 0
+        accel = (
+            2 * x_t**2
+            + 2 * lam * x**2
+            + 2 * y_t**2
+            + 2 * y * (lam * y - g)
+        )
+        assert len(result.residuals) == 1
+        assert sp.simplify(to_sympy(result.residuals[0] - accel)) == 0
+
     def test_higher_order_input_lowered(self):
         x, w = syms("x w")
         registry = DerivativeRegistry({"x", "w", "t"})
