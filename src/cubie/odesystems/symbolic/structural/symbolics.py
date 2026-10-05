@@ -32,18 +32,10 @@ Published Functions
 :func:`total_derivative`
     Total time derivative of an expression under a derivative map.
 
-:func:`as_small_int`
-    Extract an integer with ``|value| <= 127`` from a numeric node.
-
-:func:`solve_linear_system`
-    Solve a small dense symbolic linear system by Gaussian
-    elimination.
-
 :func:`linear_dependencies`
     Rows of a sparse symbolic matrix that the pivot rows span.
 """
 
-from fractions import Fraction
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from cubie.odesystems.symbolic.engine import expr as ir
@@ -194,94 +186,6 @@ def total_derivative(
     return ir.add(*terms)
 
 
-def as_small_int(value: ir.Expr) -> Optional[int]:
-    """Return ``int(value)`` when it is integral with ``|v| <= 127``.
-
-    Mirrors StateSelection's small-integer coefficient gate for the
-    integer-linear subsystem; returns ``None`` otherwise.
-    """
-
-    if not isinstance(value, ir.Num):
-        return None
-    payload = value.value
-    if isinstance(payload, int):
-        iv = payload
-    elif isinstance(payload, Fraction):
-        if payload.denominator != 1:
-            return None
-        iv = int(payload)
-    else:
-        if not float(payload).is_integer():
-            return None
-        iv = int(payload)
-    if -127 <= iv <= 127:
-        return iv
-    return None
-
-
-def solve_linear_system(
-    a_rows: List[List[ir.Expr]],
-    b_vec: List[ir.Expr],
-) -> Optional[List[ir.Expr]]:
-    """Solve the dense symbolic system ``A x = b``.
-
-    Gaussian elimination over IR expressions with pivot preference
-    for numeric entries. Intended for the small (N <= a few) linear
-    SCC solves during reassembly.
-
-    Parameters
-    ----------
-    a_rows
-        Row-major coefficient entries.
-    b_vec
-        Right-hand side entries.
-
-    Returns
-    -------
-    list of Expr or None
-        Solution vector, or ``None`` when a pivot column has no
-        structurally nonzero entry (structurally singular system).
-    """
-
-    n = len(b_vec)
-    rows = [list(row) + [b_vec[i]] for i, row in enumerate(a_rows)]
-    for col in range(n):
-        pivot_row = None
-        for candidate in range(col, n):
-            entry = rows[candidate][col]
-            if isinstance(entry, ir.Num) and not ir.is_zero(entry):
-                pivot_row = candidate
-                break
-        if pivot_row is None:
-            for candidate in range(col, n):
-                if not ir.is_zero(rows[candidate][col]):
-                    pivot_row = candidate
-                    break
-        if pivot_row is None:
-            return None
-        if pivot_row != col:
-            rows[col], rows[pivot_row] = rows[pivot_row], rows[col]
-        pivot = rows[col][col]
-        for other in range(n):
-            if other == col:
-                continue
-            factor = rows[other][col]
-            if ir.is_zero(factor):
-                continue
-            scale = ir.div(factor, pivot)
-            for k in range(col, n + 1):
-                rows[other][k] = ir.sub(
-                    rows[other][k], ir.mul(scale, rows[col][k])
-                )
-    solution = []
-    for i in range(n):
-        pivot = rows[i][i]
-        if ir.is_zero(pivot):
-            return None
-        solution.append(ir.div(rows[i][n], pivot))
-    return solution
-
-
 def _combine(
     target: Dict[int, ir.Expr],
     pivot: ir.Expr,
@@ -405,15 +309,6 @@ class DerivativeRegistry:
         self.reserved = set(reserved_names)
         self._to_base = {}
         self._to_derivative = {}
-
-    def register_known(
-        self, base: ir.Sym, derivative: ir.Sym
-    ) -> None:
-        """Record a pre-existing base/derivative symbol pair."""
-
-        self._to_derivative[base] = derivative
-        self._to_base[derivative] = base
-        self.reserved.add(derivative.name)
 
     def derivative(self, var: ir.Sym) -> ir.Sym:
         """Return (creating if needed) the derivative symbol of ``var``."""

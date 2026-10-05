@@ -9,7 +9,7 @@ algorithm packages (BipartiteGraphs.jl, StateSelection.jl, ModelingToolkitTearin
 general DAE (implicit equations, higher-order derivatives, algebraic unknowns), runs
 singular derivative-block removal, perfect-alias elimination, trivial tearing, exact
 integer-linear singularity removal,
-Pantelides index reduction, dummy-derivative state selection, and Carpanzano/Modia tearing,
+Pantelides index reduction, dummy-derivative state selection, and tearing,
 and reassembles an explicit ODE — or, when algebraic loops cannot be torn symbolically, a
 semi-explicit index-1 system with residual rows under a singular diagonal mass matrix.
 Entry point: `structural_simplify(StructuralState) -> SimplifiedSystem`; the parsing front
@@ -25,14 +25,14 @@ result.
 | `digraph.py` | Matching-oriented directed views (`DiCMOBiGraphT`/`F`), iterative Tarjan SCC, `find_var_sccs` (BLT ordering), BFS `neighborhood_in`, and the BFGT Algorithm-N `IncrementalCycleTracker` used to keep tearing assignments acyclic. |
 | `diffgraph.py` | `DiffGraph`: variable/equation differentiation chains with inverse view. |
 | `clil.py` | `SparseMatrixCLIL` integer matrix and fraction-free Bareiss elimination (`bareiss`, CLIL-specialised update, `nullspace_rank`). |
-| `symbolics.py` | Engine-IR primitives: structural `linear_expansion`, `solve_linear`, `fixpoint_sub`, `total_derivative`, small-int gate, `solve_linear_system` (dense symbolic Gaussian elimination for small linear SCCs), `linear_dependencies` (fraction-free elimination with numeric-first pivots gated by a caller predicate; returns the rows the pivot rows span, with multipliers), and `DerivativeRegistry` (plain-symbol stand-in for MTK `Differential` terms, `x_t` dummy naming; keys are interned `ir.Sym` nodes). |
+| `symbolics.py` | Engine-IR primitives: structural `linear_expansion`, `solve_linear`, `fixpoint_sub`, `total_derivative`, `linear_dependencies` (fraction-free elimination with numeric-first pivots gated by a caller predicate; returns the rows the pivot rows span, with multipliers), and `DerivativeRegistry` (plain-symbol stand-in for MTK `Differential` terms, `x_t` dummy naming; keys are interned `ir.Sym` nodes). |
 | `derivative_block.py` | `eliminate_singular_derivative_blocks`: replaces each equation whose derivative terms are an exact combination of the pivot equations' derivative terms with the derivative-free equation that combination implies; symbolic pivots follow the `allow_symbolic`/`allow_parameter` division policy, and equations with an unknown in a derivative coefficient are left alone. |
-| `alias_elimination.py` | Perfect-alias elimination (sign-tracking union-find, conflict groups force zeros), `trivial_tearing` (preemptive observed extraction), and the integer-linear `alias_elimination` driver. |
-| `singularity_removal.py` | Tiered-pivot Bareiss over the integer-linear subsystem (`structural_singularity_removal`, `aag_bareiss`), per-connected-component elimination, `get_new_mm`, `RestrictedBareissContext` for exact SCC matching. |
+| `alias_elimination.py` | Perfect-alias elimination (sign-tracking union-find, conflict groups force zeros) and the integer-linear `alias_elimination` driver. |
+| `singularity_removal.py` | `structural_singularity_removal` over the integer-linear subsystem and the underconstrained-variable hooks. |
 | `pantelides.py` | Pantelides index reduction and `computed_highest_diff_variables`. |
-| `dummy_derivatives.py` | Dummy-derivative state selection (`dummy_derivative_graph`, integer-Jacobian rank via Bareiss nullspace with structural-rank fallback) and level-based partial state selection. |
-| `tearing.py` | `ModiaTearing` and `CarpanzanoTearing` (default; exact integer-linear SCC matching), `TearingResult`, `contract_variables`, deterministic `OrderedSet`. Exact SCC matching returns its reduced rows as `extra["linear_rewrite"]`, applied by `simplify._apply_linear_rewrites`. |
-| `reassemble.py` | `default_reassemble`: dummy-derivative renaming, first-order lowering (`0 ~ D(x) - x_t`), per-SCC equation generation (differential/observed/residual) with BLT sorting, analytic small-N linear SCC solves, final reordering. |
+| `dummy_derivatives.py` | Dummy-derivative state selection (`dummy_derivative_graph`, integer-Jacobian rank via Bareiss nullspace with structural-rank fallback). |
+| `tearing.py` | `contract_variables`. |
+| `reassemble.py` | `default_reassemble`: dummy-derivative renaming, first-order lowering (`0 ~ D(x) - x_t`), per-SCC equation generation (differential/observed/residual) with BLT sorting, final reordering. |
 | `consistency.py` | Balance and structural-singularity checks with best-effort offender reporting. |
 | `errors.py` | `InvalidSystemError`, `ExtraVariablesSystemError`, `ExtraEquationsSystemError`. |
 
@@ -51,10 +51,8 @@ with 0-based indices:
   supported.
 
 ## Determinism
-Results must not depend on declaration or equation order: canonical ranks
-(`_canonical_sort_key`), the structural equation sort key, `OrderedSet` in tearing and
-ascending tie-breaks in SCC/toposort. Never iterate a Python `set` where it feeds a
-tie-break.
+Results must not depend on declaration or equation order: tie-breaks in SCC/toposort
+are ascending. Never iterate a Python `set` where it feeds a tie-break.
 
 ## Mutation
 Every pass mutates `StructuralState` in place. `Matching.__setitem__` maintains the
@@ -79,4 +77,4 @@ not.
   nothing here imports upward, and nothing here imports SymPy — expressions arrive as
   engine IR from the parse boundary.
 ### External
-- Stdlib `bisect`, `heapq`, `warnings`, `os`, `re`, `fractions`.
+- Stdlib `bisect`, `heapq`, `warnings`.

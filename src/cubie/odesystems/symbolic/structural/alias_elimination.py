@@ -1,9 +1,8 @@
-"""Alias elimination and trivial (preemptive) tearing.
+"""Alias elimination.
 
 Ports MTK's ``alias_elimination.jl`` (perfect-alias elimination via a
 sign-tracking union-find, plus the integer-linear alias pass built on
-singularity removal) and StateSelection.jl's ``trivial_tearing!``
-(preemptive extraction of explicitly-given observed equations).
+singularity removal).
 
 Published Functions
 -------------------
@@ -11,17 +10,13 @@ Published Functions
     Remove ``v ~ w`` / ``v ~ -w`` equations, substituting a chosen
     target through the system.
 
-:func:`trivial_tearing`
-    Tear explicitly-assigned variables that occur in exactly one
-    equation, recording them as observed.
-
 :func:`alias_elimination`
     Integer-linear alias pass: singularity removal followed by
     rewriting the reduced rows back into the symbolic equations.
 """
 
 import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.structural.clil import SparseMatrixCLIL
@@ -393,138 +388,6 @@ def eliminate_perfect_aliases(
         eqs_to_rm, vars_to_rm, eqs_sorted_and_uniqued=True
     )
     return old_to_new_eq, old_to_new_var, aliases
-
-
-def trivial_tearing(
-    state: StructuralState,
-    mm: Optional[SparseMatrixCLIL] = None,
-) -> Optional[SparseMatrixCLIL]:
-    """Preemptively tear explicitly-given observed equations.
-
-    Tears equations whose original form assigns a single variable
-    which appears in no other (non-torn) equation; the equations are
-    recorded as observed and removed from the structural system. When
-    ``mm`` is provided it is updated to match and returned.
-    """
-
-    trivial_idxs = []
-    trivial_set = set()
-    matched_vars = []
-    matched_set = set()
-
-    state.structure.complete()
-    var_to_diff = state.structure.var_to_diff
-    graph = state.structure.graph
-    candidates = state.possibly_explicit_equations()
-    priorities = state.structure.state_priorities
-
-    while True:
-        added_equation = False
-        for i, vari in candidates:
-            if i in trivial_set:
-                continue
-            if priorities[vari] > 0:
-                continue
-            if vari in matched_set:
-                raise AssertionError(
-                    "variable already matched to a trivial equation"
-                )
-            if var_to_diff[vari] is not None:
-                continue
-            if var_to_diff.diff_to_primal[vari] is not None:
-                continue
-            eqidxs = [
-                e
-                for e in graph.d_neighbors(vari)
-                if e not in trivial_set
-            ]
-            if len(eqidxs) != 1:
-                continue
-            eqi = eqidxs[0]
-            if eqi != i:
-                raise AssertionError(
-                    "trivial-tearing candidate mismatch"
-                )
-
-            isvalid = True
-            for v in graph.s_neighbors(eqi):
-                if v == vari:
-                    continue
-                if v in matched_set:
-                    continue
-                count = sum(
-                    1
-                    for e in graph.d_neighbors(v)
-                    if e not in trivial_set
-                )
-                if count <= 1:
-                    isvalid = False
-                if var_to_diff.diff_to_primal[v] is not None:
-                    isvalid = False
-                if not isvalid:
-                    break
-            if not isvalid:
-                continue
-
-            added_equation = True
-            trivial_idxs.append(eqi)
-            trivial_set.add(eqi)
-            matched_vars.append(vari)
-            matched_set.add(vari)
-        if not added_equation:
-            break
-
-    torn_vars_idxs = list(matched_vars)
-    torn_eqs_idxs = list(trivial_idxs)
-
-    state.trivial_tearing_postprocess(torn_eqs_idxs, torn_vars_idxs)
-    torn_eqs_sorted = sorted(torn_eqs_idxs)
-    torn_vars_sorted = sorted(torn_vars_idxs)
-    old_to_new_eq, old_to_new_var = state.rm_eqs_vars(
-        torn_eqs_sorted,
-        torn_vars_sorted,
-        eqs_sorted_and_uniqued=True,
-        vars_sorted_and_uniqued=True,
-    )
-
-    if mm is None:
-        return None
-
-    # Update mm: torn equations written in solvable form have the
-    # torn variable with coefficient -1; alias the variable to the
-    # remaining linear combination.
-    aliases = {}
-    linear_eqs = {eq: i for i, eq in enumerate(mm.nzrows)}
-    torn_vars_set = set(torn_vars_idxs)
-    for var, eq in zip(matched_vars, trivial_idxs):
-        ieq = linear_eqs.get(eq)
-        if ieq is None:
-            continue
-        eq_vars = mm.row_cols[ieq]
-        eq_coeffs = mm.row_vals[ieq]
-        combo = {}
-        can_be_aliased = True
-        for v, cf in zip(eq_vars, eq_coeffs):
-            if v == var:
-                if cf != -1:
-                    raise AssertionError(
-                        "trivially torn equation coefficient not -1"
-                    )
-                continue
-            alias = aliases.get(v)
-            if alias is None:
-                if v in torn_vars_set:
-                    can_be_aliased = False
-                    break
-                combo[v] = combo.get(v, 0) + cf
-                continue
-            for av, acf in alias.items():
-                combo[av] = combo.get(av, 0) + cf * acf
-        if not can_be_aliased:
-            continue
-        combo = {v: c for v, c in combo.items() if c != 0}
-        aliases[var] = combo
-    return get_new_mm(aliases, old_to_new_eq, old_to_new_var, mm)
 
 
 def _build_expr_from_coeffs_vars(

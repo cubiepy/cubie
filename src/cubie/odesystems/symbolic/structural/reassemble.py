@@ -36,7 +36,6 @@ from cubie.odesystems.symbolic.structural.symbolics import (
     fixpoint_sub,
     linear_expansion,
     lower_varname,
-    solve_linear_system,
 )
 from cubie.odesystems.symbolic.structural.system_structure import (
     Equation,
@@ -292,34 +291,8 @@ def generate_derivative_variables(
         if v_t < len(v_to_scc) and v_to_scc[v_t] is not None:
             i2, j2 = v_to_scc[v_t]
             idxs_to_remove.setdefault(i2, []).append(j2)
-        # The new singleton SCC for dv must run before the SCC of
-        # its higher derivative so total_sub is populated in order.
-        ddv = var_to_diff[dv]
-        if (
-            isinstance(ddv, int)
-            and ddv < len(v_to_scc)
-            and v_to_scc[ddv] is not None
-        ):
-            i_insert = min(i, v_to_scc[ddv][0])
-        else:
-            i_insert = i
         sccs_to_insert.append((i_insert, [dv]))
 
-    def chain_height(dv: int) -> int:
-        h = 0
-        v = dv
-        while True:
-            if v >= len(var_to_diff):
-                break
-            v = var_to_diff[v]
-            if not isinstance(v, int):
-                break
-            h += 1
-        return h
-
-    sccs_to_insert.sort(
-        key=lambda item: (item[0], -chain_height(item[1][0]))
-    )
     for i, idxs in idxs_to_remove.items():
         for j in sorted(idxs, reverse=True):
             del var_sccs[i][j]
@@ -340,7 +313,6 @@ def _add_dd_variable(
     structure = state.structure
     state.fullvars.append(x_t)
     structure.state_priorities.append(structure.state_priorities[dv])
-    structure.canonical_ranks.append(structure.canonical_ranks[dv])
     state.always_present.append(False)
     v_t = structure.var_to_diff.add_vertex()
     structure.graph.add_vertex(DST)
@@ -553,10 +525,6 @@ def generate_system_equations(
     var_sccs: List[List[int]],
     extra_eqs_vars: Tuple[List[int], List[int]],
     simplify: bool = False,
-    inline_linear_sccs: bool = False,
-    analytical_linear_scc_limit: int = 2,
-    allow_symbolic: bool = False,
-    allow_parameter: bool = True,
 ) -> Tuple[
     List[Equation], List[Equation], List[int], List[int], int, int
 ]:
@@ -609,63 +577,13 @@ def generate_system_equations(
             if not vscc:
                 continue
 
-        linsol = None
-        if inline_linear_sccs:
-            linsol = _get_linear_scc_linsol(
-                state,
-                escc,
-                vscc,
-                neweqs,
-                var_eq_matching,
-                gen.total_sub,
-                analytical_linear_scc_limit,
-                simplify,
-                allow_symbolic,
-                allow_parameter,
+        for ieq in escc:
+            iv = (
+                eq_var_matching[ieq]
+                if ieq < len(eq_var_matching.match)
+                else UNASSIGNED
             )
-        if linsol is not None:
-            solutions, eqs_mask, vars_mask = linsol
-            _escc = [e for e, m in zip(escc, eqs_mask) if m]
-            _vscc = [v for v, m in zip(vscc, vars_mask) if m]
-            for j, (ieq, ivar) in enumerate(zip(_escc, _vscc)):
-                rhs = solutions[j]
-                int_iv = diff_to_var[ivar]
-                if int_iv is not None:
-                    dx_sym = state.fullvars[ivar]
-                    gen.neweqs_out.append(Equation(dx_sym, rhs))
-                    gen.diff_eq_states.append(
-                        state.fullvars[int_iv]
-                    )
-                    gen.eq_ordering.append(ieq)
-                    gen.var_ordering.append(int_iv)
-                    for e in list(graph.d_neighbors(ivar)):
-                        if e == ieq:
-                            continue
-                        for vsym in ir.free_atoms(rhs):
-                            v_idx = state.var2idx.get(vsym)
-                            if v_idx is not None:
-                                graph.add_edge(e, v_idx)
-                        graph.rem_edge(e, ivar)
-                    gen.total_sub[dx_sym] = rhs
-                else:
-                    var_sym = fixpoint_sub(
-                        state.fullvars[ivar], gen.total_sub
-                    )
-                    gen.solved_eqs.append(Equation(var_sym, rhs))
-                    gen.solved_vars.append(ivar)
-            for e, m in zip(escc, eqs_mask):
-                if m:
-                    continue
-                var = eq_var_matching[e]
-                gen.codegen_equation(neweqs[e], e, var, simplify)
-        else:
-            for ieq in escc:
-                iv = (
-                    eq_var_matching[ieq]
-                    if ieq < len(eq_var_matching.match)
-                    else UNASSIGNED
-                )
-                gen.codegen_equation(neweqs[ieq], ieq, iv, simplify)
+            gen.codegen_equation(neweqs[ieq], ieq, iv, simplify)
 
     for eq in extra_eqs:
         var = (
@@ -722,178 +640,6 @@ def generate_system_equations(
         len(gen.solved_vars),
         len(solved_vars_set),
     )
-
-
-def _get_linear_scc_linsol(
-    state: StructuralState,
-    alg_eqs: List[int],
-    alg_vars: List[int],
-    neweqs: List[Equation],
-    var_eq_matching: Matching,
-    total_sub: Dict,
-    analytical_linear_scc_limit: int,
-    simplify: bool,
-    allow_symbolic: bool,
-    allow_parameter: bool,
-) -> Optional[Tuple[List[ir.Expr], List[bool], List[bool]]]:
-    """Solve a linear algebraic SCC analytically when small enough.
-
-    Returns ``(solutions, eqs_mask, vars_mask)`` covering the masked
-    subset of the SCC, or ``None`` when the SCC is nonlinear, already
-    fully torn, too large, or singular. Only the analytical (small-N)
-    path is supported; larger linear SCCs remain algebraic residuals
-    handled by the implicit solver.
-    """
-
-    structure = state.structure
-    graph = structure.graph
-    all_torn = True
-    for iv in alg_vars:
-        all_torn = all_torn and (
-            isinstance(var_eq_matching[iv], int)
-            and not structure.isdervar(iv)
-        )
-    if all_torn:
-        return None
-
-    n = len(alg_eqs)
-    if n != len(alg_vars):
-        return None
-    variables = [state.fullvars[v] for v in alg_vars]
-
-    b = []
-    for ieq in alg_eqs:
-        resid = neweqs[ieq].rhs - neweqs[ieq].lhs
-        b.append(fixpoint_sub(resid, total_sub))
-
-    a_matrix = [[ir.ZERO] * n for _ in range(n)]
-    for varidx, var in enumerate(variables):
-        for eqidx in range(n):
-            if not graph.has_edge(alg_eqs[eqidx], alg_vars[varidx]):
-                continue
-            p, q, islinear = linear_expansion(b[eqidx], var)
-            if not islinear:
-                return None
-            a_matrix[eqidx][varidx] = p
-            b[eqidx] = q
-    b = [-resid for resid in b]
-
-    # Eliminate rows already matched to a variable (torn rows).
-    eqs_mask = [True] * n
-    vars_mask = [True] * n
-    eq_var_matching = var_eq_matching.invview()
-    var_to_local = {v: i for i, v in enumerate(alg_vars)}
-    aliases = {}
-    constants = {}
-    for i in range(n):
-        matched = (
-            eq_var_matching[alg_eqs[i]]
-            if alg_eqs[i] < len(eq_var_matching.match)
-            else UNASSIGNED
-        )
-        if not isinstance(matched, int):
-            continue
-        if matched not in var_to_local:
-            continue
-        ivar = var_to_local[matched]
-        eqs_mask[i] = False
-        vars_mask[ivar] = False
-        var_coeff = a_matrix[i][ivar]
-        if ir.is_zero(var_coeff):
-            return None
-        combo = {}
-        for j in range(n):
-            if j == ivar:
-                continue
-            if not ir.is_zero(a_matrix[i][j]):
-                combo[j] = -a_matrix[i][j] / var_coeff
-        aliases[ivar] = combo
-        constants[ivar] = b[i] / var_coeff
-
-    # Resolve aliases that reference other eliminated variables
-    # (topologically; tearing guarantees acyclicity).
-    changed = True
-    guard = 0
-    while changed:
-        changed = False
-        guard += 1
-        if guard > n + 1:
-            return None
-        for ivar, combo in list(aliases.items()):
-            new_combo = {}
-            cst = constants[ivar]
-            dirty = False
-            for jvar, coeff in combo.items():
-                if jvar in aliases and jvar != ivar:
-                    dirty = True
-                    for kvar, kcoeff in aliases[jvar].items():
-                        new_combo[kvar] = (
-                            new_combo.get(kvar, ir.ZERO)
-                            + coeff * kcoeff
-                        )
-                    cst = cst + coeff * constants[jvar]
-                else:
-                    new_combo[jvar] = (
-                        new_combo.get(jvar, ir.ZERO) + coeff
-                    )
-            if dirty:
-                changed = True
-                aliases[ivar] = {
-                    k: v
-                    for k, v in new_combo.items()
-                    if not ir.is_zero(v)
-                }
-                constants[ivar] = cst
-
-    # Substitute eliminated variables into the retained rows.
-    kept_rows = [i for i in range(n) if eqs_mask[i]]
-    kept_cols = [j for j in range(n) if vars_mask[j]]
-    reduced_n = len(kept_rows)
-    if reduced_n != len(kept_cols):
-        return None
-    if reduced_n == 0:
-        return None
-    if reduced_n > analytical_linear_scc_limit and reduced_n != 1:
-        return None
-
-    a_red = [
-        [ir.ZERO] * reduced_n for _ in range(reduced_n)
-    ]
-    b_red = []
-    for ri, i in enumerate(kept_rows):
-        row_b = b[i]
-        for j in range(n):
-            coeff = a_matrix[i][j]
-            if ir.is_zero(coeff):
-                continue
-            if vars_mask[j]:
-                a_red[ri][kept_cols.index(j)] += coeff
-            else:
-                row_b = row_b - coeff * constants[j]
-                for kvar, kcoeff in aliases[j].items():
-                    if not vars_mask[kvar]:
-                        return None
-                    a_red[ri][kept_cols.index(kvar)] += coeff * kcoeff
-        b_red.append(row_b)
-
-    if reduced_n > 1 and not allow_symbolic:
-        for row in a_red:
-            for entry in row:
-                if isinstance(entry, ir.Num):
-                    continue
-                if not allow_parameter:
-                    return None
-                for sym in ir.free_atoms(entry):
-                    if sym in state.var2idx:
-                        return None
-
-    solution = solve_linear_system(a_red, b_red)
-    if solution is None:
-        return None
-    solutions = [
-        fixpoint_sub(sol, total_sub) for sol in solution
-    ]
-    return solutions, eqs_mask, vars_mask
 
 
 def reorder_vars(
@@ -986,10 +732,6 @@ def default_reassemble(
     mm: Optional[SparseMatrixCLIL],
     fully_determined: bool = True,
     simplify: bool = False,
-    inline_linear_sccs: bool = False,
-    analytical_linear_scc_limit: int = 2,
-    allow_symbolic: bool = False,
-    allow_parameter: bool = True,
     **_ignored,
 ) -> ReassembledSystem:
     """Reassemble the simplified system from a tearing result."""
@@ -1034,10 +776,6 @@ def default_reassemble(
         var_sccs,
         extra_eqs_vars,
         simplify=simplify,
-        inline_linear_sccs=inline_linear_sccs,
-        analytical_linear_scc_limit=analytical_linear_scc_limit,
-        allow_symbolic=allow_symbolic,
-        allow_parameter=allow_parameter,
     )
     reorder_vars(
         state,

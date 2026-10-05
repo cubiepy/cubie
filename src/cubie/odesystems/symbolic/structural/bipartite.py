@@ -285,14 +285,6 @@ class BipartiteGraph:
                 del self.fadjlist[s]
         return self
 
-    def delete_dsts(
-        self, dsts: Iterable[int], rm_verts: bool = False
-    ) -> "BipartiteGraph":
-        """Destination-side analogue of :meth:`delete_srcs`."""
-
-        self.invview().delete_srcs(dsts, rm_verts=rm_verts)
-        return self
-
     def edges(self) -> Iterator[tuple]:
         """Iterate over ``(src, dst)`` edges, ordered by source."""
 

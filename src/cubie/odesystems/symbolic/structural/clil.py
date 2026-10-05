@@ -3,7 +3,7 @@
 Ports StateSelection.jl's ``SparseMatrixCLIL`` (a row-dense,
 column-sparse integer matrix synced with the incidence graph) and the
 fraction-free Bareiss elimination used for integer-linear singularity
-removal, exact SCC matching, and dummy-derivative rank checks.
+removal and dummy-derivative rank checks.
 
 Python integers are arbitrary precision, so the overflow-checked
 arithmetic paths of the Julia implementation are unnecessary here; the
@@ -110,17 +110,6 @@ class SparseMatrixCLIL:
             self.row_vals[j],
             self.row_vals[i],
         )
-
-    def getindex(self, i: int, j: int) -> int:
-        """Return the coefficient at stored row ``i``, column ``j``."""
-
-        from bisect import bisect_left
-
-        cols = self.row_cols[i]
-        idx = bisect_left(cols, j)
-        if idx >= len(cols) or cols[idx] != j:
-            return 0
-        return self.row_vals[i][idx]
 
     def dropzeros(self) -> "SparseMatrixCLIL":
         """Remove explicitly stored zero coefficients in place."""
