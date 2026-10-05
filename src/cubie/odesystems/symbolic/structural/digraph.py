@@ -17,7 +17,8 @@ BipartiteGraphs.jl (commit 647b6a42, v0.1.14, ``src/dicmobigraph.jl``,
 c4177c335, ``src/structural_transformation/utils.jl``,
 ``find_var_sccs``, and
 ``src/structural_transformation/symbolics_tearing.jl``,
-``get_sorted_scc``).
+``get_sorted_scc``), ordered with the engine's depth-first
+:func:`~cubie.odesystems.symbolic.engine.assignments.dfs_order`.
 
 BipartiteGraphs.jl: Copyright (c) 2022 Aayush Sabharwal; MIT.
 Graphs.jl: Copyright (c) 2015 Seth Bromberger and other contributors;
@@ -43,12 +44,13 @@ Published Functions
     All vertices reachable through in-edges (inclusive BFS).
 
 :func:`toposort_equations`
-    Topological sort of a set of equations in a
+    Evaluation order of a set of equations in a
     :class:`DiCMOBiGraphF`.
 """
 
 from typing import Callable, Iterable, Iterator, List, Optional
 
+from cubie.odesystems.symbolic.engine.assignments import dfs_order
 from cubie.odesystems.symbolic.structural.bipartite import (
     BipartiteGraph,
     Matching,
@@ -218,32 +220,6 @@ def tarjan_scc(
     return sccs
 
 
-def _kahn_toposort(
-    n: int, out_edges: List[set]
-) -> List[int]:
-    """Deterministic Kahn topological sort with ascending tie-break."""
-
-    import heapq
-
-    indegree = [0] * n
-    for src in range(n):
-        for dst in out_edges[src]:
-            indegree[dst] += 1
-    heap = [v for v in range(n) if indegree[v] == 0]
-    heapq.heapify(heap)
-    order = []
-    while heap:
-        v = heapq.heappop(heap)
-        order.append(v)
-        for w in out_edges[v]:
-            indegree[w] -= 1
-            if indegree[w] == 0:
-                heapq.heappush(heap, w)
-    if len(order) != n:
-        raise ValueError("Graph is not a DAG")
-    return order
-
-
 def find_var_sccs(
     graph: BipartiteGraph, assign: Optional[Matching] = None
 ) -> List[List[int]]:
@@ -277,14 +253,19 @@ def find_var_sccs(
     for i, component in enumerate(sccs):
         for v in component:
             assignment[v] = i
-    out_edges = [set() for _ in range(n_scc)]
+    dependents = [set() for _ in range(n_scc)]
     for i, component in enumerate(sccs):
         for v in component:
             for w in cmog.outneighbors(v):
                 j = assignment[w]
                 if j != i:
-                    out_edges[i].add(j)
-    order = _kahn_toposort(n_scc, out_edges)
+                    dependents[i].add(j)
+    consumers = {i: sorted(dependents[i]) for i in range(n_scc)}
+    dep_map = {j: [] for j in range(n_scc)}
+    for i in range(n_scc):
+        for j in consumers[i]:
+            dep_map[j].append(i)
+    order = dfs_order(range(n_scc), dep_map, consumers)
     return [sorted(sccs[i]) for i in order]
 
 
@@ -305,23 +286,23 @@ def neighborhood_in(dig: DiCMOBiGraphT, v: int) -> List[int]:
 def toposort_equations(
     dig: DiCMOBiGraphF, eqs: List[int]
 ) -> List[int]:
-    """Topologically sort ``eqs`` within the induced subgraph of ``dig``.
+    """Order ``eqs`` for evaluation within the induced subgraph of ``dig``.
 
     An edge ``e -> e2`` in ``dig`` means ``e`` needs the variable
-    solved by ``e2``; the returned order places ``e`` before its
-    out-neighbors (callers reverse it to get evaluation order),
-    mirroring ``Graphs.topological_sort`` on the induced subgraph.
+    solved by ``e2``; the returned order places every equation after
+    the equations it needs. The induced subgraph must be acyclic.
     """
 
     eq_set = set(eqs)
-    local_idx = {e: i for i, e in enumerate(eqs)}
-    out_edges = [set() for _ in eqs]
+    dep_map = {
+        e: sorted({e2 for e2 in dig.outneighbors(e) if e2 in eq_set})
+        for e in eqs
+    }
+    consumers = {e: [] for e in eqs}
     for e in eqs:
-        for e2 in dig.outneighbors(e):
-            if e2 in eq_set and e2 != e:
-                out_edges[local_idx[e]].add(local_idx[e2])
-    order = _kahn_toposort(len(eqs), out_edges)
-    return [eqs[i] for i in order]
+        for e2 in dep_map[e]:
+            consumers[e2].append(e)
+    return dfs_order(eqs, dep_map, consumers)
 
 
 class _TransactionalList:

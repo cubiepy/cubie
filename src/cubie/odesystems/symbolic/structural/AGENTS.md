@@ -21,7 +21,7 @@ result.
 | `simplify.py` | Pipeline driver `structural_simplify` (the `mtkcompile!` equivalent) and the `SimplifiedSystem` result (states, `dxdt`, residuals, observed, mass matrix, BLT blocks). |
 | `system_structure.py` | `StructuralState`/`SystemStructure` (the `TearingState` equivalent): incidence graph construction, solvability analysis via linear expansion, integer-linear subsystem matrix, symbolic equation/variable differentiation, removal/reindexing, deterministic ranks and priorities. |
 | `bipartite.py` | `BipartiteGraph` (sorted adjacency, equations x variables), `Matching` with inverse view, augmenting-path `maximal_matching`, `UNASSIGNED`/`SELECTED_STATE` sentinels. |
-| `digraph.py` | Matching-oriented directed views (`DiCMOBiGraphT`/`F`), iterative Tarjan SCC, `find_var_sccs` (BLT ordering), `neighborhood_in`, and the `IncrementalCycleTracker` used to keep tearing assignments acyclic. |
+| `digraph.py` | Matching-oriented directed views (`DiCMOBiGraphT`/`F`), iterative Tarjan SCC, `find_var_sccs` (BLT ordering), `toposort_equations`, `neighborhood_in`, and the `IncrementalCycleTracker` used to keep tearing assignments acyclic. |
 | `diffgraph.py` | `DiffGraph`: variable/equation differentiation chains with inverse view. |
 | `clil.py` | `SparseMatrixCLIL` integer matrix and fraction-free Bareiss elimination (`bareiss`, CLIL-specialised update, `nullspace_rank`). |
 | `symbolics.py` | Engine-IR primitives: structural `linear_expansion`, `solve_linear`, `fixpoint_sub`, `total_derivative`, `linear_dependencies` (fraction-free elimination with numeric-first pivots gated by a caller predicate; returns the rows the pivot rows span, with multipliers), and `DerivativeRegistry` (plain-symbol stand-in for MTK `Differential` terms, `x_t` dummy naming; keys are interned `ir.Sym` nodes). |
@@ -65,8 +65,12 @@ Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
   supported.
 
 ## Determinism
-Results must not depend on declaration or equation order: tie-breaks in SCC/toposort
-are ascending. Never iterate a Python `set` where it feeds a tie-break.
+`find_var_sccs` (BLT order of the condensation) and `toposort_equations` (evaluation
+order of an SCC's solved equations) both use the engine's depth-first `dfs_order`:
+roots (nodes nothing depends on) are visited in index order for SCCs and in the given
+equation order within an SCC, and dependencies are followed in ascending index order,
+each emitted before its dependents. Orders are fixed by indices and list order, never
+by hash order. Never iterate a Python `set` where it feeds an order.
 
 ## Mutation
 Every pass mutates `StructuralState` in place. `Matching.__setitem__` maintains the

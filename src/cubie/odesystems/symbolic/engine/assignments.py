@@ -1,7 +1,17 @@
 """Order, prune, and deduplicate IR assignments."""
 
 from heapq import heapify, heappop, heappush
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import (
+    Dict,
+    Hashable,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.engine.expr import (
@@ -30,6 +40,7 @@ from cubie.odesystems.symbolic.engine.expr import (
 )
 
 __all__ = [
+    "dfs_order",
     "topological_sort",
     "prune_unused",
     "cse_and_stack",
@@ -85,17 +96,37 @@ def _kahn_order(
     return order
 
 
-def _dfs_order(
-    pairs: List[Assignment],
-    dep_map: Dict[Expr, List[Expr]],
-    consumers: Dict[Expr, List[Expr]],
-) -> List[Expr]:
-    """Return the roots-first depth-first emission order."""
-    roots = [lhs for lhs, _ in pairs if not consumers.get(lhs)]
-    order: List[Expr] = []
-    emitted: Set[Expr] = set()
+def dfs_order(
+    nodes: Iterable[Hashable],
+    dep_map: Mapping[Hashable, Sequence[Hashable]],
+    consumers: Mapping[Hashable, Sequence[Hashable]],
+) -> List[Hashable]:
+    """Return the roots-first depth-first emission order.
+
+    Roots are the nodes with no consumers, visited in ``nodes``
+    order; each emits its unemitted dependencies, in ``dep_map``
+    order and depth first, before itself. Every node follows its
+    dependencies when the graph is acyclic.
+
+    Parameters
+    ----------
+    nodes
+        Every node, in root-visiting order.
+    dep_map
+        Dependencies of each node.
+    consumers
+        Nodes depending on each node; absent keys have none.
+
+    Returns
+    -------
+    list
+        All nodes of an acyclic graph, dependencies first.
+    """
+    roots = [node for node in nodes if not consumers.get(node)]
+    order: List[Hashable] = []
+    emitted: Set[Hashable] = set()
     for root in roots:
-        stack: List[Tuple[Expr, bool]] = [(root, False)]
+        stack: List[Tuple[Hashable, bool]] = [(root, False)]
         while stack:
             node, expanded = stack.pop()
             if expanded:
@@ -286,7 +317,9 @@ def topological_sort(
             pairs, dep_map, consumers, order_index
         )
     elif operation_ordering == "dfs":
-        chosen = _dfs_order(pairs, dep_map, consumers)
+        chosen = dfs_order(
+            [lhs for lhs, _ in pairs], dep_map, consumers
+        )
     else:
         chosen = kahn
     if operation_ordering == operation_ordering_default():
@@ -294,7 +327,9 @@ def topological_sort(
         if kahn_peak > _RESCHEDULE_PEAK_THRESHOLD:
             alternatives = [
                 _greedy_order(pairs, dep_map, consumers, order_index),
-                _dfs_order(pairs, dep_map, consumers),
+                dfs_order(
+                    [lhs for lhs, _ in pairs], dep_map, consumers
+                ),
             ]
             best = min(
                 alternatives,
