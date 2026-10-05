@@ -31,7 +31,10 @@ from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
     SystemStructure,
 )
-from cubie.odesystems.symbolic.structural.tearing import TearingResult
+from cubie.odesystems.symbolic.structural.tearing import (
+    ModiaTearing,
+    TearingResult,
+)
 
 
 def is_present(structure: SystemStructure, v: int) -> bool:
@@ -86,7 +89,6 @@ def dummy_derivative_graph(
     state: StructuralState,
     jac: Optional[Callable] = None,
     state_priority: Optional[Callable[[int], float]] = None,
-    tearing_alg: Optional[Callable] = None,
     **kwargs,
 ) -> Tuple[TearingResult, Dict]:
     """Pantelides + dummy-derivative selection + tearing.
@@ -102,9 +104,6 @@ def dummy_derivative_graph(
     state_priority
         Per-variable priority function; higher-priority variables are
         more likely to remain states.
-    tearing_alg
-        The tearing algorithm applied after selection, seeded with the
-        dummy-derivative filters.
     """
 
     if state.structure.solvable_graph is None:
@@ -113,15 +112,8 @@ def dummy_derivative_graph(
     var_eq_matching = pantelides(state, **kwargs).complete(
         state.structure.graph.nsrcs()
     )
-    # `mm` must be queried after Pantelides, which extends the linear
-    # subsystem matrix with differentiated rows.
     return _dummy_derivative_graph(
-        state.structure,
-        var_eq_matching,
-        jac,
-        state_priority,
-        tearing_alg=tearing_alg,
-        mm=state.mm,
+        state.structure, var_eq_matching, jac, state_priority
     )
 
 
@@ -130,8 +122,6 @@ def _dummy_derivative_graph(
     var_eq_matching: Matching,
     jac: Optional[Callable],
     state_priority: Optional[Callable[[int], float]],
-    tearing_alg: Optional[Callable] = None,
-    mm=None,
 ) -> Tuple[TearingResult, Dict]:
     eq_to_diff = structure.eq_to_diff
     var_to_diff = structure.var_to_diff
@@ -308,9 +298,7 @@ def _dummy_derivative_graph(
         )
 
     dummy_set = set(dummy_derivatives)
-    tearing_result, extra = _tear_with_dummies(
-        structure, dummy_set, tearing_alg, mm
-    )
+    tearing_result, extra = _tear_with_dummies(structure, dummy_set)
     extra = dict(extra)
     extra["ddsummary"] = DummyDerivativeSummary(
         var_dummy_scc, var_state_priority
@@ -321,10 +309,8 @@ def _dummy_derivative_graph(
 def _tear_with_dummies(
     structure: SystemStructure,
     dummy_derivatives: set,
-    tearing_alg: Optional[Callable],
-    mm,
 ) -> Tuple[TearingResult, Dict]:
-    """Tear after dummy-derivative selection."""
+    """Tear with Modia tearing after dummy-derivative selection."""
 
     var_to_diff = structure.var_to_diff
     can_eliminate = [False] * len(var_to_diff)
@@ -341,8 +327,8 @@ def _tear_with_dummies(
     def varfilter(v: int) -> bool:
         return can_eliminate[v]
 
-    alg = tearing_alg(isder=isder, varfilter=varfilter)
-    tearing_result, inner_extra = alg(structure)
+    modia_tearing = ModiaTearing(isder=isder, varfilter=varfilter)
+    tearing_result, _ = modia_tearing(structure)
 
     for v in range(structure.graph.ndsts()):
         if not is_present(structure, v):
@@ -354,6 +340,4 @@ def _tear_with_dummies(
             continue
         tearing_result.var_eq_matching[v] = SELECTED_STATE
 
-    extra = dict(inner_extra)
-    extra["can_eliminate"] = can_eliminate
-    return tearing_result, extra
+    return tearing_result, {"can_eliminate": can_eliminate}

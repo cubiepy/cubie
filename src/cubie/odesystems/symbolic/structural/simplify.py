@@ -381,7 +381,7 @@ def structural_simplify(
             state.find_solvables(**solve_kwargs)
         state.structure.complete()
         tearing_result, extras = _tear_with_dummies(
-            state.structure, set(), None, state.mm
+            state.structure, set()
         )
         _apply_linear_rewrites(state, extras)
         reassembled = default_reassemble(
