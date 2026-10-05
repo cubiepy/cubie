@@ -114,6 +114,9 @@ class ParsedEquations:
     mass_matrix
         Solver mass matrix derived by structural simplification as
         nested row tuples; ``None`` for solved (identity) systems.
+    driver_derivatives
+        Driver time-derivative symbols the equations read, mapped to
+        the driver each differentiates.
     """
 
     ordered: Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]
@@ -134,6 +137,9 @@ class ParsedEquations:
     )
     mass_matrix: Optional[Tuple[Tuple[float, ...], ...]] = attrs.field(
         default=None, repr=False
+    )
+    driver_derivatives: Dict[ir_expr.Sym, ir_expr.Sym] = attrs.field(
+        factory=dict, repr=False
     )
 
     def __iter__(self) -> Iterable[Tuple[ir_expr.Expr, ir_expr.Expr]]:
@@ -216,6 +222,7 @@ class ParsedEquations:
         function_aliases: Optional[Dict[str, str]] = None,
         nonfloat_functions: Optional[Iterable[str]] = None,
         mass_matrix: Optional[Tuple[Tuple[float, ...], ...]] = None,
+        driver_derivatives: Optional[Dict[ir_expr.Sym, ir_expr.Sym]] = None,
     ) -> "ParsedEquations":
         """Partition equations according to their assigned symbols.
 
@@ -259,6 +266,7 @@ class ParsedEquations:
             function_aliases=dict(function_aliases or {}),
             nonfloat_functions=frozenset(nonfloat_functions or ()),
             mass_matrix=mass_matrix,
+            driver_derivatives=dict(driver_derivatives or {}),
         )
 
 

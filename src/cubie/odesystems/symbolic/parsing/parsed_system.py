@@ -118,16 +118,38 @@ class ParsedSystem:
             )
         }
         unknown_names = set(states) | set(observables)
+        driver_derivatives = equations.driver_derivatives
         normalised = normalise_input(
             list(equations.ordered),
             unknown_names,
-            known_symbol_map,
+            {
+                **known_symbol_map,
+                **{
+                    derivative.name: sp.Symbol(derivative.name, real=True)
+                    for derivative in driver_derivatives
+                },
+            },
             user_functions,
             user_function_derivatives,
             False,
             set(states),
         )
         normalised.derivative_names.update(equations.derivative_names)
+        # Driver derivatives return to registry derivatives of their
+        # drivers.
+        registry = normalised.registry
+        registry.reserved -= {
+            derivative.name for derivative in driver_derivatives
+        }
+        rules = {
+            derivative: registry.derivative(driver)
+            for derivative, driver in driver_derivatives.items()
+        }
+        if rules:
+            normalised.equations = [
+                (ir.xreplace(lhs, rules), ir.xreplace(rhs, rules))
+                for lhs, rhs in normalised.equations
+            ]
         return cls(
             normalised=normalised,
             states=states,

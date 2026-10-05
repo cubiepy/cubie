@@ -69,6 +69,8 @@ Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
   `rm_eqs_vars`; equations grow only through `add_equation`.
 - `find_eq_solvables` recomputes an equation's solvable edges from scratch.
 - `bareiss` returns the pivot columns in elimination order; their count is the rank.
+- Drivers are time-dependent knowns (`StructuralState(drivers=...)`): differentiating an
+  equation that holds a driver term registers the term's derivative as a known symbol.
 - Discrete systems, state machines, hierarchical connections and SDE tearing are not
   supported.
 

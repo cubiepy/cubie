@@ -250,13 +250,15 @@ def build_stage_substitutions(
         time_arg, ir.mul(h_sym, node_symbols[stage_idx])
     )
 
-    driver_count = len(sysir.driver_symbols)
-    if driver_count:
-        stage_driver_offset = stage_idx * driver_count
-        for driver_idx, driver_sym in enumerate(sysir.driver_symbols):
-            subs_map[driver_sym] = ir.arr(
-                "drivers", stage_driver_offset + driver_idx
-            )
+    stage_driver_offset = stage_idx * sysir.driver_buffer_length
+    driver_positions = {
+        **sysir.driver_index,
+        **sysir.driver_derivative_index,
+    }
+    for driver_sym, position in driver_positions.items():
+        subs_map[driver_sym] = ir.arr(
+            "drivers", stage_driver_offset + position
+        )
 
     for state_idx, state_sym in enumerate(sysir.state_symbols):
         terms: List[ir.Expr] = [ir.arr("base_state", state_idx)]

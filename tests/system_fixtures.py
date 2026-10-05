@@ -601,6 +601,26 @@ def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
     )
 
 
+# Index reduction differentiates the drive constraint, so dz reads
+# the drive's time derivative: y = d(drive)/dt.
+DRIVER_DERIVATIVE_EQUATIONS = ["dx = y", "0 = x - drive", "dz = -z + y"]
+DRIVER_DERIVATIVE_STATES = {"z": 0.5}
+
+
+def build_driver_derivative_system(precision: np_dtype) -> BaseODE:
+    """Return a DAE whose reduced dynamics read a driver derivative."""
+
+    return create_ODE_system(
+        dxdt=DRIVER_DERIVATIVE_EQUATIONS,
+        states=dict(DRIVER_DERIVATIVE_STATES),
+        observables=["x", "y"],
+        drivers=["drive"],
+        precision=precision,
+        strict=True,
+        name="driver_derivative",
+    )
+
+
 __all__ = [
     "build_colliding_constants_system",
     "build_coupled_oscillator_system",
@@ -616,6 +636,7 @@ __all__ = [
     "build_diagonally_dominant_system",
     "build_time_function_driver_system",
     "build_time_array_driver_system",
+    "build_driver_derivative_system",
     "build_torn_driver_system",
     "build_torn_time_system",
     "build_torn_unsolvable_system",

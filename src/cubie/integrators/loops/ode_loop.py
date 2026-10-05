@@ -154,7 +154,7 @@ class IVPLoop(CUDAFactory):
     n_parameters
         Number of parameters.
     n_drivers
-        Number of driver variables.
+        Length of the drivers buffer.
     n_observables
         Number of observable variables.
     n_error
@@ -238,7 +238,7 @@ class IVPLoop(CUDAFactory):
         n_parameters
             Number of parameters.
         n_drivers
-            Number of driver variables.
+            Length of the drivers buffer.
         n_observables
             Number of observable variables.
         n_error

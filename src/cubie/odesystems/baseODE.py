@@ -348,6 +348,22 @@ class BaseODE(CUDAFactory):
         return self.compile_settings.num_drivers
 
     @property
+    def reads_driver_derivatives(self) -> bool:
+        """Whether the device functions read drivers' time derivatives."""
+        return False
+
+    @property
+    def driver_buffer_length(self) -> int:
+        """Length of the drivers buffer the device functions read.
+
+        The drivers, followed by their time derivatives when the
+        system reads them.
+        """
+        if self.reads_driver_derivatives:
+            return 2 * self.num_drivers
+        return self.num_drivers
+
+    @property
     def sizes(self):
         """System component sizes cached for solvers."""
         return self.compile_settings.sizes

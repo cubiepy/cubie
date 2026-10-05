@@ -69,6 +69,11 @@ produced by `codegen.jacobian.generate_analytical_jvp`; its `_*` fields are set 
 A driver dict maps driver symbols to defaults, attached via
 `drivers.set_passthrough_defaults`. Sampled driver data is a Solver setting
 (`DriverSamples`), not part of the system.
+Index reduction that differentiates a driver leaves its first derivative in the
+equations; assembly records it in `ParsedEquations.driver_derivatives` (symbol -> driver),
+codegen reads it from `drivers[n_drivers + index]`, and a second or higher driver
+derivative raises. `ParsedSystem.from_parsed_equations` links those symbols back to their
+drivers.
 
 ## CellML
 `cellmlmanip` is imported under `try/except` and may be `None`; `load_cellml_model` raises

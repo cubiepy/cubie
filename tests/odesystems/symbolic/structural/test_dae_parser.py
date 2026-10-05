@@ -15,7 +15,10 @@ from cubie.odesystems.symbolic.structural.errors import (
     ExtraVariablesSystemError,
     InvalidSystemError,
 )
-from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+from cubie.odesystems.symbolic.symbolicODE import (
+    SymbolicODE,
+    create_ODE_system,
+)
 from tests._utils import run_device_dxdt, run_device_observables
 
 
@@ -764,3 +767,58 @@ class TestStructuralInputPaths:
         )
         satisfied = [holds(index_map, parsed, c) for c in constraints]
         assert satisfied.count(True) == 2
+
+
+class TestDriverDerivatives:
+    def _derivative(self, parsed, driver):
+        """Return the symbol the equations read for d(driver)/dt."""
+        symbols = [
+            symbol
+            for symbol, source in parsed.driver_derivatives.items()
+            if source == ir.sym(driver)
+        ]
+        assert len(symbols) == 1
+        return sp.Symbol(symbols[0].name, real=True)
+
+    def test_differentiated_driver_keeps_its_derivative(self):
+        # Index reduction differentiates 0 = x - u, so y = du/dt.
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = y", "0 = x - u", "dz = -z + y"],
+            states={"x": 0.0, "y": 0.0, "z": 0.0},
+            drivers=["u"],
+        )
+        u_t = self._derivative(parsed, "u")
+        z = real_symbols("z")
+        dz = substituted(index_map, parsed, solved(parsed)["dz"])
+        assert equivalent(dz, -z + u_t)
+
+    def test_twice_differentiated_driver_rejected(self):
+        # 0 = x - u differentiated twice gives w = d2u/dt2.
+        with pytest.raises(
+            ValueError,
+            match="differentiates driver u 2 times",
+        ):
+            parse_dae_input(
+                dxdt=["dx = y", "dy = w", "0 = x - u", "dz = -z + w"],
+                states={"x": 0.0, "y": 0.0, "w": 0.0, "z": 0.0},
+                drivers=["u"],
+            )
+
+    def test_rebuilt_system_keeps_driver_derivatives(self):
+        # Building from the parsed products re-derives the same system.
+        system = create_ODE_system(
+            dxdt=["dx = y", "0 = x - u", "dz = -z + y"],
+            states={"z": 0.5},
+            observables=["x", "y"],
+            drivers=["u"],
+            precision=np.float32,
+        )
+        rebuilt = SymbolicODE(
+            equations=system.equations,
+            all_indexed_bases=system.indices,
+            precision=np.float32,
+        )
+        assert rebuilt.equations.driver_derivatives == (
+            system.equations.driver_derivatives
+        )
+        assert rebuilt.equations.ordered == system.equations.ordered

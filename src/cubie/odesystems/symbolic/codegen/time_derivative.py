@@ -90,7 +90,12 @@ def _build_time_derivative_assignments(
         sysir.non_observable_equations(),
         operation_ordering,
     )
-    driver_symbols = list(sysir.driver_symbols)
+    # Each drivers-buffer entry, differentiated, is driver_dt at the
+    # same position.
+    driver_positions = {
+        **sysir.driver_index,
+        **sysir.driver_derivative_index,
+    }
     time_symbol = sysir.time_symbol
     derivative_names = sysir.derivative_names
 
@@ -102,7 +107,7 @@ def _build_time_derivative_assignments(
 
     time_memo: Dict = {}
     driver_memos: Dict[ir.Sym, Dict] = {
-        drv: {} for drv in driver_symbols
+        drv: {} for drv in driver_positions
     }
 
     processed: set = set()
@@ -117,7 +122,7 @@ def _build_time_derivative_assignments(
 
         driver_terms: List[ir.Expr] = []
         rhs_atoms = ir.free_atoms(rhs)
-        for driver in driver_symbols:
+        for driver, position in driver_positions.items():
             if driver in rhs_atoms:
                 partial = ir.diff(
                     rhs,
@@ -128,10 +133,7 @@ def _build_time_derivative_assignments(
                 driver_terms.append(
                     ir.mul(
                         partial,
-                        ir.arr(
-                            "driver_dt",
-                            sysir.driver_index[driver],
-                        ),
+                        ir.arr("driver_dt", position),
                     )
                 )
 

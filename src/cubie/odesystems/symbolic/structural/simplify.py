@@ -110,6 +110,7 @@ def _pantelides_reassemble_state(
         state.registry,
         state.known_symbols - {state.time_symbol},
         state.time_symbol,
+        drivers=state.drivers,
         state_priorities=priorities,
         irreducibles=state.irreducibles,
     )

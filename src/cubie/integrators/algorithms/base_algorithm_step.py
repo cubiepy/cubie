@@ -180,7 +180,7 @@ components use this set to filter kwargs before forwarding.
      - Number of state variables.
    * - ``n_drivers``
      - :class:`BaseStepConfig`
-     - Number of external driver signals.
+     - Length of the drivers buffer.
    * - ``dxdt_fn``
      - :class:`BaseStepConfig`
      - Device function evaluating the ODE RHS.
@@ -666,7 +666,8 @@ class BaseStepConfig(CUDAFactoryConfig, ABC):
     n_states
         Number of state entries advanced by each step call.
     n_drivers
-        Number of external driver signals consumed by the step (>= 0).
+        Length of the drivers buffer the step fills: the drivers, then
+        their time derivatives when the system reads them (>= 0).
     mass_flags
         Per-state mass-diagonal flags, ``True`` for a differential
         row; defaults to all ``True``.
@@ -809,7 +810,7 @@ class BaseAlgorithmStep(CUDAFactory):
         return dict(
             precision=system.precision,
             n_states=system.sizes.states,
-            n_drivers=system.sizes.drivers,
+            n_drivers=system.driver_buffer_length,
             mass_flags=system.mass_diagonal_flags,
             dxdt_fn=system.dxdt_fn,
             observables_fn=system.observables_fn,

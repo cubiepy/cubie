@@ -289,7 +289,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             n_states=sizes.states,
             n_parameters=sizes.parameters,
             n_observables=sizes.observables,
-            n_drivers=sizes.drivers,
+            n_drivers=system.driver_buffer_length,
             compile_flags=outputs["compile_flags"],
             n_counters=outputs["n_counters"],
             state_summaries_buffer_height=(

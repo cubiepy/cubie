@@ -514,6 +514,11 @@ class SymbolicODE(BaseODE):
         """Return units for drivers."""
         return self.indices.drivers.units
 
+    @property
+    def reads_driver_derivatives(self) -> bool:
+        """Whether the equations read drivers' time derivatives."""
+        return bool(self.equations.driver_derivatives)
+
     def _get_jvp_exprs(self) -> JVPEquations:
         """Return Jacobian-vector assignments for the current system.
 

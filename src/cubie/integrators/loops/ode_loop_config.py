@@ -51,7 +51,8 @@ class ODELoopConfig(CUDAFactoryConfig):
     n_parameters
         Number of parameters.
     n_drivers
-        Number of driver variables.
+        Length of the drivers buffer: the drivers, then their time
+        derivatives when the system reads them.
     n_observables
         Number of observable variables.
     n_error

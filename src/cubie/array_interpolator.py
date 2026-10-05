@@ -91,9 +91,13 @@ class InterpolatorCache(CUDADispatcherCache):
     Attributes
     ----------
     drivers_fn
-        Device function evaluating every input at a time.
+        Device function evaluating every input at a time, followed by
+        every input's time derivative when ``with_time_derivatives``.
     driver_derivative_fn
-        Device function evaluating every input's time derivative.
+        Device function evaluating every input's time derivative,
+        followed by every input's second time derivative when
+        ``with_time_derivatives``: the time derivative of what
+        ``drivers_fn`` writes.
     coefficients
         Host ``(num_segments, num_inputs, order + 1)`` table.
     coefficients_shape
@@ -318,6 +322,10 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         selects ``"periodic"`` when wrapping, else ``"clamped"``.
     drivers : DriverSamples, optional
         The sampled drivers; ``None`` interpolates nothing.
+    with_time_derivatives : bool
+        Whether ``drivers_fn`` writes each input's time derivative
+        after the input values, and ``driver_derivative_fn`` each
+        input's second time derivative after the first.
     num_inputs : int
         Column count of the sample table.
     num_segments : int
@@ -345,6 +353,10 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         validator=validators.optional(
             validators.instance_of(DriverSamples)
         ),
+    )
+    with_time_derivatives: bool = field(
+        default=False,
+        validator=validators.instance_of(bool),
     )
     num_inputs: int = field(default=0, init=False)
     num_segments: int = field(default=0, init=False)
@@ -487,115 +499,136 @@ class ArrayInterpolator(CUDAFactory):
             start_time - (resolution if pad_clamped else precision(0.0))
         )
 
-        # no cover: start
-        @cuda.jit(
-            # (numba_precision,
-            #  numba_precision[:,:,::1],
-            #  numba_precision[::1]),
-            device=True,
-            inline=True,
-            **self.jit_kwargs,
-        )
-        def evaluate_all(time, coefficients, out) -> None:
-            """Evaluate all input polynomials at ``time`` on the device.
+        jit_kwargs = self.jit_kwargs
 
-            Parameters
-            ----------
-            time : float
-                Query time for evaluation.
-            coefficients : device array
-                Segment-major coefficients with trailing polynomial degrees.
-            out : device array
-                Output array to populate with evaluated input values.
-            """
-            # Just in case, should no-op if input is precision-type
-            time = precision(time)
-            scaled = (time - evaluation_start) * inv_resolution
-            scaled_floor = precision(math.floor(scaled))
-            idx = int32(scaled_floor)
+        def evaluator(derivative: int) -> Callable:
+            """Return a device function evaluating every input's
+            ``derivative``-th time derivative at a time."""
+            first_power = int32(derivative - 1)
+            scale = precision(inv_resolution**derivative)
 
-            if wrap:
-                seg = int32(idx % num_segments)
-                tau = precision(scaled - scaled_floor)
-                in_range = True
-            else:
-                in_range = (scaled >= precision(0.0)) and (
-                    scaled <= num_segments
-                )
-                seg = cuda.selp(idx < int32(0), int32(0), idx)
-                seg = cuda.selp(
-                    seg >= num_segments, int32(num_segments - 1), seg
-                )
-                tau = precision(scaled - precision(seg))
+            # no cover: start
+            @cuda.jit(
+                # (numba_precision,
+                #  numba_precision[:,:,::1],
+                #  numba_precision[::1]),
+                device=True,
+                inline=True,
+                **jit_kwargs,
+            )
+            def evaluate(time, coefficients, out) -> None:
+                """Evaluate every input polynomial's derivative at ``time``.
 
-            # Evaluate polynomials using Horner's rule
-            for input_index in unroll_if(
-                range(num_inputs), unroll_other_small
-            ):
-                acc = zero_value
-                for k in unroll_if(
-                    range(int32(order), int32(-1), int32(-1)),
-                    unroll_other_small,
-                ):
-                    acc = acc * tau + coefficients[seg, input_index, k]
-                out[input_index] = acc if in_range else zero_value
+                Parameters
+                ----------
+                time : float
+                    Query time for evaluation.
+                coefficients : device array
+                    Segment-major coefficients with trailing polynomial
+                    degrees.
+                out : device array
+                    Output array to populate with evaluated values.
+                """
+                # Just in case, should no-op if input is precision-type
+                time = precision(time)
+                scaled = (time - evaluation_start) * inv_resolution
+                scaled_floor = precision(math.floor(scaled))
+                idx = int32(scaled_floor)
 
-        # no cover: end
-
-        # no cover: start
-        @cuda.jit(
-            # [(numba_precision,
-            #   numba_precision[:,:,::1],
-            #   numba_precision[::1])],
-            device=True,
-            inline=True,
-            **self.jit_kwargs,
-        )
-        def evaluate_time_derivative(
-            time,
-            coefficients,
-            out,
-        ) -> None:
-            """Evaluate the derivative of each driver polynomial."""
-            time = precision(time)
-            scaled = (time - evaluation_start) * inv_resolution
-            scaled_floor = precision(math.floor(scaled))
-            idx = int32(scaled_floor)
-
-            if wrap:
-                seg = int32(idx % num_segments)
-                tau = precision(scaled - scaled_floor)
-                in_range = True
-            else:
-                in_range = (scaled >= precision(0.0)) and (
-                    scaled <= num_segments
-                )
-                seg = cuda.selp(idx < int32(0), int32(0), idx)
-                seg = cuda.selp(
-                    seg >= num_segments, int32(num_segments - 1), seg
-                )
-                tau = precision(scaled - precision(seg))
-
-            for input_index in unroll_if(
-                range(int32(num_inputs)), unroll_other_small
-            ):
-                acc = zero_value
-                for k in unroll_if(
-                    range(int32(order), int32(0), int32(-1)),
-                    unroll_other_small,
-                ):
-                    acc = (
-                        acc * tau
-                        + precision(k) * (coefficients[seg, input_index, k])
+                if wrap:
+                    seg = int32(idx % num_segments)
+                    tau = precision(scaled - scaled_floor)
+                    in_range = True
+                else:
+                    in_range = (scaled >= precision(0.0)) and (
+                        scaled <= num_segments
                     )
-                out[input_index] = (
-                    acc * inv_resolution if in_range else zero_value
+                    seg = cuda.selp(idx < int32(0), int32(0), idx)
+                    seg = cuda.selp(
+                        seg >= num_segments, int32(num_segments - 1), seg
+                    )
+                    tau = precision(scaled - precision(seg))
+
+                # Evaluate polynomials using Horner's rule
+                for input_index in unroll_if(
+                    range(int32(num_inputs)), unroll_other_small
+                ):
+                    acc = zero_value
+                    for k in unroll_if(
+                        range(int32(order), first_power, int32(-1)),
+                        unroll_other_small,
+                    ):
+                        if derivative == 0:
+                            term = coefficients[seg, input_index, k]
+                        elif derivative == 1:
+                            term = precision(k) * (
+                                coefficients[seg, input_index, k]
+                            )
+                        else:
+                            term = (
+                                precision(k)
+                                * precision(k - int32(1))
+                                * coefficients[seg, input_index, k]
+                            )
+                        acc = acc * tau + term
+                    if derivative == 0:
+                        out[input_index] = acc if in_range else zero_value
+                    else:
+                        out[input_index] = (
+                            acc * scale if in_range else zero_value
+                        )
+
+            # no cover: end
+            return evaluate
+
+        evaluate_all = evaluator(0)
+        evaluate_time_derivative = evaluator(1)
+        drivers_fn = evaluate_all
+        driver_derivative_fn = evaluate_time_derivative
+        if self.compile_settings.with_time_derivatives:
+            evaluate_second_time_derivative = evaluator(2)
+
+            # no cover: start
+            @cuda.jit(
+                # (numba_precision,
+                #  numba_precision[:,:,::1],
+                #  numba_precision[::1]),
+                device=True,
+                inline=True,
+                **jit_kwargs,
+            )
+            def evaluate_with_time_derivatives(
+                time, coefficients, out
+            ) -> None:
+                """Evaluate every input, then its time derivative."""
+                evaluate_all(time, coefficients, out)
+                evaluate_time_derivative(
+                    time, coefficients, out[num_inputs:]
                 )
 
-        # no cover: end
+            @cuda.jit(
+                # (numba_precision,
+                #  numba_precision[:,:,::1],
+                #  numba_precision[::1]),
+                device=True,
+                inline=True,
+                **jit_kwargs,
+            )
+            def evaluate_time_derivatives(
+                time, coefficients, out
+            ) -> None:
+                """Evaluate every input's first, then second, derivative."""
+                evaluate_time_derivative(time, coefficients, out)
+                evaluate_second_time_derivative(
+                    time, coefficients, out[num_inputs:]
+                )
+
+            # no cover: end
+            drivers_fn = evaluate_with_time_derivatives
+            driver_derivative_fn = evaluate_time_derivatives
         cache = InterpolatorCache(
-            drivers_fn=evaluate_all,
-            driver_derivative_fn=evaluate_time_derivative,
+            drivers_fn=drivers_fn,
+            driver_derivative_fn=driver_derivative_fn,
             coefficients=coefficients,
             coefficients_shape=self.coefficients_shape,
         )

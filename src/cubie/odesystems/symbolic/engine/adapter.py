@@ -32,6 +32,12 @@ class SystemIR:
         Driver symbols ordered by driver index.
     state_index, dxdt_index, driver_index
         Symbol-to-position lookups for the ordered collections.
+    driver_derivative_index
+        Driver time-derivative symbol to its position in the drivers
+        buffer, after the drivers.
+    driver_buffer_length
+        Length of the drivers buffer: the drivers, followed by their
+        time derivatives when the equations read any.
     arrayrefs
         Printer symbol map: scalar name to :class:`~.expr.Arr`.
     function_aliases
@@ -52,6 +58,8 @@ class SystemIR:
     state_index: Dict[ir.Sym, int]
     dxdt_index: Dict[ir.Sym, int]
     driver_index: Dict[ir.Sym, int]
+    driver_derivative_index: Dict[ir.Sym, int]
+    driver_buffer_length: int
     arrayrefs: Dict[str, ir.Expr]
     function_aliases: Dict[str, str]
     nonfloat_functions: frozenset
@@ -131,6 +139,15 @@ def system_ir(equations, index_map) -> SystemIR:
                 aliases = dict(ref)
             continue
         arrayrefs[str(sym_key)] = from_sympy(ref, memo)
+    driver_derivative_index = {
+        derivative: len(drivers) + driver_index[driver]
+        for derivative, driver in equations.driver_derivatives.items()
+    }
+    for derivative, position in driver_derivative_index.items():
+        arrayrefs[derivative.name] = ir.arr("drivers", position)
+    driver_buffer_length = len(drivers) * (
+        2 if driver_derivative_index else 1
+    )
     for derivative_name in derivative_names.values():
         aliases.setdefault(derivative_name, derivative_name)
 
@@ -143,6 +160,8 @@ def system_ir(equations, index_map) -> SystemIR:
         state_index=state_index,
         dxdt_index=dxdt_index,
         driver_index=driver_index,
+        driver_derivative_index=driver_derivative_index,
+        driver_buffer_length=driver_buffer_length,
         arrayrefs=arrayrefs,
         function_aliases=aliases,
         nonfloat_functions=frozenset(

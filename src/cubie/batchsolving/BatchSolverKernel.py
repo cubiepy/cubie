@@ -350,7 +350,9 @@ class BatchSolverKernel(CUDAFactory):
             precision=precision,
             memory_manager=self._memory_manager,
         )
-        self.driver_interpolator.update(settings, silent=True)
+        self.driver_interpolator.update(
+            {**settings, **self._interpolator_inputs(system)}, silent=True
+        )
 
         system_name = system.name
         system_hash = system.fn_hash
@@ -1241,7 +1243,10 @@ class BatchSolverKernel(CUDAFactory):
         recognised = self.memory_manager.update(self, updates, silent=True)
         interpolator = self.driver_interpolator
         known_hash = interpolator.config_hash
-        recognised |= interpolator.update(updates, silent=True)
+        recognised |= interpolator.update(
+            {**updates, **self._interpolator_inputs(self.system)},
+            silent=True,
+        )
         # New sample values alone keep the compiled evaluators.
         if interpolator.config_hash != known_hash:
             updates.update(self._driver_settings())
@@ -1294,6 +1299,11 @@ class BatchSolverKernel(CUDAFactory):
                 else UnrollChoice.FULL
             )
         return defaults
+
+    @staticmethod
+    def _interpolator_inputs(system: "BaseODE") -> Dict[str, Any]:
+        """Return what the interpolator takes from the system."""
+        return {"with_time_derivatives": system.reads_driver_derivatives}
 
     def _driver_settings(self) -> Dict[str, Any]:
         """Return the interpolator's evaluators and coefficient layout."""
