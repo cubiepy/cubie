@@ -1,5 +1,9 @@
 """Dependent derivative rows rewritten as algebraic constraints.
 
+Cubie's own design. An equation whose derivative terms are an exact
+combination of other equations' derivative terms is replaced by the
+derivative-free equation that combination implies.
+
 Published Functions
 -------------------
 :func:`eliminate_singular_derivative_blocks`

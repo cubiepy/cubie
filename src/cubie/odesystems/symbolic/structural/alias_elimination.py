@@ -1,11 +1,18 @@
 """Alias elimination.
 
-Ports MTK's ``alias_elimination.jl`` (perfect-alias elimination via a
-sign-tracking union-find, plus the integer-linear alias pass built on
-singularity removal).
+Perfect-alias elimination via a sign-tracking union-find, trivial
+tearing of explicit equations, and the integer-linear alias pass built
+on singularity removal.
 
+``eliminate_perfect_aliases``, ``alias_elimination`` and their helpers
+are ported from ModelingToolkit.jl (commit a2b6dc56,
+``src/systems/alias_elimination.jl``: ``eliminate_perfect_aliases!``,
+``find_perfect_aliases!``, ``union_with_sign!``, ``pick_alias_target``,
+``build_expr_from_coeffs_vars!`` and ``alias_elimination!``).
 ``trivial_tearing`` is ported from ModelingToolkit.jl (commit
 c4177c335, ``src/systems/systemstructure.jl``, ``trivial_tearing!``).
+The coefficient helpers ``_term_coeff_rest`` and ``_add_coeffs_dict``
+are cubie's own.
 
 Published Functions
 -------------------

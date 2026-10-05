@@ -1,11 +1,11 @@
 """Engine-IR primitives backing the structural simplification passes.
 
-These replace the Symbolics.jl operations used by
-ModelingToolkitTearing: structural linear expansion, linear solving,
-fixpoint substitution, total time derivatives over derivative-symbol
-maps, and the derivative-symbol registry that stands in for MTK's
-``Differential`` terms (cubie states are plain IR symbols, so
-derivatives are represented by registered companion symbols).
+Structural linear expansion, linear solving, fixpoint substitution,
+total time derivatives over derivative-symbol maps, linear dependencies
+among rows of a symbolic matrix, and the derivative-symbol registry
+that stands in for ``Differential`` terms (cubie states are plain IR
+symbols, so derivatives are represented by registered companion
+symbols).
 
 All expressions are engine IR nodes
 (:mod:`cubie.odesystems.symbolic.engine`); SymPy input converts to IR

@@ -1,10 +1,13 @@
 """Integer-linear singularity removal.
 
-``aag_bareiss`` is ported from StateSelection.jl (commit 74df007e,
-``src/singularity_removal.jl``, ``aag_bareiss!``). ``get_new_mm``
-follows the integer-matrix rebuild in ModelingToolkit.jl (commit
-c4177c335, ``src/systems/alias_elimination.jl``,
-``alias_elimination!``).
+``structural_singularity_removal``, ``is_algebraic``, ``aag_bareiss``
+and ``force_var_to_zero`` are ported from StateSelection.jl (commit
+74df007e, ``src/singularity_removal.jl``, functions of the same names
+with the trailing ``!`` dropped). ``IgnoreUnderconstrainedVariable``
+is ported from ModelingToolkit.jl (commit a2b6dc56,
+``src/systems/alias_elimination.jl``). ``get_new_mm`` follows the
+integer-matrix rebuild in ModelingToolkit.jl (commit c4177c335,
+``src/systems/alias_elimination.jl``, ``alias_elimination!``).
 
 Published Functions
 -------------------

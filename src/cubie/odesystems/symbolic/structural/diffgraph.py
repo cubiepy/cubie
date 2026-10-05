@@ -1,8 +1,11 @@
 """Differentiation chains between variables (and between equations).
 
-Port of StateSelection.jl's ``DiffGraph``: a partial map from each
-vertex to the vertex representing its time derivative, with an
-optional inverse map. Indices are 0-based; absent edges are ``None``.
+``DiffGraph`` is a partial map from each vertex to the vertex
+representing its time derivative, with an optional inverse map.
+Indices are 0-based; absent edges are ``None``.
+
+Ported from StateSelection.jl (commit 74df007e,
+``src/graph/diff.jl``, ``DiffGraph``).
 """
 
 from typing import Iterator, List, Optional, Tuple

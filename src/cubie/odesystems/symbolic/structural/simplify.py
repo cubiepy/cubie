@@ -1,10 +1,21 @@
 """Structural simplification pipeline driver.
 
-Port of ModelingToolkit's ``mtkcompile!`` continuous-system pipeline:
-perfect-alias elimination, trivial tearing, integer-linear alias
-elimination (singularity removal), consistency checking, Pantelides
-index reduction with dummy-derivative state selection, tearing, and
-reassembly into an explicit (or semi-explicit mass-matrix) system.
+Singular derivative-block removal, perfect-alias elimination, trivial
+tearing, integer-linear alias elimination (singularity removal),
+consistency checking, Pantelides index reduction with
+dummy-derivative state selection, tearing, and reassembly into an
+explicit (or semi-explicit mass-matrix) system.
+
+``structural_simplify`` follows the continuous-system pipeline of
+ModelingToolkit.jl (commit a2b6dc56, ``src/systems/systemstructure.jl``,
+``_mtkcompile!`` and ``_mtkcompile_worker!``);
+``_pantelides_reassemble_state`` is ported from the same commit
+(``src/structural_transformation/pantelides.jl``,
+``pantelides_reassemble``) and ``_integer_jacobian`` from the integer
+Jacobian of ``dummy_derivative`` in the same commit
+(``src/structural_transformation/symbolics_tearing.jl``). Running
+singular derivative-block removal first is cubie's own, as are
+``SimplifiedSystem`` and the result assembly.
 
 Published Classes
 -----------------

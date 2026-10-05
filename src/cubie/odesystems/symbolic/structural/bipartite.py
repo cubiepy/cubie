@@ -1,9 +1,16 @@
 """Bipartite incidence graphs and matchings.
 
-Port of BipartiteGraphs.jl (SciML), the graph substrate of the
-structural simplification pipeline. Source vertices are equations and
-destination vertices are variables throughout the pipeline. All indices
-are 0-based.
+The graph substrate of the structural simplification pipeline. Source
+vertices are equations and destination vertices are variables
+throughout the pipeline. All indices are 0-based.
+
+Ported from BipartiteGraphs.jl (commit 647b6a42, v0.1.14):
+``BipartiteGraph`` from ``src/bipartite_graph.jl``; ``Matching`` and
+the ``Unassigned`` sentinel from ``src/matching.jl``;
+``construct_augmenting_path`` and ``maximal_matching`` from
+``src/maximal_matching.jl``. The ``SelectedState`` sentinel is ported
+from ModelingToolkit.jl (commit c4177c335,
+``src/structural_transformation/tearing.jl``).
 
 BipartiteGraphs.jl: Copyright (c) 2022 Aayush Sabharwal; MIT.
 

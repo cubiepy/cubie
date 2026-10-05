@@ -1,13 +1,28 @@
 """Directed views of bipartite graphs and supporting digraph algorithms.
 
-Ports the ``DiCMOBiGraph`` adapter from BipartiteGraphs.jl, Tarjan's
-strongly-connected-components algorithm together with the condensation
-topological sort used by ``find_var_sccs``, and the
-Bender-Fineman-Gilbert-Tarjan (Algorithm N) incremental cycle tracker
-from Graphs.jl that tearing uses to keep solved-equation dependency
+Matching-oriented directed views of a bipartite graph, strongly
+connected components and their topological order, and the incremental
+cycle tracker that tearing uses to keep solved-equation dependency
 graphs acyclic.
 
+``DiCMOBiGraphT`` and ``DiCMOBiGraphF`` are ported from
+BipartiteGraphs.jl (commit 647b6a42, v0.1.14, ``src/dicmobigraph.jl``,
+``DiCMOBiGraph``). Ported from Graphs.jl (commit dffc7a64, v1.15.0):
+``tarjan_scc`` and ``neighborhood_in`` from ``src/connectivity.jl``
+(``strongly_connected_components_tarjan``, ``neighborhood``);
+``IncrementalCycleTracker`` and ``_TransactionalList`` from
+``src/cycles/incremental.jl`` (``DenseGraphICT_BFGT_N``,
+``TransactionalVector``). ``find_var_sccs`` and
+``toposort_equations`` are ported from ModelingToolkit.jl (commit
+c4177c335, ``src/structural_transformation/utils.jl``,
+``find_var_sccs``, and
+``src/structural_transformation/symbolics_tearing.jl``,
+``get_sorted_scc``). The topological sort ``_kahn_toposort`` is
+cubie's own.
+
 BipartiteGraphs.jl: Copyright (c) 2022 Aayush Sabharwal; MIT.
+Graphs.jl: Copyright (c) 2015 Seth Bromberger and other contributors;
+BSD-2-Clause.
 
 Published Classes
 -----------------

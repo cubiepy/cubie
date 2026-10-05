@@ -1,4 +1,8 @@
-"""Simplify and tear ODE and DAE systems represented as engine IR."""
+"""Simplify and tear ODE and DAE systems represented as engine IR.
+
+This module re-exports the package API and is cubie's own; each
+submodule's docstring names the source of its parts.
+"""
 
 from cubie.odesystems.symbolic.structural.simplify import (
     structural_simplify,
