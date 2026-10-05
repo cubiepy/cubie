@@ -645,16 +645,16 @@ class TestStructuralInputPaths:
         )
         assert {"a", "b"} <= set(index_map.state_names)
 
-    def test_user_symbol_named_like_internal_derivative(self):
-        x, d1 = real_symbols("x _cubie_D1_x")
+    def test_user_symbol_named_like_derivative(self):
+        x, x_t = real_symbols("x x_t")
         index_map, _s, _f, parsed, _h = parse_dae_input(
-            dxdt=["dx = -x + _cubie_D1_x", "0 = _cubie_D1_x - sin(x)"],
-            states={"x": 1.0, "_cubie_D1_x": 0.0},
+            dxdt=["dx = -x + x_t", "0 = x_t - sin(x)"],
+            states={"x": 1.0, "x_t": 0.0},
         )
         assert list(index_map.state_names) == ["x"]
         eqs = solved(parsed)
-        assert equivalent(eqs["dx"], d1 - x)
-        assert equivalent(eqs["_cubie_D1_x"], sp.sin(x))
+        assert equivalent(eqs["dx"], x_t - x)
+        assert equivalent(eqs["x_t"], sp.sin(x))
 
     def test_index_reduction_rejects_excess_equations(self):
         with pytest.raises(InvalidSystemError, match="structurally"):

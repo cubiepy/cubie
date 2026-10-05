@@ -1,26 +1,25 @@
 """Reassembly of the simplified system from tearing decisions.
 
-Renames dummy derivatives to algebraic variables, lowers higher-order
+Cuts dummy derivatives from their base variables, lowers higher-order
 derivatives to first order, solves each matched equation for its
 variable (producing differential equations and observed equations),
-leaves torn equations as algebraic residuals, and reorders the state
-into BLT form.
+leaves torn equations as algebraic residuals, and collects the
+simplified system.
 
 Ported from ModelingToolkit.jl (commit c4177c335,
 ``src/structural_transformation/symbolics_tearing.jl``):
 ``default_reassemble`` (``DefaultReassembleAlgorithm`` with
 ``update_simplified_system!``), ``substitute_derivatives_algevars``,
 ``generate_derivative_variables``, ``find_duplicate_dd``,
-``_insert_sccs``, ``_add_dd_variable``, ``_add_dd_equation``,
-``get_sorted_scc``, ``EquationGenerator``, ``get_extra_eqs_vars``,
-``generate_system_equations``, ``reorder_vars`` and ``var_order``,
-each from the function of the same name less any leading underscore
-or trailing ``!``.
+``_insert_sccs``, ``get_sorted_scc``, ``EquationGenerator``,
+``get_extra_eqs_vars`` (``_extra_vars``) and
+``generate_system_equations``, each from the function of the same
+name less any leading underscore or trailing ``!``.
 
 Published Classes
 -----------------
-:class:`ReassembledSystem`
-    The reassembled system pieces consumed by the pipeline driver.
+:class:`SimplifiedSystem`
+    The simplification result consumed by cubie's parser/codegen.
 
 Published Functions
 -------------------
@@ -28,15 +27,18 @@ Published Functions
     Run the default reassembly on a tearing result.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from cubie.odesystems.symbolic.engine import expr as ir
+from cubie.odesystems.symbolic.engine.assignments import (
+    topological_sort,
+)
 from cubie.odesystems.symbolic.structural.bipartite import (
+    BipartiteGraph,
     Matching,
     SELECTED_STATE,
     UNASSIGNED,
 )
-from cubie.odesystems.symbolic.structural.clil import SparseMatrixCLIL
 from cubie.odesystems.symbolic.structural.digraph import (
     DiCMOBiGraphF,
     toposort_equations,
@@ -44,116 +46,77 @@ from cubie.odesystems.symbolic.structural.digraph import (
 from cubie.odesystems.symbolic.structural.symbolics import (
     fixpoint_sub,
     linear_expansion,
-    lower_varname,
 )
 from cubie.odesystems.symbolic.structural.system_structure import (
-    Equation,
     StructuralState,
 )
-from cubie.odesystems.symbolic.structural.tearing import (
-    TearingResult,
-    contract_variables,
-)
+from cubie.odesystems.symbolic.structural.tearing import TearingResult
 
 
-def var_order(dv: int, diff_to_var) -> Tuple[int, int]:
-    """Derivative order and lowest-order variable of ``dv``'s chain."""
-
-    order = 0
-    while diff_to_var[dv] is not None:
-        order += 1
-        dv = diff_to_var[dv]
-    return order, dv
-
-
-class ReassembledSystem:
-    """Pieces of the reassembled system.
+class SimplifiedSystem:
+    """Result of structural simplification.
 
     Parameters
     ----------
-    neweqs
-        Solved differential equations followed by algebraic residual
-        equations, in BLT order. Differential equations have their
-        derivative symbol as the LHS; residuals have LHS zero.
-    diff_eq_states
-        For each of ``neweqs``, the state whose derivative it defines,
-        or ``None`` for a residual.
+    differential_states
+        States integrated through their solved derivatives, in BLT
+        order.
+    algebraic_states
+        The torn (iteration) variables constrained by ``residuals``,
+        in BLT order.
+    dxdt
+        Map from each differential state to its explicit derivative
+        expression.
+    residuals
+        Algebraic residual expressions (each constrained to zero).
+        Empty for fully torn systems.
     observed
-        Full observed list: solved equations plus alias/trivially
-        torn equations, with dummy-derivative renames applied.
-    unknowns
-        Final unknowns (selected states then torn algebraic
-        variables), in BLT order.
+        Topologically sorted ``(symbol, expression)`` assignments for
+        eliminated variables.
     """
 
     def __init__(
         self,
-        neweqs: List[Equation],
-        diff_eq_states: List[Optional[ir.Sym]],
-        observed: List[Equation],
-        unknowns: List[ir.Sym],
+        differential_states: List[ir.Sym],
+        algebraic_states: List[ir.Sym],
+        dxdt: Dict[ir.Sym, ir.Expr],
+        residuals: List[ir.Expr],
+        observed: List[Tuple[ir.Sym, ir.Expr]],
     ) -> None:
-        self.neweqs = neweqs
-        self.diff_eq_states = diff_eq_states
+        self.differential_states = differential_states
+        self.algebraic_states = algebraic_states
+        self.dxdt = dxdt
+        self.residuals = residuals
         self.observed = observed
-        self.unknowns = unknowns
 
 
 def substitute_derivatives_algevars(
-    state: StructuralState,
-    neweqs: List[Equation],
-    var_eq_matching: Matching,
-    dummy_sub: Dict[ir.Sym, ir.Sym],
+    state: StructuralState, var_eq_matching: Matching
 ) -> None:
-    """Replace derivatives of non-selected variables by dummy names.
+    """Cut the derivatives of non-selected variables from their base.
 
     State selection may determine that some differential variables
-    are algebraic variables in disguise; their derivative symbols are
-    renamed to user-visible ``x_t`` variables and the derivative edge
-    is cut. After this pass, ``SelectedState`` information is no
-    longer needed.
+    are algebraic variables in disguise; their derivative variables
+    (``x_t``) become ordinary algebraic variables. After this pass,
+    ``SelectedState`` information is no longer needed.
     """
 
-    structure = state.structure
-    graph = structure.graph
-    var_to_diff = structure.var_to_diff
-    diff_to_var = var_to_diff.invview()
-    registry = state.registry
-
     for var in range(len(state.fullvars)):
-        dv = var_to_diff[var]
+        dv = state.derivative_of(var)
         if dv is None:
             continue
         if var_eq_matching[var] is SELECTED_STATE:
             continue
-        dd = state.fullvars[dv]
-        base, order = registry.base_and_order(dd)
-        v_t = ir.sym(
-            lower_varname(base.name, order, registry.reserved)
-        )
-        for eq in graph.d_neighbors(dv):
-            neweqs[eq] = neweqs[eq].xreplace({dd: v_t})
-        dummy_sub[dd] = v_t
-        state.fullvars[dv] = v_t
-        del state.var2idx[dd]
-        state.var2idx[v_t] = dv
-        registry.rename(dd, v_t)
-        # Higher orders (D(D(x)) -> D(x_t)) keep their internal
-        # symbols; the registry rename above rebased their chain onto
-        # the new variable.
-        diff_to_var[dv] = None
+        state.registry.cut(state.fullvars[dv])
 
 
 def find_duplicate_dd(
-    dv: int,
-    solvable_graph,
-    diff_to_var,
-    linear_eqs: Dict[int, int],
-    mm: SparseMatrixCLIL,
+    state: StructuralState, dv: int, linear_eqs: Dict[int, int]
 ) -> Optional[Tuple[int, int]]:
-    """Find a pre-existing ``D(x) ~ x_t`` equation for ``dv``."""
+    """Find a pre-existing ``0 ~ D(x) - y`` equation for ``dv``."""
 
-    for eq in solvable_graph.d_neighbors(dv):
+    mm = state.mm
+    for eq in state.solvable_graph.d_neighbors(dv):
         mi = linear_eqs.get(eq)
         if mi is None:
             continue
@@ -165,7 +128,7 @@ def find_duplicate_dd(
             and nzs[0] == -nzs[1]
         ):
             v_t = rvs[1] if rvs[0] == dv else rvs[0]
-            if diff_to_var[v_t] is None:
+            if state.primal_of(v_t) is None:
                 return eq, v_t
     return None
 
@@ -195,138 +158,84 @@ def _insert_sccs(
 
 def generate_derivative_variables(
     state: StructuralState,
-    neweqs: List[Equation],
     var_eq_matching: Matching,
     full_var_eq_matching: Matching,
     var_sccs: List[List[int]],
-    mm: SparseMatrixCLIL,
 ) -> List[List[int]]:
-    """Lower the system to first order by adding ``D(x) ~ x_t``.
+    """Lower the system to first order.
 
-    For every differentiated variable whose derivative is not solved
-    from any equation, introduce the variable ``x_t`` and the
-    equation ``0 ~ D(x) - x_t`` (unless an equivalent equation
-    already exists), match ``D(x)`` to it, and update the SCCs.
-    Returns the new SCC list.
+    For every differentiated variable ``x`` whose derivative ``x_t``
+    is solved from no equation, ``x_t`` becomes a state of its own:
+    ``x`` takes a new derivative variable ``D(x)`` matched to the new
+    equation ``0 ~ D(x) - x_t``. When an equation ``0 ~ x_t - y``
+    already exists, ``x_t`` is matched to it instead and ``y`` takes
+    over the derivative of ``x_t``. Each equation solving ``D(x)``
+    forms a singleton SCC before the SCC of ``x_t``. Returns the new
+    SCC list.
     """
 
-    structure = state.structure
-    graph = structure.graph
-    solvable_graph = structure.solvable_graph
-    var_to_diff = structure.var_to_diff
-    diff_to_var = var_to_diff.invview()
+    graph = state.graph
     registry = state.registry
-    linear_eqs = {e: i for i, e in enumerate(mm.nzrows)}
+    linear_eqs = {e: i for i, e in enumerate(state.mm.nzrows)}
 
     v_to_scc = [None] * graph.ndsts()
     for i, scc in enumerate(var_sccs):
         for j, v in enumerate(scc):
             v_to_scc[v] = (i, j)
 
-    v_t_dvs = []
+    # (unsolved derivative, its variable as a state, the variable
+    # matched to the equation solving the derivative)
+    lowered = []
 
-    for v in range(len(var_to_diff)):
-        dv = var_to_diff[v]
+    for v in range(graph.ndsts()):
+        dv = state.derivative_of(v)
         if dv is None:
             continue
         if isinstance(var_eq_matching[dv], int):
             continue
 
-        dd = find_duplicate_dd(
-            dv, solvable_graph, diff_to_var, linear_eqs, mm
-        )
-        if dd is None:
-            dx = state.fullvars[dv]
-            order, lv = var_order(dv, diff_to_var)
-            base, order_r = registry.base_and_order(dx)
-            x_t = ir.sym(
-                lower_varname(
-                    base.name, order_r, registry.reserved
-                )
+        duplicate = find_duplicate_dd(state, dv, linear_eqs)
+        if duplicate is None:
+            x_t = state.fullvars[dv]
+            registry.cut(x_t)
+            dx = state.add_variable(
+                registry.derivative(state.fullvars[v]), dv
             )
-            # Add x_t to the graph.
-            v_t = _add_dd_variable(state, x_t, dv)
-            # Add 0 ~ D(x) - x_t to the graph.
-            dummy_eq = _add_dd_equation(
-                state, neweqs, Equation(ir.ZERO, dx - x_t), dv, v_t
+            dummy_eq = state.add_equation(
+                (ir.ZERO, ir.sub(state.fullvars[dx], x_t)), [dx, dv]
             )
-            for e in list(graph.d_neighbors(dv)):
-                graph.add_edge(e, v_t)
+            state.solvable_graph.add_edge(dummy_eq, dx)
             var_eq_matching.push(UNASSIGNED)
             full_var_eq_matching.push(UNASSIGNED)
-            dd = (dummy_eq, v_t)
-        dummy_eq, v_t = dd
-        var_to_diff[v_t] = var_to_diff[dv]
+            var_eq_matching[dx] = dummy_eq
+            var_eq_matching[dv] = UNASSIGNED
+            full_var_eq_matching[dx] = dummy_eq
+            lowered.append((dv, dv, dx))
+            continue
+        dummy_eq, v_t = duplicate
+        registry.move_derivative(state.fullvars[dv], state.fullvars[v_t])
         old_matched_eq = full_var_eq_matching[dv]
         var_eq_matching[dv] = dummy_eq
         full_var_eq_matching[dv] = dummy_eq
         full_var_eq_matching[v_t] = old_matched_eq
-        v_t_dvs.append((v_t, dv))
+        lowered.append((dv, v_t, dv))
 
     sccs_to_insert = []
     idxs_to_remove = {}
-    for v_t, dv in v_t_dvs:
+    for dv, v_t, dx in lowered:
         i, j = v_to_scc[dv]
-        var_sccs[i][j] = v_t
-        if v_t < len(v_to_scc):
+        if v_t != dv:
+            var_sccs[i][j] = v_t
             i2, j2 = v_to_scc[v_t]
             idxs_to_remove.setdefault(i2, []).append(j2)
         # Emit D(x) first, so later equations read its solution.
-        sccs_to_insert.append((i, [dv]))
+        sccs_to_insert.append((i, [dx]))
     sccs_to_insert.sort(key=lambda pair: pair[0])
 
     for i, idxs in idxs_to_remove.items():
         for j in sorted(idxs, reverse=True):
             del var_sccs[i][j]
-    new_sccs = _insert_sccs(var_sccs, sccs_to_insert)
-
-    mm.ncols = graph.ndsts()
-    return new_sccs
-
-
-def _add_dd_variable(
-    state: StructuralState, x_t: ir.Sym, dv: int
-) -> int:
-    """Add the dummy variable ``x_t`` mirroring variable ``dv``."""
-
-    from cubie.odesystems.symbolic.structural.bipartite import DST
-
-    structure = state.structure
-    state.fullvars.append(x_t)
-    structure.state_priorities.append(structure.state_priorities[dv])
-    structure.canonical_ranks.append(structure.canonical_ranks[dv])
-    state.always_present.append(False)
-    v_t = structure.var_to_diff.add_vertex()
-    structure.graph.add_vertex(DST)
-    structure.solvable_graph.add_vertex(DST)
-    structure.var_to_diff[v_t] = structure.var_to_diff[dv]
-    state.var2idx[x_t] = v_t
-    return v_t
-
-
-def _add_dd_equation(
-    state: StructuralState,
-    neweqs: List[Equation],
-    eq: Equation,
-    dv: int,
-    v_t: int,
-) -> int:
-    """Append ``0 ~ D(x) - x_t`` and its graph vertices/edges."""
-
-    from cubie.odesystems.symbolic.structural.bipartite import SRC
-
-    structure = state.structure
-    neweqs.append(eq)
-    state.eqs.append(eq)
-    state.original_eqs.append(eq)
-    structure.graph.add_vertex(SRC)
-    dummy_eq = len(neweqs) - 1
-    structure.graph.add_edge(dummy_eq, dv)
-    structure.graph.add_edge(dummy_eq, v_t)
-    structure.solvable_graph.add_vertex(SRC)
-    structure.solvable_graph.add_edge(dummy_eq, dv)
-    structure.eq_to_diff.add_vertex()
-    return dummy_eq
+    return _insert_sccs(var_sccs, sccs_to_insert)
 
 
 def get_sorted_scc(
@@ -364,56 +273,54 @@ def get_sorted_scc(
     return scc_vars, scc_eqs_sorted
 
 
+def _solve_for(
+    equation: Tuple[ir.Expr, ir.Expr], var: ir.Sym
+) -> ir.Expr:
+    lhs, rhs = equation
+    a, b, islinear = linear_expansion(ir.sub(lhs, rhs), var)
+    if not islinear or ir.is_zero(a):
+        raise ValueError(
+            f"equation {lhs} ~ {rhs} is not solvable for {var} despite "
+            "a solvable-graph edge"
+        )
+    return ir.div(ir.neg(b), a)
+
+
 class EquationGenerator:
     """Accumulates generated equations and their orderings."""
 
     def __init__(self, state: StructuralState) -> None:
         self.state = state
         self.total_sub = {}
-        self.neweqs_out = []
-        # For differential equations, the state symbol whose
-        # derivative the equation defines (None for algebraic rows).
-        # Derived from the graph's derivative chain, which
-        # find_duplicate_dd may rewire away from the registry chain.
-        self.diff_eq_states = []
+        self.differential_states = []
+        self.dxdt = {}
+        self.residuals = []
         self.eq_ordering = []
         self.var_ordering = []
         self.solved_eqs = []
         self.solved_vars = []
 
-    def is_solvable(self, ieq, iv) -> bool:
-        solvable_graph = self.state.structure.solvable_graph
-        return (
-            isinstance(ieq, int)
-            and isinstance(iv, int)
-            and solvable_graph.has_edge(ieq, iv)
-        )
-
-    def is_dervar(self, iv: int) -> bool:
-        return self.state.structure.isdervar(iv)
-
-    def codegen_equation(self, eq: Equation, ieq: int, iv) -> None:
-        """Generate the output form of ``eq``.
+    def codegen_equation(self, ieq: int, iv) -> None:
+        """Generate the output form of equation ``ieq``.
 
         Solvable equations of derivative variables become
-        differential equations; solvable equations of algebraic
-        variables become observed equations; everything else stays as
-        an algebraic residual.
+        differential equations of the variable they derive; solvable
+        equations of algebraic variables become observed equations;
+        everything else stays as an algebraic residual.
         """
 
         state = self.state
-        structure = state.structure
-        graph = structure.graph
-        diff_to_var = structure.var_to_diff.invview()
+        graph = state.graph
         total_sub = self.total_sub
+        lhs, rhs = state.eqs[ieq]
 
-        issolvable = self.is_solvable(ieq, iv)
-        isdervar = issolvable and self.is_dervar(iv)
-        if issolvable and isdervar:
+        issolvable = isinstance(iv, int) and state.solvable_graph.has_edge(
+            ieq, iv
+        )
+        primal = state.primal_of(iv) if issolvable else None
+        if primal is not None:
             var = state.fullvars[iv]
-            rhs = _solve_for(eq, var)
-            rhs = fixpoint_sub(rhs, total_sub)
-            neweq = Equation(var, rhs)
+            solved = fixpoint_sub(_solve_for((lhs, rhs), var), total_sub)
             # Any equation incident on `iv` will have it substituted:
             # rewire incidence through this equation's variables.
             for e in list(graph.d_neighbors(iv)):
@@ -422,37 +329,20 @@ class EquationGenerator:
                 for v in graph.s_neighbors(ieq):
                     graph.add_edge(e, v)
                 graph.rem_edge(e, iv)
-            total_sub[var] = rhs
-            self.neweqs_out.append(neweq)
-            self.diff_eq_states.append(
-                state.fullvars[diff_to_var[iv]]
-            )
+            total_sub[var] = solved
+            self.differential_states.append(state.fullvars[primal])
+            self.dxdt[state.fullvars[primal]] = solved
             self.eq_ordering.append(ieq)
-            self.var_ordering.append(diff_to_var[iv])
+            self.var_ordering.append(primal)
         elif issolvable:
             var = state.fullvars[iv]
-            rhs = _solve_for(eq, var)
-            neweq = Equation(var, fixpoint_sub(rhs, total_sub))
-            self.solved_eqs.append(neweq)
+            solved = fixpoint_sub(_solve_for((lhs, rhs), var), total_sub)
+            self.solved_eqs.append((var, solved))
             self.solved_vars.append(iv)
         else:
-            rhs = fixpoint_sub(eq.residual(), total_sub)
-            self.neweqs_out.append(Equation(ir.ZERO, rhs))
-            self.diff_eq_states.append(None)
+            self.residuals.append(fixpoint_sub(ir.sub(rhs, lhs), total_sub))
             self.eq_ordering.append(ieq)
             self.var_ordering.append(-1)
-
-
-def _solve_for(eq: Equation, var: ir.Sym) -> ir.Expr:
-    residual = eq.lhs - eq.rhs
-    a, b, islinear = linear_expansion(residual, var)
-    if not islinear or ir.is_zero(a):
-        raise ValueError(
-            f"equation {eq} is not solvable for {var} despite a "
-            "solvable-graph edge"
-        )
-    rhs = ir.div(ir.neg(b), a)
-    return rhs
 
 
 def _extra_vars(
@@ -464,7 +354,7 @@ def _extra_vars(
 
     return [
         v
-        for v in range(state.structure.graph.ndsts())
+        for v in range(state.graph.ndsts())
         if not isinstance(full_var_eq_matching[v], int)
         and var_eq_matching[v] is UNASSIGNED
     ]
@@ -503,26 +393,22 @@ def torn_partner(
 
 def generate_system_equations(
     state: StructuralState,
-    neweqs: List[Equation],
     var_eq_matching: Matching,
     full_var_eq_matching: Matching,
     var_sccs: List[List[int]],
-    extra_eqs_vars: Tuple[List[int], List[int]],
-) -> Tuple[
-    List[Equation], List[Equation], List[int], List[int], int, int
-]:
+    extra_eqs: List[int],
+    extra_vars: List[int],
+) -> Tuple[EquationGenerator, List[int]]:
     """Solve matched equations and order the system into BLT form.
 
-    Returns ``(neweqs, solved_eqs, eq_ordering, var_ordering,
-    n_solved_eqs, n_solved_vars)``.
+    Returns the generator holding the generated equations and the
+    variable ordering: the variable of each differential equation
+    and residual in generation order, then every other unsolved
+    variable by index.
     """
 
-    structure = state.structure
-    graph = structure.graph
-    var_to_diff = structure.var_to_diff
-    diff_to_var = var_to_diff.invview()
+    graph = state.graph
     eq_var_matching = var_eq_matching.invview()
-    extra_eqs, extra_vars = extra_eqs_vars
 
     gen = EquationGenerator(state)
 
@@ -536,13 +422,7 @@ def generate_system_equations(
         )
         if not isinstance(var, int):
             continue
-        gen.codegen_equation(neweqs[eq], eq, var)
-
-    def ispresent(i: int) -> bool:
-        if graph.d_neighbors(i):
-            return True
-        dvi = var_to_diff[i]
-        return dvi is not None and bool(graph.d_neighbors(dvi))
+        gen.codegen_equation(eq, var)
 
     digraph = DiCMOBiGraphF(graph, var_eq_matching)
     for i, scc in enumerate(var_sccs):
@@ -566,7 +446,7 @@ def generate_system_equations(
                 if ieq < len(eq_var_matching.match)
                 else UNASSIGNED
             )
-            gen.codegen_equation(neweqs[ieq], ieq, iv)
+            gen.codegen_equation(ieq, iv)
 
     for eq in extra_eqs:
         var = (
@@ -576,7 +456,7 @@ def generate_system_equations(
         )
         if isinstance(var, int):
             continue
-        gen.codegen_equation(neweqs[eq], eq, var)
+        gen.codegen_equation(eq, var)
 
     var_ordering = gen.var_ordering
     solved_vars_set = set(gen.solved_vars)
@@ -592,6 +472,12 @@ def generate_system_equations(
         if paired is not None:
             var_ordering[i] = paired
 
+    def ispresent(i: int) -> bool:
+        if graph.d_neighbors(i):
+            return True
+        dvi = state.derivative_of(i)
+        return dvi is not None and bool(graph.d_neighbors(dvi))
+
     # Fill unpaired algebraic (torn) variable slots.
     paired_vars = {v for v in var_ordering if v >= 0}
     offset = 0
@@ -603,7 +489,7 @@ def generate_system_equations(
             if (
                 j not in paired_vars
                 and j not in solved_vars_set
-                and diff_to_var[j] is None
+                and state.primal_of(j) is None
                 and ispresent(j)
             ):
                 index = j
@@ -617,100 +503,67 @@ def generate_system_equations(
     var_ordering = var_ordering + [
         v for v in range(graph.ndsts()) if v not in used
     ]
-    return (
-        gen.neweqs_out,
-        gen.diff_eq_states,
-        gen.solved_eqs,
-        gen.eq_ordering,
-        var_ordering,
-        len(gen.solved_vars),
-        len(solved_vars_set),
-    )
+    return gen, var_ordering
 
 
-def reorder_vars(
+def _matched_closure(
+    graph: BipartiteGraph, var_eq_matching: Matching, var: int
+) -> Set[int]:
+    """``var`` and every variable its matched equations read, recursively."""
+
+    seen = {var}
+    stack = [var]
+    while stack:
+        eq = var_eq_matching[stack.pop()]
+        if not isinstance(eq, int):
+            continue
+        for w in graph.s_neighbors(eq):
+            if w not in seen:
+                seen.add(w)
+                stack.append(w)
+    return seen
+
+
+def _unknowns(
     state: StructuralState,
+    gen: EquationGenerator,
     var_eq_matching: Matching,
-    eq_ordering: List[int],
     var_ordering: List[int],
-    nsolved_eq: int,
-    nsolved_var: int,
-) -> None:
-    """Permute the state into the generated (BLT) ordering.
+) -> List[ir.Sym]:
+    """Unknowns of the reassembled system, in ``var_ordering`` order.
 
-    Eliminated (solved) variables and equations are contracted out of
-    the graphs.
+    A variable is reached when a differential equation or residual
+    reads it, directly or through the matched equations of the solved
+    variables it reads. An unknown is an unsolved variable that is
+    reached or whose derivative is reached, and that is not the
+    derivative of another unsolved variable.
     """
 
-    structure = state.structure
-    graph = structure.graph
-    solvable_graph = structure.solvable_graph
-    var_to_diff = structure.var_to_diff
-    eq_to_diff = structure.eq_to_diff
+    graph = state.graph
+    solved = set(gen.solved_vars)
+    reached = set()
+    for e in gen.eq_ordering:
+        for v in graph.s_neighbors(e):
+            if v in solved:
+                reached |= _matched_closure(graph, var_eq_matching, v)
+            else:
+                reached.add(v)
+    reached -= solved
 
-    eqsperm = [-1] * graph.nsrcs()
-    for i, v in enumerate(eq_ordering):
-        eqsperm[v] = i
-    varsperm = [-1] * graph.ndsts()
-    for i, v in enumerate(var_ordering):
-        varsperm[v] = i
+    def is_unknown(v: int) -> bool:
+        primal = state.primal_of(v)
+        if primal is not None and primal not in solved:
+            return False
+        return v in reached or state.derivative_of(v) in reached
 
-    new_graph = contract_variables(
-        graph, var_eq_matching, varsperm, eqsperm, nsolved_eq,
-        nsolved_var,
-    )
-    new_solvable_graph = contract_variables(
-        solvable_graph,
-        var_eq_matching,
-        varsperm,
-        eqsperm,
-        nsolved_eq,
-        nsolved_var,
-    )
-
-    from cubie.odesystems.symbolic.structural.diffgraph import DiffGraph
-
-    new_var_to_diff = DiffGraph(len(var_ordering), with_badj=True)
-    for v in range(len(var_to_diff)):
-        d = var_to_diff[v]
-        v2 = varsperm[v]
-        if v2 < 0 or d is None:
-            continue
-        d2 = varsperm[d]
-        new_var_to_diff[v2] = d2 if d2 >= 0 else None
-    new_eq_to_diff = DiffGraph(len(eq_ordering), with_badj=True)
-    for e in range(len(eq_to_diff)):
-        d = eq_to_diff[e]
-        e2 = eqsperm[e]
-        if e2 < 0 or d is None:
-            continue
-        d2 = eqsperm[d]
-        new_eq_to_diff[e2] = d2 if d2 >= 0 else None
-    new_fullvars = [state.fullvars[v] for v in var_ordering]
-
-    structure.graph = new_graph.complete()
-    structure.solvable_graph = new_solvable_graph.complete()
-    structure.var_to_diff = new_var_to_diff
-    structure.eq_to_diff = new_eq_to_diff
-    structure.state_priorities = [
-        structure.state_priorities[v] for v in var_ordering
-    ]
-    structure.canonical_ranks = [
-        structure.canonical_ranks[v] for v in var_ordering
-    ]
-    state.always_present = [
-        state.always_present[v] for v in var_ordering
-    ]
-    state.fullvars = new_fullvars
-    state.var2idx = {v: i for i, v in enumerate(new_fullvars)}
+    return [state.fullvars[v] for v in var_ordering if is_unknown(v)]
 
 
 def default_reassemble(
     state: StructuralState,
     tearing_result: TearingResult,
-    mm: SparseMatrixCLIL,
     fully_determined: bool = True,
-) -> ReassembledSystem:
+) -> SimplifiedSystem:
     """Reassemble the simplified system from a tearing result."""
 
     var_eq_matching = tearing_result.var_eq_matching
@@ -718,87 +571,43 @@ def default_reassemble(
     var_sccs = [list(s) for s in tearing_result.var_sccs]
 
     if fully_determined:
-        extra_eqs_vars = ([], [])
+        extra_eqs, extra_vars = [], []
     else:
-        extra_eqs_vars = (
-            tearing_result.free_eqs,
-            _extra_vars(state, var_eq_matching, full_var_eq_matching),
+        extra_eqs = tearing_result.free_eqs
+        extra_vars = _extra_vars(
+            state, var_eq_matching, full_var_eq_matching
         )
-    neweqs = list(state.eqs)
-    dummy_sub = {}
-    extra_unknowns = [
-        state.fullvars[v] for v in extra_eqs_vars[1]
-    ]
+    extra_unknowns = [state.fullvars[v] for v in extra_vars]
 
-    substitute_derivatives_algevars(
-        state, neweqs, var_eq_matching, dummy_sub
-    )
+    substitute_derivatives_algevars(state, var_eq_matching)
     var_sccs = generate_derivative_variables(
+        state, var_eq_matching, full_var_eq_matching, var_sccs
+    )
+    gen, var_ordering = generate_system_equations(
         state,
-        neweqs,
         var_eq_matching,
         full_var_eq_matching,
         var_sccs,
-        mm,
-    )
-    (
-        neweqs_out,
-        diff_eq_states,
-        solved_eqs,
-        eq_ordering,
-        var_ordering,
-        nelim_eq,
-        nelim_var,
-    ) = generate_system_equations(
-        state,
-        neweqs,
-        var_eq_matching,
-        full_var_eq_matching,
-        var_sccs,
-        extra_eqs_vars,
-    )
-    reorder_vars(
-        state,
-        var_eq_matching,
-        eq_ordering,
-        var_ordering,
-        nelim_eq,
-        nelim_var,
+        extra_eqs,
+        extra_vars,
     )
 
-    # Final unknowns: variables that are not derivatives and occur in
-    # the reduced system, in BLT order, plus extra unknowns.
-    structure = state.structure
-    graph = structure.graph
-    var_to_diff = structure.var_to_diff
-    diff_to_var = var_to_diff.invview()
-
-    def ispresent(i: int) -> bool:
-        if graph.d_neighbors(i):
-            return True
-        dvi = var_to_diff[i]
-        return dvi is not None and bool(graph.d_neighbors(dvi))
-
-    obs_sub = dict(dummy_sub)
-    for eq in neweqs_out:
-        if not ir.is_zero(eq.lhs):
-            obs_sub[eq.lhs] = eq.rhs
-
-    observed = list(solved_eqs)
-    observed.extend(
-        obs.xreplace(obs_sub) for obs in state.additional_observed
-    )
-
-    unknown_idxs = [
-        i
-        for i in range(len(state.fullvars))
-        if diff_to_var[i] is None and ispresent(i)
-    ]
-    unknowns = [state.fullvars[i] for i in unknown_idxs]
+    unknowns = _unknowns(state, gen, var_eq_matching, var_ordering)
     for extra in extra_unknowns:
         if extra not in unknowns:
             unknowns.append(extra)
+    diff_set = set(gen.differential_states)
 
-    return ReassembledSystem(
-        neweqs_out, diff_eq_states, observed, unknowns
+    observed = list(gen.solved_eqs)
+    observed.extend(
+        (lhs, ir.xreplace(rhs, gen.total_sub))
+        for lhs, rhs in state.additional_observed
+    )
+
+    return SimplifiedSystem(
+        gen.differential_states,
+        [s for s in unknowns if s not in diff_set],
+        gen.dxdt,
+        gen.residuals,
+        topological_sort(observed),
     )

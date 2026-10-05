@@ -1,11 +1,11 @@
 """Normalise user equation input into structural IR equations.
 
 The single symbolic front end: string and SymPy input converge on
-one representation — a list of
-:class:`~cubie.odesystems.symbolic.structural.system_structure.Equation`
-objects holding engine IR expressions, with derivatives replaced by
+one representation — a list of ``(lhs, rhs)`` pairs of engine IR
+expressions, with derivatives replaced by
 :class:`~cubie.odesystems.symbolic.structural.symbolics.DerivativeRegistry`
-symbols — plus the resolved declarations.
+symbols (``x_t``, ``x_tt``, ... clear of every name in the input) —
+plus the resolved declarations.
 
 SymPy is the parsing layer only: strings parse through
 ``sympy.parse_expr`` and SymPy input is accepted directly, but every
@@ -31,7 +31,7 @@ Published Functions
 """
 
 import re
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 import sympy as sp
 from sympy.core.function import AppliedUndef
@@ -53,11 +53,9 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
 )
-from cubie.odesystems.symbolic.structural.system_structure import (
-    Equation,
-)
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_]\w*$")
+_NAME_PATTERN = re.compile(r"[A-Za-z_]\w*")
 _NUMERIC_LITERAL_PATTERN = re.compile(
     r"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$"
 )
@@ -72,7 +70,7 @@ class NormalisedSystem:
     Parameters
     ----------
     equations
-        Structural IR equations with registry derivative symbols.
+        ``(lhs, rhs)`` IR pairs with registry derivative symbols.
     registry
         The derivative registry used by ``equations``.
     funcs
@@ -98,7 +96,7 @@ class NormalisedSystem:
 
     def __init__(
         self,
-        equations: List[Equation],
+        equations: List[Tuple[ir.Expr, ir.Expr]],
         registry: DerivativeRegistry,
         funcs: Dict[str, Callable],
         unknown_names: set,
@@ -252,20 +250,19 @@ def _replace_sympy_derivatives(
 
 
 def _bind_unassigned_derivative_tokens(
-    equations: List[Equation],
+    equations: List[Tuple[ir.Expr, ir.Expr]],
     registry: DerivativeRegistry,
     unknown_names: set,
-) -> List[Equation]:
+) -> List[Tuple[ir.Expr, ir.Expr]]:
     """Bind unassigned ``dX`` atoms to registry derivative symbols.
 
     Applies to expression LHS and every RHS when ``X`` is an unknown.
     """
 
     assigned_names = {
-        eq.lhs.name
-        for eq in equations
-        if isinstance(eq.lhs, ir.Sym)
-        and not registry.is_derivative(eq.lhs)
+        lhs.name
+        for lhs, _ in equations
+        if isinstance(lhs, ir.Sym) and not registry.is_derivative(lhs)
     }
 
     def derivative_rules(expression):
@@ -286,25 +283,20 @@ def _bind_unassigned_derivative_tokens(
         return rules
 
     bound = []
-    for eq in equations:
-        lhs = eq.lhs
+    for lhs, rhs in equations:
         if not isinstance(lhs, (ir.Sym, ir.Num)):
             lhs_rules = derivative_rules(lhs)
             if lhs_rules:
                 lhs = ir.xreplace(lhs, lhs_rules)
-        rhs = eq.rhs
         rhs_rules = derivative_rules(rhs)
         if rhs_rules:
             rhs = ir.xreplace(rhs, rhs_rules)
-        if lhs is eq.lhs and rhs is eq.rhs:
-            bound.append(eq)
-        else:
-            bound.append(Equation(lhs, rhs))
+        bound.append((lhs, rhs))
     return bound
 
 
 def _infer_parameters(
-    equations: List[Equation],
+    equations: List[Tuple[ir.Expr, ir.Expr]],
     registry: DerivativeRegistry,
     declared_names: set,
     strict: bool,
@@ -316,9 +308,10 @@ def _infer_parameters(
     """
 
     new_params: List[str] = []
-    for eq in equations:
+    for lhs, rhs in equations:
         atoms = sorted(
-            eq.free_symbols(), key=lambda atom: atom.sort_key
+            ir.free_atoms(lhs) | ir.free_atoms(rhs),
+            key=lambda atom: atom.sort_key,
         )
         for atom in atoms:
             if not isinstance(atom, ir.Sym):
@@ -348,7 +341,7 @@ def _parse_string_equations(
     strict,
     state_names,
 ):
-    """Parse ``lhs = rhs`` lines into structural IR equations.
+    """Parse ``lhs = rhs`` lines into ``(lhs, rhs)`` IR pairs.
 
     Returns ``(equations, funcs, new_params, aux_names,
     inferred_states, rename)``.
@@ -539,7 +532,7 @@ def _parse_string_equations(
     # Convert to IR once, sharing conversion work across equations.
     memo = {}
     equations = [
-        Equation(
+        (
             from_sympy(
                 lhs,
                 memo,
@@ -592,7 +585,7 @@ def _parse_sympy_equations(
     strict,
     state_names,
 ):
-    """Normalise SymPy or IR equation input into structural equations.
+    """Normalise SymPy or IR equation input into ``(lhs, rhs)`` pairs.
 
     Returns ``(equations, funcs, new_params, aux_names,
     inferred_states, rename)``. SymPy sides convert to engine IR
@@ -707,7 +700,7 @@ def _parse_sympy_equations(
                 "parameter, or driver) but is being assigned. It "
                 "must be a state, observable, or auxiliary."
             )
-        equations.append(Equation(lhs_ir, rhs_ir))
+        equations.append((lhs_ir, rhs_ir))
 
     equations = _bind_unassigned_derivative_tokens(
         equations, registry, unknown_names
@@ -724,8 +717,7 @@ def _parse_sympy_equations(
         | derivative_names
         | {"t"}
     )
-    for eq in equations:
-        lhs = eq.lhs
+    for lhs, _ in equations:
         if (
             isinstance(lhs, ir.Sym)
             and lhs.name not in declared_names
@@ -740,6 +732,39 @@ def _parse_sympy_equations(
         equations, registry, declared_names, strict
     )
     return equations, funcs, new_params, aux_names, inferred_states, {}
+
+
+def _input_names(dxdt) -> Set[str]:
+    """Every name the equation input ``dxdt`` spells.
+
+    Names of string sides are read as identifiers, of SymPy sides as
+    free symbols, and of IR sides as free symbols.
+    """
+
+    if isinstance(dxdt, str):
+        return set(_NAME_PATTERN.findall(dxdt))
+    if not isinstance(dxdt, (list, tuple)):
+        dxdt = [dxdt]
+    names = set()
+    for eq in dxdt:
+        if isinstance(eq, sp.Equality):
+            sides = (eq.lhs, eq.rhs)
+        elif isinstance(eq, tuple):
+            sides = eq
+        else:
+            sides = (eq,)
+        for side in sides:
+            if isinstance(side, str):
+                names.update(_NAME_PATTERN.findall(side))
+            elif isinstance(side, ir.Expr):
+                names.update(
+                    atom.name
+                    for atom in ir.free_atoms(side)
+                    if isinstance(atom, ir.Sym)
+                )
+            elif isinstance(side, sp.Basic):
+                names.update(sym.name for sym in side.free_symbols)
+    return names
 
 
 def normalise_input(
@@ -780,6 +805,7 @@ def normalise_input(
         | set(unknown_names)
         | {"t"}
         | set(KNOWN_FUNCTIONS)
+        | _input_names(dxdt)
     )
     registry = DerivativeRegistry(reserved)
 

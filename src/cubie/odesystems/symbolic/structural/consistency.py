@@ -39,16 +39,20 @@ def singular_check(state: StructuralState) -> List:
     maximal matching leaves unassigned.
     """
 
-    graph = state.structure.graph
-    var_to_diff = state.structure.var_to_diff
+    graph = state.graph
+    derivative_edges = [
+        (var, state.derivative_of(var))
+        for var in range(graph.ndsts())
+        if state.derivative_of(var) is not None
+    ]
     extended = BipartiteGraph(
-        graph.nsrcs() + sum(1 for _ in var_to_diff.edges()),
+        graph.nsrcs() + len(derivative_edges),
         graph.ndsts(),
     )
     for e in range(graph.nsrcs()):
         extended.set_neighbors(e, graph.s_neighbors(e))
     idx = graph.nsrcs()
-    for var, diff in var_to_diff.edges():
+    for var, diff in derivative_edges:
         extended.set_neighbors(idx, [var, diff])
         idx += 1
     extended_matching = maximal_matching(extended)
@@ -75,9 +79,8 @@ def check_consistency(state: StructuralState) -> None:
     """
 
     neqs = state.n_concrete_eqs()
-    structure = state.structure.complete()
-    graph = structure.graph
-    highest_vars = computed_highest_diff_variables(structure)
+    graph = state.graph
+    highest_vars = computed_highest_diff_variables(state)
     n_highest_vars = 0
     for v, h in enumerate(highest_vars):
         if not h:
@@ -88,11 +91,8 @@ def check_consistency(state: StructuralState) -> None:
     is_balanced = n_highest_vars == neqs
 
     if neqs > 0 and not is_balanced:
-        varwhitelist = [
-            d is None for d in structure.var_to_diff
-        ]
         var_eq_matching = maximal_matching(
-            graph, dstfilter=lambda v: varwhitelist[v]
+            graph, dstfilter=lambda v: state.derivative_of(v) is None
         )
         summary = (
             f"The system is unbalanced: {n_highest_vars} highest order "
@@ -103,7 +103,7 @@ def check_consistency(state: StructuralState) -> None:
                 graph.nsrcs()
             ).invview()
             bad_eqs = [
-                str(state.eqs[e])
+                f"{state.eqs[e][0]} ~ {state.eqs[e][1]}"
                 for e in range(graph.nsrcs())
                 if eq_var_matching[e] is UNASSIGNED
             ]

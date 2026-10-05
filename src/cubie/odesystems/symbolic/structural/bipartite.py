@@ -17,8 +17,8 @@ BipartiteGraphs.jl: Copyright (c) 2022 Aayush Sabharwal; MIT.
 Published Classes
 -----------------
 :class:`BipartiteGraph`
-    Undirected bipartite graph stored as sorted adjacency lists, with
-    an optional backward adjacency for destination-side lookup.
+    Undirected bipartite graph stored as sorted forward and backward
+    adjacency lists.
 
 :class:`Matching`
     Destination-to-source matching with an optional inverse view.
@@ -76,9 +76,6 @@ class BipartiteGraph:
         Number of source vertices.
     ndsts
         Number of destination vertices.
-    with_badj
-        Whether to maintain the backward adjacency list eagerly.
-        Without it, destination-side lookups require :meth:`complete`.
 
     Notes
     -----
@@ -87,20 +84,15 @@ class BipartiteGraph:
     implementation.
     """
 
-    def __init__(
-        self, nsrcs: int, ndsts: int, with_badj: bool = True
-    ) -> None:
+    def __init__(self, nsrcs: int, ndsts: int) -> None:
         self.fadjlist = [[] for _ in range(nsrcs)]
-        if with_badj:
-            self.badjlist = [[] for _ in range(ndsts)]
-        else:
-            self.badjlist = ndsts
+        self.badjlist = [[] for _ in range(ndsts)]
 
     @classmethod
     def _from_parts(
         cls,
         fadjlist: List[List[int]],
-        badjlist: Union[List[List[int]], int],
+        badjlist: List[List[int]],
     ) -> "BipartiteGraph":
         graph = cls.__new__(cls)
         graph.fadjlist = fadjlist
@@ -115,21 +107,7 @@ class BipartiteGraph:
     def ndsts(self) -> int:
         """Number of destination (variable) vertices."""
 
-        if isinstance(self.badjlist, int):
-            return self.badjlist
         return len(self.badjlist)
-
-    def complete(self) -> "BipartiteGraph":
-        """Populate the backward adjacency list if absent."""
-
-        if not isinstance(self.badjlist, int):
-            return self
-        badjlist = [[] for _ in range(self.badjlist)]
-        for s, dsts in enumerate(self.fadjlist):
-            for d in dsts:
-                badjlist[d].append(s)
-        self.badjlist = badjlist
-        return self
 
     def invview(self) -> "BipartiteGraph":
         """Return a view with source and destination vertices swapped.
@@ -168,8 +146,7 @@ class BipartiteGraph:
         if idx < len(lst) and lst[idx] == j:
             return False
         lst.insert(idx, j)
-        if not isinstance(self.badjlist, int):
-            insort(self.badjlist[j], i)
+        insort(self.badjlist[j], i)
         return True
 
     def rem_edge(self, i: int, j: int) -> bool:
@@ -177,19 +154,14 @@ class BipartiteGraph:
 
         lst = self.fadjlist[i]
         del lst[bisect_left(lst, j)]
-        if not isinstance(self.badjlist, int):
-            blst = self.badjlist[j]
-            bidx = bisect_left(blst, i)
-            del blst[bidx]
+        blst = self.badjlist[j]
+        del blst[bisect_left(blst, i)]
         return True
 
     def add_vertex(self, vert_type: str) -> int:
         """Append a vertex of ``vert_type`` and return its index."""
 
         if vert_type == DST:
-            if isinstance(self.badjlist, int):
-                self.badjlist += 1
-                return self.badjlist - 1
             self.badjlist.append([])
             return len(self.badjlist) - 1
         self.fadjlist.append([])
@@ -200,17 +172,16 @@ class BipartiteGraph:
 
         new_sorted = sorted(set(new_neighbors))
         old_neighbors = self.fadjlist[i]
-        if not isinstance(self.badjlist, int):
-            for n in old_neighbors:
-                blst = self.badjlist[n]
-                idx = bisect_left(blst, i)
-                if idx < len(blst) and blst[idx] == i:
-                    del blst[idx]
-            for n in new_sorted:
-                blst = self.badjlist[n]
-                idx = bisect_left(blst, i)
-                if not (idx < len(blst) and blst[idx] == i):
-                    blst.insert(idx, i)
+        for n in old_neighbors:
+            blst = self.badjlist[n]
+            idx = bisect_left(blst, i)
+            if idx < len(blst) and blst[idx] == i:
+                del blst[idx]
+        for n in new_sorted:
+            blst = self.badjlist[n]
+            idx = bisect_left(blst, i)
+            if not (idx < len(blst) and blst[idx] == i):
+                blst.insert(idx, i)
         old_neighbors[:] = new_sorted
 
 
