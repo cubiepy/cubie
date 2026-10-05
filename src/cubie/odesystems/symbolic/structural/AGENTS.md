@@ -18,7 +18,7 @@ result.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `simplify.py` | Pipeline driver `structural_simplify` (the `mtkcompile!` equivalent) and the `SimplifiedSystem` result (states, `dxdt`, residuals, observed, mass matrix, BLT blocks). |
+| `simplify.py` | Pipeline driver `structural_simplify` (the `mtkcompile!` equivalent) and the `SimplifiedSystem` result (states, `dxdt`, residuals, observed, mass matrix). |
 | `system_structure.py` | `StructuralState`/`SystemStructure` (the `TearingState` equivalent): incidence graph construction, solvability analysis via linear expansion, integer-linear subsystem matrix, symbolic equation/variable differentiation, removal/reindexing, deterministic ranks and priorities. |
 | `bipartite.py` | `BipartiteGraph` (sorted adjacency, equations x variables), `Matching` with inverse view, augmenting-path `maximal_matching`, `UNASSIGNED`/`SELECTED_STATE` sentinels. |
 | `digraph.py` | Matching-oriented directed views (`DiCMOBiGraphT`/`F`), iterative Tarjan SCC, `find_var_sccs` (BLT ordering), `toposort_equations`, `neighborhood_in`, and the `IncrementalCycleTracker` used to keep tearing assignments acyclic. |

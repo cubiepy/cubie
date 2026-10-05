@@ -72,52 +72,32 @@ class ReassembledSystem:
 
     Parameters
     ----------
-    state
-        The (reordered) structural state.
     neweqs
         Solved differential equations followed by algebraic residual
         equations, in BLT order. Differential equations have their
         derivative symbol as the LHS; residuals have LHS zero.
-    solved_eqs
-        Observed equations from tearing (explicitly solved
-        variables), in solve order.
+    diff_eq_states
+        For each of ``neweqs``, the state whose derivative it defines,
+        or ``None`` for a residual.
     observed
         Full observed list: solved equations plus alias/trivially
         torn equations, with dummy-derivative renames applied.
     unknowns
         Final unknowns (selected states then torn algebraic
         variables), in BLT order.
-    var_sccs
-        Variable SCCs over the final unknown indices.
-    dummy_sub
-        Renames applied to dummy derivatives (old derivative symbol
-        to its algebraic replacement).
-    extra_unknowns
-        Unknowns of underdetermined systems not matched to any
-        equation.
     """
 
     def __init__(
         self,
-        state: StructuralState,
         neweqs: List[Equation],
         diff_eq_states: List[Optional[ir.Sym]],
-        solved_eqs: List[Equation],
         observed: List[Equation],
         unknowns: List[ir.Sym],
-        var_sccs: List[List[int]],
-        dummy_sub: Dict[ir.Sym, ir.Sym],
-        extra_unknowns: List[ir.Sym],
     ) -> None:
-        self.state = state
         self.neweqs = neweqs
         self.diff_eq_states = diff_eq_states
-        self.solved_eqs = solved_eqs
         self.observed = observed
         self.unknowns = unknowns
-        self.var_sccs = var_sccs
-        self.dummy_sub = dummy_sub
-        self.extra_unknowns = extra_unknowns
 
 
 def substitute_derivatives_algevars(
@@ -170,12 +150,10 @@ def find_duplicate_dd(
     solvable_graph,
     diff_to_var,
     linear_eqs: Dict[int, int],
-    mm: Optional[SparseMatrixCLIL],
+    mm: SparseMatrixCLIL,
 ) -> Optional[Tuple[int, int]]:
     """Find a pre-existing ``D(x) ~ x_t`` equation for ``dv``."""
 
-    if mm is None:
-        return None
     for eq in solvable_graph.d_neighbors(dv):
         mi = linear_eqs.get(eq)
         if mi is None:
@@ -189,11 +167,6 @@ def find_duplicate_dd(
         ):
             v_t = rvs[1] if rvs[0] == dv else rvs[0]
             if diff_to_var[v_t] is None:
-                if dv not in rvs:
-                    raise AssertionError(
-                        "duplicate dummy-derivative row does not "
-                        "contain the derivative variable"
-                    )
                 return eq, v_t
     return None
 
@@ -227,7 +200,7 @@ def generate_derivative_variables(
     var_eq_matching: Matching,
     full_var_eq_matching: Matching,
     var_sccs: List[List[int]],
-    mm: Optional[SparseMatrixCLIL],
+    mm: SparseMatrixCLIL,
 ) -> List[List[int]]:
     """Lower the system to first order by adding ``D(x) ~ x_t``.
 
@@ -244,9 +217,7 @@ def generate_derivative_variables(
     var_to_diff = structure.var_to_diff
     diff_to_var = var_to_diff.invview()
     registry = state.registry
-    linear_eqs = {}
-    if mm is not None:
-        linear_eqs = {e: i for i, e in enumerate(mm.nzrows)}
+    linear_eqs = {e: i for i, e in enumerate(mm.nzrows)}
 
     v_to_scc = [None] * graph.ndsts()
     for i, scc in enumerate(var_sccs):
@@ -310,8 +281,7 @@ def generate_derivative_variables(
             del var_sccs[i][j]
     new_sccs = _insert_sccs(var_sccs, sccs_to_insert)
 
-    if mm is not None:
-        mm.ncols = graph.ndsts()
+    mm.ncols = graph.ndsts()
     return new_sccs
 
 
@@ -617,13 +587,6 @@ def generate_system_equations(
         gen.codegen_equation(neweqs[eq], eq, var)
 
     var_ordering = gen.var_ordering
-    diff_vars = [v for v in var_ordering if v >= 0]
-    diff_vars_set = set(diff_vars)
-    if len(diff_vars_set) != len(diff_vars):
-        raise ValueError(
-            "Tearing internal error: lowering DAE into semi-implicit "
-            "ODE failed!"
-        )
     solved_vars_set = set(gen.solved_vars)
 
     # Each residual takes the torn variable its matching reaches.
@@ -676,7 +639,6 @@ def generate_system_equations(
 def reorder_vars(
     state: StructuralState,
     var_eq_matching: Matching,
-    var_sccs: List[List[int]],
     eq_ordering: List[int],
     var_ordering: List[int],
     nsolved_eq: int,
@@ -734,12 +696,6 @@ def reorder_vars(
         new_eq_to_diff[e2] = d2 if d2 >= 0 else None
     new_fullvars = [state.fullvars[v] for v in var_ordering]
 
-    for scc in var_sccs:
-        scc[:] = [
-            varsperm[v] for v in scc if varsperm[v] >= 0
-        ]
-    var_sccs[:] = [scc for scc in var_sccs if scc]
-
     structure.graph = new_graph.complete()
     structure.solvable_graph = new_solvable_graph.complete()
     structure.var_to_diff = new_var_to_diff
@@ -760,9 +716,8 @@ def reorder_vars(
 def default_reassemble(
     state: StructuralState,
     tearing_result: TearingResult,
-    mm: Optional[SparseMatrixCLIL],
+    mm: SparseMatrixCLIL,
     fully_determined: bool = True,
-    **_ignored,
 ) -> ReassembledSystem:
     """Reassemble the simplified system from a tearing result."""
 
@@ -813,7 +768,6 @@ def default_reassemble(
     reorder_vars(
         state,
         var_eq_matching,
-        var_sccs,
         eq_ordering,
         var_ordering,
         nelim_eq,
@@ -853,19 +807,6 @@ def default_reassemble(
         if extra not in unknowns:
             unknowns.append(extra)
 
-    unknown_set = set(unknown_idxs)
-    for scc in var_sccs:
-        scc[:] = [v for v in scc if v in unknown_set]
-    var_sccs = [scc for scc in var_sccs if scc]
-
     return ReassembledSystem(
-        state,
-        neweqs_out,
-        diff_eq_states,
-        solved_eqs,
-        observed,
-        unknowns,
-        var_sccs,
-        dummy_sub,
-        extra_unknowns,
+        neweqs_out, diff_eq_states, observed, unknowns
     )

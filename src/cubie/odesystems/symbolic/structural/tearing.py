@@ -30,7 +30,7 @@ Published Functions
     Equations not matched to any filtered variable.
 """
 
-from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Iterable, List, Optional, Set, Tuple
 
 from cubie.odesystems.symbolic.structural.bipartite import (
     UNASSIGNED,
@@ -343,14 +343,8 @@ class ModiaTearing:
 
     def __call__(
         self, graph: BipartiteGraph, solvable_graph: BipartiteGraph
-    ) -> Tuple[TearingResult, Dict]:
-        """Tear the incidence ``graph`` along its ``solvable_graph``.
-
-        Returns
-        -------
-        tuple[TearingResult, dict]
-            The tearing result and an empty dict of extra data.
-        """
+    ) -> TearingResult:
+        """Tear the incidence ``graph`` along its ``solvable_graph``."""
 
         isder = self.isder
         varfilter = self.varfilter
@@ -403,9 +397,6 @@ class ModiaTearing:
                 isder,
             )
 
-        return (
-            TearingResult(
-                var_eq_matching, full_var_eq_matching, var_sccs, free_eqs
-            ),
-            {},
+        return TearingResult(
+            var_eq_matching, full_var_eq_matching, var_sccs, free_eqs
         )

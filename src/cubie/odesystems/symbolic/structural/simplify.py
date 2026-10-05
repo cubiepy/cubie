@@ -93,12 +93,6 @@ class SimplifiedSystem:
         diagonal mass matrix, as a nested list of floats (identity
         for differential states, zero rows for algebraic
         constraints).
-    dummy_sub
-        Renames applied to dummy derivatives.
-    var_sccs
-        BLT blocks over ``states`` indices.
-    state
-        The final structural state, for diagnostics.
     """
 
     def __init__(
@@ -110,9 +104,6 @@ class SimplifiedSystem:
         residuals: List[ir.Expr],
         observed: List[Tuple[ir.Sym, ir.Expr]],
         mass_matrix: Optional[List[List[float]]],
-        dummy_sub: Dict[ir.Sym, ir.Sym],
-        var_sccs: List[List[int]],
-        state: StructuralState,
     ) -> None:
         self.states = states
         self.differential_states = differential_states
@@ -121,16 +112,6 @@ class SimplifiedSystem:
         self.residuals = residuals
         self.observed = observed
         self.mass_matrix = mass_matrix
-        self.dummy_sub = dummy_sub
-        self.var_sccs = var_sccs
-        self.state = state
-
-    def __repr__(self) -> str:
-        return (
-            f"SimplifiedSystem({len(self.differential_states)} "
-            f"differential, {len(self.algebraic_states)} algebraic, "
-            f"{len(self.observed)} observed)"
-        )
 
 
 def _integer_jacobian(state: StructuralState):
@@ -192,8 +173,6 @@ def _assemble_result(
 ) -> SimplifiedSystem:
     """Convert a reassembled system into the cubie-facing result."""
 
-    state = reassembled.state
-
     dxdt = {}
     differential_states = []
     residuals = []
@@ -241,9 +220,6 @@ def _assemble_result(
         residuals,
         observed,
         mass,
-        reassembled.dummy_sub,
-        reassembled.var_sccs,
-        state,
     )
 
 
@@ -312,7 +288,7 @@ def structural_simplify(
     }
 
     if fully_determined and dummy_derivative:
-        tearing_result, _ = dummy_derivative_graph(
+        tearing_result = dummy_derivative_graph(
             state,
             _integer_jacobian(state),
             state_priority=lambda v: (
@@ -333,7 +309,7 @@ def structural_simplify(
         state = _pantelides_reassemble_state(state, var_eq_matching)
         mm = alias_elimination(state, **solve_kwargs)
         state.mm = mm
-        tearing_result, _ = dummy_derivative_graph(
+        tearing_result = dummy_derivative_graph(
             state,
             _integer_jacobian(state),
             state_priority=lambda v: (
@@ -346,7 +322,7 @@ def structural_simplify(
         )
     else:
         state.structure.complete()
-        tearing_result, _ = _tear_with_dummies(state, set())
+        tearing_result = _tear_with_dummies(state, set())
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )

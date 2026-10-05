@@ -236,7 +236,7 @@ class TestModiaTearing:
         # Three equations, each solvable for all three variables.
         edges = [(e, v) for e in range(3) for v in range(3)]
         graph, solvable_graph = build_graphs(3, 3, edges, edges)
-        result, _ = ModiaTearing()(graph, solvable_graph)
+        result = ModiaTearing()(graph, solvable_graph)
         matching = result.var_eq_matching
         solved = [
             (v, matching[v])
@@ -254,7 +254,7 @@ class TestModiaTearing:
     def test_sccs_follow_full_matching(self):
         edges = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 1), (2, 2)]
         graph, solvable_graph = build_graphs(3, 3, edges, edges)
-        result, _ = ModiaTearing()(graph, solvable_graph)
+        result = ModiaTearing()(graph, solvable_graph)
         assert result.var_sccs == find_var_sccs(
             graph, result.full_var_eq_matching
         )
@@ -287,7 +287,7 @@ class TestModiaTearing:
         # the maximal matching and can be solved for v1.
         edges = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 1)]
         graph, solvable_graph = build_graphs(3, 2, edges, edges)
-        result, _ = ModiaTearing()(graph, solvable_graph)
+        result = ModiaTearing()(graph, solvable_graph)
         matching = result.var_eq_matching
         assert all(isinstance(matching[v], int) for v in range(2))
         assert matching[1] == 2
