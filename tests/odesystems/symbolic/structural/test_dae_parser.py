@@ -10,6 +10,10 @@ from cubie.odesystems.symbolic.parsing import (
     EquationWarning,
     parse_input,
 )
+from cubie.odesystems.symbolic.structural.errors import (
+    ExtraEquationsSystemError,
+    InvalidSystemError,
+)
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import run_device_dxdt, run_device_observables
 
@@ -391,3 +395,344 @@ class TestDerivativeBlockPolicy:
             numeric.indices.states.symbol_map
         )
         assert len(split.indices.states.symbol_map) == 8
+
+
+def solved(parsed):
+    return {lhs.name: to_sympy(rhs) for lhs, rhs in parsed.ordered}
+
+
+def equivalent(left, right):
+    return sp.simplify(left - right) == 0
+
+
+def real_symbols(names):
+    return sp.symbols(names, real=True)
+
+
+class TestStructuralInputPaths:
+    def test_extra_equation_left_as_residual(self):
+        # Two equations fix y; with z free, the spare one becomes the
+        # residual row of z.
+        x, y = real_symbols("x y")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=[
+                "dx = -x + y + z",
+                "0 = y - sin(x)",
+                "0 = y**2 - sin(x)**2",
+                "dw = -w",
+            ],
+            states={"x": 1.0, "y": 0.0, "z": 0.0, "w": 1.0},
+            simplify_options={"fully_determined": False},
+        )
+        assert list(index_map.state_names) == ["w", "x", "z"]
+        assert parsed.mass_matrix == (
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 0.0),
+        )
+        eqs = solved(parsed)
+        assert equivalent(eqs["y"], sp.sin(x))
+        assert equivalent(eqs["dz"], y**2 - sp.sin(x) ** 2)
+
+    def test_extra_differentiated_equations_warn_unpaired(self):
+        with pytest.warns(
+            UserWarning,
+            match="2 residual equations for 0 algebraic states",
+        ):
+            index_map, _s, _f, _p, _h = parse_dae_input(
+                dxdt=[
+                    "d(d(x,t),t) = -x + y",
+                    "0 = y - sin(x)",
+                    "0 = y**2 - sin(x)**2",
+                    "0 = d(x,t) - cos(y)",
+                ],
+                states={"x": 1.0, "y": 0.0},
+                simplify_options={"fully_determined": False},
+            )
+        assert list(index_map.state_names) == ["x", "x_t"]
+
+    def test_allow_symbolic_divides_by_state_coefficient(self):
+        x = real_symbols("x")
+        dxdt = ["dx = -x + y", "0 = x*y - 1"]
+        states = {"x": 1.0, "y": 1.0}
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=dxdt,
+            states=states,
+            simplify_options={"allow_symbolic": True},
+        )
+        assert list(index_map.state_names) == ["x"]
+        assert equivalent(solved(parsed)["y"], 1 / x)
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=dxdt, states=states
+        )
+        assert list(index_map.state_names) == ["x", "y"]
+        assert parsed.mass_matrix == ((1.0, 0.0), (0.0, 0.0))
+
+    def test_integer_constraint_reduced_twice(self):
+        # The constraint is differentiated twice; its integer
+        # Jacobian selects the dummy derivatives at both levels.
+        t, x2, x2_t = real_symbols("t x2 x2_t")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=[
+                "d(d(x1,t),t) = -x1 + lam",
+                "d(d(x2,t),t) = -x2 + 2*lam",
+                "0 = x1 + 2*x2 - sin(t)",
+            ],
+            states={"x1": 0.0, "x2": 0.0, "lam": 0.0},
+        )
+        assert list(index_map.state_names) == ["x1_tt", "x2", "x2_t"]
+        eqs = solved(parsed)
+        assert equivalent(eqs["x1"], sp.sin(t) - 2 * x2)
+        assert equivalent(eqs["x1_t"], sp.cos(t) - 2 * x2_t)
+
+    def test_alias_exposed_by_integer_elimination(self):
+        a, x = real_symbols("a x")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=[
+                "dx = -x + a",
+                "0 = a + b + c",
+                "0 = a + b + 2*c",
+                "0 = b - sin(x)",
+            ],
+            states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
+        )
+        assert list(index_map.state_names) == ["x"]
+        eqs = solved(parsed)
+        assert eqs["c"] == 0
+        assert equivalent(eqs["b"], -a)
+        assert equivalent(eqs["a"], -sp.sin(x))
+
+    def test_alias_exposed_by_integer_elimination_moves_derivative(self):
+        x = real_symbols("x")
+        with pytest.warns(
+            UserWarning,
+            match="1 residual equations for 0 algebraic states",
+        ):
+            index_map, _s, _f, parsed, _h = parse_dae_input(
+                dxdt=[
+                    "dx = -x + y",
+                    "dy = -y",
+                    "0 = x + y + c",
+                    "0 = x + y + 2*c",
+                ],
+                states={"x": 1.0, "y": 0.0, "c": 0.0},
+                simplify_options={"fully_determined": False},
+            )
+        assert list(index_map.state_names) == ["x"]
+        eqs = solved(parsed)
+        assert equivalent(eqs["y"], -x)
+        assert equivalent(eqs["dx"], -2 * x)
+
+    def test_conflicting_aliases_keep_irreducible_member(self):
+        a = real_symbols("a")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + a", "0 = a - b", "0 = a + b"],
+            states={"x": 1.0, "a": 0.0, "b": 0.0},
+            irreducible=["a"],
+        )
+        assert list(index_map.state_names) == ["a", "x"]
+        assert parsed.mass_matrix == ((0.0, 0.0), (0.0, 1.0))
+        eqs = solved(parsed)
+        assert eqs["b"] == 0
+        assert equivalent(eqs["da"], -a)
+
+    def test_conflicting_aliases_zero_derivative_chain(self):
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + y", "0 = x - y", "0 = x + y"],
+            states={"x": 1.0, "y": 0.0},
+            simplify_options={"fully_determined": False},
+        )
+        assert list(index_map.state_names) == []
+        eqs = solved(parsed)
+        assert eqs["x"] == 0
+        assert eqs["y"] == 0
+
+    def test_conflict_group_absorbs_later_alias(self):
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + a + c", "0 = a - b", "0 = a + b", "0 = c - a"],
+            states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
+            simplify_options={"fully_determined": False},
+        )
+        assert list(index_map.state_names) == ["x"]
+        eqs = solved(parsed)
+        assert [eqs[name] for name in ("a", "b", "c")] == [0, 0, 0]
+
+    def test_smaller_alias_group_joins_larger(self):
+        b = real_symbols("b")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=[
+                "dx = -x + a**3 + c**3",
+                "0 = cos(b) - 0.5",
+                "0 = 2*b - 2*c",
+                "0 = a - b",
+            ],
+            states={"x": 0.1, "a": 0.1, "b": 0.1, "c": 0.1},
+        )
+        assert list(index_map.state_names) == ["b", "x"]
+        eqs = solved(parsed)
+        assert eqs["a"] == b
+        assert eqs["c"] == b
+
+    def test_product_of_two_unknowns_is_not_an_alias(self):
+        a, b, x = real_symbols("a b x")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + a + b", "0 = a*b", "0 = a - sin(x)"],
+            states={"x": 1.0, "a": 0.0, "b": 0.0},
+        )
+        assert list(index_map.state_names) == ["b", "x"]
+        eqs = solved(parsed)
+        assert equivalent(eqs["a"], sp.sin(x))
+        assert equivalent(eqs["db"], a * b)
+
+    def test_assignment_to_differential_state_stays_a_constraint(self):
+        x, z = real_symbols("x z")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + z", "x = sin(z)"],
+            states={"x": 0.5, "z": 0.5},
+        )
+        assert list(index_map.state_names) == ["x", "z"]
+        assert parsed.mass_matrix == ((1.0, 0.0), (0.0, 0.0))
+        assert equivalent(solved(parsed)["dz"], sp.sin(z) - x)
+
+    def test_identity_assignment_is_not_torn(self):
+        x = real_symbols("x")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + y", "y = y", "0 = y - sin(x)"],
+            states={"x": 1.0, "y": 0.0},
+            simplify_options={"fully_determined": False},
+        )
+        assert list(index_map.state_names) == ["x"]
+        assert equivalent(solved(parsed)["y"], sp.sin(x))
+
+    def test_repeated_alias_between_irreducibles_merges(self):
+        a, b = real_symbols("a b")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=[
+                "dx = -x + a",
+                "0 = a - b",
+                "0 = 2*a - 2*b",
+                "0 = b - sin(x)",
+            ],
+            states={"x": 1.0, "a": 0.0, "b": 0.0},
+            irreducible=["a", "b"],
+            simplify_options={"fully_determined": False},
+        )
+        assert list(index_map.state_names) == ["a", "b", "x"]
+        assert equivalent(solved(parsed)["da"], 2 * a - 2 * b)
+
+    def test_user_symbol_named_like_internal_derivative(self):
+        x, d1 = real_symbols("x _cubie_D1_x")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + _cubie_D1_x", "0 = _cubie_D1_x - sin(x)"],
+            states={"x": 1.0, "_cubie_D1_x": 0.0},
+        )
+        assert list(index_map.state_names) == ["x"]
+        eqs = solved(parsed)
+        assert equivalent(eqs["dx"], d1 - x)
+        assert equivalent(eqs["_cubie_D1_x"], sp.sin(x))
+
+    def test_index_reduction_rejects_excess_equations(self):
+        with pytest.raises(InvalidSystemError, match="structurally"):
+            parse_dae_input(
+                dxdt=["dx = -x", "0 = y - sin(x)", "0 = y**2 - x"],
+                states={"x": 1.0, "y": 0.0},
+                simplify_options={"consistency_check": False},
+            )
+
+    def test_index_reduction_skips_equation_without_unknowns(self):
+        x = real_symbols("x")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = -x + y", "0 = y - sin(x)", "0 = k - 1"],
+            states={"x": 1.0, "y": 0.0},
+            parameters={"k": 1.0},
+            simplify_options={"consistency_check": False},
+        )
+        assert list(index_map.state_names) == ["x"]
+        assert equivalent(solved(parsed)["y"], sp.sin(x))
+
+    def test_cancelling_alias_substitution_warns_singular_solve(self):
+        with pytest.warns(UserWarning, match=r"for Sym\(a\) is singular"):
+            index_map, _s, _f, _p, _h = parse_dae_input(
+                dxdt=[
+                    "dx = -x + a",
+                    "0 = a + b + c",
+                    "0 = a + b + 2*c",
+                    "0 = a + exp(b) - sin(x)",
+                ],
+                states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
+            )
+        assert list(index_map.state_names) == ["a", "x"]
+
+    def test_inconsistent_constraints_warn_singular(self):
+        with pytest.warns(UserWarning) as record:
+            index_map, _s, _f, _p, _h = parse_dae_input(
+                dxdt=[
+                    "dx = -x + z",
+                    "0 = x + y - sin(t)",
+                    "0 = x + y - cos(t)",
+                ],
+                states={"x": 0.1, "y": 0.1, "z": 0.1},
+            )
+        messages = [str(w.message) for w in record]
+        assert "The DAE system is singular!" in messages
+        assert (
+            "The number of dummy derivatives (1) does not match the "
+            "number of differentiated equations (2)." in messages
+        )
+        assert list(index_map.state_names) == ["x_t", "y"]
+
+    def test_variable_cancelled_from_all_equations_not_counted(self):
+        # y = -x cancels z from the last equation, leaving it unused.
+        with pytest.raises(
+            ExtraEquationsSystemError,
+            match="1 highest order derivative variables and 2 equations",
+        ):
+            parse_dae_input(
+                dxdt=[
+                    "dx = -x",
+                    "0 = x + y",
+                    "0 = cos(y) + y*z + z*x - 0.5",
+                ],
+                states={"x": 0.1, "y": 0.1, "z": 0.1},
+            )
+
+    def test_unmatched_unknown_stays_a_state(self):
+        with pytest.warns(
+            UserWarning,
+            match="0 residual equations for 1 algebraic states",
+        ):
+            index_map, _s, _f, _p, _h = parse_dae_input(
+                dxdt=[
+                    "d(x0,t) = -x0 + sin(x0)",
+                    "0 = 2*z1 - z0 + 2*x0",
+                    "0 = -2*x0 - 2*z2 - z1",
+                ],
+                states={"x0": 0.1, "z0": 0.1, "z1": 0.1, "z2": 0.1},
+                simplify_options={"fully_determined": False},
+            )
+        assert list(index_map.state_names) == ["x0", "z2"]
+
+    def test_coupled_linear_loop_torn_acyclic(self):
+        x0, z2, z3 = real_symbols("x0 z2 z3")
+        with pytest.warns(
+            UserWarning,
+            match="1 residual equations for 2 algebraic states",
+        ):
+            index_map, _s, _f, parsed, _h = parse_dae_input(
+                dxdt=[
+                    "d(x0,t) = -x0 + z3*z2",
+                    "0 = -2*z1 + z0 - 2*x0",
+                    "0 = z2 + z3 + z0",
+                    "0 = 2*z0 + 3*z1 + z2 - sin(t)",
+                ],
+                states={
+                    "x0": 0.1,
+                    "z0": 0.1,
+                    "z1": 0.1,
+                    "z2": 0.1,
+                    "z3": 0.1,
+                },
+                simplify_options={"fully_determined": False},
+            )
+        assert list(index_map.state_names) == ["x0", "z2", "z3"]
+        assert equivalent(solved(parsed)["z1"], -(z2 + z3 + 2 * x0) / 2)
