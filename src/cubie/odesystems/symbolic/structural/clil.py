@@ -104,23 +104,6 @@ class SparseMatrixCLIL:
             self.row_vals[i],
         )
 
-    def dropzeros(self) -> "SparseMatrixCLIL":
-        """Remove explicitly stored zero coefficients in place."""
-
-        for r in range(len(self.row_vals)):
-            cols = self.row_cols[r]
-            vals = self.row_vals[r]
-            keep = 0
-            for k in range(len(vals)):
-                if vals[k] == 0:
-                    continue
-                cols[keep] = cols[k]
-                vals[keep] = vals[k]
-                keep += 1
-            del cols[keep:]
-            del vals[keep:]
-        return self
-
 
 def bareiss_update_virtual_colswap_clil(
     matrix: SparseMatrixCLIL,

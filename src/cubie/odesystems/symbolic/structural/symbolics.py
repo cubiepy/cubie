@@ -1,6 +1,6 @@
 """Engine-IR primitives backing the structural simplification passes.
 
-Structural linear expansion, linear solving, fixpoint substitution,
+Structural linear expansion, fixpoint substitution,
 total time derivatives over derivative-symbol maps, linear dependencies
 among rows of a symbolic matrix, and the derivative-symbol registry
 that stands in for ``Differential`` terms (cubie states are plain IR
@@ -22,9 +22,6 @@ Published Functions
 :func:`linear_expansion`
     Decompose ``expr`` as ``a*var + b`` with ``a``, ``b`` free of
     ``var``, or report nonlinearity.
-
-:func:`solve_linear`
-    Solve a linear equation for a variable.
 
 :func:`fixpoint_sub`
     Structural substitution applied until a fixed point.
@@ -88,26 +85,6 @@ def linear_expansion(
         return (ir.mul(a, rest_prod), ir.mul(b, rest_prod), True)
     # Pow, calls, piecewise, ... containing var: nonlinear.
     return (ZERO, ZERO, False)
-
-
-def solve_linear(
-    lhs: ir.Expr, rhs: ir.Expr, var: ir.Sym
-) -> Optional[ir.Expr]:
-    """Solve ``lhs == rhs`` for ``var`` assuming linearity.
-
-    Returns the solution expression, or ``None`` when the equation is
-    singular in ``var`` (zero coefficient).
-    """
-
-    residual = ir.sub(lhs, rhs)
-    a, b, islinear = linear_expansion(residual, var)
-    if not islinear:
-        raise ValueError(
-            f"cannot solve nonlinear equation for {var}: {residual}"
-        )
-    if ir.is_zero(a):
-        return None
-    return ir.div(ir.neg(b), a)
 
 
 def fixpoint_sub(
@@ -347,11 +324,6 @@ class DerivativeRegistry:
         """Whether ``var`` is a registered derivative symbol."""
 
         return var in self._to_base
-
-    def deriv_map(self) -> Dict[ir.Sym, ir.Sym]:
-        """Return a copy of the base-to-derivative map."""
-
-        return dict(self._to_derivative)
 
     def copy(self) -> "DerivativeRegistry":
         """Return an independent copy of the registry."""

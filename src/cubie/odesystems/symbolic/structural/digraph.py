@@ -419,8 +419,3 @@ class IncrementalCycleTracker:
         levels.commit()
         apply_fn(g)
         return True
-
-    def add_vertex(self) -> None:
-        """Track one more vertex at level zero."""
-
-        self.levels.values.append(0)
