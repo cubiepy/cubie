@@ -630,7 +630,6 @@ def generate_system_equations(
             "ODE failed!"
         )
     solved_vars_set = set(gen.solved_vars)
-    extra_vars_set = set(extra_vars)
 
     # Each residual takes the torn variable its matching reaches.
     full_eq_var_matching = full_var_eq_matching.invview()
@@ -654,7 +653,6 @@ def generate_system_equations(
             if (
                 j not in paired_vars
                 and j not in solved_vars_set
-                and j not in extra_vars_set
                 and diff_to_var[j] is None
                 and ispresent(j)
             ):
