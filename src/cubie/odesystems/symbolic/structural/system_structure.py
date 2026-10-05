@@ -7,7 +7,8 @@ symbolic differentiation hooks used by Pantelides.
 Ported from ModelingToolkit.jl (commit c4177c335):
 ``SystemStructure`` from ``src/systems/systemstructure.jl``;
 ``StructuralState`` construction (algebraic-equation canonicalisation
-and the equation order) from ``TearingState`` in the same file;
+and the equation order) from ``TearingState`` in the same file, except
+the variable order;
 ``StructuralState.var_derivative`` and ``StructuralState.eq_derivative``
 from ``src/structural_transformation/symbolics_tearing.jl``
 (``var_derivative!``, ``eq_derivative!``);
@@ -348,49 +349,8 @@ class StructuralState:
         eqs = [Equation(eq.lhs, eq.rhs) for eq in equations]
         original_eqs = list(eqs)
 
-        # Collect fullvars: declared unknowns that occur, plus every
-        # derivative symbol occurring in the equations, plus the
-        # intermediate orders of any higher-order chain.
-        unknown_set = set(unknowns)
-        occurring = set()
-        for eq in eqs:
-            occurring |= eq.free_symbols()
-        occurring -= self.known_symbols
-
-        for v in sorted(occurring, key=lambda s: s.name):
-            base, _ = registry.base_and_order(v)
-            if base not in unknown_set:
-                raise ValueError(
-                    f"{v} is present in the system but {base} is not "
-                    "an unknown."
-                )
-
-        fullvars = []
-        seen = set()
-
-        def addvar(sym: ir.Sym) -> None:
-            if sym not in seen:
-                seen.add(sym)
-                fullvars.append(sym)
-
-        # Derivative symbols and their chains first.
-        dervars = [v for v in occurring if registry.is_derivative(v)]
-        dervars.sort(key=lambda v: _rank_key(v, registry))
-        for v in dervars:
-            addvar(v)
-        for v in dervars:
-            chain = v
-            while True:
-                lower = registry.lower_order(chain)
-                if lower is None:
-                    break
-                addvar(lower)
-                chain = lower
-        for v in sorted(occurring, key=lambda v: _rank_key(v, registry)):
-            addvar(v)
-        # Declared unknowns that do not occur are dropped (mirrors
-        # MTK: variables not present in the equations are removed).
-
+        fullvars = self._ordered_variables(eqs, unknowns)
+        seen = set(fullvars)
         self.fullvars = fullvars
         self.var2idx = {v: i for i, v in enumerate(fullvars)}
 
@@ -444,6 +404,54 @@ class StructuralState:
             canonical_ranks,
         )
         self.always_present = [False] * nvars
+
+    def _ordered_variables(
+        self, eqs: Sequence[Equation], unknowns: Sequence[ir.Sym]
+    ) -> List[ir.Sym]:
+        """Variables of ``eqs`` in index order.
+
+        The derivative symbols occurring in ``eqs`` come first, sorted
+        by base name, then derivative order; then the other members of
+        their chains down to the base unknowns, sorted by base name,
+        then derivative order descending; then the remaining occurring
+        unknowns, sorted by base name. Declared unknowns absent from
+        ``eqs`` are left out.
+        """
+
+        registry = self.registry
+        unknown_set = set(unknowns)
+        occurring = set().union(*(eq.free_symbols() for eq in eqs))
+        occurring -= self.known_symbols
+
+        for sym in sorted(occurring, key=lambda s: s.name):
+            base, _ = registry.base_and_order(sym)
+            if base not in unknown_set:
+                raise ValueError(
+                    f"{sym} is present in the system but {base} is not "
+                    "an unknown."
+                )
+
+        derivatives = {s for s in occurring if registry.is_derivative(s)}
+        lower_orders = set()
+        for sym in derivatives:
+            sym = registry.lower_order(sym)
+            while sym is not None:
+                lower_orders.add(sym)
+                sym = registry.lower_order(sym)
+        lower_orders -= derivatives
+
+        def rank(sym: ir.Sym) -> Tuple[str, int]:
+            return _rank_key(sym, registry)
+
+        def rank_descending(sym: ir.Sym) -> Tuple[str, int]:
+            name, order = _rank_key(sym, registry)
+            return name, -order
+
+        return (
+            sorted(derivatives, key=rank)
+            + sorted(lower_orders, key=rank_descending)
+            + sorted(occurring - derivatives - lower_orders, key=rank)
+        )
 
     def _build_state_priorities(
         self,

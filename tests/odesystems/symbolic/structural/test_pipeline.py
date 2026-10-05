@@ -262,6 +262,80 @@ class TestVariableRanks:
         assert len(ranks) == len(state.fullvars)
 
 
+class TestVariableOrder:
+    def _states(self):
+        x, y, z, w = syms("x y z w")
+        registry = DerivativeRegistry({"x", "y", "z", "w", "t"})
+        ddx = registry.derivative(registry.derivative(x))
+        dz = registry.derivative(z)
+        eqs = [
+            Equation(ddx, -x + y),
+            Equation(dz, -z + w),
+            Equation(ir.ZERO, y - z),
+            Equation(ir.ZERO, w - x),
+        ]
+        orders = [
+            (eqs, [x, y, z, w]),
+            (eqs[::-1], [w, z, y, x]),
+            ([eqs[2], eqs[0], eqs[3], eqs[1]], [y, w, x, z]),
+        ]
+        return registry, [
+            StructuralState(order, unknowns, registry, set(), T)
+            for order, unknowns in orders
+        ]
+
+    def test_order_independent_of_input_order(self):
+        _, states = self._states()
+        for state in states[1:]:
+            assert state.fullvars == states[0].fullvars
+
+    def test_derivatives_then_chains_then_other_unknowns(self):
+        registry, states = self._states()
+        fullvars = states[0].fullvars
+        derivatives = {v for v in fullvars if registry.is_derivative(v)}
+        occurring = set()
+        for eq in states[0].eqs:
+            occurring |= eq.free_symbols()
+        lower_orders = set()
+        for v in derivatives & occurring:
+            v = registry.lower_order(v)
+            while v is not None:
+                lower_orders.add(v)
+                v = registry.lower_order(v)
+        lower_orders -= derivatives & occurring
+        n_head = len(derivatives & occurring)
+        n_chain = n_head + len(lower_orders)
+        head = fullvars[:n_head]
+        chain = fullvars[n_head:n_chain]
+        tail = fullvars[n_chain:]
+        assert set(head) == derivatives & occurring
+        assert set(chain) == lower_orders
+
+        def keys(group):
+            return [
+                (base.name, order)
+                for base, order in map(registry.base_and_order, group)
+            ]
+
+        assert keys(head) == sorted(keys(head))
+        assert keys(chain) == sorted(
+            keys(chain), key=lambda key: (key[0], -key[1])
+        )
+        assert keys(tail) == sorted(keys(tail))
+
+    def test_derivative_of_non_unknown_raises(self):
+        x, y = syms("x y")
+        registry = DerivativeRegistry({"x", "y", "t"})
+        with pytest.raises(ValueError, match="is not an unknown"):
+            StructuralState(
+                [Equation(registry.derivative(y), -x)],
+                [x],
+                registry,
+                set(),
+                T,
+            )
+
+
 class TestCoefficientAdmission:
     def _state(self, coefficient):
         x, y = syms("x y")
