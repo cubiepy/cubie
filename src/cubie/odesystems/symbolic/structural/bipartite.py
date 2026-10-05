@@ -173,13 +173,10 @@ class BipartiteGraph:
         return True
 
     def rem_edge(self, i: int, j: int) -> bool:
-        """Remove the edge from source ``i`` to destination ``j``."""
+        """Remove the existing edge from source ``i`` to ``j``."""
 
         lst = self.fadjlist[i]
-        idx = bisect_left(lst, j)
-        if idx >= len(lst) or lst[idx] != j:
-            raise ValueError(f"graph does not have edge {i} -> {j}")
-        del lst[idx]
+        del lst[bisect_left(lst, j)]
         if not isinstance(self.badjlist, int):
             blst = self.badjlist[j]
             bidx = bisect_left(blst, i)
@@ -195,10 +192,8 @@ class BipartiteGraph:
                 return self.badjlist - 1
             self.badjlist.append([])
             return len(self.badjlist) - 1
-        if vert_type == SRC:
-            self.fadjlist.append([])
-            return len(self.fadjlist) - 1
-        raise ValueError(f"type ({vert_type}) must be SRC or DST")
+        self.fadjlist.append([])
+        return len(self.fadjlist) - 1
 
     def set_neighbors(self, i: int, new_neighbors: Iterable[int]) -> None:
         """Replace the neighbor set of source ``i``."""
