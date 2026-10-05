@@ -165,9 +165,6 @@ def assemble_simplified(
             name, sp.Symbol(name, real=True)
         )
 
-    unknown_syms = [
-        ir.sym(name) for name in sorted(normalised.unknown_names)
-    ]
     priorities = {}
     for name, value in (state_priority or {}).items():
         priorities[ir.sym(str(name))] = value
@@ -177,7 +174,6 @@ def assemble_simplified(
 
     structural_state = StructuralState(
         normalised.equations,
-        unknown_syms,
         normalised.registry,
         {ir.sym(name) for name in known_symbol_map},
         ir.sym("t"),

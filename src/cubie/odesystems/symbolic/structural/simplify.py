@@ -173,20 +173,12 @@ def _pantelides_reassemble_state(
         }
     )
     new_eqs = [state.eqs[e] for e in matched_eqs]
-    unknowns = []
-    seen = set()
-    for v in state.fullvars:
-        base, _ = state.registry.base_and_order(v)
-        if base not in seen:
-            seen.add(base)
-            unknowns.append(base)
     priorities = {
         state.fullvars[i]: state.structure.state_priorities[i]
         for i in range(len(state.fullvars))
     }
     return StructuralState(
         new_eqs,
-        unknowns,
         state.registry,
         state.known_symbols - {state.time_symbol},
         state.time_symbol,

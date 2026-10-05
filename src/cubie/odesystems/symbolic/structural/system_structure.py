@@ -304,15 +304,13 @@ class StructuralState:
     equations
         The system equations. Derivatives must already appear as
         symbols registered in ``registry``.
-    unknowns
-        Declared unknown symbols (differential or algebraic; the
-        pipeline decides which become states).
     registry
         Derivative-symbol registry covering every derivative symbol
         appearing in ``equations``.
     known_symbols
         Symbols with externally supplied values (parameters,
-        constants, drivers, and the time symbol).
+        constants, drivers, and the time symbol). Every other symbol
+        of ``equations`` is an unknown.
     time_symbol
         The independent variable.
     known_derivative_map
@@ -329,7 +327,6 @@ class StructuralState:
     def __init__(
         self,
         equations: Sequence[Equation],
-        unknowns: Sequence[ir.Sym],
         registry: DerivativeRegistry,
         known_symbols: Iterable[ir.Sym],
         time_symbol: ir.Sym,
@@ -349,7 +346,7 @@ class StructuralState:
         eqs = [Equation(eq.lhs, eq.rhs) for eq in equations]
         original_eqs = list(eqs)
 
-        fullvars = self._ordered_variables(eqs, unknowns)
+        fullvars = self._ordered_variables(eqs)
         seen = set(fullvars)
         self.fullvars = fullvars
         self.var2idx = {v: i for i, v in enumerate(fullvars)}
@@ -405,31 +402,19 @@ class StructuralState:
         )
         self.always_present = [False] * nvars
 
-    def _ordered_variables(
-        self, eqs: Sequence[Equation], unknowns: Sequence[ir.Sym]
-    ) -> List[ir.Sym]:
+    def _ordered_variables(self, eqs: Sequence[Equation]) -> List[ir.Sym]:
         """Variables of ``eqs`` in index order.
 
         The derivative symbols occurring in ``eqs`` come first, sorted
         by base name, then derivative order; then the other members of
         their chains down to the base unknowns, sorted by base name,
         then derivative order descending; then the remaining occurring
-        unknowns, sorted by base name. Declared unknowns absent from
-        ``eqs`` are left out.
+        unknowns, sorted by base name.
         """
 
         registry = self.registry
-        unknown_set = set(unknowns)
         occurring = set().union(*(eq.free_symbols() for eq in eqs))
         occurring -= self.known_symbols
-
-        for sym in sorted(occurring, key=lambda s: s.name):
-            base, _ = registry.base_and_order(sym)
-            if base not in unknown_set:
-                raise ValueError(
-                    f"{sym} is present in the system but {base} is not "
-                    "an unknown."
-                )
 
         derivatives = {s for s in occurring if registry.is_derivative(s)}
         lower_orders = set()
