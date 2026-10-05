@@ -11,9 +11,7 @@ Ported from ModelingToolkit.jl (commit c4177c335,
 ``dummy_derivative_graph`` and ``_dummy_derivative_graph``
 (``dummy_derivative_graph!``), ``DummyDerivativeSummary``,
 ``is_present``, ``is_some_diff``, ``isdiffed`` and
-``_tear_with_dummies`` (``DummyDerivativeTearing``). Selection reads
-each variable's chain priority from ``state_priority`` directly,
-without walking the chain.
+``_tear_with_dummies`` (``DummyDerivativeTearing``).
 
 Published Functions
 -------------------
