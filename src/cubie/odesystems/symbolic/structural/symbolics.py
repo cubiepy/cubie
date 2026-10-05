@@ -127,8 +127,8 @@ def total_derivative(
     expr
         Expression to differentiate.
     deriv_map
-        Map from unknown symbols to their derivative symbols. Unknowns
-        absent from the map cannot be differentiated and raise.
+        Map from unknown symbols to their derivative symbols. Symbols
+        absent from both maps differentiate to zero.
     time_symbol
         The independent variable; explicit dependence differentiates
         through :func:`~.expr.diff`.

@@ -24,6 +24,7 @@ from cubie.odesystems.symbolic.structural.simplify import (
 )
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
+    fixpoint_sub,
 )
 from cubie.odesystems.symbolic.structural.system_structure import (
     Equation,
@@ -814,6 +815,36 @@ class TestPantelidesAndDummyDerivatives:
         assert sp.simplify(
             to_sympy(result.residuals[0] - accel)
         ) == 0
+
+    def test_cancelled_unknown_needs_no_derivative(self):
+        # w's coefficient in the constraint cancels, so differentiating
+        # the constraint needs no derivative of w.
+        x, y, w, c = syms("x y w c")
+        resolved = []
+        for extra in ((w + 1) * c - w * c, c):
+            registry = DerivativeRegistry({"x", "y", "w", "c", "t"})
+            state = StructuralState(
+                [
+                    Equation(registry.derivative(x), y),
+                    Equation(ir.ZERO, x + extra - T),
+                    Equation(ir.ZERO, w - y),
+                ],
+                [x, y, w],
+                registry,
+                {c},
+                T,
+            )
+            observed = dict(structural_simplify(state).observed)
+            resolved.append(
+                {
+                    sym: fixpoint_sub(rhs, observed)
+                    for sym, rhs in observed.items()
+                }
+            )
+        cancelled, plain = resolved
+        assert set(cancelled) == set(plain)
+        for sym, rhs in plain.items():
+            assert sp.simplify(to_sympy(cancelled[sym] - rhs)) == 0
 
     def test_higher_order_input_lowered(self):
         x, w = syms("x w")

@@ -506,19 +506,8 @@ class StructuralState:
                 dv = s.var_to_diff[j]
                 if dv is not None:
                     deriv_map[v] = self.fullvars[dv]
-        residual = self.eqs[ieq].residual()
-        for v in ir.free_atoms(residual):
-            if (
-                v in self.var2idx
-                and v not in deriv_map
-                and v is not self.time_symbol
-            ):
-                raise ValueError(
-                    f"Cannot differentiate equation {self.eqs[ieq]}: "
-                    f"variable {v} has no derivative variable."
-                )
         new_rhs = total_derivative(
-            residual,
+            self.eqs[ieq].residual(),
             deriv_map,
             self.time_symbol,
             self.known_derivative_map,
@@ -533,9 +522,7 @@ class StructuralState:
         # find_eq_solvables prunes false entries.
         for var in list(s.graph.s_neighbors(ieq)):
             s.graph.add_edge(eq_diff, var)
-            dvar = s.var_to_diff[var]
-            if dvar is not None:
-                s.graph.add_edge(eq_diff, dvar)
+            s.graph.add_edge(eq_diff, s.var_to_diff[var])
 
         if self.mm is not None:
             self.mm.nparentrows += 1
