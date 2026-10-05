@@ -19,10 +19,6 @@ from cubie.odesystems.symbolic.structural.digraph import (
     tarjan_scc,
     toposort_equations,
 )
-from cubie.odesystems.symbolic.structural.diffgraph import DiffGraph
-from cubie.odesystems.symbolic.structural.system_structure import (
-    SystemStructure,
-)
 from cubie.odesystems.symbolic.structural.tearing import (
     ModiaTearing,
     tear_equations,
@@ -36,14 +32,10 @@ def build_graph(nsrcs, ndsts, edges):
     return graph
 
 
-def build_structure(nsrcs, ndsts, edges, solvable_edges):
-    return SystemStructure(
-        DiffGraph(ndsts, with_badj=True),
-        DiffGraph(nsrcs, with_badj=True),
+def build_graphs(nsrcs, ndsts, edges, solvable_edges):
+    return (
         build_graph(nsrcs, ndsts, edges),
         build_graph(nsrcs, ndsts, solvable_edges),
-        [0] * ndsts,
-        list(range(ndsts)),
     )
 
 
@@ -272,8 +264,8 @@ class TestModiaTearing:
     def test_coupled_block_torn_acyclic(self):
         # Three equations, each solvable for all three variables.
         edges = [(e, v) for e in range(3) for v in range(3)]
-        structure = build_structure(3, 3, edges, edges)
-        result, _ = ModiaTearing()(structure)
+        graph, solvable_graph = build_graphs(3, 3, edges, edges)
+        result, _ = ModiaTearing()(graph, solvable_graph)
         matching = result.var_eq_matching
         solved = [
             (v, matching[v])
@@ -281,19 +273,19 @@ class TestModiaTearing:
             if isinstance(matching[v], int)
         ]
         for v, eq in solved:
-            assert structure.solvable_graph.has_edge(eq, v)
+            assert solvable_graph.has_edge(eq, v)
         assert len({eq for _, eq in solved}) == len(solved)
-        dig = DiCMOBiGraphT(structure.graph, matching)
+        dig = DiCMOBiGraphT(graph, matching)
         sccs = tarjan_scc(dig.nv(), dig.outneighbors)
         assert all(len(scc) == 1 for scc in sccs)
         assert 0 < len(solved) < 3
 
     def test_sccs_follow_full_matching(self):
         edges = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 1), (2, 2)]
-        structure = build_structure(3, 3, edges, edges)
-        result, _ = ModiaTearing()(structure)
+        graph, solvable_graph = build_graphs(3, 3, edges, edges)
+        result, _ = ModiaTearing()(graph, solvable_graph)
         assert result.var_sccs == find_var_sccs(
-            structure.graph, result.full_var_eq_matching
+            graph, result.full_var_eq_matching
         )
 
     def test_single_solvable_equation_assigned_first(self):
@@ -323,10 +315,11 @@ class TestModiaTearing:
         # eq0 and eq1 form a loop over v0, v1; eq2 is left free by
         # the maximal matching and can be solved for v1.
         edges = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 1)]
-        structure = build_structure(3, 2, edges, edges)
-        result, _ = ModiaTearing()(structure)
+        graph, solvable_graph = build_graphs(3, 2, edges, edges)
+        result, _ = ModiaTearing()(graph, solvable_graph)
         matching = result.var_eq_matching
         assert all(isinstance(matching[v], int) for v in range(2))
         assert matching[1] == 2
+        assert result.free_eqs == [2]
         for v in range(2):
-            assert structure.solvable_graph.has_edge(matching[v], v)
+            assert solvable_graph.has_edge(matching[v], v)

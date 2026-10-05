@@ -11,10 +11,11 @@ Ported from ModelingToolkit.jl c4177c335: ``contract_variables``,
 Published Classes
 -----------------
 :class:`TearingResult`
-    Torn matching, pre-tearing matching and variable SCCs.
+    Torn matching, pre-tearing matching, variable SCCs and the
+    equations the pre-tearing matching leaves unmatched.
 
 :class:`ModiaTearing`
-    Modia tearing of each variable SCC of a system structure.
+    Modia tearing of each variable SCC of an incidence graph.
 
 Published Functions
 -------------------
@@ -42,9 +43,6 @@ from cubie.odesystems.symbolic.structural.digraph import (
 )
 from cubie.odesystems.symbolic.structural.singularity_removal import (
     RestrictedBareissContext,
-)
-from cubie.odesystems.symbolic.structural.system_structure import (
-    SystemStructure,
 )
 
 
@@ -129,7 +127,7 @@ def free_equations(
 
 
 class TearingResult:
-    """Result of tearing a system structure.
+    """Result of tearing an incidence graph.
 
     Parameters
     ----------
@@ -142,6 +140,8 @@ class TearingResult:
         ``var_sccs``.
     var_sccs
         Variable SCCs in dependency order.
+    free_eqs
+        Equations ``full_var_eq_matching`` leaves unmatched, ascending.
     """
 
     def __init__(
@@ -149,10 +149,12 @@ class TearingResult:
         var_eq_matching: Matching,
         full_var_eq_matching: Matching,
         var_sccs: List[List[int]],
+        free_eqs: List[int],
     ) -> None:
         self.var_eq_matching = var_eq_matching
         self.full_var_eq_matching = full_var_eq_matching
         self.var_sccs = var_sccs
+        self.free_eqs = free_eqs
 
 
 def try_assign_eq(ict: IncrementalCycleTracker, vj: int, eq: int) -> bool:
@@ -296,7 +298,7 @@ def tear_graph_block_modia(
 
 
 def build_var_eq_matching(
-    structure: SystemStructure,
+    graph: BipartiteGraph,
     varfilter: Callable[[int], bool],
     eqfilter: Callable[[int], bool],
 ) -> Tuple[Matching, int]:
@@ -308,7 +310,7 @@ def build_var_eq_matching(
         The completed matching and its length.
     """
 
-    var_eq_matching = maximal_matching(structure.graph, eqfilter, varfilter)
+    var_eq_matching = maximal_matching(graph, eqfilter, varfilter)
     matching_len = max(
         len(var_eq_matching),
         max(
@@ -345,9 +347,9 @@ class ModiaTearing:
         self.eqfilter = eqfilter
 
     def __call__(
-        self, structure: SystemStructure
+        self, graph: BipartiteGraph, solvable_graph: BipartiteGraph
     ) -> Tuple[TearingResult, Dict]:
-        """Tear ``structure``.
+        """Tear the incidence ``graph`` along its ``solvable_graph``.
 
         Returns
         -------
@@ -357,10 +359,8 @@ class ModiaTearing:
 
         isder = self.isder
         varfilter = self.varfilter
-        graph = structure.graph
-        solvable_graph = structure.solvable_graph
         var_eq_matching, matching_len = build_var_eq_matching(
-            structure, varfilter, self.eqfilter
+            graph, varfilter, self.eqfilter
         )
         full_var_eq_matching = var_eq_matching.copy()
         var_sccs = find_var_sccs(graph, var_eq_matching)
@@ -410,6 +410,8 @@ class ModiaTearing:
             )
 
         return (
-            TearingResult(var_eq_matching, full_var_eq_matching, var_sccs),
+            TearingResult(
+                var_eq_matching, full_var_eq_matching, var_sccs, free_eqs
+            ),
             {},
         )

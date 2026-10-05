@@ -328,7 +328,9 @@ def _tear_with_dummies(
         return can_eliminate[v]
 
     modia_tearing = ModiaTearing(isder=isder, varfilter=varfilter)
-    tearing_result, _ = modia_tearing(structure)
+    tearing_result, _ = modia_tearing(
+        structure.graph, structure.solvable_graph
+    )
 
     for v in range(structure.graph.ndsts()):
         if not is_present(structure, v):
