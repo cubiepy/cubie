@@ -339,7 +339,7 @@ def structural_simplify(
     }
 
     if fully_determined and dummy_derivative:
-        tearing_result, extras = dummy_derivative_graph(
+        tearing_result, _ = dummy_derivative_graph(
             state,
             _integer_jacobian(state),
             state_priority=lambda v: (
@@ -347,7 +347,6 @@ def structural_simplify(
             ),
             **solve_kwargs,
         )
-        _apply_linear_rewrites(state, extras)
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )
@@ -364,7 +363,7 @@ def structural_simplify(
         state = _pantelides_reassemble_state(state, var_eq_matching)
         mm = alias_elimination(state, **solve_kwargs)
         state.mm = mm
-        tearing_result, extras = dummy_derivative_graph(
+        tearing_result, _ = dummy_derivative_graph(
             state,
             _integer_jacobian(state),
             state_priority=lambda v: (
@@ -372,7 +371,6 @@ def structural_simplify(
             ),
             **solve_kwargs,
         )
-        _apply_linear_rewrites(state, extras)
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )
@@ -380,10 +378,7 @@ def structural_simplify(
         if state.structure.solvable_graph is None:
             state.find_solvables(**solve_kwargs)
         state.structure.complete()
-        tearing_result, extras = _tear_with_dummies(
-            state.structure, set()
-        )
-        _apply_linear_rewrites(state, extras)
+        tearing_result, _ = _tear_with_dummies(state, set())
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )

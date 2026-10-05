@@ -171,6 +171,38 @@ class TestIndexCompaction:
         }
 
 
+class TestIntegerMatrixDifferentiation:
+    def test_integer_linear_derivative_row_added(self):
+        x, y = syms("x y")
+        registry = DerivativeRegistry({"x", "y", "t"})
+        dx = registry.derivative(x)
+        state = StructuralState(
+            [Equation(dx, -x), Equation(ir.ZERO, x - 2 * y)],
+            [x, y],
+            registry,
+            set(),
+            T,
+        )
+        state.mm = state.linear_subsys_adjmat()
+        state.structure.complete()
+        dy_index = state.var_derivative(state.var2idx[y])
+        constraint = next(
+            i for i, eq in enumerate(state.eqs) if dx not in eq.free_symbols()
+        )
+        derivative = state.eq_derivative(constraint)
+        mm = state.mm
+        assert mm.nparentrows == state.structure.graph.nsrcs()
+        assert mm.nzrows[-1] == derivative
+        row = {
+            state.fullvars[v]: c
+            for v, c in zip(mm.row_cols[-1], mm.row_vals[-1])
+        }
+        assert row == {dx: 1, state.fullvars[dy_index]: -2}
+        assert mm.row_cols[-1] == state.structure.graph.s_neighbors(
+            derivative
+        )
+
+
 class TestTrivialTearing:
     def test_explicit_chain_torn_to_observed(self):
         x, y, z, k = syms("x y z k")
@@ -870,3 +902,21 @@ class TestExactLinearSCCRewrite:
         # x = z - y, x_t = y - 2x: dy = x - y = z - 2y, dz = -x = y - z.
         assert sp.simplify(to_sympy(full[y] - (z - 2 * y))) == 0
         assert sp.simplify(to_sympy(full[z] - (y - z))) == 0
+
+    def test_singular_integer_block_warns_and_tears(self):
+        # x + 2y + z = 0 differentiates to the sum of the two
+        # derivative rows, so the derivative block is singular.
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "t"})
+        dx, dy, dz = (registry.derivative(s) for s in (x, y, z))
+        eqs = [
+            Equation(dx + dy, -x),
+            Equation(dy + dz, -y),
+            Equation(ir.ZERO, x + 2 * y + z),
+        ]
+        state = StructuralState(eqs, [x, y, z], registry, set(), T)
+        with pytest.warns(UserWarning, match="Integer-linear"):
+            result = structural_simplify(state)
+        assert len(result.residuals) == len(result.algebraic_states)
+        assert result.residuals
+        assert result.mass_matrix is not None

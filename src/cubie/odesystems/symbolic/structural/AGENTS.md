@@ -31,6 +31,7 @@ result.
 | `singularity_removal.py` | `structural_singularity_removal` over the integer-linear subsystem and the underconstrained-variable hooks. |
 | `pantelides.py` | Pantelides index reduction and `computed_highest_diff_variables`. |
 | `dummy_derivatives.py` | Dummy-derivative state selection (`dummy_derivative_graph`, integer-Jacobian rank via Bareiss nullspace with structural-rank fallback). |
+| `exact_matching.py` | `match_linear_sccs`: before Modia tearing, reduces each square SCC of homogeneous integer-linear equations with fraction-free Bareiss elimination over its own variables (derivative pivots first) into equations that solve their variables explicitly in sequence, rewriting the equations, `mm` rows, incidence and solvable graphs; singular SCCs warn and are torn. |
 | `tearing.py` | `ModiaTearing` (per-SCC greedy tearing kept acyclic by the incremental cycle tracker, then a final tear of free equations on overdetermined systems), `TearingResult`, `free_equations`, `contract_variables`. |
 | `reassemble.py` | `default_reassemble`: dummy-derivative renaming, first-order lowering (`0 ~ D(x) - x_t`), per-SCC equation generation (differential/observed/residual) with BLT sorting, final reordering. |
 | `consistency.py` | Balance and structural-singularity checks with best-effort offender reporting. |
