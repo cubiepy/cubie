@@ -50,9 +50,8 @@ source (package, commit, file, function) of every part, or says it is cubie's ow
 | Modia.jl, via ModelingToolkit.jl c4177c335 | MIT | `tearing.py` (Modia tearing) |
 
 Cubie's own: `derivative_block.py`, `exact_matching.py`, `symbolics.py`, the variable ranks,
-variable order, state-priority propagation, `eq_derivative` integer-matrix row and
-integer-coefficient admission in `system_structure.py`, the rank tie-break in
-`dummy_derivatives.py`, `torn_partner` in `reassemble.py`, the topological sort in
+`eq_derivative` integer-matrix row and integer-coefficient admission in
+`system_structure.py`, `torn_partner` in `reassemble.py`, the topological sort in
 `digraph.py`, and `SimplifiedSystem`. Licence texts are in the repository's
 `THIRD_PARTY_LICENSES`.
 
