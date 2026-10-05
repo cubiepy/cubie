@@ -487,7 +487,7 @@ class StructuralState:
         self.var2idx[dsym] = var_diff
         s.state_priorities.append(s.state_priorities[v])
         s.canonical_ranks.append(s.canonical_ranks[v])
-        self.always_present.append(self.always_present[v])
+        self.always_present.append(False)
         if self.mm is not None:
             self.mm.ncols += 1
         return var_diff

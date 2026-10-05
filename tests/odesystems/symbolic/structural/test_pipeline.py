@@ -923,6 +923,21 @@ class TestConsistencyErrors:
         with pytest.raises(ExtraVariablesSystemError):
             structural_simplify(state)
 
+    def test_alias_only_group_counts_as_unknown(self):
+        # Alias elimination removes y ~ z, leaving its target in no
+        # equation; the target still counts as an unknown.
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "t"})
+        state = StructuralState(
+            [Equation(registry.derivative(x), -x), Equation(y, z)],
+            [x, y, z],
+            registry,
+            set(),
+            T,
+        )
+        with pytest.raises(ExtraVariablesSystemError):
+            structural_simplify(state)
+
     def test_underdetermined_tearing_only_mode(self):
         x, z = syms("x z")
         registry = DerivativeRegistry({"x", "z", "t"})
