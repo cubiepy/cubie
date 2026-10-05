@@ -8,7 +8,11 @@ differentiation hooks used by Pantelides.
 
 The equation order at construction is ported from ModelingToolkit.jl
 (commit c4177c335, ``src/systems/systemstructure.jl``,
-``TearingState``).
+``TearingState``). ``StructuralState.rm_eqs_vars`` is ported from the
+equation renumbering and graph rebuild of ModelingToolkit.jl (commit
+c4177c335, ``src/systems/alias_elimination.jl``,
+``alias_elimination!``) and from BipartiteGraphs.jl
+(``src/bipartite_graph.jl``, ``delete_dsts!``).
 
 Published Classes
 -----------------
@@ -113,6 +117,27 @@ class Equation:
         return Equation(
             ir.xreplace(self.lhs, rules), ir.xreplace(self.rhs, rules)
         )
+
+
+def _old_to_new_indices(n: int, dels: List[int]) -> Tuple[List[int], int]:
+    """Map ``n`` old indices past the sorted ``dels``.
+
+    Returns the new index of each old index (``-1`` for a deleted
+    one) and the number of indices kept.
+    """
+
+    old_to_new = [0] * n
+    idx = 0
+    cursor = 0
+    ndels = len(dels)
+    for i in range(n):
+        if cursor < ndels and i == dels[cursor]:
+            cursor += 1
+            old_to_new[i] = -1
+            continue
+        old_to_new[i] = idx
+        idx += 1
+    return old_to_new, idx
 
 
 class SystemStructure:
@@ -598,6 +623,87 @@ class StructuralState:
             eadj,
             cadj,
         )
+
+    def rm_eqs_vars(
+        self, eqs_to_rm: List[int], vars_to_rm: List[int]
+    ) -> Tuple[List[int], List[int]]:
+        """Delete equations and variables, renumbering the rest.
+
+        Parameters
+        ----------
+        eqs_to_rm
+            Equation indices to delete, in any order.
+        vars_to_rm
+            Variable indices to delete, in any order, possibly
+            repeated.
+
+        Returns
+        -------
+        tuple
+            ``(old_to_new_eq, old_to_new_var)``: the new index of
+            each old equation and variable, ``-1`` for a deleted one.
+        """
+
+        s = self.structure
+        graph = s.graph
+        solvable_graph = s.solvable_graph
+        var_dels = sorted(set(vars_to_rm))
+        old_to_new_eq, n_new_eqs = _old_to_new_indices(
+            graph.nsrcs(), sorted(set(eqs_to_rm))
+        )
+        old_to_new_var, n_new_vars = _old_to_new_indices(
+            graph.ndsts(), var_dels
+        )
+
+        new_graph = BipartiteGraph(n_new_eqs, graph.ndsts())
+        new_solvable_graph = None
+        if solvable_graph is not None:
+            new_solvable_graph = BipartiteGraph(n_new_eqs, graph.ndsts())
+        new_eq_to_diff = DiffGraph(n_new_eqs, with_badj=True)
+        for i, ieq in enumerate(old_to_new_eq):
+            if ieq < 0:
+                continue
+            new_graph.set_neighbors(ieq, graph.s_neighbors(i))
+            if new_solvable_graph is not None:
+                new_solvable_graph.set_neighbors(
+                    ieq, solvable_graph.s_neighbors(i)
+                )
+            deq = s.eq_to_diff[i]
+            if deq is not None and old_to_new_eq[deq] >= 0:
+                new_eq_to_diff[ieq] = old_to_new_eq[deq]
+
+        # Delete the variable vertices, renumbering the rows.
+        new_graph.invview().delete_srcs(var_dels, rm_verts=True)
+        if new_solvable_graph is not None:
+            new_solvable_graph.invview().delete_srcs(
+                var_dels, rm_verts=True
+            )
+
+        new_var_to_diff = DiffGraph(n_new_vars, with_badj=True)
+        for iv, i in enumerate(old_to_new_var):
+            if i < 0:
+                continue
+            dv = s.var_to_diff[iv]
+            if dv is not None and old_to_new_var[dv] >= 0:
+                new_var_to_diff[i] = old_to_new_var[dv]
+
+        kept_eqs = [e for e, ie in enumerate(old_to_new_eq) if ie >= 0]
+        kept_vars = [v for v, iv in enumerate(old_to_new_var) if iv >= 0]
+        self.eqs[:] = [self.eqs[e] for e in kept_eqs]
+        self.original_eqs[:] = [self.original_eqs[e] for e in kept_eqs]
+        self.fullvars[:] = [self.fullvars[v] for v in kept_vars]
+        self.var2idx = {v: i for i, v in enumerate(self.fullvars)}
+        self.always_present[:] = [
+            self.always_present[v] for v in kept_vars
+        ]
+        s.state_priorities[:] = [s.state_priorities[v] for v in kept_vars]
+        s.canonical_ranks[:] = [s.canonical_ranks[v] for v in kept_vars]
+
+        s.graph = new_graph
+        s.solvable_graph = new_solvable_graph
+        s.eq_to_diff = new_eq_to_diff
+        s.var_to_diff = new_var_to_diff
+        return old_to_new_eq, old_to_new_var
 
     def n_concrete_eqs(self) -> int:
         """Number of equations with at least one incident variable."""

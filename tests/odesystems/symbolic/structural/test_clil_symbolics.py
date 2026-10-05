@@ -15,6 +15,9 @@ from cubie.odesystems.symbolic.structural.clil import (
 from cubie.odesystems.symbolic.structural.dummy_derivatives import (
     _independent_columns,
 )
+from cubie.odesystems.symbolic.structural.singularity_removal import (
+    get_new_mm,
+)
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
     as_small_int,
@@ -103,6 +106,30 @@ class TestBareissPivoting:
         mm = SparseMatrixCLIL(2, 2, [0, 1], [[0], [0, 1]], [[1], [1, 1]])
         assert bareiss(mm, [[False, True], [True, False], None]) == [1, 0]
         assert mm.nzrows == [1, 0]
+
+
+class TestGetNewMM:
+    def test_rows_dropped_and_renumbered(self):
+        mm = SparseMatrixCLIL(
+            4,
+            4,
+            [0, 1, 2, 3],
+            [[0, 1], [1, 3], [2, 3], [3]],
+            [[1, -1], [2, 1], [1, 1], [5]],
+        )
+        old_to_new_eq = [0, -1, 1, 2]
+        old_to_new_var = [0, 1, -1, 2]
+        new = get_new_mm({}, old_to_new_eq, old_to_new_var, mm)
+        # Row 1 belongs to a removed equation, row 2 holds a removed
+        # variable.
+        assert new.nzrows == [old_to_new_eq[0], old_to_new_eq[3]]
+        assert new.row_cols == [
+            [old_to_new_var[0], old_to_new_var[1]],
+            [old_to_new_var[3]],
+        ]
+        assert new.row_vals == [mm.row_vals[0], mm.row_vals[3]]
+        assert new.nparentrows == 3
+        assert new.ncols == 3
 
 
 class TestLinearExpansion:

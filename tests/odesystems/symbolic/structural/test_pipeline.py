@@ -5,6 +5,9 @@ import sympy as sp
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
+from cubie.odesystems.symbolic.structural.alias_elimination import (
+    trivial_tearing,
+)
 from cubie.odesystems.symbolic.structural.derivative_block import (
     eliminate_singular_derivative_blocks,
 )
@@ -75,6 +78,147 @@ class TestEquationOrder:
             for eq, original in zip(state.eqs, state.original_eqs):
                 difference = to_sympy(eq.residual() - original.residual())
                 assert sp.simplify(difference) == 0
+
+
+class TestIndexCompaction:
+    def test_rm_eqs_vars_renumbers_consistently(self):
+        x, y, z, w, k = syms("x y z w k")
+        registry = DerivativeRegistry({"x", "y", "z", "w", "k", "t"})
+        state = StructuralState(
+            [
+                Equation(registry.derivative(x), -k * x + z),
+                Equation(y, 2 * x),
+                Equation(z, y + 1),
+                Equation(w, x - z),
+            ],
+            [x, y, z, w],
+            registry,
+            {k},
+            T,
+        )
+        state.find_solvables()
+        s = state.structure
+        s.complete()
+        nvars = len(state.fullvars)
+        # Distinct per-variable markers to follow through renumbering.
+        s.state_priorities[:] = list(range(nvars))
+        s.canonical_ranks[:] = list(range(nvars, 0, -1))
+        state.always_present[:] = [v % 2 == 0 for v in range(nvars)]
+
+        old_vars = list(state.fullvars)
+        old_priorities = list(s.state_priorities)
+        old_ranks = list(s.canonical_ranks)
+        old_present = list(state.always_present)
+        old_eqs = list(state.eqs)
+        old_original = list(state.original_eqs)
+        old_edges = set(s.graph.edges())
+        old_solvable = set(s.solvable_graph.edges())
+        old_diff = list(s.var_to_diff.edges())
+
+        rm_var = state.var2idx[w]
+        rm_eq = next(
+            i for i, eq in enumerate(state.original_eqs) if eq.lhs is y
+        )
+        old_to_new_eq, old_to_new_var = state.rm_eqs_vars(
+            [rm_eq], [rm_var, rm_var]
+        )
+        assert old_to_new_eq[rm_eq] == -1
+        assert old_to_new_var[rm_var] == -1
+
+        kept_vars = [v for v in range(nvars) if old_to_new_var[v] >= 0]
+        assert len(state.fullvars) == len(kept_vars)
+        assert len(s.state_priorities) == len(kept_vars)
+        assert len(s.canonical_ranks) == len(kept_vars)
+        assert len(state.always_present) == len(kept_vars)
+        for old in kept_vars:
+            new = old_to_new_var[old]
+            assert state.fullvars[new] is old_vars[old]
+            assert state.var2idx[old_vars[old]] == new
+            assert s.state_priorities[new] == old_priorities[old]
+            assert s.canonical_ranks[new] == old_ranks[old]
+            assert state.always_present[new] == old_present[old]
+
+        kept_eqs = [
+            e for e in range(len(old_eqs)) if old_to_new_eq[e] >= 0
+        ]
+        assert len(state.eqs) == len(kept_eqs)
+        assert len(state.original_eqs) == len(kept_eqs)
+        for old in kept_eqs:
+            new = old_to_new_eq[old]
+            assert state.eqs[new] is old_eqs[old]
+            assert state.original_eqs[new] is old_original[old]
+
+        for graph, edges in (
+            (s.graph, old_edges),
+            (s.solvable_graph, old_solvable),
+        ):
+            expected = {
+                (old_to_new_eq[e], old_to_new_var[v])
+                for e, v in edges
+                if old_to_new_eq[e] >= 0 and old_to_new_var[v] >= 0
+            }
+            assert set(graph.edges()) == expected
+            assert graph.nsrcs() == len(kept_eqs)
+            assert graph.ndsts() == len(kept_vars)
+            for v in range(graph.ndsts()):
+                assert graph.d_neighbors(v) == sorted(
+                    e for e, dst in expected if dst == v
+                )
+        assert set(s.var_to_diff.edges()) == {
+            (old_to_new_var[a], old_to_new_var[b])
+            for a, b in old_diff
+            if old_to_new_var[a] >= 0 and old_to_new_var[b] >= 0
+        }
+
+
+class TestTrivialTearing:
+    def test_explicit_chain_torn_to_observed(self):
+        x, y, z, k = syms("x y z k")
+        registry = DerivativeRegistry({"x", "y", "z", "k", "t"})
+        dx = registry.derivative(x)
+        y_rhs = 2 * x
+        z_rhs = y + 1
+        state = StructuralState(
+            [
+                Equation(dx, -k * x),
+                Equation(y, y_rhs),
+                Equation(z, z_rhs),
+            ],
+            [x, y, z],
+            registry,
+            {k},
+            T,
+        )
+        trivial_tearing(state)
+        assert set(state.fullvars) == {x, dx}
+        assert [eq.lhs for eq in state.eqs] == [dx]
+        assert len(state.additional_observed) == 2
+        assert Equation(y, y_rhs) in state.additional_observed
+        assert Equation(z, z_rhs) in state.additional_observed
+        assert state.structure.graph.nsrcs() == len(state.eqs)
+        assert state.structure.graph.ndsts() == len(state.fullvars)
+
+    def test_irreducible_and_self_referencing_not_torn(self):
+        x, y, z, k = syms("x y z k")
+        registry = DerivativeRegistry({"x", "y", "z", "k", "t"})
+        dx = registry.derivative(x)
+        state = StructuralState(
+            [
+                Equation(dx, -k * x),
+                Equation(y, 2 * x),
+                Equation(z, z * x + 1),
+            ],
+            [x, y, z],
+            registry,
+            {k},
+            T,
+            irreducibles=[y],
+        )
+        n_eqs = len(state.eqs)
+        trivial_tearing(state)
+        assert set(state.fullvars) == {x, dx, y, z}
+        assert len(state.eqs) == n_eqs
+        assert state.additional_observed == []
 
 
 class TestExplicitSystems:
