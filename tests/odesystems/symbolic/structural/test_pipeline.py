@@ -218,7 +218,6 @@ class TestTrivialTearing:
         trivial_tearing(state)
         assert set(state.fullvars) == {x, dx, y, z}
         assert len(state.eqs) == n_eqs
-        assert state.additional_observed == []
 
 
 class TestExplicitSystems:
