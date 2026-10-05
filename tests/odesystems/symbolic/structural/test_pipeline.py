@@ -732,18 +732,13 @@ class TestAliasEdgeCases:
     def test_removed_derivative_chain_maps_to_target_chain(self):
         x, y = syms("x y")
         registry = DerivativeRegistry({"x", "y", "t"})
-        dx = registry.derivative(x)
-        ddx = registry.derivative(dx)
         dy = registry.derivative(y)
         ddy = registry.derivative(dy)
         state = self._second_order_alias_state(registry)
-        old_vars = list(state.fullvars)
-        _, old_to_new_var, aliases = eliminate_perfect_aliases(state)
-        renamed = {
-            old_vars[removed]: state.fullvars[old_to_new_var[target]]
-            for removed, target in aliases.items()
-        }
-        assert renamed == {x: y, dx: dy, ddx: ddy}
+        eliminate_perfect_aliases(state)
+        assert set(state.fullvars) == {y, dy, ddy}
+        observed = {eq.lhs: eq.rhs for eq in state.additional_observed}
+        assert observed == {x: y}
         var_to_diff = state.structure.var_to_diff
         y_index = state.var2idx[y]
         dy_index = var_to_diff[y_index]

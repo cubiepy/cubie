@@ -300,10 +300,8 @@ def structural_simplify(
     eliminate_perfect_aliases(state)
     trivial_tearing(state)
     mm = alias_elimination(state, **solve_kwargs)
-    old_to_new_eq, old_to_new_var, aliases = (
-        eliminate_perfect_aliases(state)
-    )
-    mm = get_new_mm(aliases, old_to_new_eq, old_to_new_var, mm)
+    old_to_new_eq, old_to_new_var = eliminate_perfect_aliases(state)
+    mm = get_new_mm(old_to_new_eq, old_to_new_var, mm)
     state.mm = mm
 
     if consistency_check and fully_determined:

@@ -117,7 +117,7 @@ class TestGetNewMM:
         )
         old_to_new_eq = [0, -1, 1, 2]
         old_to_new_var = [0, 1, -1, 2]
-        new = get_new_mm({}, old_to_new_eq, old_to_new_var, mm)
+        new = get_new_mm(old_to_new_eq, old_to_new_var, mm)
         # Row 1's equation and row 2's variable are removed.
         assert new.nzrows == [old_to_new_eq[0], old_to_new_eq[3]]
         assert new.row_cols == [

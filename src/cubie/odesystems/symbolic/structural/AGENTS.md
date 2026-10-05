@@ -27,7 +27,7 @@ result.
 | `symbolics.py` | Engine-IR primitives: structural `linear_expansion`, `fixpoint_sub`, `total_derivative`, `linear_dependencies` (fraction-free elimination with numeric-first pivots gated by a caller predicate; returns the rows the pivot rows span, with multipliers), and `DerivativeRegistry` (plain-symbol stand-in for MTK `Differential` terms, `x_t` dummy naming; keys are interned `ir.Sym` nodes). |
 | `derivative_block.py` | `eliminate_singular_derivative_blocks`: replaces each equation whose derivative terms are an exact combination of the pivot equations' derivative terms with the derivative-free equation that combination implies; symbolic pivots follow the `allow_symbolic`/`allow_parameter` division policy, and equations with an unknown in a derivative coefficient are left alone. |
 | `alias_elimination.py` | Perfect-alias elimination (sign-tracking union-find, conflict groups force zeros) and the integer-linear `alias_elimination` driver. |
-| `singularity_removal.py` | `structural_singularity_removal` over the integer-linear subsystem and the underconstrained-variable hooks. |
+| `singularity_removal.py` | `structural_singularity_removal` over the integer-linear subsystem. |
 | `pantelides.py` | Pantelides index reduction and `computed_highest_diff_variables`. |
 | `dummy_derivatives.py` | Dummy-derivative state selection (`dummy_derivative_graph`, integer-Jacobian rank via Bareiss nullspace with structural-rank fallback). |
 | `exact_matching.py` | `match_linear_sccs`: before Modia tearing, reduces each square SCC of homogeneous integer-linear equations with fraction-free Bareiss elimination over its own variables (derivative pivots first) into equations that solve their variables explicitly in sequence, rewriting the equations, `mm` rows, incidence and solvable graphs; singular SCCs warn and are torn. |
@@ -44,7 +44,7 @@ of a ported design is marked "Not ported".
 | Source | Licence | Used in |
 |--------|---------|---------|
 | ModelingToolkit.jl c4177c335 | MIT | `tearing.py`, `reassemble.py`, `dummy_derivatives.py`, `consistency.py`, `system_structure.py`, `alias_elimination.py` (`trivial_tearing`), `singularity_removal.py` (`get_new_mm`), `digraph.py` (`find_var_sccs`, `toposort_equations`), `pantelides.py`, `bipartite.py` (`SelectedState`) |
-| ModelingToolkit.jl a2b6dc56 | MIT | `simplify.py` (pipeline order, `_pantelides_reassemble_state`, `_integer_jacobian`), `alias_elimination.py` (perfect-alias and integer-linear alias elimination), `singularity_removal.py` (`IgnoreUnderconstrainedVariable`), `system_structure.py` (`always_present`) |
+| ModelingToolkit.jl a2b6dc56 | MIT | `simplify.py` (pipeline order, `_pantelides_reassemble_state`, `_integer_jacobian`), `alias_elimination.py` (perfect-alias and integer-linear alias elimination), `system_structure.py` (`always_present`) |
 | StateSelection.jl 74df007e | MIT | `clil.py`, `diffgraph.py`, `pantelides.py`, `singularity_removal.py`, `consistency.py`, `errors.py`, `system_structure.py` (derivative-graph hooks) |
 | BipartiteGraphs.jl 647b6a42 (v0.1.14) | MIT | `bipartite.py`, `digraph.py` (`DiCMOBiGraphT`/`F`), `system_structure.py` (`rm_eqs_vars`) |
 | Graphs.jl dffc7a64 (v1.15.0) | BSD-2-Clause | `digraph.py` (`tarjan_scc`, `neighborhood_in`, `IncrementalCycleTracker`) |

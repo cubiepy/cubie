@@ -1,12 +1,10 @@
 """Integer-linear singularity removal.
 
-``structural_singularity_removal``, ``is_algebraic``, ``aag_bareiss``
-and ``force_var_to_zero`` are ported from StateSelection.jl (commit
-74df007e, ``src/singularity_removal.jl``, functions of the same names
-with the trailing ``!`` dropped). ``IgnoreUnderconstrainedVariable``
-is ported from ModelingToolkit.jl (commit a2b6dc56,
-``src/systems/alias_elimination.jl``). ``get_new_mm`` follows the
-integer-matrix rebuild in ModelingToolkit.jl (commit c4177c335,
+``structural_singularity_removal``, ``is_algebraic`` and
+``aag_bareiss`` are ported from StateSelection.jl (commit 74df007e,
+``src/singularity_removal.jl``, functions of the same names with the
+trailing ``!`` dropped). ``get_new_mm`` follows the integer-matrix
+rebuild in ModelingToolkit.jl (commit c4177c335,
 ``src/systems/alias_elimination.jl``, ``alias_elimination!``).
 
 Published Functions
@@ -22,7 +20,7 @@ Published Functions
     deletion.
 """
 
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import List
 
 from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
@@ -49,26 +47,18 @@ def is_algebraic(var_to_diff: DiffGraph, v: int) -> bool:
 
 def aag_bareiss(
     structure: SystemStructure, mm: SparseMatrixCLIL
-) -> Tuple[List[int], List[int]]:
+) -> None:
     """Bareiss-factorise the integer-linear subsystem in place.
-
-    Pivots are taken first on algebraic variables that occur only in
-    linear algebraic equations, then on highest-differentiated
-    variables, then on any variable.
 
     Parameters
     ----------
     structure
         Structure the matrix rows belong to.
     mm
-        The integer-linear subsystem, reduced in place.
-
-    Returns
-    -------
-    tuple
-        ``(solvable_variables, pivots)``: the algebraic variables
-        that occur only in linear algebraic equations, and the pivot
-        columns in elimination order.
+        The integer-linear subsystem. Pivots are taken first on
+        algebraic variables that occur only in linear algebraic
+        equations, then on highest-differentiated variables, then on
+        any variable.
     """
 
     graph = structure.graph
@@ -87,16 +77,11 @@ def aag_bareiss(
             continue
         for j in graph.s_neighbors(i):
             is_linear_variables[j] = False
-    solvable_variables = [
-        v for v, linear in enumerate(is_linear_variables) if linear
-    ]
 
-    pivots = bareiss(mm, [is_linear_variables, is_highest_diff, None])
-    return solvable_variables, pivots
+    bareiss(mm, [is_linear_variables, is_highest_diff, None])
 
 
 def get_new_mm(
-    aliases: Dict[int, Union[int, Dict[int, int]]],
     old_to_new_eq: List[int],
     old_to_new_var: List[int],
     mm: SparseMatrixCLIL,
@@ -105,8 +90,6 @@ def get_new_mm(
 
     Parameters
     ----------
-    aliases
-        Removed variables and their targets; not read.
     old_to_new_eq
         New index of each old equation, ``-1`` for a deleted one.
     old_to_new_var
@@ -142,70 +125,21 @@ def get_new_mm(
     )
 
 
-def force_var_to_zero(
-    structure: SystemStructure, ils: SparseMatrixCLIL, v: int
-) -> SparseMatrixCLIL:
-    """Append the equation ``v == 0`` for an underconstrained variable."""
-
-    from cubie.odesystems.symbolic.structural.bipartite import SRC
-
-    ils.nparentrows += 1
-    ils.nzrows.append(ils.nparentrows - 1)
-    ils.row_cols.append([v])
-    ils.row_vals.append([1])
-    structure.graph.add_vertex(SRC)
-    if structure.solvable_graph is not None:
-        structure.solvable_graph.add_vertex(SRC)
-    structure.graph.add_edge(ils.nparentrows - 1, v)
-    if structure.solvable_graph is not None:
-        structure.solvable_graph.add_edge(ils.nparentrows - 1, v)
-    structure.eq_to_diff.add_vertex()
-    return ils
-
-
-class IgnoreUnderconstrainedVariable:
-    """Record underconstrained variables without altering the system."""
-
-    def __init__(self) -> None:
-        self.underconstrained = []
-
-    def __call__(
-        self,
-        structure: SystemStructure,
-        ils: SparseMatrixCLIL,
-        v: int,
-    ) -> SparseMatrixCLIL:
-        self.underconstrained.append(v)
-        return ils
-
-
 def structural_singularity_removal(
-    state: StructuralState,
-    variable_underconstrained: Optional[Callable] = None,
-    **kwargs,
+    state: StructuralState, **kwargs
 ) -> SparseMatrixCLIL:
     """Run the integer-linear singularity removal pass.
 
-    Factorises the integer-linear subsystem exactly and applies the
-    underconstrained-variable hook to purely-linear variables that
-    were not pivoted.
+    Factorises the integer-linear subsystem exactly under the
+    solvability options ``kwargs`` of
+    :meth:`StructuralState.find_eq_solvables`.
 
     Returns the reduced :class:`SparseMatrixCLIL`.
     """
 
-    if variable_underconstrained is None:
-        variable_underconstrained = force_var_to_zero
     mm = state.linear_subsys_adjmat(**kwargs)
     if len(mm.nzrows) == 0:
         return mm
 
-    structure = state.structure
-    ils = mm
-    solvable_variables, pivots = aag_bareiss(structure, ils)
-    # Pivots on linear variables are all taken before any other.
-    rk1vars = {v for v in pivots if v in solvable_variables}
-    for v in solvable_variables:
-        if v in rk1vars:
-            continue
-        ils = variable_underconstrained(structure, ils, v)
-    return ils
+    aag_bareiss(state.structure, mm)
+    return mm
