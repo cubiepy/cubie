@@ -197,12 +197,9 @@ def _find_perfect_aliases(
             continue
         if var_to_diff.diff_to_primal[snbors[1]] is not None:
             continue
-        eq = eqs[ieq]
-        if not ir.is_zero(eq.lhs):
-            continue
         v1_sym = fullvars[snbors[0]]
         v2_sym = fullvars[snbors[1]]
-        rhs = eq.rhs
+        rhs = eqs[ieq].rhs
         if not isinstance(rhs, ir.Add):
             continue
         coeffs = _add_coeffs_dict(rhs)
@@ -345,13 +342,10 @@ def _find_perfect_aliases(
             if c1 == c2:
                 eqs_to_rm.append(ieq)
 
-    for e in set(eqs_to_substitute):
-        # Substitute twice: an alias substitution may cancel the
-        # target, and zero substitution annihilates cofactors.
-        eqs[e] = eqs[e].xreplace(subs).xreplace(subs)
-        original_eqs[e] = (
-            original_eqs[e].xreplace(subs).xreplace(subs)
-        )
+    for e in dict.fromkeys(eqs_to_substitute):
+        eqs[e] = eqs[e].xreplace(subs)
+        original_eqs[e] = original_eqs[e].xreplace(subs)
+        # Substitution can cancel the target or annihilate cofactors.
         new_vars = eqs[e].free_symbols()
         new_row = [
             v_idx
@@ -381,7 +375,6 @@ def _find_perfect_aliases(
             eqs_to_rm.append(ieq)
         else:
             seen.add(pair)
-    eqs_to_rm.sort()
     return aliases
 
 
