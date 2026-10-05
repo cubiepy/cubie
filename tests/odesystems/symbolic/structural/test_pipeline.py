@@ -6,6 +6,7 @@ import sympy as sp
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.structural.alias_elimination import (
+    eliminate_perfect_aliases,
     trivial_tearing,
 )
 from cubie.odesystems.symbolic.structural.derivative_block import (
@@ -612,6 +613,55 @@ class TestAliasEdgeCases:
         assert len(result.differential_states) == 2
         obs = dict(result.observed)
         assert obs[y] is -x
+
+    def _second_order_alias_state(self, registry):
+        # x carries a second derivative and is aliased to the
+        # higher-priority y, which has no derivative of its own.
+        x, y = syms("x y")
+        dx = registry.derivative(x)
+        return StructuralState(
+            [
+                Equation(registry.derivative(dx), -x),
+                Equation(ir.ZERO, y - x),
+            ],
+            [x, y],
+            registry,
+            set(),
+            T,
+            state_priorities={y: 5},
+        )
+
+    def test_removed_derivative_chain_maps_to_target_chain(self):
+        x, y = syms("x y")
+        registry = DerivativeRegistry({"x", "y", "t"})
+        dx = registry.derivative(x)
+        ddx = registry.derivative(dx)
+        dy = registry.derivative(y)
+        ddy = registry.derivative(dy)
+        state = self._second_order_alias_state(registry)
+        old_vars = list(state.fullvars)
+        _, old_to_new_var, aliases = eliminate_perfect_aliases(state)
+        renamed = {
+            old_vars[removed]: state.fullvars[old_to_new_var[target]]
+            for removed, target in aliases.items()
+        }
+        assert renamed == {x: y, dx: dy, ddx: ddy}
+        var_to_diff = state.structure.var_to_diff
+        y_index = state.var2idx[y]
+        dy_index = var_to_diff[y_index]
+        assert state.fullvars[dy_index] is dy
+        assert state.fullvars[var_to_diff[dy_index]] is ddy
+        assert Equation(ddy, -y) in state.eqs
+
+    def test_second_order_alias_reduces_to_oscillator(self):
+        y = ir.sym("y")
+        registry = DerivativeRegistry({"x", "y", "t"})
+        state = self._second_order_alias_state(registry)
+        result = structural_simplify(state)
+        assert len(result.differential_states) == 2
+        velocity = result.dxdt[y]
+        assert velocity in result.states
+        assert sp.simplify(to_sympy(result.dxdt[velocity] + y)) == 0
 
     def test_priority_tie_warns(self):
         x, y, z = syms("x y z")
