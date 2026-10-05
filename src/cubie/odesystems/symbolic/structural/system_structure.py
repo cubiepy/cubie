@@ -241,20 +241,6 @@ class SystemStructure:
         self.state_priorities = state_priorities
         self.canonical_ranks = canonical_ranks
 
-    def copy(self) -> "SystemStructure":
-        """Return a deep copy."""
-
-        return SystemStructure(
-            self.var_to_diff.copy(),
-            self.eq_to_diff.copy(),
-            self.graph.copy(),
-            None
-            if self.solvable_graph is None
-            else self.solvable_graph.copy(),
-            list(self.state_priorities),
-            list(self.canonical_ranks),
-        )
-
     def complete(self) -> "SystemStructure":
         """Complete all member graphs (inverse/backward adjacency)."""
 
@@ -268,7 +254,6 @@ class SystemStructure:
     def isdervar(self, i: int) -> bool:
         """Whether variable ``i`` is the derivative of another."""
 
-        self.var_to_diff.require_complete()
         return self.var_to_diff.diff_to_primal[i] is not None
 
     def eq_derivative_graph(self, eq: int) -> int:

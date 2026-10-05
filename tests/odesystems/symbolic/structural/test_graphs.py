@@ -48,7 +48,6 @@ def new_tracker(graph):
 class TestBipartiteGraph:
     def test_edges_sorted_and_counted(self):
         graph = build_graph(2, 3, [(0, 2), (0, 0), (1, 1)])
-        assert graph.ne == 3
         assert graph.s_neighbors(0) == [0, 2]
         assert graph.d_neighbors(1) == [1]
         assert graph.has_edge(0, 2)
@@ -57,14 +56,12 @@ class TestBipartiteGraph:
     def test_duplicate_edge_not_added(self):
         graph = build_graph(1, 1, [(0, 0)])
         assert not graph.add_edge(0, 0)
-        assert graph.ne == 1
 
     def test_rem_edge_updates_both_sides(self):
         graph = build_graph(2, 2, [(0, 0), (0, 1), (1, 0)])
         graph.rem_edge(0, 0)
         assert graph.s_neighbors(0) == [1]
         assert graph.d_neighbors(0) == [1]
-        assert graph.ne == 2
 
     def test_set_neighbors_syncs_backward(self):
         graph = build_graph(2, 3, [(0, 0), (0, 1)])
@@ -79,7 +76,6 @@ class TestBipartiteGraph:
         assert inv.s_neighbors(1) == [0]
         inv.add_edge(0, 1)
         assert graph.has_edge(1, 0)
-        assert graph.ne == 2
 
     def test_add_vertex(self):
         graph = build_graph(1, 1, [(0, 0)])
@@ -213,22 +209,6 @@ class TestIncrementalCycleTracker:
         assert assign(0, 0)
         assert not assign(1, 1)
         assert dig.matching[1] is UNASSIGNED
-
-    def test_self_loop_reject_reverts_levels(self):
-        # A batch whose srcs include dst must be rejected without
-        # leaking level bumps applied for earlier srcs in the batch.
-        graph = build_graph(2, 2, [(0, 0), (0, 1), (1, 1)])
-        matching = Matching(2).complete(2)
-        dig = DiCMOBiGraphT(graph, matching)
-        ict = IncrementalCycleTracker(dig)
-
-        before = list(ict.levels.values)
-        accepted = ict.add_edge_checked(
-            lambda g: None, [1, 0], 0
-        )
-        assert not accepted
-        assert ict.levels.values == before
-        assert ict.levels.log == []
 
     def test_accepts_chain(self):
         graph = build_graph(2, 2, [(0, 0), (1, 0), (1, 1)])

@@ -56,15 +56,6 @@ class DiffGraph:
                 self.diff_to_primal[val] = var
         self.primal_to_diff[var] = val
 
-    def copy(self) -> "DiffGraph":
-        """Return a copy sharing no mutable state."""
-
-        inv = self.diff_to_primal
-        return DiffGraph._from_parts(
-            list(self.primal_to_diff),
-            None if inv is None else list(inv),
-        )
-
     def add_vertex(self) -> int:
         """Append a vertex with no derivative edge; return its index."""
 
@@ -85,12 +76,6 @@ class DiffGraph:
             if v is not None:
                 yield (i, v)
 
-    def require_complete(self) -> None:
-        """Raise unless the inverse map is stored."""
-
-        if self.diff_to_primal is None:
-            raise ValueError("Not complete. Run `complete` first.")
-
     def complete(self) -> "DiffGraph":
         """Populate the inverse map if absent."""
 
@@ -105,7 +90,6 @@ class DiffGraph:
     def invview(self) -> "DiffGraph":
         """Return a view with the maps swapped (aliases storage)."""
 
-        self.require_complete()
         return DiffGraph._from_parts(
             self.diff_to_primal, self.primal_to_diff
         )

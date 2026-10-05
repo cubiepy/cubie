@@ -46,9 +46,6 @@ class Unassigned:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __repr__(self) -> str:
-        return "u"
-
 
 class SelectedState:
     """Sentinel marking a variable selected as a differential state."""
@@ -59,9 +56,6 @@ class SelectedState:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-
-    def __repr__(self) -> str:
-        return "SelectedState"
 
 
 UNASSIGNED = Unassigned()
@@ -96,7 +90,6 @@ class BipartiteGraph:
     def __init__(
         self, nsrcs: int, ndsts: int, with_badj: bool = True
     ) -> None:
-        self._ne = [0]
         self.fadjlist = [[] for _ in range(nsrcs)]
         if with_badj:
             self.badjlist = [[] for _ in range(ndsts)]
@@ -106,21 +99,13 @@ class BipartiteGraph:
     @classmethod
     def _from_parts(
         cls,
-        ne_box: List[int],
         fadjlist: List[List[int]],
         badjlist: Union[List[List[int]], int],
     ) -> "BipartiteGraph":
         graph = cls.__new__(cls)
-        graph._ne = ne_box
         graph.fadjlist = fadjlist
         graph.badjlist = badjlist
         return graph
-
-    @property
-    def ne(self) -> int:
-        """Number of edges in the graph."""
-
-        return self._ne[0]
 
     def nsrcs(self) -> int:
         """Number of source (equation) vertices."""
@@ -133,14 +118,6 @@ class BipartiteGraph:
         if isinstance(self.badjlist, int):
             return self.badjlist
         return len(self.badjlist)
-
-    def require_complete(self) -> None:
-        """Raise unless the backward adjacency list is stored."""
-
-        if isinstance(self.badjlist, int):
-            raise ValueError(
-                "The graph has no back edges. Use `complete`."
-            )
 
     def complete(self) -> "BipartiteGraph":
         """Populate the backward adjacency list if absent."""
@@ -157,26 +134,11 @@ class BipartiteGraph:
     def invview(self) -> "BipartiteGraph":
         """Return a view with source and destination vertices swapped.
 
-        The returned graph aliases this graph's adjacency lists and
-        edge count, so mutations through either are shared.
+        The returned graph aliases this graph's adjacency lists, so
+        mutations through either are shared.
         """
 
-        self.require_complete()
-        return BipartiteGraph._from_parts(
-            self._ne, self.badjlist, self.fadjlist
-        )
-
-    def copy(self) -> "BipartiteGraph":
-        """Return a deep copy of the graph."""
-
-        badj = self.badjlist
-        if not isinstance(badj, int):
-            badj = [list(row) for row in badj]
-        return BipartiteGraph._from_parts(
-            [self._ne[0]],
-            [list(row) for row in self.fadjlist],
-            badj,
-        )
+        return BipartiteGraph._from_parts(self.badjlist, self.fadjlist)
 
     def s_neighbors(self, i: int) -> List[int]:
         """Return the destinations adjacent to source ``i``."""
@@ -186,7 +148,6 @@ class BipartiteGraph:
     def d_neighbors(self, j: int) -> List[int]:
         """Return the sources adjacent to destination ``j``."""
 
-        self.require_complete()
         return self.badjlist[j]
 
     def has_edge(self, i: int, j: int) -> bool:
@@ -207,7 +168,6 @@ class BipartiteGraph:
         if idx < len(lst) and lst[idx] == j:
             return False
         lst.insert(idx, j)
-        self._ne[0] += 1
         if not isinstance(self.badjlist, int):
             insort(self.badjlist[j], i)
         return True
@@ -220,7 +180,6 @@ class BipartiteGraph:
         if idx >= len(lst) or lst[idx] != j:
             raise ValueError(f"graph does not have edge {i} -> {j}")
         del lst[idx]
-        self._ne[0] -= 1
         if not isinstance(self.badjlist, int):
             blst = self.badjlist[j]
             bidx = bisect_left(blst, i)
@@ -246,7 +205,6 @@ class BipartiteGraph:
 
         new_sorted = sorted(set(new_neighbors))
         old_neighbors = self.fadjlist[i]
-        self._ne[0] += len(new_sorted) - len(old_neighbors)
         if not isinstance(self.badjlist, int):
             for n in old_neighbors:
                 blst = self.badjlist[n]
@@ -259,13 +217,6 @@ class BipartiteGraph:
                 if not (idx < len(blst) and blst[idx] == i):
                     blst.insert(idx, i)
         old_neighbors[:] = new_sorted
-
-    def edges(self) -> Iterator[tuple]:
-        """Iterate over ``(src, dst)`` edges, ordered by source."""
-
-        for s, dsts in enumerate(self.fadjlist):
-            for d in dsts:
-                yield (s, d)
 
 
 class Matching:
@@ -313,10 +264,6 @@ class Matching:
                 if isinstance(iv, int):
                     self.match[iv] = UNASSIGNED
             if isinstance(oldv, int):
-                if self.inv_match[oldv] != i:
-                    raise AssertionError(
-                        "matching inverse invariant violated"
-                    )
                 self.inv_match[oldv] = UNASSIGNED
             if isinstance(v, int):
                 while len(self.inv_match) < v + 1:
@@ -325,13 +272,9 @@ class Matching:
         self.match[i] = v
 
     def push(self, v: MatchEntry) -> None:
-        """Append a destination entry matched to ``v``."""
+        """Append a destination entry holding the non-index ``v``."""
 
         self.match.append(v)
-        if isinstance(v, int) and self.inv_match is not None:
-            while len(self.inv_match) < v + 1:
-                self.inv_match.append(UNASSIGNED)
-            self.inv_match[v] = len(self.match) - 1
 
     def copy(self) -> "Matching":
         """Return a copy sharing no mutable state."""
@@ -362,22 +305,12 @@ class Matching:
                 inv_match[entry] = i
         return Matching(list(self.match), inv_match)
 
-    def require_complete(self) -> None:
-        """Raise unless the inverse matching is stored."""
-
-        if self.inv_match is None:
-            raise ValueError(
-                "Backwards matching not defined. `complete` the "
-                "matching first."
-            )
-
     def invview(self) -> "Matching":
         """Return a view with forward and inverse entries swapped.
 
         The view aliases this matching's storage.
         """
 
-        self.require_complete()
         return Matching(self.inv_match, self.match)
 
 
@@ -427,8 +360,6 @@ def construct_augmenting_path(
                 continue
             dcolor[vdst] = True
             matched_src = matching[vdst]
-            if not isinstance(matched_src, int):
-                continue
             if scolor is not None:
                 scolor[matched_src] = True
             # Phase 1 for the child: unassigned destination?
@@ -469,21 +400,18 @@ def _always_true(_x: int) -> bool:
 
 def maximal_matching(
     graph: BipartiteGraph,
-    srcfilter: Callable[[int], bool] = _always_true,
     dstfilter: Callable[[int], bool] = _always_true,
 ) -> Matching:
     """Construct a maximal matching of destinations to sources.
 
-    Vertices rejected by ``srcfilter``/``dstfilter`` do not
-    participate. The matching has ``max(nsrcs, ndsts)`` entries,
-    mirroring the Julia implementation.
+    Destinations rejected by ``dstfilter`` do not participate. The
+    matching has ``max(nsrcs, ndsts)`` entries, mirroring the Julia
+    implementation.
     """
 
     matching = Matching(max(graph.nsrcs(), graph.ndsts()))
     dcolor = [False] * graph.ndsts()
     for vsrc in range(graph.nsrcs()):
-        if not srcfilter(vsrc):
-            continue
         for i in range(len(dcolor)):
             dcolor[i] = False
         construct_augmenting_path(matching, graph, vsrc, dstfilter, dcolor)

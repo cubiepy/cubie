@@ -171,7 +171,6 @@ def try_assign_eq(ict: IncrementalCycleTracker, vj: int, eq: int) -> bool:
 
     def assign(g: DiCMOBiGraphT) -> None:
         g.matching[vj] = eq
-        g.ne += len(g.graph.s_neighbors(eq)) - 1
 
     return ict.add_edge_checked(
         assign,
@@ -301,9 +300,8 @@ def tear_graph_block_modia(
 def build_var_eq_matching(
     graph: BipartiteGraph,
     varfilter: Callable[[int], bool],
-    eqfilter: Callable[[int], bool],
 ) -> Tuple[Matching, int]:
-    """Maximal matching of filtered variables to filtered equations.
+    """Maximal matching of filtered variables to equations.
 
     Returns
     -------
@@ -311,7 +309,7 @@ def build_var_eq_matching(
         The completed matching and its length.
     """
 
-    var_eq_matching = maximal_matching(graph, eqfilter, varfilter)
+    var_eq_matching = maximal_matching(graph, varfilter)
     matching_len = max(
         len(var_eq_matching),
         max(
@@ -333,19 +331,15 @@ class ModiaTearing:
         solved for differentiated variables.
     varfilter
         Predicate selecting the variables that may be solved for.
-    eqfilter
-        Predicate selecting the equations that may be matched.
     """
 
     def __init__(
         self,
         isder: Optional[Callable[[int], bool]] = None,
         varfilter: Callable[[int], bool] = _always_true,
-        eqfilter: Callable[[int], bool] = _always_true,
     ) -> None:
         self.isder = isder
         self.varfilter = varfilter
-        self.eqfilter = eqfilter
 
     def __call__(
         self, graph: BipartiteGraph, solvable_graph: BipartiteGraph
@@ -361,7 +355,7 @@ class ModiaTearing:
         isder = self.isder
         varfilter = self.varfilter
         var_eq_matching, matching_len = build_var_eq_matching(
-            graph, varfilter, self.eqfilter
+            graph, varfilter
         )
         full_var_eq_matching = var_eq_matching.copy()
         var_sccs = find_var_sccs(graph, var_eq_matching)
@@ -390,7 +384,6 @@ class ModiaTearing:
             # Keep the block's assignments when free equations may
             # close loops through it.
             if not is_overdetermined:
-                vargraph.ne = 0
                 for var in scc:
                     vargraph.matching[var] = UNASSIGNED
             ieqs = []

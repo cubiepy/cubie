@@ -38,6 +38,14 @@ def syms(names):
     return tuple(ir.sym(name) for name in names.split())
 
 
+def edge_set(graph):
+    return {
+        (e, v)
+        for e in range(graph.nsrcs())
+        for v in graph.s_neighbors(e)
+    }
+
+
 def make_state(eqs, unknowns, knowns=(), priorities=None,
                irreducibles=None):
     names = {s.name for s in unknowns} | {s.name for s in knowns}
@@ -114,8 +122,8 @@ class TestIndexCompaction:
         old_present = list(state.always_present)
         old_eqs = list(state.eqs)
         old_original = list(state.original_eqs)
-        old_edges = set(s.graph.edges())
-        old_solvable = set(s.solvable_graph.edges())
+        old_edges = edge_set(s.graph)
+        old_solvable = edge_set(s.solvable_graph)
         old_diff = list(s.var_to_diff.edges())
 
         rm_var = state.var2idx[w]
@@ -160,7 +168,7 @@ class TestIndexCompaction:
                 for e, v in edges
                 if old_to_new_eq[e] >= 0 and old_to_new_var[v] >= 0
             }
-            assert set(graph.edges()) == expected
+            assert edge_set(graph) == expected
             assert graph.nsrcs() == len(kept_eqs)
             assert graph.ndsts() == len(kept_vars)
             for v in range(graph.ndsts()):
