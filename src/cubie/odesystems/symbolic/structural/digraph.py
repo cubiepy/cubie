@@ -48,7 +48,8 @@ Published Functions
     :class:`DiCMOBiGraphF`.
 """
 
-from typing import Callable, Iterable, Iterator, List, Optional
+from typing import Callable, Dict, Hashable, Iterable, Iterator, List
+from typing import Optional, Sequence
 
 from cubie.odesystems.symbolic.engine.assignments import dfs_order
 from cubie.odesystems.symbolic.structural.bipartite import (
@@ -220,6 +221,24 @@ def tarjan_scc(
     return sccs
 
 
+def _dependencies_first(
+    nodes: Sequence[Hashable],
+    dependencies: Dict[Hashable, List[Hashable]],
+) -> List[Hashable]:
+    """Order ``nodes`` with each after its ``dependencies``.
+
+    The roots (nodes nothing depends on) are visited in ``nodes``
+    order by the engine's depth-first
+    :func:`~cubie.odesystems.symbolic.engine.assignments.dfs_order`.
+    """
+
+    consumers = {}
+    for node in nodes:
+        for dependency in dependencies[node]:
+            consumers.setdefault(dependency, []).append(node)
+    return dfs_order(nodes, dependencies, consumers)
+
+
 def find_var_sccs(
     graph: BipartiteGraph, assign: Optional[Matching] = None
 ) -> List[List[int]]:
@@ -248,24 +267,22 @@ def find_var_sccs(
     cmog = DiCMOBiGraphT(graph, matching)
     sccs = tarjan_scc(cmog.nv(), cmog.outneighbors)
 
-    n_scc = len(sccs)
     assignment = [0] * cmog.nv()
     for i, component in enumerate(sccs):
         for v in component:
             assignment[v] = i
-    dependents = [set() for _ in range(n_scc)]
-    for i, component in enumerate(sccs):
-        for v in component:
-            for w in cmog.outneighbors(v):
-                j = assignment[w]
-                if j != i:
-                    dependents[i].add(j)
-    consumers = {i: sorted(dependents[i]) for i in range(n_scc)}
-    dep_map = {j: [] for j in range(n_scc)}
-    for i in range(n_scc):
-        for j in consumers[i]:
-            dep_map[j].append(i)
-    order = dfs_order(range(n_scc), dep_map, consumers)
+    dependencies = {
+        i: sorted(
+            {
+                assignment[u]
+                for v in component
+                for u in cmog.inneighbors(v)
+            }
+            - {i}
+        )
+        for i, component in enumerate(sccs)
+    }
+    order = _dependencies_first(range(len(sccs)), dependencies)
     return [sorted(sccs[i]) for i in order]
 
 
@@ -294,15 +311,11 @@ def toposort_equations(
     """
 
     eq_set = set(eqs)
-    dep_map = {
+    dependencies = {
         e: sorted({e2 for e2 in dig.outneighbors(e) if e2 in eq_set})
         for e in eqs
     }
-    consumers = {e: [] for e in eqs}
-    for e in eqs:
-        for e2 in dep_map[e]:
-            consumers[e2].append(e)
-    return dfs_order(eqs, dep_map, consumers)
+    return _dependencies_first(eqs, dependencies)
 
 
 class _TransactionalList:
