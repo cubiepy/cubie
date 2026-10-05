@@ -495,6 +495,33 @@ class TestExplicitSystems:
         assert dict(result.observed)[x] is y
         assert sp.simplify(to_sympy(result.dxdt[y] + 3 * y)) == 0
 
+    def test_derivative_priority_reaches_base(self):
+        x, y = syms("x y")
+        registry = DerivativeRegistry({"x", "y", "t"})
+        dx = registry.derivative(x)
+        dy = registry.derivative(y)
+        # The priority set on dx outranks y's and carries down to x,
+        # so x survives the alias.
+        state = StructuralState(
+            [
+                Equation(dx, -3 * x),
+                Equation(dy, -3 * y),
+                Equation(ir.ZERO, x - y),
+            ],
+            [x, y],
+            registry,
+            set(),
+            T,
+            state_priorities={dx: 10, y: 5},
+        )
+        priorities = state.structure.state_priorities
+        assert priorities[state.var2idx[x]] == 10
+        assert priorities[state.var2idx[dx]] == 10
+        result = structural_simplify(state)
+        assert result.states == [x]
+        assert dict(result.observed)[y] is x
+        assert sp.simplify(to_sympy(result.dxdt[x] + 3 * x)) == 0
+
     def test_irreducible_not_eliminated(self):
         x, y, k = syms("x y k")
         registry = DerivativeRegistry({"x", "y", "k", "t"})

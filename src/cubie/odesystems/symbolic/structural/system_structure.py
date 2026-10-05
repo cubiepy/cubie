@@ -11,6 +11,8 @@ and the equation order) from ``TearingState`` in the same file;
 ``StructuralState.var_derivative`` and ``StructuralState.eq_derivative``
 from ``src/structural_transformation/symbolics_tearing.jl``
 (``var_derivative!``, ``eq_derivative!``);
+``StructuralState._build_state_priorities`` from the
+``state_priority`` closure of ``dummy_derivative`` in the same file;
 ``StructuralState.find_eq_solvables`` with
 ``StructuralState.division_permitted``,
 ``StructuralState.find_solvables``,
@@ -228,7 +230,7 @@ class SystemStructure:
         eq_to_diff: DiffGraph,
         graph: BipartiteGraph,
         solvable_graph: Optional[BipartiteGraph],
-        state_priorities: List[int],
+        state_priorities: List[float],
         canonical_ranks: List[int],
     ) -> None:
         self.var_to_diff = var_to_diff
@@ -331,7 +333,7 @@ class StructuralState:
         known_symbols: Iterable[ir.Sym],
         time_symbol: ir.Sym,
         known_derivative_map: Optional[Dict[ir.Sym, ir.Expr]] = None,
-        state_priorities: Optional[Dict[ir.Sym, int]] = None,
+        state_priorities: Optional[Dict[ir.Sym, float]] = None,
         irreducibles: Optional[Iterable[ir.Sym]] = None,
         sort_eqs: bool = True,
     ) -> None:
@@ -445,27 +447,28 @@ class StructuralState:
 
     def _build_state_priorities(
         self,
-        priority_map: Dict[ir.Sym, int],
+        priority_map: Dict[ir.Sym, float],
         var_to_diff: DiffGraph,
-    ) -> List[int]:
-        priorities = [
-            int(round(priority_map.get(v, 0))) for v in self.fullvars
-        ]
-        # Propagate up derivative chains: each variable's priority is
-        # the running maximum from the lowest-order variable upward.
+    ) -> List[float]:
+        """Give each variable the priority of its derivative chain.
+
+        A chain's priority is the largest user priority of any of its
+        members, and never less than zero.
+        """
+
+        priorities = [0.0] * len(self.fullvars)
         var_to_diff.complete()
         for i in range(len(self.fullvars)):
             if var_to_diff.diff_to_primal[i] is not None:
                 continue
-            p = priorities[i]
-            var = i
-            while True:
-                p = max(p, priorities[var])
+            chain = [i]
+            while var_to_diff[chain[-1]] is not None:
+                chain.append(var_to_diff[chain[-1]])
+            p = 0.0
+            for var in chain:
+                p = max(p, float(priority_map.get(self.fullvars[var], 0)))
+            for var in chain:
                 priorities[var] = p
-                nxt = var_to_diff[var]
-                if nxt is None:
-                    break
-                var = nxt
         return priorities
 
     # -- Transformation-state interface ------------------------------
