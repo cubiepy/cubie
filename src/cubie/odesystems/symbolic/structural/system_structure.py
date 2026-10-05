@@ -552,15 +552,7 @@ class StructuralState:
             return True
         if not allow_parameter:
             return isinstance(denom, ir.Num)
-        # Parameter-only denominators allowed; anything containing an
-        # unknown is rejected.
-        for v in ir.free_atoms(denom):
-            if v in self.var2idx:
-                return False
-            base, _ = self.registry.base_and_order(v)
-            if base in self.var2idx:
-                return False
-        return True
+        return not any(v in self.var2idx for v in ir.free_atoms(denom))
 
     def find_eq_solvables(
         self,
