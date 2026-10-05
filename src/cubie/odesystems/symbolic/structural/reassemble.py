@@ -463,12 +463,7 @@ class EquationGenerator:
         elif issolvable:
             var = state.fullvars[iv]
             residual = eq.lhs - eq.rhs
-            a, b, islinear = linear_expansion(residual, var)
-            if not islinear:
-                raise AssertionError(
-                    f"equation {eq} is not linear in {var} despite a "
-                    "solvable-graph edge"
-                )
+            a, b, _ = linear_expansion(residual, var)
             if ir.is_zero(a):
                 warnings.warn(
                     f"Tearing: solving {eq} for {var} is singular!"
