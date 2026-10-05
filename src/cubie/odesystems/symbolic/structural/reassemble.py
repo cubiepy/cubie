@@ -423,9 +423,7 @@ class EquationGenerator:
     def is_dervar(self, iv: int) -> bool:
         return self.state.structure.isdervar(iv)
 
-    def codegen_equation(
-        self, eq: Equation, ieq: int, iv, simplify: bool = False
-    ) -> None:
+    def codegen_equation(self, eq: Equation, ieq: int, iv) -> None:
         """Generate the output form of ``eq``.
 
         Solvable equations of derivative variables become
@@ -444,7 +442,7 @@ class EquationGenerator:
         isdervar = issolvable and self.is_dervar(iv)
         if issolvable and isdervar:
             var = state.fullvars[iv]
-            rhs = _solve_for(eq, var, simplify)
+            rhs = _solve_for(eq, var)
             rhs = fixpoint_sub(rhs, total_sub)
             neweq = Equation(var, rhs)
             # Any equation incident on `iv` will have it substituted:
@@ -466,7 +464,12 @@ class EquationGenerator:
             var = state.fullvars[iv]
             residual = eq.lhs - eq.rhs
             a, b, islinear = linear_expansion(residual, var)
-            if not islinear or ir.is_zero(a):
+            if not islinear:
+                raise AssertionError(
+                    f"equation {eq} is not linear in {var} despite a "
+                    "solvable-graph edge"
+                )
+            if ir.is_zero(a):
                 warnings.warn(
                     f"Tearing: solving {eq} for {var} is singular!"
                 )
@@ -483,7 +486,7 @@ class EquationGenerator:
             self.var_ordering.append(-1)
 
 
-def _solve_for(eq: Equation, var: ir.Sym, simplify: bool) -> ir.Expr:
+def _solve_for(eq: Equation, var: ir.Sym) -> ir.Expr:
     residual = eq.lhs - eq.rhs
     a, b, islinear = linear_expansion(residual, var)
     if not islinear or ir.is_zero(a):
@@ -548,7 +551,6 @@ def generate_system_equations(
     full_var_eq_matching: Matching,
     var_sccs: List[List[int]],
     extra_eqs_vars: Tuple[List[int], List[int]],
-    simplify: bool = False,
 ) -> Tuple[
     List[Equation], List[Equation], List[int], List[int], int, int
 ]:
@@ -577,7 +579,7 @@ def generate_system_equations(
         )
         if not isinstance(var, int):
             continue
-        gen.codegen_equation(neweqs[eq], eq, var, simplify)
+        gen.codegen_equation(neweqs[eq], eq, var)
 
     def ispresent(i: int) -> bool:
         if graph.d_neighbors(i):
@@ -607,7 +609,7 @@ def generate_system_equations(
                 if ieq < len(eq_var_matching.match)
                 else UNASSIGNED
             )
-            gen.codegen_equation(neweqs[ieq], ieq, iv, simplify)
+            gen.codegen_equation(neweqs[ieq], ieq, iv)
 
     for eq in extra_eqs:
         var = (
@@ -617,7 +619,7 @@ def generate_system_equations(
         )
         if isinstance(var, int):
             continue
-        gen.codegen_equation(neweqs[eq], eq, var, simplify)
+        gen.codegen_equation(neweqs[eq], eq, var)
 
     var_ordering = gen.var_ordering
     diff_vars = [v for v in var_ordering if v >= 0]
@@ -767,7 +769,6 @@ def default_reassemble(
     tearing_result: TearingResult,
     mm: Optional[SparseMatrixCLIL],
     fully_determined: bool = True,
-    simplify: bool = False,
     **_ignored,
 ) -> ReassembledSystem:
     """Reassemble the simplified system from a tearing result."""
@@ -815,7 +816,6 @@ def default_reassemble(
         full_var_eq_matching,
         var_sccs,
         extra_eqs_vars,
-        simplify=simplify,
     )
     reorder_vars(
         state,
