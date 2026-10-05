@@ -8,12 +8,12 @@ from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
+    bareiss,
     bareiss_update_virtual_colswap_clil,
     exactdiv,
-    nullspace_rank,
 )
-from cubie.odesystems.symbolic.structural.singularity_removal import (
-    do_bareiss,
+from cubie.odesystems.symbolic.structural.dummy_derivatives import (
+    _independent_columns,
 )
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
@@ -69,35 +69,21 @@ class TestClil:
         bareiss_update_virtual_colswap_clil(mm, 0, 0, 1, 1)
         assert mm.row_vals[1] == [5, 7]
 
-    def test_nullspace_rank(self):
-        col_order = []
-        rank = nullspace_rank(
-            [[1, 2, 3], [2, 4, 6], [0, 1, 1]], col_order
-        )
-        assert rank == 2
-        assert len(col_order) == 3
+    def test_independent_columns_dependent_row(self):
+        columns = _independent_columns([[1, 2, 3], [2, 4, 6], [0, 1, 1]])
+        assert columns == [0, 1]
 
-    def test_nullspace_rank_full(self):
-        assert nullspace_rank([[1, 0], [0, 1]]) == 2
-        assert nullspace_rank([[0, 0], [0, 0]]) == 0
+    def test_independent_columns_full_and_empty(self):
+        assert _independent_columns([[1, 0], [0, 1]]) == [0, 1]
+        assert _independent_columns([[0, 0], [0, 0]]) == []
 
-    def test_nullspace_rank_column_swap_order(self):
-        # A zero leading column forces a column swap; col_order's
-        # first `rank` entries are the pivot columns in elimination
-        # order, the remainder the free columns.
-        col_order = []
-        rank = nullspace_rank([[0, 2, 1], [0, 4, 3]], col_order)
-        assert rank == 2
-        assert col_order == [1, 2, 0]
-
-    def test_nullspace_rank_no_swap_identity_order(self):
-        col_order = []
-        rank = nullspace_rank(
-            [[1, 2, 3], [2, 4, 6], [0, 1, 1]], col_order
-        )
-        assert rank == 2
-        assert col_order[:2] == [0, 1]
-        assert sorted(col_order) == [0, 1, 2]
+    def test_independent_columns_skip_dependent_column(self):
+        # The zero leading column and the column dependent on the
+        # earlier ones are left out.
+        assert _independent_columns([[0, 2, 1, 3], [0, 4, 3, 7]]) == [
+            1,
+            2,
+        ]
 
 
 class TestBareissPivoting:
@@ -110,20 +96,13 @@ class TestBareissPivoting:
             [[1, 1, 1], [1, 1], [1]],
         )
         allowed = [True] * 6
-        _, _, rank3, pivots = do_bareiss(mm, None, allowed, allowed)
-        assert pivots == [5, 3, 0]
-        assert rank3 == 3
+        assert bareiss(mm, [allowed, allowed, None]) == [5, 3, 0]
 
     def test_pivot_stages_follow_masks(self):
         # Only column 1 may pivot in the first stage.
         mm = SparseMatrixCLIL(2, 2, [0, 1], [[0], [0, 1]], [[1], [1, 1]])
-        mold = mm.copy()
-        rank1, rank2, rank3, pivots = do_bareiss(
-            mm, mold, [False, True], [True, False]
-        )
-        assert pivots == [1, 0]
-        assert (rank1, rank2, rank3) == (1, 2, 2)
-        assert mold.nzrows == mm.nzrows == [1, 0]
+        assert bareiss(mm, [[False, True], [True, False], None]) == [1, 0]
+        assert mm.nzrows == [1, 0]
 
 
 class TestLinearExpansion:
