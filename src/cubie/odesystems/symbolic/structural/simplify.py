@@ -54,11 +54,7 @@ from cubie.odesystems.symbolic.structural.dummy_derivatives import (
     _tear_with_dummies,
     dummy_derivative_graph,
 )
-from cubie.odesystems.symbolic.structural.errors import (
-    ExtraEquationsSystemError,
-    ExtraVariablesSystemError,
-    InvalidSystemError,
-)
+from cubie.odesystems.symbolic.structural.errors import raise_unmatched
 from cubie.odesystems.symbolic.structural.pantelides import pantelides
 from cubie.odesystems.symbolic.structural.reassemble import (
     ReassembledSystem,
@@ -209,42 +205,33 @@ def _check_algebraic_block(
     matching = maximal_matching(graph)
     matched_rows = {r for r in matching if isinstance(r, int)}
     extra_rows = [
-        residual
+        f"0 ~ {residual}"
         for i, residual in enumerate(residuals)
         if i not in matched_rows
     ]
     extra_states = [
-        s
+        str(s)
         for i, s in enumerate(algebraic_states)
         if not isinstance(matching[i], int)
     ]
-    rows_text = (
-        f"{len(extra_rows)} residual equations determine no "
-        "algebraic state"
-    )
-    states_text = (
-        f"{len(extra_states)} algebraic states have no residual "
-        "equation"
-    )
-    rows_list = "\n".join(f"0 = {r}" for r in extra_rows)
-    states_list = "\n".join(str(s) for s in extra_states)
-    if extra_rows and extra_states:
-        raise InvalidSystemError(
-            "The algebraic equations are structurally singular: "
-            f"{rows_text} and {states_text}.\n"
-            f"Residual equation(s):\n{rows_list}\n"
-            f"Algebraic state(s):\n{states_list}"
-        )
+    counts = []
     if extra_rows:
-        raise ExtraEquationsSystemError(
-            f"{rows_text}; each algebraic state takes one residual "
-            f"row. Extra residual equation(s):\n{rows_list}"
+        counts.append(
+            f"{len(extra_rows)} residual equations determine no "
+            "algebraic state"
         )
     if extra_states:
-        raise ExtraVariablesSystemError(
-            f"{states_text} to determine them. Extra algebraic "
-            f"state(s):\n{states_list}"
+        counts.append(
+            f"{len(extra_states)} algebraic states have no residual "
+            "equation"
         )
+    raise_unmatched(
+        "The algebraic equations do not pair one to one: "
+        + " and ".join(counts)
+        + ".",
+        extra_rows,
+        extra_states,
+    )
 
 
 def _reached_states(
