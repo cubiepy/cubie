@@ -115,9 +115,7 @@ class TestBareissPivoting:
         assert rank3 == 3
 
     def test_pivot_stages_follow_masks(self):
-        # Column 0 is not linear, so the single-entry row cannot
-        # pivot in the first stage; the two-entry row pivots on
-        # column 1 and the remaining row waits for the second stage.
+        # Only column 1 may pivot in the first stage.
         mm = SparseMatrixCLIL(2, 2, [0, 1], [[0], [0, 1]], [[1], [1, 1]])
         mold = mm.copy()
         rank1, rank2, rank3, pivots = do_bareiss(
