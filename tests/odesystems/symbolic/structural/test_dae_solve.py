@@ -98,8 +98,9 @@ RING_SOLVE_COMMON = {
     "step_controller": "fixed",
     "dt": 1e-7,
     "save_every": 1e-6,
-    "output_types": ["state", "time"],
-    "saved_state_indices": list(range(14)),
+    "output_types": ["state", "observables", "time"],
+    "saved_state_indices": None,
+    "saved_observable_indices": None,
     "preconditioner_order": 0,
     **UNSET_LINEAR_SOLVE,
 }
@@ -209,19 +210,28 @@ def test_plain_system_keeps_default_linear_solve(solver):
     assert cap == math.ceil(1.5 * width)
 
 
-def _ring_constraint_residuals(values):
+def _ring_diode_voltages(values):
+    """Return UD1..UD4 from the saved states and observables.
+
+    The four diode voltages sum to zero by definition, so the one
+    the reduced system does not carry follows from the other three.
+    """
+    voltages = [values.get(f"UD{k}") for k in range(1, 5)]
+    missing = [k for k, voltage in enumerate(voltages) if voltage is None]
+    assert len(missing) <= 1
+    for k in missing:
+        voltages[k] = -sum(v for v in voltages if v is not None)
+    return voltages
+
+
+def _ring_constraint_residuals(values, voltages):
     """Evaluate the four diode constraints from named final values."""
 
     gamma = 40.67286402e-9
     delta = 17.7493332
-    ud4 = -(values["UD1"] + values["UD2"] + values["UD3"])
-    charges = [
-        gamma * (np.exp(delta * ud) - 1.0)
-        for ud in (values["UD1"], values["UD2"], values["UD3"], ud4)
-    ]
-    i3 = -(values["I4"] + values["I5"] + values["I6"])
+    charges = [gamma * (np.exp(delta * ud) - 1.0) for ud in voltages]
     return (
-        i3 - charges[0] + charges[3],
+        values["I3"] - charges[0] + charges[3],
         -values["I4"] + charges[1] - charges[2],
         values["I5"] + charges[0] - charges[2],
         -values["I6"] - charges[1] + charges[3],
@@ -238,12 +248,14 @@ def _solve_ring(solver, system):
     trajectory = result.time_domain_array
     assert np.isfinite(trajectory).all()
     finals = {
-        name: float(trajectory[-1, legend[name], 0])
-        for name in ("I4", "I5", "I6", "UD1", "UD2", "UD3")
+        name: float(trajectory[-1, index, 0])
+        for name, index in legend.items()
+        if name != "time"
     }
+    voltages = _ring_diode_voltages(finals)
     # A flat trajectory would satisfy the constraints trivially.
-    assert max(abs(finals[k]) for k in ("UD1", "UD2", "UD3")) > 0.1
-    for residual in _ring_constraint_residuals(finals):
+    assert max(abs(voltage) for voltage in voltages) > 0.1
+    for residual in _ring_constraint_residuals(finals, voltages):
         assert residual == pytest.approx(0.0, abs=1e-5)
 
 
@@ -538,7 +550,12 @@ TRANSAMP_REFERENCE = {
 
 
 def _transamp_consistent_derivatives():
-    """Solve y'(0) from the differentiated node constraints."""
+    """Solve y'(0) from the differentiated node constraints.
+
+    Returns every node's rate keyed by its derivative-state name. At
+    the DC point the right-hand sides of the y1, y4 and y7 rows
+    vanish, so each coupled pair shares one rate.
+    """
     k = TRANSAMP_CONSTANTS
     y = TRANSAMP_DC_STATES
     drive_rate = 0.1 * 628.3185307179587
@@ -572,6 +589,11 @@ def _transamp_consistent_derivatives():
         + k["alfa"] * g56 * (rates["y5_t"] - dy6)
         + v / k["r9"]
     )
+    rates["y1_t"] = rates["y2_t"]
+    rates["y3_t"] = dy3
+    rates["y4_t"] = rates["y5_t"]
+    rates["y6_t"] = dy6
+    rates["y8_t"] = rates["y7_t"]
     return rates
 
 
@@ -786,10 +808,7 @@ def test_diode_line_stacked_prefactored_lu_matches_dense(
     "solver_settings_override", [TRANSAMP_RADAU_ADAPTIVE], indirect=True
 )
 def test_transistor_amplifier_init_and_reference(solver, system):
-    """Consistent derivative states at t0 and the reference at 0.2."""
-    assert system.mass_diagonal_flags == (
-        True, False, True, True, False, True, False, True
-    )
+    """Consistent algebraic states at t0 and the reference at 0.2."""
     initialiser = solver.kernel.single_integrator._dae_initialiser
     assert initialiser.dae_initialisation == "brown"
     assert solver.kernel.single_integrator._step_controller.is_adaptive
@@ -800,23 +819,19 @@ def test_transistor_amplifier_init_and_reference(solver, system):
     assert np.isfinite(trajectory).all()
     assert set(system.initial_values.values_dict) <= set(legend)
     assert {"y1", "y4", "y7"} <= set(legend)
-    expected = _transamp_consistent_derivatives()
-    algebraic = {
-        name
-        for name, flag in zip(
-            system.initial_values.values_dict, system.mass_diagonal_flags
-        )
-        if not flag
+    initial_values = system.initial_values.values_dict
+    differential = dict(zip(initial_values, system.mass_diagonal_flags))
+    assert not all(differential.values())
+    consistent = {
+        **TRANSAMP_DC_STATES,
+        **_transamp_consistent_derivatives(),
     }
-    assert set(expected) == algebraic
-    for name, value in expected.items():
-        assert float(trajectory[0, legend[name], 0]) == pytest.approx(
-            value, rel=1e-4
-        )
-    for name in ("y2", "y3", "y5", "y6", "y8"):
-        assert float(trajectory[0, legend[name], 0]) == (
-            TRANSAMP_DC_STATES[name]
-        )
+    for name, is_differential in differential.items():
+        start = float(trajectory[0, legend[name], 0])
+        if is_differential:
+            assert start == initial_values[name]
+        else:
+            assert start == pytest.approx(consistent[name], rel=1e-4)
     for name, value in TRANSAMP_REFERENCE.items():
         assert float(trajectory[-1, legend[name], 0]) == pytest.approx(
             value, abs=2e-3
