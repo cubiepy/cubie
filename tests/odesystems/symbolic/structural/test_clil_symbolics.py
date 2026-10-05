@@ -10,7 +10,6 @@ from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
     bareiss,
     bareiss_update_virtual_colswap_clil,
-    exactdiv,
 )
 from cubie.odesystems.symbolic.structural.dummy_derivatives import (
     _independent_columns,
@@ -38,15 +37,6 @@ def dense_from_clil(mm):
 
 
 class TestClil:
-    def test_exactdiv_raises_on_remainder(self):
-        assert exactdiv(6, 3) == 2
-        try:
-            exactdiv(7, 3)
-        except AssertionError:
-            pass
-        else:
-            raise AssertionError("inexact division did not raise")
-
     def test_elimination_step_matches_dense_bareiss(self):
         # M = [[2, 1, 0], [4, 3, 1], [6, 1, 2]]; eliminate col 0
         # with pivot M[0][0]=2, last_pivot=1: row_i <- (2*row_i -

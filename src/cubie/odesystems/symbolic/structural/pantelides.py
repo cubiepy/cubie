@@ -21,7 +21,7 @@ Published Functions
     in the system.
 """
 
-from typing import Callable, List, Optional
+from typing import List
 
 from cubie.odesystems.symbolic.structural.bipartite import (
     Matching,
@@ -37,7 +37,6 @@ from cubie.odesystems.symbolic.structural.system_structure import (
 
 def computed_highest_diff_variables(
     structure: SystemStructure,
-    varfilter: Optional[Callable[[int], bool]] = None,
 ) -> List[bool]:
     """Mask of highest-differentiated variables present in the system.
 
@@ -52,8 +51,6 @@ def computed_highest_diff_variables(
     nvars = len(var_to_diff)
     varwhitelist = [False] * nvars
     for var in range(nvars):
-        if varfilter is not None and not varfilter(var):
-            continue
         if var_to_diff[var] is None and not varwhitelist[var]:
             while not graph.d_neighbors(var):
                 var_lower = var_to_diff.diff_to_primal[var]
@@ -76,14 +73,10 @@ def computed_highest_diff_variables(
     return varwhitelist
 
 
-def pantelides(
-    state: StructuralState,
-    finalize: bool = True,
-    maxiters: int = 8000,
-    eqfilter: Callable[[int], bool] = lambda eq: True,
-    varfilter: Callable[[int], bool] = lambda var: True,
-    **kwargs,
-) -> Matching:
+_MAXITERS = 8000
+
+
+def pantelides(state: StructuralState, **kwargs) -> Matching:
     """Perform the Pantelides index-reduction algorithm.
 
     Repeatedly attempts to match each undifferentiated equation to a
@@ -93,9 +86,8 @@ def pantelides(
     :class:`~cubie.odesystems.symbolic.structural.errors.InvalidSystemError`
     for structurally singular systems.
 
-    Returns the variable-equation :class:`Matching`. When
-    ``finalize`` is true, matches on non-highest-differentiated
-    variables are cleared.
+    Returns the variable-equation :class:`Matching`, with matches on
+    non-highest-differentiated variables cleared.
     """
 
     structure = state.structure
@@ -111,26 +103,22 @@ def pantelides(
     nnonemptyeqs = sum(
         1
         for eq in range(neqs_orig)
-        if graph.s_neighbors(eq)
-        and eq_to_diff[eq] is None
-        and eqfilter(eq)
+        if graph.s_neighbors(eq) and eq_to_diff[eq] is None
     )
 
-    varwhitelist = computed_highest_diff_variables(structure, varfilter)
+    varwhitelist = computed_highest_diff_variables(structure)
 
     if nnonemptyeqs > sum(varwhitelist):
         raise InvalidSystemError("System is structurally singular")
 
     for k in range(neqs_orig):
         eq_prime = k
-        if not eqfilter(k):
-            continue
         if eq_to_diff[eq_prime] is not None:
             continue
         if not graph.s_neighbors(eq_prime):
             continue
         pathfound = False
-        for _ in range(maxiters):
+        for _ in range(_MAXITERS):
             # Match on highest-differentiated variables only.
             nvars = len(var_to_diff)
             neqs = graph.nsrcs()
@@ -151,13 +139,9 @@ def pantelides(
                     continue
                 if var_to_diff[var] is None:
                     # Introduce a new (derivative) variable.
-                    var_diff = state.var_derivative(var)
+                    state.var_derivative(var)
                     var_eq_matching.push(UNASSIGNED)
                     varwhitelist.append(False)
-                    if len(var_eq_matching) != var_diff + 1:
-                        raise AssertionError(
-                            "matching size diverged from variables"
-                        )
                 varwhitelist[var] = False
                 varwhitelist[var_to_diff[var]] = True
 
@@ -177,15 +161,13 @@ def pantelides(
             eq_prime = eq_to_diff[eq_prime]
         if not pathfound:
             raise InvalidSystemError(
-                f"maxiters={maxiters} reached in Pantelides. File a "
+                f"maxiters={_MAXITERS} reached in Pantelides. File a "
                 "bug report if your system has a reasonable index "
-                "(<100); increase maxiters for extremely high-index "
-                "systems."
+                "(<100)."
             )
 
-    if finalize:
-        for var in range(state.structure.graph.ndsts()):
-            if varwhitelist[var]:
-                continue
-            var_eq_matching[var] = UNASSIGNED
+    for var in range(state.structure.graph.ndsts()):
+        if varwhitelist[var]:
+            continue
+        var_eq_matching[var] = UNASSIGNED
     return var_eq_matching

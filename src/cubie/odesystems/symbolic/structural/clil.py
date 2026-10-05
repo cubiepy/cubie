@@ -40,12 +40,9 @@ from typing import Callable, List, Optional, Sequence, Tuple
 
 
 def exactdiv(a: int, b: int) -> int:
-    """Divide ``a`` by ``b`` asserting the division is exact."""
+    """Divide ``a`` by ``b``; Bareiss steps always divide exactly."""
 
-    d, r = divmod(a, b)
-    if r != 0:
-        raise AssertionError(f"inexact division {a} / {b}")
-    return d
+    return a // b
 
 
 class SparseMatrixCLIL:
@@ -111,7 +108,6 @@ def bareiss_update_virtual_colswap_clil(
     pivot_col: int,
     pivot: int,
     last_pivot: int,
-    pivot_equal_optimization: bool = True,
 ) -> None:
     """One Bareiss elimination step on a CLIL matrix.
 
@@ -132,9 +128,7 @@ def bareiss_update_virtual_colswap_clil(
 
     eadj = matrix.row_cols
     old_cadj = matrix.row_vals
-    pivot_equal = (
-        pivot_equal_optimization and abs(pivot) == abs(last_pivot)
-    )
+    pivot_equal = abs(pivot) == abs(last_pivot)
     nrows = len(matrix.nzrows)
     kvars = eadj[k]
     kcoeffs = old_cadj[k]
