@@ -131,7 +131,7 @@ def dummy_derivative_graph(
         state.structure.graph.nsrcs()
     )
     return _dummy_derivative_graph(
-        state, var_eq_matching, jac, state_priority
+        state, var_eq_matching, jac, state_priority, **kwargs
     )
 
 
@@ -140,6 +140,7 @@ def _dummy_derivative_graph(
     var_eq_matching: Matching,
     jac: Optional[Callable],
     state_priority: Optional[Callable[[int], float]],
+    **kwargs,
 ) -> TearingResult:
     structure = state.structure
     eq_to_diff = structure.eq_to_diff
@@ -267,17 +268,19 @@ def _dummy_derivative_graph(
             f"({n_diff_eqs})."
         )
 
-    return _tear_with_dummies(state, set(dummy_derivatives))
+    return _tear_with_dummies(state, set(dummy_derivatives), **kwargs)
 
 
 def _tear_with_dummies(
     state: StructuralState,
     dummy_derivatives: set,
+    **kwargs,
 ) -> TearingResult:
     """Tear after dummy-derivative selection.
 
     Integer-linear SCCs are first reduced to explicit solve sequences
-    by :func:`match_linear_sccs`; Modia tearing then tears the rest.
+    by :func:`match_linear_sccs` under the solvability options
+    ``kwargs``; Modia tearing then tears the rest.
     """
 
     structure = state.structure
@@ -297,7 +300,7 @@ def _tear_with_dummies(
         return can_eliminate[v]
 
     # Not ported: exact matching runs before Modia tearing.
-    match_linear_sccs(state, isder, varfilter)
+    match_linear_sccs(state, isder, varfilter, **kwargs)
     modia_tearing = ModiaTearing(isder=isder, varfilter=varfilter)
     tearing_result = modia_tearing(
         structure.graph, structure.solvable_graph

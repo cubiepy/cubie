@@ -490,7 +490,7 @@ class StructuralState:
         conservative: bool = False,
         **_ignored,
     ) -> Tuple[bool, ir.Expr]:
-        """Populate the solvable graph for equation ``ieq``.
+        """Recompute the solvable edges of equation ``ieq``.
 
         Parameters
         ----------
@@ -528,6 +528,7 @@ class StructuralState:
         s = self.structure
         graph = s.graph
         solvable_graph = s.solvable_graph
+        solvable_graph.set_neighbors(ieq, ())
         term = self.eqs[ieq].residual()
         all_int_vars = True
 
@@ -570,17 +571,19 @@ class StructuralState:
         return all_int_vars, term
 
     def rewrite_from_row(
-        self, ieq: int, cols: List[int], vals: List[int]
+        self, ieq: int, cols: List[int], vals: List[int], **kwargs
     ) -> None:
         """Rewrite equation ``ieq`` as ``0 ~ sum(vals * variables)``.
 
-        The equation becomes incident on, and solvable for, ``cols``.
+        The equation becomes incident on ``cols`` and its solvable
+        edges are recomputed under the solvability options
+        ``kwargs`` of :meth:`find_eq_solvables`.
         """
 
         rhs = ir.add(*[c * self.fullvars[v] for c, v in zip(vals, cols)])
         self.eqs[ieq] = Equation(ir.ZERO, rhs)
         self.structure.graph.set_neighbors(ieq, cols)
-        self.structure.solvable_graph.set_neighbors(ieq, cols)
+        self.find_eq_solvables(ieq, **kwargs)
 
     def linear_subsys_adjmat(self, **kwargs) -> SparseMatrixCLIL:
         """Identify integer-coefficient homogeneous linear equations.

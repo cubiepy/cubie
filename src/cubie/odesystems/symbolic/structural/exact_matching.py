@@ -32,6 +32,7 @@ def match_linear_sccs(
     state: StructuralState,
     isder: Callable[[int], bool],
     varfilter: Callable[[int], bool],
+    **kwargs,
 ) -> None:
     """Reduce integer-linear SCCs to explicit solve sequences.
 
@@ -42,9 +43,11 @@ def match_linear_sccs(
     incidence. Its rows are reduced exactly over the SCC's variables.
     When the reduction reaches full rank, each equation is replaced
     by a reduced row that holds one SCC variable not held by any
-    later row, and the equations, ``state.mm`` rows, incidence graph
-    and solvable graph are rewritten to the reduced rows. A singular
-    SCC warns and is left unchanged.
+    later row; the equations, ``state.mm`` rows and incidence graph
+    are rewritten to the reduced rows, and the solvable edges of each
+    rewritten equation are recomputed with
+    :meth:`StructuralState.find_eq_solvables` under ``kwargs``. A
+    singular SCC warns and is left unchanged.
 
     Parameters
     ----------
@@ -55,6 +58,9 @@ def match_linear_sccs(
         as pivots before other variables.
     varfilter
         Predicate selecting the variables that may be solved for.
+    **kwargs
+        Solvability options of
+        :meth:`StructuralState.find_eq_solvables`.
     """
 
     graph = state.structure.graph
@@ -101,5 +107,5 @@ def match_linear_sccs(
             row = mm_rows[eq]
             mm.row_cols[row] = list(cols)
             mm.row_vals[row] = list(vals)
-            state.rewrite_from_row(eq, cols, vals)
+            state.rewrite_from_row(eq, cols, vals, **kwargs)
             state.original_eqs[eq] = state.eqs[eq]

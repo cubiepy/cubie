@@ -163,10 +163,13 @@ def _find_perfect_aliases(
     state: StructuralState,
     eqs_to_rm: List[int],
     vars_to_rm: List[int],
+    **kwargs,
 ) -> None:
     """Identify and rewrite perfect alias equations.
 
     Appends removable equations/variables to the given buffers.
+    Solvable edges of every rewritten equation are recomputed with
+    :meth:`StructuralState.find_eq_solvables` under ``kwargs``.
     """
 
     structure = state.structure
@@ -244,8 +247,6 @@ def _find_perfect_aliases(
                 for e in list(graph.d_neighbors(v)):
                     eqs_to_substitute.append(e)
                 graph.invview().set_neighbors(v, ())
-                if solvable_graph is not None:
-                    solvable_graph.invview().set_neighbors(v, ())
                 dv = var_to_diff[v]
                 while dv is not None:
                     vars_to_rm.append(dv)
@@ -253,8 +254,6 @@ def _find_perfect_aliases(
                     for e in list(graph.d_neighbors(dv)):
                         eqs_to_substitute.append(e)
                     graph.invview().set_neighbors(dv, ())
-                    if solvable_graph is not None:
-                        solvable_graph.invview().set_neighbors(dv, ())
                     dv = var_to_diff[dv]
             continue
 
@@ -281,12 +280,6 @@ def _find_perfect_aliases(
                 eqs_to_substitute.append(e)
                 graph.rem_edge(e, v)
                 graph.add_edge(e, target)
-                if (
-                    solvable_graph is not None
-                    and solvable_graph.has_edge(e, v)
-                ):
-                    solvable_graph.rem_edge(e, v)
-                    solvable_graph.add_edge(e, target)
 
             dv = var_to_diff[v]
             # One differentiation level below dtarget.
@@ -306,12 +299,6 @@ def _find_perfect_aliases(
                     eqs_to_substitute.append(e)
                     graph.rem_edge(e, dv)
                     graph.add_edge(e, dtarget)
-                    if (
-                        solvable_graph is not None
-                        and solvable_graph.has_edge(e, dv)
-                    ):
-                        solvable_graph.rem_edge(e, dv)
-                        solvable_graph.add_edge(e, dtarget)
                 dv = var_to_diff[dv]
                 prev_dtarget = dtarget
                 dtarget = var_to_diff[dtarget]
@@ -325,10 +312,9 @@ def _find_perfect_aliases(
             else:
                 v_pin = irrs.pop()
                 graph.set_neighbors(ieq, [v_pin])
-                if solvable_graph is not None:
-                    solvable_graph.set_neighbors(ieq, [v_pin])
                 eqs[ieq] = Equation(fullvars[v_pin], zero)
                 original_eqs[ieq] = Equation(fullvars[v_pin], zero)
+                eqs_to_substitute.append(ieq)
         else:
             target = group_target[parent[v1]]
             c1 = v1 if is_irreducible_v(v1) else target
@@ -347,13 +333,9 @@ def _find_perfect_aliases(
             if fullvars[v_idx] in new_vars
         ]
         graph.set_neighbors(e, new_row)
+        # Substitution can make a variable enter nonlinearly.
         if solvable_graph is not None:
-            new_row = [
-                v
-                for v in new_row
-                if solvable_graph.has_edge(e, v)
-            ]
-            solvable_graph.set_neighbors(e, new_row)
+            state.find_eq_solvables(e, **kwargs)
 
     # Remove duplicate structural aliases produced by redirection.
     seen = set()
@@ -372,9 +354,12 @@ def _find_perfect_aliases(
 
 
 def eliminate_perfect_aliases(
-    state: StructuralState,
+    state: StructuralState, **kwargs
 ) -> Tuple[List[int], List[int]]:
     """Remove perfect alias equations from ``state``.
+
+    ``kwargs`` are the solvability options of
+    :meth:`StructuralState.find_eq_solvables`.
 
     Returns ``(old_to_new_eq, old_to_new_var)``.
     """
@@ -382,7 +367,7 @@ def eliminate_perfect_aliases(
     state.structure.complete()
     eqs_to_rm = []
     vars_to_rm = []
-    _find_perfect_aliases(state, eqs_to_rm, vars_to_rm)
+    _find_perfect_aliases(state, eqs_to_rm, vars_to_rm, **kwargs)
     return state.rm_eqs_vars(eqs_to_rm, vars_to_rm)
 
 
@@ -493,7 +478,7 @@ def alias_elimination(
         if not rcol:
             eqs_to_rm.append(eq)
             continue
-        state.rewrite_from_row(eq, rcol, rval)
+        state.rewrite_from_row(eq, rcol, rval, **kwargs)
         rhs = eqs[eq].rhs
         oeq = original_eqs[eq]
         lhs = oeq.lhs
