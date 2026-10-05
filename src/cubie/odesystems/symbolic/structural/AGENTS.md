@@ -65,7 +65,9 @@ and `rm_eqs_vars` renumbers everything: use its `old_to_new` maps and rebuild `m
 ## Output contract
 `SimplifiedSystem.states` = differential states (BLT order) + torn algebraic states;
 `dxdt` maps differential states to explicit RHS; `residuals[i]` pairs with
-`algebraic_states[i]`; `mass_matrix` is `None` for fully torn systems, else the singular
+`algebraic_states[i]`, the torn variable reached from the residual's equation by
+alternating pre-tearing and tearing matches (`torn_partner`), so each residual row
+depends on its own state; `mass_matrix` is `None` for fully torn systems, else the singular
 diagonal as nested float lists. Observed assignments are topologically sorted. Balanced
 inputs always pair residuals with algebraic states; `fully_determined=False` outputs may
 not.
