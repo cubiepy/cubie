@@ -1,4 +1,5 @@
-"""Graph-layer tests: bipartite graphs, matchings, digraph views."""
+"""Graph-layer tests: bipartite graphs, matchings, digraph views,
+Modia tearing."""
 
 
 from cubie.odesystems.symbolic.structural.bipartite import (
@@ -18,6 +19,14 @@ from cubie.odesystems.symbolic.structural.digraph import (
     tarjan_scc,
     toposort_equations,
 )
+from cubie.odesystems.symbolic.structural.diffgraph import DiffGraph
+from cubie.odesystems.symbolic.structural.system_structure import (
+    SystemStructure,
+)
+from cubie.odesystems.symbolic.structural.tearing import (
+    ModiaTearing,
+    tear_equations,
+)
 
 
 def build_graph(nsrcs, ndsts, edges):
@@ -25,6 +34,23 @@ def build_graph(nsrcs, ndsts, edges):
     for e, v in edges:
         graph.add_edge(e, v)
     return graph
+
+
+def build_structure(nsrcs, ndsts, edges, solvable_edges):
+    return SystemStructure(
+        DiffGraph(ndsts, with_badj=True),
+        DiffGraph(nsrcs, with_badj=True),
+        build_graph(nsrcs, ndsts, edges),
+        build_graph(nsrcs, ndsts, solvable_edges),
+        [0] * ndsts,
+        list(range(ndsts)),
+    )
+
+
+def new_tracker(graph):
+    return IncrementalCycleTracker(
+        DiCMOBiGraphT(graph, Matching(graph.ndsts()))
+    )
 
 
 class TestBipartiteGraph:
@@ -240,3 +266,67 @@ class TestIncrementalCycleTracker:
         assert assign(1, 1)
         assert dig.matching[0] == 0
         assert dig.matching[1] == 1
+
+
+class TestModiaTearing:
+    def test_coupled_block_torn_acyclic(self):
+        # Three equations, each solvable for all three variables.
+        edges = [(e, v) for e in range(3) for v in range(3)]
+        structure = build_structure(3, 3, edges, edges)
+        result, _ = ModiaTearing()(structure)
+        matching = result.var_eq_matching
+        solved = [
+            (v, matching[v])
+            for v in range(3)
+            if isinstance(matching[v], int)
+        ]
+        for v, eq in solved:
+            assert structure.solvable_graph.has_edge(eq, v)
+        assert len({eq for _, eq in solved}) == len(solved)
+        dig = DiCMOBiGraphT(structure.graph, matching)
+        sccs = tarjan_scc(dig.nv(), dig.outneighbors)
+        assert all(len(scc) == 1 for scc in sccs)
+        assert 0 < len(solved) < 3
+
+    def test_sccs_follow_full_matching(self):
+        edges = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 1), (2, 2)]
+        structure = build_structure(3, 3, edges, edges)
+        result, _ = ModiaTearing()(structure)
+        assert result.var_sccs == find_var_sccs(
+            structure.graph, result.full_var_eq_matching
+        )
+
+    def test_single_solvable_equation_assigned_first(self):
+        # eq1 can only be solved for v0; eq0 for either variable.
+        graph = build_graph(2, 2, [(0, 0), (0, 1), (1, 0), (1, 1)])
+        solvable = build_graph(2, 2, [(0, 0), (0, 1), (1, 0)])
+        ict = new_tracker(graph)
+        tear_equations(ict, solvable.fadjlist, [0, 1], {0, 1}, None)
+        assert ict.graph.matching[0] == 1
+
+    def test_differentiated_variable_preferred(self):
+        graph = build_graph(1, 2, [(0, 0), (0, 1)])
+        ict = new_tracker(graph)
+        tear_equations(
+            ict, graph.fadjlist, [0], {0, 1}, lambda v: v == 1
+        )
+        assert ict.graph.matching[1] == 0
+        assert ict.graph.matching[0] is UNASSIGNED
+
+    def test_inactive_derivative_falls_back(self):
+        graph = build_graph(1, 2, [(0, 0), (0, 1)])
+        ict = new_tracker(graph)
+        tear_equations(ict, graph.fadjlist, [0], {0}, lambda v: v == 1)
+        assert ict.graph.matching[0] == 0
+
+    def test_free_equation_solves_torn_variable(self):
+        # eq0 and eq1 form a loop over v0, v1; eq2 is left free by
+        # the maximal matching and can be solved for v1.
+        edges = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 1)]
+        structure = build_structure(3, 2, edges, edges)
+        result, _ = ModiaTearing()(structure)
+        matching = result.var_eq_matching
+        assert all(isinstance(matching[v], int) for v in range(2))
+        assert matching[1] == 2
+        for v in range(2):
+            assert structure.solvable_graph.has_edge(matching[v], v)
