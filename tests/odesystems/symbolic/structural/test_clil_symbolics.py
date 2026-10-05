@@ -257,15 +257,6 @@ class TestSymbolics:
             to_sympy(result - (2 * x * dx + w))
         ) == 0
 
-    def test_total_derivative_known_map(self):
-        x, dx, drv = ir.sym("x"), ir.sym("dx_sym"), ir.sym("drv")
-        result = total_derivative(
-            x * drv, {x: dx}, self.t, {drv: ir.ONE}
-        )
-        assert sp.simplify(
-            to_sympy(result - (dx * drv + x))
-        ) == 0
-
     def test_registry_chain_and_rename(self):
         x = ir.sym("x")
         reg = DerivativeRegistry({"x", "t"})

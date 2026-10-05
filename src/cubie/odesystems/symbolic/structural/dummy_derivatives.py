@@ -140,8 +140,6 @@ def dummy_derivative_graph(
         likely to remain states.
     """
 
-    if state.structure.solvable_graph is None:
-        state.find_solvables(**kwargs)
     state.structure.complete()
     var_eq_matching = pantelides(state, **kwargs).complete(
         state.structure.graph.nsrcs()

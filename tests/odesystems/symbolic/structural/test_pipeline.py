@@ -38,6 +38,12 @@ def syms(names):
     return tuple(ir.sym(name) for name in names.split())
 
 
+def same_equations(left, right):
+    return len(left) == len(right) and all(
+        a.lhs is b.lhs and a.rhs is b.rhs for a, b in zip(left, right)
+    )
+
+
 def edge_set(graph):
     return {
         (e, v)
@@ -107,7 +113,7 @@ class TestIndexCompaction:
             {k},
             T,
         )
-        state.find_solvables()
+        state.linear_subsys_adjmat()
         s = state.structure
         s.complete()
         nvars = len(state.fullvars)
@@ -255,7 +261,7 @@ class TestVariableRanks:
     def test_new_derivative_takes_source_rank(self):
         _, states = self._states()
         state = states[0]
-        state.find_solvables()
+        state.linear_subsys_adjmat()
         state.structure.complete()
         ranks = state.structure.canonical_ranks
         y = state.var2idx[ir.sym("y")]
@@ -350,7 +356,7 @@ class TestCoefficientAdmission:
     @pytest.mark.parametrize("coefficient", [128, -128, 2.5])
     def test_coefficient_beyond_limit_stays_solvable(self, coefficient):
         state = self._state(coefficient)
-        state.find_solvables()
+        state.linear_subsys_adjmat()
         all_int_vars, _ = state.find_eq_solvables(0)
         assert all_int_vars is False
         assert state.structure.solvable_graph.s_neighbors(0) == sorted(
@@ -377,7 +383,7 @@ class TestCoefficientAdmission:
     def test_conservative_admits_unit_coefficients_only(self):
         x, y = syms("x y")
         state = self._state(2)
-        state.find_solvables(conservative=True)
+        state.linear_subsys_adjmat(conservative=True)
         all_int_vars, _ = state.find_eq_solvables(0, conservative=True)
         assert all_int_vars is False
         assert state.structure.solvable_graph.s_neighbors(0) == [
@@ -406,8 +412,9 @@ class TestTrivialTearing:
         assert set(state.fullvars) == {x, dx}
         assert [eq.lhs for eq in state.eqs] == [dx]
         assert len(state.additional_observed) == 2
-        assert Equation(y, y_rhs) in state.additional_observed
-        assert Equation(z, z_rhs) in state.additional_observed
+        observed = {eq.lhs: eq.rhs for eq in state.additional_observed}
+        assert observed[y] is y_rhs
+        assert observed[z] is z_rhs
         assert state.structure.graph.nsrcs() == len(state.eqs)
         assert state.structure.graph.ndsts() == len(state.fullvars)
 
@@ -742,7 +749,9 @@ class TestAliasEdgeCases:
         dy_index = var_to_diff[y_index]
         assert state.fullvars[dy_index] is dy
         assert state.fullvars[var_to_diff[dy_index]] is ddy
-        assert Equation(ddy, -y) in state.eqs
+        assert any(
+            same_equations([eq], [Equation(ddy, -y)]) for eq in state.eqs
+        )
 
     def test_second_order_alias_reduces_to_oscillator(self):
         y = ir.sym("y")
@@ -1156,7 +1165,7 @@ class TestSingularDerivativeBlocks:
             sp.simplify(to_sympy(constraint.rhs - expected)) == 0
             or sp.simplify(to_sympy(constraint.rhs + expected)) == 0
         )
-        assert state.eqs[1] == eqs[1]
+        assert same_equations([state.eqs[1]], [eqs[1]])
 
     def test_rejected_parameter_pivot_leaves_rows(self):
         x, y, p, q = syms("x y p q")
@@ -1167,7 +1176,7 @@ class TestSingularDerivativeBlocks:
         assert eliminate_singular_derivative_blocks(
             state, allow_parameter=False
         ) == []
-        assert state.eqs == eqs
+        assert same_equations(state.eqs, eqs)
 
     def test_independent_block_untouched(self):
         x, y = syms("x y")
@@ -1180,7 +1189,7 @@ class TestSingularDerivativeBlocks:
         state = StructuralState(eqs, registry, set(), T)
         before = list(state.eqs)
         assert eliminate_singular_derivative_blocks(state) == []
-        assert state.eqs == before
+        assert same_equations(state.eqs, before)
 
     def test_unknown_coefficient_excluded(self):
         x, y, w = syms("x y w")

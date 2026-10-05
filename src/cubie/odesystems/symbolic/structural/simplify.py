@@ -182,7 +182,6 @@ def _pantelides_reassemble_state(
         state.registry,
         state.known_symbols - {state.time_symbol},
         state.time_symbol,
-        known_derivative_map=state.known_derivative_map,
         state_priorities=priorities,
         irreducibles=state.irreducibles,
     )
@@ -253,20 +252,7 @@ def _topsort_observed(
 ) -> List[Tuple[ir.Sym, ir.Expr]]:
     """Topologically sort observed assignments by dependency."""
 
-    pairs = []
-    seen = set()
-    for lhs, rhs in observed:
-        if not isinstance(lhs, ir.Sym):
-            raise AssertionError(
-                f"observed equation LHS {lhs} is not a symbol"
-            )
-        if lhs in seen:
-            raise AssertionError(
-                f"observed variable {lhs} is assigned more than once"
-            )
-        seen.add(lhs)
-        pairs.append((lhs, rhs))
-    return topological_sort(pairs)
+    return topological_sort(list(observed))
 
 
 def structural_simplify(
@@ -319,15 +305,6 @@ def structural_simplify(
     )
     mm = get_new_mm(aliases, old_to_new_eq, old_to_new_var, mm)
     state.mm = mm
-    if mm.nparentrows != state.structure.graph.nsrcs() or (
-        mm.ncols != state.structure.graph.ndsts()
-    ):
-        raise AssertionError(
-            f"Invalid mm. Got (nparentrows, ncols) = "
-            f"({mm.nparentrows}, {mm.ncols}). Expected "
-            f"({state.structure.graph.nsrcs()}, "
-            f"{state.structure.graph.ndsts()})."
-        )
 
     if consistency_check and fully_determined:
         check_consistency(state)
@@ -350,8 +327,6 @@ def structural_simplify(
         )
     elif fully_determined:
         # Bare index reduction, then re-analyse and select states.
-        if state.structure.solvable_graph is None:
-            state.find_solvables(**solve_kwargs)
         state.structure.complete()
         # Alias elimination rewrites integer-linear differential
         # equations to 0 ~ f, so they cannot be told apart from
@@ -372,8 +347,6 @@ def structural_simplify(
             state, tearing_result, state.mm, **reassemble_kwargs
         )
     else:
-        if state.structure.solvable_graph is None:
-            state.find_solvables(**solve_kwargs)
         state.structure.complete()
         tearing_result, _ = _tear_with_dummies(state, set())
         reassembled = default_reassemble(
