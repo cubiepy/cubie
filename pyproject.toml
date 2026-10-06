@@ -112,6 +112,9 @@ omit = [
     "*/vendored/cudasim/*",
     # Compile-time backend patches; covered by upstream PRs.
     "*/backend/_mlir_compat.py",
+    # Backend compiler shims; exercised only through compiled kernels.
+    "*/backend/_typed_block_scheduler.py",
+    "*/backend/intrinsics.py",
 ]
 relative_files = true
 
