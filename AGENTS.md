@@ -14,6 +14,8 @@ the device-code optimisation conventions.
 ## Setup
 - `pip install -e .[dev-cuda13]` from the repo root (use a venv; some deps are
   version-pinned). `dev` uses a system CUDA toolkit; `dev-cuda12`/`dev-cuda13` install one.
+- Every worktree runs in its own venv. If you run `git worktree add`, run
+  `python ci/tools/worktree_setup.py` in the new worktree before anything else.
 - **Python 3.11-3.14**, **CUDA 12 or 13** (via the `cuda12`/`cuda13` extras, or a
   system toolkit), **NVIDIA GPU (compute capability ≥6.0)**.
 - CPU-only dev/test without a GPU: set `NUMBA_ENABLE_CUDASIM=1` (the CUDA simulator
