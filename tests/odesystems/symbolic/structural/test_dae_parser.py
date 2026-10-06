@@ -6,6 +6,7 @@ import sympy as sp
 
 from cubie.odesystems.symbolic.codegen.jacobian import (
     generate_analytical_jvp,
+    generate_jacobian,
 )
 from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_lines,
@@ -792,6 +793,15 @@ class TestStructuralInputPaths:
         assert satisfied.count(True) == 2
 
 
+def _another_growth_d1():
+    """Return a helper named like ``growth_d1`` but a different object."""
+
+    def growth_d1(x, i):
+        return -1.0
+
+    return growth_d1
+
+
 class TestUserFunctionDerivatives:
     def _calls(self, parsed):
         """Return the names of every function the equations call."""
@@ -809,7 +819,8 @@ class TestUserFunctionDerivatives:
         return names
 
     def test_reduction_calls_each_supplied_derivative(self):
-        # Two differentiations read the first and second helpers.
+        # The reduction differentiates growth twice, so the equations
+        # call the first and second helpers.
         _i, _s, _f, parsed, _h = parse_dae_input(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},
@@ -839,16 +850,32 @@ class TestUserFunctionDerivatives:
         assert "growth_d1" in self._calls(parsed)
         assert parsed.derivative_names == {"growth_": "growth_d1"}
 
-    def test_non_callable_derivative_entry_rejected(self):
+    @pytest.mark.parametrize("entry", [[growth_d1, 2.0], None, 2.0])
+    def test_non_callable_derivative_entry_rejected(self, entry):
         with pytest.raises(TypeError, match="list of callables"):
             parse_dae_input(
                 dxdt=["dx = -growth(x)"],
                 states={"x": 0.0},
                 user_functions={"growth": growth},
-                user_function_derivatives={"growth": [growth_d1, 2.0]},
+                user_function_derivatives={"growth": entry},
             )
 
-    def test_short_chain_for_reduction_names_the_order(self):
+    def test_distinct_helpers_sharing_a_name_rejected(self):
+        def shrink(x):
+            return -x
+
+        with pytest.raises(ValueError, match='both named "growth_d1"'):
+            parse_dae_input(
+                dxdt=["dx = -growth(x) - shrink(x)"],
+                states={"x": 0.0},
+                user_functions={"growth": growth, "shrink": shrink},
+                user_function_derivatives={
+                    "growth": growth_d1,
+                    "shrink": _another_growth_d1(),
+                },
+            )
+
+    def test_too_few_derivatives_for_reduction_names_the_order(self):
         with pytest.raises(
             ValueError,
             match=(
@@ -866,7 +893,7 @@ class TestUserFunctionDerivatives:
                 user_function_derivatives={"growth": [growth_d1]},
             )
 
-    def test_short_chain_for_jacobian_names_the_order(self):
+    def test_too_few_derivatives_for_jacobian_names_the_order(self):
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},
@@ -888,6 +915,26 @@ class TestUserFunctionDerivatives:
                 output_order=index_map.dxdt.index_map,
             )
 
+    def test_jacobian_after_a_failed_jvp_names_the_order(self):
+        # The failed JVP leaves its Jacobian under the key the full
+        # Jacobian looks up next.
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=USER_DERIVATIVE_EQUATIONS,
+            states={"x": 0.0},
+            observables=["v", "w"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={"growth": [growth_d1, growth_d2]},
+        )
+        orders = dict(
+            input_order=index_map.states.index_map,
+            output_order=index_map.dxdt.index_map,
+        )
+        with pytest.raises(ValueError, match="up to order 3"):
+            generate_analytical_jvp(parsed, **orders)
+        with pytest.raises(ValueError, match="up to order 3"):
+            generate_jacobian(parsed, **orders)
+
     def test_missing_derivative_for_time_derivative_names_the_order(self):
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=["dx = growth(t)"],
@@ -904,7 +951,7 @@ class TestUserFunctionDerivatives:
             generate_time_derivative_lines(parsed, index_map)
 
 
-# Rosenbrock's Jacobian helpers call the third helper.
+# Use Rosenbrock so the Jacobian helpers call the third derivative.
 USER_DERIVATIVE_ROSENBROCK = {
     "system_type": "user_derivative",
     "algorithm": "rosenbrock",

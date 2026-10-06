@@ -367,66 +367,115 @@ def _rename_user_calls(
     return renamed_lines, rename
 
 
-def derivative_chain(entry) -> Tuple[Callable, ...]:
+def ordered_derivatives(entry) -> Tuple[Callable, ...]:
     """Return a user function's derivative helpers, lowest order first.
 
     Parameters
     ----------
     entry
-        One callable (first derivative) or a list of callables in
-        increasing order; order ``n`` takes the arguments then ``n``
-        argument indices.
+        One callable, which evaluates the first derivative, or a list
+        or tuple of callables evaluating the first, second, ...
+        derivatives. The order-``n`` helper takes the function's
+        arguments followed by ``n`` argument indices.
+
+    Returns
+    -------
+    tuple of callable
+        The helpers in increasing derivative order.
 
     Raises
     ------
     TypeError
-        ``entry`` is not a callable or a non-empty list of callables.
+        ``entry`` is neither a callable nor a non-empty list or tuple
+        of callables.
     """
 
     if callable(entry):
         return (entry,)
-    chain = tuple(entry)
-    if not chain or not all(callable(fn) for fn in chain):
+    if (
+        not isinstance(entry, (list, tuple))
+        or not entry
+        or not all(callable(fn) for fn in entry)
+    ):
         raise TypeError(
             "A user_function_derivatives entry must be a callable or a "
             f"non-empty list of callables; got {entry!r}."
         )
-    return chain
+    return tuple(entry)
 
 
 def derivative_helpers(
     user_function_derivatives: Optional[Dict[str, object]],
 ) -> List[Callable]:
-    """Return every user function's derivative helpers."""
+    """Return every user function's derivative helpers.
+
+    Parameters
+    ----------
+    user_function_derivatives
+        User-function name to its helper or list of helpers.
+
+    Returns
+    -------
+    list of callable
+        Every helper, grouped by function and in increasing order.
+    """
 
     return [
         fn
         for entry in (user_function_derivatives or {}).values()
-        for fn in derivative_chain(entry)
+        for fn in ordered_derivatives(entry)
     ]
 
 
-def _helper_chains(
+def _derivative_names_by_function(
     function_aliases: Dict[str, str],
     derivative_names: Dict[str, str],
 ) -> Dict[str, List[str]]:
-    """Return each user function's call name then its helpers' names."""
+    """Return each user function's call name followed by its helpers.
+
+    Parameters
+    ----------
+    function_aliases
+        Name each function is called by to the user's name for it.
+    derivative_names
+        Name of each user function, and of each helper, to the name of
+        the helper for its next derivative.
+
+    Returns
+    -------
+    dict
+        User function name to a list holding the name it is called by,
+        then its helpers' names in increasing order.
+    """
 
     helpers = set(derivative_names.values())
-    chains = {}
+    by_function = {}
     for name, user_name in function_aliases.items():
         if name in helpers:
             continue
-        chain = [name]
-        while chain[-1] in derivative_names:
-            chain.append(derivative_names[chain[-1]])
-        if len(chain) > len(chains.get(user_name, ())):
-            chains[user_name] = chain
-    return chains
+        names = [name]
+        while names[-1] in derivative_names:
+            names.append(derivative_names[names[-1]])
+        # A renamed function also appears under its original name;
+        # keep whichever spelling has the helpers attached.
+        if len(names) > len(by_function.get(user_name, ())):
+            by_function[user_name] = names
+    return by_function
 
 
 def _call_names(expressions: Iterable[ir_expr.Expr]) -> set:
-    """Return the name of every function ``expressions`` call."""
+    """Return the name of every function called in ``expressions``.
+
+    Parameters
+    ----------
+    expressions
+        IR expressions to walk.
+
+    Returns
+    -------
+    set of str
+        Names of the called functions.
+    """
 
     names = set()
     seen = set()
@@ -450,16 +499,22 @@ def check_derivative_orders(
 ) -> None:
     """Raise when ``expressions`` need a derivative no helper supplies.
 
+    Differentiating past the last helper leaves a ``d_<name>`` call in
+    the expressions, which no generated module can evaluate. We count
+    the ``d_`` prefixes on each call to find the order the user needs
+    to supply.
+
     Parameters
     ----------
     expressions
-        Expressions scanned for ``d_<name>`` calls.
+        Expressions to scan for ``d_<name>`` calls.
     function_aliases
-        Call name to user function name.
+        Name each function is called by to the user's name for it.
     derivative_names
-        Each function and helper to its next helper.
+        Name of each user function, and of each helper, to the name of
+        the helper for its next derivative.
     generating
-        What the expressions build.
+        What the expressions build, for the error message.
 
     Raises
     ------
@@ -467,24 +522,28 @@ def check_derivative_orders(
         A function is differentiated past its last helper.
     """
 
-    chains = _helper_chains(function_aliases, derivative_names)
+    by_function = _derivative_names_by_function(
+        function_aliases, derivative_names
+    )
     orders = {}
-    for user_name, chain in chains.items():
-        for order, member in enumerate(chain):
-            orders.setdefault(member.rstrip("_"), (user_name, order))
+    for user_name, names in by_function.items():
+        for order, name in enumerate(names):
+            orders.setdefault(name.rstrip("_"), (user_name, order))
     needed = {}
     for name in _call_names(expressions):
-        base, extra = name, 0
+        base, extra_order = name, 0
         while base not in orders and base.startswith("d_"):
-            base, extra = base[2:], extra + 1
-        if extra and base in orders:
+            base, extra_order = base[2:], extra_order + 1
+        if extra_order and base in orders:
             user_name, order = orders[base]
-            needed[user_name] = max(needed.get(user_name, 0), order + extra)
+            needed[user_name] = max(
+                needed.get(user_name, 0), order + extra_order
+            )
     if not needed:
         return
     user_name = min(needed)
     count = needed[user_name]
-    given = chains[user_name][1:]
+    given = by_function[user_name][1:]
     entries = given + [
         f"<order-{order} derivative>"
         for order in range(len(given) + 1, count + 1)
@@ -514,8 +573,10 @@ def _build_sympy_user_functions(
         Mapping from original user function names to temporary suffixed names
         used during parsing.
     user_function_derivatives
-        Mapping from user function names to their derivative helpers
-        (see :func:`derivative_chain`).
+        Mapping from user function names to callables that evaluate analytic
+        derivatives. A value may be one callable, for the first
+        derivative, or a list of callables for the first, second, ...
+        derivatives (see :func:`ordered_derivatives`).
 
     Returns
     -------
@@ -544,7 +605,7 @@ def _build_sympy_user_functions(
             user_function_derivatives
             and orig_name in user_function_derivatives
         ):
-            deriv_callable = derivative_chain(
+            deriv_callable = ordered_derivatives(
                 user_function_derivatives[orig_name]
             )[0]
         deriv_print_name = None
