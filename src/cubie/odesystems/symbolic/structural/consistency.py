@@ -20,9 +20,8 @@ from cubie.odesystems.symbolic.structural.bipartite import (
     maximal_matching,
 )
 from cubie.odesystems.symbolic.structural.errors import (
-    ExtraEquationsSystemError,
-    ExtraVariablesSystemError,
     InvalidSystemError,
+    raise_unmatched,
 )
 from cubie.odesystems.symbolic.structural.pantelides import (
     computed_highest_diff_variables,
@@ -95,37 +94,27 @@ def check_consistency(state: StructuralState) -> None:
         var_eq_matching = maximal_matching(
             graph, dstfilter=lambda v: varwhitelist[v]
         )
+        summary = (
+            f"The system is unbalanced: {n_highest_vars} highest order "
+            f"derivative variables and {neqs} equations."
+        )
         if n_highest_vars < neqs:
             eq_var_matching = var_eq_matching.complete(
                 graph.nsrcs()
             ).invview()
             bad_eqs = [
-                state.eqs[e]
+                str(state.eqs[e])
                 for e in range(graph.nsrcs())
                 if eq_var_matching[e] is UNASSIGNED
             ]
-            raise ExtraEquationsSystemError(
-                "The system is unbalanced. There are "
-                f"{n_highest_vars} highest order derivative "
-                f"variables and {neqs} equations.\n"
-                "More equations than variables, here are the "
-                "potential extra equation(s):\n"
-                + "\n".join(str(e) for e in bad_eqs)
-            )
+            raise_unmatched(summary, bad_eqs, [])
         bad_vars = [
-            state.fullvars[v]
+            str(state.fullvars[v])
             for v in range(graph.ndsts())
             if v < len(var_eq_matching)
             and var_eq_matching[v] is UNASSIGNED
         ]
-        raise ExtraVariablesSystemError(
-            "The system is unbalanced. There are "
-            f"{n_highest_vars} highest order derivative variables "
-            f"and {neqs} equations.\n"
-            "More variables than equations, here are the potential "
-            "extra variable(s):\n"
-            + "\n".join(str(v) for v in bad_vars)
-        )
+        raise_unmatched(summary, [], bad_vars)
 
     unassigned_vars = singular_check(state)
 

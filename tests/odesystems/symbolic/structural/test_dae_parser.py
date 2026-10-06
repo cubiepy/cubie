@@ -12,6 +12,7 @@ from cubie.odesystems.symbolic.parsing import (
 )
 from cubie.odesystems.symbolic.structural.errors import (
     ExtraEquationsSystemError,
+    ExtraVariablesSystemError,
     InvalidSystemError,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
@@ -446,31 +447,29 @@ def holds(index_map, parsed, expr):
 
 
 class TestStructuralInputPaths:
-    def test_extra_equation_left_as_residual(self):
-        # Two equations fix y; the spare one becomes the residual row
-        # of z, the only unknown no equation solves.
-        x, y = real_symbols("x y")
-        index_map, _s, _f, parsed, _h = parse_dae_input(
-            dxdt=[
-                "dx = -x + y + z",
-                "0 = y - sin(x)",
-                "0 = y**2 - sin(x)**2",
-                "dw = -w",
-            ],
-            states={"x": 1.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            simplify_options={"fully_determined": False},
-        )
-        assert algebraic_states(index_map, parsed) == ["z"]
-        spare = residual(index_map, parsed, "z")
-        assert equivalent(spare, y**2 - sp.sin(x) ** 2) or equivalent(
-            spare, sp.sin(x) ** 2 - y**2
-        )
-        assert holds(index_map, parsed, y - sp.sin(x))
+    def test_redundant_equation_for_undetermined_unknown_rejected(self):
+        # The spare equation repeats y = sin(x) and never reaches z,
+        # which no equation determines.
+        with pytest.raises(InvalidSystemError) as excinfo:
+            parse_dae_input(
+                dxdt=[
+                    "dx = -x + y + z",
+                    "0 = y - sin(x)",
+                    "0 = y**2 - sin(x)**2",
+                    "dw = -w",
+                ],
+                states={"x": 1.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                simplify_options={"fully_determined": False},
+            )
+        assert type(excinfo.value) is InvalidSystemError
+        message = str(excinfo.value)
+        assert "Sym(z)" in message
+        assert "Call(sin, Sym(x))" in message
 
-    def test_extra_differentiated_equations_warn_unpaired(self):
-        with pytest.warns(
-            UserWarning,
-            match="2 residual equations for 0 algebraic states",
+    def test_extra_differentiated_equations_rejected(self):
+        with pytest.raises(
+            ExtraEquationsSystemError,
+            match="2 residual equations determine no algebraic state",
         ):
             parse_dae_input(
                 dxdt=[
@@ -534,13 +533,14 @@ class TestStructuralInputPaths:
         for constraint in (a + b + c, a + b + 2 * c, b - sp.sin(x)):
             assert holds(index_map, parsed, constraint)
 
-    def test_alias_exposed_by_integer_elimination_moves_derivative(self):
-        x, y = real_symbols("x y")
-        with pytest.warns(
-            UserWarning,
-            match="1 residual equations for 0 algebraic states",
+    def test_alias_exposed_derivative_constraint_rejected(self):
+        # Eliminating c leaves x + y = 0 alongside both derivative
+        # equations, which then imply 0 = -x with no state to solve.
+        with pytest.raises(
+            ExtraEquationsSystemError,
+            match="1 residual equations determine no algebraic state",
         ):
-            index_map, _s, _f, parsed, _h = parse_dae_input(
+            parse_dae_input(
                 dxdt=[
                     "dx = -x + y",
                     "dy = -y",
@@ -550,8 +550,6 @@ class TestStructuralInputPaths:
                 states={"x": 1.0, "y": 0.0, "c": 0.0},
                 simplify_options={"fully_determined": False},
             )
-        assert len(index_map.state_names) == 1
-        assert holds(index_map, parsed, x + y)
 
     def test_conflicting_aliases_keep_irreducible_member(self):
         index_map, _s, _f, parsed, _h = parse_dae_input(
@@ -729,12 +727,12 @@ class TestStructuralInputPaths:
                 states={"x": 0.1, "y": 0.1, "z": 0.1},
             )
 
-    def test_unmatched_unknown_stays_a_state(self):
-        with pytest.warns(
-            UserWarning,
-            match="0 residual equations for 1 algebraic states",
+    def test_unmatched_unknown_rejected(self):
+        with pytest.raises(
+            ExtraVariablesSystemError,
+            match="1 algebraic states have no residual equation",
         ):
-            index_map, _s, _f, _p, _h = parse_dae_input(
+            parse_dae_input(
                 dxdt=[
                     "d(x0,t) = -x0 + sin(x0)",
                     "0 = 2*z1 - z0 + 2*x0",
@@ -743,32 +741,20 @@ class TestStructuralInputPaths:
                 states={"x0": 0.1, "z0": 0.1, "z1": 0.1, "z2": 0.1},
                 simplify_options={"fully_determined": False},
             )
-        names = set(index_map.state_names)
-        assert "x0" in names
-        assert len(names & {"z0", "z1", "z2"}) == 1
 
     def test_coupled_linear_loop_torn_acyclic(self):
         t, x0, z0, z1, z2, z3 = real_symbols("t x0 z0 z1 z2 z3")
-        with pytest.warns(
-            UserWarning,
-            match="1 residual equations for 2 algebraic states",
-        ):
-            index_map, _s, _f, parsed, _h = parse_dae_input(
-                dxdt=[
-                    "d(x0,t) = -x0 + z3*z2",
-                    "0 = -2*z1 + z0 - 2*x0",
-                    "0 = z2 + z3 + z0",
-                    "0 = 2*z0 + 3*z1 + z2 - sin(t)",
-                ],
-                states={
-                    "x0": 0.1,
-                    "z0": 0.1,
-                    "z1": 0.1,
-                    "z2": 0.1,
-                    "z3": 0.1,
-                },
-                simplify_options={"fully_determined": False},
-            )
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=[
+                "d(x0,t) = -x0 + z3*z2",
+                "0 = -2*z1 + z0 - 2*x0",
+                "0 = z2 + z3 + z0",
+                "0 = 2*z0 + 3*z1 + z2 - sin(t)",
+            ],
+            states={"x0": 0.1, "z0": 0.1, "z1": 0.1, "z2": 0.1},
+            parameters={"z3": 0.1},
+            simplify_options={"fully_determined": False},
+        )
         # Two of the three constraints are solved explicitly; the
         # third is left as the residual.
         constraints = (

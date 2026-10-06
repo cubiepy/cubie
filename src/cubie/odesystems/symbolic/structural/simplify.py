@@ -40,7 +40,9 @@ from cubie.odesystems.symbolic.structural.alias_elimination import (
     trivial_tearing,
 )
 from cubie.odesystems.symbolic.structural.bipartite import (
+    BipartiteGraph,
     Matching,
+    maximal_matching,
 )
 from cubie.odesystems.symbolic.structural.consistency import (
     check_consistency,
@@ -52,6 +54,7 @@ from cubie.odesystems.symbolic.structural.dummy_derivatives import (
     _tear_with_dummies,
     dummy_derivative_graph,
 )
+from cubie.odesystems.symbolic.structural.errors import raise_unmatched
 from cubie.odesystems.symbolic.structural.pantelides import pantelides
 from cubie.odesystems.symbolic.structural.reassemble import (
     ReassembledSystem,
@@ -168,8 +171,88 @@ def _pantelides_reassemble_state(
     )
 
 
+def _check_algebraic_block(
+    residuals: List[ir.Expr],
+    algebraic_states: List[ir.Sym],
+    observed: List[Tuple[ir.Sym, ir.Expr]],
+) -> None:
+    """Require a residual row determining each algebraic state.
+
+    The solvers take one residual row per algebraic state under a
+    singular mass matrix, so the residuals must match the algebraic
+    states one to one through the states each residual reaches,
+    directly or through the observed assignments.
+
+    Raises
+    ------
+    ExtraEquationsSystemError
+        When residuals are left that determine no algebraic state.
+    ExtraVariablesSystemError
+        When algebraic states are left with no residual.
+    InvalidSystemError
+        When both are left.
+    """
+
+    state_index = {s: i for i, s in enumerate(algebraic_states)}
+    reached = {}
+    for lhs, rhs in observed:
+        reached[lhs] = _reached_states(rhs, state_index, reached)
+    graph = BipartiteGraph(len(residuals), len(algebraic_states))
+    for i, residual in enumerate(residuals):
+        graph.set_neighbors(
+            i, _reached_states(residual, state_index, reached)
+        )
+    matching = maximal_matching(graph)
+    matched_rows = {r for r in matching if isinstance(r, int)}
+    extra_rows = [
+        f"0 ~ {residual}"
+        for i, residual in enumerate(residuals)
+        if i not in matched_rows
+    ]
+    extra_states = [
+        str(s)
+        for i, s in enumerate(algebraic_states)
+        if not isinstance(matching[i], int)
+    ]
+    counts = []
+    if extra_rows:
+        counts.append(
+            f"{len(extra_rows)} residual equations determine no "
+            "algebraic state"
+        )
+    if extra_states:
+        counts.append(
+            f"{len(extra_states)} algebraic states have no residual "
+            "equation"
+        )
+    raise_unmatched(
+        "The algebraic equations do not pair one to one: "
+        + " and ".join(counts)
+        + ".",
+        extra_rows,
+        extra_states,
+    )
+
+
+def _reached_states(
+    expr: ir.Expr,
+    state_index: Dict[ir.Sym, int],
+    reached: Dict[ir.Sym, List[int]],
+) -> List[int]:
+    """Algebraic-state indices ``expr`` reads, through ``reached``."""
+
+    indices = set()
+    for atom in ir.free_atoms(expr):
+        if atom in state_index:
+            indices.add(state_index[atom])
+        else:
+            indices.update(reached.get(atom, ()))
+    return sorted(indices)
+
+
 def _assemble_result(
     reassembled: ReassembledSystem,
+    fully_determined: bool,
 ) -> SimplifiedSystem:
     """Convert a reassembled system into the cubie-facing result."""
 
@@ -191,9 +274,15 @@ def _assemble_result(
     ]
     states = differential_states + algebraic_states
 
-    if len(residuals) != len(algebraic_states):
-        # Balanced systems always pair up; unbalanced systems (run
-        # with fully_determined=False) may not.
+    observed = _topsort_observed(
+        [(eq.lhs, eq.rhs) for eq in reassembled.observed]
+    )
+
+    if not fully_determined:
+        # No balance check ran, so the result can be unbalanced.
+        _check_algebraic_block(residuals, algebraic_states, observed)
+    elif len(residuals) != len(algebraic_states):
+        # A singular tearing solve leaves its variable unsolved.
         warnings.warn(
             f"{len(residuals)} residual equations for "
             f"{len(algebraic_states)} algebraic states; the system "
@@ -207,10 +296,6 @@ def _assemble_result(
             mass[i][i] = 1.0
     else:
         mass = None
-
-    observed = _topsort_observed(
-        [(eq.lhs, eq.rhs) for eq in reassembled.observed]
-    )
 
     return SimplifiedSystem(
         states,
@@ -249,7 +334,10 @@ def structural_simplify(
     fully_determined
         Whether the system must have matching equation and unknown
         counts; disables the consistency check and index reduction
-        when false (tearing only).
+        when false (tearing only). The simplified result must still
+        pair each algebraic state with a residual that determines
+        it; ``InvalidSystemError`` (or its extra-equations or
+        extra-variables subclass) names what is left unpaired.
     dummy_derivative
         Use dummy-derivative state selection (the default MTK path).
         When false, bare Pantelides index reduction runs first and
@@ -331,4 +419,4 @@ def structural_simplify(
             state, tearing_result, state.mm, **reassemble_kwargs
         )
 
-    return _assemble_result(reassembled)
+    return _assemble_result(reassembled, fully_determined)
