@@ -4,9 +4,6 @@ import numpy as np
 import pytest
 import sympy as sp
 
-from cubie.odesystems.symbolic.codegen.linear_operators import (
-    generate_linear_operator_code,
-)
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.parsing import (
@@ -846,11 +843,16 @@ class TestUserFunctionDerivatives:
             )
 
 
-USER_DERIVATIVE_SYSTEM = {"system_type": "user_derivative"}
+# Rosenbrock's Jacobian helpers call the third helper.
+USER_DERIVATIVE_ROSENBROCK = {
+    "system_type": "user_derivative",
+    "algorithm": "rosenbrock",
+    "output_types": ["state", "time"],
+}
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
+    "solver_settings_override", [USER_DERIVATIVE_ROSENBROCK], indirect=True
 )
 @pytest.mark.parametrize("x", [0.0, 0.5, 1.2])
 def test_user_derivative_residuals_vanish_on_the_solution(
@@ -875,10 +877,16 @@ def test_user_derivative_residuals_vanish_on_the_solution(
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
+    "solver_settings_override", [USER_DERIVATIVE_ROSENBROCK], indirect=True
 )
-def test_user_derivative_jacobian_calls_the_third_derivative(system):
-    code = generate_linear_operator_code(
-        equations=system.equations, index_map=system.indices
+def test_user_derivative_solve_tracks_the_constraint(solver, tolerance):
+    result = solver.solve({"x": np.array([0.0])}, {"p": np.array([1.0])})
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    x = result.time_domain_array[:, legend["x"], 0]
+    time = np.asarray(result.time).reshape(-1)
+    assert result.status_messages == {}
+    np.testing.assert_allclose(
+        x + x**3 / 3.0, time, rtol=0.0, atol=tolerance.abs_loose
     )
-    assert "growth_d3(" in code
