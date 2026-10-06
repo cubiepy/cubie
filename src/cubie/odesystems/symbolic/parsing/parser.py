@@ -160,28 +160,7 @@ def _units_by_name(
     units: Optional[Union[Dict[str, str], Iterable[str]]],
     label: str,
 ) -> Optional[Dict[str, str]]:
-    """Return ``units`` as a dict keyed by name.
-
-    Parameters
-    ----------
-    names
-        Declared names, in the order a list of units follows.
-    units
-        A dict of units by name, or a list aligned with ``names``.
-    label
-        Category name used in error messages.
-
-    Returns
-    -------
-    dict or None
-        Units by name, or ``None`` when ``units`` is ``None``.
-
-    Raises
-    ------
-    ValueError
-        If a list of units is given without declared names, or its
-        length differs from the number of names.
-    """
+    """Return ``units`` keyed by name; a list follows ``names``."""
     if units is None:
         return None
     if isinstance(units, dict):
