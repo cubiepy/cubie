@@ -135,8 +135,9 @@ def dummy_derivative_graph(
         given equations with respect to the given variables, or
         ``None`` when it is not all-integer.
     state_priority
-        Per-variable priority function; higher-priority variables are
-        more likely to remain states.
+        Priority of each variable's derivative chain, the same for
+        every member of a chain; higher-priority variables are more
+        likely to remain states.
     """
 
     if state.structure.solvable_graph is None:
@@ -164,23 +165,6 @@ def _dummy_derivative_graph(
     diff_to_var = var_to_diff.invview()
     invgraph = graph.invview()
     cranks = structure.canonical_ranks
-
-    def extended_sp(var: int) -> float:
-        """Priority of a variable's whole derivative chain."""
-
-        min_p = 0.0
-        max_p = 0.0
-        v = var
-        while var_to_diff[v] is not None:
-            v = var_to_diff[v]
-        while True:
-            p = state_priority(v)
-            max_p = max(max_p, p)
-            min_p = min(min_p, p)
-            v = diff_to_var[v]
-            if v is None:
-                break
-        return min_p if min_p < 0 else max_p
 
     var_sccs = find_var_sccs(graph, var_eq_matching)
     var_dummy_scc = []
@@ -230,7 +214,7 @@ def _dummy_derivative_graph(
                 break
 
             if state_priority is not None and isfirst:
-                sp_vals = [extended_sp(v) for v in variables]
+                sp_vals = [state_priority(v) for v in variables]
                 var_perm = sorted(
                     range(len(sp_vals)),
                     key=lambda i: (sp_vals[i], cranks[variables[i]]),
