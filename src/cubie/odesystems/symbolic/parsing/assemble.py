@@ -26,35 +26,12 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
 from cubie.odesystems.symbolic.structural.simplify import (
     structural_simplify,
 )
+from cubie.odesystems.symbolic.structural.symbolics import fixpoint_sub
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie._utils import devfunc_returns_nonfloat
-
-
-def _observable_substitutions(
-    definitions: List,
-) -> Dict[ir.Expr, ir.Expr]:
-    """Fully expand observable definitions against each other.
-
-    ``definitions`` is a list of ``(symbol, expression)`` IR pairs.
-    Raises when the definitions contain a cycle.
-    """
-
-    subs = {sym: expr for sym, expr in definitions}
-    for _ in range(len(subs) + 1):
-        expanded = {
-            sym: ir.xreplace(expr, subs)
-            for sym, expr in subs.items()
-        }
-        if expanded == subs:
-            return subs
-        subs = expanded
-    raise AssertionError(
-        "observable inlining did not converge; the observable "
-        "definitions contain a cycle"
-    )
 
 
 def _finalise_symbols_and_products(
@@ -185,7 +162,11 @@ def assemble_simplified(
     )
 
     # Sorted, matching the layout IndexedBaseMap builds.
-    surviving = {sym.name: sym for sym in simplified.states}
+    surviving = {
+        sym.name: sym
+        for sym in simplified.differential_states
+        + simplified.algebraic_states
+    }
     final_states = [surviving[name] for name in sorted(surviving)]
 
     final_state_values = {}
@@ -286,17 +267,15 @@ def assemble_simplified(
     # evaluation. Inline their defining expressions into every
     # consuming equation so the dynamics never read that buffer.
     final_observable_set = set(final_observables)
-    observable_sub = _observable_substitutions(
-        [
-            (sym, expr)
-            for sym, expr in simplified.observed
-            if sym.name in final_observable_set
-        ]
-    )
+    observable_sub = {
+        sym: expr
+        for sym, expr in simplified.observed
+        if sym.name in final_observable_set
+    }
     inline_memo = {}
 
     def _inline_observables(expr: ir.Expr) -> ir.Expr:
-        return ir.xreplace(expr, observable_sub, inline_memo)
+        return fixpoint_sub(expr, observable_sub, inline_memo)
 
     diff_set = set(simplified.differential_states)
     residual_for = dict(
@@ -324,7 +303,7 @@ def assemble_simplified(
     # Mass over the final state order: 1 diagonal for differential
     # states, 0 for torn algebraic rows.
     mass = None
-    if simplified.mass_matrix is not None:
+    if simplified.residuals:
         n = len(final_states)
         mass = tuple(
             tuple(

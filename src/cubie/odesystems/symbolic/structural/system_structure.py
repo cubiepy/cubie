@@ -1,14 +1,15 @@
 """Structural state of a DAE system under simplification.
 
-The bipartite incidence graph, derivative chains, solvability analysis
-via linear expansion, the integer-linear subsystem matrix, and the
-symbolic differentiation hooks used by Pantelides.
+The equations and variables of the system, its bipartite incidence
+graph, solvability analysis via linear expansion, the integer-linear
+subsystem matrix, and the symbolic differentiation hooks used by
+Pantelides. Equations are ``(lhs, rhs)`` pairs of engine IR
+expressions.
 
 Ported from ModelingToolkit.jl (commit c4177c335):
-``SystemStructure`` from ``src/systems/systemstructure.jl``;
 ``StructuralState`` construction (algebraic-equation canonicalisation
-and the equation order) from ``TearingState`` in the same file, except
-the variable order;
+and the equation order) from ``TearingState`` in
+``src/systems/systemstructure.jl``, except the variable order;
 ``StructuralState.var_derivative`` and ``StructuralState.eq_derivative``
 from ``src/structural_transformation/symbolics_tearing.jl``
 (``var_derivative!``, ``eq_derivative!``);
@@ -22,10 +23,6 @@ from ``src/structural_transformation/symbolics_tearing.jl``
 ``StructuralState.rm_eqs_vars`` and ``_old_to_new_indices`` from the
 equation renumbering and graph rebuild in ``alias_elimination!``
 (``src/systems/alias_elimination.jl``).
-``SystemStructure.eq_derivative_graph`` and
-``SystemStructure.var_derivative_graph`` are ported from
-StateSelection.jl (commit 74df007e, ``src/interface.jl``,
-``eq_derivative_graph!``, ``var_derivative_graph!``).
 ``StructuralState.is_unused_var`` combines the empty-incidence test of
 ModelingToolkit.jl c4177c335 (``utils.jl``) with the
 ``always_present`` marking of ModelingToolkit.jl (commit a2b6dc56,
@@ -33,17 +30,10 @@ ModelingToolkit.jl c4177c335 (``utils.jl``) with the
 
 Published Classes
 -----------------
-:class:`Equation`
-    Immutable ``lhs ~ rhs`` pair of engine IR expressions.
-
-:class:`SystemStructure`
-    Integer-graph view of the system (incidence, solvability,
-    derivative chains, priorities, ranks).
-
 :class:`StructuralState`
-    Full transformation state: structure plus the symbolic equations,
-    variables, derivative registry, and bookkeeping updated by the
-    passes.
+    Full transformation state: the symbolic equations, variables,
+    derivative registry, incidence and solvability graphs, and the
+    bookkeeping updated by the passes.
 
 Published Functions
 -------------------
@@ -78,35 +68,13 @@ from cubie.odesystems.symbolic.structural.symbolics import (
 # Not ported: largest coefficient magnitude in the integer matrix.
 MAX_INTEGER_COEFFICIENT = 127
 
-
-class Equation:
-    """An equation ``lhs ~ rhs`` of engine IR expressions."""
-
-    __slots__ = ("lhs", "rhs")
-
-    def __init__(self, lhs: ir.Expr, rhs: ir.Expr) -> None:
-        self.lhs = lhs
-        self.rhs = rhs
-
-    def __repr__(self) -> str:
-        return f"{self.lhs} ~ {self.rhs}"
-
-    def residual(self) -> ir.Expr:
-        """Return ``rhs - lhs``."""
-
-        return ir.sub(self.rhs, self.lhs)
-
-    def free_symbols(self) -> frozenset:
-        """Free symbols of both sides."""
-
-        return ir.free_atoms(self.lhs) | ir.free_atoms(self.rhs)
-
-    def xreplace(self, rules: Dict[ir.Expr, ir.Expr]) -> "Equation":
-        """Return a copy with ``rules`` structurally substituted."""
-
-        return Equation(
-            ir.xreplace(self.lhs, rules), ir.xreplace(self.rhs, rules)
-        )
+# Per-variable lists, aligned with ``StructuralState.fullvars``.
+_VARIABLE_FIELDS = (
+    "fullvars",
+    "state_priorities",
+    "canonical_ranks",
+    "always_present",
+)
 
 
 def _old_to_new_indices(n: int, dels: List[int]) -> Tuple[List[int], int]:
@@ -168,78 +136,11 @@ def variable_ranks(
     return ranks
 
 
-class SystemStructure:
-    """Integer-graph structural information about a DAE.
+def _free_symbols(equation: Tuple[ir.Expr, ir.Expr]) -> frozenset:
+    """Free symbols of both sides of ``equation``."""
 
-    Parameters
-    ----------
-    var_to_diff
-        Maps variable indices to their derivative variable indices.
-    eq_to_diff
-        Maps equation indices to their differentiated equations.
-    graph
-        Bipartite incidence graph (equations x variables).
-    solvable_graph
-        Subgraph of ``graph`` restricted to (equation, variable) pairs
-        the equation can be explicitly solved for, or ``None`` before
-        solvability analysis.
-    state_priorities
-        Per-variable state-selection priority (higher is more likely
-        to stay a state).
-    canonical_ranks
-        Per-variable rank (see :func:`variable_ranks`), breaking ties
-        between equal state priorities.
-    """
-
-    def __init__(
-        self,
-        var_to_diff: DiffGraph,
-        eq_to_diff: DiffGraph,
-        graph: BipartiteGraph,
-        solvable_graph: Optional[BipartiteGraph],
-        state_priorities: List[float],
-        canonical_ranks: List[int],
-    ) -> None:
-        self.var_to_diff = var_to_diff
-        self.eq_to_diff = eq_to_diff
-        self.graph = graph
-        self.solvable_graph = solvable_graph
-        self.state_priorities = state_priorities
-        self.canonical_ranks = canonical_ranks
-
-    def complete(self) -> "SystemStructure":
-        """Complete all member graphs (inverse/backward adjacency)."""
-
-        self.var_to_diff.complete()
-        self.eq_to_diff.complete()
-        self.graph.complete()
-        if self.solvable_graph is not None:
-            self.solvable_graph.complete()
-        return self
-
-    def isdervar(self, i: int) -> bool:
-        """Whether variable ``i`` is the derivative of another."""
-
-        return self.var_to_diff.diff_to_primal[i] is not None
-
-    def eq_derivative_graph(self, eq: int) -> int:
-        """Add the graph vertices for the derivative of equation ``eq``."""
-
-        self.graph.add_vertex(SRC)
-        self.solvable_graph.add_vertex(SRC)
-        eq_diff = self.eq_to_diff.add_vertex()
-        self.eq_to_diff.add_edge(eq, eq_diff)
-        return eq_diff
-
-    def var_derivative_graph(self, v: int) -> int:
-        """Add the graph vertices for the derivative of variable ``v``."""
-
-        self.graph.add_vertex(DST)
-        var_diff = self.var_to_diff.add_vertex()
-        self.var_to_diff.add_edge(v, var_diff)
-        if self.solvable_graph is not None:
-            self.solvable_graph.add_vertex(DST)
-        return var_diff
+    lhs, rhs = equation
+    return ir.free_atoms(lhs) | ir.free_atoms(rhs)
 
 
 class StructuralState:
@@ -248,11 +149,12 @@ class StructuralState:
     Parameters
     ----------
     equations
-        The system equations. Derivatives must already appear as
-        symbols registered in ``registry``.
+        The system equations as ``(lhs, rhs)`` pairs. Derivatives
+        must already appear as symbols registered in ``registry``.
     registry
         Derivative-symbol registry covering every derivative symbol
-        appearing in ``equations``.
+        appearing in ``equations``; it records each variable's
+        derivative chain.
     known_symbols
         Symbols with externally supplied values (parameters,
         constants, drivers, and the time symbol). Every other symbol
@@ -263,11 +165,28 @@ class StructuralState:
         Optional per-symbol state-selection priorities.
     irreducibles
         Symbols that may not be eliminated from the unknowns.
+
+    Attributes
+    ----------
+    graph
+        Bipartite incidence graph (equations x variables).
+    solvable_graph
+        Subgraph of ``graph`` restricted to (equation, variable) pairs
+        the equation can be explicitly solved for, or ``None`` before
+        solvability analysis.
+    eq_to_diff
+        Maps equation indices to their differentiated equations.
+    state_priorities
+        Per-variable state-selection priority (higher is more likely
+        to stay a state).
+    canonical_ranks
+        Per-variable rank (see :func:`variable_ranks`), breaking ties
+        between equal state priorities.
     """
 
     def __init__(
         self,
-        equations: Sequence[Equation],
+        equations: Sequence[Tuple[ir.Expr, ir.Expr]],
         registry: DerivativeRegistry,
         known_symbols: Iterable[ir.Sym],
         time_symbol: ir.Sym,
@@ -280,77 +199,58 @@ class StructuralState:
         self.irreducibles = set(irreducibles or ())
         self.mm = None
         self.additional_observed = []
+        self.solvable_graph = None
 
-        eqs = [Equation(eq.lhs, eq.rhs) for eq in equations]
+        eqs = [(lhs, rhs) for lhs, rhs in equations]
         original_eqs = list(eqs)
 
-        fullvars = self._ordered_variables(eqs)
-        seen = set(fullvars)
-        self.fullvars = fullvars
-        self.var2idx = {v: i for i, v in enumerate(fullvars)}
-
-        # var_to_diff from the registry chains.
-        nvars = len(fullvars)
-        var_to_diff = DiffGraph(nvars, with_badj=True)
-        for i, v in enumerate(fullvars):
-            lower = registry.lower_order(v)
-            if lower is not None and lower in self.var2idx:
-                var_to_diff[self.var2idx[lower]] = i
-
-        canonical_ranks = variable_ranks(fullvars, registry)
-        priorities = self._build_state_priorities(
-            state_priorities or {}, var_to_diff
+        self.fullvars = self._ordered_variables(eqs)
+        self.var2idx = {v: i for i, v in enumerate(self.fullvars)}
+        nvars = len(self.fullvars)
+        self.canonical_ranks = variable_ranks(self.fullvars, registry)
+        self.state_priorities = self._build_state_priorities(
+            state_priorities or {}
         )
+        self.always_present = [False] * nvars
 
         # Canonicalize algebraic equations to 0 ~ rhs - lhs. An
         # equation is algebraic when it is incident on no derivative
         # symbol.
-        for i, eq in enumerate(eqs):
-            incidence = eq.free_symbols() & seen
+        for i, (lhs, rhs) in enumerate(eqs):
             isalgeq = all(
-                not registry.is_derivative(v) for v in incidence
+                not registry.is_derivative(v)
+                for v in _free_symbols((lhs, rhs))
+                if v in self.var2idx
             )
-            if isalgeq and not ir.is_zero(eq.lhs):
-                eqs[i] = Equation(ir.ZERO, eq.residual())
+            if isalgeq and not ir.is_zero(lhs):
+                eqs[i] = (ir.ZERO, ir.sub(rhs, lhs))
 
         # Order equations by their printed form.
-        sortidxs = sorted(range(len(eqs)), key=lambda i: str(eqs[i]))
-        eqs = [eqs[i] for i in sortidxs]
-        original_eqs = [original_eqs[i] for i in sortidxs]
-
-        self.eqs = eqs
-        self.original_eqs = original_eqs
-
-        graph = BipartiteGraph(len(eqs), nvars, with_badj=False)
-        for ie, eq in enumerate(eqs):
-            for v in eq.free_symbols():
-                j = self.var2idx.get(v)
-                if j is not None:
-                    graph.add_edge(ie, j)
-
-        eq_to_diff = DiffGraph(len(eqs))
-        self.structure = SystemStructure(
-            var_to_diff.complete(),
-            eq_to_diff.complete(),
-            graph.complete(),
-            None,
-            priorities,
-            canonical_ranks,
+        sortidxs = sorted(
+            range(len(eqs)), key=lambda i: f"{eqs[i][0]} ~ {eqs[i][1]}"
         )
-        self.always_present = [False] * nvars
+        self.eqs = [eqs[i] for i in sortidxs]
+        self.original_eqs = [original_eqs[i] for i in sortidxs]
 
-    def _ordered_variables(self, eqs: Sequence[Equation]) -> List[ir.Sym]:
+        self.graph = BipartiteGraph(len(self.eqs), nvars)
+        for ie, eq in enumerate(self.eqs):
+            self.graph.set_neighbors(ie, self.incidence(eq))
+        self.eq_to_diff = DiffGraph(len(self.eqs))
+
+    def _ordered_variables(
+        self, eqs: Sequence[Tuple[ir.Expr, ir.Expr]]
+    ) -> List[ir.Sym]:
         """Variables of ``eqs`` in index order.
 
-        Not ported. The derivative symbols occurring in ``eqs`` come first, sorted
-        by base name, then derivative order; then the other members of
-        their chains down to the base unknowns, sorted by base name,
-        then derivative order descending; then the remaining occurring
-        unknowns, sorted by base name.
+        Not ported. The derivative symbols occurring in ``eqs`` come
+        first, sorted by base name, then derivative order; then the other
+        members of their chains down to the base unknowns, sorted by base
+        name, then derivative order descending; then the remaining
+        occurring unknowns, sorted by base name.
         """
 
         registry = self.registry
-        occurring = set().union(*(eq.free_symbols() for eq in eqs))
+        occurring = set().union(*(_free_symbols(eq) for eq in eqs))
         occurring -= self.known_symbols
 
         derivatives = {s for s in occurring if registry.is_derivative(s)}
@@ -376,9 +276,7 @@ class StructuralState:
         )
 
     def _build_state_priorities(
-        self,
-        priority_map: Dict[ir.Sym, float],
-        var_to_diff: DiffGraph,
+        self, priority_map: Dict[ir.Sym, float]
     ) -> List[float]:
         """Give each variable the priority of its derivative chain.
 
@@ -387,13 +285,12 @@ class StructuralState:
         """
 
         priorities = [0.0] * len(self.fullvars)
-        var_to_diff.complete()
         for i in range(len(self.fullvars)):
-            if var_to_diff.diff_to_primal[i] is not None:
+            if self.primal_of(i) is not None:
                 continue
             chain = [i]
-            while var_to_diff[chain[-1]] is not None:
-                chain.append(var_to_diff[chain[-1]])
+            while self.derivative_of(chain[-1]) is not None:
+                chain.append(self.derivative_of(chain[-1]))
             p = 0.0
             for var in chain:
                 p = max(p, float(priority_map.get(self.fullvars[var], 0)))
@@ -401,68 +298,128 @@ class StructuralState:
                 priorities[var] = p
         return priorities
 
+    # -- Derivative chains -------------------------------------------
+
+    def derivative_of(self, var: int) -> Optional[int]:
+        """Index of the derivative of variable ``var``, if one exists."""
+
+        derivative = self.registry.higher_order(self.fullvars[var])
+        if derivative is None:
+            return None
+        return self.var2idx.get(derivative)
+
+    def primal_of(self, var: int) -> Optional[int]:
+        """Index of the variable ``var`` is the derivative of, if any."""
+
+        lower = self.registry.lower_order(self.fullvars[var])
+        if lower is None:
+            return None
+        return self.var2idx.get(lower)
+
+    def is_algebraic(self, var: int) -> bool:
+        """Whether variable ``var`` has no derivative relations at all."""
+
+        return self.derivative_of(var) is None and self.primal_of(var) is None
+
     # -- Transformation-state interface ------------------------------
+
+    def incidence(self, equation: Tuple[ir.Expr, ir.Expr]) -> List[int]:
+        """Sorted indices of the variables occurring in ``equation``."""
+
+        return sorted(
+            self.var2idx[symbol]
+            for symbol in _free_symbols(equation)
+            if symbol in self.var2idx
+        )
 
     def is_unused_var(self, var: int) -> bool:
         """Whether ``var`` occurs in no equation and is removable."""
 
         return not self.always_present[var] and not (
-            self.structure.graph.d_neighbors(var)
+            self.graph.d_neighbors(var)
         )
+
+    def add_variable(self, symbol: ir.Sym, like: int) -> int:
+        """Append variable ``symbol``; return its index.
+
+        The new variable takes the state priority and rank of
+        variable ``like`` and occurs in no equation yet.
+        """
+
+        var = len(self.fullvars)
+        self.fullvars.append(symbol)
+        self.var2idx[symbol] = var
+        self.state_priorities.append(self.state_priorities[like])
+        self.canonical_ranks.append(self.canonical_ranks[like])
+        self.always_present.append(False)
+        self.graph.add_vertex(DST)
+        if self.solvable_graph is not None:
+            self.solvable_graph.add_vertex(DST)
+        if self.mm is not None:
+            self.mm.ncols += 1
+        return var
+
+    def add_equation(
+        self,
+        equation: Tuple[ir.Expr, ir.Expr],
+        incidence: Iterable[int],
+    ) -> int:
+        """Append ``equation`` incident on ``incidence``; return its index.
+
+        The new equation has no solvable edges and no derivative.
+        """
+
+        ieq = len(self.eqs)
+        self.eqs.append(equation)
+        self.original_eqs.append(equation)
+        self.graph.add_vertex(SRC)
+        self.graph.set_neighbors(ieq, incidence)
+        self.solvable_graph.add_vertex(SRC)
+        self.eq_to_diff.add_vertex()
+        self.mm.nparentrows += 1
+        return ieq
 
     def var_derivative(self, v: int) -> int:
         """Introduce the derivative variable of ``v``; return its index."""
 
-        s = self.structure
-        var_diff = s.var_derivative_graph(v)
-        dsym = self.registry.derivative(self.fullvars[v])
-        self.fullvars.append(dsym)
-        self.var2idx[dsym] = var_diff
-        s.state_priorities.append(s.state_priorities[v])
-        s.canonical_ranks.append(s.canonical_ranks[v])
-        self.always_present.append(False)
-        if self.mm is not None:
-            self.mm.ncols += 1
-        return var_diff
+        return self.add_variable(
+            self.registry.derivative(self.fullvars[v]), v
+        )
 
     def eq_derivative(self, ieq: int, **kwargs) -> int:
         """Differentiate equation ``ieq``; return the new equation index."""
 
-        s = self.structure
-        eq_diff = s.eq_derivative_graph(ieq)
-
+        lhs, rhs = self.eqs[ieq]
         deriv_map = {}
-        for v in self.eqs[ieq].free_symbols():
+        for v in _free_symbols((lhs, rhs)):
             j = self.var2idx.get(v)
             if j is not None:
-                dv = s.var_to_diff[j]
+                dv = self.derivative_of(j)
                 if dv is not None:
                     deriv_map[v] = self.fullvars[dv]
         new_rhs = total_derivative(
-            self.eqs[ieq].residual(), deriv_map, self.time_symbol
+            ir.sub(rhs, lhs), deriv_map, self.time_symbol
         )
-        new_eq = Equation(ir.ZERO, new_rhs)
-        self.eqs.append(new_eq)
-        self.original_eqs.append(new_eq)
 
         # Superset incidence: previous incidence plus derivatives;
         # find_eq_solvables prunes false entries.
-        for var in list(s.graph.s_neighbors(ieq)):
-            s.graph.add_edge(eq_diff, var)
-            s.graph.add_edge(eq_diff, s.var_to_diff[var])
+        neighbors = self.graph.s_neighbors(ieq)
+        eq_diff = self.add_equation(
+            (ir.ZERO, new_rhs),
+            list(neighbors) + [self.derivative_of(v) for v in neighbors],
+        )
+        self.eq_to_diff[ieq] = eq_diff
 
-        self.mm.nparentrows += 1
-        to_rm = []
         coeffs = []
         solv_kwargs = {"allow_symbolic": False}
         solv_kwargs.update(kwargs)
         all_int_vars, rem = self.find_eq_solvables(
-            eq_diff, to_rm, coeffs, **solv_kwargs
+            eq_diff, coeffs=coeffs, **solv_kwargs
         )
         if all_int_vars and ir.is_zero(rem):
             # Not ported: an integer-linear derivative joins mm.
             self.mm.nzrows.append(eq_diff)
-            self.mm.row_cols.append(list(s.graph.s_neighbors(eq_diff)))
+            self.mm.row_cols.append(list(self.graph.s_neighbors(eq_diff)))
             self.mm.row_vals.append(coeffs)
         return eq_diff
 
@@ -483,7 +440,6 @@ class StructuralState:
     def find_eq_solvables(
         self,
         ieq: int,
-        to_rm: Optional[List[int]] = None,
         coeffs: Optional[List[int]] = None,
         allow_symbolic: bool = False,
         allow_parameter: bool = True,
@@ -492,13 +448,13 @@ class StructuralState:
     ) -> Tuple[bool, ir.Expr]:
         """Recompute the solvable edges of equation ``ieq``.
 
+        Incident variables whose coefficient is zero lose their
+        incidence edge.
+
         Parameters
         ----------
         ieq
             Equation index.
-        to_rm
-            Filled with the incident variables whose coefficient is
-            zero; their incidence edges are removed.
         coeffs
             Filled with the integer coefficients of the incident
             variables, aligned with the equation's incidence after
@@ -519,18 +475,15 @@ class StructuralState:
             integer-linear equation).
         """
 
-        if to_rm is None:
-            to_rm = []
-        else:
-            to_rm.clear()
         if coeffs is not None:
             coeffs.clear()
-        s = self.structure
-        graph = s.graph
-        solvable_graph = s.solvable_graph
+        graph = self.graph
+        solvable_graph = self.solvable_graph
         solvable_graph.set_neighbors(ieq, ())
-        term = self.eqs[ieq].residual()
+        lhs, rhs = self.eqs[ieq]
+        term = ir.sub(rhs, lhs)
         all_int_vars = True
+        to_rm = []
 
         for j in list(graph.s_neighbors(ieq)):
             var = self.fullvars[j]
@@ -581,8 +534,8 @@ class StructuralState:
         """
 
         rhs = ir.add(*[c * self.fullvars[v] for c, v in zip(vals, cols)])
-        self.eqs[ieq] = Equation(ir.ZERO, rhs)
-        self.structure.graph.set_neighbors(ieq, cols)
+        self.eqs[ieq] = (ir.ZERO, rhs)
+        self.graph.set_neighbors(ieq, cols)
         self.find_eq_solvables(ieq, **kwargs)
 
     def linear_subsys_adjmat(self, **kwargs) -> SparseMatrixCLIL:
@@ -592,18 +545,15 @@ class StructuralState:
         ``sum(c_i * v_i) == 0`` with small integer ``c_i``.
         """
 
-        graph = self.structure.graph
-        self.structure.solvable_graph = BipartiteGraph(
-            graph.nsrcs(), graph.ndsts()
-        )
+        graph = self.graph
+        self.solvable_graph = BipartiteGraph(graph.nsrcs(), graph.ndsts())
         linear_equations = []
         eadj = []
         cadj = []
-        to_rm = []
         for i in range(len(self.eqs)):
             coeffs = []
             all_int_vars, rem = self.find_eq_solvables(
-                i, to_rm, coeffs, **kwargs
+                i, coeffs=coeffs, **kwargs
             )
             if all_int_vars and ir.is_zero(rem):
                 linear_equations.append(i)
@@ -637,12 +587,11 @@ class StructuralState:
             each old equation and variable, ``-1`` for a deleted one.
         """
 
-        s = self.structure
         old_to_new_eq, n_new_eqs = _old_to_new_indices(
-            s.graph.nsrcs(), sorted(set(eqs_to_rm))
+            self.graph.nsrcs(), sorted(set(eqs_to_rm))
         )
         old_to_new_var, n_new_vars = _old_to_new_indices(
-            s.graph.ndsts(), sorted(set(vars_to_rm))
+            self.graph.ndsts(), sorted(set(vars_to_rm))
         )
 
         def renumbered(graph: BipartiteGraph) -> BipartiteGraph:
@@ -660,40 +609,24 @@ class StructuralState:
                 )
             return new_graph
 
-        new_var_to_diff = DiffGraph(n_new_vars, with_badj=True)
-        for iv, i in enumerate(old_to_new_var):
-            if i < 0:
-                continue
-            dv = s.var_to_diff[iv]
-            if dv is not None and old_to_new_var[dv] >= 0:
-                new_var_to_diff[i] = old_to_new_var[dv]
+        self.graph = renumbered(self.graph)
+        if self.solvable_graph is not None:
+            self.solvable_graph = renumbered(self.solvable_graph)
 
         kept_eqs = [e for e, ie in enumerate(old_to_new_eq) if ie >= 0]
         kept_vars = [v for v, iv in enumerate(old_to_new_var) if iv >= 0]
         self.eqs[:] = [self.eqs[e] for e in kept_eqs]
         self.original_eqs[:] = [self.original_eqs[e] for e in kept_eqs]
-        self.fullvars[:] = [self.fullvars[v] for v in kept_vars]
+        for name in _VARIABLE_FIELDS:
+            values = getattr(self, name)
+            values[:] = [values[v] for v in kept_vars]
         self.var2idx = {v: i for i, v in enumerate(self.fullvars)}
-        self.always_present[:] = [
-            self.always_present[v] for v in kept_vars
-        ]
-        s.state_priorities[:] = [s.state_priorities[v] for v in kept_vars]
-        s.canonical_ranks[:] = [s.canonical_ranks[v] for v in kept_vars]
-
-        s.graph = renumbered(s.graph)
-        if s.solvable_graph is not None:
-            s.solvable_graph = renumbered(s.solvable_graph)
         # No equation is differentiated before index reduction.
-        s.eq_to_diff = DiffGraph(n_new_eqs, with_badj=True)
-        s.var_to_diff = new_var_to_diff
+        self.eq_to_diff = DiffGraph(n_new_eqs)
         return old_to_new_eq, old_to_new_var
 
     def n_concrete_eqs(self) -> int:
         """Number of equations with at least one incident variable."""
 
-        graph = self.structure.graph
-        return sum(
-            1
-            for e in range(graph.nsrcs())
-            if graph.s_neighbors(e)
-        )
+        graph = self.graph
+        return sum(1 for e in range(graph.nsrcs()) if graph.s_neighbors(e))

@@ -20,7 +20,7 @@ Published Functions
 """
 
 import warnings
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from cubie.odesystems.symbolic.structural.bipartite import (
     Matching,
@@ -39,7 +39,6 @@ from cubie.odesystems.symbolic.structural.exact_matching import (
 from cubie.odesystems.symbolic.structural.pantelides import pantelides
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
-    SystemStructure,
 )
 from cubie.odesystems.symbolic.structural.tearing import (
     ModiaTearing,
@@ -47,29 +46,28 @@ from cubie.odesystems.symbolic.structural.tearing import (
 )
 
 
-def is_present(structure: SystemStructure, v: int) -> bool:
+def is_present(state: StructuralState, v: int) -> bool:
     """Whether ``v`` or any of its higher derivatives occurs."""
 
-    var_to_diff = structure.var_to_diff
-    graph = structure.graph
+    graph = state.graph
     while True:
         if graph.d_neighbors(v):
             return True
-        v = var_to_diff[v]
+        v = state.derivative_of(v)
         if v is None:
             return False
 
 
 def is_some_diff(
-    structure: SystemStructure, dummy_derivatives: set, v: int
+    state: StructuralState, dummy_derivatives: set, v: int
 ) -> bool:
     """Whether ``v`` is a live (non-dummy, present) derivative."""
 
-    return v not in dummy_derivatives and is_present(structure, v)
+    return v not in dummy_derivatives and is_present(state, v)
 
 
 def isdiffed(
-    structure: SystemStructure, dummy_derivatives: set, v: int
+    state: StructuralState, dummy_derivatives: set, v: int
 ) -> bool:
     """Whether ``v`` is an actually differentiated variable.
 
@@ -77,9 +75,8 @@ def isdiffed(
     real derivative variables are treated specially.
     """
 
-    var_to_diff = structure.var_to_diff
-    return var_to_diff.diff_to_primal[v] is not None and is_some_diff(
-        structure, dummy_derivatives, v
+    return state.primal_of(v) is not None and is_some_diff(
+        state, dummy_derivatives, v
     )
 
 
@@ -126,9 +123,8 @@ def dummy_derivative_graph(
         likely to remain states.
     """
 
-    state.structure.complete()
     var_eq_matching = pantelides(state, **kwargs).complete(
-        state.structure.graph.nsrcs()
+        state.graph.nsrcs()
     )
     return _dummy_derivative_graph(
         state, var_eq_matching, jac, state_priority, **kwargs
@@ -142,14 +138,10 @@ def _dummy_derivative_graph(
     state_priority: Optional[Callable[[int], float]],
     **kwargs,
 ) -> TearingResult:
-    structure = state.structure
-    eq_to_diff = structure.eq_to_diff
-    var_to_diff = structure.var_to_diff
-    graph = structure.graph
-    diff_to_eq = eq_to_diff.invview()
-    diff_to_var = var_to_diff.invview()
+    graph = state.graph
+    diff_to_eq = state.eq_to_diff.invview()
     invgraph = graph.invview()
-    cranks = structure.canonical_ranks
+    cranks = state.canonical_ranks
 
     var_sccs = find_var_sccs(graph, var_eq_matching)
     dummy_derivatives = []
@@ -165,8 +157,8 @@ def _dummy_derivative_graph(
                 continue
             if diff_to_eq[eq] is not None:
                 eqs.append(eq)
-            if diff_to_var[var] is not None and is_present(
-                structure, var
+            if state.primal_of(var) is not None and is_present(
+                state, var
             ):
                 variables.append(var)
         if not eqs:
@@ -247,8 +239,8 @@ def _dummy_derivative_graph(
                     next_eq_idxs.append(i)
                 new_eqs.append(int_eq)
             for i, var in enumerate(variables):
-                int_var = diff_to_var[var]
-                if diff_to_var[int_var] is None:
+                int_var = state.primal_of(var)
+                if state.primal_of(int_var) is None:
                     continue
                 if J is not None:
                     next_var_idxs.append(i)
@@ -283,18 +275,15 @@ def _tear_with_dummies(
     ``kwargs``; Modia tearing then tears the rest.
     """
 
-    structure = state.structure
-    var_to_diff = structure.var_to_diff
-    can_eliminate = [False] * len(var_to_diff)
-    for v in range(len(var_to_diff)):
-        dv = var_to_diff[v]
-        if dv is None or not is_some_diff(
-            structure, dummy_derivatives, dv
-        ):
+    nvars = state.graph.ndsts()
+    can_eliminate = [False] * nvars
+    for v in range(nvars):
+        dv = state.derivative_of(v)
+        if dv is None or not is_some_diff(state, dummy_derivatives, dv):
             can_eliminate[v] = True
 
     def isder(v: int) -> bool:
-        return isdiffed(structure, dummy_derivatives, v)
+        return isdiffed(state, dummy_derivatives, v)
 
     def varfilter(v: int) -> bool:
         return can_eliminate[v]
@@ -302,17 +291,13 @@ def _tear_with_dummies(
     # Not ported: exact matching runs before Modia tearing.
     match_linear_sccs(state, isder, varfilter, **kwargs)
     modia_tearing = ModiaTearing(isder=isder, varfilter=varfilter)
-    tearing_result = modia_tearing(
-        structure.graph, structure.solvable_graph
-    )
+    tearing_result = modia_tearing(state.graph, state.solvable_graph)
 
-    for v in range(structure.graph.ndsts()):
-        if not is_present(structure, v):
+    for v in range(state.graph.ndsts()):
+        if not is_present(state, v):
             continue
-        dv = var_to_diff[v]
-        if dv is None or not is_some_diff(
-            structure, dummy_derivatives, dv
-        ):
+        dv = state.derivative_of(v)
+        if dv is None or not is_some_diff(state, dummy_derivatives, dv):
             continue
         tearing_result.var_eq_matching[v] = SELECTED_STATE
 

@@ -15,11 +15,6 @@ ModelingToolkit.jl (commit a2b6dc56, ``src/systems/systemstructure.jl``,
 Jacobian of ``dummy_derivative`` in the same commit
 (``src/structural_transformation/symbolics_tearing.jl``).
 
-Published Classes
------------------
-:class:`SimplifiedSystem`
-    The simplification result consumed by cubie's parser/codegen.
-
 Published Functions
 -------------------
 :func:`structural_simplify`
@@ -28,12 +23,9 @@ Published Functions
 """
 
 import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.engine.assignments import (
-    topological_sort,
-)
 from cubie.odesystems.symbolic.structural.alias_elimination import (
     alias_elimination,
     eliminate_perfect_aliases,
@@ -57,7 +49,7 @@ from cubie.odesystems.symbolic.structural.dummy_derivatives import (
 from cubie.odesystems.symbolic.structural.errors import raise_unmatched
 from cubie.odesystems.symbolic.structural.pantelides import pantelides
 from cubie.odesystems.symbolic.structural.reassemble import (
-    ReassembledSystem,
+    SimplifiedSystem,
     default_reassemble,
 )
 from cubie.odesystems.symbolic.structural.singularity_removal import (
@@ -69,54 +61,6 @@ from cubie.odesystems.symbolic.structural.system_structure import (
 )
 
 
-class SimplifiedSystem:
-    """Result of structural simplification.
-
-    Parameters
-    ----------
-    states
-        Final solver unknowns in BLT order: differential states
-        first, then torn algebraic variables.
-    differential_states
-        The subset of ``states`` integrated through their solved
-        derivatives.
-    algebraic_states
-        The torn (iteration) variables constrained by ``residuals``.
-    dxdt
-        Map from each differential state to its explicit derivative
-        expression.
-    residuals
-        Algebraic residual expressions (each constrained to zero).
-        Empty for fully torn systems.
-    observed
-        Topologically sorted ``(symbol, expression)`` assignments for
-        eliminated variables.
-    mass_matrix
-        ``None`` when there are no residuals; otherwise the singular
-        diagonal mass matrix, as a nested list of floats (identity
-        for differential states, zero rows for algebraic
-        constraints).
-    """
-
-    def __init__(
-        self,
-        states: List[ir.Sym],
-        differential_states: List[ir.Sym],
-        algebraic_states: List[ir.Sym],
-        dxdt: Dict[ir.Sym, ir.Expr],
-        residuals: List[ir.Expr],
-        observed: List[Tuple[ir.Sym, ir.Expr]],
-        mass_matrix: Optional[List[List[float]]],
-    ) -> None:
-        self.states = states
-        self.differential_states = differential_states
-        self.algebraic_states = algebraic_states
-        self.dxdt = dxdt
-        self.residuals = residuals
-        self.observed = observed
-        self.mass_matrix = mass_matrix
-
-
 def _integer_jacobian(state: StructuralState):
     """Integer Jacobian closure for dummy-derivative rank checks."""
 
@@ -125,7 +69,7 @@ def _integer_jacobian(state: StructuralState):
     ) -> Optional[List[List[int]]]:
         rows = []
         for e in eq_idxs:
-            rhs = state.eqs[e].rhs
+            rhs = state.eqs[e][1]
             row = []
             for v in var_idxs:
                 entry = ir.diff(rhs, state.fullvars[v])
@@ -158,7 +102,7 @@ def _pantelides_reassemble_state(
     )
     new_eqs = [state.eqs[e] for e in matched_eqs]
     priorities = {
-        state.fullvars[i]: state.structure.state_priorities[i]
+        state.fullvars[i]: state.state_priorities[i]
         for i in range(len(state.fullvars))
     }
     return StructuralState(
@@ -171,11 +115,7 @@ def _pantelides_reassemble_state(
     )
 
 
-def _check_algebraic_block(
-    residuals: List[ir.Expr],
-    algebraic_states: List[ir.Sym],
-    observed: List[Tuple[ir.Sym, ir.Expr]],
-) -> None:
+def _check_algebraic_block(result: SimplifiedSystem) -> None:
     """Require a residual row determining each algebraic state.
 
     The solvers take one residual row per algebraic state under a
@@ -193,9 +133,11 @@ def _check_algebraic_block(
         When both are left.
     """
 
+    residuals = result.residuals
+    algebraic_states = result.algebraic_states
     state_index = {s: i for i, s in enumerate(algebraic_states)}
     reached = {}
-    for lhs, rhs in observed:
+    for lhs, rhs in result.observed:
         reached[lhs] = _reached_states(rhs, state_index, reached)
     graph = BipartiteGraph(len(residuals), len(algebraic_states))
     for i, residual in enumerate(residuals):
@@ -248,72 +190,6 @@ def _reached_states(
         else:
             indices.update(reached.get(atom, ()))
     return sorted(indices)
-
-
-def _assemble_result(
-    reassembled: ReassembledSystem,
-    fully_determined: bool,
-) -> SimplifiedSystem:
-    """Convert a reassembled system into the cubie-facing result."""
-
-    dxdt = {}
-    differential_states = []
-    residuals = []
-    for eq, diff_state in zip(
-        reassembled.neweqs, reassembled.diff_eq_states
-    ):
-        if diff_state is None:
-            residuals.append(eq.rhs)
-            continue
-        differential_states.append(diff_state)
-        dxdt[diff_state] = eq.rhs
-
-    diff_set = set(differential_states)
-    algebraic_states = [
-        s for s in reassembled.unknowns if s not in diff_set
-    ]
-    states = differential_states + algebraic_states
-
-    observed = _topsort_observed(
-        [(eq.lhs, eq.rhs) for eq in reassembled.observed]
-    )
-
-    if not fully_determined:
-        # No balance check ran, so the result can be unbalanced.
-        _check_algebraic_block(residuals, algebraic_states, observed)
-    elif len(residuals) != len(algebraic_states):
-        # A singular tearing solve leaves its variable unsolved.
-        warnings.warn(
-            f"{len(residuals)} residual equations for "
-            f"{len(algebraic_states)} algebraic states; the system "
-            "is not fully determined"
-        )
-
-    n = len(states)
-    if residuals:
-        mass = [[0.0] * n for _ in range(n)]
-        for i in range(len(differential_states)):
-            mass[i][i] = 1.0
-    else:
-        mass = None
-
-    return SimplifiedSystem(
-        states,
-        differential_states,
-        algebraic_states,
-        dxdt,
-        residuals,
-        observed,
-        mass,
-    )
-
-
-def _topsort_observed(
-    observed: List[Tuple[ir.Expr, ir.Expr]],
-) -> List[Tuple[ir.Sym, ir.Expr]]:
-    """Topologically sort observed assignments by dependency."""
-
-    return topological_sort(list(observed))
 
 
 def structural_simplify(
@@ -373,50 +249,33 @@ def structural_simplify(
     if consistency_check and fully_determined:
         check_consistency(state)
 
-    reassemble_kwargs = {
-        "fully_determined": fully_determined,
-    }
-
-    if fully_determined and dummy_derivative:
-        tearing_result = dummy_derivative_graph(
-            state,
-            _integer_jacobian(state),
-            state_priority=lambda v: (
-                state.structure.state_priorities[v]
-            ),
-            **solve_kwargs,
-        )
-        reassembled = default_reassemble(
-            state, tearing_result, state.mm, **reassemble_kwargs
-        )
-    elif fully_determined:
-        # Bare index reduction, then re-analyse and select states.
-        state.structure.complete()
+    if fully_determined and not dummy_derivative:
         # Alias elimination rewrites integer-linear differential
         # equations to 0 ~ f, so they cannot be told apart from
         # their derivatives; only highest-order matches are kept.
         var_eq_matching = pantelides(state, **solve_kwargs)
         state = _pantelides_reassemble_state(state, var_eq_matching)
-        mm = alias_elimination(state, **solve_kwargs)
-        state.mm = mm
+        state.mm = alias_elimination(state, **solve_kwargs)
+
+    if fully_determined:
         tearing_result = dummy_derivative_graph(
             state,
             _integer_jacobian(state),
-            state_priority=lambda v: (
-                state.structure.state_priorities[v]
-            ),
+            state_priority=lambda v: state.state_priorities[v],
             **solve_kwargs,
         )
-        reassembled = default_reassemble(
-            state, tearing_result, state.mm, **reassemble_kwargs
-        )
     else:
-        state.structure.complete()
-        tearing_result = _tear_with_dummies(
-            state, set(), **solve_kwargs
-        )
-        reassembled = default_reassemble(
-            state, tearing_result, state.mm, **reassemble_kwargs
-        )
+        tearing_result = _tear_with_dummies(state, set(), **solve_kwargs)
+    result = default_reassemble(state, tearing_result, fully_determined)
 
-    return _assemble_result(reassembled, fully_determined)
+    if not fully_determined:
+        # No balance check ran, so the result can be unbalanced.
+        _check_algebraic_block(result)
+    elif len(result.residuals) != len(result.algebraic_states):
+        # A singular tearing solve leaves its variable unsolved.
+        warnings.warn(
+            f"{len(result.residuals)} residual equations for "
+            f"{len(result.algebraic_states)} algebraic states; the "
+            "system is not fully determined"
+        )
+    return result

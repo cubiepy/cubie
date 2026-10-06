@@ -2,6 +2,7 @@
 
 from fractions import Fraction
 
+import pytest
 import sympy as sp
 
 from cubie.odesystems.symbolic.engine import expr as ir
@@ -22,7 +23,6 @@ from cubie.odesystems.symbolic.structural.symbolics import (
     fixpoint_sub,
     linear_dependencies,
     linear_expansion,
-    lower_varname,
     total_derivative,
 )
 
@@ -239,6 +239,11 @@ class TestSymbolics:
         result = fixpoint_sub(a, {a: b + 1, b: c})
         assert result is c + ir.ONE
 
+    def test_fixpoint_sub_cycle_raises(self):
+        a, b = ir.sym("a"), ir.sym("b")
+        with pytest.raises(ValueError, match="cycle"):
+            fixpoint_sub(a, {a: b + 1, b: a})
+
     def test_total_derivative(self):
         x, dx, w = ir.sym("x"), ir.sym("dx_sym"), ir.sym("w")
         expr = x**2 + self.t * w
@@ -247,21 +252,35 @@ class TestSymbolics:
             to_sympy(result - (2 * x * dx + w))
         ) == 0
 
-    def test_registry_chain_and_rename(self):
+    def test_registry_chain_and_cut(self):
         x = ir.sym("x")
         reg = DerivativeRegistry({"x", "t"})
         d1 = reg.derivative(x)
         d2 = reg.derivative(d1)
+        assert (d1.name, d2.name) == ("x_t", "x_tt")
         assert reg.base_and_order(d2) == (x, 2)
         assert reg.lower_order(d2) is d1
-        x_t = ir.sym("x_t")
-        reg.rename(d1, x_t)
-        assert reg.lower_order(d2) is x_t
+        assert reg.higher_order(d1) is d2
+        reg.cut(d1)
         # x_t becomes an ordinary chain root (diff2term semantics).
-        assert reg.base_and_order(d2) == (x_t, 1)
-        assert reg.base_and_order(x_t) == (x_t, 0)
+        assert reg.lower_order(d2) is d1
+        assert reg.base_and_order(d2) == (d1, 1)
+        assert reg.base_and_order(d1) == (d1, 0)
+        assert reg.higher_order(x) is None
 
-    def test_lower_varname_collision(self):
-        reserved = {"x_t"}
-        assert lower_varname("x", 1, reserved) == "x_t_"
-        assert lower_varname("x", 2, reserved) == "x_tt"
+    def test_registry_name_collision(self):
+        x = ir.sym("x")
+        reg = DerivativeRegistry({"x", "x_t", "t"})
+        d1 = reg.derivative(x)
+        assert d1.name == "x_t_"
+        assert reg.derivative(d1).name == "x_tt"
+
+    def test_registry_move_derivative(self):
+        x, y = ir.sym("x"), ir.sym("y")
+        reg = DerivativeRegistry({"x", "y", "t"})
+        d1 = reg.derivative(x)
+        d2 = reg.derivative(d1)
+        reg.move_derivative(d1, y)
+        assert reg.higher_order(y) is d2
+        assert reg.lower_order(d2) is y
+        assert reg.higher_order(d1) is None

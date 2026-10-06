@@ -15,7 +15,6 @@ from cubie.odesystems.symbolic.structural.digraph import (
     DiCMOBiGraphT,
     IncrementalCycleTracker,
     find_var_sccs,
-    neighborhood_in,
     tarjan_scc,
     toposort_equations,
 )
@@ -180,12 +179,6 @@ class TestDigraphViews:
         dig = DiCMOBiGraphF(graph, matching)
         assert list(dig.outneighbors(0)) == [1]
         assert toposort_equations(dig, [0, 1]) == [1, 0]
-
-    def test_neighborhood_in(self):
-        graph = build_graph(2, 3, [(0, 0), (0, 1), (1, 1), (1, 2)])
-        matching = Matching([0, 1, UNASSIGNED]).complete(2)
-        dig = DiCMOBiGraphT(graph, matching)
-        assert neighborhood_in(dig, 0) == [0, 1, 2]
 
 
 class TestIncrementalCycleTracker:

@@ -15,7 +15,8 @@ Published Classes
 -----------------
 :class:`DerivativeRegistry`
     Creates and tracks derivative symbols (``x`` -> ``x_t`` ->
-    ``x_tt`` ...) with collision-safe naming.
+    ``x_tt`` ...) with collision-safe naming; the record of every
+    variable's derivative chain.
 
 Published Functions
 -------------------
@@ -33,7 +34,7 @@ Published Functions
     Rows of a sparse symbolic matrix that the pivot rows span.
 """
 
-from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 from cubie.odesystems.symbolic.engine import expr as ir
 
@@ -90,22 +91,29 @@ def linear_expansion(
 def fixpoint_sub(
     expr: ir.Expr,
     sub_map: Dict[ir.Expr, ir.Expr],
+    memo: Optional[Dict[ir.Expr, ir.Expr]] = None,
 ) -> ir.Expr:
     """Apply structural substitution until the expression stabilises.
 
-    Substitution keys are plain symbols so :func:`~.expr.xreplace`
-    (exact-node replacement) is sufficient; it is applied repeatedly
-    because substituted expressions may themselves contain keys. The
-    map comes from an acyclic tearing, so the loop terminates.
+    Substitution keys are plain symbols, so :func:`~.expr.xreplace`
+    (exact-node replacement) is applied repeatedly until no key
+    remains reachable. ``memo`` caches single-pass replacements under
+    ``sub_map`` across calls.
+
+    Raises
+    ------
+    ValueError
+        When the substitutions reach ``expr`` through a cycle.
     """
 
-    if not sub_map:
-        return expr
-    while True:
-        new_expr = ir.xreplace(expr, sub_map)
+    if memo is None:
+        memo = {}
+    for _ in range(len(sub_map) + 1):
+        new_expr = ir.xreplace(expr, sub_map, memo)
         if new_expr is expr:
-            return new_expr
+            return expr
         expr = new_expr
+    raise ValueError("the substitutions contain a cycle")
 
 
 def total_derivative(
@@ -227,40 +235,20 @@ def linear_dependencies(
     return dependent
 
 
-def lower_varname(
-    base_name: str, order: int, reserved: Set[str]
-) -> str:
-    """User-visible name for a dummy-derivative variable.
-
-    Produces ``x_t``, ``x_tt``, ... (the plain-symbol analogue of
-    MTK's ``xˍt`` naming), appending underscores until the name is
-    free in ``reserved``. The chosen name is added to ``reserved``.
-    """
-
-    name = f"{base_name}_{'t' * order}"
-    while name in reserved:
-        name = name + "_"
-    reserved.add(name)
-    return name
-
-
 class DerivativeRegistry:
     """Factory and index for derivative symbols.
 
     Derivative symbols stand in for MTK's ``Differential`` terms and
-    are plain IR symbols with mangled internal names
-    (``_cubie_D<order>_<base>``); they are renamed to user-visible
-    ``x_t`` forms during reassembly when state selection turns them
-    into ordinary algebraic variables. The registry records
-    base/order relations so higher-order chains can be walked
-    symbolically as well as through the integer
-    :class:`~cubie.odesystems.symbolic.structural.diffgraph.DiffGraph`.
+    are plain IR symbols named ``x_t``, ``x_tt``, ... after their
+    base, with an underscore appended until the name is free in
+    ``reserved``. The registry records each symbol's lower and higher
+    order, and is the record of every variable's derivative chain.
 
     Parameters
     ----------
     reserved_names
-        Names that generated symbols must not collide with (all user
-        symbols in the system).
+        Names that generated symbols must not collide with (every
+        name in the user's input).
     """
 
     def __init__(self, reserved_names: Iterable[str]) -> None:
@@ -275,7 +263,7 @@ class DerivativeRegistry:
         if existing is not None:
             return existing
         base, order = self.base_and_order(var)
-        name = f"_cubie_D{order + 1}_{base.name}"
+        name = f"{base.name}_{'t' * (order + 1)}"
         while name in self.reserved:
             name = name + "_"
         dsym = ir.sym(name)
@@ -285,9 +273,14 @@ class DerivativeRegistry:
         return dsym
 
     def lower_order(self, var: ir.Sym) -> Optional[ir.Sym]:
-        """Return the symbol ``var`` is the derivative of, if known."""
+        """Return the symbol ``var`` is the derivative of, if any."""
 
         return self._to_base.get(var)
+
+    def higher_order(self, var: ir.Sym) -> Optional[ir.Sym]:
+        """Return the derivative symbol of ``var``, if registered."""
+
+        return self._to_derivative.get(var)
 
     def base_and_order(self, var: ir.Sym) -> Tuple[ir.Sym, int]:
         """Return the underived base symbol and derivative order."""
@@ -314,20 +307,28 @@ class DerivativeRegistry:
         duplicate._to_derivative = dict(self._to_derivative)
         return duplicate
 
-    def rename(self, old: ir.Sym, new: ir.Sym) -> None:
-        """Rebind a registered derivative symbol to a new symbol.
+    def cut(self, var: ir.Sym) -> None:
+        """Make the derivative symbol ``var`` an ordinary chain root.
 
-        The renamed variable becomes an ordinary chain root (its link
-        to the variable it derived is cut, mirroring MTK's
-        ``diff2term``); a higher derivative of ``old``, if any, is
-        rebased onto ``new``.
+        ``var`` keeps its name and its own higher derivatives; the
+        symbol it derived has no derivative afterwards (MTK's
+        ``diff2term``).
         """
 
-        lower = self._to_base.pop(old, None)
-        if lower is not None and self._to_derivative.get(lower) is old:
-            del self._to_derivative[lower]
-        upper = self._to_derivative.pop(old, None)
+        lower = self._to_base.pop(var)
+        del self._to_derivative[lower]
+
+    def move_derivative(self, source: ir.Sym, target: ir.Sym) -> None:
+        """Make the derivative of ``source`` the derivative of ``target``.
+
+        ``source`` is left without a derivative, and any previous
+        derivative of ``target`` without a base.
+        """
+
+        previous = self._to_derivative.pop(target, None)
+        if previous is not None:
+            del self._to_base[previous]
+        upper = self._to_derivative.pop(source, None)
         if upper is not None:
-            self._to_derivative[new] = upper
-            self._to_base[upper] = new
-        self.reserved.add(new.name)
+            self._to_derivative[target] = upper
+            self._to_base[upper] = target

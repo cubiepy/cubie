@@ -1,8 +1,10 @@
 """Simplify and tear ODE and DAE systems represented as engine IR."""
 
+from cubie.odesystems.symbolic.structural.reassemble import (
+    SimplifiedSystem,
+)
 from cubie.odesystems.symbolic.structural.simplify import (
     structural_simplify,
-    SimplifiedSystem,
 )
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,

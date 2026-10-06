@@ -31,12 +31,11 @@ from cubie.odesystems.symbolic.structural.bipartite import (
 from cubie.odesystems.symbolic.structural.errors import InvalidSystemError
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
-    SystemStructure,
 )
 
 
 def computed_highest_diff_variables(
-    structure: SystemStructure,
+    state: StructuralState,
 ) -> List[bool]:
     """Mask of highest-differentiated variables present in the system.
 
@@ -46,14 +45,13 @@ def computed_highest_diff_variables(
     derivative are excluded.
     """
 
-    graph = structure.graph
-    var_to_diff = structure.var_to_diff
-    nvars = len(var_to_diff)
+    graph = state.graph
+    nvars = graph.ndsts()
     varwhitelist = [False] * nvars
     for var in range(nvars):
-        if var_to_diff[var] is None and not varwhitelist[var]:
+        if state.derivative_of(var) is None and not varwhitelist[var]:
             while not graph.d_neighbors(var):
-                var_lower = var_to_diff.diff_to_primal[var]
+                var_lower = state.primal_of(var)
                 if var_lower is None:
                     break
                 var = var_lower
@@ -64,7 +62,7 @@ def computed_highest_diff_variables(
             continue
         var2 = var
         while True:
-            var2 = var_to_diff[var2]
+            var2 = state.derivative_of(var2)
             if var2 is None:
                 break
             if varwhitelist[var2]:
@@ -90,12 +88,10 @@ def pantelides(state: StructuralState, **kwargs) -> Matching:
     non-highest-differentiated variables cleared.
     """
 
-    structure = state.structure
-    graph = structure.graph
-    var_to_diff = structure.var_to_diff
-    eq_to_diff = structure.eq_to_diff
+    graph = state.graph
+    eq_to_diff = state.eq_to_diff
     neqs = graph.nsrcs()
-    nvars = len(var_to_diff)
+    nvars = graph.ndsts()
     vcolor = [False] * nvars
     ecolor = [False] * neqs
     var_eq_matching = Matching(nvars)
@@ -106,7 +102,7 @@ def pantelides(state: StructuralState, **kwargs) -> Matching:
         if graph.s_neighbors(eq) and eq_to_diff[eq] is None
     )
 
-    varwhitelist = computed_highest_diff_variables(structure)
+    varwhitelist = computed_highest_diff_variables(state)
 
     if nnonemptyeqs > sum(varwhitelist):
         raise InvalidSystemError("System is structurally singular")
@@ -120,7 +116,7 @@ def pantelides(state: StructuralState, **kwargs) -> Matching:
         pathfound = False
         for _ in range(_MAXITERS):
             # Match on highest-differentiated variables only.
-            nvars = len(var_to_diff)
+            nvars = graph.ndsts()
             neqs = graph.nsrcs()
             vcolor = [False] * nvars
             ecolor = [False] * neqs
@@ -137,13 +133,14 @@ def pantelides(state: StructuralState, **kwargs) -> Matching:
             for var in range(len(vcolor)):
                 if not vcolor[var]:
                     continue
-                if var_to_diff[var] is None:
+                dvar = state.derivative_of(var)
+                if dvar is None:
                     # Introduce a new (derivative) variable.
-                    state.var_derivative(var)
+                    dvar = state.var_derivative(var)
                     var_eq_matching.push(UNASSIGNED)
                     varwhitelist.append(False)
                 varwhitelist[var] = False
-                varwhitelist[var_to_diff[var]] = True
+                varwhitelist[dvar] = True
 
             for eq in range(len(ecolor)):
                 if not ecolor[eq]:
@@ -155,7 +152,7 @@ def pantelides(state: StructuralState, **kwargs) -> Matching:
                     continue
                 # Newly introduced variables and equations inherit
                 # the assignment.
-                var_eq_matching[var_to_diff[var]] = eq_to_diff[
+                var_eq_matching[state.derivative_of(var)] = eq_to_diff[
                     var_eq_matching[var]
                 ]
             eq_prime = eq_to_diff[eq_prime]
@@ -166,7 +163,7 @@ def pantelides(state: StructuralState, **kwargs) -> Matching:
                 "(<100)."
             )
 
-    for var in range(state.structure.graph.ndsts()):
+    for var in range(graph.ndsts()):
         if varwhitelist[var]:
             continue
         var_eq_matching[var] = UNASSIGNED

@@ -234,7 +234,8 @@ class ParsedSystem:
         rules = _literal_rules(values)
         source = self.normalised
         folded_equations = [
-            eq.xreplace(rules) for eq in source.equations
+            (ir.xreplace(lhs, rules), ir.xreplace(rhs, rules))
+            for lhs, rhs in source.equations
         ]
         folded = NormalisedSystem(
             folded_equations,

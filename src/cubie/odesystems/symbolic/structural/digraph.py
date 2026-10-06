@@ -8,8 +8,8 @@ graphs acyclic.
 ``DiCMOBiGraphT`` and ``DiCMOBiGraphF`` are ported from
 BipartiteGraphs.jl (commit 647b6a42, v0.1.14, ``src/dicmobigraph.jl``,
 ``DiCMOBiGraph``). Ported from Graphs.jl (commit dffc7a64, v1.15.0):
-``tarjan_scc`` and ``neighborhood_in`` from ``src/connectivity.jl``
-(``strongly_connected_components_tarjan``, ``neighborhood``);
+``tarjan_scc`` from ``src/connectivity.jl``
+(``strongly_connected_components_tarjan``);
 ``IncrementalCycleTracker`` and ``_TransactionalList`` from
 ``src/cycles/incremental.jl`` (``DenseGraphICT_BFGT_N``,
 ``TransactionalVector``). ``find_var_sccs`` and
@@ -39,9 +39,6 @@ Published Functions
 -------------------
 :func:`find_var_sccs`
     Topologically sorted variable SCCs induced by a matching.
-
-:func:`neighborhood_in`
-    All vertices reachable through in-edges (inclusive BFS).
 
 :func:`toposort_equations`
     Evaluation order of a set of equations in a
@@ -260,20 +257,6 @@ def find_var_sccs(
     }
     order = _dependencies_first(range(len(sccs)), dependencies)
     return [sorted(sccs[i]) for i in order]
-
-
-def neighborhood_in(dig: DiCMOBiGraphT, v: int) -> List[int]:
-    """Vertices reachable from ``v`` through in-edges, including ``v``."""
-
-    seen = {v}
-    queue = [v]
-    while queue:
-        u = queue.pop()
-        for w in dig.inneighbors(u):
-            if w not in seen:
-                seen.add(w)
-                queue.append(w)
-    return sorted(seen)
 
 
 def toposort_equations(

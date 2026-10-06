@@ -1,10 +1,10 @@
 """Integer-linear singularity removal.
 
-``structural_singularity_removal``, ``is_algebraic`` and
-``aag_bareiss`` are ported from StateSelection.jl (commit 74df007e,
-``src/singularity_removal.jl``, functions of the same names with the
-trailing ``!`` dropped). ``get_new_mm`` follows the integer-matrix
-rebuild in ModelingToolkit.jl (commit c4177c335,
+``structural_singularity_removal`` and ``aag_bareiss`` are ported from
+StateSelection.jl (commit 74df007e, ``src/singularity_removal.jl``,
+functions of the same names with the trailing ``!`` dropped).
+``get_new_mm`` follows the integer-matrix rebuild in
+ModelingToolkit.jl (commit c4177c335,
 ``src/systems/alias_elimination.jl``, ``alias_elimination!``).
 
 Published Functions
@@ -26,34 +26,21 @@ from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
     bareiss,
 )
-from cubie.odesystems.symbolic.structural.diffgraph import DiffGraph
 from cubie.odesystems.symbolic.structural.pantelides import (
     computed_highest_diff_variables,
 )
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
-    SystemStructure,
 )
 
 
-def is_algebraic(var_to_diff: DiffGraph, v: int) -> bool:
-    """Whether variable ``v`` has no derivative relations at all."""
-
-    return (
-        var_to_diff[v] is None
-        and var_to_diff.diff_to_primal[v] is None
-    )
-
-
-def aag_bareiss(
-    structure: SystemStructure, mm: SparseMatrixCLIL
-) -> None:
+def aag_bareiss(state: StructuralState, mm: SparseMatrixCLIL) -> None:
     """Bareiss-factorise the integer-linear subsystem in place.
 
     Parameters
     ----------
-    structure
-        Structure the matrix rows belong to.
+    state
+        State the matrix rows belong to.
     mm
         The integer-linear subsystem. Pivots are taken first on
         algebraic variables that occur only in linear algebraic
@@ -61,18 +48,17 @@ def aag_bareiss(
         any variable.
     """
 
-    graph = structure.graph
-    var_to_diff = structure.var_to_diff
+    graph = state.graph
     linear_equations_set = set(mm.nzrows)
 
     is_linear_variables = [
-        is_algebraic(var_to_diff, v) for v in range(len(var_to_diff))
+        state.is_algebraic(v) for v in range(graph.ndsts())
     ]
-    is_highest_diff = computed_highest_diff_variables(structure)
+    is_highest_diff = computed_highest_diff_variables(state)
     for i in range(graph.nsrcs()):
         # Only linear algebraic equations keep their variables linear.
         if i in linear_equations_set and all(
-            is_algebraic(var_to_diff, v) for v in graph.s_neighbors(i)
+            state.is_algebraic(v) for v in graph.s_neighbors(i)
         ):
             continue
         for j in graph.s_neighbors(i):
@@ -141,5 +127,5 @@ def structural_singularity_removal(
     if len(mm.nzrows) == 0:
         return mm
 
-    aag_bareiss(state.structure, mm)
+    aag_bareiss(state, mm)
     return mm

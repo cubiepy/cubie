@@ -18,7 +18,6 @@ from cubie.odesystems.symbolic.structural.symbolics import (
     linear_expansion,
 )
 from cubie.odesystems.symbolic.structural.system_structure import (
-    Equation,
     StructuralState,
 )
 
@@ -29,17 +28,19 @@ def _derivative_rows(
     """Return ``(equation, {derivative: coefficient}, remainder)`` for
     each equation linear in its derivatives with known coefficients."""
 
-    structure = state.structure
-    graph = structure.graph
+    graph = state.graph
     unknowns = set(state.var2idx) | {state.time_symbol}
     rows = []
     for ieq in range(graph.nsrcs()):
         dvars = [
-            v for v in graph.s_neighbors(ieq) if structure.isdervar(v)
+            v
+            for v in graph.s_neighbors(ieq)
+            if state.primal_of(v) is not None
         ]
         if not dvars:
             continue
-        term = state.eqs[ieq].residual()
+        lhs, rhs = state.eqs[ieq]
+        term = ir.sub(rhs, lhs)
         coeffs = {}
         known = True
         for v in dvars:
@@ -69,7 +70,7 @@ def eliminate_singular_derivative_blocks(
         return []
     equations = [ieq for ieq, _, _ in rows]
     remainders = {ieq: remainder for ieq, _, remainder in rows}
-    graph = state.structure.graph
+    graph = state.graph
     rewritten = []
 
     def pivot_ok(entry: ir.Expr) -> bool:
@@ -86,14 +87,9 @@ def eliminate_singular_derivative_blocks(
             ir.mul(weight, remainders[equations[source]])
             for source, weight in sorted(multipliers.items())
         ]
-        constraint = Equation(ir.ZERO, ir.add(*terms))
+        constraint = (ir.ZERO, ir.add(*terms))
         state.eqs[ieq] = constraint
         state.original_eqs[ieq] = constraint
-        incidence = [
-            state.var2idx[symbol]
-            for symbol in constraint.free_symbols()
-            if symbol in state.var2idx
-        ]
-        graph.set_neighbors(ieq, incidence)
+        graph.set_neighbors(ieq, state.incidence(constraint))
         rewritten.append(ieq)
     return rewritten

@@ -63,7 +63,7 @@ def match_linear_sccs(
         :meth:`StructuralState.find_eq_solvables`.
     """
 
-    graph = state.structure.graph
+    graph = state.graph
     mm = state.mm
     mm_rows = {eq: i for i, eq in enumerate(mm.nzrows)}
     var_eq_matching, _ = build_var_eq_matching(graph, varfilter)
