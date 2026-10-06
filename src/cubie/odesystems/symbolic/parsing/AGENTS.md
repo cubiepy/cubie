@@ -87,9 +87,8 @@ clashes. Device functions and functions with derivative helpers are wrapped in d
 `sp.Function` subclasses whose `fdiff` emits `d_<name>` (or the given derivative's
 `__name__`). A `user_function_derivatives` value is one callable or a list in increasing
 order; `derivative_names` maps each function and helper to the next helper.
-`check_derivative_orders` raises when the reduced DAE, Jacobian or time derivative
-needs a derivative order past the last helper. Non-device callables are inlined when
-they accept SymPy arguments.
+`check_derivative_orders` raises when a function is differentiated past its last
+helper. Non-device callables are inlined when they accept SymPy arguments.
 `function_parser` leaves dxdt symbols out of the symbol map, so `dx = expr; return [dx]`
 inlines `expr`.
 

@@ -453,18 +453,18 @@ def check_derivative_orders(
     Parameters
     ----------
     expressions
-        Expressions to scan for ``d_<name>`` placeholder calls.
+        Expressions scanned for ``d_<name>`` calls.
     function_aliases
-        Call name to the user's function name.
+        Call name to user function name.
     derivative_names
         Each function and helper to its next helper.
     generating
-        What the expressions build, named in the message.
+        What the expressions build.
 
     Raises
     ------
     ValueError
-        A user function is differentiated past its last helper.
+        A function is differentiated past its last helper.
     """
 
     chains = _helper_chains(function_aliases, derivative_names)
