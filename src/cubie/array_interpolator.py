@@ -364,7 +364,7 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
     driver_evaluation: str = field(
         default="columns",
         validator=validators.in_(
-            {"columns", "combined", "combined_selp", "two_loop"}
+            {"columns", "combined", "combined_selp", "two_loop", "two_loop_mul", "two_loop_guard"}
         ),
     )
     num_inputs: int = field(default=0, init=False)
@@ -1098,6 +1098,23 @@ class ArrayInterpolator(CUDAFactory):
                         falling(q + k + 1, k + 1) * inv_res ** (k + 1)
                     )
         selp_commit = evaluation == "combined_selp"
+        always_unroll = (True, None)
+        top = int32(order)
+        # Active, first and continuing powers of each slot and its rate.
+        slot_on = zeros((n_rows, order + 1), dtype=bool)
+        slot_start = zeros((n_rows, order + 1), dtype=bool)
+        slot_continue = zeros((n_rows, order + 1), dtype=bool)
+        rate_on = zeros((n_rows, order + 1), dtype=bool)
+        rate_start = zeros((n_rows, order + 1), dtype=bool)
+        rate_continue = zeros((n_rows, order + 1), dtype=bool)
+        for s, (_, k) in enumerate(slots):
+            for q in range(order + 1):
+                slot_on[s, q] = q + k <= order
+                slot_start[s, q] = q == order - k
+                slot_continue[s, q] = q < order - k
+                rate_on[s, q] = q + k + 1 <= order
+                rate_start[s, q] = q == order - k - 1
+                rate_continue[s, q] = q < order - k - 1
 
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)
@@ -1275,8 +1292,136 @@ class ArrayInterpolator(CUDAFactory):
                         )
                     out[n_inputs + slot] = acc if in_range else zero_value
 
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def peeled_inputs(seg, tau, in_range, coefficients, out):
+            """Evaluate every input from its top coefficient down."""
+            for input_index in unroll_if(
+                range(n_inputs), unroll_other_small
+            ):
+                acc = coefficients[seg, input_index, top]
+                for p in unroll_if(
+                    range(top - int32(1), int32(-1), int32(-1)),
+                    unroll_other_small,
+                ):
+                    acc = acc * tau + coefficients[seg, input_index, p]
+                out[input_index] = acc if in_range else zero_value
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def peeled_input_rates(seg, tau, in_range, coefficients, out):
+            """Evaluate every input's rate from its top coefficient down."""
+            for input_index in unroll_if(
+                range(n_inputs), unroll_other_small
+            ):
+                acc = precision(order) * coefficients[seg, input_index, top]
+                for p in unroll_if(
+                    range(top - int32(1), int32(0), int32(-1)),
+                    unroll_other_small,
+                ):
+                    acc = acc * tau + precision(p) * (
+                        coefficients[seg, input_index, p]
+                    )
+                out[input_index] = (
+                    acc * inv_resolution if in_range else zero_value
+                )
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def mul_all(time, coefficients, out) -> None:
+            """Peeled inputs; slots switched by multiplying a bool."""
+            seg, tau, in_range = locate(time)
+            peeled_inputs(seg, tau, in_range, coefficients, out)
+            if has_slots:
+                for slot in unroll_if(range(n_slots), always_unroll):
+                    column = slot_inputs[slot]
+                    acc = (
+                        coefficients[seg, column, slot_powers[slot, top]]
+                        * slot_scales[slot, top]
+                        * slot_on[slot, top]
+                    )
+                    for q in unroll_if(
+                        range(top - int32(1), int32(-1), int32(-1)),
+                        always_unroll,
+                    ):
+                        acc = acc * tau + (
+                            coefficients[seg, column, slot_powers[slot, q]]
+                            * slot_scales[slot, q]
+                            * slot_on[slot, q]
+                        )
+                    out[n_inputs + slot] = acc if in_range else zero_value
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def mul_rate(time, coefficients, out) -> None:
+            """Peeled input rates; slot rates switched by a bool."""
+            seg, tau, in_range = locate(time)
+            peeled_input_rates(seg, tau, in_range, coefficients, out)
+            if has_slots:
+                for slot in unroll_if(range(n_slots), always_unroll):
+                    column = slot_inputs[slot]
+                    acc = (
+                        coefficients[seg, column, rate_powers[slot, top]]
+                        * rate_scales[slot, top]
+                        * rate_on[slot, top]
+                    )
+                    for q in unroll_if(
+                        range(top - int32(1), int32(-1), int32(-1)),
+                        always_unroll,
+                    ):
+                        acc = acc * tau + (
+                            coefficients[seg, column, rate_powers[slot, q]]
+                            * rate_scales[slot, q]
+                            * rate_on[slot, q]
+                        )
+                    out[n_inputs + slot] = acc if in_range else zero_value
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def guard_all(time, coefficients, out) -> None:
+            """Peeled inputs; each slot starts at its top real power."""
+            seg, tau, in_range = locate(time)
+            peeled_inputs(seg, tau, in_range, coefficients, out)
+            if has_slots:
+                for slot in unroll_if(range(n_slots), always_unroll):
+                    column = slot_inputs[slot]
+                    acc = zero_value
+                    for q in unroll_if(
+                        range(top, int32(-1), int32(-1)), always_unroll
+                    ):
+                        term = (
+                            coefficients[seg, column, slot_powers[slot, q]]
+                            * slot_scales[slot, q]
+                        )
+                        if slot_start[slot, q]:
+                            acc = term
+                        elif slot_continue[slot, q]:
+                            acc = acc * tau + term
+                    out[n_inputs + slot] = acc if in_range else zero_value
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def guard_rate(time, coefficients, out) -> None:
+            """Peeled input rates; each slot rate starts at its top power."""
+            seg, tau, in_range = locate(time)
+            peeled_input_rates(seg, tau, in_range, coefficients, out)
+            if has_slots:
+                for slot in unroll_if(range(n_slots), always_unroll):
+                    column = slot_inputs[slot]
+                    acc = zero_value
+                    for q in unroll_if(
+                        range(top, int32(-1), int32(-1)), always_unroll
+                    ):
+                        term = (
+                            coefficients[seg, column, rate_powers[slot, q]]
+                            * rate_scales[slot, q]
+                        )
+                        if rate_start[slot, q]:
+                            acc = term
+                        elif rate_continue[slot, q]:
+                            acc = acc * tau + term
+                    out[n_inputs + slot] = acc if in_range else zero_value
+
         # no cover: end
-        if evaluation == "two_loop":
+        if evaluation == "two_loop_mul":
+            drivers_fn, rate_fn = mul_all, mul_rate
+        elif evaluation == "two_loop_guard":
+            drivers_fn, rate_fn = guard_all, guard_rate
+        elif evaluation == "two_loop":
             drivers_fn, rate_fn = two_loop_all, two_loop_rate
         else:
             drivers_fn, rate_fn = combined_all, combined_rate

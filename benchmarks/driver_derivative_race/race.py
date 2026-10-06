@@ -22,7 +22,11 @@ from cubie.array_interpolator import DriverSamples
 from cubie._cudasim_extensions import cuda
 
 TOOLS = r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\bin"
-VARIANTS = ("columns", "combined", "combined_selp", "two_loop")
+VARIANTS = tuple(
+    __import__("os").environ.get(
+        "RACE_VARIANTS", "columns,combined,combined_selp,two_loop"
+    ).split(",")
+)
 MODES = {"unrolled": UnrollChoice.FULL, "rolled": UnrollChoice.ROLLED}
 precision = np.float32
 n_samples = 127
@@ -211,7 +215,8 @@ def main(system_name, mode, out_dir, rounds=8, block=12):
     per_round = []
     order = list(VARIANTS)
     for round_index in range(rounds):
-        rotated = order[round_index % 4:] + order[:round_index % 4]
+        shift = round_index % len(order)
+        rotated = order[shift:] + order[:shift]
         if round_index % 2:
             rotated = rotated[::-1]
         stats = {variant: run_block(solvers[variant]) for variant in rotated}
