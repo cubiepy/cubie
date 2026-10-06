@@ -65,6 +65,10 @@ Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
   supported.
 
 ## Determinism
+`StructuralState.fullvars` lists the occurring derivative symbols by
+base name and derivative order, then the rest of their chains down to the base unknowns
+by base name and descending order, then the remaining unknowns by base name; ties
+between equal candidates go to the lower index.
 `find_var_sccs` (BLT order of the condensation) and `toposort_equations` (evaluation
 order of an SCC's solved equations) both use the engine's depth-first `dfs_order`:
 roots (nodes nothing depends on) are visited in index order for SCCs and in the given

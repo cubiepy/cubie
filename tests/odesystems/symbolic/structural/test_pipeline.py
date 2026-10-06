@@ -44,7 +44,6 @@ def make_state(eqs, unknowns, knowns=(), priorities=None,
     registry = DerivativeRegistry(names | {"t"})
     return registry, lambda: StructuralState(
         eqs,
-        unknowns,
         registry,
         set(knowns),
         T,
@@ -63,7 +62,7 @@ class TestEquationOrder:
             Equation(z, y + 1),
         ]
         return [
-            StructuralState(order, [x, y, z], registry, {k}, T)
+            StructuralState(order, registry, {k}, T)
             for order in (eqs, eqs[::-1], [eqs[1], eqs[0], eqs[2]])
         ]
 
@@ -96,7 +95,6 @@ class TestIndexCompaction:
                 Equation(z, y + 1),
                 Equation(w, x - z),
             ],
-            [x, y, z, w],
             registry,
             {k},
             T,
@@ -183,7 +181,6 @@ class TestIntegerMatrixDifferentiation:
         dx = registry.derivative(x)
         state = StructuralState(
             [Equation(dx, -x), Equation(ir.ZERO, x - 2 * y)],
-            [x, y],
             registry,
             set(),
             T,
@@ -221,9 +218,9 @@ class TestVariableRanks:
             Equation(ir.ZERO, y - z),
         ]
         return registry, [
-            StructuralState(eqs, unknowns, registry, set(), T)
-            for unknowns in ([x, y, z], [z, y, x])
-        ] + [StructuralState(eqs[::-1], [y, z, x], registry, set(), T)]
+            StructuralState(order, registry, set(), T)
+            for order in (eqs, eqs[::-1])
+        ]
 
     def test_ranks_order_by_base_name_then_derivative_order(self):
         registry, states = self._states()
@@ -262,13 +259,69 @@ class TestVariableRanks:
         assert len(ranks) == len(state.fullvars)
 
 
+class TestVariableOrder:
+    def _states(self):
+        x, y, z, w = syms("x y z w")
+        registry = DerivativeRegistry({"x", "y", "z", "w", "t"})
+        ddx = registry.derivative(registry.derivative(x))
+        dz = registry.derivative(z)
+        eqs = [
+            Equation(ddx, -x + y),
+            Equation(dz, -z + w),
+            Equation(ir.ZERO, y - z),
+            Equation(ir.ZERO, w - x),
+        ]
+        orders = [eqs, eqs[::-1], [eqs[2], eqs[0], eqs[3], eqs[1]]]
+        return registry, [
+            StructuralState(order, registry, set(), T) for order in orders
+        ]
+
+    def test_order_independent_of_input_order(self):
+        _, states = self._states()
+        for state in states[1:]:
+            assert state.fullvars == states[0].fullvars
+
+    def test_derivatives_then_chains_then_other_unknowns(self):
+        registry, states = self._states()
+        fullvars = states[0].fullvars
+        derivatives = {v for v in fullvars if registry.is_derivative(v)}
+        occurring = set()
+        for eq in states[0].eqs:
+            occurring |= eq.free_symbols()
+        lower_orders = set()
+        for v in derivatives & occurring:
+            v = registry.lower_order(v)
+            while v is not None:
+                lower_orders.add(v)
+                v = registry.lower_order(v)
+        lower_orders -= derivatives & occurring
+        n_head = len(derivatives & occurring)
+        n_chain = n_head + len(lower_orders)
+        head = fullvars[:n_head]
+        chain = fullvars[n_head:n_chain]
+        tail = fullvars[n_chain:]
+        assert set(head) == derivatives & occurring
+        assert set(chain) == lower_orders
+
+        def keys(group):
+            return [
+                (base.name, order)
+                for base, order in map(registry.base_and_order, group)
+            ]
+
+        assert keys(head) == sorted(keys(head))
+        assert keys(chain) == sorted(
+            keys(chain), key=lambda key: (key[0], -key[1])
+        )
+        assert keys(tail) == sorted(keys(tail))
+
+
 class TestCoefficientAdmission:
     def _state(self, coefficient):
         x, y = syms("x y")
         registry = DerivativeRegistry({"x", "y", "t"})
         return StructuralState(
             [Equation(ir.ZERO, coefficient * x - y)],
-            [x, y],
             registry,
             set(),
             T,
@@ -302,7 +355,6 @@ class TestCoefficientAdmission:
         registry = DerivativeRegistry({"x", "y", "z", "t"})
         state = StructuralState(
             [Equation(ir.ZERO, (x + 1) * y - x * y - z)],
-            [x, y, z],
             registry,
             set(),
             T,
@@ -338,7 +390,6 @@ class TestTrivialTearing:
                 Equation(y, y_rhs),
                 Equation(z, z_rhs),
             ],
-            [x, y, z],
             registry,
             {k},
             T,
@@ -362,7 +413,6 @@ class TestTrivialTearing:
                 Equation(y, 2 * x),
                 Equation(z, z * x + 1),
             ],
-            [x, y, z],
             registry,
             {k},
             T,
@@ -382,7 +432,6 @@ class TestExplicitSystems:
         registry = DerivativeRegistry({"x", "t"})
         state = StructuralState(
             [Equation(registry.derivative(x), -x)],
-            [x],
             registry,
             set(),
             T,
@@ -395,7 +444,7 @@ class TestExplicitSystems:
         registry = DerivativeRegistry({"x", "k", "t"})
         dx = registry.derivative(x)
         state = StructuralState(
-            [Equation(dx, -k * x)], [x], registry, {k}, T
+            [Equation(dx, -k * x)], registry, {k}, T
         )
         result = structural_simplify(state)
         assert result.states == [x]
@@ -413,7 +462,6 @@ class TestExplicitSystems:
                 Equation(y, 2 * x),
                 Equation(z, y + 1),
             ],
-            [x, y, z],
             registry,
             {k},
             T,
@@ -439,7 +487,6 @@ class TestExplicitSystems:
                 Equation(dx, -k * y),
                 Equation(ir.ZERO, x - y),
             ],
-            [x, y],
             registry,
             {k},
             T,
@@ -459,7 +506,6 @@ class TestExplicitSystems:
                 Equation(dx, -k * y),
                 Equation(ir.ZERO, x + y),
             ],
-            [x, y],
             registry,
             {k},
             T,
@@ -484,7 +530,6 @@ class TestExplicitSystems:
                 Equation(dy, -3 * y),
                 Equation(ir.ZERO, x - y),
             ],
-            [x, y],
             registry,
             set(),
             T,
@@ -508,7 +553,6 @@ class TestExplicitSystems:
                 Equation(dy, -3 * y),
                 Equation(ir.ZERO, x - y),
             ],
-            [x, y],
             registry,
             set(),
             T,
@@ -531,7 +575,6 @@ class TestExplicitSystems:
                 Equation(dx, -k * y),
                 Equation(y, x),
             ],
-            [x, y],
             registry,
             {k},
             T,
@@ -553,7 +596,6 @@ class TestAlgebraicSystems:
                 Equation(dx, -k * x + z),
                 Equation(ir.ZERO, z - x**2),
             ],
-            [x, z],
             registry,
             {k},
             T,
@@ -573,7 +615,6 @@ class TestAlgebraicSystems:
                 Equation(dx, -z),
                 Equation(ir.ZERO, z**5 + z - x),
             ],
-            [x, z],
             registry,
             set(),
             T,
@@ -604,7 +645,6 @@ class TestAliasEdgeCases:
                 Equation(ir.ZERO, x - y),
                 Equation(ir.ZERO, x + y),
             ],
-            [x, y, z],
             registry,
             {k},
             T,
@@ -627,7 +667,6 @@ class TestAliasEdgeCases:
                 Equation(ir.ZERO, x + y),
                 Equation(ir.ZERO, y + z),
             ],
-            [x, y, z],
             registry,
             {k},
             T,
@@ -650,7 +689,6 @@ class TestAliasEdgeCases:
                 Equation(d2, -x),
                 Equation(ir.ZERO, y + x),
             ],
-            [x, y],
             registry,
             set(),
             T,
@@ -670,7 +708,6 @@ class TestAliasEdgeCases:
                 Equation(registry.derivative(dx), -x),
                 Equation(ir.ZERO, y - x),
             ],
-            [x, y],
             registry,
             set(),
             T,
@@ -719,7 +756,6 @@ class TestAliasEdgeCases:
                 Equation(ir.ZERO, x - y),
                 Equation(ir.ZERO, x + y - z),
             ],
-            [x, y, z],
             registry,
             set(),
             T,
@@ -741,7 +777,6 @@ class TestSingularIntegerSCC:
                 Equation(ir.ZERO, 2 * x + 2 * y - w),
                 Equation(ir.ZERO, w**5 + w - z),
             ],
-            [x, y, z, w],
             registry,
             set(),
             T,
@@ -799,7 +834,6 @@ class TestPantelidesAndDummyDerivatives:
         ]
         state = StructuralState(
             eqs,
-            [x, y, vx, vy, Tn],
             registry,
             {g, L},
             T,
@@ -871,7 +905,6 @@ class TestPantelidesAndDummyDerivatives:
                     Equation(ir.ZERO, x + extra - T),
                     Equation(ir.ZERO, w - y),
                 ],
-                [x, y, w],
                 registry,
                 {c},
                 T,
@@ -901,7 +934,6 @@ class TestPantelidesAndDummyDerivatives:
                 Equation(registry.derivative(dy), lam * y - g),
                 Equation(ir.ZERO, x**2 + y**2 - 1),
             ],
-            [x, y, lam],
             registry,
             {g},
             T,
@@ -929,7 +961,6 @@ class TestPantelidesAndDummyDerivatives:
         # x'' = -x (harmonic oscillator given as second order).
         state = StructuralState(
             [Equation(d2, -x)],
-            [x],
             registry,
             set(),
             T,
@@ -958,7 +989,6 @@ class TestConsistencyErrors:
                 Equation(ir.ZERO, x - 1),
                 Equation(ir.ZERO, x - 2),
             ],
-            [x],
             registry,
             {k},
             T,
@@ -972,7 +1002,6 @@ class TestConsistencyErrors:
         dx = registry.derivative(x)
         state = StructuralState(
             [Equation(dx, -x + z)],
-            [x, z],
             registry,
             set(),
             T,
@@ -987,7 +1016,6 @@ class TestConsistencyErrors:
         registry = DerivativeRegistry({"x", "y", "z", "t"})
         state = StructuralState(
             [Equation(registry.derivative(x), -x), Equation(y, z)],
-            [x, y, z],
             registry,
             set(),
             T,
@@ -1001,7 +1029,6 @@ class TestConsistencyErrors:
         dx = registry.derivative(x)
         state = StructuralState(
             [Equation(dx, -x + z)],
-            [x, z],
             registry,
             set(),
             T,
@@ -1042,7 +1069,7 @@ class TestSingularDerivativeBlocks:
 
     def test_numeric_block_rewritten_to_constraint(self):
         registry, eqs, (x, y, z) = self.make_pair(ir.num(1e-6))
-        state = StructuralState(eqs, [x, y, z], registry, set(), T)
+        state = StructuralState(eqs, registry, set(), T)
         rewritten = eliminate_singular_derivative_blocks(state)
         assert len(rewritten) == 1
         constraint = state.eqs[rewritten[0]]
@@ -1069,7 +1096,7 @@ class TestSingularDerivativeBlocks:
             c = ir.add(ir.sym("c1a"), ir.sym("c1b"))
             knowns = {ir.sym("c1a"), ir.sym("c1b")}
         registry, eqs, (x, y, z) = self.make_pair(c)
-        state = StructuralState(eqs, [x, y, z], registry, knowns, T)
+        state = StructuralState(eqs, registry, knowns, T)
         result = structural_simplify(state)
         # Constraint and its derivative, both reading algebraic states.
         assert len(result.residuals) == 2
@@ -1096,7 +1123,7 @@ class TestSingularDerivativeBlocks:
             Equation(b * dy + a * dz, -y),
             Equation(a * dx + 2 * b * dy + a * dz, -z),
         ]
-        state = StructuralState(eqs, [x, y, z], registry, {a, b}, T)
+        state = StructuralState(eqs, registry, {a, b}, T)
         assert eliminate_singular_derivative_blocks(state) == [2]
         assert sp.simplify(
             to_sympy(state.eqs[2].rhs) - to_sympy(x + y - z)
@@ -1110,7 +1137,7 @@ class TestSingularDerivativeBlocks:
         registry = DerivativeRegistry({"x", "y", "p", "t"})
         dx = registry.derivative(x)
         eqs = [Equation(p * dx, -x), Equation(dx, -y)]
-        state = StructuralState(eqs, [x, y], registry, {p}, T)
+        state = StructuralState(eqs, registry, {p}, T)
         assert eliminate_singular_derivative_blocks(
             state, allow_parameter=allow_parameter
         ) == [0]
@@ -1128,7 +1155,7 @@ class TestSingularDerivativeBlocks:
         registry = DerivativeRegistry({"x", "y", "p", "q", "t"})
         dx = registry.derivative(x)
         eqs = [Equation(p * dx, -x), Equation(q * dx, -y)]
-        state = StructuralState(eqs, [x, y], registry, {p, q}, T)
+        state = StructuralState(eqs, registry, {p, q}, T)
         assert eliminate_singular_derivative_blocks(
             state, allow_parameter=False
         ) == []
@@ -1142,7 +1169,7 @@ class TestSingularDerivativeBlocks:
             Equation(2 * dx + 3 * dy, -x),
             Equation(3 * dy - 2 * dx, -y),
         ]
-        state = StructuralState(eqs, [x, y], registry, set(), T)
+        state = StructuralState(eqs, registry, set(), T)
         before = list(state.eqs)
         assert eliminate_singular_derivative_blocks(state) == []
         assert state.eqs == before
@@ -1156,7 +1183,7 @@ class TestSingularDerivativeBlocks:
             Equation(-w * dx + w * dy, -y + 1),
             Equation(dw, -w),
         ]
-        state = StructuralState(eqs, [x, y, w], registry, set(), T)
+        state = StructuralState(eqs, registry, set(), T)
         assert eliminate_singular_derivative_blocks(state) == []
 
 
@@ -1171,7 +1198,7 @@ class TestExactLinearSCCRewrite:
             Equation(dy + dz, -y),
             Equation(ir.ZERO, x + y - z),
         ]
-        state = StructuralState(eqs, [x, y, z], registry, set(), T)
+        state = StructuralState(eqs, registry, set(), T)
         result = structural_simplify(state)
         assert result.residuals == []
         assert set(result.states) == {y, z}
@@ -1199,7 +1226,7 @@ class TestExactLinearSCCRewrite:
             Equation(dy + dz, -y),
             Equation(ir.ZERO, x + 2 * y + z),
         ]
-        state = StructuralState(eqs, [x, y, z], registry, set(), T)
+        state = StructuralState(eqs, registry, set(), T)
         with pytest.warns(UserWarning, match="Integer-linear"):
             result = structural_simplify(state)
         assert len(result.residuals) == len(result.algebraic_states)
