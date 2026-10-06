@@ -51,7 +51,7 @@ updating a PR; targeted subsets miss cross-cutting tests.
 ## Code style
 - PEP8: 79-char lines, 71-char comments. Descriptive names, not abbreviations.
 - Type hints on function/method **signatures** only (PEP484) — no inline variable annotations, no
-  `from __future__ import annotations` (min Python 3.11). numpydoc docstrings on public API.
+  `from __future__ import annotations` (min Python 3.11). Every docstring, public or private, uses numpydoc structure.
 - Write comments as the programmer explaining the code to a colleague, in the imperative
   ("Place driver derivatives after drivers in the buffer") or as narrative ("We sort first so
   the cache key is stable"). Data and objects are never the actor: "Driver derivatives take the
