@@ -1545,8 +1545,8 @@ def test_coefficients_land_pinned_below_ceiling(precision):
 
 
 @pytest.fixture(scope="session")
-def cubic_derivative_columns(precision) -> ArrayInterpolator:
-    """The cubic inputs with derivative columns of both inputs."""
+def cubic_derivative_slots(precision) -> ArrayInterpolator:
+    """The cubic inputs with derivative slots of both inputs."""
 
     times = np.linspace(0.0, 5.0, 11, dtype=precision)
     samples = {
@@ -1559,7 +1559,7 @@ def cubic_derivative_columns(precision) -> ArrayInterpolator:
         order=3,
         boundary_condition="not-a-knot",
         wrap=False,
-        derivative_columns=((0, 1), (0, 2), (1, 3)),
+        derivative_slots=((0, 1), (0, 2), (1, 3)),
     )
 
 
@@ -1574,14 +1574,14 @@ def _cubic_query_times(interpolator):
     )
 
 
-def test_derivative_columns_follow_the_inputs(
-    cubic_derivative_columns, tolerance
+def test_derivative_slots_follow_the_inputs(
+    cubic_derivative_slots, tolerance
 ):
-    # Columns: cubic1, cubic2, cubic1', cubic1'', cubic2'''.
-    interpolator = cubic_derivative_columns
+    # Buffer: cubic1, cubic2, cubic1', cubic1'', cubic2'''.
+    interpolator = cubic_derivative_slots
     times = _cubic_query_times(interpolator)
     evaluated = run_driver_device_eval(
-        interpolator.drivers_fn, interpolator.coefficients, times
+        interpolator.drivers_fn, interpolator.coefficients, times, width=5
     )
     expected = np.column_stack(
         (
@@ -1600,13 +1600,16 @@ def test_derivative_columns_follow_the_inputs(
     )
 
 
-def test_time_derivative_of_a_derivative_column_is_the_next_order(
-    cubic_derivative_columns, tolerance
+def test_time_derivative_of_a_derivative_slot_is_the_next_order(
+    cubic_derivative_slots, tolerance
 ):
-    interpolator = cubic_derivative_columns
+    interpolator = cubic_derivative_slots
     times = _cubic_query_times(interpolator)
     evaluated = run_driver_device_eval(
-        interpolator.driver_derivative_fn, interpolator.coefficients, times
+        interpolator.driver_derivative_fn,
+        interpolator.coefficients,
+        times,
+        width=5,
     )
     expected = np.column_stack(
         (
@@ -1625,30 +1628,21 @@ def test_time_derivative_of_a_derivative_column_is_the_next_order(
     )
 
 
-def test_derivative_columns_widen_the_coefficient_table(
-    cubic_derivative_columns,
-):
-    interpolator = cubic_derivative_columns
-    assert interpolator.coefficients_shape == (
-        interpolator.num_segments, 5, 4
-    )
-    assert interpolator.coefficients.shape == (
-        interpolator.coefficients_shape
-    )
-
-
-def test_get_interpolated_returns_the_inputs(cubic_derivative_columns):
-    interpolator = cubic_derivative_columns
+def test_get_interpolated_returns_the_inputs(cubic_derivative_slots):
+    interpolator = cubic_derivative_slots
     times = _cubic_query_times(interpolator)
     np.testing.assert_array_equal(
         interpolator.get_interpolated(times),
         run_driver_device_eval(
-            interpolator.drivers_fn, interpolator.coefficients, times
+            interpolator.drivers_fn,
+            interpolator.coefficients,
+            times,
+            width=5,
         )[:, :2],
     )
 
 
-def test_derivative_column_above_the_spline_order_rejected(precision):
+def test_derivative_slot_above_the_spline_order_rejected(precision):
     times = np.linspace(0.0, 5.0, 11, dtype=precision)
     with pytest.raises(ValueError, match="interpolation order to at least 4"):
         ArrayInterpolator(
@@ -1656,5 +1650,5 @@ def test_derivative_column_above_the_spline_order_rejected(precision):
             drivers=DriverSamples({"cubic": times**3}, time=times),
             order=3,
             wrap=False,
-            derivative_columns=((0, 4),),
+            derivative_slots=((0, 4),),
         )

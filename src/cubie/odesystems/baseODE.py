@@ -293,7 +293,7 @@ class BaseODE(CUDAFactory):
         return self.compile_settings.num_drivers
 
     @property
-    def driver_derivative_columns(self) -> Tuple[Tuple[int, int], ...]:
+    def driver_derivative_slots(self) -> Tuple[Tuple[int, int], ...]:
         """``(driver column, order)`` of each derivative slot."""
         return ()
 

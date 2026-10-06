@@ -1080,7 +1080,7 @@ def test_rebuilt_system_keeps_driver_derivatives(system, precision):
 )
 def test_read_driver_derivatives_take_slots_by_order(system):
     # Orders 1 and 2 are read, so slots 1 and 2 follow the drive.
-    assert system.driver_derivative_columns == ((0, 1), (0, 2))
+    assert system.driver_derivative_slots == ((0, 1), (0, 2))
     assert system.sizes.drivers == 3
     sysir = system_ir(system.equations, system.indices)
     slots = {

@@ -517,7 +517,7 @@ class SymbolicODE(BaseODE):
         return self.indices.drivers.units
 
     @property
-    def driver_derivative_columns(self) -> Tuple[Tuple[int, int], ...]:
+    def driver_derivative_slots(self) -> Tuple[Tuple[int, int], ...]:
         """``(driver column, order)`` of each derivative slot."""
         columns = {
             str(symbol): index
