@@ -52,8 +52,17 @@ updating a PR; targeted subsets miss cross-cutting tests.
 - PEP8: 79-char lines, 71-char comments. Descriptive names, not abbreviations.
 - Type hints on function/method **signatures** only (PEP484) — no inline variable annotations, no
   `from __future__ import annotations` (min Python 3.11). numpydoc docstrings on public API.
-- Comments describe current behaviour, not change history ("now", "no longer", "changed from" →
-  removed). **Never edit `changelog.md`** (plugin-managed).
+- Write comments as the programmer explaining the code to a colleague, in the imperative
+  ("Place driver derivatives after drivers in the buffer") or as narrative ("We sort first so
+  the cache key is stable"). Data and objects are never the actor: "Driver derivatives take the
+  last slots; drivers carry priority" is unreadable.
+- Use whole sentences in plain words, comment only where the code is hard to read, and say why
+  when the reason is not visible in the code. Never describe what used to exist ("now", "no
+  longer", "changed from"), a bug avoided, or an alternative rejected.
+- Docstrings describe what the code does and any non-obvious behaviour, in the same plain
+  sentences. `AGENTS.md` files tell the reader what they need to use, extend or debug the code.
+- Cite a source only for directly ported code (see `odesystems/symbolic/structural/AGENTS.md`).
+- **Never edit `changelog.md`** (plugin-managed).
 
 ## Commits & PRs
 - **Conventional Commit format**; description in **present-state changelog language** (describe the
