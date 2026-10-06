@@ -836,3 +836,46 @@ def test_transistor_amplifier_init_and_reference(solver, system):
         assert float(trajectory[-1, legend[name], 0]) == pytest.approx(
             value, abs=2e-3
         )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [
+        {
+            "system_type": "user_derivative",
+            "algorithm": algorithm,
+            "step_controller": "pi",
+        }
+        for algorithm in ("l_stable_dirk_3", "radau_iia_5")
+    ],
+    indirect=True,
+)
+def test_user_derivative_solution_matches_analytic(
+    solver, solver_settings, tolerance
+):
+    # growth(x) = exp(x) - 1 = p*t pins x = log(1 + p*t); the reduced
+    # rows read v and w through the user's first and second
+    # derivatives of growth.
+    result = solver.solve(
+        {"x": np.array([0.0])},
+        {},
+        duration=float(solver_settings["duration"]),
+    )
+    legend = {
+        label: idx for idx, label in result.time_domain_legend.items()
+    }
+    trajectory = np.asarray(result.time_domain_array, dtype=np.float64)
+    times = np.asarray(result.time[:, 0], dtype=np.float64)
+    expected = {
+        "x": np.log1p(times),
+        "v": 1.0 / (1.0 + times),
+        "w": -1.0 / (1.0 + times) ** 2,
+    }
+    assert not np.any(result.status_codes)
+    for name, values in expected.items():
+        np.testing.assert_allclose(
+            trajectory[:, legend[name], 0],
+            values,
+            rtol=0.0,
+            atol=tolerance.abs_loose,
+        )

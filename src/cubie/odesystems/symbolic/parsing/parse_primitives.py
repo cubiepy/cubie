@@ -367,6 +367,47 @@ def _rename_user_calls(
     return renamed_lines, rename
 
 
+def derivative_chain(entry) -> Tuple[Callable, ...]:
+    """Return a user function's derivative helpers, lowest order first.
+
+    Parameters
+    ----------
+    entry
+        A ``user_function_derivatives`` value: one callable (the first
+        derivative) or a sequence of callables whose ``k``-th entry is
+        the ``(k+1)``-th derivative. The order-``n`` helper takes the
+        function's arguments followed by ``n`` argument indices.
+
+    Raises
+    ------
+    TypeError
+        ``entry`` is neither a callable nor a non-empty sequence of
+        callables.
+    """
+
+    if callable(entry):
+        return (entry,)
+    chain = tuple(entry)
+    if not chain or not all(callable(fn) for fn in chain):
+        raise TypeError(
+            "A user_function_derivatives entry must be a callable or a "
+            f"non-empty list of callables; got {entry!r}."
+        )
+    return chain
+
+
+def derivative_helpers(
+    user_function_derivatives: Optional[Dict[str, object]],
+) -> List[Callable]:
+    """Return every derivative helper of every user function."""
+
+    return [
+        fn
+        for entry in (user_function_derivatives or {}).values()
+        for fn in derivative_chain(entry)
+    ]
+
+
 def _build_sympy_user_functions(
     user_functions: Optional[Dict[str, Callable]],
     rename: Dict[str, str],
@@ -382,8 +423,8 @@ def _build_sympy_user_functions(
         Mapping from original user function names to temporary suffixed names
         used during parsing.
     user_function_derivatives
-        Mapping from user function names to callables that evaluate analytic
-        derivatives.
+        Mapping from user function names to their derivative helpers
+        (see :func:`derivative_chain`).
 
     Returns
     -------
@@ -412,7 +453,9 @@ def _build_sympy_user_functions(
             user_function_derivatives
             and orig_name in user_function_derivatives
         ):
-            deriv_callable = user_function_derivatives[orig_name]
+            deriv_callable = derivative_chain(
+                user_function_derivatives[orig_name]
+            )[0]
         deriv_print_name = None
         if deriv_callable is not None:
             try:

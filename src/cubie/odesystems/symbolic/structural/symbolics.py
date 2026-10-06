@@ -120,6 +120,7 @@ def total_derivative(
     expr: ir.Expr,
     deriv_map: Dict[ir.Sym, ir.Sym],
     time_symbol: ir.Sym,
+    derivative_names: Optional[Dict[str, str]] = None,
 ) -> ir.Expr:
     """Total time derivative of ``expr``.
 
@@ -134,6 +135,9 @@ def total_derivative(
     time_symbol
         The independent variable; explicit dependence differentiates
         through :func:`~.expr.diff`.
+    derivative_names
+        User-function name to the name of its derivative helper,
+        passed to :func:`~.expr.diff`.
 
     Notes
     -----
@@ -141,14 +145,19 @@ def total_derivative(
     mapped symbols occurring in ``expr``.
     """
 
-    terms: List[ir.Expr] = [ir.diff(expr, time_symbol)]
+    terms: List[ir.Expr] = [
+        ir.diff(expr, time_symbol, derivative_names=derivative_names)
+    ]
     atoms = sorted(ir.free_atoms(expr), key=lambda a: a.sort_key)
     for atom in atoms:
         if atom is time_symbol:
             continue
         dsym = deriv_map.get(atom)
         if dsym is not None:
-            terms.append(ir.mul(ir.diff(expr, atom), dsym))
+            partial = ir.diff(
+                expr, atom, derivative_names=derivative_names
+            )
+            terms.append(ir.mul(partial, dsym))
     return ir.add(*terms)
 
 

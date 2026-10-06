@@ -161,6 +161,9 @@ class StructuralState:
         ``equations`` is an unknown.
     time_symbol
         The independent variable.
+    derivative_names
+        User-function name to the name of its derivative helper;
+        differentiating a call to the function calls the helper.
     state_priorities
         Optional per-symbol state-selection priorities.
     irreducibles
@@ -190,11 +193,13 @@ class StructuralState:
         registry: DerivativeRegistry,
         known_symbols: Iterable[ir.Sym],
         time_symbol: ir.Sym,
+        derivative_names: Optional[Dict[str, str]] = None,
         state_priorities: Optional[Dict[ir.Sym, float]] = None,
         irreducibles: Optional[Iterable[ir.Sym]] = None,
     ) -> None:
         self.registry = registry
         self.time_symbol = time_symbol
+        self.derivative_names = dict(derivative_names or {})
         self.known_symbols = set(known_symbols) | {time_symbol}
         self.irreducibles = set(irreducibles or ())
         self.mm = None
@@ -398,7 +403,10 @@ class StructuralState:
                 if dv is not None:
                     deriv_map[v] = self.fullvars[dv]
         new_rhs = total_derivative(
-            ir.sub(rhs, lhs), deriv_map, self.time_symbol
+            ir.sub(rhs, lhs),
+            deriv_map,
+            self.time_symbol,
+            derivative_names=self.derivative_names,
         )
 
         # Superset incidence: previous incidence plus derivatives;

@@ -8,6 +8,7 @@ fast reference evaluations that mirror the behaviour of the compiled device
 functions.
 """
 
+import math
 import warnings
 from math import cos, sin  # noqa: F401 — used inside ODE callables
 from typing import Sequence, Union
@@ -20,6 +21,7 @@ from numpy import (
 )
 from numpy.typing import NDArray
 
+from cubie._cudasim_extensions import cuda
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
@@ -592,6 +594,56 @@ def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
     )
 
 
+# ---------------------------------------------------------------------------
+# Index-3 DAE whose reduction differentiates a user function twice
+# ---------------------------------------------------------------------------
+
+
+@cuda.jit(device=True, inline=True)
+def growth(x):
+    return math.exp(x) - 1.0
+
+
+@cuda.jit(device=True, inline=True)
+def growth_d1(x, i):
+    return math.exp(x)
+
+
+@cuda.jit(device=True, inline=True)
+def growth_d2(x, i, j):
+    return math.exp(x)
+
+
+@cuda.jit(device=True, inline=True)
+def growth_d3(x, i, j, k):
+    return math.exp(x)
+
+
+# Index reduction differentiates the constraint twice, reading
+# growth_d1 and growth_d2; the Jacobian of the result reads growth_d3.
+# x = log(1 + p*t), v = p/(1 + p*t), w = -p**2/(1 + p*t)**2.
+USER_DERIVATIVE_EQUATIONS = ["dx = v", "dv = w", "0 = growth(x) - p*t"]
+USER_DERIVATIVE_PARAMETERS = {"p": 1.0}
+
+
+def build_user_derivative_system(precision: np_dtype) -> BaseODE:
+    """Return a DAE whose reduction reads user-supplied derivatives."""
+
+    return create_ODE_system(
+        dxdt=USER_DERIVATIVE_EQUATIONS,
+        states={"x": 0.0},
+        observables=["v", "w"],
+        parameters=dict(USER_DERIVATIVE_PARAMETERS),
+        user_functions={"growth": growth},
+        user_function_derivatives={
+            "growth": [growth_d1, growth_d2, growth_d3]
+        },
+        precision=precision,
+        strict=True,
+        name="user_derivative",
+    )
+
+
 __all__ = [
     "build_colliding_parameters_system",
     "build_coupled_oscillator_system",
@@ -610,6 +662,7 @@ __all__ = [
     "build_torn_driver_system",
     "build_torn_time_system",
     "build_torn_unsolvable_system",
+    "build_user_derivative_system",
 ]
 # ---------------------------------------------------------------------------
 # Torn DAE twins (mass diag(1, 0)); quintic residuals keep x1 torn
