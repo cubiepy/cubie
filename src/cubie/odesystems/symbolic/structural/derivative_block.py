@@ -54,8 +54,7 @@ def _derivative_rows(
         if not known or not coeffs:
             continue
         rows.append((ieq, coeffs, term))
-    # Rows reading fewest algebraic unknowns become pivots, then rows
-    # that do not define one.
+    # Pivot first: fewest algebraic reads, then not defining one.
     rows.sort(
         key=lambda row: (
             sum(_is_algebraic(state, a) for a in ir.free_atoms(row[2])),
