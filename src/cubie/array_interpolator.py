@@ -94,8 +94,7 @@ class InterpolatorCache(CUDADispatcherCache):
     Attributes
     ----------
     drivers_fn
-        Device function filling the drivers buffer: inputs, then
-        derivative slots.
+        Device function filling the drivers buffer.
     driver_derivative_fn
         Device function filling each buffer entry's time derivative.
     coefficients
@@ -1021,11 +1020,9 @@ class ArrayInterpolator(CUDAFactory):
     def _slot_tables(self, extra: int) -> Tuple[NDArray, ...]:
         """Return each slot's coefficient indices, scales and switches.
 
-        Row ``s`` evaluates the ``k + extra``-th derivative of slot
-        ``s``'s input as a polynomial in the segment position: power
-        ``q`` reads coefficient ``q + k + extra``, scaled by
-        ``(q + k + extra)! / q! / period**(k + extra)``. ``start`` marks
-        the slot's top power and ``continues`` the powers below it.
+        For order ``k + extra``, power ``q`` reads coefficient
+        ``q + k + extra`` scaled by ``(q + k + extra)!/q!/period**(k +
+        extra)``; ``start`` marks the top power, ``continues`` the rest.
         """
         precision = self.precision
         order = self.order
