@@ -6,6 +6,10 @@ incidence graph, derivative chains, solvability analysis via linear
 expansion, the integer-linear subsystem matrix, and the symbolic
 differentiation hooks used by Pantelides.
 
+The equation order at construction is ported from ModelingToolkit.jl
+(commit c4177c335, ``src/systems/systemstructure.jl``,
+``TearingState``).
+
 Published Classes
 -----------------
 :class:`Equation`
@@ -328,6 +332,12 @@ class StructuralState:
             )
             if isalgeq and not ir.is_zero(eq.lhs):
                 eqs[i] = Equation(ir.ZERO, eq.residual())
+
+        if sort_eqs:
+            # Order equations by their printed form.
+            sortidxs = sorted(range(len(eqs)), key=lambda i: str(eqs[i]))
+            eqs = [eqs[i] for i in sortidxs]
+            original_eqs = [original_eqs[i] for i in sortidxs]
 
         self.eqs = eqs
         self.original_eqs = original_eqs

@@ -1,15 +1,27 @@
 """Integer-linear singularity removal.
 
+``aag_bareiss`` is ported from StateSelection.jl (commit 74df007e,
+``src/singularity_removal.jl``, ``aag_bareiss!``).
+
 Published Functions
 -------------------
 :func:`structural_singularity_removal`
     The pass entry point; returns the reduced integer subsystem.
+
+:func:`aag_bareiss`
+    Bareiss factorisation of the integer-linear subsystem.
 """
 
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple
 
-from cubie.odesystems.symbolic.structural.clil import SparseMatrixCLIL
+from cubie.odesystems.symbolic.structural.clil import (
+    SparseMatrixCLIL,
+    bareiss,
+)
 from cubie.odesystems.symbolic.structural.diffgraph import DiffGraph
+from cubie.odesystems.symbolic.structural.pantelides import (
+    computed_highest_diff_variables,
+)
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
     SystemStructure,
@@ -23,6 +35,54 @@ def is_algebraic(var_to_diff: DiffGraph, v: int) -> bool:
         var_to_diff[v] is None
         and var_to_diff.diff_to_primal[v] is None
     )
+
+
+def aag_bareiss(
+    structure: SystemStructure, mm: SparseMatrixCLIL
+) -> Tuple[List[int], List[int]]:
+    """Bareiss-factorise the integer-linear subsystem in place.
+
+    Pivots are taken first on algebraic variables that occur only in
+    linear algebraic equations, then on highest-differentiated
+    variables, then on any variable.
+
+    Parameters
+    ----------
+    structure
+        Structure the matrix rows belong to.
+    mm
+        The integer-linear subsystem, reduced in place.
+
+    Returns
+    -------
+    tuple
+        ``(solvable_variables, pivots)``: the algebraic variables
+        that occur only in linear algebraic equations, and the pivot
+        columns in elimination order.
+    """
+
+    graph = structure.graph
+    var_to_diff = structure.var_to_diff
+    linear_equations_set = set(mm.nzrows)
+
+    is_linear_variables = [
+        is_algebraic(var_to_diff, v) for v in range(len(var_to_diff))
+    ]
+    is_highest_diff = computed_highest_diff_variables(structure)
+    for i in range(graph.nsrcs()):
+        # Only linear algebraic equations keep their variables linear.
+        if i in linear_equations_set and all(
+            is_algebraic(var_to_diff, v) for v in graph.s_neighbors(i)
+        ):
+            continue
+        for j in graph.s_neighbors(i):
+            is_linear_variables[j] = False
+    solvable_variables = [
+        v for v, linear in enumerate(is_linear_variables) if linear
+    ]
+
+    pivots = bareiss(mm, [is_linear_variables, is_highest_diff, None])
+    return solvable_variables, pivots
 
 
 def force_var_to_zero(
@@ -84,10 +144,10 @@ def structural_singularity_removal(
         return mm
 
     structure = state.structure
-    ils, solvable_variables, (rank1, rank2, _rank3, pivots) = (
-        aag_bareiss(structure, mm)
-    )
-    rk1vars = set(pivots[:rank1])
+    ils = mm
+    solvable_variables, pivots = aag_bareiss(structure, ils)
+    # Pivots on linear variables are all taken before any other.
+    rk1vars = {v for v in pivots if v in solvable_variables}
     for v in solvable_variables:
         if v in rk1vars:
             continue

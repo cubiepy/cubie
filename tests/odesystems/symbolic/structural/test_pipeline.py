@@ -45,6 +45,38 @@ def make_state(eqs, unknowns, knowns=(), priorities=None,
     )
 
 
+class TestEquationOrder:
+    def _states(self):
+        x, y, z, k = syms("x y z k")
+        registry = DerivativeRegistry({"x", "y", "z", "k", "t"})
+        eqs = [
+            Equation(registry.derivative(x), -k * x + z),
+            Equation(y, 2 * x),
+            Equation(z, y + 1),
+        ]
+        return [
+            StructuralState(order, [x, y, z], registry, {k}, T)
+            for order in (eqs, eqs[::-1], [eqs[1], eqs[0], eqs[2]])
+        ]
+
+    def test_equations_sorted_by_printed_form(self):
+        for state in self._states():
+            printed = [str(eq) for eq in state.eqs]
+            assert printed == sorted(printed)
+
+    def test_order_independent_of_input_order(self):
+        states = self._states()
+        reference = [str(eq) for eq in states[0].original_eqs]
+        for state in states[1:]:
+            assert [str(eq) for eq in state.original_eqs] == reference
+
+    def test_original_equations_follow_sorted_equations(self):
+        for state in self._states():
+            for eq, original in zip(state.eqs, state.original_eqs):
+                difference = to_sympy(eq.residual() - original.residual())
+                assert sp.simplify(difference) == 0
+
+
 class TestExplicitSystems:
     def test_removed_expression_simplify_option_raises(self):
         """The removed expression option fails explicitly."""

@@ -3,14 +3,13 @@
 Ports StateSelection.jl's ``SparseMatrixCLIL`` (a row-dense,
 column-sparse integer matrix synced with the incidence graph) and the
 fraction-free Bareiss elimination used for integer-linear singularity
-removal and dummy-derivative rank checks.
+removal and dummy-derivative rank checks. ``bareiss`` combines the
+elimination loop of ``bareiss!`` with the staged masked pivot search
+of ``do_bareiss!`` (``find_masked_pivot``).
 
 Python integers are arbitrary precision, so the overflow-checked
 arithmetic paths of the Julia implementation are unnecessary here; the
-elimination arithmetic is otherwise identical. The nullspace helper
-returns the rank and pivot column order only — the nullspace basis
-matrix computed by the Julia version is never consumed by the
-pipeline, so its reduced-echelon construction is not ported.
+elimination arithmetic is otherwise identical.
 
 Published Classes
 -----------------
@@ -20,19 +19,19 @@ Published Classes
 Published Functions
 -------------------
 :func:`bareiss`
-    Generic fraction-free row reduction with pluggable pivoting.
+    Fraction-free row reduction pivoting through staged column masks.
 
 :func:`bareiss_update_virtual_colswap_clil`
     CLIL-specialised elimination step with virtual column swaps.
 
-:func:`nullspace_rank`
-    Rank and pivot column order of a dense integer matrix.
+:func:`find_masked_pivot`
+    Pivot search restricted to the columns of a mask.
 
 :func:`exactdiv`
     Integer division asserting a zero remainder.
 """
 
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 
 def exactdiv(a: int, b: int) -> int:
@@ -84,17 +83,6 @@ class SparseMatrixCLIL:
         """Return ``(stored_rows, ncols)``."""
 
         return (len(self.nzrows), self.ncols)
-
-    def copy(self) -> "SparseMatrixCLIL":
-        """Return a deep copy."""
-
-        return SparseMatrixCLIL(
-            self.nparentrows,
-            self.ncols,
-            list(self.nzrows),
-            [list(r) for r in self.row_cols],
-            [list(r) for r in self.row_vals],
-        )
 
     def swaprows(self, i: int, j: int) -> None:
         """Swap stored rows ``i`` and ``j``."""
@@ -212,138 +200,125 @@ def bareiss_update_virtual_colswap_clil(
         old_cadj[ei] = tmp_vals
 
 
-def bareiss(
-    matrix,
-    find_pivot: Callable,
-    swapcols: Optional[Callable] = None,
-    swaprows: Optional[Callable] = None,
-    update: Optional[Callable] = None,
-    column_pivots: Optional[List[int]] = None,
-) -> Tuple[int, int, bool]:
-    """Fraction-free Bareiss row reduction with pluggable operations.
+def find_first_linear_variable(
+    matrix: SparseMatrixCLIL,
+    row_range: range,
+    mask: Optional[List[bool]],
+    constraint: Callable[[int], bool],
+) -> Optional[Tuple[Tuple[int, int], int]]:
+    """Find the first allowed entry in a row whose length passes.
 
     Parameters
     ----------
     matrix
-        The matrix being reduced (mutated in place).
-    find_pivot
-        ``find_pivot(matrix, k)`` returning ``((row, col), value)`` or
-        ``None`` when no pivot remains.
-    swapcols, swaprows, update
-        Operation callbacks; ``update(matrix, k, (row, col), pivot,
-        last_pivot)`` performs the elimination step and any
-        pivot-column zeroing.
-    column_pivots
-        Optional record of column swaps for pivot-order recovery.
+        The matrix searched.
+    row_range
+        Stored rows searched, in order.
+    mask
+        Per-variable flags of the columns a pivot may take, or
+        ``None`` to allow every column.
+    constraint
+        Predicate on a row's number of nonzeros.
 
     Returns
     -------
-    tuple
-        ``(rank, last_pivot, column_permuted)``.
+    tuple or None
+        ``((row, col), value)`` of the first row passing
+        ``constraint`` that holds an allowed column, taking that
+        row's first allowed column; ``None`` when there is none.
     """
 
-    prev = 1
-    n = matrix.size()[0] if hasattr(matrix, "size") else len(matrix)
-    pivot = 1
-    column_permuted = False
-    for k in range(n):
-        r = find_pivot(matrix, k)
-        if r is None:
-            return (k, pivot, column_permuted)
-        (row, col), pivot = r
-        if column_pivots is not None and k != col:
-            column_pivots[k] = col
-            column_permuted = True
-        if (row, col) != (k, k):
-            if swapcols is not None:
-                swapcols(matrix, k, col)
-            if swaprows is not None:
-                swaprows(matrix, k, row)
-        update(matrix, k, (row, col), pivot, prev)
-        prev = pivot
-    return (n, pivot, column_permuted)
-
-
-def _dense_find_pivot_any(matrix: List[List[int]], k: int):
-    nrows = len(matrix)
-    ncols = len(matrix[0]) if nrows else 0
-    for j in range(k, ncols):
-        for i in range(k, nrows):
-            if matrix[i][j] != 0:
-                return ((i, j), matrix[i][j])
+    eadj = matrix.row_cols
+    for i in row_range:
+        vertices = eadj[i]
+        if constraint(len(vertices)):
+            for j, v in enumerate(vertices):
+                if mask is None or mask[v]:
+                    return ((i, v), matrix.row_vals[i][j])
     return None
 
 
-def _dense_swapcols(matrix: List[List[int]], i: int, j: int) -> None:
-    if i == j:
-        return
-    for row in matrix:
-        row[i], row[j] = row[j], row[i]
+def find_masked_pivot(
+    variables: Optional[List[bool]], matrix: SparseMatrixCLIL, k: int
+) -> Optional[Tuple[Tuple[int, int], int]]:
+    """Pivot from rows ``k`` on: one nonzero, then two, then any.
+
+    Parameters
+    ----------
+    variables
+        Per-variable flags of the columns a pivot may take, or
+        ``None`` to allow every column.
+    matrix
+        The matrix being reduced.
+    k
+        First stored row searched.
+
+    Returns
+    -------
+    tuple or None
+        ``((row, col), value)`` of the pivot, or ``None``.
+    """
+
+    rows = range(k, matrix.size()[0])
+    r = find_first_linear_variable(
+        matrix, rows, variables, lambda n: n == 1
+    )
+    if r is not None:
+        return r
+    r = find_first_linear_variable(
+        matrix, rows, variables, lambda n: n == 2
+    )
+    if r is not None:
+        return r
+    return find_first_linear_variable(
+        matrix, rows, variables, lambda n: True
+    )
 
 
-def _dense_swaprows(matrix: List[List[int]], i: int, j: int) -> None:
-    if i == j:
-        return
-    matrix[i], matrix[j] = matrix[j], matrix[i]
+def bareiss(
+    matrix: SparseMatrixCLIL,
+    pivot_masks: Sequence[Optional[List[bool]]],
+) -> List[int]:
+    """Fraction-free Bareiss row reduction of ``matrix`` in place.
 
-
-def _dense_update(
-    matrix: List[List[int]],
-    k: int,
-    _swapto: Tuple[int, int],
-    pivot: int,
-    prev_pivot: int,
-) -> None:
-    # _swapto (the pivot's original position) is unused: the swap
-    # callbacks have already moved the pivot to (k, k).
-    nrows = len(matrix)
-    ncols = len(matrix[0]) if nrows else 0
-    for i in range(k + 1, ncols):
-        mki = matrix[k][i]
-        for j in range(k + 1, nrows):
-            matrix[j][i] = exactdiv(
-                matrix[j][i] * pivot - matrix[j][k] * mki, prev_pivot
-            )
-    for j in range(k + 1, nrows):
-        matrix[j][k] = 0
-
-
-def nullspace_rank(
-    matrix: List[List[int]],
-    col_order: Optional[List[int]] = None,
-) -> int:
-    """Rank of a dense integer matrix via exact Bareiss elimination.
+    Each step pivots, through :func:`find_masked_pivot`, on a column
+    of the first mask in ``pivot_masks`` that still offers one
+    (``None`` allows every column); a mask that offers none is not
+    tried again. Elimination stops when no mask offers a pivot. Row
+    ``k`` of the result holds its pivot column and no earlier pivot
+    column.
 
     Parameters
     ----------
     matrix
-        Dense integer matrix as a list of row lists. Not mutated.
-    col_order
-        Optional output list; when provided it is filled so that its
-        first ``rank`` entries are the pivot columns in elimination
-        order (the columns proven linearly independent) and the
-        remainder are the free columns, matching the Julia
-        ``bareiss.nullspace`` ``col_order`` contract.
+        The matrix reduced in place; its rows are swapped into pivot
+        order.
+    pivot_masks
+        Per-variable column flags, tried in order.
 
     Returns
     -------
-    int
-        The rank of the matrix.
+    list[int]
+        The pivot column of each step; its length is the rank.
     """
 
-    work = [list(row) for row in matrix]
-    n = len(work[0]) if work else 0
-    column_pivots = list(range(n))
-    rank, _, _ = bareiss(
-        work,
-        _dense_find_pivot_any,
-        swapcols=_dense_swapcols,
-        swaprows=_dense_swaprows,
-        update=_dense_update,
-        column_pivots=column_pivots,
-    )
-    if col_order is not None:
-        col_order[:] = list(range(n))
-        for i, cp in enumerate(column_pivots):
-            col_order[i], col_order[cp] = col_order[cp], col_order[i]
-    return rank
+    pivots = []
+    stage = 0
+    last_pivot = 1
+    for k in range(matrix.size()[0]):
+        found = None
+        while stage < len(pivot_masks):
+            found = find_masked_pivot(pivot_masks[stage], matrix, k)
+            if found is not None:
+                break
+            stage += 1
+        if found is None:
+            break
+        (row, col), pivot = found
+        matrix.swaprows(k, row)
+        bareiss_update_virtual_colswap_clil(
+            matrix, k, col, pivot, last_pivot
+        )
+        last_pivot = pivot
+        pivots.append(col)
+    return pivots

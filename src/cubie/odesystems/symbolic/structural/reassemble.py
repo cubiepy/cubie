@@ -7,6 +7,12 @@ solves each matched equation for its variable (producing differential
 equations and observed equations), leaves torn equations as algebraic
 residuals, and reorders the state into BLT form.
 
+The placement of the ``D(x) ~ x_t`` solve blocks in
+``generate_derivative_variables`` is ported from ModelingToolkit.jl
+(commit c4177c335,
+``src/structural_transformation/symbolics_tearing.jl``,
+``generate_derivative_variables!``).
+
 Published Classes
 -----------------
 :class:`ReassembledSystem`
@@ -291,7 +297,9 @@ def generate_derivative_variables(
         if v_t < len(v_to_scc) and v_to_scc[v_t] is not None:
             i2, j2 = v_to_scc[v_t]
             idxs_to_remove.setdefault(i2, []).append(j2)
-        sccs_to_insert.append((i_insert, [dv]))
+        # Emit D(x) first, so later equations read its solution.
+        sccs_to_insert.append((i, [dv]))
+    sccs_to_insert.sort(key=lambda pair: pair[0])
 
     for i, idxs in idxs_to_remove.items():
         for j in sorted(idxs, reverse=True):

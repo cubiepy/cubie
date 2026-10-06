@@ -4,8 +4,8 @@ Port of StateSelection.jl's ``partial_state_selection.jl``: after
 Pantelides index reduction, choose which differentiated variables
 become algebraic ("dummy derivatives", Mattsson-Soederlind) so the
 remaining system is index 1, then tear. The per-SCC rank decisions
-use the exact integer Jacobian (Bareiss nullspace) when available and
-an augmenting-path structural rank otherwise.
+use the exact integer Jacobian (Bareiss elimination) when available
+and an augmenting-path structural rank otherwise.
 
 Published Functions
 -------------------
@@ -24,7 +24,10 @@ from cubie.odesystems.symbolic.structural.bipartite import (
     UNASSIGNED,
     construct_augmenting_path,
 )
-from cubie.odesystems.symbolic.structural.clil import nullspace_rank
+from cubie.odesystems.symbolic.structural.clil import (
+    SparseMatrixCLIL,
+    bareiss,
+)
 from cubie.odesystems.symbolic.structural.digraph import find_var_sccs
 from cubie.odesystems.symbolic.structural.pantelides import pantelides
 from cubie.odesystems.symbolic.structural.system_structure import (
@@ -83,6 +86,27 @@ class DummyDerivativeSummary:
     ) -> None:
         self.var_sccs = var_sccs
         self.state_priority = state_priority
+
+
+def _independent_columns(matrix: List[List[int]]) -> List[int]:
+    """Columns of ``matrix`` independent of the columns before them.
+
+    Bareiss elimination pivots on one column at a time, in column
+    order; the number of columns returned is the rank.
+    """
+
+    ncols = len(matrix[0]) if matrix else 0
+    row_cols = [[c for c in range(ncols) if row[c]] for row in matrix]
+    clil = SparseMatrixCLIL(
+        len(matrix),
+        ncols,
+        list(range(len(matrix))),
+        row_cols,
+        [[row[c] for c in cols] for row, cols in zip(matrix, row_cols)],
+    )
+    return bareiss(
+        clil, [[c == j for c in range(ncols)] for j in range(ncols)]
+    )
 
 
 def dummy_derivative_graph(
@@ -227,12 +251,10 @@ def _dummy_derivative_graph(
                         [J[i][j] for j in next_var_idxs]
                         for i in next_eq_idxs
                     ]
-                col_order = []
-                rank = nullspace_rank(J, col_order)
-                for i in range(rank):
-                    dummy_derivatives.append(
-                        variables[col_order[i]]
-                    )
+                columns = _independent_columns(J)
+                rank = len(columns)
+                for column in columns:
+                    dummy_derivatives.append(variables[column])
             else:
                 eqs_set = set(eqs)
                 rank = 0
