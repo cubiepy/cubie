@@ -41,6 +41,7 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Union,
@@ -108,13 +109,16 @@ default_timelogger.register_event(
 )
 
 
-def _unknown_names(
-    system: BaseODE, names: Set[str], recognised: Set[str]
-) -> Set[str]:
-    """Return the names neither a setting nor a constant of ``system``."""
-    constants = system.constants
-    constant_names = set(constants.names) if constants is not None else set()
-    return names - recognised - constant_names
+def _unknown_names_error(system: BaseODE, unknown: Set[str]) -> KeyError:
+    """Return the error for keyword arguments that are not settings."""
+    message = f"Unrecognized keyword arguments: {sorted(unknown)}."
+    parameters = sorted(unknown & set(system.parameters.names))
+    if parameters:
+        message += (
+            f" {parameters} are parameters. Pass their values in the "
+            "parameters argument."
+        )
+    return KeyError(message)
 
 
 def _system_from_equations(
@@ -198,6 +202,7 @@ def solve_ivp(
     grid_type: str = "combinatorial",
     time_logging_level: Optional[str] = None,
     nan_error_trajectories: bool = True,
+    fix_constant_parameters: bool = False,
     **kwargs: Any,
 ) -> SolveResult:
     """Solve a batch initial value problem.
@@ -256,8 +261,13 @@ def solve_ivp(
         codes are automatically set to NaN, protecting users from analyzing
         invalid data. When ``False``, all trajectories are returned with
         original values.
+    fix_constant_parameters : bool, default=False
+        Check whether any parameters are set to the same value across
+        all runs, and compile them into the code if they are.
     **kwargs
-        Additional keyword arguments passed to :class:`Solver`.
+        Additional keyword arguments passed to :class:`Solver`. Any
+        system parameters passed as kwargs are rejected, as they should
+        be in the ``parameters`` argument.
 
     Returns
     -------
@@ -307,6 +317,7 @@ def solve_ivp(
             t0=t0,
             grid_type=grid_type,
             nan_error_trajectories=nan_error_trajectories,
+            fix_constant_parameters=fix_constant_parameters,
             **solve_options,
         )
         default_timelogger.stop_event("solve_ivp")
@@ -363,8 +374,7 @@ class Solver:
         off returns the derived values to their defaults.
     **kwargs
         Any setting named in
-        :class:`~cubie.batchsolving.solver_settings.SolverSettings` and
-        any constant of ``system`` by name.
+        :class:`~cubie.batchsolving.solver_settings.SolverSettings`.
 
     Attributes
     ----------
@@ -426,11 +436,9 @@ class Solver:
         }
         settings, _ = unpack_dict_values(settings)
         given, recognised, _ = SolverSettings().update(settings)
-        unknown = _unknown_names(system, set(settings), recognised)
+        unknown = set(settings) - recognised
         if unknown:
-            raise KeyError(
-                f"Unrecognized keyword arguments: {sorted(unknown)}"
-            )
+            raise _unknown_names_error(system, unknown)
         # Set global time logging level
         default_timelogger.set_verbosity(time_logging_level)
         self.given = given
@@ -550,6 +558,7 @@ class Solver:
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
+        fix_constant_parameters: bool = False,
         **kwargs: Any,
     ) -> Union[SolveResult, DeviceSolveResult]:
         """Solve a batch initial value problem.
@@ -566,8 +575,10 @@ class Solver:
         parameters
             Parameter values for each run. Accepts dictionaries
             mapping parameter names to values, or pre-built arrays
-            in (n_params, n_runs) format. Device arrays are accepted
-            as for ``initial_values``.
+            in (n_params, n_runs) format. ``n_params`` is either the
+            number of parameters you've set as swept with
+            :meth:`set_swept_parameters`, or the system's full number
+            of parameters.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -593,9 +604,15 @@ class Solver:
             arrays and return a :class:`DeviceSolveResult` holding the
             solver's device output buffers plus the CUDA stream the
             solve ran on; see Notes. Default ``False``.
+        fix_constant_parameters
+            Check whether any parameters are set to the same value across
+            all runs, and compile them into the code if they are.
+            Default ``False``.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
-            Arguments" in the docs for possibilities.
+            Arguments" in the docs for possibilities. Any system
+            parameters passed as kwargs are rejected, as they should be
+            in the ``parameters`` argument.
 
         Returns
         -------
@@ -638,8 +655,12 @@ class Solver:
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
 
+        sweep, swept, fixed = self.input_handler.split_parameters(
+            parameters, fix_constant_parameters
+        )
+        self.set_swept_parameters(swept, fixed)
         inits, params = self.input_handler(
-            states=initial_values, params=parameters, kind=grid_type
+            states=initial_values, params=sweep, kind=grid_type
         )
 
         self.kernel.run(
@@ -674,14 +695,25 @@ class Solver:
 
     def compile(
         self,
+        parameters: Union[
+            None, ndarray, Dict[str, Union[float, ndarray]]
+        ] = None,
+        fix_constant_parameters: bool = False,
         optimize_candidates: bool = False,
         max_parallel: int = 4,
         **kwargs: Any,
     ) -> None:
-        """Apply settings and compile the kernel.
+        """Apply settings and compile the kernel for these parameters.
 
         Parameters
         ----------
+        parameters
+            Parameter values as in :meth:`solve`. ``None`` compiles for
+            the current :attr:`swept_parameters` and
+            :attr:`fixed_parameter_values`.
+        fix_constant_parameters
+            Check whether any parameters are set to the same value across
+            all runs, and compile them into the code if they are.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
@@ -690,6 +722,11 @@ class Solver:
             Options forwarded to :meth:`update`.
         """
         self.update(**kwargs)
+        if parameters is not None:
+            _, swept, fixed = self.input_handler.split_parameters(
+                parameters, fix_constant_parameters
+            )
+            self.set_swept_parameters(swept, fixed)
 
         if optimize_candidates:
             run_optimization(
@@ -711,8 +748,9 @@ class Solver:
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
         grid_type: str = "verbatim",
+        fix_constant_parameters: bool = False,
     ) -> Tuple[ndarray, ndarray]:
-        """Build parameter and state grids for external use.
+        """Build state and parameter arrays to pass to :meth:`solve`.
 
         Parameters
         ----------
@@ -726,12 +764,16 @@ class Solver:
             Strategy for constructing the grid. ``"combinatorial"``
             produces all combinations while ``"verbatim"`` preserves
             column-wise pairings. Default is ``"verbatim"``.
+        fix_constant_parameters
+            Check whether any parameters are set to the same value across
+            all runs, and compile them into the code if they are.
 
         Returns
         -------
         Tuple[ndarray, ndarray]
             Tuple of (initial_values, parameters) arrays in
-            (n_vars, n_runs) format with system precision dtype.
+            (n_vars, n_runs) format with system precision dtype. The
+            parameter rows are :attr:`swept_parameters`.
             These arrays can be passed directly to :meth:`solve`
             for fast-path execution.
 
@@ -742,9 +784,41 @@ class Solver:
         ... )
         >>> result = solver.solve(inits, params)  # Uses fast path
         """
-        return self.input_handler(
-            states=initial_values, params=parameters, kind=grid_type
+        sweep, swept, fixed = self.input_handler.split_parameters(
+            parameters, fix_constant_parameters
         )
+        self.set_swept_parameters(swept, fixed)
+        return self.input_handler(
+            states=initial_values, params=sweep, kind=grid_type
+        )
+
+    def set_swept_parameters(
+        self,
+        names: Sequence[str],
+        fixed_values: Optional[Dict[str, float]] = None,
+    ) -> None:
+        """Set the parameters an array input gives values for.
+
+        A parameters array can then have one row per name, in this
+        order. Every other parameter is compiled in.
+
+        Parameters
+        ----------
+        names
+            Parameter names, in the order of the array's rows.
+        fixed_values
+            Values to compile in for the other parameters. Defaults to
+            their default values.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name repeats.
+        """
+        self.system_interface.set_swept_parameters(names, fixed_values)
+        self.update()
 
     def calibrate(
         self,
@@ -755,6 +829,7 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
+        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         auto_size: bool = True,
@@ -798,6 +873,9 @@ class Solver:
             Strategy for constructing the integration grid from
             inputs. Only used when dict inputs trigger grid
             construction.
+        fix_constant_parameters
+            Check whether any parameters are set to the same value across
+            all runs, and compile them into the code if they are.
         apply
             Apply the winner's configuration to this solver when
             ``True`` (default). Pass ``False`` to only report.
@@ -837,6 +915,7 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
+            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             auto_size=auto_size,
@@ -854,6 +933,7 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
+        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
@@ -884,6 +964,9 @@ class Solver:
             Initial integration time. Default ``0.0``.
         grid_type
             Grid strategy when dict inputs build a grid.
+        fix_constant_parameters
+            Check whether any parameters are set to the same value across
+            all runs, and compile them into the code if they are.
         apply
             Apply the fastest settings to this solver. Default ``True``.
         verbose
@@ -922,6 +1005,7 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
+            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             force=force,
@@ -939,8 +1023,8 @@ class Solver:
     ) -> Set[str]:
         """Record the given settings, resolve them and update the kernel.
 
-        Constants of the system are given by name; ``None`` makes a
-        setting not given and returns it to its default.
+        ``None`` makes a setting not given and returns it to its
+        default.
 
         Parameters
         ----------
@@ -967,9 +1051,9 @@ class Solver:
             return set()
         updates, groups = unpack_dict_values(updates)
         given, recognised, changed = self.given.update(updates)
-        unknown = _unknown_names(self.system, set(updates), recognised)
+        unknown = set(updates) - recognised
         if unknown and not silent:
-            raise KeyError(f"Unrecognized parameters: {sorted(unknown)}")
+            raise _unknown_names_error(self.system, unknown)
         manager = updates.get("memory_manager")
         if manager is not None and manager is not self.kernel.memory_manager:
             raise ValueError(
@@ -1248,6 +1332,16 @@ class Solver:
     def parameters(self):
         """Expose parameter array used in the last run."""
         return self.kernel.parameters
+
+    @property
+    def fixed_parameter_values(self) -> Dict[str, float]:
+        """Values compiled into the kernel, keyed by parameter name."""
+        return self.system_interface.fixed_parameter_values
+
+    @property
+    def swept_parameters(self) -> Tuple[str, ...]:
+        """Names of the parameters array's rows, in order."""
+        return self.system_interface.swept_parameters
 
     @property
     def initial_values(self):

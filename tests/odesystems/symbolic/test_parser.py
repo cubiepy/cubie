@@ -4,6 +4,8 @@ import warnings
 import pytest
 import sympy as sp
 
+from tests._utils import parse_input_swept
+
 from cubie.odesystems.symbolic.codegen import (
     generate_linear_operator_code,
     print_cuda_multiple,
@@ -268,12 +270,11 @@ class TestProcessParameters:
         """Test basic parameter processing."""
         states = ["x", "y"]
         parameters = ["a", "b"]
-        constants = ["c"]
         observables = ["o1"]
         drivers = ["d1"]
 
         ib = _process_parameters(
-            states, parameters, constants, observables, drivers
+            states, parameters, observables, drivers
         )
 
         assert isinstance(ib, IndexedBases)
@@ -283,13 +284,12 @@ class TestProcessParameters:
     def test_process_parameters_with_dicts(self):
         """Test parameter processing with dictionaries."""
         states = {"x": 1.0, "y": 2.0}
-        parameters = {"a": 0.1, "b": 0.2}
-        constants = {"c": 3.14}
+        parameters = {"a": 0.1, "b": 0.2, "c": 3.14}
         observables = ["o1"]
         drivers = ["d1"]
 
         ib = _process_parameters(
-            states, parameters, constants, observables, drivers
+            states, parameters, observables, drivers
         )
 
         assert "x" in ib.state_names
@@ -304,7 +304,6 @@ class TestLhsSemantics:
         (
             states,
             parameters,
-            constants,
             drivers,
             observables,
             dxdt_str,
@@ -314,7 +313,6 @@ class TestLhsSemantics:
         index_map, all_symbols, _, parsed, _, *_ = parse_input(
             states=states,
             parameters=parameters,
-            constants=constants,
             observables=observables,
             drivers=drivers,
             dxdt=dxdt_list,
@@ -326,7 +324,7 @@ class TestLhsSemantics:
 
     def test_strict_unlisted_auxiliary(self):
         """Unlisted LHS assignments stay anonymous in strict mode."""
-        _, all_symbols, _, parsed, _, _, *_ = parse_input(
+        _, all_symbols, _, parsed, _, _, *_ = parse_input_swept(
             dxdt=["obs = x + a", "aux_val = obs", "dx = obs"],
             states=["x"],
             parameters=["a"],
@@ -402,7 +400,7 @@ class TestRhsSemantics:
 
     def test_if_else_becomes_piecewise(self):
         """Inline conditionals parse to Piecewise."""
-        _, _, _, parsed, _, _, *_ = parse_input(
+        _, _, _, parsed, _, _, *_ = parse_input_swept(
             dxdt=["dx = a if x > 0 else b"],
             states=["x"],
             parameters=["a", "b"],
@@ -502,7 +500,6 @@ class TestParseInput:
         (
             states,
             parameters,
-            constants,
             drivers,
             observables,
             dxdt_str,
@@ -512,10 +509,9 @@ class TestParseInput:
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
-                parse_input(
+                parse_input_swept(
                     states=states,
                     parameters=parameters,
-                    constants=constants,
                     observables=observables,
                     drivers=drivers,
                     dxdt=dxdt_str,
@@ -530,14 +526,13 @@ class TestParseInput:
         # Check that we got the expected symbols
         assert "one" in all_symbols  # state
         assert "zebra" in all_symbols  # parameter
-        assert "apple" in all_symbols  # constant
+        assert "apple" in all_symbols  # parameter
 
     def test_parse_input_with_list(self, simple_system_defaults):
         """Test parsing with list input."""
         (
             states,
             parameters,
-            constants,
             drivers,
             observables,
             dxdt_str,
@@ -550,7 +545,6 @@ class TestParseInput:
                 parse_input(
                     states=states,
                     parameters=parameters,
-                    constants=constants,
                     observables=observables,
                     drivers=drivers,
                     dxdt=dxdt_list,
@@ -564,7 +558,6 @@ class TestParseInput:
         """Test parsing with user-defined functions."""
         states = ["x"]
         parameters = ["a"]
-        constants = {}
         observables = ["y"]
         drivers = []
         dxdt = ["dx = custom_func(x)", "y = x"]
@@ -574,7 +567,6 @@ class TestParseInput:
             parse_input(
                 states=states,
                 parameters=parameters,
-                constants=constants,
                 observables=observables,
                 drivers=drivers,
                 user_functions=user_functions,
@@ -595,7 +587,6 @@ class TestParseInput:
                 states={"x": 0.0},
                 observables=[],
                 parameters={},
-                constants={},
                 drivers=[],
                 strict=True,
             )
@@ -611,7 +602,6 @@ class TestParseInput:
         """Test error with invalid dxdt type."""
         states = ["x"]
         parameters = ["a"]
-        constants = []
         observables = []
         drivers = []
         dxdt = 123  # Invalid type
@@ -620,7 +610,6 @@ class TestParseInput:
             parse_input(
                 states=states,
                 parameters=parameters,
-                constants=constants,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt,
@@ -630,15 +619,13 @@ class TestParseInput:
         """Test that empty lines are filtered out."""
         states = ["x"]
         parameters = ["a"]
-        constants = []
         observables = ["y"]
         drivers = []
         dxdt = ["dx = x + a", "", "  ", "y = x"]  # Contains empty lines
         index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
-            parse_input(
+            parse_input_swept(
                 states=states,
                 parameters=parameters,
-                constants=constants,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt,
@@ -657,7 +644,6 @@ class TestParseInput:
 
         states = {"x0": 0.0, "x1": 0.0}
         parameters = {"parameters0": 1.0, "parameters1": 2.0}
-        constants = {}
         observables = []
         drivers = []
         indexed_dxdt = [
@@ -680,7 +666,6 @@ class TestParseInput:
         ) = parse_input(
             states=states,
             parameters=parameters,
-            constants=constants,
             observables=observables,
             drivers=drivers,
             dxdt=indexed_dxdt,
@@ -698,7 +683,6 @@ class TestParseInput:
         ) = parse_input(
             states=states,
             parameters=parameters,
-            constants=constants,
             observables=observables,
             drivers=drivers,
             dxdt=scalar_dxdt,
@@ -711,7 +695,6 @@ class TestParseInput:
         """Test system with derivatives and d-prefixed auxiliaries."""
         states = ["x", "y"]
         parameters = ["k"]
-        constants = {}
         observables = []
         drivers = []
         dxdt = [
@@ -725,7 +708,6 @@ class TestParseInput:
             parse_input(
                 states=states,
                 parameters=parameters,
-                constants=constants,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt,
@@ -750,7 +732,6 @@ class TestIntegrationWithFixtures:
         (
             states,
             parameters,
-            constants,
             drivers,
             observables,
             dxdt_str,
@@ -763,7 +744,6 @@ class TestIntegrationWithFixtures:
             result1 = parse_input(
                 states=states,
                 parameters=parameters,
-                constants=constants,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt_str,
@@ -772,7 +752,6 @@ class TestIntegrationWithFixtures:
             result2 = parse_input(
                 states=states,
                 parameters=parameters,
-                constants=constants,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt_list,
@@ -790,7 +769,6 @@ class TestIntegrationWithFixtures:
         (
             states,
             parameters,
-            constants,
             drivers,
             observables,
             dxdt_str,
@@ -800,7 +778,6 @@ class TestIntegrationWithFixtures:
         index_map, all_symbols, _, equation_map, fn_hash, _, *_ = parse_input(
             states=states,
             parameters=parameters,
-            constants=constants,
             observables=observables,
             drivers=drivers,
             dxdt=dxdt_str,
@@ -823,7 +800,6 @@ class TestNonStrictInput:
         (
             states,
             parameters,
-            constants,
             drivers,
             observables,
             dxdt_str,
@@ -832,8 +808,8 @@ class TestNonStrictInput:
 
         with pytest.raises(ValueError, match="strict"):
             parse_input(dxdt=dxdt_str, strict=True)
-        index_map, all_symbols, _, equation_map, fn_hash, _, *_ = parse_input(
-            dxdt=dxdt_str, strict=False
+        index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
+            parse_input_swept(dxdt=dxdt_str, strict=False)
         )
         assert "apple" in index_map.parameter_names
         assert "zebra" in index_map.parameter_names
@@ -854,7 +830,7 @@ class TestFunctions:
         user input
         """
         eqs = ("dx = sin(a) + exp(b)", "dy = min(c,d) + log(e)")
-        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
+        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input_swept(
             dxdt=eqs
         )
         code = print_cuda_multiple(eq_map, symbols)
@@ -874,7 +850,7 @@ class TestFunctions:
         userfuncs = {"ex_squared": custom_func, "exp": lambda x: math.exp(x)}
 
         eqs = ["dx = exp(a) + exp(b)", "dy = x"]
-        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
+        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input_swept(
             dxdt=eqs, user_functions=userfuncs
         )
         code = print_cuda_multiple(eq_map, symbols)
@@ -908,7 +884,6 @@ class TestFunctions:
         index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
             states=["x", "y"],
             parameters=[],
-            constants=[],
             observables=[],
             drivers=[],
             dxdt=eqs,
@@ -936,7 +911,7 @@ class TestSympyInputPathway:
         dxdt = [sp.Eq(dx, -k * x)]
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input(
+            parse_input_swept(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
         )
@@ -1056,7 +1031,7 @@ class TestSympyInputPathway:
         dxdt = [sp.Eq(dx, -k * x)]
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input(
+            parse_input_swept(
                 dxdt=dxdt, states=["x"], parameters=[], strict=False
             )
         )
@@ -1101,7 +1076,7 @@ class TestSympyInputPathway:
         dxdt = [sp.Eq(sp.Derivative(x, t), -k * x)]
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input(
+            parse_input_swept(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
         )
@@ -1119,7 +1094,7 @@ class TestSympyInputPathway:
         dxdt = [(sp.Derivative(x, t), -k * x)]
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input(
+            parse_input_swept(
                 dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
         )
@@ -1182,7 +1157,6 @@ class TestHashConsistency:
             dxdt=["dx = -k*x", "dy = k*x"],
             states=["x", "y"],
             parameters=["k"],
-            constants={},
             observables=[],
             drivers=[],
         )
@@ -1194,7 +1168,6 @@ class TestHashConsistency:
             dxdt=[sp.Eq(dy, k * x), sp.Eq(dx, -k * x)],
             states=["x", "y"],
             parameters=["k"],
-            constants={},
             observables=[],
             drivers=[],
         )
@@ -1215,7 +1188,6 @@ class TestHashConsistency:
             dxdt=["dx = -x", "dy = x"],
             states=["x", "y"],
             parameters=[],
-            constants={},
             observables=[],
             drivers=[],
         )
@@ -1225,7 +1197,6 @@ class TestHashConsistency:
             dxdt=["dy = x", "dx = -x"],
             states=["x", "y"],
             parameters=[],
-            constants={},
             observables=[],
             drivers=[],
         )

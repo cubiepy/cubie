@@ -29,7 +29,7 @@ Parser
 
 The parser in ``src/cubie/odesystems/symbolic/parsing/`` tokenises the
 equation strings, identifies states (variables with ``d<name>`` on the
-left-hand side), parameters, constants, and observables, and converts
+left-hand side), parameters, and observables, and converts
 every expression to engine IR before returning.
 
 Array references

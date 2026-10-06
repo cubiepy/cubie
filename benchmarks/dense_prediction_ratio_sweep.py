@@ -644,13 +644,9 @@ def main():
         systems = {}
         for probe_name, probe in PROBES.items():
             system = probe["builder"](precision)
-            params = system.parameters.values_array.astype(
-                precision
-            ).copy()
-            for key, value in probe["parameter_overrides"].items():
-                params[
-                    system.parameters.get_index_of_key(key)
-                ] = value
+            system.set_default_parameters(probe["parameter_overrides"])
+            # Nothing is swept, so the device functions read no params.
+            params = np.zeros(1, dtype=precision)
             state = np.asarray(
                 system.initial_values.values_array, dtype=precision
             ).copy()

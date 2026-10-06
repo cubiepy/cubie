@@ -118,8 +118,8 @@ class TestGenerateDxdtFacCode:
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
 
-    def test_equations_with_constants(self, indexed_bases):
-        """Test equations that reference constants."""
+    def test_equations_with_numeric_constants(self, indexed_bases):
+        """Test equations that reference numeric constants."""
         x = indexed_bases.states.symbol_map["x"]
         y = indexed_bases.states.symbol_map["y"]
         dx = indexed_bases.dxdt.symbol_map["dx"]
@@ -188,10 +188,10 @@ class TestGenerateDxdtFacCode:
         assert "out" in func_def_line
         assert "t" in func_def_line
 
-    def test_constants_never_named(self, indexed_bases):
-        """Constant symbols emit no load binding in the factory."""
+    def test_fixed_parameters_never_named(self, indexed_bases):
+        """Folded parameters emit no load binding in the factory."""
         x = indexed_bases.states.symbol_map["x"]
-        c = indexed_bases.constants.symbol_map["c"]
+        c = indexed_bases.parameters.symbol_map["c"]
         dx = indexed_bases.dxdt.symbol_map["dx"]
         equations = ParsedEquations.from_equations(
             [(dx, c * x)],
@@ -210,14 +210,12 @@ class TestDxdtIntegration:
         # Lotka-Volterra predator-prey model
         states = ["prey", "predator"]
         parameters = ["alpha", "beta", "gamma", "delta"]
-        constants = []
         observables = []
         drivers = []
 
         indexed_bases = IndexedBases.from_user_inputs(
             states=states,
             parameters=parameters,
-            constants=constants,
             observables=observables,
             drivers=drivers,
         )
@@ -248,15 +246,13 @@ class TestDxdtIntegration:
     def test_with_auxiliary_variables(self):
         """Test system with auxiliary variables."""
         states = ["x", "y"]
-        parameters = ["k1", "k2"]
-        constants = ["c1"]
+        parameters = ["k1", "k2", "c1"]
         observables = ["total"]
         drivers = []
 
         indexed_bases = IndexedBases.from_user_inputs(
             states=states,
             parameters=parameters,
-            constants=constants,
             observables=observables,
             drivers=drivers,
         )
@@ -303,7 +299,6 @@ class TestDxdtIntegration:
             states={"x1": 0.0, "x2": 0.0, "x3": 0.0},
             observables=["o1", "o2"],
             parameters={"p1": 0.0, "p2": 0.0},
-            constants={},
             drivers=[],
             strict=False,
         )
@@ -426,7 +421,7 @@ class TestObservablesDeviceParity:
         param_idx = system.parameters.indices_dict
         driver_names = system.indices.driver_names
         drive_idx = driver_names.index("drive")
-        const_value = precision(system.constants.values_dict["c0"])
+        const_value = precision(system.parameters.values_dict["c0"])
 
         x_val = state_kernel[state_idx["x"]]
         y_val = state_kernel[state_idx["y"]]
@@ -456,19 +451,18 @@ class TestObservablesDeviceParity:
         )
 
 
-def test_recompile_updates_constants(precision, tolerance):
-    """Recompiling with new constants updates the device function."""
+def test_recompile_updates_fixed_parameters(precision, tolerance):
+    """A new default for a fixed parameter updates the device function."""
 
     system = SymbolicODE.create(
         dxdt=["dx = c * x"],
         states={"x": precision(1.0)},
-        parameters={},
-        constants={"c": precision(2.0)},
+        parameters={"c": precision(2.0)},
         drivers=[],
         observables=[],
         precision=precision,
         strict=True,
-        name="recompile_constants",
+        name="recompile_fixed_parameters",
     )
 
     def run_dxdt(current_system: SymbolicODE) -> float:
@@ -493,7 +487,7 @@ def test_recompile_updates_constants(precision, tolerance):
         return float(out[0])
 
     res1 = run_dxdt(system)
-    system.set_constants({"c": precision(3.0)})
+    system.set_default_parameters({"c": precision(3.0)})
     res2 = run_dxdt(system)
 
     assert res1 == pytest.approx(

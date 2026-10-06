@@ -511,7 +511,7 @@ def _system_features(
         "system": getattr(system, "name", type(system).__name__),
         "n_states": int(sizes.states),
         "n_observables": int(sizes.observables),
-        "n_parameters": int(sizes.parameters),
+        "n_swept_parameters": int(sizes.swept_parameters),
         "n_drivers": int(sizes.drivers),
         "n_runs": int(n_runs),
         "precision": parent.precision.__name__,
@@ -645,6 +645,7 @@ def run_calibration(
     settling_time: float = 0.0,
     t0: float = 0.0,
     grid_type: str = "verbatim",
+    fix_constant_parameters: bool = False,
     apply: bool = True,
     verbose: bool = True,
     auto_size: bool = True,
@@ -678,6 +679,9 @@ def run_calibration(
     grid_type
         Strategy for constructing the integration grid from inputs.
         Only used when dict inputs trigger grid construction.
+    fix_constant_parameters
+        Check whether any parameters are set to the same value across
+        all runs, and compile them into the code if they are.
     apply
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
@@ -717,7 +721,10 @@ def run_calibration(
         )
 
     inits, params = parent.build_grid(
-        initial_values, parameters, grid_type=grid_type
+        initial_values,
+        parameters,
+        grid_type=grid_type,
+        fix_constant_parameters=fix_constant_parameters,
     )
     if drivers is not None:
         parent.update(drivers=drivers)

@@ -84,7 +84,7 @@ Example:
 
      index_map, symbols, funcs, eqs, fn_hash = parse_input(
          dxdt=["dx = myfunc(x, y)", "dy = x"],
-         states=["x", "y"], parameters=[], constants=[], observables=[],
+         states=["x", "y"], parameters=[], observables=[],
          user_functions={"myfunc": myfunc},
          user_function_derivatives={"myfunc": myfunc_grad}
      )

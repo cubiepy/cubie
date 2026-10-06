@@ -98,7 +98,7 @@ def test_update_sets_host_arrays(
     sk = solverkernel_mutable
     ia = sk.input_arrays
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.full((n_params, 1), 2.0, dtype=precision)
     ia.update(sk, inits, params, None)
@@ -114,7 +114,7 @@ def test_update_includes_driver_coefficients(
     sk = solverkernel_mutable
     ia = sk.input_arrays
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.ones((n_params, 1), dtype=precision)
     drivers = np.ones(sk.coefficients_shape, dtype=precision) * 3.0
@@ -130,7 +130,7 @@ def test_update_fast_path_requeues_attached_inputs(
     sk = solverkernel_mutable
     ia = sk.input_arrays
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.full((n_params, 1), 2.0, dtype=precision)
     drivers = np.ones(sk.coefficients_shape, dtype=precision) * 3.0
@@ -161,7 +161,7 @@ def test_update_fast_path_rejects_stale_slot_dtype(
     sk = solverkernel_mutable
     ia = sk.input_arrays
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.full((n_params, 1), 2.0, dtype=precision)
     ia.update(sk, inits, params, None)
@@ -187,7 +187,7 @@ def test_update_resident_device_buffers_queue_nothing(
     sk = solverkernel_mutable
     ia = sk.input_arrays
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.full((n_params, 1), 2.0, dtype=precision)
     ia.update(sk, inits, params, None)
@@ -281,7 +281,7 @@ def test_initialise_non_chunked_clears_overwrite_list(
     sk = solverkernel_mutable
     ia = sk.input_arrays
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.ones((n_params, 1), dtype=precision)
     ia.update(sk, inits, params, None)
@@ -348,7 +348,7 @@ def _attached_run_inputs(ia):
 def _first_upload(sk, ia, system, precision, drivers):
     """Attach fresh inputs with ``drivers`` and complete their upload."""
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     inits = np.ones((n_states, 1), dtype=precision)
     params = np.full((n_params, 1), 2.0, dtype=precision)
     ia.update(sk, inits, params, drivers)

@@ -22,6 +22,19 @@ from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.driver_memory import is_pinned_array
 
 
+def _handle(
+    handler, states=None, params=None, kind="combinatorial",
+    fix_constant_parameters=False,
+):
+    """Split the parameters, set the sweep and build the arrays."""
+    values, swept, fixed = handler.split_parameters(
+        params, fix_constant_parameters
+    )
+    handler.interface.set_swept_parameters(swept, fixed)
+    inits, built = handler(states, values, kind)
+    return inits, built, swept, fixed
+
+
 def test_unique_cartesian_product_deduplicates(system):
     """Deduplicates each input array preserving order."""
     a = np.array([1, 2, 2])
@@ -239,14 +252,16 @@ def test_init_stores_attributes(system):
 def test_from_system_creates_handler(system):
     """Creates handler via SystemInterface.from_system."""
     handler = BatchInputHandler.from_system(system)
-    assert handler.parameters.n == system.sizes.parameters
+    assert handler.parameters.n == system.num_parameters
     assert handler.states.n == system.sizes.states
 
 
-def test_call_updates_precision(input_handler, system):
+def test_call_updates_precision(input_handler_mutable, system):
     """Updates precision from current system state."""
     # Just verifying it doesn't error and precision matches
-    inits, params = input_handler(states=None, params=None)
+    inits, params, _, _ = _handle(
+        input_handler_mutable, states=None, params=None
+    )
     assert inits.dtype == system.precision
     assert params.dtype == system.precision
 
@@ -269,106 +284,123 @@ class _FakeDeviceArray:
         }
 
 
-def test_call_device_arrays_pass_through(input_handler, system):
+def test_call_device_arrays_pass_through(input_handler_mutable, system):
     """Matched device states and params pass through untouched."""
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     states = _FakeDeviceArray((n_states, 2), system.precision)
     params = _FakeDeviceArray((n_params, 2), system.precision)
-    result_s, result_p = input_handler(states, params, "verbatim")
+    result_s, result_p, swept, _ = _handle(
+        input_handler_mutable,
+        states, params, "verbatim"
+    )
     assert result_s is states
     assert result_p is params
+    assert swept == system.swept_parameters
 
 
-def test_call_device_states_none_params(input_handler, system):
-    """Device states pair with defaults tiled to the run count."""
+def test_call_device_states_none_params(input_handler_mutable, system):
+    """Device states pair with every parameter fixed."""
     n_states = system.sizes.states
     states = _FakeDeviceArray((n_states, 4), system.precision)
-    result_s, result_p = input_handler(states, None, "verbatim")
-    assert result_s is states
-    assert result_p.shape == (system.sizes.parameters, 4)
-    assert result_p.dtype == system.precision
-    expected = np.tile(
-        system.parameters.values_array[:, np.newaxis], (1, 4)
+    result_s, result_p, swept, _ = _handle(
+        input_handler_mutable, states, None, "verbatim"
     )
-    assert_array_equal(result_p, expected)
+    assert result_s is states
+    assert result_p.shape == (0, 4)
+    assert result_p.dtype == system.precision
+    assert swept == ()
 
 
-def test_call_device_states_single_column_params(input_handler, system):
+def test_call_device_states_single_column_params(
+    input_handler_mutable, system
+):
     """A single-column host input broadcasts to the device run count."""
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
     states = _FakeDeviceArray((n_states, 3), system.precision)
     params = np.arange(n_params, dtype=system.precision)
-    result_s, result_p = input_handler(states, params, "verbatim")
+    result_s, result_p, swept, _ = _handle(
+        input_handler_mutable,
+        states, params, "verbatim"
+    )
     assert result_s is states
     assert result_p.shape == (n_params, 3)
+    assert swept == tuple(system.parameters.names)
     for run in range(3):
         assert_array_equal(result_p[:, run], params)
 
 
-def test_call_device_params_matching_host_states(input_handler, system):
+def test_call_device_params_matching_host_states(
+    input_handler_mutable, system
+):
     """A right-sized host grid pairs verbatim with device params."""
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     params = _FakeDeviceArray((n_params, 3), system.precision)
     states = np.ones((n_states, 3), dtype=np.float64)
-    result_s, result_p = input_handler(states, params, "verbatim")
+    result_s, result_p, _, _ = _handle(
+        input_handler_mutable, states, params, "verbatim"
+    )
     assert result_p is params
     assert result_s.shape == (n_states, 3)
     assert result_s.dtype == system.precision
 
 
 def test_call_device_states_mismatched_host_params_raise(
-    input_handler, system
+    input_handler_mutable, system
 ):
     """Multi-column host input must match the device run count."""
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
     states = _FakeDeviceArray((n_states, 4), system.precision)
     params = np.ones((n_params, 3), dtype=system.precision)
     with pytest.raises(ValueError, match="paired\\s+verbatim"):
-        input_handler(states, params, "verbatim")
+        _handle(input_handler_mutable, states, params, "verbatim")
 
 
-def test_call_device_states_dict_params_raise(input_handler, system):
+def test_call_device_states_dict_params_raise(input_handler_mutable, system):
     """Non-empty dict grids cannot combine with device arrays."""
     n_states = system.sizes.states
     param_names = list(system.parameters.names)
     states = _FakeDeviceArray((n_states, 2), system.precision)
     with pytest.raises(TypeError, match="device array"):
-        input_handler(states, {param_names[0]: [1.0, 2.0]}, "verbatim")
+        _handle(
+            input_handler_mutable,
+            states, {param_names[0]: [1.0, 2.0]}, "verbatim"
+        )
 
 
-def test_call_device_array_wrong_dtype_raises(input_handler, system):
+def test_call_device_array_wrong_dtype_raises(input_handler_mutable, system):
     """Device arrays must match the system precision exactly."""
     n_states = system.sizes.states
     wrong = np.float64 if system.precision == np.float32 else np.float32
     states = _FakeDeviceArray((n_states, 2), wrong)
     with pytest.raises(TypeError, match="precision"):
-        input_handler(states, None, "verbatim")
+        _handle(input_handler_mutable, states, None, "verbatim")
 
 
-def test_call_device_array_wrong_rows_raises(input_handler, system):
+def test_call_device_array_wrong_rows_raises(input_handler_mutable, system):
     """Device arrays must carry every system variable."""
     n_states = system.sizes.states
     states = _FakeDeviceArray((n_states + 1, 2), system.precision)
     with pytest.raises(ValueError, match="variables"):
-        input_handler(states, None, "verbatim")
+        _handle(input_handler_mutable, states, None, "verbatim")
 
 
-def test_call_device_array_1d_raises(input_handler, system):
+def test_call_device_array_1d_raises(input_handler_mutable, system):
     """Device arrays must be 2D in (variable, run) format."""
     states = _FakeDeviceArray((system.sizes.states,), system.precision)
     with pytest.raises(ValueError, match="2D"):
-        input_handler(states, None, "verbatim")
+        _handle(input_handler_mutable, states, None, "verbatim")
 
 
-def test_call_processes_inputs(input_handler, system):
+def test_call_processes_inputs(input_handler_mutable, system):
     """Dict states and params are expanded into full grids."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
-    inits, params = input_handler(
+    inits, params, _, _ = _handle(
+        input_handler_mutable,
         states={state_names[0]: [1.0, 2.0]},
         params={param_names[0]: [10.0, 20.0]},
         kind="combinatorial",
@@ -376,7 +408,7 @@ def test_call_processes_inputs(input_handler, system):
     assert inits.shape[1] == params.shape[1] == 4
 
 
-def test_call_dict_order_independent(input_handler, system):
+def test_call_dict_order_independent(input_handler_mutable, system):
     """Full dicts map by key name regardless of insertion order."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
@@ -392,23 +424,26 @@ def test_call_dict_order_independent(input_handler, system):
     shuffled_params = {
         name: params[name] for name in reversed(param_names)
     }
-    inits, param_arr = input_handler(states, params, "verbatim")
-    inits_s, params_s = input_handler(
+    inits, _, swept, fixed = _handle(
+        input_handler_mutable, states, params, "verbatim"
+    )
+    inits_s, _, swept_s, fixed_s = _handle(
+        input_handler_mutable,
         shuffled_states, shuffled_params, "verbatim"
     )
     assert_array_equal(inits_s, inits)
-    assert_array_equal(params_s, param_arr)
+    assert (swept_s, fixed_s) == (swept, fixed)
     expected_inits = np.arange(1.0, len(state_names) + 1.0)
-    expected_params = 10.0 * np.arange(1.0, len(param_names) + 1.0)
     assert_array_equal(inits[:, 0], expected_inits)
-    assert_array_equal(param_arr[:, 0], expected_params)
+    assert fixed == {name: value[0] for name, value in params.items()}
 
 
-def test_call_aligns_run_counts(input_handler, system):
+def test_call_aligns_run_counts(input_handler_mutable, system):
     """Aligns run counts via _fill_aligned."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
-    inits, params = input_handler(
+    inits, params, _, _ = _handle(
+        input_handler_mutable,
         states={state_names[0]: [1.0, 2.0]},
         params={param_names[0]: [10.0, 20.0, 30.0]},
         kind="combinatorial",
@@ -418,9 +453,11 @@ def test_call_aligns_run_counts(input_handler, system):
     assert params.shape[1] == 6
 
 
-def test_call_casts_to_precision(input_handler, system, precision):
+def test_call_casts_to_precision(input_handler_mutable, system, precision):
     """Casts to precision."""
-    inits, params = input_handler(states=None, params=None)
+    inits, params, _, _ = _handle(
+        input_handler_mutable, states=None, params=None
+    )
     assert inits.dtype == precision
     assert params.dtype == precision
 
@@ -448,34 +485,6 @@ def test_cast_to_precision_default_dtype(system, precision):
 def test_cast_to_precision_float64(system, precision):
     """_cast_to_precision casts to a float64 precision override."""
     _assert_cast_to_precision(system, precision)
-
-
-def test_trim_or_extend_fewer_rows(input_handler, system):
-    """Extends with default values when arr has fewer rows."""
-    arr = np.array([[1.0, 2.0]])  # 1 row, 2 runs
-    result = input_handler._trim_or_extend(arr, system.initial_values)
-    assert result.shape[0] == system.sizes.states
-    assert_array_equal(result[0, :], [1.0, 2.0])
-    for i in range(1, system.sizes.states):
-        expected = system.initial_values.values_array[i]
-        assert_allclose(result[i, :], [expected, expected])
-
-
-def test_trim_or_extend_more_rows(input_handler, system):
-    """Trims extra rows when arr has more rows."""
-    n = system.sizes.states
-    arr = np.ones((n + 5, 2))
-    result = input_handler._trim_or_extend(arr, system.initial_values)
-    assert result.shape[0] == n
-
-
-def test_trim_or_extend_exact(input_handler, system):
-    """Returns unchanged when row count matches."""
-    n = system.sizes.states
-    arr = np.ones((n, 2))
-    result = input_handler._trim_or_extend(arr, system.initial_values)
-    assert result.shape == (n, 2)
-    assert_array_equal(result, arr)
 
 
 def test_sanitise_none_passthrough(input_handler, system):
@@ -506,16 +515,6 @@ def test_sanitise_1d_to_column(input_handler, system):
     result = input_handler._sanitise_arraylike(arr, system.initial_values)
     assert result.shape == (n, 1)
     assert_array_equal(result[:, 0], arr)
-
-
-def test_sanitise_warns_on_row_mismatch(input_handler, system):
-    """Warns and adjusts when row count mismatches values_object.n."""
-    arr = np.array([[1.0, 2.0]])  # 1 row, system has more
-    with pytest.warns(UserWarning, match="Missing values"):
-        result = input_handler._sanitise_arraylike(
-            arr, system.initial_values
-        )
-    assert result.shape[0] == system.sizes.states
 
 
 def test_sanitise_returns_none_for_empty(input_handler, system):
@@ -626,7 +625,7 @@ def test_is_right_sized_non_2d(input_handler, system):
 
 def test_is_right_sized_correct(input_handler, system):
     """Returns True when shape[0] == values_object.n."""
-    n = system.sizes.parameters
+    n = system.num_parameters
     arr = np.ones((n, 5))
     assert input_handler._is_right_sized_array(
         arr, system.parameters
@@ -651,7 +650,7 @@ def test_is_1d_or_none(input_handler, val, expected):
 def test_fill_defaults(input_handler, system):
     """Returns broadcast defaults with n_runs columns."""
     result = input_handler._fill_defaults(system.parameters, 5, set())
-    assert result.shape == (system.sizes.parameters, 5)
+    assert result.shape == (system.num_parameters, 5)
     for col in range(5):
         assert_array_equal(result[:, col], system.parameters.values_array)
 
@@ -659,10 +658,12 @@ def test_fill_defaults(input_handler, system):
 def test_fast_return_right_sized_matching(input_handler, system, precision):
     """Returns cast arrays when both are right-sized with matching runs."""
     n_s = system.sizes.states
-    n_p = system.sizes.parameters
+    n_p = system.sizes.swept_parameters
     states = np.ones((n_s, 3), dtype=precision)
     params = np.ones((n_p, 3), dtype=precision)
-    result = input_handler._fast_return_arrays(states, params, "verbatim")
+    result = input_handler._fast_return_arrays(
+        states, params, "verbatim"
+    )
     assert result is not None
     assert result[0].shape == (n_s, 3)
     assert result[1].shape == (n_p, 3)
@@ -682,16 +683,20 @@ def test_fast_return_states_ok_params_small(input_handler, system, precision):
     """Fast path: states_ok + params_small -> broadcast params to match."""
     n_s = system.sizes.states
     states = np.ones((n_s, 3), dtype=precision)
-    result = input_handler._fast_return_arrays(states, None, "verbatim")
+    result = input_handler._fast_return_arrays(
+        states, None, "verbatim"
+    )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
 
 
 def test_fast_return_params_ok_states_small(input_handler, system, precision):
     """Fast path: params_ok + states_small -> broadcast states to match."""
-    n_p = system.sizes.parameters
+    n_p = system.sizes.swept_parameters
     params = np.ones((n_p, 3), dtype=precision)
-    result = input_handler._fast_return_arrays(None, params, "verbatim")
+    result = input_handler._fast_return_arrays(
+        None, params, "verbatim"
+    )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
 
@@ -744,32 +749,37 @@ def test_fill_aligned_combinatorial(input_handler):
     assert_allclose(rp, expected_p)
 
 
-def test_call_none_returns_defaults(input_handler, system):
-    """Empty inputs return single run with all defaults."""
-    inits, params = input_handler(states=None, params=None)
+def test_call_none_returns_defaults(input_handler_mutable, system):
+    """Empty inputs return one run with every default fixed."""
+    inits, params, swept, fixed = _handle(
+        input_handler_mutable, states=None, params=None
+    )
     assert inits.shape[1] == 1
-    assert params.shape[1] == 1
+    assert params.shape == (0, 1)
     assert_allclose(inits[:, 0], system.initial_values.values_array)
-    assert_allclose(params[:, 0], system.parameters.values_array)
+    assert swept == ()
+    assert fixed == system.compile_settings.parameter_values
 
 
-def test_call_verbatim_mismatch_raises(input_handler, system):
+def test_call_verbatim_mismatch_raises(input_handler_mutable, system):
     """Verbatim with mismatched lengths raises ValueError."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
     with pytest.raises(ValueError):
-        input_handler(
+        _handle(
+            input_handler_mutable,
             states={state_names[0]: [0, 1, 2]},
             params={param_names[0]: [0, 1]},
             kind="verbatim",
         )
 
 
-def test_call_combinatorial_dict_both(input_handler, system):
+def test_call_combinatorial_dict_both(input_handler_mutable, system):
     """Combinatorial dict for both states and params."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
-    inits, params = input_handler(
+    inits, params, _, _ = _handle(
+        input_handler_mutable,
         states={state_names[0]: [1.0, 2.0]},
         params={param_names[0]: [10.0, 20.0]},
         kind="combinatorial",
@@ -778,11 +788,12 @@ def test_call_combinatorial_dict_both(input_handler, system):
     assert params.shape[1] == 4
 
 
-def test_call_verbatim_broadcast_single(input_handler, system):
+def test_call_verbatim_broadcast_single(input_handler_mutable, system):
     """Verbatim broadcasts single-run state to match multi-run params."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
-    inits, params = input_handler(
+    inits, params, _, _ = _handle(
+        input_handler_mutable,
         states={state_names[0]: 0.5},
         params={param_names[0]: [1.0, 2.0, 3.0]},
         kind="verbatim",
@@ -792,37 +803,41 @@ def test_call_verbatim_broadcast_single(input_handler, system):
     assert_allclose(inits[0, :], [0.5, 0.5, 0.5])
 
 
-def test_call_single_param_sweep(input_handler, system):
-    """Single parameter sweep fills other values with defaults."""
+def test_call_single_param_sweep(input_handler_mutable, system):
+    """A single-parameter sweep fixes the rest at their defaults."""
     param_names = list(system.parameters.names)
-    sweep = np.linspace(0, 1, 50)
-    inits, params = input_handler(
-        params={param_names[0]: sweep}, kind="combinatorial"
+    values = np.linspace(0, 1, 50)
+    inits, params, swept, fixed = _handle(
+        input_handler_mutable,
+        params={param_names[0]: values}, kind="combinatorial"
     )
-    assert params.shape[1] == 50
-    assert_allclose(params[0, :], sweep, rtol=1e-6)
-    # Non-swept params at defaults
-    for i in range(1, system.sizes.parameters):
-        expected_val = system.parameters.values_array[i]
-        assert_allclose(params[i, :], np.full(50, expected_val), rtol=1e-6)
+    assert params.shape == (1, 50)
+    assert_allclose(params[0, :], values, rtol=1e-6)
+    assert swept == (param_names[0],)
+    defaults = system.compile_settings.parameter_values
+    assert fixed == {
+        name: value
+        for name, value in defaults.items()
+        if name != param_names[0]
+    }
 
 
-def test_call_1d_array_single_run(input_handler, system):
+def test_call_1d_array_single_run(input_handler_mutable, system):
     """1D parameter array treated as single run."""
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
     vals = np.arange(n_params, dtype=float)
-    inits, params = input_handler(params=vals)
+    inits, params, _, _ = _handle(input_handler_mutable, params=vals)
     assert params.shape[1] == 1
     assert_allclose(params[:, 0], vals)
 
 
-def test_call_positional_args(input_handler, system):
+def test_call_positional_args(input_handler_mutable, system):
     """Positional args route correctly: states first, params second."""
     n_s = system.sizes.states
-    n_p = system.sizes.parameters
+    n_p = system.num_parameters
     states = np.full((n_s, 2), 1.5, dtype=system.precision)
     params = np.full((n_p, 2), 99.0, dtype=system.precision)
-    rs, rp = input_handler(states, params, "verbatim")
+    rs, rp, _, _ = _handle(input_handler_mutable, states, params, "verbatim")
     assert_allclose(rs[0, 0], 1.5)
     assert_allclose(rp[0, 0], 99.0)
 
@@ -915,7 +930,8 @@ def test_call_with_no_param_system_processes_empty_params(no_param_system):
     """__call__ falls through to the empty-SystemValues path for params
     when a non-None, non-array params value is supplied."""
     handler = BatchInputHandler.from_system(no_param_system)
-    inits, params = handler(
+    inits, params, _, _ = _handle(
+        handler,
         states={"x0": [1.0, 2.0]}, params={}, kind="combinatorial"
     )
     assert params.shape == (0, 2)
@@ -961,14 +977,14 @@ def test_is_1d_or_none_scalar_returns_false(input_handler):
     assert input_handler._is_1d_or_none(3.14) is False
 
 
-def test_device_arrays_mismatched_runs_raise(input_handler, system):
+def test_device_arrays_mismatched_runs_raise(input_handler_mutable, system):
     """Both device arrays but mismatched run counts raise."""
     n_s = system.sizes.states
-    n_p = system.sizes.parameters
+    n_p = system.sizes.swept_parameters
     states = _FakeDeviceArray((n_s, 2), system.precision)
     params = _FakeDeviceArray((n_p, 3), system.precision)
     with pytest.raises(ValueError, match="different run counts"):
-        input_handler(states, params, "verbatim")
+        _handle(input_handler_mutable, states, params, "verbatim")
 
 
 def test_fast_return_empty_params_none_marks_params_ok(no_param_system):
@@ -988,10 +1004,12 @@ def test_fast_return_states_ok_params_provided_1d_broadcasts(
     """states_ok + a provided (non-None) 1D params array sanitises and
     broadcasts to match the state run count."""
     n_s = system.sizes.states
-    n_p = system.sizes.parameters
+    n_p = system.sizes.swept_parameters
     states = np.ones((n_s, 3), dtype=precision)
     params = np.arange(n_p, dtype=precision)
-    result = input_handler._fast_return_arrays(states, params, "verbatim")
+    result = input_handler._fast_return_arrays(
+        states, params, "verbatim"
+    )
     assert result is not None
     assert result[0].shape[1] == 3
     assert result[1].shape[1] == 3
@@ -1003,10 +1021,12 @@ def test_fast_return_params_ok_states_provided_1d_broadcasts(
     """params_ok + a provided (non-None) 1D states array sanitises and
     broadcasts to match the params run count."""
     n_s = system.sizes.states
-    n_p = system.sizes.parameters
+    n_p = system.sizes.swept_parameters
     params = np.ones((n_p, 3), dtype=precision)
     states = np.arange(n_s, dtype=precision)
-    result = input_handler._fast_return_arrays(states, params, "verbatim")
+    result = input_handler._fast_return_arrays(
+        states, params, "verbatim"
+    )
     assert result is not None
     assert result[0].shape[1] == 3
     assert result[1].shape[1] == 3
@@ -1063,14 +1083,222 @@ def test_materialise_pins_handler_assembled_arrays(input_handler):
 
 
 @pytest.mark.nocudasim
-def test_call_dict_inputs_return_pinned_grids(input_handler, system):
+def test_call_dict_inputs_return_pinned_grids(input_handler_mutable, system):
     """Grids assembled from dict inputs land in pinned buffers."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
-    inits, params = input_handler(
+    inits, params, _, _ = _handle(
+        input_handler_mutable,
         states={state_names[0]: [0.5, 1.5]},
         params={param_names[0]: [0.1, 0.2]},
         kind="verbatim",
     )
     assert is_pinned_array(inits)
     assert is_pinned_array(params)
+
+
+# ── Swept and fixed parameters ────────────────────────────────── #
+
+def test_dict_sweeps_multiple_values_and_fixes_single_values(
+    input_handler_mutable, system
+):
+    """Several values sweep a parameter and one value fixes it."""
+    names = list(system.parameters.names)
+    _, params, swept, fixed = _handle(
+        input_handler_mutable,
+        params={names[0]: [1.0, 2.0, 3.0], names[1]: 4.0},
+        kind="verbatim",
+    )
+    assert swept == (names[0],)
+    assert_array_equal(params, [[1.0, 2.0, 3.0]])
+    assert fixed[names[1]] == 4.0
+
+
+def test_fixed_parameters_keep_the_state_run_count(
+    input_handler_mutable, system
+):
+    """Every parameter fixed still solves one run per state column."""
+    names = list(system.parameters.names)
+    state = system.initial_values.names[0]
+    inits, params, swept, fixed = _handle(
+        input_handler_mutable,
+        states={state: [0.5, 1.0, 1.5]},
+        params={names[0]: 2.0},
+        kind="verbatim",
+    )
+    assert params.shape == (0, 3)
+    assert inits.shape[1] == 3
+    assert swept == ()
+    assert fixed[names[0]] == 2.0
+
+
+def test_system_height_array_sweeps_every_row(input_handler_mutable, system):
+    """A row per system parameter sweeps them all, untouched."""
+    params = np.ones(
+        (system.num_parameters, 3), dtype=system.precision
+    )
+    _, result, swept, fixed = _handle(
+        input_handler_mutable, params=params, kind="verbatim"
+    )
+    assert result is params
+    assert (swept, fixed) == (tuple(system.parameters.names), {})
+
+
+def test_fix_constant_parameters_fixes_uniform_rows(
+    input_handler_mutable, system
+):
+    """fix_constant_parameters fixes rows that hold one value."""
+    names = list(system.parameters.names)
+    params = np.full(
+        (system.num_parameters, 3), 7.0, dtype=system.precision
+    )
+    params[0] = [1.0, 2.0, 3.0]
+    _, result, swept, fixed = _handle(
+        input_handler_mutable,
+        params=params, kind="verbatim", fix_constant_parameters=True
+    )
+    assert swept == (names[0],)
+    assert fixed == {name: 7.0 for name in names[1:]}
+    assert_array_equal(result, [[1.0, 2.0, 3.0]])
+
+
+def test_fix_constant_parameters_keeps_run_count(
+    input_handler_mutable, system
+):
+    """Fixing every row keeps one run per column."""
+    params = np.full(
+        (system.num_parameters, 3), 7.0, dtype=system.precision
+    )
+    inits, result, swept, fixed = _handle(
+        input_handler_mutable,
+        params=params, kind="verbatim", fix_constant_parameters=True
+    )
+    assert swept == ()
+    assert fixed == {name: 7.0 for name in system.parameters.names}
+    assert result.shape == (0, 3)
+    assert inits.shape[1] == 3
+
+
+def test_fix_constant_parameters_zero_column_array(
+    input_handler_mutable, system
+):
+    """A zero-column array builds the same arrays with or without fixing."""
+    params = np.zeros((system.num_parameters, 0), dtype=system.precision)
+    inits, result, swept, _ = _handle(
+        input_handler_mutable,
+        params=params, kind="verbatim", fix_constant_parameters=True
+    )
+    plain_inits, plain_result, plain_swept, _ = _handle(
+        input_handler_mutable, params=params, kind="verbatim"
+    )
+    assert swept == plain_swept
+    assert result.shape == plain_result.shape
+    assert inits.shape == plain_inits.shape
+
+
+@pytest.mark.parametrize("rows", [1, -1])
+def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
+    """Arrays of neither swept nor system height raise."""
+    height = system.num_parameters + rows
+    if height == len(system.swept_parameters):
+        height += 2
+    with pytest.raises(ValueError, match="rows"):
+        _handle(
+            input_handler_mutable, params=np.ones((height, 2)), kind="verbatim"
+        )
+    with pytest.raises(ValueError, match="rows"):
+        _handle(
+            input_handler_mutable,
+            states=np.ones((system.sizes.states + rows, 2)),
+            kind="verbatim",
+        )
+
+
+def test_swept_height_array_keeps_the_compiled_parameters(
+    input_handler_mutable, system
+):
+    """A row per swept parameter keeps the swept and fixed parameters."""
+    names = list(system.parameters.names)
+    fixed = {
+        name: value
+        for name, value in system.parameters.as_float_dict.items()
+        if name != names[0]
+    }
+    fixed[names[1]] = 0.25
+    input_handler_mutable.interface.set_swept_parameters(names[:1], fixed)
+    params = np.ones((1, 4), dtype=system.precision)
+    _, result, swept, result_fixed = _handle(
+        input_handler_mutable, params=params, kind="verbatim"
+    )
+    assert swept == (names[0],)
+    assert result_fixed == fixed
+    assert result is params
+
+
+def test_ragged_verbatim_entries_raise(input_handler_mutable, system):
+    """Verbatim entries of different lengths cannot pair."""
+    names = list(system.parameters.names)
+    with pytest.raises(ValueError, match="same number of values"):
+        _handle(
+            input_handler_mutable,
+            params={names[0]: [1.0, 2.0], names[1]: [3.0, 4.0, 5.0]},
+            kind="verbatim",
+        )
+
+
+def _sweep_reversed(handler):
+    """Sweep the first two parameters, second first."""
+    names = list(handler.parameters.names)
+    handler.interface.set_swept_parameters([names[1], names[0]])
+    return names
+
+
+@pytest.mark.parametrize("empty", [None, {}, np.empty(0)])
+def test_empty_params_sweep_nothing(input_handler_mutable, system, empty):
+    """No parameter input sweeps nothing and fixes every default."""
+    _sweep_reversed(input_handler_mutable)
+    _, params, swept, fixed = _handle(
+        input_handler_mutable, params=empty, kind="verbatim"
+    )
+    assert swept == ()
+    assert fixed == system.compile_settings.parameter_values
+    assert params.shape == (0, 1)
+
+
+def test_dict_rows_follow_the_parameter_order(input_handler_mutable):
+    """A dict's swept rows follow the system's parameter order."""
+    names = _sweep_reversed(input_handler_mutable)
+    _, params, swept, _ = _handle(
+        input_handler_mutable,
+        params={names[1]: [3.0, 4.0], names[0]: [1.0, 2.0]},
+        kind="verbatim",
+    )
+    assert swept == (names[0], names[1])
+    assert_array_equal(params, [[1.0, 2.0], [3.0, 4.0]])
+
+
+def test_device_swept_rows_follow_the_swept_order(
+    input_handler_mutable, system
+):
+    """A device array with a row per swept name keeps the order."""
+    names = _sweep_reversed(input_handler_mutable)
+    params = _FakeDeviceArray((2, 3), system.precision)
+    _, result, swept, _ = _handle(
+        input_handler_mutable, None, params, "verbatim"
+    )
+    assert result is params
+    assert swept == (names[1], names[0])
+
+
+def test_device_system_height_params_sweep_every_row(
+    input_handler_mutable, system
+):
+    """A device array with a row per system parameter sweeps them all."""
+    params = _FakeDeviceArray(
+        (system.num_parameters, 2), system.precision
+    )
+    _, result, swept, _ = _handle(
+        input_handler_mutable, None, params, "verbatim"
+    )
+    assert result is params
+    assert swept == tuple(system.parameters.names)

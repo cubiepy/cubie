@@ -57,6 +57,7 @@ from tests._utils import (
     LORENZ_ITERATION_BASE,
     MOVABLE_LOCATION_KEYS,
     UNROLL_SETTINGS,
+    extract_state_and_time,
 )
 
 
@@ -389,7 +390,10 @@ def test_compile_between_solves_keeps_the_batch_arrays(
     compiled = kernel.kernel
     batch_bytes = _batch_bytes(kernel)
 
-    solver.compile(drivers=driver_settings)
+    solver.compile(
+        parameters=simple_parameters,
+        drivers=driver_settings,
+    )
     kernel.launch_geometry()
     kernel.launchable_shapes()
     assert inputs.device_initial_values is device_inits
@@ -441,7 +445,10 @@ def test_compile_publishes_solve_specialization(
     driver_settings,
 ):
     """Compile publishes the exact specialization a solve reuses."""
-    solver_mutable.compile(drivers=driver_settings)
+    solver_mutable.compile(
+        parameters=simple_parameters,
+        drivers=driver_settings,
+    )
     dispatcher = solver_mutable.kernel.kernel
     keys_after_compile = set(dispatcher.overloads)
     assert len(keys_after_compile) == 1
@@ -475,7 +482,7 @@ def test_compile_and_solve_device_input_layouts(
     initial, parameters = solver.build_grid(
         simple_initial_values, simple_parameters
     )
-    solver.compile(drivers=driver_settings)
+    solver.compile(parameters=simple_parameters, drivers=driver_settings)
     for runs in (4, 8):
         columns = np.arange(runs) % initial.shape[1]
         inits = np.take(initial, columns, axis=1)
@@ -504,7 +511,7 @@ def test_compile_and_solve_device_input_layouts(
             solver.kernel.kernel, solver.kernel.signature
         ).registers_per_thread > 0
         assert solver.kernel.launchable_shapes(runs=runs)
-        solver.compile()
+        solver.compile(parameters=params)
         signature = solver.kernel.signature
         repeated = solver.solve(*device_inputs, duration=0.05)
         np.testing.assert_array_equal(repeated.state, expected_state)
@@ -740,7 +747,7 @@ def test_device_results_match_host(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     host = solver.solve(
@@ -791,7 +798,7 @@ def test_device_results_chunked_raises(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
     with pytest.raises(ValueError, match="single chunk"):
         low_mem_solver.solve(
@@ -821,7 +828,7 @@ def test_device_inputs_match_host_inputs(
         (system.sizes.states, n_runs)
     ).astype(precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     host_result = solver.solve(
@@ -875,7 +882,7 @@ def test_driverless_copy_solves_device_inputs_without_warning(
     """A copy staging device inputs attaches its empty driver table."""
     n_runs = 4
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
-    params = np.ones((system.sizes.parameters, n_runs), dtype=precision)
+    params = np.ones((system.num_parameters, n_runs), dtype=precision)
     twin = solver_mutable.copy()
     try:
         with warnings.catch_warnings():
@@ -910,7 +917,7 @@ def test_device_inputs_device_results_roundtrip(
     n_runs = 3
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     reference = solver.solve(
@@ -955,7 +962,7 @@ def test_device_inputs_chunked_raises(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
     with pytest.raises(ValueError, match="single chunk"):
         low_mem_solver.solve(
@@ -983,7 +990,7 @@ def test_resident_device_inputs_run_without_an_upload(
         0.5, 1.5, system.sizes.states * n_runs
     ).reshape((system.sizes.states, n_runs)).astype(precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
 
     host = solver.solve(
@@ -1055,7 +1062,7 @@ def test_device_inputs_after_a_chunked_run_raise(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.sizes.parameters, n_runs), dtype=precision
+        (system.num_parameters, n_runs), dtype=precision
     )
     low_mem_solver.solve(
         inits,
@@ -1620,7 +1627,7 @@ def test_build_grid_returns_correct_shape(
     assert inits.ndim == 2
     assert params.ndim == 2
     assert inits.shape[0] == solver.system_sizes.states
-    assert params.shape[0] == solver.system_sizes.parameters
+    assert params.shape[0] == solver.system_sizes.swept_parameters
     # Verbatim: run count matches input length
     assert inits.shape[1] == params.shape[1]
 
@@ -1704,7 +1711,7 @@ def test_solve_ivp_positional_argument_order(
     The underlying routing is verified in test_batch_input_handler.py.
     """
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
 
     # Use distinctive values to verify routing
     states = np.full((n_states, 2), 1.5, dtype=system.precision)
@@ -2614,6 +2621,8 @@ def test_copy_rebuilds_the_same_kernel_on_its_own_system(
     solver, driver_settings
 ):
     """A copy hashes identically on a copied system."""
+    # Other solves on the shared system can change its swept parameters.
+    solver.update()
     twin = solver.copy()
     try:
         assert twin.system is not solver.system
@@ -2852,9 +2861,9 @@ def test_repeat_solve_reuses_the_build_state(
     assert kernel.run_params.num_chunks == partition.num_chunks
     assert kernel.run_params.chunk_length == partition.chunk_length
 
-    name = list(system_restored.constants.names)[0]
-    value = float(system_restored.constants.values_dict[name])
-    system_restored.update({name: 2.0 * value + 1.0})
+    name = sorted(system_restored.fixed_parameter_values)[0]
+    value = float(system_restored.parameters.values_dict[name])
+    system_restored.set_default_parameters({name: 2.0 * value + 1.0})
     assert kernel.system_config_stale
     solver.solve(
         initial_values=simple_initial_values,
@@ -2871,7 +2880,10 @@ def test_repeat_solve_reuses_the_build_state(
     rebuilt_legend = kernel.time_domain_legend
     assert rebuilt_legend is not legend
     assert rebuilt_legend == legend
-    assert float(kernel.system.constants.values_dict[name]) == (
+    assert float(kernel.system.parameters.values_dict[name]) == (
+        pytest.approx(2.0 * value + 1.0)
+    )
+    assert kernel.system.fixed_parameter_values[name] == (
         pytest.approx(2.0 * value + 1.0)
     )
 
@@ -3132,3 +3144,141 @@ def test_auto_blocksize_of_shared_kernel_maximises_threads(
         for candidate, (_, count) in shapes.items():
             if candidate * count == most:
                 assert blocksize <= candidate
+
+
+# ============================================================================
+# Swept and fixed parameters
+# ============================================================================
+
+# Expected swept rows of parameter_batch per input form, None for all.
+PARAMETER_FORM_SWEEPS = {
+    "dict": (0, 1),
+    "full_array": None,
+    "fixed_rows": (0, 1),
+    "swept_rows": (1, 0),
+    "device": (1, 0),
+    "build_grid": (0, 1),
+    "compile": (0, 1),
+}
+PARAMETER_FORMS = [
+    pytest.param({"parameter_input": form}, id=form)
+    for form in PARAMETER_FORM_SWEEPS
+]
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", PARAMETER_FORMS, indirect=True
+)
+def test_parameter_inputs_match_cpu_reference(
+    parameter_solve, parameter_batch_reference, output_functions, tolerance
+):
+    """Every parameter input form solves the same batch."""
+    state = parameter_solve["result"].state
+    for run, reference in enumerate(parameter_batch_reference):
+        device_state, _ = extract_state_and_time(
+            state[:, :, run], output_functions
+        )
+        reference_state, _ = extract_state_and_time(
+            reference["state"], output_functions
+        )
+        np.testing.assert_allclose(
+            device_state,
+            reference_state,
+            rtol=tolerance.rel_tight,
+            atol=tolerance.abs_tight,
+        )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", PARAMETER_FORMS, indirect=True
+)
+def test_parameter_inputs_sweep_their_varying_parameters(
+    parameter_solve, solver, system, solver_settings
+):
+    """Each form sweeps the parameters it gives several values."""
+    names = list(system.parameters.names)
+    rows = PARAMETER_FORM_SWEEPS[solver_settings["parameter_input"]]
+    expected = tuple(names) if rows is None else tuple(
+        names[row] for row in rows
+    )
+    assert solver.swept_parameters == expected
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [form for form in PARAMETER_FORMS if form.id != "full_array"],
+    indirect=True,
+)
+def test_single_values_compile_in(
+    parameter_solve, solver, system, parameter_batch
+):
+    """A value that holds across the batch is compiled in."""
+    name = system.parameters.names[2]
+    assert solver.fixed_parameter_values[name] == pytest.approx(
+        float(parameter_batch[2, 0])
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", PARAMETER_FORMS, indirect=True
+)
+def test_solve_leaves_defaults_and_the_system_current(
+    parameter_solve, solver, system
+):
+    """A solve changes no defaults and leaves the kernel up to date."""
+    assert (
+        system.compile_settings.parameter_values
+        == parameter_solve["defaults"]
+    )
+    assert not solver.kernel.system_config_stale
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"parameter_input": "build_grid"}, {"parameter_input": "compile"}],
+    indirect=True,
+)
+def test_prepared_parameters_solve_without_a_change(parameter_solve, solver):
+    """build_grid and compile set the sweep the solve then uses."""
+    assert solver.swept_parameters == parameter_solve["swept_before"]
+    if "rows" in parameter_solve:
+        assert parameter_solve["rows"] == len(solver.swept_parameters)
+    if "kernel_before" in parameter_solve:
+        assert solver.kernel.kernel is parameter_solve["kernel_before"]
+
+
+def test_parameter_changes_between_solves(
+    solver, system_restored, simple_parameters, solver_settings
+):
+    """Single values last one call; a new default reaches the next solve."""
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.compile_settings.parameter_values)
+    solver.build_grid(
+        None, {names[0]: simple_parameters[names[0]], names[1]: 0.75}
+    )
+    assert solver.fixed_parameter_values[names[1]] == 0.75
+    solver.build_grid(None, None)
+    assert solver.swept_parameters == ()
+    assert solver.fixed_parameter_values == defaults
+
+    duration = solver_settings["duration"]
+    first = solver.solve(
+        None, None, duration=duration
+    ).time_domain_array.copy()
+    value = 2.0 * defaults[names[0]] + 1.0
+    system.set_default_parameters({names[0]: value})
+    second = solver.solve(
+        None, None, duration=duration
+    ).time_domain_array.copy()
+    assert solver.fixed_parameter_values[names[0]] == pytest.approx(value)
+    assert not np.array_equal(first, second)
+
+
+def test_parameter_names_are_rejected_as_options(solver, system):
+    """Parameter values go in the parameters argument, not options."""
+    name = system.parameters.names[0]
+    with pytest.raises(KeyError, match="parameters argument"):
+        solver.solve(None, None, **{name: 1.0})
+    with pytest.raises(KeyError, match="parameters argument"):
+        solver.update({name: 1.0})

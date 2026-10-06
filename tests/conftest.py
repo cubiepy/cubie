@@ -14,9 +14,11 @@ from tests._utils import (
     _get_algorithm_tableau,
     _get_evaluate_driver_at_t,
     _get_driver_del_t,
+    restoring_values,
 )
 import attrs
 
+from cubie._cudasim_extensions import cuda
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.buffer_registry import buffer_registry
@@ -65,7 +67,7 @@ from tests._utils import (
     run_device_loop,
 )
 from tests.system_fixtures import (
-    build_colliding_constants_system,
+    build_colliding_parameters_system,
     build_coupled_oscillator_system,
     build_diagonally_dominant_system,
     build_hodgkin_huxley_system,
@@ -87,7 +89,7 @@ from tests.system_fixtures import (
     build_ring_modulator_index2_system,
     build_ring_modulator_index2_scaled_system,
     build_scaled_cs_system,
-    build_amp_constant_system,
+    build_amp_system,
     build_toggle_system,
     build_diode_line_system,
     build_transistor_amplifier_system,
@@ -320,8 +322,8 @@ def system(request, solver_settings_override, precision):
         return build_medium_nonlinear_system(precision)
     if model_type == "constant_deriv":
         return build_three_state_constant_deriv_system(precision)
-    if model_type == "colliding_constants":
-        return build_colliding_constants_system(precision)
+    if model_type == "colliding_parameters":
+        return build_colliding_parameters_system(precision)
     if model_type == "diagonally_dominant":
         return build_diagonally_dominant_system(precision)
     if model_type == "hodgkin_huxley":
@@ -352,8 +354,8 @@ def system(request, solver_settings_override, precision):
         return build_diode_line_system(precision)
     if model_type == "transistor_amplifier":
         return build_transistor_amplifier_system(precision)
-    if model_type == "amp_constant":
-        return build_amp_constant_system(precision)
+    if model_type == "amp":
+        return build_amp_system(precision)
     if model_type == "toggle":
         return build_toggle_system(precision)
     if not isinstance(model_type, str):
@@ -365,22 +367,12 @@ def system(request, solver_settings_override, precision):
 
 @pytest.fixture(scope="function")
 def system_restored(system):
-    """Yield the chain system; restore its specialisation on exit.
+    """Yield the chain system and restore its parameters and states.
 
     For tests that mutate a shared session system. Symbolic only.
     """
-    checkpoint = system._parsed_system
-    constants = dict(system.compile_settings.constant_values)
-    states = dict(system.compile_settings.initial_state_values)
-    parameters = dict(system.compile_settings.parameter_values)
-    config_hash = system.config_hash
-    yield system
-    if system.config_hash != config_hash:
-        system._specialise(constants, checkpoint)
-    system.parameters.update_from_dict(parameters, silent=True)
-    system.initial_values.update_from_dict(states, silent=True)
-    system.indices.parameters.update_values(parameters)
-    system.indices.states.update_values(states)
+    with restoring_values(system):
+        yield system
 
 
 @pytest.fixture(scope="function")
@@ -582,7 +574,7 @@ def chunked_solved_solver(
 
     n_runs = 5
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
 
     inits = np.ones((n_states, n_runs), dtype=precision)
     params = np.ones((n_params, n_runs), dtype=precision)
@@ -616,7 +608,7 @@ def unchunked_solved_solver(
     solver = unchunking_solver
     n_runs = 5
     n_states = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.num_parameters
 
     inits = np.ones((n_states, n_runs), dtype=precision)
     params = np.ones((n_params, n_runs), dtype=precision)
@@ -712,6 +704,7 @@ def solver_settings(solver_settings_override, system, precision):
         "fix_singularities": True,
         "voltage_variable": None,
         "auto_performance": True,
+        "parameter_input": "dict",
     }
 
     float_keys = {
@@ -766,7 +759,7 @@ def solver_settings(solver_settings_override, system, precision):
         defaults["algorithm"], defaults["use_smoothed_error"]
     )
     defaults["n_states"] = system.sizes.states
-    defaults["n_parameters"] = system.sizes.parameters
+    defaults["n_parameters"] = system.sizes.swept_parameters
     defaults["n_drivers"] = system.sizes.drivers
     defaults["n_observables"] = system.sizes.observables
 
@@ -789,6 +782,80 @@ def simple_parameters(system):
         list(system.parameters.names)[0]: [1.0, 2.0],
         list(system.parameters.names)[1]: [0.5, 1.5],
     }
+
+
+@pytest.fixture(scope="session")
+def parameter_batch(system, simple_parameters, precision):
+    """A row per parameter: two swept rows and one changed fixed row."""
+    rows = np.tile(
+        system.parameters.values_array[:, np.newaxis], (1, 2)
+    ).astype(precision)
+    names = list(system.parameters.names)
+    rows[0] = simple_parameters[names[0]]
+    rows[1] = simple_parameters[names[1]]
+    rows[2] = 2.0 * rows[2] + 1.0
+    return rows
+
+
+@pytest.fixture(scope="session")
+def parameter_solve(solver, system, solver_settings, parameter_batch):
+    """Solve parameter_batch given in the form ``parameter_input`` names."""
+    form = solver_settings["parameter_input"]
+    duration = solver_settings["duration"]
+    names = list(system.parameters.names)
+    as_dict = {
+        names[0]: parameter_batch[0],
+        names[1]: parameter_batch[1],
+        names[2]: float(parameter_batch[2, 0]),
+    }
+    defaults = dict(system.compile_settings.parameter_values)
+    record = {"defaults": defaults, "swept_before": None}
+    inits, params, options = None, as_dict, {}
+    if form == "full_array":
+        params = parameter_batch
+    elif form == "fixed_rows":
+        params = parameter_batch
+        options = {"fix_constant_parameters": True}
+    elif form in ("swept_rows", "device"):
+        fixed = {
+            name: value
+            for name, value in defaults.items()
+            if name not in names[:2]
+        }
+        fixed[names[2]] = as_dict[names[2]]
+        solver.set_swept_parameters((names[1], names[0]), fixed)
+        params = parameter_batch[[1, 0]]
+        if form == "device":
+            params = cuda.to_device(params)
+    elif form == "build_grid":
+        inits, params = solver.build_grid(None, as_dict)
+        record["swept_before"] = solver.swept_parameters
+        record["rows"] = params.shape[0]
+    elif form == "compile":
+        solver.compile(parameters=as_dict)
+        record["swept_before"] = solver.swept_parameters
+        record["kernel_before"] = solver.kernel.kernel
+    record["result"] = solver.solve(
+        inits, params, duration=duration, **options
+    )
+    return record
+
+
+@pytest.fixture(scope="session")
+def parameter_batch_reference(
+    cpu_loop_runner, parameter_batch, driver_array
+):
+    """CPU reference loop outputs for each run of parameter_batch."""
+    coefficients = (
+        driver_array.coefficients if driver_array is not None else None
+    )
+    return [
+        cpu_loop_runner(
+            parameters=parameter_batch[:, run],
+            driver_coefficients=coefficients,
+        )
+        for run in range(parameter_batch.shape[1])
+    ]
 
 
 @pytest.fixture(scope="session")
@@ -1390,21 +1457,16 @@ def system_interface(system) -> SystemInterface:
     return SystemInterface(system)
 
 
-@pytest.fixture(scope="function")
-def system_interface_mutable(system) -> SystemInterface:
-    """Yield a system-bound interface, restoring values afterwards."""
-    interface = SystemInterface(system)
-    saved_parameters = dict(system.parameters.values_dict)
-    saved_states = dict(system.initial_values.values_dict)
-    yield interface
-    system.parameters.update_from_dict(saved_parameters, silent=True)
-    system.initial_values.update_from_dict(saved_states, silent=True)
-
-
 @pytest.fixture(scope="session")
 def input_handler(system) -> BatchInputHandler:
     """Return a batch input handler for the configured system."""
     return BatchInputHandler.from_system(system)
+
+
+@pytest.fixture(scope="function")
+def input_handler_mutable(system) -> BatchInputHandler:
+    """Return a handler on a copy of the system, free to set its sweep."""
+    return BatchInputHandler.from_system(system.copy())
 
 
 @pytest.fixture(scope="session")
@@ -1474,10 +1536,9 @@ def batch_request(system, batch_settings, precision) -> dict[str, Array]:
 def batch_input_arrays(
     batch_request,
     batch_settings,
-    input_handler,
     system,
 ) -> tuple[Array, Array]:
-    """Return the initial state and parameter arrays for the batch run."""
+    """Return the batch's initial states and a row per parameter."""
     state_names = set(system.initial_values.names)
     param_names = set(system.parameters.names)
 
@@ -1488,11 +1549,20 @@ def batch_input_arrays(
         k: v for k, v in batch_request.items() if k in param_names
     }
 
-    return input_handler(
-        states=states_dict,
-        params=params_dict,
-        kind=batch_settings["kind"],
+    # A copy takes the sweep, leaving the session system as it is.
+    handler = BatchInputHandler.from_system(system.copy())
+    values, swept, fixed = handler.split_parameters(params_dict)
+    handler.interface.set_swept_parameters(swept, fixed)
+    inits, params = handler(
+        states=states_dict, params=values, kind=batch_settings["kind"]
     )
+    rows = [
+        params[swept.index(name)]
+        if name in swept
+        else np.full(params.shape[1], fixed[name])
+        for name in system.parameters.names
+    ]
+    return inits, np.asarray(rows, dtype=params.dtype)
 
 
 @attrs.define
@@ -1603,27 +1673,6 @@ def basic_model_custom(cellml_fixtures_dir):
         str(cellml_fixtures_dir / "basic_ode.cellml"),
         name="custom_model",
         precision=np.float64,
-        fix_singularities=False,
-    )
-
-
-@pytest.fixture(scope="session")
-def basic_model_param_main_a(cellml_fixtures_dir):
-    """basic_ode with its numeric constant promoted to a parameter."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
-        parameters=["main_a"],
-        fix_singularities=False,
-    )
-
-
-@pytest.fixture(scope="session")
-def basic_model_parameters_dict(cellml_fixtures_dir):
-    """basic_ode with a parameters dict naming one known and one new
-    symbol."""
-    return load_cellml_model(
-        str(cellml_fixtures_dir / "basic_ode.cellml"),
-        parameters={"main_a": 1.0, "user_param": 1.5},
         fix_singularities=False,
     )
 

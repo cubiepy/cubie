@@ -39,14 +39,13 @@ def test_generate_jacobian_with_auxiliary():
 
     index_map = IndexedBases.from_user_inputs(
         states=["x", "y"],
-        parameters=[],
-        constants={"a": 0.0, "b": 0.0},
+        parameters={"a": 0.0, "b": 0.0},
         observables=[],
         drivers=[],
     )
     x, y = list(index_map.states.ref_map.keys())
-    a = index_map.constants.symbol_map["a"]
-    b = index_map.constants.symbol_map["b"]
+    a = index_map.parameters.symbol_map["a"]
+    b = index_map.parameters.symbol_map["b"]
     dx, dy = list(index_map.dxdt.ref_map.keys())
     aux = sp.Symbol("aux", real=True)
     equations = [
@@ -70,7 +69,6 @@ def test_generate_jacobian_coupled_nonlinear():
     index_map = IndexedBases.from_user_inputs(
         states=["x0", "x1"],
         parameters=[],
-        constants={},
         observables=[],
         drivers=[],
     )
@@ -101,7 +99,6 @@ def test_jacobian_caching():
     index_map = IndexedBases.from_user_inputs(
         states=["x", "y"],
         parameters=[],
-        constants={},
         observables=[],
         drivers=[],
     )
@@ -134,7 +131,6 @@ def test_jvp_graph_defines_every_jacobian_entry():
     index_map = IndexedBases.from_user_inputs(
         states=["x", "y"],
         parameters=["a"],
-        constants={},
         observables=["obs1"],
         drivers=[],
     )
@@ -170,7 +166,6 @@ def test_structurally_zero_jacobian_entry_is_zero():
     index_map = IndexedBases.from_user_inputs(
         states=["x", "y"],
         parameters=["a"],
-        constants={},
         observables=[],
         drivers=[],
     )

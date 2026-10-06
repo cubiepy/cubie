@@ -1,7 +1,7 @@
 """Cache parsed CellML models on disk."""
 
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional, Union
+from typing import Any, Dict, Iterable, Mapping, Optional
 import pickle
 from hashlib import sha256
 import json
@@ -88,15 +88,11 @@ class CellMLCache:
 
     def _serialize_args(
         self,
-        parameters: Optional[
-            Union[Iterable[str], Mapping[str, Any]]
-        ],
         observables: Optional[Iterable[str]],
         precision,
         name: str,
         fix_singularities: bool = True,
         voltage_variable: Optional[str] = None,
-        constant_values: Optional[Mapping[str, Any]] = None,
         parameter_values: Optional[Mapping[str, Any]] = None,
         initial_values: Optional[Mapping[str, Any]] = None,
     ) -> str:
@@ -111,26 +107,15 @@ class CellMLCache:
         else:
             precision_str = "None"
 
-        if isinstance(parameters, Mapping):
-            serialized_parameters = self._serialize_values(parameters)
-        else:
-            serialized_parameters = (
-                sorted(str(value) for value in parameters)
-                if parameters
-                else None
-            )
-
         args_dict = {
-            "parameters": serialized_parameters,
             "observables": sorted(observables) if observables else None,
             "precision": precision_str,
             "name": name,
             "fix_singularities": fix_singularities,
             "voltage_variable": voltage_variable,
-            "constant_values": self._serialize_values(constant_values),
             "parameter_values": self._serialize_values(parameter_values),
             "initial_values": self._serialize_values(initial_values),
-            "parse_format": 7,
+            "parse_format": 8,
         }
         return json.dumps(args_dict, sort_keys=True)
 
@@ -149,15 +134,11 @@ class CellMLCache:
 
     def compute_cache_key(
         self,
-        parameters: Optional[
-            Union[Iterable[str], Mapping[str, Any]]
-        ],
         observables: Optional[Iterable[str]],
         precision,
         name: str,
         fix_singularities: bool = True,
         voltage_variable: Optional[str] = None,
-        constant_values: Optional[Mapping[str, Any]] = None,
         parameter_values: Optional[Mapping[str, Any]] = None,
         initial_values: Optional[Mapping[str, Any]] = None,
     ) -> str:
@@ -167,10 +148,9 @@ class CellMLCache:
         """
         file_hash = self.get_cellml_hash()
         args_str = self._serialize_args(
-            parameters, observables, precision, name,
+            observables, precision, name,
             fix_singularities=fix_singularities,
             voltage_variable=voltage_variable,
-            constant_values=constant_values,
             parameter_values=parameter_values,
             initial_values=initial_values,
         )
@@ -308,8 +288,9 @@ class CellMLCache:
         name : str
             Model name
         parsed_system : ParsedSystem
-            Constants-symbolic checkpoint from parse_input, used to
-            re-specialise the system on constant changes.
+            Parsed system from parse_input with every parameter left
+            as a symbol, used to rebuild the equations when the swept
+            parameters change.
         """
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)

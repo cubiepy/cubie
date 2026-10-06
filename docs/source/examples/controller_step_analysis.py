@@ -309,7 +309,7 @@ def create_output_functions(
 
     return OutputFunctions(
         system.sizes.states,
-        system.sizes.parameters,
+        system.sizes.swept_parameters,
         solver_settings["output_types"],
         solver_settings["saved_state_indices"],
         solver_settings["saved_observable_indices"],

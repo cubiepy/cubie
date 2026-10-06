@@ -30,7 +30,7 @@ class TestInspectOdeFunction:
 
         result = inspect_ode_function(f)
         assert result.state_param == "y"
-        assert result.constant_params == []
+        assert result.parameter_args == []
         assert len(result.state_accesses) == 1
         assert result.state_accesses[0]["key"] == 0
         assert result.state_accesses[0]["pattern_type"] == "int"
@@ -41,7 +41,7 @@ class TestInspectOdeFunction:
             return [-k * y[0]]
 
         result = inspect_ode_function(f)
-        assert result.constant_params == ["k"]
+        assert result.parameter_args == ["k"]
 
     def test_math_function_calls(self):
         """Math functions detected in calls."""
@@ -81,24 +81,24 @@ class TestInspectOdeFunction:
         assert result.state_accesses[0]["key"] == "velocity"
         assert result.state_accesses[0]["pattern_type"] == "attribute"
 
-    def test_constant_attribute_access(self):
-        """Attribute access on constants parameter."""
+    def test_parameter_attribute_access(self):
+        """Attribute access on the parameter argument."""
         def f(t, y, p):
             return [-p.damping * y[0]]
 
         result = inspect_ode_function(f)
-        assert len(result.constant_accesses) == 1
-        assert result.constant_accesses[0]["key"] == "damping"
-        assert result.constant_accesses[0]["pattern_type"] == "attribute"
+        assert len(result.parameter_accesses) == 1
+        assert result.parameter_accesses[0]["key"] == "damping"
+        assert result.parameter_accesses[0]["pattern_type"] == "attribute"
 
-    def test_constant_string_subscript(self):
-        """String subscript on constants parameter."""
+    def test_parameter_string_subscript(self):
+        """String subscript on the parameter argument."""
         def f(t, y, p):
             return [-p["mass"] * y[0]]
 
         result = inspect_ode_function(f)
-        assert result.constant_accesses[0]["key"] == "mass"
-        assert result.constant_accesses[0]["pattern_type"] == "string"
+        assert result.parameter_accesses[0]["key"] == "mass"
+        assert result.parameter_accesses[0]["pattern_type"] == "string"
 
     def test_reject_lambda(self):
         """Lambda functions rejected."""
@@ -318,7 +318,7 @@ class TestInspectOdeFunction:
             global SOME_VAR  # noqa: F824
             return [-y[0]]
 
-        with pytest.raises(NotImplementedError, match="constants"):
+        with pytest.raises(NotImplementedError, match="parameters"):
             inspect_ode_function(f)
 
     def test_reject_nonlocal_statement(self):

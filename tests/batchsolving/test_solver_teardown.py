@@ -227,6 +227,7 @@ def test_close_does_not_wait_for_unrelated_stream(
     ids = _instance_ids(target_solver)
     assert _registered_bytes(manager, ids) == 0
 
+    target_solver.compile(parameters=params)
     target_solver.kernel.run(y0, params, duration=0.1)
     closed_state_view = target_solver.kernel.state
     assert _registered_bytes(manager, ids) > 0
@@ -254,6 +255,7 @@ def test_close_does_not_wait_for_unrelated_stream(
 
     # The session solver differs from the closed one only in
     # registration settings, so it reproduces the same state.
+    solver.compile(parameters=params)
     solver.kernel.run(y0, params, duration=0.1)
     solver.kernel.synchronize()
     solver.kernel.wait_for_writeback()

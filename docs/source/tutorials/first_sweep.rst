@@ -32,9 +32,8 @@ order.  States and named values can be accessed by attribute
 
    LV = qb.create_ODE_system(
        lotka_volterra,
-       constants={"a": 0.1, "c": 0.3},     # fixed for the whole batch
-       parameters={"b": 0.02, "d": 0.01},  # can vary per run
-       states={"x": 0.5, "y": 0.3},        # initial values
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},  # default values
+       states={"x": 0.5, "y": 0.3},  # initial values
        name="LotkaVolterra",
    )
 
@@ -54,8 +53,7 @@ form ``dx = ...`` defines a state variable ``x``:
        dx = a*x - b*x*y
        dy = -c*y + d*x*y
        """,
-       constants={"a": 0.1, "c": 0.3},
-       parameters={"b": 0.02, "d": 0.01},
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
        states={"x": 0.5, "y": 0.3},
        name="LotkaVolterra",
    )
@@ -68,11 +66,13 @@ The keyword arguments sort your symbols into roles:
   run.  For the string form the state names can also be inferred
   from the ``dx = ...`` left-hand sides; the function form requires
   ``states`` so CuBIE knows what the returned derivatives refer to.
-- ``parameters`` can take a different value in every run of the
-  batch.  Sweeps operate on parameters and initial conditions.
-- ``constants`` hold one value for the whole batch and are baked
-  into the compiled GPU code, which makes the kernel faster.  A
-  value you will never sweep belongs here.
+- ``parameters`` are the non-state constants in the model.
+  Alongside initial values, they form the inputs you can batch
+  over: each batch runs one integration per set of parameters and
+  initial conditions.  Every parameter that doesn't vary over a
+  given batch is compiled into the code as a number instead of
+  loaded from memory, which can provide a large speedup in big
+  systems.
 - Any right-hand-side symbol you never declared is inferred as a
   parameter with a default value of 0.0, and CuBIE emits a warning
   naming it.  Declaring everything explicitly keeps the warning

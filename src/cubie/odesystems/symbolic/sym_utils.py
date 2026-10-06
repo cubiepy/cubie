@@ -201,7 +201,6 @@ def hash_system_definition(
         "ParsedEquations",
         Iterable[Tuple[sp.Symbol, sp.Expr]],
     ],
-    constants: Optional[Dict[str, float]] = None,
     observable_labels: Optional[Iterable[str]] = None,
     state_labels: Optional[Iterable[str]] = None,
     dxdt_labels: Optional[Iterable[str]] = None,
@@ -218,8 +217,6 @@ def hash_system_definition(
     equations
         Parsed equations object or iterable of (symbol, expression)
         tuples representing the system.
-    constants
-        Optional mapping of constant names to values.
     observable_labels
         Observable names in output-array order.
     state_labels
@@ -256,19 +253,6 @@ def hash_system_definition(
     dxdt_str = "|".join(eq_strings)
     normalized_dxdt = "".join(dxdt_str.split())
 
-    # Append sorted constants labels. When constants vs parameters change,
-    # we need to re-codegen. When values change, we just need to rebuild,
-    # so this is handled in the config hash for caching.
-    constants_str = ""
-    if constants is not None:
-        # Keys in `constants` may be SymPy Symbols (for example from
-        # an index_map) as well as plain strings; SymPy Symbol keys are
-        # not directly orderable, so str() is used to obtain a stable
-        # string-based sort order for all key types.
-        label_strings = [str(k) for k in constants.keys()]
-        sorted_constants = sorted(label_strings)
-        constants_str = "|".join(f"{label}" for label in sorted_constants)
-
     def ordered_labels(labels):
         if labels is None:
             return ""
@@ -300,7 +284,7 @@ def hash_system_definition(
 
     # Combine and hash
     combined = (
-        f"dxdt:{normalized_dxdt}|constants:{constants_str}"
+        f"dxdt:{normalized_dxdt}"
         f"|states:{ordered_labels(state_labels)}"
         f"|dxdt_layout:{ordered_labels(dxdt_labels)}"
         f"|parameters:{ordered_labels(parameter_labels)}"

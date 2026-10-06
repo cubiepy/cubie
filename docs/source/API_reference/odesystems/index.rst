@@ -46,7 +46,7 @@ Data containers and caches
 
 * :doc:`ODEData <ode_data>` – captures compile-time metadata such as precision and state
   sizes.
-* :doc:`SystemValues <system_values>` – runtime container for system-specific constants.
+* :doc:`SystemValues <system_values>` – named-value container for states, parameters and observables.
 * :doc:`SystemSizes <system_sizes>` – records shape information for state and observable
   vectors.
 * :doc:`ODECache <ode_cache>` – caches compiled device functions and solver helpers.

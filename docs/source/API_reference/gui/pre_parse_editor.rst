@@ -1,7 +1,7 @@
 PreParseEditor
 ==============
 
-.. currentmodule:: cubie.gui.constants_editor
+.. currentmodule:: cubie.gui.parameters_editor
 
 .. autoclass:: PreParseEditor
    :members:

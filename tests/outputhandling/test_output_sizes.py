@@ -175,7 +175,7 @@ def test_batch_input_parameters(solverkernel):
     """parameters = (parameters, num_runs)."""
     sizes = BatchInputSizes.from_solver(solverkernel)
     ss = solverkernel.system_sizes
-    assert sizes.parameters == (ss.parameters, solverkernel.num_runs)
+    assert sizes.parameters == (ss.swept_parameters, solverkernel.num_runs)
 
 
 def test_batch_input_driver_coefficients(solverkernel):

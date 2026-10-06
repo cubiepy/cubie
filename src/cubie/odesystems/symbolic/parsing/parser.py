@@ -109,12 +109,10 @@ def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
 def _process_parameters(
     states: Union[Dict[str, float], Iterable[str]],
     parameters: Union[Dict[str, float], Iterable[str]],
-    constants: Union[Dict[str, float], Iterable[str]],
     observables: Iterable[str],
     drivers: Iterable[str],
     state_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     parameter_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-    constant_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     observable_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     driver_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
 ) -> IndexedBases:
@@ -126,8 +124,6 @@ def _process_parameters(
         State symbols or mapping to initial values.
     parameters
         Parameter symbols or mapping to default values.
-    constants
-        Constant symbols or mapping to default values.
     observables
         Observable symbol names supplied by the user.
     drivers
@@ -136,8 +132,6 @@ def _process_parameters(
         Optional units for states. Defaults to "dimensionless".
     parameter_units
         Optional units for parameters. Defaults to "dimensionless".
-    constant_units
-        Optional units for constants. Defaults to "dimensionless".
     observable_units
         Optional units for observables. Defaults to "dimensionless".
     driver_units
@@ -151,16 +145,39 @@ def _process_parameters(
     indexed_bases = IndexedBases.from_user_inputs(
         states,
         parameters,
-        constants,
         observables,
         drivers,
         state_units=state_units,
         parameter_units=parameter_units,
-        constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
     )
     return indexed_bases
+
+
+def _units_by_name(
+    names: Optional[Iterable[Any]],
+    units: Optional[Union[Dict[str, str], Iterable[str]]],
+    label: str,
+) -> Optional[Dict[str, str]]:
+    """Return ``units`` keyed by name; a list follows ``names``."""
+    if units is None:
+        return None
+    if isinstance(units, dict):
+        return {str(name): unit for name, unit in units.items()}
+    if names is None:
+        raise ValueError(
+            f"{label} units were given as a list but no {label} names "
+            f"were declared. Give the units as a dict of name: unit."
+        )
+    names = [str(name) for name in names]
+    units = list(units)
+    if len(units) != len(names):
+        raise ValueError(
+            f"{len(units)} {label} units were given for {len(names)} "
+            f"{label} names."
+        )
+    return dict(zip(names, units))
 
 
 def parse_input(
@@ -168,14 +185,12 @@ def parse_input(
     states: Optional[Union[Dict[str, float], Iterable[str]]] = None,
     observables: Optional[Iterable[str]] = None,
     parameters: Optional[Union[Dict[str, float], Iterable[str]]] = None,
-    constants: Optional[Union[Dict[str, float], Iterable[str]]] = None,
     drivers: Optional[Union[Iterable[str], Dict[str, Any]]] = None,
     user_functions: Optional[Dict[str, Callable]] = None,
     user_function_derivatives: Optional[Dict[str, Callable]] = None,
     strict: bool = False,
     state_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     parameter_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-    constant_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     observable_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     driver_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
     state_priority: Optional[Dict[str, float]] = None,
@@ -201,9 +216,6 @@ def parse_input(
         Observable variable names whose trajectories should be saved.
     parameters
         Parameter names or mapping to default values.
-    constants
-        Constant names or mapping to default values that remain fixed across
-        runs.
     drivers
         Driver variable names supplied at runtime. Accepts either an iterable
         of driver labels or a dictionary mapping driver labels to default
@@ -219,8 +231,6 @@ def parse_input(
         Optional units for states. Defaults to "dimensionless".
     parameter_units
         Optional units for parameters. Defaults to "dimensionless".
-    constant_units
-        Optional units for constants. Defaults to "dimensionless".
     observable_units
         Optional units for observables. Defaults to "dimensionless".
     driver_units
@@ -239,18 +249,26 @@ def parse_input(
     tuple
         ``(index_map, all_symbols, funcs, parsed_equations, fn_hash,
         parsed_system)``. The derived mass matrix rides on
-        ``parsed_equations.mass_matrix``; ``parsed_system`` is the
-        constants-symbolic checkpoint used to re-specialise the
-        system when constant values change.
+        ``parsed_equations.mass_matrix``. ``parsed_system`` is the
+        parsed system with every parameter left as a symbol, used to
+        rebuild the equations when the swept parameters change.
 
     Notes
     -----
     With ``strict=False``, undeclared variables inferred from usage
-    are added automatically. Constant values fold into the equations
-    as literals, so ``parsed_equations`` and ``fn_hash`` are
-    value-specific.
+    are added automatically as parameters. The products fix every
+    parameter at its default, so ``parsed_equations`` and ``fn_hash``
+    are value-specific.
     """
     input_type = _detect_input_type(dxdt)
+    state_units = _units_by_name(states, state_units, "state")
+    parameter_units = _units_by_name(
+        parameters, parameter_units, "parameter"
+    )
+    observable_units = _units_by_name(
+        observables, observable_units, "observable"
+    )
+    driver_units = _units_by_name(drivers, driver_units, "driver")
 
     if input_type == "function":
         return _parse_function_path(
@@ -258,14 +276,12 @@ def parse_input(
             states=states,
             observables=observables,
             parameters=parameters,
-            constants=constants,
             drivers=drivers,
             user_functions=user_functions,
             user_function_derivatives=user_function_derivatives,
             strict=strict,
             state_units=state_units,
             parameter_units=parameter_units,
-            constant_units=constant_units,
             observable_units=observable_units,
             driver_units=driver_units,
         )
@@ -281,7 +297,6 @@ def parse_input(
     }
     observables = list(observables or [])
     parameters = parameters if parameters is not None else {}
-    constants = constants if constants is not None else {}
 
     driver_dict = None
     if drivers is None:
@@ -297,7 +312,7 @@ def parse_input(
         driver_names = list(drivers)
 
     known_symbol_map = {}
-    for name in list(parameters) + list(constants) + driver_names:
+    for name in list(parameters) + driver_names:
         known_symbol_map[str(name)] = sp.Symbol(str(name), real=True)
 
     unknown_names = {str(name) for name in states_dict}
@@ -321,20 +336,15 @@ def parse_input(
         }
     else:
         parameters_dict = {str(name): 0.0 for name in parameters}
-    if isinstance(constants, dict):
-        constants_dict = {
-            str(name): float(value)
-            for name, value in constants.items()
-        }
-    else:
-        constants_dict = {str(name): 0.0 for name in constants}
+    for name in normalised.new_params:
+        parameters_dict.setdefault(name, 0.0)
+        known_symbol_map.setdefault(name, sp.Symbol(name, real=True))
 
     parsed_system = ParsedSystem(
         normalised=normalised,
         states=states_dict,
         observables=observables,
         parameters=parameters_dict,
-        constants=constants_dict,
         driver_names=driver_names,
         driver_dict=driver_dict,
         known_symbol_map=known_symbol_map,
@@ -345,7 +355,6 @@ def parse_input(
         simplify_options=simplify_options,
         state_units=state_units,
         parameter_units=parameter_units,
-        constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
     )
@@ -358,14 +367,12 @@ def _parse_function_path(
     states,
     observables,
     parameters,
-    constants,
     drivers,
     user_functions,
     user_function_derivatives,
     strict,
     state_units,
     parameter_units,
-    constant_units,
     observable_units,
     driver_units,
 ):
@@ -382,8 +389,6 @@ def _parse_function_path(
         observables = []
     if parameters is None:
         parameters = {}
-    if constants is None:
-        constants = {}
     driver_dict = None
     if drivers is None:
         drivers = []
@@ -398,12 +403,10 @@ def _parse_function_path(
     index_map = _process_parameters(
         states=states,
         parameters=parameters,
-        constants=constants,
         observables=observables,
         drivers=drivers,
         state_units=state_units,
         parameter_units=parameter_units,
-        constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
     )
@@ -436,15 +439,9 @@ def _parse_function_path(
     }
     for param in new_params:
         parameters_dict.setdefault(str(param), 0.0)
-    constants_dict = {
-        str(name): float(value)
-        for name, value in index_map.constant_values.items()
-    }
 
     known_symbol_map = {}
-    for name in (
-        list(parameters_dict) + list(constants_dict) + list(drivers)
-    ):
+    for name in list(parameters_dict) + list(drivers):
         known_symbol_map[str(name)] = sp.Symbol(str(name), real=True)
 
     unknown_names = set(states_dict) | set(observables)
@@ -458,13 +455,15 @@ def _parse_function_path(
         set(states_dict),
     )
     normalised.derivative_names.update(function_derivative_names)
+    for name in normalised.new_params:
+        parameters_dict.setdefault(name, 0.0)
+        known_symbol_map.setdefault(name, sp.Symbol(name, real=True))
 
     parsed_system = ParsedSystem(
         normalised=normalised,
         states=states_dict,
         observables=observables,
         parameters=parameters_dict,
-        constants=constants_dict,
         driver_names=list(drivers),
         driver_dict=driver_dict,
         known_symbol_map=known_symbol_map,
@@ -472,7 +471,6 @@ def _parse_function_path(
         user_function_derivatives=user_function_derivatives,
         state_units=state_units,
         parameter_units=parameter_units,
-        constant_units=constant_units,
         observable_units=observable_units,
         driver_units=driver_units,
     )

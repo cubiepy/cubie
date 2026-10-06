@@ -15,13 +15,12 @@ Loading a CellML Model
 
    system = qb.load_cellml_model(
        "path/to/model.cellml",
-       parameters=["g_Na", "g_K"],
        observables=["I_Na", "I_K"],
    )
 
 Variables with differential equations become states.  Of the
 remaining (algebraic) variables, those defined as plain numbers become
-constants — or parameters, if you list them in ``parameters``.
+parameters.
 Variables defined by expressions become anonymous auxiliaries unless
 you list them in ``observables``, in which case their trajectories can
 be saved.

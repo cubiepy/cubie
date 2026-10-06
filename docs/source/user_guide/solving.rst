@@ -24,8 +24,7 @@ solve the Lotka--Volterra system for a single initial condition:
 
    LV = qb.create_ODE_system(
        lotka_volterra,
-       constants={"a": 0.1, "c": 0.3},
-       parameters={"b": 0.02, "d": 0.01},
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
        states={"x": 0.5, "y": 0.3},
        name="LotkaVolterra",
    )
@@ -105,11 +104,41 @@ from scratch, and
 input grid once so repeated ``solve`` calls with the same batch layout
 skip grid construction.
 
-Initial values and parameters that already live on the GPU (CuPy or
-Numba device arrays in ``(n_variables, n_runs)`` layout, matching the
-system precision) are wired directly into the kernel with no
-host-to-device transfer; pair them with ``on_device=True`` to keep an
-entire solve → post-process pipeline on the GPU (see :doc:`results`).
+.. _parameter-inputs:
+
+Dicts and arrays
+----------------
+
+It's simplest to provide a dict of parameter and initial values, with
+each value that differs from the system's defaults assigned a constant
+value and any swept parameters or states assigned a group or range of
+values. Cubie takes a few milliseconds to interpret and sort these,
+which is fine if your solve takes several seconds. If you're looking for
+something a bit faster and more programmatic, you can pass Cubie an
+array instead. If you want to go *really* fast and you are comfortable
+with the CUDA environment, you can pass arrays on the GPU (device arrays)
+directly to cut out the few milliseconds of transfer time as well.
+
+There is one additional step required when passing an array of swept
+parameters: you need to tell Cubie which parameters they correspond to.
+You can do this two ways:
+
+- By passing an array that has a row for *every* parameter in your
+  system, Cubie will assume that all parameters are changing over a
+  batch. This can make the solver run slower, as it needs to load every
+  parameter from memory for each run in the batch. If you pass
+  ``fix_constant_parameters=True``, Cubie can scan your array, filter
+  out each value that doesn't change over the batch, and compile it into
+  the code as a number instead.
+- By calling ``solver.set_swept_parameters(param_names)`` before you
+  pass the array, and then passing an array of only the parameters that
+  vary over a batch. This can cut down the size of the arrays you pass
+  considerably, and is how Cubie's benchmarks use it.
+
+Arrays are laid out ``(n_variables, n_runs)`` and must match the system
+precision. Device arrays (CuPy or Numba) are wired directly into the
+kernel; pair them with ``on_device=True`` to keep an entire solve →
+post-process pipeline on the GPU (see :doc:`results`).
 
 The ``duration`` Parameter
 --------------------------

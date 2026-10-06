@@ -174,8 +174,7 @@ introduces no interpolation error:
        dx = v
        dv = mu * (1 - x*x) * v - x + amp * sin(omega * t)
        """,
-       constants={"amp": 5.0, "omega": 2.0 * np.pi * 0.25},
-       parameters={"mu": 50.0},
+       parameters={"mu": 50.0, "amp": 5.0, "omega": 2.0 * np.pi * 0.25},
        states={"x": 2.0, "v": 0.0},
        name="SineDrivenVanDerPol",
    )

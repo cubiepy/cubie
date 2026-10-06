@@ -16,7 +16,12 @@ from cubie.odesystems.symbolic.structural.errors import (
     InvalidSystemError,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
-from tests._utils import run_device_dxdt, run_device_observables
+from tests._utils import (
+    sweep,
+    parse_input_swept,
+    run_device_dxdt,
+    run_device_observables,
+)
 
 
 def parse_dae_input(**kwargs):
@@ -25,10 +30,16 @@ def parse_dae_input(**kwargs):
     return parse_input(**kwargs)[:5]
 
 
+def parse_dae_input_swept(**kwargs):
+    """Parse with every parameter swept, without the parsed system."""
+
+    return parse_input_swept(**kwargs)[:5]
+
+
 class TestParseDaeInput:
     def test_string_implicit_and_alias(self):
         index_map, _syms, _funcs, parsed, _h = (
-            parse_dae_input(
+            parse_dae_input_swept(
                 dxdt=["dx = -k*x + y", "y = 2*x"],
                 states={"x": 1.0},
                 observables=["y"],
@@ -74,7 +85,7 @@ class TestParseDaeInput:
     def test_torn_system_mass_and_defaults_warning(self):
         with pytest.warns(EquationWarning):
             index_map, _s, _f, parsed, _h = (
-                parse_dae_input(
+                parse_dae_input_swept(
                     dxdt="""
                     dx = vx
                     dy = vy
@@ -89,7 +100,7 @@ class TestParseDaeInput:
                         "vy": 0.0,
                         "T": 0.0,
                     },
-                    constants={"g": 9.81, "L": 1.0},
+                    parameters={"g": 9.81, "L": 1.0},
                     state_priority={"y": 10, "vy": 10},
                 )
             )
@@ -171,7 +182,7 @@ class TestParseDaeInput:
         assert sp.simplify(to_sympy(eqs["z"] + 2 * x)) == 0
 
     def test_undeclared_symbol_inferred_parameter(self):
-        index_map, _s, _f, _p, _h = parse_dae_input(
+        index_map, _s, _f, _p, _h = parse_dae_input_swept(
             dxdt=["dx = -mu * x"],
             states={"x": 1.0},
         )
@@ -272,13 +283,13 @@ class TestScaledDerivativeLhs:
             dx = v
             """,
             states={"x": 1.0, "v": 0.0},
-            constants={"M": 2.0, "k": 4.0, "c": 0.5},
+            parameters={"M": 2.0, "k": 4.0, "c": 0.5},
         )
         assert set(index_map.state_names) == {"x", "v"}
         assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         x, v = sp.symbols("x v", real=True)
-        # Constant values fold as literals before simplification.
+        # Fixed values fold as literals before simplification.
         assert sp.simplify(
             to_sympy(eqs["dv"]) - (-4.0 * x - 0.5 * v) / 2.0
         ) == 0
@@ -291,7 +302,7 @@ class TestScaledDerivativeLhs:
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=[(M * dv, -k * x), ("dx", "v")],
             states={"x": 1.0, "v": 0.0},
-            constants={"M": 2.0, "k": 4.0},
+            parameters={"M": 2.0, "k": 4.0},
         )
         assert set(index_map.state_names) == {"x", "v"}
         assert parsed.mass_matrix is None
@@ -360,6 +371,7 @@ class TestDerivativeBlockPolicy:
             simplify_options={"allow_parameter": False},
             name="policy_pivot",
         )
+        sweep(system, ["p"])
         assert list(system.indices.states.symbol_map) == ["x", "y"]
         assert system.mass.tolist() == [[1.0, 0.0], [0.0, 0.0]]
         p = sp.Symbol("p", real=True)
@@ -368,7 +380,7 @@ class TestDerivativeBlockPolicy:
 
     def test_sum_of_parameters_coefficient_reduces_like_a_number(self):
         from tests.system_fixtures import (
-            TRANSAMP_CONSTANTS,
+            TRANSAMP_PARAMETERS,
             TRANSAMP_DC_STATES,
             TRANSAMP_EQUATIONS,
         )
@@ -377,18 +389,18 @@ class TestDerivativeBlockPolicy:
             TRANSAMP_EQUATIONS,
             states=dict(TRANSAMP_DC_STATES),
             observables=["y1", "y4", "y7"],
-            constants=dict(TRANSAMP_CONSTANTS),
+            parameters=dict(TRANSAMP_PARAMETERS),
             precision=np.float32,
             name="transamp_numeric_c1",
         )
-        constants = dict(TRANSAMP_CONSTANTS)
-        del constants["c1"]
+        parameters = dict(TRANSAMP_PARAMETERS)
+        del parameters["c1"]
+        parameters.update({"c1a": 0.5e-6, "c1b": 0.5e-6})
         split = create_ODE_system(
             TRANSAMP_EQUATIONS.replace("c1", "(c1a + c1b)"),
             states=dict(TRANSAMP_DC_STATES),
             observables=["y1", "y4", "y7"],
-            parameters={"c1a": 0.5e-6, "c1b": 0.5e-6},
-            constants=constants,
+            parameters=parameters,
             precision=np.float32,
             name="transamp_split_c1",
         )

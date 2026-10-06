@@ -38,8 +38,7 @@ def build_lorenz_system():
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"rho": 21.0, "sigma": 10.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=precision,
     )
@@ -75,10 +74,6 @@ def build_fabbri_system():
     return qb.load_cellml_model(
         str(FABBRI_CELLML),
         precision=precision,
-        parameters=[
-            "Rate_modulation_experiments_ACh",
-            "Rate_modulation_experiments_Iso_cas",
-        ],
         voltage_variable="Membrane$V_ode",
     )
 
@@ -106,6 +101,7 @@ def fabbri_grid(n_runs: int):
     return None, {
         "Rate_modulation_experiments_ACh": ach.ravel()[:n_runs],
         "Rate_modulation_experiments_Iso_cas": iso.ravel()[:n_runs],
+        "Rate_modulation_experiments_ANS": 1.0,
     }
 
 
@@ -154,7 +150,6 @@ SYSTEMS = {
             "dt_min": 1e-12,
             "dt_max": 1e-2,
         },
-        "constants": {"Rate_modulation_experiments_ANS": 1.0},
     },
 }
 
@@ -211,9 +206,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             output_types=["state"],
             **spec["solver_kwargs"],
         )
-        constants = spec.get("constants")
-        if constants:
-            solver.update(constants)
         initial_values, parameters = spec["grid"](args.n_runs)
         try:
             report = solver.calibrate(

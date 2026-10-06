@@ -29,6 +29,7 @@ from cubie.odesystems.symbolic.parsing import (
     parse_input,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+from tests._utils import parse_input_swept
 
 
 def _walk(node):
@@ -110,27 +111,27 @@ class TestParseInput:
         )
         assert len(eqs.state_derivatives) == 1
 
-    def test_constants_attribute_access(self):
-        """Constants accessed via attribute pattern."""
+    def test_parameters_attribute_access(self):
+        """Parameters accessed via attribute pattern."""
         def f(t, y, c):
             return [-c.damping * y[0]]
 
         index_map, syms, fns, eqs, h, _, *_ = parse_input(
             dxdt=f,
             states={"x": 1.0},
-            constants={"damping": 0.1},
+            parameters={"damping": 0.1},
         )
         assert len(eqs.state_derivatives) == 1
 
-    def test_constants_string_subscript(self):
-        """Constants accessed via string subscript."""
+    def test_parameters_string_subscript(self):
+        """Parameters accessed via string subscript."""
         def f(t, y, c):
             return [-c["damping"] * y[0]]
 
         index_map, syms, fns, eqs, h, _, *_ = parse_input(
             dxdt=f,
             states={"x": 1.0},
-            constants={"damping": 0.1},
+            parameters={"damping": 0.1},
         )
         assert len(eqs.state_derivatives) == 1
 
@@ -217,7 +218,7 @@ class TestParseInput:
                 total += y[i] * p[i]
             return [-total, total * 0.5, -total * 0.25]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _, _, *_ = parse_input_swept(
             dxdt=f,
             states={"a": 1.0, "b": 0.5, "c": 0.0},
             parameters={"p0": 0.1, "p1": 0.2, "p2": 0.3},
@@ -297,7 +298,7 @@ class TestParseInput:
                 rate = 0.0
             return [-rate]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _, _, *_ = parse_input_swept(
             dxdt=f,
             states={"x": 1.0},
             parameters={"k1": 1.0, "k2": 2.0},
@@ -318,7 +319,7 @@ class TestParseInput:
                 total = 1.0
             return [-total, total]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _, _, *_ = parse_input_swept(
             dxdt=f,
             states={"a": 1.0, "b": 0.5},
             parameters={"k0": 0.1, "k1": 0.2},
@@ -651,7 +652,7 @@ class TestUndeclaredSymbols:
             return [-p.k_new * y.x]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, _, _, _, *_ = parse_input(
+            index_map, _, _, _, _, _, *_ = parse_input_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert "k_new" in index_map.parameter_names
@@ -711,7 +712,7 @@ class TestUserFunctions:
             dx = -hill(y.x, p.km)
             return [dx]
 
-        index_map, _, funcs, eqs, _, _, *_ = parse_input(
+        index_map, _, funcs, eqs, _, _, *_ = parse_input_swept(
             dxdt=f,
             states={"x": 1.0},
             parameters={"km": 0.5},
@@ -809,7 +810,7 @@ class TestScalarArguments:
         def f(t, y, mu):
             return [y[1], mu * (1 - y[0] ** 2) * y[1] - y[0]]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _, _, *_ = parse_input_swept(
             dxdt=f,
             states={"x": 1.0, "v": 0.0},
             parameters={"mu": 1.5},
@@ -840,7 +841,7 @@ class TestScalarArguments:
             return [-k_new * y[0]]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, _, _, _, *_ = parse_input(
+            index_map, _, _, _, _, _, *_ = parse_input_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert "k_new" in index_map.parameter_names
@@ -858,7 +859,7 @@ class TestScalarArguments:
         def f(t, y, mu, p):
             return [-mu * y[0] + p.k]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _, _, *_ = parse_input_swept(
             dxdt=f,
             states={"x": 1.0},
             parameters={"mu": 1.0, "k": 2.0},
@@ -909,7 +910,6 @@ def _single_state_index_map():
     return IndexedBases.from_user_inputs(
         states={"x": 1.0},
         parameters={},
-        constants={},
         observables=[],
         drivers=[],
     )
@@ -952,14 +952,12 @@ class TestParseFunctionInputDirect:
         """A dict return with no matching dxdt entry synthesizes one."""
         states = IndexedBaseMap("state", ["x"], input_defaults=[1.0])
         empty_params = IndexedBaseMap("parameters", [])
-        empty_consts = IndexedBaseMap("constants", [])
         empty_obs = IndexedBaseMap("observables", [])
         empty_drivers = IndexedBaseMap("drivers", [])
         empty_dxdt = IndexedBaseMap("out", [])
         index_map = IndexedBases(
             states,
             empty_params,
-            empty_consts,
             empty_obs,
             empty_drivers,
             empty_dxdt,
@@ -1006,8 +1004,8 @@ class TestParseFunctionInputDirect:
 class TestParseFunctionErrors:
     """Error and edge paths reached through ``parse_input``."""
 
-    def test_local_named_like_constant_arg_skipped(self):
-        """A local reassigning a constant arg is not an auxiliary."""
+    def test_local_named_like_parameter_arg_skipped(self):
+        """A local reassigning a parameter arg is not an auxiliary."""
         def f(t, y, k):
             k = 2.0  # noqa: F841
             return [-k * y[0]]
@@ -1089,7 +1087,7 @@ class TestParseFunctionErrors:
             return [-p.k_new * y[0] + p.k_new]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, eqs, _, _, *_ = parse_input(
+            index_map, _, _, eqs, _, _, *_ = parse_input_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert index_map.parameter_names.count("k_new") == 1
@@ -1100,7 +1098,7 @@ class TestParseFunctionErrors:
             return [-p.k_new * y[0] + k_new]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, eqs, _, _, *_ = parse_input(
+            index_map, _, _, eqs, _, _, *_ = parse_input_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert index_map.parameter_names.count("k_new") == 1
