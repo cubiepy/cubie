@@ -51,8 +51,8 @@ from cubie.odesystems.symbolic.structural.reassemble import (
 from cubie.odesystems.symbolic.structural.singularity_removal import (
     get_new_mm,
 )
-from cubie.odesystems.symbolic.structural.symbolics import as_small_int
 from cubie.odesystems.symbolic.structural.system_structure import (
+    MAX_INTEGER_COEFFICIENT,
     StructuralState,
 )
 
@@ -136,12 +136,10 @@ def _integer_jacobian(state: StructuralState):
             row = []
             for v in var_idxs:
                 entry = ir.diff(rhs, state.fullvars[v])
-                if not isinstance(entry, ir.Num):
+                value = ir.int_value(entry)
+                if value is None or abs(value) > MAX_INTEGER_COEFFICIENT:
                     return None
-                small = as_small_int(entry)
-                if small is None:
-                    return None
-                row.append(small)
+                row.append(value)
             rows.append(row)
         return rows
 

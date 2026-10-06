@@ -54,10 +54,12 @@ from cubie.odesystems.symbolic.structural.clil import SparseMatrixCLIL
 from cubie.odesystems.symbolic.structural.diffgraph import DiffGraph
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
-    as_small_int,
     linear_expansion,
     total_derivative,
 )
+
+# Not ported: largest coefficient magnitude in the integer matrix.
+MAX_INTEGER_COEFFICIENT = 127
 
 
 class Equation:
@@ -155,6 +157,8 @@ def variable_ranks(
     variables: Sequence[ir.Sym], registry: DerivativeRegistry
 ) -> List[int]:
     """Rank of each variable by base name, then derivative order.
+
+    Not ported.
 
     Parameters
     ----------
@@ -633,7 +637,9 @@ class StructuralState:
                 solvable_graph.add_edge(ieq, j)
                 continue
             term = b
-            a_int = as_small_int(a)
+            a_int = ir.int_value(a)
+            if a_int is not None and abs(a_int) > MAX_INTEGER_COEFFICIENT:
+                a_int = None
             if conservative and a_int not in (-1, 0, 1):
                 all_int_vars = False
                 continue

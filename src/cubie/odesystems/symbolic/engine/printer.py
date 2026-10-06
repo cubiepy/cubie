@@ -18,6 +18,7 @@ from cubie.odesystems.symbolic.engine.expr import (
     Pow,
     Rel,
     Sym,
+    int_value,
 )
 __all__ = ["CUDA_FUNCTIONS", "IRPrinter", "indent_lines",
            "print_cuda", "print_cuda_multiple"]
@@ -269,20 +270,19 @@ class IRPrinter:
                     f"(precision(1)/math.sqrt({inner}))",
                     _PREC_ATOM,
                 )
-            if isinstance(value, float) and as_float.is_integer():
-                value = int(as_float)
-            if isinstance(value, int):
-                if value < 0:
-                    positive = _pow_or_base(node.base, -value)
+            integer = int_value(exp)
+            if integer is not None:
+                if integer < 0:
+                    positive = _pow_or_base(node.base, -integer)
                     denom = self._print(positive, _PREC_UNARY)
                     return (
                         f"(precision(1)/{denom})",
                         _PREC_ATOM,
                     )
-                if 2 <= value <= _POW_CHAIN_LIMIT:
-                    return self._render_mult_chain(node.base, value)
+                if 2 <= integer <= _POW_CHAIN_LIMIT:
+                    return self._render_mult_chain(node.base, integer)
                 return (
-                    f"{base_text}**precision({value})",
+                    f"{base_text}**precision({integer})",
                     _PREC_POW,
                 )
             exp_text = _format_number(value)

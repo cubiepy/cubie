@@ -29,6 +29,7 @@ from cubie.odesystems.symbolic.engine import (
     expand,
     free_atoms,
     from_sympy,
+    int_value,
     is_one,
     is_zero,
     mul,
@@ -226,6 +227,14 @@ class TestInterningAndFolding:
         forward = add(pow_(x, num(big)), pow_(x, num(bigger)))
         reverse = add(pow_(x, num(bigger)), pow_(x, num(big)))
         assert forward is reverse
+
+    def test_int_value_reads_integral_literals(self):
+        assert int_value(num(-5)) == -5
+        assert int_value(num(3.0)) == 3
+        assert int_value(num(Fraction(4, 2))) == 2
+        assert int_value(num(2.5)) is None
+        assert int_value(num(Fraction(1, 2))) is None
+        assert int_value(sym("q")) is None
 
 
 class TestExpandAndRationalize:
