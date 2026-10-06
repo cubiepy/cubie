@@ -401,11 +401,7 @@ class StructuralState:
         )
 
     def driver_derivative(self, sym: ir.Sym) -> Optional[ir.Sym]:
-        """Return the known derivative of a driver term, if ``sym`` is one.
-
-        A driver term is a driver or a derivative of one; its
-        derivative is registered and joins the known symbols.
-        """
+        """Return the derivative of driver term ``sym`` as a new known."""
 
         base, _ = self.registry.base_and_order(sym)
         if base not in self.drivers:

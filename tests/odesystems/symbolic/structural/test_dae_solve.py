@@ -879,11 +879,9 @@ def _driver_solve(solver):
     "driver_settings_override", [SINUSOID_DRIVER_SAMPLES], indirect=True
 )
 def test_driver_derivative_solution_matches_analytic(solver, system):
-    # drive = sin(t), so y = cos(t) and z' = -z + cos(t) from z(0) = 1/2
-    # gives z = (sin(t) + cos(t)) / 2.
+    # drive = sin(t) gives z = (sin(t) + cos(t)) / 2.
     times, values = _driver_solve(solver)
-    # The periodic cubic spline of sin on a 0.05 grid differentiates
-    # to within h**3 / 24 of cos(t), about 5e-6.
+    # Spline derivative error is within h**3 / 24 at h = 0.05.
     np.testing.assert_allclose(
         values["y"], np.cos(times), rtol=0.0, atol=1e-5
     )
@@ -915,11 +913,9 @@ def test_driver_derivative_solution_matches_analytic(solver, system):
 def test_driver_second_derivative_solution_matches_analytic(
     solver, system
 ):
-    # drive = sin(t), so w = -sin(t) and z' = -z - sin(t) from
-    # z(0) = 1/2 gives z = (cos(t) - sin(t)) / 2.
+    # drive = sin(t) gives z = (cos(t) - sin(t)) / 2.
     times, values = _driver_solve(solver)
-    # The cubic spline's second derivative is within (3/8) h**2
-    # max|f''''| of -sin(t) (de Boor), about 9.4e-4 on a 0.05 grid.
+    # Cubic spline f'' error bound (3/8) h**2 max|f''''| at h = 0.05.
     np.testing.assert_allclose(
         values["w"], -np.sin(times), rtol=0.0, atol=9.4e-4
     )

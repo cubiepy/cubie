@@ -92,8 +92,7 @@ class InterpolatorCache(CUDADispatcherCache):
     Attributes
     ----------
     drivers_fn
-        Device function evaluating every coefficient column at a
-        time: the inputs, then their requested time derivatives.
+        Device function evaluating every column at a time.
     driver_derivative_fn
         Device function evaluating every column's time derivative.
     coefficients
@@ -321,14 +320,11 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
     drivers : DriverSamples, optional
         The sampled drivers; ``None`` interpolates nothing.
     derivative_columns : tuple of (int, int)
-        ``(input, order)`` of each coefficient column after the
-        inputs: the ``order``-th time derivative of sample column
-        ``input``. Supplied by the system, not the user.
+        ``(input, order)`` of each derivative column; set by the system.
     num_inputs : int
         Column count of the sample table.
     num_columns : int
-        Coefficient columns: the inputs then ``derivative_columns``;
-        zero with no inputs.
+        Inputs plus derivative columns; zero with no inputs.
     num_segments : int
         Polynomial segments in the table: samples minus one, plus two
         ghost segments for clamped non-wrapping inputs, zero with no
@@ -840,8 +836,7 @@ class ArrayInterpolator(CUDAFactory):
         -------
         numpy.ndarray
             Fresh pinned ``(num_segments, num_columns, order + 1)``
-            array: the inputs, then ``derivative_columns``; zero-sized
-            with no inputs.
+            array; zero-sized with no inputs.
 
         Raises
         ------
@@ -1022,23 +1017,19 @@ class ArrayInterpolator(CUDAFactory):
     def _derivative_coefficients(
         self, coefficients: FloatArray, falling: FloatArray
     ) -> FloatArray:
-        """Return the polynomial columns of the requested derivatives.
+        """Return the polynomial columns of ``derivative_columns``.
 
         Parameters
         ----------
         coefficients
-            ``(num_segments, num_inputs, order + 1)`` input polynomials
-            in the segment-local coordinate.
+            ``(num_segments, num_inputs, order + 1)`` input polynomials.
         falling
-            Falling-factorial table, ``falling[p, k] = p! / (p - k)!``.
+            Falling factorials, ``falling[p, k] = p! / (p - k)!``.
 
         Returns
         -------
         numpy.ndarray
-            ``(num_segments, len(derivative_columns), order + 1)``: the
-            ``order``-th time derivative of input ``input`` per entry
-            of ``derivative_columns``, its powers shifted down by the
-            order and the trailing powers zero.
+            ``(num_segments, len(derivative_columns), order + 1)``.
         """
         precision = self.precision
         order = self.order
