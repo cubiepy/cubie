@@ -2,13 +2,8 @@
 
 Usage: python race.py <system> <mode> <out_dir> [rounds] [block]
 
-One process per (system, mode). Builds one Solver per variant on the
-same system, checks final states against the ``columns`` baseline,
-dumps each integration kernel's SASS, then runs ``rounds`` rounds of
-``block`` solves per variant in a rotating order and reports, per
-variant, the median over rounds of the paired percent delta of the
-block statistic (mean of the 3 lowest per-solve kernel times) against
-``columns`` in the same round.
+Checks each variant's states against ``columns``, dumps its kernel
+SASS, and reports the median per-round delta against ``columns``.
 """
 
 import collections
