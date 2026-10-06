@@ -297,7 +297,7 @@ def generate_derivative_variables(
         if v_t < len(v_to_scc) and v_to_scc[v_t] is not None:
             i2, j2 = v_to_scc[v_t]
             idxs_to_remove.setdefault(i2, []).append(j2)
-        # The singleton SCC solving dv goes before the SCC dv was in.
+        # Emit D(x) first, so later equations read its solution.
         sccs_to_insert.append((i, [dv]))
     sccs_to_insert.sort(key=lambda pair: pair[0])
 
