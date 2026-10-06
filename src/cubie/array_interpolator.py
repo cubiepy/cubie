@@ -558,14 +558,11 @@ class ArrayInterpolator(CUDAFactory):
         n_inputs = int32(self.num_inputs)
         n_derivatives = int32(config.n_driver_derivatives)
         has_derivatives = config.n_driver_derivatives > 0
-        # Unroll the derivative loops fully, so every flag lookup is a
-        # compile-time constant and each derivative evaluates only the
-        # powers its polynomial has.
+        # Unroll the derivative loops fully to compile out unused
+        # operations.
         always_unroll = (True, None)
-        # Keep one entry when there are no derivatives so the device
-        # code indexes a real array; has_derivatives prunes the reads.
         derivative_drivers = asarray(
-            [driver for driver, _ in config.driver_derivatives] or [0],
+            [driver for driver, _ in config.driver_derivatives],
             dtype=np_int32,
         )
         resolution = precision(self.driver_sample_period)
@@ -1145,9 +1142,7 @@ class ArrayInterpolator(CUDAFactory):
         precision = self.precision
         order = self.order
         derivatives = self.compile_settings.driver_derivatives
-        # Keep one row so the device code indexes a real array when
-        # there are no derivatives.
-        rows = max(len(derivatives), 1)
+        rows = len(derivatives)
         inv_period = 1.0 / float(self.driver_sample_period)
         coefficient_index = zeros((rows, order + 1), dtype=np_int32)
         factor = zeros((rows, order + 1), dtype=precision)
