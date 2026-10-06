@@ -815,3 +815,30 @@ class TestPreconditionerTypeValidation:
                     "get_solver_helper_fn": system.get_solver_helper,
                 },
             )
+
+
+def _units_dxdt(t, y, k, b):
+    return [-k * y["zz"] + b, -k * y["aa"]]
+
+
+@pytest.mark.parametrize(
+    "dxdt",
+    [["dzz = -k*zz + b", "daa = -k*aa"], _units_dxdt],
+    ids=["string", "callable"],
+)
+def test_list_units_follow_declared_names(dxdt, precision):
+    """Units given as lists attach to the declared names."""
+    system = SymbolicODE.create(
+        dxdt=dxdt,
+        states={"zz": 1.0, "aa": 2.0},
+        parameters={"k": 1.0, "b": 0.5},
+        state_units=["zz_unit", "aa_unit"],
+        parameter_units=["k_unit", "b_unit"],
+        precision=precision,
+    )
+    assert system.state_units == {"aa": "aa_unit", "zz": "zz_unit"}
+    assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}
+
+    sweep(system, ["k"])
+    assert system.indices.parameters.units == {"k": "k_unit"}
+    assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}

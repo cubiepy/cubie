@@ -155,6 +155,52 @@ def _process_parameters(
     return indexed_bases
 
 
+def _units_by_name(
+    names: Optional[Iterable[Any]],
+    units: Optional[Union[Dict[str, str], Iterable[str]]],
+    label: str,
+) -> Optional[Dict[str, str]]:
+    """Return ``units`` as a dict keyed by name.
+
+    Parameters
+    ----------
+    names
+        Declared names, in the order a list of units follows.
+    units
+        A dict of units by name, or a list aligned with ``names``.
+    label
+        Category name used in error messages.
+
+    Returns
+    -------
+    dict or None
+        Units by name, or ``None`` when ``units`` is ``None``.
+
+    Raises
+    ------
+    ValueError
+        If a list of units is given without declared names, or its
+        length differs from the number of names.
+    """
+    if units is None:
+        return None
+    if isinstance(units, dict):
+        return {str(name): unit for name, unit in units.items()}
+    if names is None:
+        raise ValueError(
+            f"{label} units were given as a list but no {label} names "
+            f"were declared. Give the units as a dict of name: unit."
+        )
+    names = [str(name) for name in names]
+    units = list(units)
+    if len(units) != len(names):
+        raise ValueError(
+            f"{len(units)} {label} units were given for {len(names)} "
+            f"{label} names."
+        )
+    return dict(zip(names, units))
+
+
 def parse_input(
     dxdt: Union[str, Iterable, Callable],
     states: Optional[Union[Dict[str, float], Iterable[str]]] = None,
@@ -236,6 +282,14 @@ def parse_input(
     are value-specific.
     """
     input_type = _detect_input_type(dxdt)
+    state_units = _units_by_name(states, state_units, "state")
+    parameter_units = _units_by_name(
+        parameters, parameter_units, "parameter"
+    )
+    observable_units = _units_by_name(
+        observables, observable_units, "observable"
+    )
+    driver_units = _units_by_name(drivers, driver_units, "driver")
 
     if input_type == "function":
         return _parse_function_path(

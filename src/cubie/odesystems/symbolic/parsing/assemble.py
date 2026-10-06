@@ -229,8 +229,6 @@ def assemble_simplified(
         final_observables.append(name)
 
     if state_units is not None:
-        if not isinstance(state_units, dict):
-            state_units = dict(zip(states, state_units))
         state_units = {
             k: v
             for k, v in state_units.items()

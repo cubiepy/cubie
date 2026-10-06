@@ -97,13 +97,12 @@ def _system_source_hash(equations, index_map) -> str:
     )
 
 
-def _unit_map(parameters: dict, units: Any) -> dict[str, str]:
+def _unit_map(
+    parameters: dict, units: Optional[dict[str, str]]
+) -> dict[str, str]:
     """Return a unit string for every parameter name."""
 
-    if units is None:
-        units = {}
-    elif not isinstance(units, dict):
-        units = dict(zip(parameters, units))
+    units = units or {}
     return {
         name: units.get(name, "dimensionless") for name in parameters
     }
