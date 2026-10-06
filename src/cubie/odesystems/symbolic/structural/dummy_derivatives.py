@@ -29,6 +29,9 @@ from cubie.odesystems.symbolic.structural.clil import (
     bareiss,
 )
 from cubie.odesystems.symbolic.structural.digraph import find_var_sccs
+from cubie.odesystems.symbolic.structural.exact_matching import (
+    match_linear_sccs,
+)
 from cubie.odesystems.symbolic.structural.pantelides import pantelides
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
@@ -137,16 +140,17 @@ def dummy_derivative_graph(
         state.structure.graph.nsrcs()
     )
     return _dummy_derivative_graph(
-        state.structure, var_eq_matching, jac, state_priority
+        state, var_eq_matching, jac, state_priority
     )
 
 
 def _dummy_derivative_graph(
-    structure: SystemStructure,
+    state: StructuralState,
     var_eq_matching: Matching,
     jac: Optional[Callable],
     state_priority: Optional[Callable[[int], float]],
 ) -> Tuple[TearingResult, Dict]:
+    structure = state.structure
     eq_to_diff = structure.eq_to_diff
     var_to_diff = structure.var_to_diff
     graph = structure.graph
@@ -320,7 +324,7 @@ def _dummy_derivative_graph(
         )
 
     dummy_set = set(dummy_derivatives)
-    tearing_result, extra = _tear_with_dummies(structure, dummy_set)
+    tearing_result, extra = _tear_with_dummies(state, dummy_set)
     extra = dict(extra)
     extra["ddsummary"] = DummyDerivativeSummary(
         var_dummy_scc, var_state_priority
@@ -329,11 +333,16 @@ def _dummy_derivative_graph(
 
 
 def _tear_with_dummies(
-    structure: SystemStructure,
+    state: StructuralState,
     dummy_derivatives: set,
 ) -> Tuple[TearingResult, Dict]:
-    """Tear with Modia tearing after dummy-derivative selection."""
+    """Tear after dummy-derivative selection.
 
+    Integer-linear SCCs are first reduced to explicit solve sequences
+    by :func:`match_linear_sccs`; Modia tearing then tears the rest.
+    """
+
+    structure = state.structure
     var_to_diff = structure.var_to_diff
     can_eliminate = [False] * len(var_to_diff)
     for v in range(len(var_to_diff)):
@@ -349,6 +358,8 @@ def _tear_with_dummies(
     def varfilter(v: int) -> bool:
         return can_eliminate[v]
 
+    # Not ported: exact matching runs before Modia tearing.
+    match_linear_sccs(state, isder, varfilter)
     modia_tearing = ModiaTearing(isder=isder, varfilter=varfilter)
     tearing_result, _ = modia_tearing(
         structure.graph, structure.solvable_graph

@@ -476,6 +476,8 @@ class StructuralState:
             if dvar is not None:
                 s.graph.add_edge(eq_diff, dvar)
 
+        if self.mm is not None:
+            self.mm.nparentrows += 1
         if s.solvable_graph is not None:
             to_rm = []
             coeffs = []
@@ -487,6 +489,11 @@ class StructuralState:
             all_int_vars, rem = self.find_eq_solvables(
                 eq_diff, to_rm, coeffs, **solv_kwargs
             )
+            if self.mm is not None and all_int_vars and ir.is_zero(rem):
+                # Not ported: an integer-linear derivative joins mm.
+                self.mm.nzrows.append(eq_diff)
+                self.mm.row_cols.append(list(s.graph.s_neighbors(eq_diff)))
+                self.mm.row_vals.append(coeffs)
         return eq_diff
 
     def division_permitted(
@@ -589,6 +596,19 @@ class StructuralState:
         )
         for ieq in range(graph.nsrcs()):
             self.find_eq_solvables(ieq, **kwargs)
+
+    def rewrite_from_row(
+        self, ieq: int, cols: List[int], vals: List[int]
+    ) -> None:
+        """Rewrite equation ``ieq`` as ``0 ~ sum(vals * variables)``.
+
+        The equation becomes incident on, and solvable for, ``cols``.
+        """
+
+        rhs = ir.add(*[c * self.fullvars[v] for c, v in zip(vals, cols)])
+        self.eqs[ieq] = Equation(ir.ZERO, rhs)
+        self.structure.graph.set_neighbors(ieq, cols)
+        self.structure.solvable_graph.set_neighbors(ieq, cols)
 
     def linear_subsys_adjmat(self, **kwargs) -> SparseMatrixCLIL:
         """Identify integer-coefficient homogeneous linear equations.

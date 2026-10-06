@@ -479,14 +479,6 @@ def trivial_tearing(state: StructuralState) -> None:
     state.additional_observed.extend(torn_eqs)
 
 
-def _build_expr_from_coeffs_vars(
-    coeffs: List[int], cols: List[int], fullvars: List[ir.Sym]
-) -> ir.Expr:
-    return ir.add(
-        *[cf * fullvars[v] for cf, v in zip(coeffs, cols)]
-    )
-
-
 def alias_elimination(
     state: StructuralState,
     print_underconstrained_variables: bool = False,
@@ -519,7 +511,6 @@ def alias_elimination(
             f"Found underconstrained variables in the system: {names}"
         )
 
-    fullvars = state.fullvars
     fullvars_to_idx = state.var2idx
     eqs = state.eqs
     original_eqs = state.original_eqs
@@ -530,8 +521,8 @@ def alias_elimination(
         if not rcol:
             eqs_to_rm.append(eq)
             continue
-        rhs = _build_expr_from_coeffs_vars(rval, rcol, fullvars)
-        eqs[eq] = Equation(ir.ZERO, rhs)
+        state.rewrite_from_row(eq, rcol, rval)
+        rhs = eqs[eq].rhs
         oeq = original_eqs[eq]
         lhs = oeq.lhs
         idx = fullvars_to_idx.get(lhs)

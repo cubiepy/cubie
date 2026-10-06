@@ -41,9 +41,6 @@ from cubie.odesystems.symbolic.structural.digraph import (
     find_var_sccs,
     neighborhood_in,
 )
-from cubie.odesystems.symbolic.structural.singularity_removal import (
-    RestrictedBareissContext,
-)
 
 
 def contract_variables(
