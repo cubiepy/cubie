@@ -8,7 +8,6 @@ fast reference evaluations that mirror the behaviour of the compiled device
 functions.
 """
 
-import math
 import warnings
 from math import cos, sin  # noqa: F401 — used inside ODE callables
 from typing import Sequence, Union
@@ -599,25 +598,24 @@ def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
 
 @cuda.jit(device=True, inline=True)
 def growth(x):
-    return math.exp(x) - 1.0
+    return x + x * x * x / 3.0
 
 
 @cuda.jit(device=True, inline=True)
 def growth_d1(x, i):
-    return math.exp(x)
+    return 1.0 + x * x
 
 
 @cuda.jit(device=True, inline=True)
 def growth_d2(x, i, j):
-    return math.exp(x)
+    return 2.0 * x
 
 
 @cuda.jit(device=True, inline=True)
 def growth_d3(x, i, j, k):
-    return math.exp(x)
+    return 2.0
 
 
-# x = log(1 + p*t), v = p/(1 + p*t), w = -p**2/(1 + p*t)**2.
 USER_DERIVATIVE_EQUATIONS = ["dx = v", "dv = w", "0 = growth(x) - p*t"]
 USER_DERIVATIVE_PARAMETERS = {"p": 1.0}
 

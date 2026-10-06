@@ -4,6 +4,9 @@ import numpy as np
 import pytest
 import sympy as sp
 
+from cubie.odesystems.symbolic.codegen.linear_operators import (
+    generate_linear_operator_code,
+)
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.parsing import (
@@ -841,3 +844,41 @@ class TestUserFunctionDerivatives:
                 user_functions={"growth": growth},
                 user_function_derivatives={"growth": [growth_d1, 2.0]},
             )
+
+
+USER_DERIVATIVE_SYSTEM = {"system_type": "user_derivative"}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
+)
+@pytest.mark.parametrize("x", [0.0, 0.5, 1.2])
+def test_user_derivative_residuals_vanish_on_the_solution(
+    system, precision, tolerance, x
+):
+    # On x + x**3/3 = t: x_t = 1/g'(x), x_tt = -g''(x) x_t**2 / g'(x).
+    time = x + x**3 / 3.0
+    x_t = 1.0 / (1.0 + x * x)
+    solution = {"x": x, "x_t": x_t, "x_tt": -2.0 * x * x_t**3}
+    names = list(system.indices.state_names)
+    state = np.array([solution[name] for name in names], dtype=precision)
+    params = np.array([1.0], dtype=precision)
+    drivers = np.zeros(1, dtype=precision)
+    obs = np.zeros(system.sizes.observables, dtype=precision)
+    out = np.ones(len(names), dtype=precision)
+    run_device_dxdt(
+        system.dxdt_fn, state, params, drivers, obs, out, precision(time)
+    )
+    np.testing.assert_allclose(
+        out, np.zeros(len(names)), rtol=0.0, atol=tolerance.abs_loose
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
+)
+def test_user_derivative_jacobian_calls_the_third_derivative(system):
+    code = generate_linear_operator_code(
+        equations=system.equations, index_map=system.indices
+    )
+    assert "growth_d3(" in code
