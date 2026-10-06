@@ -26,6 +26,7 @@ from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     sweep,
     parse_input_swept,
+    run_dense_at_state_operator,
     run_device_dxdt,
     run_device_observables,
 )
@@ -951,16 +952,11 @@ class TestUserFunctionDerivatives:
             generate_time_derivative_lines(parsed, index_map)
 
 
-# Use Rosenbrock so the Jacobian helpers call the third derivative.
-USER_DERIVATIVE_ROSENBROCK = {
-    "system_type": "user_derivative",
-    "algorithm": "rosenbrock",
-    "output_types": ["state", "time"],
-}
+USER_DERIVATIVE_SYSTEM = {"system_type": "user_derivative"}
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [USER_DERIVATIVE_ROSENBROCK], indirect=True
+    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
 )
 @pytest.mark.parametrize("x", [0.0, 0.5, 1.2])
 def test_user_derivative_residuals_vanish_on_the_solution(
@@ -985,16 +981,43 @@ def test_user_derivative_residuals_vanish_on_the_solution(
 
 
 @pytest.mark.parametrize(
-    "solver_settings_override", [USER_DERIVATIVE_ROSENBROCK], indirect=True
+    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
 )
-def test_user_derivative_solve_tracks_the_constraint(solver, tolerance):
-    result = solver.solve({"x": np.array([0.0])}, {"p": np.array([1.0])})
-    legend = {
-        label: idx for idx, label in result.time_domain_legend.items()
+def test_user_derivative_jacobian_calls_the_third_helper(
+    system, precision, tolerance
+):
+    # The residuals are g(x) - t, x_t g'(x) - 1 and
+    # x_tt g'(x) + x_t**2 g''(x); the last one's x entry needs the
+    # third derivative of g.
+    x, x_t, x_tt, h = 0.5, 0.3, -0.2, 0.01
+    g1, g2, g3 = 1.0 + x * x, 2.0 * x, 2.0
+    entries = {
+        "x": {"x": g1},
+        "x_t": {"x": x_t * g2, "x_t": g1},
+        "x_tt": {"x": x_tt * g2 + x_t**2 * g3, "x_t": 2.0 * x_t * g2,
+                 "x_tt": g1},
     }
-    x = result.time_domain_array[:, legend["x"], 0]
-    time = np.asarray(result.time).reshape(-1)
-    assert result.status_messages == {}
+    names = list(system.indices.state_names)
+    jacobian = np.array(
+        [[entries[row].get(column, 0.0) for column in names]
+         for row in names]
+    )
+    values = {"x": x, "x_t": x_t, "x_tt": x_tt}
+    state = np.array([values[name] for name in names], dtype=precision)
+    operator = system.get_solver_helper(
+        role="linear_operator", jacobian_at="state"
+    ).device_function
+    dense = run_dense_at_state_operator(
+        operator,
+        state,
+        np.ones(1, dtype=precision),
+        np.zeros(1, dtype=precision),
+        0.0,
+        h,
+    )
     np.testing.assert_allclose(
-        x + x**3 / 3.0, time, rtol=0.0, atol=tolerance.abs_loose
+        dense,
+        -h * jacobian,
+        rtol=tolerance.rel_tight,
+        atol=tolerance.abs_tight,
     )
