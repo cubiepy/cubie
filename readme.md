@@ -88,16 +88,24 @@ batching, solver configuration, outputs, and performance.
 
 ## Acknowledgements
 
-- **[SciML/DifferentialEquations.jl](https://docs.sciml.ai/DiffEqDocs/stable/)**
-  — Only the DAE initialiser is ported from OrdinaryDiffEq.jl, but I treat its
-  solver suite as the authority on numerical integration. I check CuBIE's
-  methods against it, and when an implementation is unclear I first look at
-  how DifferentialEquations.jl handles it. See
+- **[SciML, DifferentialEquations.jl](https://docs.sciml.ai/DiffEqDocs/stable/)**
+  — SciML's differential equations ecosystem was the main reference for every
+  correctness, step-control, algorithm detail, or default constant question I
+  ran into when building Cubie. Cubie's implementation differs a lot, mostly
+  due to it's GPU-first nature, but almost every piece of math and many default
+  settings values were either drawn from or rigorously checked against a SciML
+  implementation.
+  The DAE initialiser is ported directly from OrdinaryDiffEq.jl under an MIT
+  license, as was some code in the DAE structural simplification pipeline.
+  . Any solving of DAEs through Cubie should cite them directly: See
   [Rackauckas and Nie (2017)](https://doi.org/10.5334/jors.151).
+  If you want to explore numerical integration further, head to their docs,
+  where they have many accessibly-written explanations of which algorithms
+  do what well.
 - **[ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/stable/)** —
-  CuBIE's DAE tearing and structural-simplification implementation is a direct
-  port of ModelingToolkit.jl's approach, adapted to CuBIE's symbolic IR and
-  CUDA code generation. See
+  CuBIE's DAE tearing and structural-simplification implementation is largely
+  a direct port of ModelingToolkit.jl's approach, adapted to CuBIE's symbolic
+  IR and CUDA code generation. DAE users should cite them directly as well: See
   [Ma et al. (2021)](https://doi.org/10.48550/arXiv.2103.05244).
 - **[cellmlmanip](https://github.com/ModellingWebLab/cellmlmanip) and
   [chaste_codegen](https://github.com/ModellingWebLab/chaste-codegen)** — Their
