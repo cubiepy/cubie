@@ -292,10 +292,12 @@ def _find_perfect_aliases(
                     solvable_graph.add_edge(e, target)
 
             dv = var_to_diff[v]
+            # One differentiation level below dtarget.
+            prev_dtarget = target
             dtarget = var_to_diff[target]
             while dv is not None:
                 if dtarget is None:
-                    dtarget = state.var_derivative(target)
+                    dtarget = state.var_derivative(prev_dtarget)
                 vars_to_rm.append(dv)
                 dsub = (
                     fullvars[dtarget]
@@ -315,6 +317,7 @@ def _find_perfect_aliases(
                         solvable_graph.rem_edge(e, dv)
                         solvable_graph.add_edge(e, dtarget)
                 dv = var_to_diff[dv]
+                prev_dtarget = dtarget
                 dtarget = var_to_diff[dtarget]
 
     # Per-equation cleanup of the candidate alias equations.
