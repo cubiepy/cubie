@@ -405,7 +405,7 @@ class StructuralState:
     def _ordered_variables(self, eqs: Sequence[Equation]) -> List[ir.Sym]:
         """Variables of ``eqs`` in index order.
 
-        The derivative symbols occurring in ``eqs`` come first, sorted
+        Not ported. The derivative symbols occurring in ``eqs`` come first, sorted
         by base name, then derivative order; then the other members of
         their chains down to the base unknowns, sorted by base name,
         then derivative order descending; then the remaining occurring

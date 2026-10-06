@@ -65,7 +65,7 @@ Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
   supported.
 
 ## Determinism
-`StructuralState.fullvars` (cubie's own order) lists the occurring derivative symbols by
+`StructuralState.fullvars` lists the occurring derivative symbols by
 base name and derivative order, then the rest of their chains down to the base unknowns
 by base name and descending order, then the remaining unknowns by base name; ties
 between equal candidates go to the lower index.
