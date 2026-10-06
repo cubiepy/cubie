@@ -819,8 +819,8 @@ class TestUserFunctionDerivatives:
         return names
 
     def test_reduction_calls_each_supplied_derivative(self):
-        # The reduction differentiates growth twice, so the equations
-        # call the first and second helpers.
+        # Expect calls to the first and second helpers, because
+        # reducing the system differentiates growth twice.
         _i, _s, _f, parsed, _h = parse_dae_input(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},
@@ -916,8 +916,8 @@ class TestUserFunctionDerivatives:
             )
 
     def test_jacobian_after_a_failed_jvp_names_the_order(self):
-        # The failed JVP leaves its Jacobian under the key the full
-        # Jacobian looks up next.
+        # Request the JVP first, so its Jacobian is already cached
+        # under the key the full Jacobian looks up.
         index_map, _s, _f, parsed, _h = parse_dae_input(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},

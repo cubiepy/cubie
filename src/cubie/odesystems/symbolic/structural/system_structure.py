@@ -162,8 +162,8 @@ class StructuralState:
     time_symbol
         The independent variable.
     derivative_names
-        Name of each user function, and of each derivative helper, to
-        the name of the helper for its next derivative.
+        Maps the name of each user function, and of each derivative
+        helper, to the name of the helper for its next derivative.
     state_priorities
         Optional per-symbol state-selection priorities.
     irreducibles

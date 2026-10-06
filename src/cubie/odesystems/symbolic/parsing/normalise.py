@@ -164,14 +164,15 @@ def _derivative_print_names(
     user_function_derivatives
         User-function name to its helper or list of helpers.
     rename
-        Original user-function name to the name it is called by.
+        Maps each original user-function name to the name it is
+        called by.
 
     Returns
     -------
     dict
-        Name of each user function, and of each helper, to the name of
-        the helper for its next derivative. Functions without a helper
-        are absent and differentiate to ``d_<name>``.
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative. Functions without a
+        helper are left out and differentiate to ``d_<name>``.
 
     Raises
     ------

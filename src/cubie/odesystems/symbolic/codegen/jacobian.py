@@ -114,8 +114,8 @@ def _check_jacobian_orders(
     jac
         Row-major Jacobian of IR expressions.
     derivative_names
-        Name of each user function, and of each helper, to the name of
-        the helper for its next derivative.
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative.
 
     Raises
     ------
@@ -489,14 +489,14 @@ def _cached_jacobian_for(
     substituted
         IR equation pairs to differentiate.
     ir_inputs, ir_outputs
-        Input and output symbols to their vector positions.
+        Map each input and output symbol to its vector position.
     cse
-        CSE flag folded into the cache key.
+        Whether CSE is on; it is part of the cache key.
     derivative_names
-        Name of each user function, and of each helper, to the name of
-        the helper for its next derivative.
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative.
     operation_ordering
-        Ordering policy folded into the cache key.
+        The operation-ordering policy, which is part of the cache key.
 
     Returns
     -------

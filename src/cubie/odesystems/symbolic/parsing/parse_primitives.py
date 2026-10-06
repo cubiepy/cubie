@@ -436,10 +436,11 @@ def _derivative_names_by_function(
     Parameters
     ----------
     function_aliases
-        Name each function is called by to the user's name for it.
+        Maps the name each function is called by to the user's name
+        for it.
     derivative_names
-        Name of each user function, and of each helper, to the name of
-        the helper for its next derivative.
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative.
 
     Returns
     -------
@@ -509,12 +510,13 @@ def check_derivative_orders(
     expressions
         Expressions to scan for ``d_<name>`` calls.
     function_aliases
-        Name each function is called by to the user's name for it.
+        Maps the name each function is called by to the user's name
+        for it.
     derivative_names
-        Name of each user function, and of each helper, to the name of
-        the helper for its next derivative.
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative.
     generating
-        What the expressions build, for the error message.
+        What the expressions build, named in the error message.
 
     Raises
     ------
