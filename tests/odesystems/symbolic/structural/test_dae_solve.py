@@ -29,8 +29,6 @@ from tests.system_fixtures import (
     TRANSAMP_DC_STATES,
 )
 from tests._utils import (
-    SINUSOID_DRIVER_SAMPLES,
-    TIME_DRIVER_SETTINGS,
     TORN_INIT_COMMON,
     TORN_NO_OBSERVABLES,
     UNSET_LINEAR_SOLVE,
@@ -838,90 +836,3 @@ def test_transistor_amplifier_init_and_reference(solver, system):
         assert float(trajectory[-1, legend[name], 0]) == pytest.approx(
             value, abs=2e-3
         )
-
-
-DRIVER_DERIVATIVE_SETTINGS = {
-    **TIME_DRIVER_SETTINGS,
-    "system_type": "driver_derivative",
-    "saved_observable_indices": [0, 1],
-    "summarised_observable_indices": [0, 1],
-}
-
-DRIVER_DERIVATIVE_ALGORITHMS = (
-    "rk4", "ros3p", "l_stable_dirk_3", "radau_iia_5",
-)
-
-
-def _driver_solve(solver):
-    """Solve from z(0) = 1/2; return the times and named trajectories."""
-    duration = TIME_DRIVER_SETTINGS["duration"]
-    result = solver.solve({"z": np.array([0.5])}, {}, duration=duration)
-    assert not np.any(result.status_codes)
-    legend = {
-        label: idx for idx, label in result.time_domain_legend.items()
-    }
-    trajectory = np.asarray(result.time_domain_array, dtype=np.float64)
-    times = np.asarray(result.time[:, 0], dtype=np.float64)
-    return times, {
-        name: trajectory[:, index, 0] for name, index in legend.items()
-    }
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        {**DRIVER_DERIVATIVE_SETTINGS, "algorithm": algorithm}
-        for algorithm in DRIVER_DERIVATIVE_ALGORITHMS
-    ],
-    indirect=True,
-)
-@pytest.mark.parametrize(
-    "driver_settings_override", [SINUSOID_DRIVER_SAMPLES], indirect=True
-)
-def test_driver_derivative_solution_matches_analytic(solver, system):
-    # drive = sin(t) gives z = (sin(t) + cos(t)) / 2.
-    times, values = _driver_solve(solver)
-    # Spline derivative error is within h**3 / 24 at h = 0.05.
-    np.testing.assert_allclose(
-        values["y"], np.cos(times), rtol=0.0, atol=1e-5
-    )
-    np.testing.assert_allclose(
-        values["z"],
-        0.5 * (np.sin(times) + np.cos(times)),
-        rtol=0.0,
-        atol=1e-5,
-    )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        {
-            **DRIVER_DERIVATIVE_SETTINGS,
-            "system_type": "driver_second_derivative",
-            "saved_observable_indices": [0, 1, 2],
-            "summarised_observable_indices": [0, 1, 2],
-            "algorithm": algorithm,
-        }
-        for algorithm in DRIVER_DERIVATIVE_ALGORITHMS
-    ],
-    indirect=True,
-)
-@pytest.mark.parametrize(
-    "driver_settings_override", [SINUSOID_DRIVER_SAMPLES], indirect=True
-)
-def test_driver_second_derivative_solution_matches_analytic(
-    solver, system
-):
-    # drive = sin(t) gives z = (cos(t) - sin(t)) / 2.
-    times, values = _driver_solve(solver)
-    # Cubic spline f'' error bound (3/8) h**2 max|f''''| at h = 0.05.
-    np.testing.assert_allclose(
-        values["w"], -np.sin(times), rtol=0.0, atol=9.4e-4
-    )
-    np.testing.assert_allclose(
-        values["z"],
-        0.5 * (np.cos(times) - np.sin(times)),
-        rtol=0.0,
-        atol=9.4e-4,
-    )

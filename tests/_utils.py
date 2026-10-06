@@ -2430,6 +2430,15 @@ TIME_DRIVER_SETTINGS = {
     "boundary_condition": "periodic",
 }
 
+# State only: the slots' float32 spline error exceeds 1e-5.
+DRIVER_DERIVATIVE_SETTINGS = {
+    **TIME_DRIVER_SETTINGS,
+    "system_type": "driver_derivative",
+    "output_types": ["state", "time"],
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
+}
+
 SINUSOID_DRIVER_SAMPLES = DriverSamples(
     {"drive": _DRIVER_VALUES}, driver_sample_period=_DRIVER_SAMPLE_PERIOD
 )

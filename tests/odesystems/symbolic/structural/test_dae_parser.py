@@ -25,7 +25,6 @@ from cubie.odesystems.symbolic.symbolicODE import (
 )
 from tests._utils import run_device_dxdt, run_device_observables
 from tests.system_fixtures import (
-    DRIVER_SECOND_DERIVATIVE_EQUATIONS,
     USER_DERIVATIVE_EQUATIONS,
     USER_DERIVATIVE_PARAMETERS,
     growth,
@@ -877,125 +876,64 @@ def test_user_derivative_jacobian_calls_the_third_derivative(system):
     assert "growth_d3(" in code
 
 
-class TestDriverDerivatives:
-    def _derivative(self, parsed, driver, order=1):
-        """Return the symbol read for driver's order-th derivative."""
-        symbols = [
-            symbol
-            for symbol, source in parsed.driver_derivatives.items()
-            if source == (ir.sym(driver), order)
-        ]
-        assert len(symbols) == 1
-        return sp.Symbol(symbols[0].name, real=True)
-
-    def test_differentiated_driver_keeps_its_derivative(self):
-        # Index reduction differentiates 0 = x - u, so y = du/dt.
-        index_map, _s, _f, parsed, _h = parse_dae_input(
-            dxdt=["dx = y", "0 = x - u", "dz = -z + y"],
-            states={"x": 0.0, "y": 0.0, "z": 0.0},
-            drivers=["u"],
-        )
-        u_t = self._derivative(parsed, "u")
-        z = real_symbols("z")
-        dz = substituted(index_map, parsed, solved(parsed)["dz"])
-        assert equivalent(dz, -z + u_t)
-
-    def test_rebuilt_system_keeps_driver_derivatives(self):
-        # Building from the parsed products re-derives the same system.
-        system = create_ODE_system(
-            dxdt=["dx = y", "0 = x - u", "dz = -z + y"],
-            states={"z": 0.5},
-            observables=["x", "y"],
-            drivers=["u"],
-            precision=np.float32,
-        )
-        rebuilt = SymbolicODE(
-            equations=system.equations,
-            all_indexed_bases=system.indices,
-            precision=np.float32,
-        )
-        assert rebuilt.equations.driver_derivatives == (
-            system.equations.driver_derivatives
-        )
-        assert rebuilt.equations.ordered == system.equations.ordered
-
-    def test_twice_differentiated_driver_keeps_its_second_derivative(
-        self,
-    ):
-        # 0 = x - u differentiated twice gives w = d2u/dt2.
-        index_map, _s, _f, parsed, _h = parse_dae_input(
-            dxdt=DRIVER_SECOND_DERIVATIVE_EQUATIONS,
-            states={"z": 0.5},
-            observables=["x", "y", "w"],
-            drivers=["drive"],
-        )
-        u_tt = self._derivative(parsed, "drive", order=2)
-        z = real_symbols("z")
-        dz = substituted(index_map, parsed, solved(parsed)["dz"])
-        assert equivalent(dz, -z + u_tt)
-
-    def test_rebuilt_system_keeps_second_driver_derivative(self):
-        # The rebuilt dynamics still read d2u/dt2 from its slot.
-        system = create_ODE_system(
-            dxdt=DRIVER_SECOND_DERIVATIVE_EQUATIONS,
-            states={"z": 0.5},
-            observables=["x", "y", "w"],
-            drivers=["drive"],
-            precision=np.float32,
-        )
-        rebuilt = SymbolicODE(
-            equations=system.equations,
-            all_indexed_bases=system.indices,
-            precision=np.float32,
-        )
-        assert rebuilt.equations.driver_derivatives == (
-            system.equations.driver_derivatives
-        )
-        u_tt = self._derivative(rebuilt.equations, "drive", order=2)
-        z = real_symbols("z")
-        dz = substituted(
-            rebuilt.indices,
-            rebuilt.equations,
-            solved(rebuilt.equations)["dz"],
-        )
-        assert equivalent(dz, -z + u_tt)
+DRIVER_DERIVATIVE_SYSTEM = {"system_type": "driver_derivative"}
 
 
-class TestDriverDerivativeSlots:
-    def test_only_read_derivatives_take_slots(self):
-        # Only b is differentiated, once: one slot after a and b.
-        system = create_ODE_system(
-            dxdt=["dx = y", "0 = x - b", "dz = -z + y + a"],
-            states={"z": 0.5},
-            observables=["x", "y"],
-            drivers=["a", "b"],
-            precision=np.float32,
-        )
-        (symbol,) = system.equations.driver_derivatives
-        assert system.equations.driver_derivatives[symbol] == (
-            ir.sym("b"), 1
-        )
-        assert system.driver_derivative_columns == ((1, 1),)
-        assert system.sizes.drivers == 3
-        sysir = system_ir(system.equations, system.indices)
-        assert sysir.driver_index[symbol] == 2
-        assert sysir.arrayrefs[symbol.name] == ir.arr("drivers", 2)
+def _driver_derivative(equations, order):
+    """Return the symbol read for the drive's order-th derivative."""
+    (symbol,) = [
+        symbol
+        for symbol, source in equations.driver_derivatives.items()
+        if source == (ir.sym("drive"), order)
+    ]
+    return sp.Symbol(symbol.name, real=True)
 
-    def test_derivative_slots_ordered_by_order(self):
-        system = create_ODE_system(
-            dxdt=DRIVER_SECOND_DERIVATIVE_EQUATIONS,
-            states={"z": 0.5},
-            observables=["x", "y", "w"],
-            drivers=["drive"],
-            precision=np.float32,
-        )
-        assert system.driver_derivative_columns == ((0, 1), (0, 2))
-        assert system.sizes.drivers == 3
-        sysir = system_ir(system.equations, system.indices)
-        orders = {
-            sysir.driver_index[symbol]: order
-            for symbol, (_, order) in (
-                system.equations.driver_derivatives.items()
-            )
-        }
-        assert orders == {1: 1, 2: 2}
+
+def _reduced_dz(system):
+    """Return the reduced dz with observables substituted."""
+    return substituted(
+        system.indices, system.equations, solved(system.equations)["dz"]
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [DRIVER_DERIVATIVE_SYSTEM], indirect=True
+)
+def test_reduction_reads_first_and_second_driver_derivatives(system):
+    # 0 = x - drive differentiated twice: y = drive', w = drive''.
+    expected = (
+        -real_symbols("z")
+        + _driver_derivative(system.equations, 1)
+        + _driver_derivative(system.equations, 2)
+    )
+    assert equivalent(_reduced_dz(system), expected)
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [DRIVER_DERIVATIVE_SYSTEM], indirect=True
+)
+def test_rebuilt_system_keeps_driver_derivatives(system, precision):
+    rebuilt = SymbolicODE(
+        equations=system.equations,
+        all_indexed_bases=system.indices,
+        precision=precision,
+    )
+    assert rebuilt.equations.driver_derivatives == (
+        system.equations.driver_derivatives
+    )
+    assert equivalent(_reduced_dz(rebuilt), _reduced_dz(system))
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [DRIVER_DERIVATIVE_SYSTEM], indirect=True
+)
+def test_read_driver_derivatives_take_slots_by_order(system):
+    # Orders 1 and 2 are read, so slots 1 and 2 follow the drive.
+    assert system.driver_derivative_columns == ((0, 1), (0, 2))
+    assert system.sizes.drivers == 3
+    sysir = system_ir(system.equations, system.indices)
+    slots = {
+        order: sysir.arrayrefs[symbol.name]
+        for symbol, (_, order) in system.equations.driver_derivatives.items()
+    }
+    assert slots == {1: ir.arr("drivers", 1), 2: ir.arr("drivers", 2)}

@@ -647,26 +647,28 @@ def build_user_derivative_system(precision: np_dtype) -> BaseODE:
     )
 
 
-# y = d(drive)/dt.
-DRIVER_DERIVATIVE_EQUATIONS = ["dx = y", "0 = x - drive", "dz = -z + y"]
-DRIVER_DERIVATIVE_STATES = {"z": 0.5}
-
-# w = d2(drive)/dt2.
-DRIVER_SECOND_DERIVATIVE_EQUATIONS = [
+# Reads the drive's first and second derivatives: y = drive', w = drive''.
+DRIVER_DERIVATIVE_EQUATIONS = [
     "dx = y",
     "dy = w",
     "0 = x - drive",
-    "dz = -z + w",
+    "dz = -z + y + w",
+]
+DRIVER_DERIVATIVE_FUNCTION_EQUATIONS = [
+    "dx = y",
+    "dy = w",
+    "0 = x - sin(t)",
+    "dz = -z + y + w",
 ]
 
 
 def build_driver_derivative_system(precision: np_dtype) -> BaseODE:
-    """Return a DAE whose reduced dynamics read a driver derivative."""
+    """Return a DAE whose reduced dynamics read driver derivatives."""
 
     return create_ODE_system(
         dxdt=DRIVER_DERIVATIVE_EQUATIONS,
-        states=dict(DRIVER_DERIVATIVE_STATES),
-        observables=["x", "y"],
+        states={"z": 0.5},
+        observables=["x", "y", "w"],
         drivers=["drive"],
         precision=precision,
         strict=True,
@@ -674,18 +676,16 @@ def build_driver_derivative_system(precision: np_dtype) -> BaseODE:
     )
 
 
-def build_driver_second_derivative_system(precision: np_dtype) -> BaseODE:
-    """Return a DAE whose reduced dynamics read a second driver
-    derivative."""
+def build_driver_derivative_function_system(precision: np_dtype) -> BaseODE:
+    """Return the twin of ``driver_derivative`` with the drive in-equation."""
 
     return create_ODE_system(
-        dxdt=DRIVER_SECOND_DERIVATIVE_EQUATIONS,
-        states=dict(DRIVER_DERIVATIVE_STATES),
+        dxdt=DRIVER_DERIVATIVE_FUNCTION_EQUATIONS,
+        states={"z": 0.5},
         observables=["x", "y", "w"],
-        drivers=["drive"],
         precision=precision,
         strict=True,
-        name="driver_second_derivative",
+        name="driver_derivative_function",
     )
 
 
@@ -705,7 +705,7 @@ __all__ = [
     "build_time_function_driver_system",
     "build_time_array_driver_system",
     "build_driver_derivative_system",
-    "build_driver_second_derivative_system",
+    "build_driver_derivative_function_system",
     "build_torn_driver_system",
     "build_torn_time_system",
     "build_torn_unsolvable_system",
