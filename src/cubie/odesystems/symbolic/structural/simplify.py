@@ -160,10 +160,9 @@ def _pantelides_reassemble_state(
 ) -> StructuralState:
     """Rebuild a first-analysis state after bare index reduction.
 
-    Port of MTK's ``pantelides_reassemble``: keep, for each matched
-    highest-differentiated variable, the (differentiated) equation it
-    is matched to, and rebuild a fresh structural state from those
-    equations.
+    Keeps, for each matched highest-differentiated variable, the
+    (differentiated) equation it is matched to, and rebuilds a fresh
+    structural state from those equations.
     """
 
     matched_eqs = sorted(
@@ -362,10 +361,9 @@ def structural_simplify(
         if state.structure.solvable_graph is None:
             state.find_solvables(**solve_kwargs)
         state.structure.complete()
-        # The reassembly step keeps one equation per matched
-        # highest-differentiated variable, so it needs the finalized
-        # matching (non-highest matches cleared), as in MTK's
-        # dae_index_lowering.
+        # Alias elimination rewrites integer-linear differential
+        # equations to 0 ~ f, so they cannot be told apart from
+        # their derivatives; only highest-order matches are kept.
         var_eq_matching = pantelides(state)
         state = _pantelides_reassemble_state(state, var_eq_matching)
         mm = alias_elimination(state, **solve_kwargs)

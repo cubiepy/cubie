@@ -24,6 +24,7 @@ from cubie.odesystems.symbolic.structural.simplify import (
 )
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
+    fixpoint_sub,
 )
 from cubie.odesystems.symbolic.structural.system_structure import (
     Equation,
@@ -294,6 +295,24 @@ class TestCoefficientAdmission:
         assert state.structure.solvable_graph.s_neighbors(0) == sorted(
             state.var2idx[v] for v in syms("x y")
         )
+
+    @pytest.mark.parametrize("conservative", [False, True])
+    def test_cancelled_coefficient_drops_incidence(self, conservative):
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "t"})
+        state = StructuralState(
+            [Equation(ir.ZERO, (x + 1) * y - x * y - z)],
+            [x, y, z],
+            registry,
+            set(),
+            T,
+        )
+        mm = state.linear_subsys_adjmat(conservative=conservative)
+        y_z = [state.var2idx[y], state.var2idx[z]]
+        assert state.structure.graph.s_neighbors(0) == y_z
+        assert mm.nzrows == [0]
+        assert mm.row_cols[0] == y_z
+        assert mm.row_vals[0] == [1, -1]
 
     def test_conservative_admits_unit_coefficients_only(self):
         x, y = syms("x y")
@@ -815,6 +834,69 @@ class TestPantelidesAndDummyDerivatives:
             to_sympy(result.residuals[0] - accel)
         ) == 0
 
+    def test_cancelled_unknown_needs_no_derivative(self):
+        # w's coefficient in the constraint cancels, so differentiating
+        # the constraint needs no derivative of w.
+        x, y, w, c = syms("x y w c")
+        resolved = []
+        for extra in ((w + 1) * c - w * c, c):
+            registry = DerivativeRegistry({"x", "y", "w", "c", "t"})
+            state = StructuralState(
+                [
+                    Equation(registry.derivative(x), y),
+                    Equation(ir.ZERO, x + extra - T),
+                    Equation(ir.ZERO, w - y),
+                ],
+                [x, y, w],
+                registry,
+                {c},
+                T,
+            )
+            observed = dict(structural_simplify(state).observed)
+            resolved.append(
+                {
+                    sym: fixpoint_sub(rhs, observed)
+                    for sym, rhs in observed.items()
+                }
+            )
+        cancelled, plain = resolved
+        assert set(cancelled) == set(plain)
+        for sym, rhs in plain.items():
+            assert sp.simplify(to_sympy(cancelled[sym] - rhs)) == 0
+
+    def test_second_order_pendulum_bare_index_reduction(self):
+        # Bare reduction of the pendulum given in second-order form
+        # integrates the given accelerations and keeps the
+        # acceleration-level constraint.
+        x, y, lam, g = syms("x y lam g")
+        registry = DerivativeRegistry({"x", "y", "lam", "g", "t"})
+        dx, dy = registry.derivative(x), registry.derivative(y)
+        state = StructuralState(
+            [
+                Equation(registry.derivative(dx), lam * x),
+                Equation(registry.derivative(dy), lam * y - g),
+                Equation(ir.ZERO, x**2 + y**2 - 1),
+            ],
+            [x, y, lam],
+            registry,
+            {g},
+            T,
+        )
+        result = structural_simplify(state, dummy_derivative=False)
+        assert result.algebraic_states == [lam]
+        x_t, y_t = result.dxdt[x], result.dxdt[y]
+        assert set(result.differential_states) == {x, y, x_t, y_t}
+        assert sp.simplify(to_sympy(result.dxdt[x_t] - lam * x)) == 0
+        assert sp.simplify(to_sympy(result.dxdt[y_t] - (lam * y - g))) == 0
+        accel = (
+            2 * x_t**2
+            + 2 * lam * x**2
+            + 2 * y_t**2
+            + 2 * y * (lam * y - g)
+        )
+        assert len(result.residuals) == 1
+        assert sp.simplify(to_sympy(result.residuals[0] - accel)) == 0
+
     def test_higher_order_input_lowered(self):
         x, w = syms("x w")
         registry = DerivativeRegistry({"x", "w", "t"})
@@ -867,6 +949,21 @@ class TestConsistencyErrors:
         state = StructuralState(
             [Equation(dx, -x + z)],
             [x, z],
+            registry,
+            set(),
+            T,
+        )
+        with pytest.raises(ExtraVariablesSystemError):
+            structural_simplify(state)
+
+    def test_alias_only_group_counts_as_unknown(self):
+        # Alias elimination removes y ~ z, leaving its target in no
+        # equation; the target still counts as an unknown.
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "t"})
+        state = StructuralState(
+            [Equation(registry.derivative(x), -x), Equation(y, z)],
+            [x, y, z],
             registry,
             set(),
             T,

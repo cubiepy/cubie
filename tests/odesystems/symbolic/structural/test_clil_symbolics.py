@@ -24,7 +24,6 @@ from cubie.odesystems.symbolic.structural.symbolics import (
     linear_dependencies,
     linear_expansion,
     lower_varname,
-    solve_linear,
     total_derivative,
 )
 
@@ -162,15 +161,6 @@ class TestLinearExpansion:
     def test_absent_variable(self):
         a, b, lin = linear_expansion(self.y + 1, self.x)
         assert lin and a is ir.ZERO and b is self.y + 1
-
-    def test_solve_linear(self):
-        sol = solve_linear(
-            ir.ZERO, 2 * self.x - self.y, self.x
-        )
-        assert sol is self.y / 2
-
-    def test_solve_linear_singular(self):
-        assert solve_linear(self.y, self.y, self.x) is None
 
 
 def _any_pivot(entry):

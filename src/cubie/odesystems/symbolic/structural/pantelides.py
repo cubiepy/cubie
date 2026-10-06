@@ -171,11 +171,9 @@ def pantelides(
                     continue
                 # Newly introduced variables and equations inherit
                 # the assignment.
-                matched = var_eq_matching[var]
-                if isinstance(matched, int):
-                    var_eq_matching[var_to_diff[var]] = eq_to_diff[
-                        matched
-                    ]
+                var_eq_matching[var_to_diff[var]] = eq_to_diff[
+                    var_eq_matching[var]
+                ]
             eq_prime = eq_to_diff[eq_prime]
         if not pathfound:
             raise InvalidSystemError(

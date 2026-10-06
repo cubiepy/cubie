@@ -49,7 +49,6 @@ Published Functions
     Rank of each variable by base name, then derivative order.
 """
 
-import warnings
 from typing import (
     Dict,
     Iterable,
@@ -488,7 +487,7 @@ class StructuralState:
         self.var2idx[dsym] = var_diff
         s.state_priorities.append(s.state_priorities[v])
         s.canonical_ranks.append(s.canonical_ranks[v])
-        self.always_present.append(self.always_present[v])
+        self.always_present.append(False)
         if self.mm is not None:
             self.mm.ncols += 1
         return var_diff
@@ -506,19 +505,8 @@ class StructuralState:
                 dv = s.var_to_diff[j]
                 if dv is not None:
                     deriv_map[v] = self.fullvars[dv]
-        residual = self.eqs[ieq].residual()
-        for v in ir.free_atoms(residual):
-            if (
-                v in self.var2idx
-                and v not in deriv_map
-                and v is not self.time_symbol
-            ):
-                raise ValueError(
-                    f"Cannot differentiate equation {self.eqs[ieq]}: "
-                    f"variable {v} has no derivative variable."
-                )
         new_rhs = total_derivative(
-            residual,
+            self.eqs[ieq].residual(),
             deriv_map,
             self.time_symbol,
             self.known_derivative_map,
@@ -533,19 +521,14 @@ class StructuralState:
         # find_eq_solvables prunes false entries.
         for var in list(s.graph.s_neighbors(ieq)):
             s.graph.add_edge(eq_diff, var)
-            dvar = s.var_to_diff[var]
-            if dvar is not None:
-                s.graph.add_edge(eq_diff, dvar)
+            s.graph.add_edge(eq_diff, s.var_to_diff[var])
 
         if self.mm is not None:
             self.mm.nparentrows += 1
         if s.solvable_graph is not None:
             to_rm = []
             coeffs = []
-            solv_kwargs = {
-                "may_be_zero": True,
-                "allow_symbolic": False,
-            }
+            solv_kwargs = {"allow_symbolic": False}
             solv_kwargs.update(kwargs)
             all_int_vars, rem = self.find_eq_solvables(
                 eq_diff, to_rm, coeffs, **solv_kwargs
@@ -569,22 +552,13 @@ class StructuralState:
             return True
         if not allow_parameter:
             return isinstance(denom, ir.Num)
-        # Parameter-only denominators allowed; anything containing an
-        # unknown is rejected.
-        for v in ir.free_atoms(denom):
-            if v in self.var2idx:
-                return False
-            base, _ = self.registry.base_and_order(v)
-            if base in self.var2idx:
-                return False
-        return True
+        return not any(v in self.var2idx for v in ir.free_atoms(denom))
 
     def find_eq_solvables(
         self,
         ieq: int,
         to_rm: Optional[List[int]] = None,
         coeffs: Optional[List[int]] = None,
-        may_be_zero: bool = True,
         allow_symbolic: bool = False,
         allow_parameter: bool = True,
         conservative: bool = False,
@@ -597,15 +571,12 @@ class StructuralState:
         ieq
             Equation index.
         to_rm
-            Filled, when ``may_be_zero`` is true, with the incident
-            variables whose coefficient is zero; their incidence
-            edges are removed.
+            Filled with the incident variables whose coefficient is
+            zero; their incidence edges are removed.
         coeffs
             Filled with the integer coefficients of the incident
             variables, aligned with the equation's incidence after
             zero-coefficient removal.
-        may_be_zero
-            Whether an incident variable may have a zero coefficient.
         allow_symbolic, allow_parameter
             Division policy for symbolic coefficients.
         conservative
@@ -631,8 +602,7 @@ class StructuralState:
         s = self.structure
         graph = s.graph
         solvable_graph = s.solvable_graph
-        eq = self.eqs[ieq]
-        term = eq.residual()
+        term = self.eqs[ieq].residual()
         all_int_vars = True
 
         for j in list(graph.s_neighbors(ieq)):
@@ -653,26 +623,22 @@ class StructuralState:
                 solvable_graph.add_edge(ieq, j)
                 continue
             term = b
+            # The IR keeps cancelling terms apart, so a zero
+            # coefficient means the variable is absent.
+            if ir.is_zero(a):
+                to_rm.append(j)
+                continue
             a_int = ir.int_value(a)
             if a_int is not None and abs(a_int) > MAX_INTEGER_COEFFICIENT:
                 a_int = None
-            if conservative and a_int not in (-1, 0, 1):
+            if conservative and a_int not in (-1, 1):
                 all_int_vars = False
                 continue
             if a_int is None:
                 all_int_vars = False
-            elif coeffs is not None and (a_int != 0 or not may_be_zero):
+            elif coeffs is not None:
                 coeffs.append(a_int)
-            if not ir.is_zero(a):
-                solvable_graph.add_edge(ieq, j)
-                continue
-            if may_be_zero:
-                to_rm.append(j)
-            else:
-                warnings.warn(
-                    f"Internal error: variable {var} was marked as "
-                    f"being in {eq}, but was actually zero"
-                )
+            solvable_graph.add_edge(ieq, j)
         for j in to_rm:
             graph.rem_edge(ieq, j)
         return all_int_vars, term
