@@ -15,7 +15,6 @@ Published Functions
 import warnings
 from typing import Callable
 
-from cubie.odesystems.symbolic.structural.bipartite import _always_true
 from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
     bareiss,
@@ -61,9 +60,7 @@ def match_linear_sccs(
     graph = state.structure.graph
     mm = state.mm
     mm_rows = {eq: i for i, eq in enumerate(mm.nzrows)}
-    var_eq_matching, _ = build_var_eq_matching(
-        graph, varfilter, _always_true
-    )
+    var_eq_matching, _ = build_var_eq_matching(graph, varfilter)
 
     for scc in find_var_sccs(graph, var_eq_matching):
         eqs = [var_eq_matching[v] for v in scc]

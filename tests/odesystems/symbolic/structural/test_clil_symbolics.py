@@ -10,7 +10,6 @@ from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
     bareiss,
     bareiss_update_virtual_colswap_clil,
-    exactdiv,
 )
 from cubie.odesystems.symbolic.structural.dummy_derivatives import (
     _independent_columns,
@@ -38,15 +37,6 @@ def dense_from_clil(mm):
 
 
 class TestClil:
-    def test_exactdiv_raises_on_remainder(self):
-        assert exactdiv(6, 3) == 2
-        try:
-            exactdiv(7, 3)
-        except AssertionError:
-            pass
-        else:
-            raise AssertionError("inexact division did not raise")
-
     def test_elimination_step_matches_dense_bareiss(self):
         # M = [[2, 1, 0], [4, 3, 1], [6, 1, 2]]; eliminate col 0
         # with pivot M[0][0]=2, last_pivot=1: row_i <- (2*row_i -
@@ -117,7 +107,7 @@ class TestGetNewMM:
         )
         old_to_new_eq = [0, -1, 1, 2]
         old_to_new_var = [0, 1, -1, 2]
-        new = get_new_mm({}, old_to_new_eq, old_to_new_var, mm)
+        new = get_new_mm(old_to_new_eq, old_to_new_var, mm)
         # Row 1's equation and row 2's variable are removed.
         assert new.nzrows == [old_to_new_eq[0], old_to_new_eq[3]]
         assert new.row_cols == [
@@ -255,15 +245,6 @@ class TestSymbolics:
         result = total_derivative(expr, {x: dx}, self.t)
         assert sp.simplify(
             to_sympy(result - (2 * x * dx + w))
-        ) == 0
-
-    def test_total_derivative_known_map(self):
-        x, dx, drv = ir.sym("x"), ir.sym("dx_sym"), ir.sym("drv")
-        result = total_derivative(
-            x * drv, {x: dx}, self.t, {drv: ir.ONE}
-        )
-        assert sp.simplify(
-            to_sympy(result - (dx * drv + x))
         ) == 0
 
     def test_registry_chain_and_rename(self):

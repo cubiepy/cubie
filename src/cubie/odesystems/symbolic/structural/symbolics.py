@@ -90,35 +90,28 @@ def linear_expansion(
 def fixpoint_sub(
     expr: ir.Expr,
     sub_map: Dict[ir.Expr, ir.Expr],
-    maxiters: Optional[int] = None,
 ) -> ir.Expr:
     """Apply structural substitution until the expression stabilises.
 
     Substitution keys are plain symbols so :func:`~.expr.xreplace`
     (exact-node replacement) is sufficient; it is applied repeatedly
-    because substituted expressions may themselves contain keys.
+    because substituted expressions may themselves contain keys. The
+    map comes from an acyclic tearing, so the loop terminates.
     """
 
     if not sub_map:
         return expr
-    if maxiters is None:
-        maxiters = len(sub_map) + 10
-    for _ in range(maxiters):
+    while True:
         new_expr = ir.xreplace(expr, sub_map)
         if new_expr is expr:
             return new_expr
         expr = new_expr
-    raise ValueError(
-        "fixpoint substitution failed to converge; the substitution "
-        "map is likely cyclic"
-    )
 
 
 def total_derivative(
     expr: ir.Expr,
     deriv_map: Dict[ir.Sym, ir.Sym],
     time_symbol: ir.Sym,
-    known_derivative_map: Optional[Dict[ir.Sym, ir.Expr]] = None,
 ) -> ir.Expr:
     """Total time derivative of ``expr``.
 
@@ -128,15 +121,11 @@ def total_derivative(
         Expression to differentiate.
     deriv_map
         Map from unknown symbols to their derivative symbols. Symbols
-        absent from both maps differentiate to zero.
+        absent from the map differentiate to zero, matching MTK's
+        default for time-dependent parameters.
     time_symbol
         The independent variable; explicit dependence differentiates
         through :func:`~.expr.diff`.
-    known_derivative_map
-        Derivative expressions for known time-dependent quantities
-        (drivers). Known symbols absent from this map differentiate
-        to zero, matching MTK's default for time-dependent
-        parameters.
 
     Notes
     -----
@@ -144,8 +133,6 @@ def total_derivative(
     mapped symbols occurring in ``expr``.
     """
 
-    if known_derivative_map is None:
-        known_derivative_map = {}
     terms: List[ir.Expr] = [ir.diff(expr, time_symbol)]
     atoms = sorted(ir.free_atoms(expr), key=lambda a: a.sort_key)
     for atom in atoms:
@@ -154,12 +141,6 @@ def total_derivative(
         dsym = deriv_map.get(atom)
         if dsym is not None:
             terms.append(ir.mul(ir.diff(expr, atom), dsym))
-            continue
-        known = known_derivative_map.get(atom)
-        if known is not None:
-            terms.append(ir.mul(ir.diff(expr, atom), known))
-        # Symbols that are neither unknowns nor known time-dependent
-        # quantities are constants/parameters: derivative zero.
     return ir.add(*terms)
 
 

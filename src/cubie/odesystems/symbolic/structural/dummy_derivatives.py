@@ -9,20 +9,18 @@ available and an augmenting-path structural rank otherwise.
 Ported from ModelingToolkit.jl (commit c4177c335,
 ``src/structural_transformation/partial_state_selection.jl``):
 ``dummy_derivative_graph`` and ``_dummy_derivative_graph``
-(``dummy_derivative_graph!``), ``DummyDerivativeSummary``,
-``is_present``, ``is_some_diff``, ``isdiffed`` and
-``_tear_with_dummies`` (``DummyDerivativeTearing``).
+(``dummy_derivative_graph!``), ``is_present``, ``is_some_diff``,
+``isdiffed`` and ``_tear_with_dummies`` (``DummyDerivativeTearing``).
 
 Published Functions
 -------------------
 :func:`dummy_derivative_graph`
     Run Pantelides, select dummy derivatives, and tear. Returns a
-    :class:`~cubie.odesystems.symbolic.structural.tearing.TearingResult`
-    and a dict of extra data.
+    :class:`~cubie.odesystems.symbolic.structural.tearing.TearingResult`.
 """
 
 import warnings
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Optional
 
 from cubie.odesystems.symbolic.structural.bipartite import (
     Matching,
@@ -85,18 +83,6 @@ def isdiffed(
     )
 
 
-class DummyDerivativeSummary:
-    """Per-SCC variable ordering and priorities used for selection."""
-
-    def __init__(
-        self,
-        var_sccs: List[List[int]],
-        state_priority: List[List[float]],
-    ) -> None:
-        self.var_sccs = var_sccs
-        self.state_priority = state_priority
-
-
 def _independent_columns(matrix: List[List[int]]) -> List[int]:
     """Columns of ``matrix`` independent of the columns before them.
 
@@ -123,7 +109,7 @@ def dummy_derivative_graph(
     jac: Optional[Callable] = None,
     state_priority: Optional[Callable[[int], float]] = None,
     **kwargs,
-) -> Tuple[TearingResult, Dict]:
+) -> TearingResult:
     """Pantelides + dummy-derivative selection + tearing.
 
     Parameters
@@ -140,8 +126,6 @@ def dummy_derivative_graph(
         likely to remain states.
     """
 
-    if state.structure.solvable_graph is None:
-        state.find_solvables(**kwargs)
     state.structure.complete()
     var_eq_matching = pantelides(state, **kwargs).complete(
         state.structure.graph.nsrcs()
@@ -156,7 +140,7 @@ def _dummy_derivative_graph(
     var_eq_matching: Matching,
     jac: Optional[Callable],
     state_priority: Optional[Callable[[int], float]],
-) -> Tuple[TearingResult, Dict]:
+) -> TearingResult:
     structure = state.structure
     eq_to_diff = structure.eq_to_diff
     var_to_diff = structure.var_to_diff
@@ -167,8 +151,6 @@ def _dummy_derivative_graph(
     cranks = structure.canonical_ranks
 
     var_sccs = find_var_sccs(graph, var_eq_matching)
-    var_dummy_scc = []
-    var_state_priority = []
     dummy_derivatives = []
     neqs = graph.nsrcs()
     nvars = graph.ndsts()
@@ -182,8 +164,6 @@ def _dummy_derivative_graph(
                 continue
             if diff_to_eq[eq] is not None:
                 eqs.append(eq)
-            if var_to_diff[var] is not None:
-                raise AssertionError("Invalid SCC")
             if diff_to_var[var] is not None and is_present(
                 structure, var
             ):
@@ -196,16 +176,6 @@ def _dummy_derivative_graph(
         J = None
         if jac is not None:
             J = jac(eqs, variables)
-        if J is not None:
-            for row in J:
-                for x in row:
-                    if not (
-                        isinstance(x, int) and -128 <= x <= 127
-                    ):
-                        J = None
-                        break
-                if J is None:
-                    break
         next_eq_idxs = []
         next_var_idxs = []
         while True:
@@ -220,15 +190,12 @@ def _dummy_derivative_graph(
                     key=lambda i: (sp_vals[i], cranks[variables[i]]),
                 )
                 variables = [variables[i] for i in var_perm]
-                sp_vals = [sp_vals[i] for i in var_perm]
                 # Keep Jacobian columns aligned with the permuted
                 # variable order.
                 if J is not None:
                     J = [
                         [row[i] for i in var_perm] for row in J
                     ]
-                var_dummy_scc.append(list(variables))
-                var_state_priority.append(sp_vals)
 
             if J is not None:
                 if not isfirst:
@@ -273,8 +240,6 @@ def _dummy_derivative_graph(
             new_vars = []
             for i, eq in enumerate(eqs):
                 int_eq = diff_to_eq[eq]
-                if int_eq is None:
-                    continue
                 if diff_to_eq[int_eq] is None:
                     continue
                 if J is not None:
@@ -282,8 +247,6 @@ def _dummy_derivative_graph(
                 new_eqs.append(int_eq)
             for i, var in enumerate(variables):
                 int_var = diff_to_var[var]
-                if int_var is None:
-                    continue
                 if diff_to_var[int_var] is None:
                     continue
                 if J is not None:
@@ -304,19 +267,13 @@ def _dummy_derivative_graph(
             f"({n_diff_eqs})."
         )
 
-    dummy_set = set(dummy_derivatives)
-    tearing_result, extra = _tear_with_dummies(state, dummy_set)
-    extra = dict(extra)
-    extra["ddsummary"] = DummyDerivativeSummary(
-        var_dummy_scc, var_state_priority
-    )
-    return tearing_result, extra
+    return _tear_with_dummies(state, set(dummy_derivatives))
 
 
 def _tear_with_dummies(
     state: StructuralState,
     dummy_derivatives: set,
-) -> Tuple[TearingResult, Dict]:
+) -> TearingResult:
     """Tear after dummy-derivative selection.
 
     Integer-linear SCCs are first reduced to explicit solve sequences
@@ -342,7 +299,7 @@ def _tear_with_dummies(
     # Not ported: exact matching runs before Modia tearing.
     match_linear_sccs(state, isder, varfilter)
     modia_tearing = ModiaTearing(isder=isder, varfilter=varfilter)
-    tearing_result, _ = modia_tearing(
+    tearing_result = modia_tearing(
         structure.graph, structure.solvable_graph
     )
 
@@ -356,4 +313,4 @@ def _tear_with_dummies(
             continue
         tearing_result.var_eq_matching[v] = SELECTED_STATE
 
-    return tearing_result, {"can_eliminate": can_eliminate}
+    return tearing_result

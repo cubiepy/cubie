@@ -33,7 +33,6 @@ from typing import Dict, List, Tuple
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.structural.clil import SparseMatrixCLIL
 from cubie.odesystems.symbolic.structural.singularity_removal import (
-    IgnoreUnderconstrainedVariable,
     get_new_mm,
     structural_singularity_removal,
 )
@@ -164,12 +163,10 @@ def _find_perfect_aliases(
     state: StructuralState,
     eqs_to_rm: List[int],
     vars_to_rm: List[int],
-) -> Dict[int, int]:
+) -> None:
     """Identify and rewrite perfect alias equations.
 
-    Appends removable equations/variables to the given buffers and
-    returns ``aliases``: removed variable index to target variable
-    index.
+    Appends removable equations/variables to the given buffers.
     """
 
     structure = state.structure
@@ -180,7 +177,6 @@ def _find_perfect_aliases(
     eqs = state.eqs
     original_eqs = state.original_eqs
 
-    aliases = {}
     subs = {}
     parent = {}
     parity = {}
@@ -280,7 +276,6 @@ def _find_perfect_aliases(
             state.additional_observed.append(
                 Equation(fullvars[v], rhs_sym)
             )
-            aliases[v] = target
 
             for e in list(graph.d_neighbors(v)):
                 eqs_to_substitute.append(e)
@@ -307,7 +302,6 @@ def _find_perfect_aliases(
                     else ir.neg(fullvars[dtarget])
                 )
                 subs[fullvars[dv]] = dsub
-                aliases[dv] = dtarget
                 for e in list(graph.d_neighbors(dv)):
                     eqs_to_substitute.append(e)
                     graph.rem_edge(e, dv)
@@ -375,27 +369,21 @@ def _find_perfect_aliases(
             eqs_to_rm.append(ieq)
         else:
             seen.add(pair)
-    return aliases
 
 
 def eliminate_perfect_aliases(
     state: StructuralState,
-) -> Tuple[List[int], List[int], Dict[int, int]]:
+) -> Tuple[List[int], List[int]]:
     """Remove perfect alias equations from ``state``.
 
-    Returns ``(old_to_new_eq, old_to_new_var, aliases)`` where
-    ``aliases`` maps removed (old) variable indices to their (old)
-    target variable indices.
+    Returns ``(old_to_new_eq, old_to_new_var)``.
     """
 
     state.structure.complete()
     eqs_to_rm = []
     vars_to_rm = []
-    aliases = _find_perfect_aliases(state, eqs_to_rm, vars_to_rm)
-    old_to_new_eq, old_to_new_var = state.rm_eqs_vars(
-        eqs_to_rm, vars_to_rm
-    )
-    return old_to_new_eq, old_to_new_var, aliases
+    _find_perfect_aliases(state, eqs_to_rm, vars_to_rm)
+    return state.rm_eqs_vars(eqs_to_rm, vars_to_rm)
 
 
 def trivial_tearing(state: StructuralState) -> None:
@@ -481,9 +469,7 @@ def trivial_tearing(state: StructuralState) -> None:
 
 
 def alias_elimination(
-    state: StructuralState,
-    print_underconstrained_variables: bool = False,
-    **kwargs,
+    state: StructuralState, **kwargs
 ) -> SparseMatrixCLIL:
     """Integer-linear alias elimination pass.
 
@@ -494,23 +480,8 @@ def alias_elimination(
 
     state.structure.complete()
     eqs_to_rm = []
-    vars_to_rm = []
-    aliases = {}
 
-    underconstrained_hook = IgnoreUnderconstrainedVariable()
-    mm = structural_singularity_removal(
-        state,
-        variable_underconstrained=underconstrained_hook,
-        **kwargs,
-    )
-    if print_underconstrained_variables:
-        names = [
-            state.fullvars[v]
-            for v in underconstrained_hook.underconstrained
-        ]
-        warnings.warn(
-            f"Found underconstrained variables in the system: {names}"
-        )
+    mm = structural_singularity_removal(state, **kwargs)
 
     fullvars_to_idx = state.var2idx
     eqs = state.eqs
@@ -542,7 +513,5 @@ def alias_elimination(
         else:
             original_eqs[eq] = eqs[eq]
 
-    old_to_new_eq, old_to_new_var = state.rm_eqs_vars(
-        eqs_to_rm, vars_to_rm
-    )
-    return get_new_mm(aliases, old_to_new_eq, old_to_new_var, mm)
+    old_to_new_eq, old_to_new_var = state.rm_eqs_vars(eqs_to_rm, [])
+    return get_new_mm(old_to_new_eq, old_to_new_var, mm)

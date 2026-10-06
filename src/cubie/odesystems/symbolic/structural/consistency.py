@@ -64,18 +64,15 @@ def singular_check(state: StructuralState) -> List:
     return unassigned_vars
 
 
-def check_consistency(
-    state: StructuralState, nothrow: bool = False
-) -> bool:
+def check_consistency(state: StructuralState) -> None:
     """Check that ``state`` is balanced and structurally nonsingular.
 
     Raises
     ------
     ExtraEquationsSystemError, ExtraVariablesSystemError
-        When the system is unbalanced (unless ``nothrow``).
+        When the system is unbalanced.
     InvalidSystemError
-        When the system is structurally singular (unless
-        ``nothrow``).
+        When the system is structurally singular.
     """
 
     neqs = state.n_concrete_eqs()
@@ -92,8 +89,6 @@ def check_consistency(
     is_balanced = n_highest_vars == neqs
 
     if neqs > 0 and not is_balanced:
-        if nothrow:
-            return False
         varwhitelist = [
             d is None for d in structure.var_to_diff
         ]
@@ -135,12 +130,8 @@ def check_consistency(
     unassigned_vars = singular_check(state)
 
     if unassigned_vars or not is_balanced:
-        if nothrow:
-            return False
         raise InvalidSystemError(
             "The system is structurally singular! Here are the "
             "problematic variables:\n"
             + "\n".join(str(v) for v in unassigned_vars)
         )
-
-    return True

@@ -82,7 +82,6 @@ class DiCMOBiGraphT:
         if matching is None:
             matching = Matching(graph.ndsts())
         self.matching = matching
-        self.ne = 0
 
     def nv(self) -> int:
         """Number of vertices (variables) in the view."""
@@ -103,8 +102,6 @@ class DiCMOBiGraphT:
         """Variables whose matched equation is incident on ``v``."""
 
         inv = self.matching.inv_match
-        if inv is None:
-            self.matching.require_complete()
         for eq in self.graph.d_neighbors(v):
             if eq < len(inv):
                 w = inv[eq]
@@ -123,12 +120,6 @@ class DiCMOBiGraphF:
     def __init__(self, graph: BipartiteGraph, matching: Matching) -> None:
         self.graph = graph
         self.matching = matching
-        self.ne = 0
-
-    def nv(self) -> int:
-        """Number of vertices (equations) in the view."""
-
-        return self.graph.nsrcs()
 
     def outneighbors(self, e: int) -> Iterator[int]:
         """Equations solving a variable that ``e`` is incident on."""
@@ -136,21 +127,6 @@ class DiCMOBiGraphF:
         for v in self.graph.s_neighbors(e):
             e2 = self.matching[v]
             if isinstance(e2, int) and e2 != e:
-                yield e2
-
-    def inneighbors(self, e: int) -> Iterator[int]:
-        """Equations incident on the variable matched to ``e``."""
-
-        inv = self.matching.inv_match
-        if inv is None:
-            self.matching.require_complete()
-        if e >= len(inv):
-            return
-        v = inv[e]
-        if not isinstance(v, int):
-            return
-        for e2 in self.graph.d_neighbors(v):
-            if e2 != e:
                 yield e2
 
 
@@ -332,9 +308,6 @@ class _TransactionalList:
         self.log.append((i, self.values[i]))
         self.values[i] = val
 
-    def __len__(self) -> int:
-        return len(self.values)
-
     def commit(self) -> None:
         self.log.clear()
 
@@ -393,9 +366,6 @@ class IncrementalCycleTracker:
             v = dst
             if levels[v] < levels[w]:
                 continue
-            if v == w:
-                levels.revert()
-                return False
             levels[w] = levels[v] + 1
             worklist.append((v, w))
         idx = 0

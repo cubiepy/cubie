@@ -16,7 +16,6 @@ from ``src/structural_transformation/symbolics_tearing.jl``
 ``state_priority`` closure of ``dummy_derivative`` in the same file;
 ``StructuralState.find_eq_solvables`` with
 ``StructuralState.division_permitted``,
-``StructuralState.find_solvables``,
 ``StructuralState.linear_subsys_adjmat`` and
 ``StructuralState.n_concrete_eqs`` from
 ``src/structural_transformation/utils.jl``;
@@ -86,44 +85,11 @@ class Equation:
     __slots__ = ("lhs", "rhs")
 
     def __init__(self, lhs: ir.Expr, rhs: ir.Expr) -> None:
-        self.lhs = self._coerce(lhs)
-        self.rhs = self._coerce(rhs)
-
-    @staticmethod
-    def _coerce(value) -> ir.Expr:
-        """Coerce an operand to an engine IR expression.
-
-        Plain Python ``int``/``float`` values are wrapped as numeric
-        literals. Any other non-IR value (in particular a SymPy
-        expression) raises ``TypeError``: conversion from SymPy
-        belongs at the parse boundary, before an ``Equation`` is
-        constructed.
-        """
-
-        if isinstance(value, ir.Expr):
-            return value
-        if isinstance(value, (int, float)):
-            return ir.num(value)
-        raise TypeError(
-            "Equation operands must be engine IR expressions "
-            "(cubie.odesystems.symbolic.engine.expr.Expr) or plain "
-            f"Python int/float; got {type(value).__name__}. Convert "
-            "SymPy expressions to IR at the parse boundary before "
-            "constructing an Equation."
-        )
+        self.lhs = lhs
+        self.rhs = rhs
 
     def __repr__(self) -> str:
         return f"{self.lhs} ~ {self.rhs}"
-
-    def __eq__(self, other) -> bool:
-        return (
-            isinstance(other, Equation)
-            and self.lhs is other.lhs
-            and self.rhs is other.rhs
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.lhs, self.rhs))
 
     def residual(self) -> ir.Expr:
         """Return ``rhs - lhs``."""
@@ -241,20 +207,6 @@ class SystemStructure:
         self.state_priorities = state_priorities
         self.canonical_ranks = canonical_ranks
 
-    def copy(self) -> "SystemStructure":
-        """Return a deep copy."""
-
-        return SystemStructure(
-            self.var_to_diff.copy(),
-            self.eq_to_diff.copy(),
-            self.graph.copy(),
-            None
-            if self.solvable_graph is None
-            else self.solvable_graph.copy(),
-            list(self.state_priorities),
-            list(self.canonical_ranks),
-        )
-
     def complete(self) -> "SystemStructure":
         """Complete all member graphs (inverse/backward adjacency)."""
 
@@ -268,15 +220,13 @@ class SystemStructure:
     def isdervar(self, i: int) -> bool:
         """Whether variable ``i`` is the derivative of another."""
 
-        self.var_to_diff.require_complete()
         return self.var_to_diff.diff_to_primal[i] is not None
 
     def eq_derivative_graph(self, eq: int) -> int:
         """Add the graph vertices for the derivative of equation ``eq``."""
 
         self.graph.add_vertex(SRC)
-        if self.solvable_graph is not None:
-            self.solvable_graph.add_vertex(SRC)
+        self.solvable_graph.add_vertex(SRC)
         eq_diff = self.eq_to_diff.add_vertex()
         self.eq_to_diff.add_edge(eq, eq_diff)
         return eq_diff
@@ -284,15 +234,11 @@ class SystemStructure:
     def var_derivative_graph(self, v: int) -> int:
         """Add the graph vertices for the derivative of variable ``v``."""
 
-        g = self.graph.add_vertex(DST)
+        self.graph.add_vertex(DST)
         var_diff = self.var_to_diff.add_vertex()
         self.var_to_diff.add_edge(v, var_diff)
         if self.solvable_graph is not None:
-            sg = self.solvable_graph.add_vertex(DST)
-            if sg != g:
-                raise AssertionError("graph vertex counts diverged")
-        if g != var_diff:
-            raise AssertionError("graph vertex counts diverged")
+            self.solvable_graph.add_vertex(DST)
         return var_diff
 
 
@@ -313,15 +259,10 @@ class StructuralState:
         of ``equations`` is an unknown.
     time_symbol
         The independent variable.
-    known_derivative_map
-        Time derivatives of known time-dependent symbols (drivers).
-        Knowns absent from the map differentiate to zero.
     state_priorities
         Optional per-symbol state-selection priorities.
     irreducibles
         Symbols that may not be eliminated from the unknowns.
-    sort_eqs
-        Whether to sort equations before analysis.
     """
 
     def __init__(
@@ -330,15 +271,12 @@ class StructuralState:
         registry: DerivativeRegistry,
         known_symbols: Iterable[ir.Sym],
         time_symbol: ir.Sym,
-        known_derivative_map: Optional[Dict[ir.Sym, ir.Expr]] = None,
         state_priorities: Optional[Dict[ir.Sym, float]] = None,
         irreducibles: Optional[Iterable[ir.Sym]] = None,
-        sort_eqs: bool = True,
     ) -> None:
         self.registry = registry
         self.time_symbol = time_symbol
         self.known_symbols = set(known_symbols) | {time_symbol}
-        self.known_derivative_map = dict(known_derivative_map or {})
         self.irreducibles = set(irreducibles or ())
         self.mm = None
         self.additional_observed = []
@@ -375,11 +313,10 @@ class StructuralState:
             if isalgeq and not ir.is_zero(eq.lhs):
                 eqs[i] = Equation(ir.ZERO, eq.residual())
 
-        if sort_eqs:
-            # Order equations by their printed form.
-            sortidxs = sorted(range(len(eqs)), key=lambda i: str(eqs[i]))
-            eqs = [eqs[i] for i in sortidxs]
-            original_eqs = [original_eqs[i] for i in sortidxs]
+        # Order equations by their printed form.
+        sortidxs = sorted(range(len(eqs)), key=lambda i: str(eqs[i]))
+        eqs = [eqs[i] for i in sortidxs]
+        original_eqs = [original_eqs[i] for i in sortidxs]
 
         self.eqs = eqs
         self.original_eqs = original_eqs
@@ -502,16 +439,11 @@ class StructuralState:
                 if dv is not None:
                     deriv_map[v] = self.fullvars[dv]
         new_rhs = total_derivative(
-            self.eqs[ieq].residual(),
-            deriv_map,
-            self.time_symbol,
-            self.known_derivative_map,
+            self.eqs[ieq].residual(), deriv_map, self.time_symbol
         )
         new_eq = Equation(ir.ZERO, new_rhs)
         self.eqs.append(new_eq)
         self.original_eqs.append(new_eq)
-        if len(self.eqs) != eq_diff + 1:
-            raise AssertionError("equation count diverged from graph")
 
         # Superset incidence: previous incidence plus derivatives;
         # find_eq_solvables prunes false entries.
@@ -519,21 +451,19 @@ class StructuralState:
             s.graph.add_edge(eq_diff, var)
             s.graph.add_edge(eq_diff, s.var_to_diff[var])
 
-        if self.mm is not None:
-            self.mm.nparentrows += 1
-        if s.solvable_graph is not None:
-            to_rm = []
-            coeffs = []
-            solv_kwargs = {"allow_symbolic": False}
-            solv_kwargs.update(kwargs)
-            all_int_vars, rem = self.find_eq_solvables(
-                eq_diff, to_rm, coeffs, **solv_kwargs
-            )
-            if self.mm is not None and all_int_vars and ir.is_zero(rem):
-                # Not ported: an integer-linear derivative joins mm.
-                self.mm.nzrows.append(eq_diff)
-                self.mm.row_cols.append(list(s.graph.s_neighbors(eq_diff)))
-                self.mm.row_vals.append(coeffs)
+        self.mm.nparentrows += 1
+        to_rm = []
+        coeffs = []
+        solv_kwargs = {"allow_symbolic": False}
+        solv_kwargs.update(kwargs)
+        all_int_vars, rem = self.find_eq_solvables(
+            eq_diff, to_rm, coeffs, **solv_kwargs
+        )
+        if all_int_vars and ir.is_zero(rem):
+            # Not ported: an integer-linear derivative joins mm.
+            self.mm.nzrows.append(eq_diff)
+            self.mm.row_cols.append(list(s.graph.s_neighbors(eq_diff)))
+            self.mm.row_vals.append(coeffs)
         return eq_diff
 
     def division_permitted(
@@ -639,18 +569,6 @@ class StructuralState:
             graph.rem_edge(ieq, j)
         return all_int_vars, term
 
-    def find_solvables(self, **kwargs) -> None:
-        """Populate the solvable graph for every equation."""
-
-        if self.structure.solvable_graph is not None:
-            raise AssertionError("solvable graph already populated")
-        graph = self.structure.graph
-        self.structure.solvable_graph = BipartiteGraph(
-            graph.nsrcs(), graph.ndsts()
-        )
-        for ieq in range(graph.nsrcs()):
-            self.find_eq_solvables(ieq, **kwargs)
-
     def rewrite_from_row(
         self, ieq: int, cols: List[int], vals: List[int]
     ) -> None:
@@ -672,10 +590,9 @@ class StructuralState:
         """
 
         graph = self.structure.graph
-        if self.structure.solvable_graph is None:
-            self.structure.solvable_graph = BipartiteGraph(
-                graph.nsrcs(), graph.ndsts()
-            )
+        self.structure.solvable_graph = BipartiteGraph(
+            graph.nsrcs(), graph.ndsts()
+        )
         linear_equations = []
         eadj = []
         cadj = []
@@ -740,14 +657,6 @@ class StructuralState:
                 )
             return new_graph
 
-        new_eq_to_diff = DiffGraph(n_new_eqs, with_badj=True)
-        for i, ieq in enumerate(old_to_new_eq):
-            if ieq < 0:
-                continue
-            deq = s.eq_to_diff[i]
-            if deq is not None and old_to_new_eq[deq] >= 0:
-                new_eq_to_diff[ieq] = old_to_new_eq[deq]
-
         new_var_to_diff = DiffGraph(n_new_vars, with_badj=True)
         for iv, i in enumerate(old_to_new_var):
             if i < 0:
@@ -771,7 +680,8 @@ class StructuralState:
         s.graph = renumbered(s.graph)
         if s.solvable_graph is not None:
             s.solvable_graph = renumbered(s.solvable_graph)
-        s.eq_to_diff = new_eq_to_diff
+        # No equation is differentiated before index reduction.
+        s.eq_to_diff = DiffGraph(n_new_eqs, with_badj=True)
         s.var_to_diff = new_var_to_diff
         return old_to_new_eq, old_to_new_var
 
