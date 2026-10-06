@@ -176,6 +176,7 @@ class SolverSettings(_CubieConfigBase):
     order: Optional[int] = None
     wrap: Optional[bool] = None
     boundary_condition: Any = None
+    driver_evaluation: Optional[str] = None
 
     # -- Loop unrolling -----------------------------------------------
     unroll_stage: Any = None

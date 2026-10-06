@@ -44,6 +44,8 @@ from typing import (
 )
 
 from numpy import (
+    full as np_full,
+    int32 as np_int32,
     allclose,
     any as np_any,
     arange,
@@ -62,6 +64,7 @@ from numpy import (
 from numpy.linalg import solve as np_solve
 from attrs import cmp_using, define, field, fields, validators, frozen
 from numba_cuda_mlir.types import int32
+from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 from cubie._cudasim_extensions import cuda
 from cubie.backend.intrinsics import unroll_if
 from numpy.typing import NDArray
@@ -358,6 +361,12 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         ),
         validator=validators.instance_of(tuple),
     )
+    driver_evaluation: str = field(
+        default="columns",
+        validator=validators.in_(
+            {"columns", "combined", "combined_selp", "two_loop"}
+        ),
+    )
     num_inputs: int = field(default=0, init=False)
     num_columns: int = field(default=0, init=False)
     num_segments: int = field(default=0, init=False)
@@ -377,8 +386,8 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
             self,
             "num_columns",
             int(num_inputs + len(self.derivative_columns))
-            if num_inputs
-            else 0,
+            if num_inputs and self.driver_evaluation == "columns"
+            else int(num_inputs),
         )
         object.__setattr__(
             self, "num_segments", self._segment_count(num_samples)
@@ -528,6 +537,19 @@ class ArrayInterpolator(CUDAFactory):
         evaluation_start = precision(
             start_time - (resolution if pad_clamped else precision(0.0))
         )
+        evaluation = self.compile_settings.driver_evaluation
+        if evaluation != "columns":
+            return self._build_slot_evaluators(
+                coefficients,
+                evaluation,
+                order,
+                inv_resolution,
+                num_segments,
+                wrap,
+                unroll_other_small,
+                zero_value,
+                evaluation_start,
+            )
 
         # no cover: start
         @cuda.jit(
@@ -1005,14 +1027,265 @@ class ArrayInterpolator(CUDAFactory):
         solution = np_solve(matrix, rhs)
         coefficients = solution.reshape(num_segments, order + 1, num_inputs)
         coefficients = np_transpose(coefficients, (0, 2, 1))
-        derived = self._derivative_coefficients(coefficients, falling)
-        coefficients = concatenate((coefficients, derived), axis=1)
+        if self.compile_settings.driver_evaluation == "columns":
+            derived = self._derivative_coefficients(coefficients, falling)
+            coefficients = concatenate((coefficients, derived), axis=1)
         # Fresh pinned buffer per build.
         buffer = self._memory_manager.create_host_array(
             coefficients.shape, precision, "pinned"
         )
         buffer[...] = coefficients
         return buffer
+
+    def _build_slot_evaluators(
+        self,
+        coefficients,
+        evaluation,
+        order,
+        inv_resolution,
+        num_segments,
+        wrap,
+        unroll_other_small,
+        zero_value,
+        evaluation_start,
+    ) -> InterpolatorCache:
+        """Compile the experimental derivative-slot evaluators."""
+        precision = self.precision
+        numba_precision = from_dtype(precision)
+        num_inputs = self.num_inputs
+        n_inputs = int32(num_inputs)
+        slots = self.compile_settings.derivative_columns
+        n_slots = int32(len(slots))
+        has_slots = len(slots) > 0
+        max_order = max((k for _, k in slots), default=0)
+        inv_res = float(inv_resolution)
+
+        def falling(p, k):
+            return math.factorial(p) // math.factorial(p - k)
+
+        # Combined: one Horner pass per input with derivative accumulators.
+        n_value_terms = int32(max_order + 1)
+        n_rate_terms = int32(max_order + 2)
+        value_size = max_order + 1
+        rate_size = max_order + 2
+        driver_orders = zeros(max(num_inputs, 1), dtype=np_int32)
+        slot_index = np_full(
+            (max(num_inputs, 1), max_order + 2), -1, dtype=np_int32
+        )
+        for s, (i, k) in enumerate(slots):
+            driver_orders[i] = max(driver_orders[i], k)
+            slot_index[i, k] = num_inputs + s
+        derivative_scale = asarray(
+            [math.factorial(k) * inv_res**k for k in range(max_order + 2)],
+            dtype=precision,
+        )
+
+        # Two-loop: each slot from its input's coefficients, shifted.
+        n_rows = max(len(slots), 1)
+        slot_inputs = asarray([i for i, _ in slots] or [0], dtype=np_int32)
+        slot_powers = zeros((n_rows, order + 1), dtype=np_int32)
+        slot_scales = zeros((n_rows, order + 1), dtype=precision)
+        rate_powers = zeros((n_rows, order + 1), dtype=np_int32)
+        rate_scales = zeros((n_rows, order + 1), dtype=precision)
+        for s, (_, k) in enumerate(slots):
+            for q in range(order + 1):
+                slot_powers[s, q] = min(q + k, order)
+                rate_powers[s, q] = min(q + k + 1, order)
+                if q + k <= order:
+                    slot_scales[s, q] = falling(q + k, k) * inv_res**k
+                if q + k + 1 <= order:
+                    rate_scales[s, q] = (
+                        falling(q + k + 1, k + 1) * inv_res ** (k + 1)
+                    )
+        selp_commit = evaluation == "combined_selp"
+
+        # no cover: start
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def locate(time):
+            """Return the segment, local position and in-range flag."""
+            time = precision(time)
+            scaled = (time - evaluation_start) * inv_resolution
+            scaled_floor = precision(math.floor(scaled))
+            idx = int32(scaled_floor)
+            if wrap:
+                seg = int32(idx % num_segments)
+                tau = precision(scaled - scaled_floor)
+                in_range = True
+            else:
+                in_range = (scaled >= precision(0.0)) and (
+                    scaled <= num_segments
+                )
+                seg = cuda.selp(idx < int32(0), int32(0), idx)
+                seg = cuda.selp(
+                    seg >= num_segments, int32(num_segments - 1), seg
+                )
+                tau = precision(scaled - precision(seg))
+            return seg, tau, in_range
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def combined_all(time, coefficients, out) -> None:
+            """Evaluate inputs and their derivative slots in one pass."""
+            seg, tau, in_range = locate(time)
+            for input_index in unroll_if(
+                range(n_inputs), unroll_other_small
+            ):
+                acc = cuda.local.array(value_size, numba_precision)
+                for j in unroll_if(range(n_value_terms), unroll_other_small):
+                    acc[j] = zero_value
+                top = driver_orders[input_index]
+                for p in unroll_if(
+                    range(int32(order), int32(-1), int32(-1)),
+                    unroll_other_small,
+                ):
+                    if has_slots:
+                        for j in unroll_if(
+                            range(
+                                n_value_terms - int32(1),
+                                int32(0),
+                                int32(-1),
+                            ),
+                            unroll_other_small,
+                        ):
+                            if selp_commit:
+                                acc[j] = cuda.selp(
+                                    j <= top,
+                                    acc[j] * tau + acc[j - 1],
+                                    acc[j],
+                                )
+                            else:
+                                if j <= top:
+                                    acc[j] = acc[j] * tau + acc[j - 1]
+                    acc[0] = (
+                        acc[0] * tau + coefficients[seg, input_index, p]
+                    )
+                out[input_index] = acc[0] if in_range else zero_value
+                if has_slots:
+                    for k in unroll_if(
+                        range(int32(1), n_value_terms), unroll_other_small
+                    ):
+                        index = slot_index[input_index, k]
+                        if index >= int32(0):
+                            out[index] = (
+                                acc[k] * derivative_scale[k]
+                                if in_range
+                                else zero_value
+                            )
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def combined_rate(time, coefficients, out) -> None:
+            """Evaluate every buffer slot's time derivative in one pass."""
+            seg, tau, in_range = locate(time)
+            for input_index in unroll_if(
+                range(n_inputs), unroll_other_small
+            ):
+                acc = cuda.local.array(rate_size, numba_precision)
+                for j in unroll_if(range(n_rate_terms), unroll_other_small):
+                    acc[j] = zero_value
+                top = driver_orders[input_index] + int32(1)
+                for p in unroll_if(
+                    range(int32(order), int32(-1), int32(-1)),
+                    unroll_other_small,
+                ):
+                    for j in unroll_if(
+                        range(n_rate_terms - int32(1), int32(0), int32(-1)),
+                        unroll_other_small,
+                    ):
+                        if selp_commit:
+                            acc[j] = cuda.selp(
+                                j <= top, acc[j] * tau + acc[j - 1], acc[j]
+                            )
+                        else:
+                            if j <= top:
+                                acc[j] = acc[j] * tau + acc[j - 1]
+                    acc[0] = (
+                        acc[0] * tau + coefficients[seg, input_index, p]
+                    )
+                out[input_index] = (
+                    acc[1] * derivative_scale[1] if in_range else zero_value
+                )
+                if has_slots:
+                    for k in unroll_if(
+                        range(int32(1), n_value_terms), unroll_other_small
+                    ):
+                        index = slot_index[input_index, k]
+                        if index >= int32(0):
+                            out[index] = (
+                                acc[k + 1] * derivative_scale[k + 1]
+                                if in_range
+                                else zero_value
+                            )
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def two_loop_all(time, coefficients, out) -> None:
+            """Evaluate inputs, then each slot from its input."""
+            seg, tau, in_range = locate(time)
+            for input_index in unroll_if(
+                range(n_inputs), unroll_other_small
+            ):
+                acc = zero_value
+                for p in unroll_if(
+                    range(int32(order), int32(-1), int32(-1)),
+                    unroll_other_small,
+                ):
+                    acc = acc * tau + coefficients[seg, input_index, p]
+                out[input_index] = acc if in_range else zero_value
+            if has_slots:
+                for slot in unroll_if(range(n_slots), unroll_other_small):
+                    column = slot_inputs[slot]
+                    acc = zero_value
+                    for q in unroll_if(
+                        range(int32(order), int32(-1), int32(-1)),
+                        unroll_other_small,
+                    ):
+                        acc = acc * tau + (
+                            coefficients[seg, column, slot_powers[slot, q]]
+                            * slot_scales[slot, q]
+                        )
+                    out[n_inputs + slot] = acc if in_range else zero_value
+
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def two_loop_rate(time, coefficients, out) -> None:
+            """Evaluate input rates, then each slot's rate."""
+            seg, tau, in_range = locate(time)
+            for input_index in unroll_if(
+                range(n_inputs), unroll_other_small
+            ):
+                acc = zero_value
+                for p in unroll_if(
+                    range(int32(order), int32(0), int32(-1)),
+                    unroll_other_small,
+                ):
+                    acc = acc * tau + precision(p) * (
+                        coefficients[seg, input_index, p]
+                    )
+                out[input_index] = (
+                    acc * inv_resolution if in_range else zero_value
+                )
+            if has_slots:
+                for slot in unroll_if(range(n_slots), unroll_other_small):
+                    column = slot_inputs[slot]
+                    acc = zero_value
+                    for q in unroll_if(
+                        range(int32(order), int32(-1), int32(-1)),
+                        unroll_other_small,
+                    ):
+                        acc = acc * tau + (
+                            coefficients[seg, column, rate_powers[slot, q]]
+                            * rate_scales[slot, q]
+                        )
+                    out[n_inputs + slot] = acc if in_range else zero_value
+
+        # no cover: end
+        if evaluation == "two_loop":
+            drivers_fn, rate_fn = two_loop_all, two_loop_rate
+        else:
+            drivers_fn, rate_fn = combined_all, combined_rate
+        return InterpolatorCache(
+            drivers_fn=drivers_fn,
+            driver_derivative_fn=rate_fn,
+            coefficients=coefficients,
+            coefficients_shape=self.coefficients_shape,
+        )
 
     def _derivative_coefficients(
         self, coefficients: FloatArray, falling: FloatArray
