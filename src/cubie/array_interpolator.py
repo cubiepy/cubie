@@ -328,14 +328,16 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
     drivers : DriverSamples, optional
         The sampled drivers; ``None`` interpolates nothing.
     n_drivers : int
-        Length of the system's drivers buffer: the drivers, then the
-        driver derivatives the equations read. Set from the system.
+        Length of the system's drivers buffer, which holds the drivers
+        followed by the driver derivatives the equations read. The
+        system supplies it.
     n_driver_derivatives : int
-        Number of driver derivatives in the drivers buffer. Set from
-        the system.
+        Number of driver derivatives in the drivers buffer. The system
+        supplies it.
     driver_derivatives : tuple of (int, int)
-        ``(driver index, order)`` of each driver derivative, in
-        drivers-buffer order. Set from the system.
+        The driver index and order of each driver derivative, in the
+        order they follow the drivers in the buffer. The system
+        supplies it.
     num_segments : int
         Polynomial segments in the table: samples minus one, plus two
         ghost segments for clamped non-wrapping inputs, zero with no
@@ -397,7 +399,8 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         ------
         ValueError
             The system reads a driver derivative of higher order than
-            the spline polynomial, which would be zero everywhere.
+            the spline polynomial, which would make it zero
+            everywhere.
         """
         for _, order in self.driver_derivatives:
             if order > self.order:
@@ -519,8 +522,9 @@ class ArrayInterpolator(CUDAFactory):
         Returns
         -------
         dict
-            Precision, drivers-buffer length, driver-derivative count
-            and ``(driver index, order)`` of each driver derivative.
+            The precision, the drivers-buffer length, the number of
+            driver derivatives, and the driver index and order of each
+            derivative.
         """
         return dict(
             precision=system.precision,
@@ -669,7 +673,8 @@ class ArrayInterpolator(CUDAFactory):
             coefficients : device array
                 Segment-major coefficients with trailing polynomial degrees.
             out : device array
-                Drivers buffer: the drivers, then their derivatives.
+                Drivers buffer to fill with the drivers followed by
+                their derivatives.
             """
             seg, tau, in_range = locate(time)
             for input_index in unroll_if(
@@ -696,8 +701,9 @@ class ArrayInterpolator(CUDAFactory):
             coefficients : device array
                 Segment-major coefficients with trailing polynomial degrees.
             out : device array
-                Time derivatives of the drivers, then of the driver
-                derivatives, which are the next order up.
+                Buffer to fill with the time derivatives of the drivers,
+                followed by those of the driver derivatives, which are
+                one order higher.
             """
             seg, tau, in_range = locate(time)
             for input_index in unroll_if(
@@ -1106,11 +1112,11 @@ class ArrayInterpolator(CUDAFactory):
         ``s`` whose coefficient of ``s**q`` is
         ``c_(q+k) * (q+k)!/q! / period**k``, for ``q`` from 0 up to
         ``order - k``. We evaluate it by Horner's rule, starting at the
-        leading power ``order - k`` and working down to ``s**0``. The
-        device loop visits every power from ``order`` down so that it
-        unrolls to the same shape for every derivative; the flags tell
-        it where the sum starts and which powers continue it, and it
-        skips the powers above the leading one.
+        leading power ``order - k`` and working down to ``s**0``. We
+        loop over every power from ``order`` down, so the loop unrolls
+        to the same shape for every derivative, and use the flags to
+        start the sum at the leading power and to skip the powers above
+        it.
 
         Parameters
         ----------
@@ -1121,15 +1127,18 @@ class ArrayInterpolator(CUDAFactory):
         Returns
         -------
         coefficient_index
-            ``(derivatives, order + 1)`` int32 array: the spline
-            coefficient that power ``q`` of each derivative reads.
+            An int32 array of shape ``(derivatives, order + 1)`` giving
+            the spline coefficient that power ``q`` of each derivative
+            reads.
         factor
-            Same shape: ``(q+k)!/q! / period**k`` multiplying that
-            coefficient.
+            An array of the same shape holding the factor
+            ``(q+k)!/q! / period**k`` that multiplies that coefficient.
         is_leading_power
-            Same shape: true at the power where Horner's rule starts.
+            A boolean array of the same shape, true at the power where
+            Horner's rule starts.
         is_lower_power
-            Same shape: true at the powers below the leading one.
+            A boolean array of the same shape, true at the powers below
+            the leading one.
         """
         precision = self.precision
         order = self.order

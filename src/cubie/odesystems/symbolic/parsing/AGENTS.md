@@ -72,7 +72,8 @@ A driver dict maps driver symbols to defaults, attached via
 `drivers.set_passthrough_defaults`. Sampled driver data is a Solver setting
 (`DriverSamples`), not part of the system.
 `ParsedEquations.driver_derivatives` maps each driver derivative read to `(driver, order)`;
-they follow the drivers in the drivers buffer. `from_parsed_equations` re-registers them.
+we place them after the drivers in the drivers buffer, and `from_parsed_equations`
+registers them again on the rebuilt registry.
 
 ## CellML
 `cellmlmanip` is imported under `try/except` and may be `None`; `load_cellml_model` raises

@@ -289,8 +289,8 @@ class DerivativeRegistry:
         var
             The symbol differentiated.
         dsym
-            The symbol standing for its time derivative; its name is
-            reserved so no new derivative symbol reuses it.
+            The symbol for its time derivative. We reserve its name so
+            that no new derivative symbol reuses it.
         """
 
         self.reserved.add(dsym.name)

@@ -1079,7 +1079,8 @@ def test_rebuilt_system_keeps_driver_derivatives(system, precision):
     "solver_settings_override", [DRIVER_DERIVATIVE_SYSTEM], indirect=True
 )
 def test_read_driver_derivatives_follow_the_drive_by_order(system):
-    # Orders 1 and 2 are read, so they take buffer entries 1 and 2.
+    # Expect the first and second derivatives at buffer entries 1 and
+    # 2, after the drive.
     assert system.driver_derivatives == ((0, 1), (0, 2))
     assert system.sizes.drivers == 3
     assert system.sizes.driver_derivatives == 2

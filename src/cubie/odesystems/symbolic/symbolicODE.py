@@ -112,7 +112,7 @@ def _unit_map(
 def _driver_derivative_indices(
     equations, index_map
 ) -> Tuple[Tuple[int, int], ...]:
-    """Return ``(driver index, order)`` of each driver derivative read.
+    """Return the driver index and order of each driver derivative.
 
     Parameters
     ----------
@@ -125,7 +125,9 @@ def _driver_derivative_indices(
     Returns
     -------
     tuple of (int, int)
-        One pair per derivative, in drivers-buffer order.
+        One ``(driver index, order)`` pair per derivative the equations
+        read, in the order the derivatives follow the drivers in the
+        drivers buffer.
     """
 
     driver_indices = {

@@ -117,7 +117,8 @@ class ParsedSystem:
         }
         unknown_names = set(states) | set(observables)
         driver_derivatives = equations.driver_derivatives
-        # The reduced equations read driver derivatives as knowns.
+        # Treat the driver derivatives the reduced equations read as
+        # known symbols.
         known_with_derivatives = {
             **known_symbol_map,
             **{

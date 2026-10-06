@@ -1550,7 +1550,7 @@ def test_coefficients_land_pinned_below_ceiling(precision):
 
 @pytest.fixture(scope="session")
 def cubic_with_derivatives(precision) -> ArrayInterpolator:
-    """The cubic inputs with derivatives of both in the buffer."""
+    """Return the cubic inputs with driver derivatives of both."""
 
     times = np.linspace(0.0, 5.0, 11, dtype=precision)
     samples = {

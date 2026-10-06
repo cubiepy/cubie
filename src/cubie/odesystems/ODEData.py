@@ -178,8 +178,9 @@ class ODEData(CUDAFactoryConfig):
         Drivers-buffer length: drivers plus driver derivatives read.
         Defaults to ``1``.
     driver_derivatives
-        ``(driver index, order)`` of each driver derivative the
-        equations read, in drivers-buffer order after the drivers.
+        The driver index and order of each driver derivative the
+        equations read, in the order the derivatives follow the
+        drivers in the drivers buffer.
     swept_parameters
         Names of the parameters read from the parameters array, in
         row order.
@@ -383,8 +384,9 @@ class ODEData(CUDAFactoryConfig):
             Names of the parameters read from the parameters array.
             Every other parameter compiles in at its default.
         driver_derivatives
-            ``(driver index, order)`` of each driver derivative the
-            equations read, in drivers-buffer order after the drivers.
+            The driver index and order of each driver derivative the
+            equations read, in the order the derivatives follow the
+            drivers in the drivers buffer.
 
         Returns
         -------

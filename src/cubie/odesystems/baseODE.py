@@ -150,8 +150,9 @@ class BaseODE(CUDAFactory):
             Names of the parameters read from the parameters array.
             Every other parameter compiles in at its default.
         driver_derivatives
-            ``(driver index, order)`` of each driver derivative the
-            equations read, in drivers-buffer order after the drivers.
+            The driver index and order of each driver derivative the
+            equations read, in the order the derivatives follow the
+            drivers in the drivers buffer.
         """
         super().__init__()
         system_data = ODEData.from_BaseODE_initargs(
@@ -299,9 +300,9 @@ class BaseODE(CUDAFactory):
 
     @property
     def driver_derivatives(self) -> Tuple[Tuple[int, int], ...]:
-        """``(driver index, order)`` of each driver derivative read.
+        """The driver index and order of each driver derivative read.
 
-        The derivatives sit in the drivers buffer after the drivers, in
+        The derivatives follow the drivers in the drivers buffer, in
         this order.
         """
         return self.compile_settings.driver_derivatives
