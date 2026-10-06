@@ -85,9 +85,8 @@ included) invalidates.
 String parsing renames user functions with a trailing underscore to avoid SymPy
 clashes. Device functions and functions with derivative helpers are wrapped in dynamic
 `sp.Function` subclasses whose `fdiff` emits `d_<name>` (or the given derivative's
-`__name__`). A `user_function_derivatives` value is one callable or a list of increasing
-orders (`derivative_chain`); `NormalisedSystem.derivative_names` maps the function to its
-first helper and each helper to the next, so differentiating a helper calls the next one. Non-device callables are inlined when they accept SymPy arguments.
+`__name__`). A `user_function_derivatives` value is one callable or a list in increasing
+order; `derivative_names` maps each function and helper to the next helper. Non-device callables are inlined when they accept SymPy arguments.
 `function_parser` leaves dxdt symbols out of the symbol map, so `dx = expr; return [dx]`
 inlines `expr`.
 

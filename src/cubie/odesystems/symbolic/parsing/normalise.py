@@ -149,12 +149,9 @@ def _derivative_print_names(
     user_function_derivatives: Optional[Dict[str, Callable]],
     rename: Dict[str, str],
 ) -> Dict[str, str]:
-    """Map renamed function names to derivative placeholder names.
+    """Map each function, and each helper, to its next derivative's name.
 
-    Each supplied derivative helper maps the function, or the helper
-    one order below it, to its own name, so differentiating a helper
-    calls the next one. Every other function differentiates to the
-    default ``d_<name>`` placeholder.
+    Functions without a helper differentiate to ``d_<name>``.
     """
 
     names: Dict[str, str] = {}

@@ -853,9 +853,7 @@ def test_transistor_amplifier_init_and_reference(solver, system):
 def test_user_derivative_solution_matches_analytic(
     solver, solver_settings, tolerance
 ):
-    # growth(x) = exp(x) - 1 = p*t pins x = log(1 + p*t); the reduced
-    # rows read v and w through the user's first and second
-    # derivatives of growth.
+    # exp(x) - 1 = t gives x = log(1 + t).
     result = solver.solve(
         {"x": np.array([0.0])},
         {},

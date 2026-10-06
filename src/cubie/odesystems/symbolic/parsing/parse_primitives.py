@@ -373,16 +373,14 @@ def derivative_chain(entry) -> Tuple[Callable, ...]:
     Parameters
     ----------
     entry
-        A ``user_function_derivatives`` value: one callable (the first
-        derivative) or a sequence of callables whose ``k``-th entry is
-        the ``(k+1)``-th derivative. The order-``n`` helper takes the
-        function's arguments followed by ``n`` argument indices.
+        One callable (first derivative) or a list of callables in
+        increasing order; order ``n`` takes the arguments then ``n``
+        argument indices.
 
     Raises
     ------
     TypeError
-        ``entry`` is neither a callable nor a non-empty sequence of
-        callables.
+        ``entry`` is not a callable or a non-empty list of callables.
     """
 
     if callable(entry):
@@ -399,7 +397,7 @@ def derivative_chain(entry) -> Tuple[Callable, ...]:
 def derivative_helpers(
     user_function_derivatives: Optional[Dict[str, object]],
 ) -> List[Callable]:
-    """Return every derivative helper of every user function."""
+    """Return every user function's derivative helpers."""
 
     return [
         fn
