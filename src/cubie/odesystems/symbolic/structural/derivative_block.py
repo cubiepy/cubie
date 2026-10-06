@@ -54,23 +54,25 @@ def _derivative_rows(
         if not known or not coeffs:
             continue
         rows.append((ieq, coeffs, term))
-    # Rows reading fewest algebraic unknowns become pivots.
-    rows.sort(key=lambda row: _algebraic_count(state, row[2]))
+    # Rows reading fewest algebraic unknowns become pivots, then rows
+    # that do not define one.
+    rows.sort(
+        key=lambda row: (
+            sum(_is_algebraic(state, a) for a in ir.free_atoms(row[2])),
+            _is_algebraic(state, state.eqs[row[0]][0]),
+        )
+    )
     return rows
 
 
-def _algebraic_count(state: StructuralState, term: ir.Expr) -> int:
-    """Count the unknowns in ``term`` that have no derivative."""
-    count = 0
-    for atom in ir.free_atoms(term):
-        index = state.var2idx.get(atom)
-        if (
-            index is not None
-            and state.derivative_of(index) is None
-            and state.primal_of(index) is None
-        ):
-            count += 1
-    return count
+def _is_algebraic(state: StructuralState, node: ir.Expr) -> bool:
+    """Whether ``node`` is an unknown with no derivative."""
+    index = state.var2idx.get(node)
+    return (
+        index is not None
+        and state.derivative_of(index) is None
+        and state.primal_of(index) is None
+    )
 
 
 def eliminate_singular_derivative_blocks(

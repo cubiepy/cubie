@@ -1199,18 +1199,25 @@ class TestSingularDerivativeBlocks:
 
     @pytest.mark.parametrize("output", ["a", "z"])
     @pytest.mark.parametrize("dynamics", ["derivative_lhs", "state_lhs"])
-    def test_state_only_row_keeps_derivative(self, output, dynamics):
-        x, d, o = syms(f"x d {output}")
-        registry = DerivativeRegistry({"x", "d", output, "t"})
+    @pytest.mark.parametrize("reads", ["states", "auxiliary"])
+    def test_state_row_keeps_derivative(self, output, dynamics, reads):
+        x, y, d, o = syms(f"x y d {output}")
+        registry = DerivativeRegistry({"x", "y", "d", output, "t"})
         dx = registry.derivative(x)
-        own = (dx, -x) if dynamics == "derivative_lhs" else (x, -dx)
+        rest = -x if reads == "states" else -x + y
+        if dynamics == "derivative_lhs":
+            own = (dx, rest)
+        else:
+            own = (x, x - dx + rest)
         eqs = [own, (o, dx + d + ir.num(0.5))]
+        if reads == "auxiliary":
+            eqs.append((y, x * x))
         state = StructuralState(eqs, registry, {d}, T)
         rewritten = eliminate_singular_derivative_blocks(state)
         assert len(rewritten) == 1
         kept = [
-            eq for index, eq in enumerate(state.eqs)
-            if index not in rewritten
+            (lhs, rhs) for lhs, rhs in state.eqs
+            if dx in ir.free_atoms(lhs) | ir.free_atoms(rhs)
         ]
         assert same_equations(kept, [own])
 
