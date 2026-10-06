@@ -484,37 +484,19 @@ def _solve_for(eq: Equation, var: ir.Sym, simplify: bool) -> ir.Expr:
     return rhs
 
 
-def get_extra_eqs_vars(
+def _extra_vars(
     state: StructuralState,
     var_eq_matching: Matching,
     full_var_eq_matching: Matching,
-    fully_determined: bool,
-) -> Tuple[List[int], List[int]]:
-    """Unmatched equations/variables of non-fully-determined systems."""
+) -> List[int]:
+    """Variables neither matched before tearing nor selected or solved."""
 
-    if fully_determined:
-        return [], []
-    extra_eqs = []
-    extra_vars = []
-    full_eq_var_matching = full_var_eq_matching.invview()
-    graph = state.structure.graph
-    for v in range(graph.ndsts()):
-        eq = full_var_eq_matching[v]
-        if isinstance(eq, int):
-            continue
-        if var_eq_matching[v] is not UNASSIGNED:
-            continue
-        extra_vars.append(v)
-    for eq in range(graph.nsrcs()):
-        v = (
-            full_eq_var_matching[eq]
-            if eq < len(full_eq_var_matching.match)
-            else UNASSIGNED
-        )
-        if isinstance(v, int):
-            continue
-        extra_eqs.append(eq)
-    return extra_eqs, extra_vars
+    return [
+        v
+        for v in range(state.structure.graph.ndsts())
+        if not isinstance(full_var_eq_matching[v], int)
+        and var_eq_matching[v] is UNASSIGNED
+    ]
 
 
 def generate_system_equations(
@@ -740,9 +722,13 @@ def default_reassemble(
     full_var_eq_matching = tearing_result.full_var_eq_matching
     var_sccs = [list(s) for s in tearing_result.var_sccs]
 
-    extra_eqs_vars = get_extra_eqs_vars(
-        state, var_eq_matching, full_var_eq_matching, fully_determined
-    )
+    if fully_determined:
+        extra_eqs_vars = ([], [])
+    else:
+        extra_eqs_vars = (
+            tearing_result.free_eqs,
+            _extra_vars(state, var_eq_matching, full_var_eq_matching),
+        )
     neweqs = list(state.eqs)
     dummy_sub = {}
     extra_unknowns = [
