@@ -681,6 +681,7 @@ class ArrayInterpolator(CUDAFactory):
                 range(n_inputs), unroll_other_small
             ):
                 acc = coefficients[seg, input_index, order]
+                # Horner's rule below the top power, down to 0.
                 for k in unroll_if(
                     range(order - int32(1), int32(-1), int32(-1)),
                     unroll_other_small,
@@ -710,6 +711,7 @@ class ArrayInterpolator(CUDAFactory):
                 range(n_inputs), unroll_other_small
             ):
                 acc = precision(order) * coefficients[seg, input_index, order]
+                # Horner's rule below the top power, down to 1.
                 for k in unroll_if(
                     range(order - int32(1), int32(0), int32(-1)),
                     unroll_other_small,
