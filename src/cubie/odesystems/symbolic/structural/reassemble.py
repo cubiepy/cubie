@@ -321,6 +321,7 @@ def _add_dd_variable(
     structure = state.structure
     state.fullvars.append(x_t)
     structure.state_priorities.append(structure.state_priorities[dv])
+    structure.canonical_ranks.append(structure.canonical_ranks[dv])
     state.always_present.append(False)
     v_t = structure.var_to_diff.add_vertex()
     structure.graph.add_vertex(DST)

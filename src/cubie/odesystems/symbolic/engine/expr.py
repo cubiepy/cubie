@@ -436,6 +436,18 @@ def is_one(node: Expr) -> bool:
     return isinstance(node, Num) and node.value == 1
 
 
+def int_value(node: Expr) -> Optional[int]:
+    """Return the integer a numeric literal holds, else ``None``."""
+    if not isinstance(node, Num):
+        return None
+    value = node.value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+    if isinstance(value, int):
+        return value
+    return None
+
+
 def _num_add(a: NumberLike, b: NumberLike) -> NumberLike:
     if isinstance(a, float) or isinstance(b, float):
         return float(a) + float(b)
@@ -1113,15 +1125,12 @@ def _pow_device_weight(exp: Expr) -> int:
             return DEVICE_WEIGHT_SQRT
         if value == -0.5:
             return DEVICE_WEIGHT_SQRT + DEVICE_WEIGHT_DIVIDE
-        if isinstance(value, float) and not value.is_integer():
-            return DEVICE_WEIGHT_TRANSCENDENTAL
-        if isinstance(value, (int, float)):
-            magnitude = abs(int(value))
-            if magnitude <= _POW_CHAIN_LIMIT:
-                cost = max(magnitude - 1, 0)
-                if value < 0:
-                    cost += DEVICE_WEIGHT_DIVIDE
-                return cost
+        integer = int_value(exp)
+        if integer is not None and abs(integer) <= _POW_CHAIN_LIMIT:
+            cost = max(abs(integer) - 1, 0)
+            if integer < 0:
+                cost += DEVICE_WEIGHT_DIVIDE
+            return cost
     return DEVICE_WEIGHT_TRANSCENDENTAL
 
 

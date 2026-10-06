@@ -15,6 +15,9 @@ from cubie.odesystems.symbolic.structural.errors import (
     ExtraEquationsSystemError,
     ExtraVariablesSystemError,
 )
+from cubie.odesystems.symbolic.structural.reassemble import (
+    _add_dd_variable,
+)
 from cubie.odesystems.symbolic.structural.simplify import (
     structural_simplify,
 )
@@ -201,6 +204,105 @@ class TestIntegerMatrixDifferentiation:
         assert mm.row_cols[-1] == state.structure.graph.s_neighbors(
             derivative
         )
+
+
+class TestVariableRanks:
+    def _states(self):
+        x, y, z = syms("x y z")
+        registry = DerivativeRegistry({"x", "y", "z", "t"})
+        dx = registry.derivative(x)
+        ddx = registry.derivative(dx)
+        dz = registry.derivative(z)
+        eqs = [
+            Equation(ddx, -x + y),
+            Equation(dz, -z),
+            Equation(ir.ZERO, y - z),
+        ]
+        return registry, [
+            StructuralState(eqs, unknowns, registry, set(), T)
+            for unknowns in ([x, y, z], [z, y, x])
+        ] + [StructuralState(eqs[::-1], [y, z, x], registry, set(), T)]
+
+    def test_ranks_order_by_base_name_then_derivative_order(self):
+        registry, states = self._states()
+        reference = None
+        for state in states:
+            ranks = state.structure.canonical_ranks
+            by_rank = sorted(
+                range(len(state.fullvars)), key=lambda i: ranks[i]
+            )
+            keys = [
+                (base.name, order)
+                for base, order in (
+                    registry.base_and_order(state.fullvars[i])
+                    for i in by_rank
+                )
+            ]
+            assert keys == sorted(keys)
+            assert sorted(ranks) == list(range(len(state.fullvars)))
+            ranked = {v: ranks[i] for i, v in enumerate(state.fullvars)}
+            if reference is None:
+                reference = ranked
+            assert ranked == reference
+
+    def test_new_derivative_takes_source_rank(self):
+        _, states = self._states()
+        state = states[0]
+        state.find_solvables()
+        state.structure.complete()
+        ranks = state.structure.canonical_ranks
+        y = state.var2idx[ir.sym("y")]
+        dy = state.var_derivative(y)
+        assert ranks[dy] == ranks[y]
+        dz = state.structure.var_to_diff[state.var2idx[ir.sym("z")]]
+        z_t = _add_dd_variable(state, ir.sym("z_t"), dz)
+        assert ranks[z_t] == ranks[dz]
+        assert len(ranks) == len(state.fullvars)
+
+
+class TestCoefficientAdmission:
+    def _state(self, coefficient):
+        x, y = syms("x y")
+        registry = DerivativeRegistry({"x", "y", "t"})
+        return StructuralState(
+            [Equation(ir.ZERO, coefficient * x - y)],
+            [x, y],
+            registry,
+            set(),
+            T,
+        )
+
+    @pytest.mark.parametrize("coefficient", [127, -127, 127.0])
+    def test_coefficient_within_limit_enters_row(self, coefficient):
+        state = self._state(coefficient)
+        mm = state.linear_subsys_adjmat()
+        assert mm.nzrows == [0]
+        row = {
+            state.fullvars[v]: c
+            for v, c in zip(mm.row_cols[0], mm.row_vals[0])
+        }
+        x, y = syms("x y")
+        assert row == {x: int(coefficient), y: -1}
+
+    @pytest.mark.parametrize("coefficient", [128, -128, 2.5])
+    def test_coefficient_beyond_limit_stays_solvable(self, coefficient):
+        state = self._state(coefficient)
+        state.find_solvables()
+        all_int_vars, _ = state.find_eq_solvables(0)
+        assert all_int_vars is False
+        assert state.structure.solvable_graph.s_neighbors(0) == sorted(
+            state.var2idx[v] for v in syms("x y")
+        )
+
+    def test_conservative_admits_unit_coefficients_only(self):
+        x, y = syms("x y")
+        state = self._state(2)
+        state.find_solvables(conservative=True)
+        all_int_vars, _ = state.find_eq_solvables(0, conservative=True)
+        assert all_int_vars is False
+        assert state.structure.solvable_graph.s_neighbors(0) == [
+            state.var2idx[y]
+        ]
 
 
 class TestTrivialTearing:

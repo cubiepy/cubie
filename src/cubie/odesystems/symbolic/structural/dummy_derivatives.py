@@ -225,19 +225,10 @@ def _dummy_derivative_graph(
 
             if state_priority is not None and isfirst:
                 sp_vals = [extended_sp(v) for v in variables]
-                if cranks is None:
-                    var_perm = sorted(
-                        range(len(sp_vals)),
-                        key=lambda i: sp_vals[i],
-                    )
-                else:
-                    var_perm = sorted(
-                        range(len(sp_vals)),
-                        key=lambda i: (
-                            sp_vals[i],
-                            cranks[variables[i]],
-                        ),
-                    )
+                var_perm = sorted(
+                    range(len(sp_vals)),
+                    key=lambda i: (sp_vals[i], cranks[variables[i]]),
+                )
                 variables = [variables[i] for i in var_perm]
                 sp_vals = [sp_vals[i] for i in var_perm]
                 # Keep Jacobian columns aligned with the permuted

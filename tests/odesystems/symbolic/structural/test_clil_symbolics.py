@@ -20,7 +20,6 @@ from cubie.odesystems.symbolic.structural.singularity_removal import (
 )
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
-    as_small_int,
     fixpoint_sub,
     linear_dependencies,
     linear_expansion,
@@ -259,13 +258,6 @@ class TestSymbolics:
         a, b, c = ir.sym("a"), ir.sym("b"), ir.sym("c")
         result = fixpoint_sub(a, {a: b + 1, b: c})
         assert result is c + ir.ONE
-
-    def test_as_small_int(self):
-        assert as_small_int(ir.num(-5)) == -5
-        assert as_small_int(ir.num(3.0)) == 3
-        assert as_small_int(ir.num(1000)) is None
-        assert as_small_int(ir.num(Fraction(1, 2))) is None
-        assert as_small_int(ir.sym("q")) is None
 
     def test_total_derivative(self):
         x, dx, w = ir.sym("x"), ir.sym("dx_sym"), ir.sym("w")
