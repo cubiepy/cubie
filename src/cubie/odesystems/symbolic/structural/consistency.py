@@ -1,9 +1,15 @@
 """System consistency checking.
 
-Port of StateSelection.jl's ``check_consistency``/``singular_check``:
-verifies the system is balanced (as many equations as highest-order
+Verifies the system is balanced (as many equations as highest-order
 present variables) and structurally nonsingular, with best-effort
 identification of the offending equations or variables.
+
+``singular_check`` and ``check_consistency`` with its error reporting
+are ported from ModelingToolkit.jl (commit c4177c335,
+``src/structural_transformation/utils.jl``, ``singular_check``,
+``check_consistency`` and ``error_reporting``) and StateSelection.jl
+(commit 74df007e, ``src/utils.jl``, ``check_consistency`` and
+``error_reporting``).
 """
 
 from typing import List

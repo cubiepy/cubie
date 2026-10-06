@@ -1,17 +1,33 @@
 """Structural state of a DAE system under simplification.
 
-Port of ModelingToolkitTearing's ``TearingState``/``SystemStructure``
-pair and its StateSelection interface implementation: the bipartite
-incidence graph, derivative chains, solvability analysis via linear
-expansion, the integer-linear subsystem matrix, and the symbolic
-differentiation hooks used by Pantelides.
+The bipartite incidence graph, derivative chains, solvability analysis
+via linear expansion, the integer-linear subsystem matrix, and the
+symbolic differentiation hooks used by Pantelides.
 
-The equation order at construction is ported from ModelingToolkit.jl
-(commit c4177c335, ``src/systems/systemstructure.jl``,
-``TearingState``). ``StructuralState.rm_eqs_vars`` is ported from the
-equation renumbering and graph rebuild of ModelingToolkit.jl (commit
-c4177c335, ``src/systems/alias_elimination.jl``,
-``alias_elimination!``).
+Ported from ModelingToolkit.jl (commit c4177c335):
+``SystemStructure`` from ``src/systems/systemstructure.jl``;
+``StructuralState`` construction (algebraic-equation canonicalisation
+and the equation order) from ``TearingState`` in the same file;
+``StructuralState.var_derivative`` and ``StructuralState.eq_derivative``
+from ``src/structural_transformation/symbolics_tearing.jl``
+(``var_derivative!``, ``eq_derivative!``);
+``StructuralState.find_eq_solvables`` with
+``StructuralState.division_permitted``,
+``StructuralState.find_solvables``,
+``StructuralState.linear_subsys_adjmat`` and
+``StructuralState.n_concrete_eqs`` from
+``src/structural_transformation/utils.jl``;
+``StructuralState.rm_eqs_vars`` and ``_old_to_new_indices`` from the
+equation renumbering and graph rebuild in ``alias_elimination!``
+(``src/systems/alias_elimination.jl``).
+``SystemStructure.eq_derivative_graph`` and
+``SystemStructure.var_derivative_graph`` are ported from
+StateSelection.jl (commit 74df007e, ``src/interface.jl``,
+``eq_derivative_graph!``, ``var_derivative_graph!``).
+``StructuralState.is_unused_var`` combines the empty-incidence test of
+ModelingToolkit.jl c4177c335 (``utils.jl``) with the
+``always_present`` marking of ModelingToolkit.jl (commit a2b6dc56,
+``src/systems/alias_elimination.jl``).
 
 Published Classes
 -----------------
@@ -453,7 +469,7 @@ class StructuralState:
                 var = nxt
         return priorities
 
-    # -- StateSelection interface ------------------------------------
+    # -- Transformation-state interface ------------------------------
 
     def is_unused_var(self, var: int) -> bool:
         """Whether ``var`` occurs in no equation and is removable."""

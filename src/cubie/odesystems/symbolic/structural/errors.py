@@ -1,4 +1,10 @@
-"""Exceptions raised by structural simplification consistency checks."""
+"""Exceptions raised by structural simplification consistency checks.
+
+The exception types follow StateSelection.jl (commit 74df007e,
+``src/utils.jl``, ``InvalidSystemException``,
+``ExtraVariablesSystemException`` and
+``ExtraEquationsSystemException``).
+"""
 
 
 class InvalidSystemError(ValueError):

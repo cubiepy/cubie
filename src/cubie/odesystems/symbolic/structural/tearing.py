@@ -1,12 +1,16 @@
 """Modia tearing and contraction of eliminated variables.
 
-Ported from ModelingToolkit.jl c4177c335: ``contract_variables``,
-``free_equations`` and ``TearingResult`` from
-``src/structural_transformation/tearing.jl``; ``try_assign_eq!``,
-``tearEquations!``, ``tear_graph_block_modia!``,
-``build_var_eq_matching`` and ``ModiaTearing`` from
-``src/structural_transformation/bipartite_tearing/modia_tearing.jl``
-(derived from Modia.jl).
+Ported from ModelingToolkit.jl (commit c4177c335):
+``contract_variables``, ``free_equations`` and ``TearingResult`` from
+``src/structural_transformation/tearing.jl``; ``try_assign_eq`` and
+``try_assign_eq_vars`` (``try_assign_eq!``), ``tear_equations``
+(``tearEquations!``), ``tear_graph_block_modia``
+(``tear_graph_block_modia!``), ``build_var_eq_matching`` and
+``ModiaTearing`` from
+``src/structural_transformation/bipartite_tearing/modia_tearing.jl``,
+which ModelingToolkit.jl takes from Modia.jl.
+
+Modia.jl: Copyright (c) 2017-2018 ModiaSim developers; MIT.
 
 Published Classes
 -----------------

@@ -3,15 +3,14 @@
 # structural
 
 ## Purpose
-MTK-style structural simplification and tearing for DAE systems: a Python port of the
-continuous-system `mtkcompile` pipeline from ModelingToolkit.jl v11 and its factored
-algorithm packages (BipartiteGraphs.jl, StateSelection.jl, ModelingToolkitTearing). Takes a
-general DAE (implicit equations, higher-order derivatives, algebraic unknowns), runs
-singular derivative-block removal, perfect-alias elimination, trivial tearing, exact
-integer-linear singularity removal,
-Pantelides index reduction, dummy-derivative state selection, and tearing,
-and reassembles an explicit ODE — or, when algebraic loops cannot be torn symbolically, a
-semi-explicit index-1 system with residual rows under a singular diagonal mass matrix.
+Structural simplification and tearing for DAE systems, following the continuous-system
+`mtkcompile` pipeline of ModelingToolkit.jl. Takes a general DAE (implicit equations,
+higher-order derivatives, algebraic unknowns), runs singular derivative-block removal,
+perfect-alias elimination, trivial tearing, exact integer-linear singularity removal,
+Pantelides index reduction, dummy-derivative state selection, exact matching of
+integer-linear SCCs, and Modia tearing, and reassembles an explicit ODE — or, when
+algebraic loops cannot be torn symbolically, a semi-explicit index-1 system with residual
+rows under a singular diagonal mass matrix.
 Entry point: `structural_simplify(StructuralState) -> SimplifiedSystem`; the parsing front
 end (`parsing/normalise.py` + `parsing/assemble.py`) builds the state and consumes the
 result.
@@ -22,7 +21,7 @@ result.
 | `simplify.py` | Pipeline driver `structural_simplify` (the `mtkcompile!` equivalent) and the `SimplifiedSystem` result (states, `dxdt`, residuals, observed, mass matrix, BLT blocks). |
 | `system_structure.py` | `StructuralState`/`SystemStructure` (the `TearingState` equivalent): incidence graph construction, solvability analysis via linear expansion, integer-linear subsystem matrix, symbolic equation/variable differentiation, removal/reindexing, deterministic ranks and priorities. |
 | `bipartite.py` | `BipartiteGraph` (sorted adjacency, equations x variables), `Matching` with inverse view, augmenting-path `maximal_matching`, `UNASSIGNED`/`SELECTED_STATE` sentinels. |
-| `digraph.py` | Matching-oriented directed views (`DiCMOBiGraphT`/`F`), iterative Tarjan SCC, `find_var_sccs` (BLT ordering), BFS `neighborhood_in`, and the BFGT Algorithm-N `IncrementalCycleTracker` used to keep tearing assignments acyclic. |
+| `digraph.py` | Matching-oriented directed views (`DiCMOBiGraphT`/`F`), iterative Tarjan SCC, `find_var_sccs` (BLT ordering), `neighborhood_in`, and the `IncrementalCycleTracker` used to keep tearing assignments acyclic. |
 | `diffgraph.py` | `DiffGraph`: variable/equation differentiation chains with inverse view. |
 | `clil.py` | `SparseMatrixCLIL` integer matrix and fraction-free Bareiss elimination (`bareiss`, CLIL-specialised update, `nullspace_rank`). |
 | `symbolics.py` | Engine-IR primitives: structural `linear_expansion`, `solve_linear`, `fixpoint_sub`, `total_derivative`, `linear_dependencies` (fraction-free elimination with numeric-first pivots gated by a caller predicate; returns the rows the pivot rows span, with multipliers), and `DerivativeRegistry` (plain-symbol stand-in for MTK `Differential` terms, `x_t` dummy naming; keys are interned `ir.Sym` nodes). |
@@ -37,14 +36,28 @@ result.
 | `consistency.py` | Balance and structural-singularity checks with best-effort offender reporting. |
 | `errors.py` | `InvalidSystemError`, `ExtraVariablesSystemError`, `ExtraEquationsSystemError`. |
 
-## Port constraints
-The algorithms follow ModelingToolkit.jl v11, StateSelection.jl and BipartiteGraphs.jl
-with 0-based indices:
+## Sources
+Ported code is translated to Python with 0-based indices; each module docstring names the
+source (package, commit, file, function) of every ported part; code written for cubie in place
+of a ported design is marked "Not ported".
+
+| Source | Licence | Used in |
+|--------|---------|---------|
+| ModelingToolkit.jl c4177c335 | MIT | `tearing.py`, `reassemble.py`, `dummy_derivatives.py`, `consistency.py`, `system_structure.py`, `alias_elimination.py` (`trivial_tearing`), `singularity_removal.py` (`get_new_mm`), `digraph.py` (`find_var_sccs`, `toposort_equations`), `pantelides.py`, `bipartite.py` (`SelectedState`) |
+| ModelingToolkit.jl a2b6dc56 | MIT | `simplify.py` (pipeline order, `_pantelides_reassemble_state`, `_integer_jacobian`), `alias_elimination.py` (perfect-alias and integer-linear alias elimination), `singularity_removal.py` (`IgnoreUnderconstrainedVariable`), `system_structure.py` (`always_present`) |
+| StateSelection.jl 74df007e | MIT | `clil.py`, `diffgraph.py`, `pantelides.py`, `singularity_removal.py`, `consistency.py`, `errors.py`, `system_structure.py` (derivative-graph hooks) |
+| BipartiteGraphs.jl 647b6a42 (v0.1.14) | MIT | `bipartite.py`, `digraph.py` (`DiCMOBiGraphT`/`F`), `system_structure.py` (`rm_eqs_vars`) |
+| Graphs.jl dffc7a64 (v1.15.0) | BSD-2-Clause | `digraph.py` (`tarjan_scc`, `neighborhood_in`, `IncrementalCycleTracker`) |
+| Modia.jl, via ModelingToolkit.jl c4177c335 | MIT | `tearing.py` (Modia tearing) |
+
+Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
+
+## Conventions
 - Derivative terms are plain registered symbols (`DerivativeRegistry`), not
   `Differential` wrappers. Internal derivative symbols are mangled
   (`_cubie_D<order>_<base>`) and never user-visible; state selection renames dummies to
-  `x_t`-style names (`lower_varname`). `registry.rename` cuts the base link (MTK
-  `diff2term` semantics).
+  `x_t`-style names (`lower_varname`). `registry.rename` cuts the link to the base
+  variable.
 - `diff_eq_states` follows the graph chain after `find_duplicate_dd` rewires
   `diff_to_primal`.
 - Bareiss returns rank and pivot order.

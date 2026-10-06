@@ -1,11 +1,17 @@
 """Dummy-derivative state selection.
 
-Port of StateSelection.jl's ``partial_state_selection.jl``: after
-Pantelides index reduction, choose which differentiated variables
-become algebraic ("dummy derivatives", Mattsson-Soederlind) so the
-remaining system is index 1, then tear. The per-SCC rank decisions
-use the exact integer Jacobian (Bareiss elimination) when available
-and an augmenting-path structural rank otherwise.
+After Pantelides index reduction, choose which differentiated
+variables become algebraic ("dummy derivatives", Mattsson-Soederlind)
+so the remaining system is index 1, then tear. The per-SCC rank
+decisions use the exact integer Jacobian (Bareiss elimination) when
+available and an augmenting-path structural rank otherwise.
+
+Ported from ModelingToolkit.jl (commit c4177c335,
+``src/structural_transformation/partial_state_selection.jl``):
+``dummy_derivative_graph`` and ``_dummy_derivative_graph``
+(``dummy_derivative_graph!``), ``DummyDerivativeSummary``,
+``is_present``, ``is_some_diff``, ``isdiffed`` and
+``_tear_with_dummies`` (``DummyDerivativeTearing``).
 
 Published Functions
 -------------------

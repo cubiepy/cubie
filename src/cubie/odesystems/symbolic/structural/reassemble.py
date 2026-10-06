@@ -1,17 +1,21 @@
 """Reassembly of the simplified system from tearing decisions.
 
-Port of ModelingToolkitTearing's ``reassemble.jl``
-(``DefaultReassembleAlgorithm``): renames dummy derivatives to
-algebraic variables, lowers higher-order derivatives to first order,
-solves each matched equation for its variable (producing differential
-equations and observed equations), leaves torn equations as algebraic
-residuals, and reorders the state into BLT form.
+Renames dummy derivatives to algebraic variables, lowers higher-order
+derivatives to first order, solves each matched equation for its
+variable (producing differential equations and observed equations),
+leaves torn equations as algebraic residuals, and reorders the state
+into BLT form.
 
-The placement of the ``D(x) ~ x_t`` solve blocks in
-``generate_derivative_variables`` is ported from ModelingToolkit.jl
-(commit c4177c335,
-``src/structural_transformation/symbolics_tearing.jl``,
-``generate_derivative_variables!``).
+Ported from ModelingToolkit.jl (commit c4177c335,
+``src/structural_transformation/symbolics_tearing.jl``):
+``default_reassemble`` (``DefaultReassembleAlgorithm`` with
+``update_simplified_system!``), ``substitute_derivatives_algevars``,
+``generate_derivative_variables``, ``find_duplicate_dd``,
+``_insert_sccs``, ``_add_dd_variable``, ``_add_dd_equation``,
+``get_sorted_scc``, ``EquationGenerator``, ``get_extra_eqs_vars``,
+``generate_system_equations``, ``reorder_vars`` and ``var_order``,
+each from the function of the same name less any leading underscore
+or trailing ``!``.
 
 Published Classes
 -----------------

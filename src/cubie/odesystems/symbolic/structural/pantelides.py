@@ -1,9 +1,14 @@
 """Pantelides algorithm for DAE index reduction.
 
-Port of StateSelection.jl's ``pantelides.jl``: finds a maximal
-matching on highest-differentiated variables, differentiating
-equations and introducing derivative variables until an augmenting
-path exists for every equation.
+Finds a maximal matching on highest-differentiated variables,
+differentiating equations and introducing derivative variables until
+an augmenting path exists for every equation.
+
+Ported from StateSelection.jl (commit 74df007e, ``src/pantelides.jl``,
+``computed_highest_diff_variables`` and ``pantelides!``), with the
+keyword forwarding to the equation derivative of ModelingToolkit.jl
+(commit c4177c335, ``src/structural_transformation/pantelides.jl``,
+``pantelides!``).
 
 Published Functions
 -------------------

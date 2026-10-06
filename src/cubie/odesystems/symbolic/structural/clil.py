@@ -1,15 +1,20 @@
 """Exact integer linear algebra for structural simplification.
 
-Ports StateSelection.jl's ``SparseMatrixCLIL`` (a row-dense,
-column-sparse integer matrix synced with the incidence graph) and the
-fraction-free Bareiss elimination used for integer-linear singularity
-removal and dummy-derivative rank checks. ``bareiss`` combines the
-elimination loop of ``bareiss!`` with the staged masked pivot search
-of ``do_bareiss!`` (``find_masked_pivot``).
+A row-dense, column-sparse integer matrix synced with the incidence
+graph, and the fraction-free Bareiss elimination used for
+integer-linear singularity removal, exact SCC matching and
+dummy-derivative rank checks.
 
-Python integers are arbitrary precision, so the overflow-checked
-arithmetic paths of the Julia implementation are unnecessary here; the
-elimination arithmetic is otherwise identical.
+Ported from StateSelection.jl (commit 74df007e): ``SparseMatrixCLIL``
+and ``bareiss_update_virtual_colswap_clil``
+(``bareiss_update_virtual_colswap_mtk!``) from
+``src/math/sparsematrixclil.jl``; ``exactdiv`` from
+``src/math/bareiss.jl``; ``find_first_linear_variable`` and
+``find_masked_pivot`` from ``src/singularity_removal.jl``. ``bareiss``
+combines the elimination loop of ``bareiss!`` (``src/math/bareiss.jl``)
+with the staged masked pivot search of ``do_bareiss!``
+(``src/singularity_removal.jl``). Arithmetic uses Python's
+arbitrary-precision integers without overflow checks.
 
 Published Classes
 -----------------
