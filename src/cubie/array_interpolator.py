@@ -459,7 +459,7 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
     @property
     def num_inputs(self) -> int:
         """Number of sampled drivers; zero with no samples."""
-        return 0 if self.drivers is None else self.drivers.num_inputs
+        return int(self.input_array.shape[1])
 
     @property
     def t0(self) -> float:
