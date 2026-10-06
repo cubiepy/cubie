@@ -1197,6 +1197,23 @@ class TestSingularDerivativeBlocks:
         assert eliminate_singular_derivative_blocks(state) == []
         assert same_equations(state.eqs, before)
 
+    @pytest.mark.parametrize("output", ["a", "z"])
+    @pytest.mark.parametrize("dynamics", ["derivative_lhs", "state_lhs"])
+    def test_state_only_row_keeps_derivative(self, output, dynamics):
+        x, d, o = syms(f"x d {output}")
+        registry = DerivativeRegistry({"x", "d", output, "t"})
+        dx = registry.derivative(x)
+        own = (dx, -x) if dynamics == "derivative_lhs" else (x, -dx)
+        eqs = [own, (o, dx + d + ir.num(0.5))]
+        state = StructuralState(eqs, registry, {d}, T)
+        rewritten = eliminate_singular_derivative_blocks(state)
+        assert len(rewritten) == 1
+        kept = [
+            eq for index, eq in enumerate(state.eqs)
+            if index not in rewritten
+        ]
+        assert same_equations(kept, [own])
+
     def test_unknown_coefficient_excluded(self):
         x, y, w = syms("x y w")
         registry = DerivativeRegistry({"x", "y", "w", "t"})

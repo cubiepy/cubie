@@ -54,7 +54,24 @@ def _derivative_rows(
         if not known or not coeffs:
             continue
         rows.append((ieq, coeffs, term))
+    # Equations whose other terms read fewest algebraic unknowns come
+    # first, so they stay pivots.
+    rows.sort(key=lambda row: _algebraic_count(state, row[2]))
     return rows
+
+
+def _algebraic_count(state: StructuralState, term: ir.Expr) -> int:
+    """Count the unknowns in ``term`` that have no derivative."""
+    count = 0
+    for atom in ir.free_atoms(term):
+        index = state.var2idx.get(atom)
+        if (
+            index is not None
+            and state.derivative_of(index) is None
+            and state.primal_of(index) is None
+        ):
+            count += 1
+    return count
 
 
 def eliminate_singular_derivative_blocks(
