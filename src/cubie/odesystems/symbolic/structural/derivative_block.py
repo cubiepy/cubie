@@ -54,7 +54,24 @@ def _derivative_rows(
         if not known or not coeffs:
             continue
         rows.append((ieq, coeffs, term))
+    # Pivot first: fewest algebraic reads, then not defining one.
+    rows.sort(
+        key=lambda row: (
+            sum(_is_algebraic(state, a) for a in ir.free_atoms(row[2])),
+            _is_algebraic(state, state.eqs[row[0]][0]),
+        )
+    )
     return rows
+
+
+def _is_algebraic(state: StructuralState, node: ir.Expr) -> bool:
+    """Whether ``node`` is an unknown with no derivative."""
+    index = state.var2idx.get(node)
+    return (
+        index is not None
+        and state.derivative_of(index) is None
+        and state.primal_of(index) is None
+    )
 
 
 def eliminate_singular_derivative_blocks(
