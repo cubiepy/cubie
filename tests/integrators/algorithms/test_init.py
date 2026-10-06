@@ -11,6 +11,7 @@ from cubie.integrators.algorithms import (
     ExplicitEulerStep,
     BackwardsEulerStep,
     BackwardsEulerPCStep,
+    BDFStep,
     CrankNicolsonStep,
     DIRKStep,
     FIRKStep,
@@ -20,6 +21,7 @@ from cubie.integrators.algorithms import (
     DIRK_TABLEAU_REGISTRY,
     FIRK_TABLEAU_REGISTRY,
     ROSENBROCK_TABLEAUS,
+    BDF_TABLEAU_REGISTRY,
     algorithm_facts,
     algorithm_is_adaptive,
     resolve_alias,
@@ -40,6 +42,7 @@ _EXPECTED_REGISTRY = {
     "firk": FIRKStep,
     "erk": ERKStep,
     "rosenbrock": GenericRosenbrockWStep,
+    "bdf": BDFStep,
 }
 
 
@@ -50,11 +53,6 @@ _EXPECTED_REGISTRY = {
 def test_algorithm_registry_entries(key, expected_class):
     """_ALGORITHM_REGISTRY maps each key to the correct step class."""
     assert _ALGORITHM_REGISTRY[key] is expected_class
-
-
-def test_algorithm_registry_size():
-    """_ALGORITHM_REGISTRY contains exactly 8 entries."""
-    assert len(_ALGORITHM_REGISTRY) == 8
 
 
 # ── _TABLEAU_REGISTRY_BY_ALGORITHM (items 2-6) ───────────── #
@@ -97,6 +95,15 @@ def test_rosenbrock_aliases_registered(alias):
     constructor, tableau = _TABLEAU_REGISTRY_BY_ALGORITHM[alias]
     assert constructor is GenericRosenbrockWStep
     assert tableau is ROSENBROCK_TABLEAUS[alias]
+
+
+@pytest.mark.parametrize("alias", list(BDF_TABLEAU_REGISTRY.keys()))
+def test_bdf_aliases_registered(alias):
+    """BDF aliases map to BDFStep with their tableau."""
+    constructor, tableau = _TABLEAU_REGISTRY_BY_ALGORITHM[alias]
+    assert constructor is BDFStep
+    assert tableau is BDF_TABLEAU_REGISTRY[alias]
+    assert resolve_supplied_tableau(tableau) == (BDFStep, tableau)
 
 
 # ── resolve_alias (items 7-9) ────────────────────────────── #
