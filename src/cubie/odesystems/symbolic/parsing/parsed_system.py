@@ -116,16 +116,32 @@ class ParsedSystem:
             for name in list(parameters) + driver_names
         }
         unknown_names = set(states) | set(observables)
+        driver_derivatives = equations.driver_derivatives
         normalised = normalise_input(
             list(equations.ordered),
             unknown_names,
-            known_symbol_map,
+            {
+                **known_symbol_map,
+                **{
+                    symbol.name: sp.Symbol(symbol.name, real=True)
+                    for symbol in driver_derivatives
+                },
+            },
             user_functions,
             user_function_derivatives,
             False,
             set(states),
         )
         normalised.derivative_names.update(equations.derivative_names)
+        # Lower orders first, so each derivative's chain exists.
+        registry = normalised.registry
+        for symbol, (driver, order) in sorted(
+            driver_derivatives.items(), key=lambda item: item[1][1]
+        ):
+            lower = driver
+            for _ in range(order - 1):
+                lower = registry.derivative(lower)
+            registry.register(lower, symbol)
         return cls(
             normalised=normalised,
             states=states,

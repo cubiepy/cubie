@@ -136,7 +136,9 @@ class BaseODE(CUDAFactory):
             Precision factory used for calculations. Defaults to
             :class:`numpy.float32`.
         num_drivers
-            Number of driver or forcing functions. Defaults to ``1``.
+            Length of the drivers buffer: the drivers, then any driver
+            time derivatives the device functions read. Defaults to
+            ``1``.
         operation_ordering
             Generated-operation ordering policy:
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
@@ -288,8 +290,15 @@ class BaseODE(CUDAFactory):
 
     @property
     def num_drivers(self) -> int:
-        """Number of driver variables."""
+        """Length of the drivers buffer the device functions read."""
         return self.compile_settings.num_drivers
+
+    @property
+    def driver_derivative_columns(self) -> Tuple[Tuple[int, int], ...]:
+        """``(driver, order)`` for each drivers-buffer slot after the
+        drivers: the driver's sample column and the time-derivative
+        order the slot holds."""
+        return ()
 
     @property
     def sizes(self):

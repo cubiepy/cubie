@@ -350,7 +350,10 @@ class BatchSolverKernel(CUDAFactory):
             precision=precision,
             memory_manager=self._memory_manager,
         )
-        self.driver_interpolator.update(settings, silent=True)
+        self.driver_interpolator.update(
+            {**settings, **ArrayInterpolator.system_inputs(system)},
+            silent=True,
+        )
 
         system_name = system.name
         system_hash = system.fn_hash
@@ -547,9 +550,8 @@ class BatchSolverKernel(CUDAFactory):
             self.single_integrator._loop.drivers_fn is None
         ):
             raise ValueError(
-                f"System declares {self.system.sizes.drivers} driver(s) "
-                "but no driver samples are given; pass drivers= to "
-                "solve."
+                "System declares drivers but no driver samples are "
+                "given; pass drivers= to solve."
             )
         stream = self.stream
         self._memory_manager.begin_work(self)
@@ -1242,7 +1244,10 @@ class BatchSolverKernel(CUDAFactory):
         recognised = self.memory_manager.update(self, updates, silent=True)
         interpolator = self.driver_interpolator
         known_hash = interpolator.config_hash
-        recognised |= interpolator.update(updates, silent=True)
+        recognised |= interpolator.update(
+            {**updates, **ArrayInterpolator.system_inputs(self.system)},
+            silent=True,
+        )
         # New sample values alone keep the compiled evaluators.
         if interpolator.config_hash != known_hash:
             updates.update(self._driver_settings())
@@ -1689,7 +1694,7 @@ class BatchSolverKernel(CUDAFactory):
 
     @property
     def n_drivers(self) -> int:
-        """Number of interpolated driver inputs for the system."""
+        """Length of the drivers buffer the system reads."""
 
         return self.system_sizes.drivers
 

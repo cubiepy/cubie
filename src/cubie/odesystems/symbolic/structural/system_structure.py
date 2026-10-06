@@ -164,6 +164,9 @@ class StructuralState:
     derivative_names
         Maps the name of each user function, and of each derivative
         helper, to the name of the helper for its next derivative.
+    drivers
+        The system's drivers. Differentiating a driver, or a derivative
+        of one, adds the next derivative as a known symbol.
     state_priorities
         Optional per-symbol state-selection priorities.
     irreducibles
@@ -194,12 +197,14 @@ class StructuralState:
         known_symbols: Iterable[ir.Sym],
         time_symbol: ir.Sym,
         derivative_names: Optional[Dict[str, str]] = None,
+        drivers: Iterable[ir.Sym] = (),
         state_priorities: Optional[Dict[ir.Sym, float]] = None,
         irreducibles: Optional[Iterable[ir.Sym]] = None,
     ) -> None:
         self.registry = registry
         self.time_symbol = time_symbol
         self.derivative_names = dict(derivative_names or {})
+        self.drivers = set(drivers)
         self.known_symbols = set(known_symbols) | {time_symbol}
         self.irreducibles = set(irreducibles or ())
         self.mm = None
@@ -208,6 +213,11 @@ class StructuralState:
 
         eqs = [(lhs, rhs) for lhs, rhs in equations]
         original_eqs = list(eqs)
+        # Driver derivatives in the given equations are known.
+        for eq in eqs:
+            for sym in _free_symbols(eq):
+                if registry.base_and_order(sym)[0] in self.drivers:
+                    self.known_symbols.add(sym)
 
         self.fullvars = self._ordered_variables(eqs)
         self.var2idx = {v: i for i, v in enumerate(self.fullvars)}
@@ -391,6 +401,20 @@ class StructuralState:
             self.registry.derivative(self.fullvars[v]), v
         )
 
+    def driver_derivative(self, sym: ir.Sym) -> Optional[ir.Sym]:
+        """Return the known derivative of a driver term, if ``sym`` is one.
+
+        A driver term is a driver or a derivative of one; its
+        derivative is registered and joins the known symbols.
+        """
+
+        base, _ = self.registry.base_and_order(sym)
+        if base not in self.drivers:
+            return None
+        dsym = self.registry.derivative(sym)
+        self.known_symbols.add(dsym)
+        return dsym
+
     def eq_derivative(self, ieq: int, **kwargs) -> int:
         """Differentiate equation ``ieq``; return the new equation index."""
 
@@ -402,6 +426,10 @@ class StructuralState:
                 dv = self.derivative_of(j)
                 if dv is not None:
                     deriv_map[v] = self.fullvars[dv]
+            else:
+                dv = self.driver_derivative(v)
+                if dv is not None:
+                    deriv_map[v] = dv
         new_rhs = total_derivative(
             ir.sub(rhs, lhs),
             deriv_map,
