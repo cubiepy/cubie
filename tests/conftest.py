@@ -82,7 +82,7 @@ from tests.system_fixtures import (
     build_three_state_very_stiff_system,
     build_time_array_driver_system,
     build_driver_derivative_system,
-    build_driver_second_derivative_system,
+    build_driver_derivative_function_system,
     build_time_function_driver_system,
     build_two_driver_system,
     build_torn_driver_system,
@@ -345,8 +345,6 @@ def system(request, solver_settings_override, precision):
         return build_torn_driver_system(precision)
     if model_type == "driver_derivative":
         return build_driver_derivative_system(precision)
-    if model_type == "driver_second_derivative":
-        return build_driver_second_derivative_system(precision)
     if model_type == "torn_time":
         return build_torn_time_system(precision)
     if model_type == "torn_unsolvable":
@@ -401,14 +399,23 @@ def fresh_solver_factory(
     return _build
 
 
+DRIVER_TWINS = {
+    "time_array_driver": build_time_function_driver_system,
+    "driver_derivative": build_driver_derivative_function_system,
+}
+
+
 @pytest.fixture(scope="session")
-def time_function_driver_system(precision):
-    """Return the equation-driven twin of ``time_array_driver``.
+def time_function_driver_system(solver_settings_override, precision):
+    """Return the equation-driven twin of the driver system.
 
     The interpolated twin arrives through the chain as ``system``;
     driver-interpolation tests solve both and compare.
     """
-    return build_time_function_driver_system(precision)
+    model_type = (solver_settings_override or {}).get(
+        "system_type", "time_array_driver"
+    )
+    return DRIVER_TWINS[model_type](precision)
 
 
 @pytest.fixture(scope="session")
@@ -922,6 +929,7 @@ def driver_array(
     driver_settings,
     solver_settings,
     precision,
+    system,
 ):
     """Instantiate :class:`ArrayInterpolator` for the configured system."""
 
@@ -934,6 +942,7 @@ def driver_array(
         order=int(solver_settings["order"]),
         wrap=bool(solver_settings["wrap"]),
         boundary_condition=solver_settings["boundary_condition"],
+        **ArrayInterpolator.system_inputs(system),
     )
 
 

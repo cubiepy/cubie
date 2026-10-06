@@ -3,6 +3,7 @@
 import pytest
 
 from tests._utils import (
+    DRIVER_DERIVATIVE_SETTINGS,
     SINUSOID_DRIVER_SAMPLES,
     TIME_DRIVER_SETTINGS,
     assert_integration_outputs,
@@ -10,8 +11,15 @@ from tests._utils import (
 )
 
 
+# Rosenbrock reads slot time derivatives; FIRK stacks stage drivers.
 @pytest.mark.parametrize(
-    "solver_settings_override", [TIME_DRIVER_SETTINGS], indirect=True
+    "solver_settings_override",
+    [
+        TIME_DRIVER_SETTINGS,
+        {**DRIVER_DERIVATIVE_SETTINGS, "algorithm": "rosenbrock"},
+        {**DRIVER_DERIVATIVE_SETTINGS, "algorithm": "firk"},
+    ],
+    indirect=True,
 )
 @pytest.mark.parametrize(
     "driver_settings_override", [SINUSOID_DRIVER_SAMPLES], indirect=True
