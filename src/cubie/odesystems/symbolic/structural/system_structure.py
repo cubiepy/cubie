@@ -13,7 +13,7 @@ Published Classes
 
 :class:`SystemStructure`
     Integer-graph view of the system (incidence, solvability,
-    derivative chains, priorities, deterministic ranks).
+    derivative chains, priorities, ranks).
 
 :class:`StructuralState`
     Full transformation state: structure plus the symbolic equations,
@@ -22,19 +22,16 @@ Published Classes
 """
 
 import warnings
-from math import inf
 from typing import (
     Dict,
     Iterable,
     List,
     Optional,
     Sequence,
-    Set,
     Tuple,
 )
 
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.engine.expr import _children
 
 from cubie.odesystems.symbolic.structural.bipartite import (
     BipartiteGraph,
@@ -133,8 +130,7 @@ class SystemStructure:
         Per-variable state-selection priority (higher is more likely
         to stay a state).
     canonical_ranks
-        Deterministic per-variable rank used as a tie-break so results
-        do not depend on declaration or equation order.
+        Per-variable rank used as a tie-break.
     """
 
     def __init__(
@@ -183,33 +179,6 @@ class SystemStructure:
         self.var_to_diff.require_complete()
         return self.var_to_diff.diff_to_primal[i] is not None
 
-    def isalgvar(self, i: int) -> bool:
-        """Whether variable ``i`` has no derivative relations."""
-
-        return (
-            self.var_to_diff[i] is None
-            and self.var_to_diff.diff_to_primal[i] is None
-        )
-
-    def isdiffvar(self, i: int) -> bool:
-        """Whether ``i`` is differentiated but not itself a derivative."""
-
-        return (
-            self.var_to_diff[i] is not None
-            and self.var_to_diff.diff_to_primal[i] is None
-        )
-
-    def algeqs(self) -> Set[int]:
-        """Equations incident on no derivative variables."""
-
-        return {
-            eq
-            for eq in range(self.graph.nsrcs())
-            if all(
-                not self.isdervar(v) for v in self.graph.s_neighbors(eq)
-            )
-        }
-
     def eq_derivative_graph(self, eq: int) -> int:
         """Add the graph vertices for the derivative of equation ``eq``."""
 
@@ -233,114 +202,6 @@ class SystemStructure:
         if g != var_diff:
             raise AssertionError("graph vertex counts diverged")
         return var_diff
-
-
-def get_old_to_new_idxs(
-    n_before: int, dels: List[int]
-) -> Tuple[List[int], int]:
-    """Index remapping after deleting sorted indices ``dels``.
-
-    Deleted entries map to ``-1``; the second element is the new
-    length.
-    """
-
-    old_to_new = [0] * n_before
-    idx = 0
-    cursor = 0
-    ndels = len(dels)
-    for i in range(n_before):
-        if cursor < ndels and i == dels[cursor]:
-            cursor += 1
-            old_to_new[i] = -1
-            continue
-        old_to_new[i] = idx
-        idx += 1
-    return old_to_new, idx
-
-
-def default_rm_eqs_vars(
-    structure: SystemStructure,
-    eqs_to_rm: List[int],
-    vars_to_rm: List[int],
-    eqs_sorted_and_uniqued: bool = False,
-    vars_sorted_and_uniqued: bool = False,
-) -> Tuple[List[int], List[int]]:
-    """Remove equations and variables from ``structure``.
-
-    Returns ``(old_to_new_eq, old_to_new_var)`` index maps with
-    deleted entries mapped to ``-1``.
-    """
-
-    graph = structure.graph
-    solvable_graph = structure.solvable_graph
-
-    if not eqs_sorted_and_uniqued:
-        eqs_to_rm[:] = sorted(set(eqs_to_rm))
-    if not vars_sorted_and_uniqued:
-        vars_to_rm[:] = sorted(set(vars_to_rm))
-
-    old_to_new_eq, n_new_eqs = get_old_to_new_idxs(
-        graph.nsrcs(), eqs_to_rm
-    )
-    old_to_new_var, n_new_vars = get_old_to_new_idxs(
-        graph.ndsts(), vars_to_rm
-    )
-
-    new_graph = BipartiteGraph(n_new_eqs, n_new_vars)
-    new_solvable_graph = None
-    if solvable_graph is not None:
-        new_solvable_graph = BipartiteGraph(n_new_eqs, n_new_vars)
-    new_eq_to_diff = DiffGraph(n_new_eqs)
-    for i, ieq in enumerate(old_to_new_eq):
-        if ieq < 0:
-            continue
-        new_nbors = [
-            old_to_new_var[v]
-            for v in graph.s_neighbors(i)
-            if old_to_new_var[v] >= 0
-        ]
-        new_graph.set_neighbors(ieq, new_nbors)
-        if solvable_graph is not None:
-            new_nbors = [
-                old_to_new_var[v]
-                for v in solvable_graph.s_neighbors(i)
-                if old_to_new_var[v] >= 0
-            ]
-            new_solvable_graph.set_neighbors(ieq, new_nbors)
-        ediff = structure.eq_to_diff[i]
-        if ediff is not None:
-            ediff = old_to_new_eq[ediff]
-            if ediff < 0:
-                raise AssertionError(
-                    "removed an equation whose derivative is retained"
-                )
-        new_eq_to_diff[ieq] = ediff
-
-    new_var_to_diff = DiffGraph(n_new_vars)
-    for v, newv in enumerate(old_to_new_var):
-        if newv < 0:
-            continue
-        vdiff = structure.var_to_diff[v]
-        if vdiff is not None:
-            vdiff = old_to_new_var[vdiff]
-            if vdiff < 0:
-                continue
-        new_var_to_diff[newv] = vdiff
-    structure.graph = new_graph
-    if solvable_graph is not None:
-        structure.solvable_graph = new_solvable_graph
-    structure.eq_to_diff = new_eq_to_diff
-    structure.var_to_diff = new_var_to_diff
-    return old_to_new_eq, old_to_new_var
-
-
-def _canonical_sort_key(
-    var: ir.Sym, registry: DerivativeRegistry
-) -> Tuple[Tuple[int, ...], str]:
-    """Deterministic ordering key: derivative chain, then base name."""
-
-    base, order = registry.base_and_order(var)
-    return ((1,) * order, base.name)
 
 
 class StructuralState:
@@ -370,8 +231,7 @@ class StructuralState:
     irreducibles
         Symbols that may not be eliminated from the unknowns.
     sort_eqs
-        Whether to sort equations by a deterministic structural key
-        before analysis.
+        Whether to sort equations before analysis.
     """
 
     def __init__(
@@ -469,17 +329,6 @@ class StructuralState:
             if isalgeq and not ir.is_zero(eq.lhs):
                 eqs[i] = Equation(ir.ZERO, eq.residual())
 
-        if sort_eqs:
-            keys = [
-                _equation_sort_key(
-                    eq, self.var2idx, canonical_ranks
-                )
-                for eq in eqs
-            ]
-            order = sorted(range(len(eqs)), key=lambda i: keys[i])
-            eqs = [eqs[i] for i in order]
-            original_eqs = [original_eqs[i] for i in order]
-
         self.eqs = eqs
         self.original_eqs = original_eqs
 
@@ -500,16 +349,6 @@ class StructuralState:
             canonical_ranks,
         )
         self.always_present = [False] * nvars
-
-    def _build_canonical_ranks(self) -> List[int]:
-        keys = [
-            _canonical_sort_key(v, self.registry) for v in self.fullvars
-        ]
-        order = sorted(range(len(keys)), key=lambda i: keys[i])
-        ranks = [0] * len(keys)
-        for rank, i in enumerate(order):
-            ranks[i] = (rank + 1) * 100
-        return ranks
 
     def _build_state_priorities(
         self,
@@ -554,7 +393,6 @@ class StructuralState:
         self.fullvars.append(dsym)
         self.var2idx[dsym] = var_diff
         s.state_priorities.append(s.state_priorities[v])
-        s.canonical_ranks.append(s.canonical_ranks[v] + 1)
         self.always_present.append(self.always_present[v])
         if self.mm is not None:
             self.mm.ncols += 1
@@ -565,15 +403,6 @@ class StructuralState:
 
         s = self.structure
         eq_diff = s.eq_derivative_graph(ieq)
-
-        if self.mm is not None:
-            self.mm.nparentrows += 1
-            try:
-                idx = self.mm.nzrows.index(ieq)
-            except ValueError:
-                idx = None
-            if idx is not None:
-                return self._eq_derivative_mm(ieq, eq_diff, idx)
 
         deriv_map = {}
         for v in self.eqs[ieq].free_symbols():
@@ -624,56 +453,6 @@ class StructuralState:
             all_int_vars, rem = self.find_eq_solvables(
                 eq_diff, to_rm, coeffs, **solv_kwargs
             )
-            if self.mm is not None and all_int_vars and ir.is_zero(rem):
-                if self.mm.nzrows and eq_diff <= self.mm.nzrows[-1]:
-                    raise AssertionError("mm rows out of order")
-                self.mm.nzrows.append(eq_diff)
-                self.mm.row_cols.append(
-                    list(s.solvable_graph.s_neighbors(eq_diff))
-                )
-                self.mm.row_vals.append(coeffs)
-        return eq_diff
-
-    def _eq_derivative_mm(self, ieq: int, eq_diff: int, idx: int) -> int:
-        """Differentiate an integer-linear equation through ``mm``."""
-
-        s = self.structure
-        mm = self.mm
-        rcol = list(mm.row_cols[idx])
-        rval = list(mm.row_vals[idx])
-        new_cols = []
-        for c in rcol:
-            dc = s.var_to_diff[c]
-            if dc is None:
-                raise AssertionError(
-                    "differentiating an mm row whose variable has no "
-                    "derivative"
-                )
-            new_cols.append(dc)
-        pairs = sorted(zip(new_cols, rval))
-        rcol = [p[0] for p in pairs]
-        rval = [p[1] for p in pairs]
-        if mm.nzrows and eq_diff <= mm.nzrows[-1]:
-            raise AssertionError("mm rows out of order")
-        mm.nzrows.append(eq_diff)
-        mm.row_cols.append(rcol)
-        mm.row_vals.append(rval)
-
-        rhs = ir.add(
-            *[
-                ir.mul(coeff, self.fullvars[c])
-                for c, coeff in zip(rcol, rval)
-            ]
-        )
-        new_eq = Equation(ir.ZERO, rhs)
-        self.eqs.append(new_eq)
-        self.original_eqs.append(new_eq)
-        if len(self.eqs) != eq_diff + 1:
-            raise AssertionError("equation count diverged from graph")
-        for v in rcol:
-            s.graph.add_edge(eq_diff, v)
-            if s.solvable_graph is not None:
-                s.solvable_graph.add_edge(eq_diff, v)
         return eq_diff
 
     def division_permitted(
@@ -749,24 +528,6 @@ class StructuralState:
                 solvable_graph.add_edge(ieq, j)
                 continue
             term = b
-            a_int = as_small_int(a)
-            if a_int is None:
-                all_int_vars = False
-                if conservative:
-                    continue
-                a_int = 0 if ir.is_zero(a) else None
-                if a_int is None:
-                    # Non-small nonzero numeric coefficient: solvable,
-                    # but not part of the integer subsystem.
-                    solvable_graph.add_edge(ieq, j)
-                    continue
-            elif conservative and abs(a_int) > 1:
-                # Conservative mode admits only unit coefficients:
-                # the variable is not solvable here and the equation
-                # leaves the integer subsystem (a partial coeffs row
-                # would desync from the incidence columns).
-                all_int_vars = False
-                continue
             if coeffs is not None and (a_int != 0 or not may_be_zero):
                 coeffs.append(a_int)
             if a_int != 0:
@@ -828,77 +589,6 @@ class StructuralState:
             cadj,
         )
 
-    def rm_eqs_vars(
-        self,
-        eqs_to_rm: List[int],
-        vars_to_rm: List[int],
-        eqs_sorted_and_uniqued: bool = False,
-        vars_sorted_and_uniqued: bool = False,
-    ) -> Tuple[List[int], List[int]]:
-        """Remove equations and variables from the state.
-
-        Does not update ``mm``; callers combine the returned index
-        maps with alias information via ``get_new_mm``.
-        """
-
-        if not eqs_sorted_and_uniqued:
-            eqs_to_rm = sorted(set(eqs_to_rm))
-        if not vars_sorted_and_uniqued:
-            vars_to_rm = sorted(set(vars_to_rm))
-        structure = self.structure
-        old_to_new_eq, old_to_new_var = default_rm_eqs_vars(
-            structure,
-            eqs_to_rm,
-            vars_to_rm,
-            eqs_sorted_and_uniqued=True,
-            vars_sorted_and_uniqued=True,
-        )
-        for v in reversed(vars_to_rm):
-            del structure.canonical_ranks[v]
-            del structure.state_priorities[v]
-            del self.fullvars[v]
-            del self.always_present[v]
-        self.var2idx = {v: i for i, v in enumerate(self.fullvars)}
-        for e in reversed(eqs_to_rm):
-            del self.eqs[e]
-            del self.original_eqs[e]
-        return old_to_new_eq, old_to_new_var
-
-    def possibly_explicit_equations(self) -> List[Tuple[int, int]]:
-        """Candidates for trivial tearing.
-
-        Returns ``(equation_index, variable_index)`` pairs where the
-        original user equation assigns a single unknown explicitly and
-        the assignment is not self-referential.
-        """
-
-        result = []
-        for i, oeq in enumerate(self.original_eqs):
-            lhs = oeq.lhs
-            if not isinstance(lhs, ir.Sym):
-                continue
-            vidx = self.var2idx.get(lhs)
-            if vidx is None:
-                continue
-            if lhs in self.irreducibles:
-                continue
-            sys_eq = self.eqs[i]
-            if ir.is_zero(sys_eq.lhs) and ir.is_zero(sys_eq.rhs):
-                continue
-            if lhs in ir.free_atoms(oeq.rhs):
-                continue
-            result.append((i, vidx))
-        return result
-
-    def trivial_tearing_postprocess(
-        self, torn_eqs: List[int], torn_vars: List[int]
-    ) -> None:
-        """Record preemptively torn equations as observed."""
-
-        self.additional_observed.extend(
-            self.original_eqs[e] for e in torn_eqs
-        )
-
     def n_concrete_eqs(self) -> int:
         """Number of equations with at least one incident variable."""
 
@@ -908,152 +598,3 @@ class StructuralState:
             for e in range(graph.nsrcs())
             if graph.s_neighbors(e)
         )
-
-
-def _num_float(node: ir.Expr) -> float:
-    """Return ``float(node.value)``; raise for a non-numeric node."""
-
-    if not isinstance(node, ir.Num):
-        raise TypeError(f"{node!r} is not a numeric IR node")
-    return float(node.value)
-
-
-def _ieee_pow(base: float, exponent: float) -> float:
-    """Float power with IEEE semantics: zero or overflow gives inf."""
-    try:
-        return base**exponent
-    except (ZeroDivisionError, OverflowError):
-        return inf
-
-
-def _expression_sort_key(
-    expr: ir.Expr,
-    var2idx: Dict[ir.Sym, int],
-    canonical_ranks: List[int],
-    cache: Dict,
-) -> List[Tuple[int, float, float]]:
-    """Structural sort key for deterministic equation ordering.
-
-    Port of ModelingToolkitTearing's equation sort key: a list of
-    ``(variable_rank, coefficient, exponent)`` tuples derived from the
-    expression tree, capped at 100 entries.
-    """
-
-    cached = cache.get(expr)
-    if cached is not None:
-        return cached
-    result = __expression_sort_key(expr, var2idx, canonical_ranks, cache)
-    cache[expr] = result
-    return result
-
-
-def __expression_sort_key(
-    expr: ir.Expr,
-    var2idx: Dict[ir.Sym, int],
-    canonical_ranks: List[int],
-    cache: Dict,
-) -> List[Tuple[int, float, float]]:
-    if isinstance(expr, ir.Num):
-        try:
-            return [(0, float(expr.value), 1.0)]
-        except (TypeError, ValueError):
-            return []
-    if isinstance(expr, ir.Sym):
-        idx = var2idx.get(expr)
-        if idx is None:
-            return []
-        return [(canonical_ranks[idx], 1.0, 1.0)]
-    if isinstance(expr, ir.Add):
-        result = []
-        # Add.args are already stored in sort_key order.
-        for term in expr.args:
-            if isinstance(term, ir.Mul) and isinstance(
-                term.args[0], ir.Num
-            ):
-                coeff = term.args[0].value
-                rest = ir.mul(*term.args[1:])
-            elif isinstance(term, ir.Num):
-                coeff = term.value
-                rest = ir.ONE
-            else:
-                coeff = 1
-                rest = term
-            sub = _expression_sort_key(
-                rest, var2idx, canonical_ranks, cache
-            )
-            try:
-                cf = float(coeff)
-            except (TypeError, ValueError):
-                result.extend(sub)
-                continue
-            for rank, c, e in sub:
-                result.append((rank, c * cf, e))
-            if len(result) > 100:
-                break
-        return result
-    if isinstance(expr, ir.Mul):
-        if isinstance(expr.args[0], ir.Num):
-            coeff = expr.args[0].value
-            rest_factors = expr.args[1:]
-        else:
-            coeff = 1
-            rest_factors = expr.args
-        try:
-            cf = abs(float(coeff))
-        except (TypeError, ValueError):
-            cf = 1.0
-        result = []
-        # The remaining factors stay in sort_key order.
-        for factor in rest_factors:
-            if isinstance(factor, ir.Pow):
-                base, exponent = factor.base, factor.exp
-            else:
-                base, exponent = factor, ir.ONE
-            sub = _expression_sort_key(
-                base, var2idx, canonical_ranks, cache
-            )
-            try:
-                ev = _num_float(exponent)
-            except (TypeError, ValueError):
-                result.extend(sub)
-                continue
-            for rank, c, e in sub:
-                result.append((rank, _ieee_pow(abs(c), ev) * cf, e + ev))
-            if len(result) > 100:
-                break
-        return result
-    if isinstance(expr, ir.Pow):
-        base, exponent = expr.base, expr.exp
-        base_key = _expression_sort_key(
-            base, var2idx, canonical_ranks, cache
-        )
-        try:
-            ev = _num_float(exponent)
-        except (TypeError, ValueError):
-            if len(base_key) > 100:
-                return base_key
-            return base_key + _expression_sort_key(
-                exponent, var2idx, canonical_ranks, cache
-            )
-        return [
-            (rank, _ieee_pow(abs(c), ev), e + ev)
-            for rank, c, e in base_key
-        ]
-    result = []
-    for arg in _children(expr):
-        result.extend(
-            _expression_sort_key(arg, var2idx, canonical_ranks, cache)
-        )
-        if len(result) > 100:
-            break
-    return result
-
-
-def _equation_sort_key(
-    eq: Equation,
-    var2idx: Dict[ir.Sym, int],
-    canonical_ranks: List[int],
-) -> List[Tuple[int, float, float]]:
-    """Sort key of an equation (over its RHS, matching MTK)."""
-
-    return _expression_sort_key(eq.rhs, var2idx, canonical_ranks, {})

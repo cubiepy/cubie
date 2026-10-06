@@ -234,39 +234,6 @@ class TestAlgebraicSystems:
         assert mass is not None
         assert mass[0][0] == 1 and mass[1][1] == 0
 
-    def test_inline_linear_scc_solves_analytically(self):
-        x, u, v, p = syms("x u v p")
-        registry = DerivativeRegistry({"x", "u", "v", "p", "t"})
-        dx = registry.derivative(x)
-        # Coupled linear block: u + 2v = x; 3u - v = 1 with
-        # non-integer-friendly structure kept linear.
-
-        def state_fn():
-            return StructuralState(
-                [
-                    Equation(dx, -u),
-                    Equation(ir.ZERO, u + 2 * v - x),
-                    Equation(ir.ZERO, 3 * u - v - 1),
-                ],
-                [x, u, v],
-                registry,
-                {p},
-                T,
-            )
-
-        result = structural_simplify(
-            state_fn(), inline_linear_sccs=True
-        )
-        # The integer-linear exact SCC matching or the analytic
-        # solve must fully determine u and v as observed.
-        assert result.states == [x]
-        obs = dict(result.observed)
-        u_val = obs[u]
-        for _ in range(3):
-            u_val = ir.xreplace(u_val, obs)
-        expected = (x + 2) / 7
-        assert sp.simplify(to_sympy(u_val - expected)) == 0
-
 
 class TestAliasEdgeCases:
     def test_conflicting_aliases_force_zero(self):
@@ -398,45 +365,6 @@ class TestSingularIntegerSCC:
         assert len(result.residuals) == len(result.algebraic_states)
         obs = dict(result.observed)
         assert x in ir.free_atoms(obs[y])
-
-    def test_exact_scc_matching_singular_warns(self):
-        # Unit-level pin of the rank-deficient fallback: an SCC of
-        # integer-linear rows that is exactly singular over its own
-        # variables warns and reports no exact matching.
-        from cubie.odesystems.symbolic.structural.bipartite import (
-            Matching,
-        )
-        from cubie.odesystems.symbolic.structural.tearing import (
-            exact_scc_matching,
-        )
-
-        x, y = syms("x y")
-        registry = DerivativeRegistry({"x", "y", "t"})
-        state = StructuralState(
-            [
-                Equation(ir.ZERO, x + y),
-                Equation(ir.ZERO, 2 * x + 2 * y),
-            ],
-            [x, y],
-            registry,
-            set(),
-            T,
-        )
-        mm = state.linear_subsys_adjmat()
-        mm_row_of = {e: i for i, e in enumerate(mm.nzrows)}
-        matching = Matching(2).complete(2)
-        with pytest.warns(UserWarning, match="exactly singular"):
-            exact = exact_scc_matching(
-                state.structure,
-                mm,
-                mm_row_of,
-                matching,
-                [0, 1],
-                [0, 1],
-                None,
-                [],
-            )
-        assert not exact
 
 
 class TestPantelidesAndDummyDerivatives:

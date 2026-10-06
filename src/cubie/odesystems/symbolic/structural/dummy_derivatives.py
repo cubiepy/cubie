@@ -13,10 +13,6 @@ Published Functions
     Run Pantelides, select dummy derivatives, and tear. Returns a
     :class:`~cubie.odesystems.symbolic.structural.tearing.TearingResult`
     and a dict of extra data.
-
-:func:`partial_state_selection_graph`
-    Level-by-level partial state selection (alternative to the dummy
-    derivative default).
 """
 
 import warnings
@@ -27,26 +23,15 @@ from cubie.odesystems.symbolic.structural.bipartite import (
     SELECTED_STATE,
     UNASSIGNED,
     construct_augmenting_path,
-    maximal_matching,
 )
 from cubie.odesystems.symbolic.structural.clil import nullspace_rank
-from cubie.odesystems.symbolic.structural.digraph import (
-    DiCMOBiGraphT,
-    IncrementalCycleTracker,
-    find_var_sccs,
-)
+from cubie.odesystems.symbolic.structural.digraph import find_var_sccs
 from cubie.odesystems.symbolic.structural.pantelides import pantelides
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
     SystemStructure,
 )
-from cubie.odesystems.symbolic.structural.tearing import (
-    CarpanzanoTearing,
-    TearingResult,
-    tear_equations,
-    tear_graph_modia,
-    try_assign_eq,
-)
+from cubie.odesystems.symbolic.structural.tearing import TearingResult
 
 
 def is_present(structure: SystemStructure, v: int) -> bool:
@@ -118,9 +103,8 @@ def dummy_derivative_graph(
         Per-variable priority function; higher-priority variables are
         more likely to remain states.
     tearing_alg
-        The tearing algorithm applied after selection. Defaults to
-        :class:`~cubie.odesystems.symbolic.structural.tearing.CarpanzanoTearing`
-        seeded with the dummy-derivative filters.
+        The tearing algorithm applied after selection, seeded with the
+        dummy-derivative filters.
     """
 
     if state.structure.solvable_graph is None:
@@ -340,7 +324,7 @@ def _tear_with_dummies(
     tearing_alg: Optional[Callable],
     mm,
 ) -> Tuple[TearingResult, Dict]:
-    """Tear after dummy-derivative selection (default: Carpanzano)."""
+    """Tear after dummy-derivative selection."""
 
     var_to_diff = structure.var_to_diff
     can_eliminate = [False] * len(var_to_diff)
@@ -357,12 +341,7 @@ def _tear_with_dummies(
     def varfilter(v: int) -> bool:
         return can_eliminate[v]
 
-    if tearing_alg is None:
-        alg = CarpanzanoTearing(
-            isder=isder, varfilter=varfilter, mm=mm
-        )
-    else:
-        alg = tearing_alg(isder=isder, varfilter=varfilter)
+    alg = tearing_alg(isder=isder, varfilter=varfilter)
     tearing_result, inner_extra = alg(structure)
 
     for v in range(structure.graph.ndsts()):
@@ -378,271 +357,3 @@ def _tear_with_dummies(
     extra = dict(inner_extra)
     extra["can_eliminate"] = can_eliminate
     return tearing_result, extra
-
-
-def tearing_with_dummy_derivatives(
-    structure: SystemStructure, dummy_derivatives: set
-) -> Tuple[Matching, Matching, List[List[int]], List[bool]]:
-    """Modia tearing seeded with dummy-derivative filters.
-
-    Retained for the Modia tearing path; the default pipeline uses
-    Carpanzano through :func:`dummy_derivative_graph`.
-    """
-
-    var_to_diff = structure.var_to_diff
-    can_eliminate = [False] * len(var_to_diff)
-    for v in range(len(var_to_diff)):
-        dv = var_to_diff[v]
-        if dv is None or not is_some_diff(
-            structure, dummy_derivatives, dv
-        ):
-            can_eliminate[v] = True
-    var_eq_matching, full_var_eq_matching, var_sccs = tear_graph_modia(
-        structure,
-        lambda v: isdiffed(structure, dummy_derivatives, v),
-        varfilter=lambda v: can_eliminate[v],
-    )
-    for v in range(structure.graph.ndsts()):
-        if not is_present(structure, v):
-            continue
-        dv = var_to_diff[v]
-        if dv is None or not is_some_diff(
-            structure, dummy_derivatives, dv
-        ):
-            continue
-        var_eq_matching[v] = SELECTED_STATE
-    return (
-        var_eq_matching,
-        full_var_eq_matching,
-        var_sccs,
-        can_eliminate,
-    )
-
-
-def _ascend_dg(xs: List[int], dg, level: int) -> List[int]:
-    while level > 0:
-        xs = [dg[x] for x in xs]
-        level -= 1
-    return xs
-
-
-class _DiffData:
-    def __init__(
-        self,
-        varlevel: List[int],
-        inv_varlevel: List[int],
-        inv_eqlevel: List[int],
-    ) -> None:
-        self.varlevel = varlevel
-        self.inv_varlevel = inv_varlevel
-        self.inv_eqlevel = inv_eqlevel
-
-
-def partial_state_selection_graph(
-    state: StructuralState,
-) -> Matching:
-    """Partial state selection after Pantelides (level-by-level)."""
-
-    var_eq_matching = pantelides(state).complete(
-        state.structure.graph.nsrcs()
-    )
-    state.structure.complete()
-    return _partial_state_selection_graph(
-        state.structure, var_eq_matching
-    )
-
-
-def _partial_state_selection_graph(
-    structure: SystemStructure, var_eq_matching: Matching
-) -> Matching:
-    graph = structure.graph
-    eq_to_diff = structure.eq_to_diff.complete()
-    var_to_diff = structure.var_to_diff
-    inv_eq = eq_to_diff.invview()
-    inv_var = var_to_diff.invview()
-
-    inv_eqlevel = []
-    for eq in range(graph.nsrcs()):
-        level = 0
-        e = eq
-        while inv_eq[e] is not None:
-            e = inv_eq[e]
-            level += 1
-        inv_eqlevel.append(level)
-
-    varlevel = []
-    for var in range(graph.ndsts()):
-        graph_level = 0
-        level = 0
-        v = var
-        while var_to_diff[v] is not None:
-            v = var_to_diff[v]
-            level += 1
-            if graph.d_neighbors(v):
-                graph_level = level
-        varlevel.append(graph_level)
-
-    inv_varlevel = []
-    for var in range(graph.ndsts()):
-        level = 0
-        v = var
-        while inv_var[v] is not None:
-            v = inv_var[v]
-            level += 1
-        inv_varlevel.append(level)
-
-    return _pss_graph_modia(
-        structure,
-        var_eq_matching.complete(graph.nsrcs()),
-        _DiffData(varlevel, inv_varlevel, inv_eqlevel),
-    )
-
-
-def _pss_graph_modia(
-    structure: SystemStructure,
-    maximal_top_matching: Matching,
-    diff_data: Optional[_DiffData] = None,
-) -> Matching:
-    eq_to_diff = structure.eq_to_diff
-    var_to_diff = structure.var_to_diff
-    graph = structure.graph
-    solvable_graph = structure.solvable_graph
-    inv_eq = eq_to_diff.invview()
-    inv_var = var_to_diff.invview()
-
-    var_sccs = find_var_sccs(graph, maximal_top_matching)
-    var_eq_matching = Matching(graph.ndsts())
-    for scc_vars in var_sccs:
-        if (
-            len(scc_vars) == 1
-            and maximal_top_matching[scc_vars[0]] is UNASSIGNED
-        ):
-            continue
-        eqs = [
-            maximal_top_matching[var]
-            for var in scc_vars
-            if maximal_top_matching[var] is not UNASSIGNED
-        ]
-        if not eqs:
-            continue
-        if diff_data is None:
-            level = 0
-        else:
-            level = max(
-                diff_data.inv_varlevel[v] for v in scc_vars
-            )
-        old_level_vars = None
-        ict = IncrementalCycleTracker(
-            DiCMOBiGraphT(
-                graph,
-                Matching(graph.ndsts()).complete(graph.nsrcs()),
-            )
-        )
-
-        while level >= 0:
-            if level == 0:
-                to_tear_eqs_toplevel = list(eqs)
-            else:
-                to_tear_eqs_toplevel = [
-                    eq
-                    for eq in eqs
-                    if diff_data.inv_eqlevel[eq] >= level
-                ]
-            to_tear_eqs = _ascend_dg(
-                to_tear_eqs_toplevel, inv_eq, level
-            )
-            if level == 0:
-                to_tear_vars_toplevel = list(scc_vars)
-            else:
-                to_tear_vars_toplevel = [
-                    var
-                    for var in scc_vars
-                    if diff_data.inv_varlevel[var] >= level
-                ]
-            to_tear_vars = _ascend_dg(
-                to_tear_vars_toplevel, inv_var, level
-            )
-
-            assigned_eqs = []
-
-            if old_level_vars is not None:
-                # Inherit constraints from the previous level.
-                removed_eqs = []
-                removed_vars = []
-                for var in old_level_vars:
-                    old_assign = var_eq_matching[var]
-                    if old_assign is SELECTED_STATE:
-                        removed_vars.append(var)
-                        continue
-                    if not isinstance(old_assign, int) or (
-                        ict.graph.matching[var_to_diff[var]]
-                        is not UNASSIGNED
-                    ):
-                        continue
-                    assgned_eq = eq_to_diff[old_assign]
-                    ok = try_assign_eq(
-                        ict, var_to_diff[var], assgned_eq
-                    )
-                    if not ok:
-                        raise AssertionError(
-                            "level-inherited assignment created a "
-                            "cycle"
-                        )
-                    var_eq_matching[var_to_diff[var]] = assgned_eq
-                    removed_eqs.append(
-                        eq_to_diff[ict.graph.matching[var]]
-                    )
-                    removed_vars.append(var_to_diff[var])
-                    removed_vars.append(var)
-                to_tear_eqs = [
-                    e for e in to_tear_eqs if e not in set(removed_eqs)
-                ]
-                to_tear_vars = [
-                    v
-                    for v in to_tear_vars
-                    if v not in set(removed_vars)
-                ]
-            tear_equations(
-                ict,
-                solvable_graph.fadjlist,
-                to_tear_eqs,
-                set(to_tear_vars),
-                None,
-            )
-
-            for var in to_tear_vars:
-                if var_eq_matching[var] is not UNASSIGNED:
-                    raise AssertionError(
-                        "variable already assigned during PSS"
-                    )
-                assgned_eq = ict.graph.matching[var]
-                var_eq_matching[var] = assgned_eq
-                if isinstance(assgned_eq, int):
-                    assigned_eqs.append(assgned_eq)
-
-            if level != 0:
-                remaining_vars = [
-                    v
-                    for v in to_tear_vars
-                    if var_eq_matching[v] is UNASSIGNED
-                ]
-                if remaining_vars:
-                    remaining_eqs = list(
-                        set(to_tear_eqs) - set(assigned_eqs)
-                    )
-                    nlsolve_matching = maximal_matching(
-                        graph,
-                        srcfilter=lambda e: e in set(remaining_eqs),
-                        dstfilter=lambda v: v
-                        in set(remaining_vars),
-                    )
-                    for var in remaining_vars:
-                        if (
-                            nlsolve_matching[var] is UNASSIGNED
-                            and var_eq_matching[var] is UNASSIGNED
-                        ):
-                            var_eq_matching[var] = SELECTED_STATE
-
-            old_level_vars = to_tear_vars
-            level -= 1
-    return var_eq_matching.complete(graph.nsrcs())

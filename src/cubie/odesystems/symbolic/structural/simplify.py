@@ -53,7 +53,6 @@ from cubie.odesystems.symbolic.structural.singularity_removal import (
 )
 from cubie.odesystems.symbolic.structural.symbolics import as_small_int
 from cubie.odesystems.symbolic.structural.system_structure import (
-    Equation,
     StructuralState,
 )
 
@@ -191,20 +190,6 @@ def _pantelides_reassemble_state(
     )
 
 
-def _apply_linear_rewrites(state: StructuralState, extras: Dict) -> None:
-    """Write the tearing's reduced SCC rows into the equations."""
-
-    for eq, cols, vals in extras.get("linear_rewrite", []):
-        rhs = ir.add(
-            *[
-                ir.mul(val, state.fullvars[col])
-                for col, val in zip(cols, vals)
-            ]
-        )
-        state.eqs[eq] = Equation(ir.ZERO, rhs)
-        state.original_eqs[eq] = state.eqs[eq]
-
-
 def _assemble_result(
     reassembled: ReassembledSystem,
 ) -> SimplifiedSystem:
@@ -294,8 +279,6 @@ def structural_simplify(
     conservative: bool = False,
     allow_symbolic: bool = False,
     allow_parameter: bool = True,
-    inline_linear_sccs: bool = False,
-    analytical_linear_scc_limit: int = 2,
 ) -> SimplifiedSystem:
     """Run the full structural simplification pipeline.
 
@@ -317,9 +300,6 @@ def structural_simplify(
         Restrict tearing to coefficients with absolute value one.
     allow_symbolic, allow_parameter
         Solvability limits on symbolic pivots (division safety).
-    inline_linear_sccs, analytical_linear_scc_limit
-        Solve small linear algebraic SCCs analytically instead of
-        leaving them as residuals.
     """
 
     solve_kwargs = {
@@ -356,10 +336,6 @@ def structural_simplify(
 
     reassemble_kwargs = {
         "fully_determined": fully_determined,
-        "inline_linear_sccs": inline_linear_sccs,
-        "analytical_linear_scc_limit": analytical_linear_scc_limit,
-        "allow_symbolic": allow_symbolic,
-        "allow_parameter": allow_parameter,
     }
 
     if fully_determined and dummy_derivative:
