@@ -709,10 +709,10 @@ class BatchInputHandler:
             return None, (), {}
         names = self._array_names(arr.shape[0])
         given = self._current_fixed(names)
-        if not fix_constant_parameters:
+        grid = arr[:, np_newaxis] if arr.ndim == 1 else arr
+        if not fix_constant_parameters or grid.shape[1] == 0:
             return arr, names, given
 
-        grid = arr[:, np_newaxis] if arr.ndim == 1 else arr
         cast = grid.astype(self.precision)
         uniform = np_all(cast == cast[:, :1], axis=1)
         given.update(
@@ -725,8 +725,6 @@ class BatchInputHandler:
         swept = tuple(names[row] for row in keep)
         if keep.size == len(names):
             return arr, swept, given
-        if keep.size == 0:
-            return None, swept, given
         return grid[keep], swept, given
 
     def _current_fixed(self, names: Tuple[str, ...]) -> Dict[str, float]:

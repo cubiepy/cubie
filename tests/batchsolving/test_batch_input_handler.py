@@ -1162,6 +1162,40 @@ def test_fix_constant_parameters_fixes_uniform_rows(
     assert_array_equal(result, [[1.0, 2.0, 3.0]])
 
 
+def test_fix_constant_parameters_keeps_run_count(
+    input_handler_mutable, system
+):
+    """Fixing every row keeps one run per column."""
+    params = np.full(
+        (system.num_parameters, 3), 7.0, dtype=system.precision
+    )
+    inits, result, swept, fixed = _handle(
+        input_handler_mutable,
+        params=params, kind="verbatim", fix_constant_parameters=True
+    )
+    assert swept == ()
+    assert fixed == {name: 7.0 for name in system.parameters.names}
+    assert result.shape == (0, 3)
+    assert inits.shape[1] == 3
+
+
+def test_fix_constant_parameters_zero_column_array(
+    input_handler_mutable, system
+):
+    """A zero-column array builds the same arrays with or without fixing."""
+    params = np.zeros((system.num_parameters, 0), dtype=system.precision)
+    inits, result, swept, _ = _handle(
+        input_handler_mutable,
+        params=params, kind="verbatim", fix_constant_parameters=True
+    )
+    plain_inits, plain_result, plain_swept, _ = _handle(
+        input_handler_mutable, params=params, kind="verbatim"
+    )
+    assert swept == plain_swept
+    assert result.shape == plain_result.shape
+    assert inits.shape == plain_inits.shape
+
+
 @pytest.mark.parametrize("rows", [1, -1])
 def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
     """Arrays of neither swept nor system height raise."""
