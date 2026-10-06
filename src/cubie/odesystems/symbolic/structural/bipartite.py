@@ -253,38 +253,6 @@ class BipartiteGraph:
                     blst.insert(idx, i)
         old_neighbors[:] = new_sorted
 
-    def delete_srcs(
-        self, srcs: Iterable[int], rm_verts: bool = False
-    ) -> "BipartiteGraph":
-        """Remove all edges incident on the given source vertices.
-
-        When ``rm_verts`` is true the vertices themselves are removed,
-        renumbering the remaining source vertices.
-        """
-
-        srcs = list(srcs)
-        for s in srcs:
-            self.set_neighbors(s, ())
-        if rm_verts:
-            old_to_new = list(range(self.nsrcs()))
-            for s in srcs:
-                old_to_new[s] = -1
-            offset = 0
-            for i in range(len(old_to_new)):
-                if old_to_new[i] == -1:
-                    offset += 1
-                    continue
-                old_to_new[i] -= offset
-            if not isinstance(self.badjlist, int):
-                for j in range(self.ndsts()):
-                    row = self.badjlist[j]
-                    row[:] = [
-                        old_to_new[s] for s in row if old_to_new[s] != -1
-                    ]
-            for s in sorted(srcs, reverse=True):
-                del self.fadjlist[s]
-        return self
-
     def edges(self) -> Iterator[tuple]:
         """Iterate over ``(src, dst)`` edges, ordered by source."""
 

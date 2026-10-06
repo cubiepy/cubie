@@ -88,13 +88,6 @@ class TestBipartiteGraph:
         assert graph.nsrcs() == 2
         assert graph.ndsts() == 2
 
-    def test_delete_srcs_renumbers(self):
-        graph = build_graph(3, 2, [(0, 0), (1, 1), (2, 0)])
-        graph.delete_srcs([1], rm_verts=True)
-        assert graph.nsrcs() == 2
-        assert graph.d_neighbors(0) == [0, 1]
-        assert graph.d_neighbors(1) == []
-
 
 class TestMatching:
     def test_setitem_maintains_inverse(self):

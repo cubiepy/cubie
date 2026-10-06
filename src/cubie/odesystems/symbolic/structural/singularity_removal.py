@@ -1,7 +1,10 @@
 """Integer-linear singularity removal.
 
 ``aag_bareiss`` is ported from StateSelection.jl (commit 74df007e,
-``src/singularity_removal.jl``, ``aag_bareiss!``).
+``src/singularity_removal.jl``, ``aag_bareiss!``). ``get_new_mm``
+follows the integer-matrix rebuild in ModelingToolkit.jl (commit
+c4177c335, ``src/systems/alias_elimination.jl``,
+``alias_elimination!``).
 
 Published Functions
 -------------------
@@ -10,9 +13,13 @@ Published Functions
 
 :func:`aag_bareiss`
     Bareiss factorisation of the integer-linear subsystem.
+
+:func:`get_new_mm`
+    Rebase the integer-linear subsystem after equation and variable
+    deletion.
 """
 
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from cubie.odesystems.symbolic.structural.clil import (
     SparseMatrixCLIL,
@@ -83,6 +90,53 @@ def aag_bareiss(
 
     pivots = bareiss(mm, [is_linear_variables, is_highest_diff, None])
     return solvable_variables, pivots
+
+
+def get_new_mm(
+    aliases: Dict[int, Union[int, Dict[int, int]]],
+    old_to_new_eq: List[int],
+    old_to_new_var: List[int],
+    mm: SparseMatrixCLIL,
+) -> SparseMatrixCLIL:
+    """Rebase ``mm`` onto renumbered equations and variables.
+
+    Parameters
+    ----------
+    aliases
+        Removed variables and their targets; not read.
+    old_to_new_eq
+        New index of each old equation, ``-1`` for a deleted one.
+    old_to_new_var
+        New index of each old variable, ``-1`` for a deleted one.
+    mm
+        The integer-linear subsystem on the old indices.
+
+    Returns
+    -------
+    SparseMatrixCLIL
+        The rows of kept equations that hold only kept variables, on
+        the new indices.
+    """
+
+    new_row_cols = []
+    new_row_vals = []
+    new_nzrows = []
+    for i, eq in enumerate(mm.nzrows):
+        if old_to_new_eq[eq] < 0:
+            continue
+        cols = mm.row_cols[i]
+        if any(old_to_new_var[v] < 0 for v in cols):
+            continue
+        new_row_cols.append([old_to_new_var[v] for v in cols])
+        new_row_vals.append(mm.row_vals[i])
+        new_nzrows.append(old_to_new_eq[eq])
+    return SparseMatrixCLIL(
+        sum(1 for ieq in old_to_new_eq if ieq >= 0),
+        sum(1 for iv in old_to_new_var if iv >= 0),
+        new_nzrows,
+        new_row_cols,
+        new_row_vals,
+    )
 
 
 def force_var_to_zero(

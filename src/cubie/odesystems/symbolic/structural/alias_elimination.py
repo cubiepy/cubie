@@ -4,11 +4,18 @@ Ports MTK's ``alias_elimination.jl`` (perfect-alias elimination via a
 sign-tracking union-find, plus the integer-linear alias pass built on
 singularity removal).
 
+``trivial_tearing`` is ported from ModelingToolkit.jl (commit
+c4177c335, ``src/systems/systemstructure.jl``, ``trivial_tearing!``).
+
 Published Functions
 -------------------
 :func:`eliminate_perfect_aliases`
     Remove ``v ~ w`` / ``v ~ -w`` equations, substituting a chosen
     target through the system.
+
+:func:`trivial_tearing`
+    Remove explicit equations whose solved variable occurs nowhere
+    else, recording them as observed.
 
 :func:`alias_elimination`
     Integer-linear alias pass: singularity removal followed by
@@ -385,9 +392,91 @@ def eliminate_perfect_aliases(
     vars_to_rm = []
     aliases = _find_perfect_aliases(state, eqs_to_rm, vars_to_rm)
     old_to_new_eq, old_to_new_var = state.rm_eqs_vars(
-        eqs_to_rm, vars_to_rm, eqs_sorted_and_uniqued=True
+        eqs_to_rm, vars_to_rm
     )
     return old_to_new_eq, old_to_new_var, aliases
+
+
+def trivial_tearing(state: StructuralState) -> None:
+    """Tear explicit observed equations before simplification.
+
+    An equation ``x ~ f(...)`` is torn when ``x`` is an unknown that
+    is neither irreducible nor part of a derivative chain, occurs in
+    no other equation that is not already torn, does not occur in
+    ``f``, and every other variable of the equation occurs in some
+    other equation that is not torn. Torn equations and their
+    variables are removed from ``state`` and the equations appended
+    to ``state.additional_observed``.
+
+    Parameters
+    ----------
+    state
+        The structural state, mutated in place.
+    """
+
+    trivial_idxs = set()
+    blacklist = set()
+    torn_eqs = []
+    matched_vars = set()
+    var_to_idx = state.var2idx
+    sys_eqs = state.eqs
+
+    state.structure.complete()
+    var_to_diff = state.structure.var_to_diff
+    graph = state.structure.graph
+    while True:
+        added_equation = False
+        for i, eq in enumerate(state.original_eqs):
+            if i in trivial_idxs or i in blacklist:
+                continue
+            vari = var_to_idx.get(eq.lhs)
+            if vari is None:
+                continue
+            if eq.lhs in state.irreducibles:
+                blacklist.add(i)
+                continue
+            # A var ~ var equation is stored as 0 ~ 0.
+            sys_eq = sys_eqs[i]
+            if ir.is_zero(sys_eq.lhs) and ir.is_zero(sys_eq.rhs):
+                continue
+            if var_to_diff[vari] is not None:
+                continue
+            if var_to_diff.diff_to_primal[vari] is not None:
+                continue
+            eqidxs = [
+                e for e in graph.d_neighbors(vari) if e not in trivial_idxs
+            ]
+            if len(eqidxs) != 1:
+                continue
+            eqi = eqidxs[0]
+
+            isvalid = True
+            for v in graph.s_neighbors(eqi):
+                if v == vari or v in matched_vars:
+                    continue
+                n_untorn = sum(
+                    1 for e in graph.d_neighbors(v) if e not in trivial_idxs
+                )
+                # One of the counted equations is eqi itself.
+                isvalid = n_untorn > 1
+                if not isvalid:
+                    break
+            if not isvalid:
+                continue
+            if eq.lhs in ir.free_atoms(eq.rhs):
+                blacklist.add(i)
+                continue
+
+            added_equation = True
+            trivial_idxs.add(eqi)
+            torn_eqs.append(eq)
+            matched_vars.add(vari)
+
+        if not added_equation:
+            break
+
+    state.rm_eqs_vars(sorted(trivial_idxs), sorted(matched_vars))
+    state.additional_observed.extend(torn_eqs)
 
 
 def _build_expr_from_coeffs_vars(
