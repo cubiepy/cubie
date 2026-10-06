@@ -1030,8 +1030,7 @@ def test_user_derivative_jacobian_calls_the_third_helper(
 
 class TestDriverDerivatives:
     def _derivative(self, parsed, driver, order=1):
-        """Return the symbol the equations read for the order-th
-        time derivative of driver."""
+        """Return the symbol read for driver's order-th derivative."""
         symbols = [
             symbol
             for symbol, source in parsed.driver_derivatives.items()

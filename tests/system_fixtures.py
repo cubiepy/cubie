@@ -638,16 +638,11 @@ def build_user_derivative_system(precision: np_dtype) -> BaseODE:
     )
 
 
-# ---------------------------------------------------------------------------
-# DAEs whose reduced dynamics read a driver's time derivatives
-# ---------------------------------------------------------------------------
-
-# Index reduction differentiates the drive constraint, so dz reads
-# the drive's time derivative: y = d(drive)/dt.
+# y = d(drive)/dt.
 DRIVER_DERIVATIVE_EQUATIONS = ["dx = y", "0 = x - drive", "dz = -z + y"]
 DRIVER_DERIVATIVE_STATES = {"z": 0.5}
 
-# Two differentiations of the drive constraint: w = d2(drive)/dt2.
+# w = d2(drive)/dt2.
 DRIVER_SECOND_DERIVATIVE_EQUATIONS = [
     "dx = y",
     "dy = w",

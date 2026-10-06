@@ -29,8 +29,7 @@ class SystemIR:
     observable_symbols
         Observable symbols ordered by observable index.
     driver_symbols
-        Drivers-buffer symbols ordered by slot: the drivers, then the
-        driver time derivatives the equations read.
+        Drivers-buffer symbols by slot: drivers, then their derivatives.
     state_index, dxdt_index, driver_index
         Symbol-to-position lookups for the ordered collections.
     arrayrefs
@@ -117,8 +116,7 @@ def system_ir(equations, index_map) -> SystemIR:
     drivers, driver_index = _ordered_syms(
         index_map.drivers.index_map
     )
-    # Each driver derivative the equations read takes the next drivers
-    # buffer slot after the drivers.
+    # Driver derivatives take the slots after the drivers.
     derivative_slots = tuple(
         getattr(equations, "driver_derivatives", None) or {}
     )

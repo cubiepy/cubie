@@ -115,9 +115,8 @@ class ParsedEquations:
         Solver mass matrix derived by structural simplification as
         nested row tuples; ``None`` for solved (identity) systems.
     driver_derivatives
-        Driver time-derivative symbols the equations read, mapped to
-        ``(driver, order)`` and ordered by driver name then order; each
-        takes the next drivers-buffer slot after the drivers.
+        Driver derivative symbols read, to ``(driver, order)``, in
+        drivers-buffer slot order after the drivers.
     """
 
     ordered: Tuple[Tuple[ir_expr.Expr, ir_expr.Expr], ...]

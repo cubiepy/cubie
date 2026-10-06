@@ -140,8 +140,7 @@ class SystemSizes:
     swept_parameters
         Number of swept parameters.
     drivers
-        Length of the drivers buffer: the drivers, then any driver
-        time derivatives the device functions read.
+        Drivers-buffer length: drivers plus driver derivatives read.
 
     Notes
     -----
@@ -171,8 +170,8 @@ class ODEData(CUDAFactoryConfig):
         Precision factory used for numerical calculations. Defaults to
         :class:`numpy.float32`.
     num_drivers
-        Length of the drivers buffer: the drivers, then any driver
-        time derivatives the device functions read. Defaults to ``1``.
+        Drivers-buffer length: drivers plus driver derivatives read.
+        Defaults to ``1``.
     swept_parameters
         Names of the parameters read from the parameters array, in
         row order.
@@ -355,9 +354,8 @@ class ODEData(CUDAFactoryConfig):
         precision
             Precision factory used for calculations.
         num_drivers
-            Length of the drivers buffer: the drivers, then any driver
-            time derivatives the device functions read. Defaults to
-            ``1``.
+            Drivers-buffer length: drivers plus driver derivatives read.
+            Defaults to ``1``.
         operation_ordering
             Generated-operation ordering policy: stable ``"kahn"``,
             fixed ``"greedy"`` or ``"dfs"``, or thresholded

@@ -47,8 +47,7 @@ def _driver_derivatives(
     registry: DerivativeRegistry,
     driver_names: Iterable[str],
 ) -> Dict[ir.Sym, Tuple[ir.Sym, int]]:
-    """Map each driver derivative the simplified system reads to its
-    driver and derivative order, ordered by driver name then order."""
+    """Map each driver derivative read to ``(driver, order)``, sorted."""
 
     expressions = [
         *simplified.dxdt.values(),
