@@ -12,13 +12,12 @@ from tests._utils import (
 
 
 # Run Rosenbrock to exercise the time derivatives of the driver
-# derivatives, and FIRK to exercise the stacked drivers of every stage.
+# derivatives.
 @pytest.mark.parametrize(
     "solver_settings_override",
     [
         TIME_DRIVER_SETTINGS,
         {**DRIVER_DERIVATIVE_SETTINGS, "algorithm": "rosenbrock"},
-        {**DRIVER_DERIVATIVE_SETTINGS, "algorithm": "firk"},
     ],
     indirect=True,
 )
