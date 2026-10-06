@@ -157,12 +157,9 @@ def create_ODE_system(
     user_functions
         Custom callables referenced within ``dxdt`` expressions.
     user_function_derivatives
-        Mapping of user-function names to their analytic derivatives:
-        one callable for the first derivative, or a list whose
-        ``k``-th entry is the ``(k+1)``-th derivative. The order-``n``
-        callable takes the function's arguments followed by ``n``
-        argument indices. Used by index reduction and the
-        Jacobian-based solver helpers.
+        User-function name to its derivative: one callable, or a list
+        in increasing order. Order ``n`` takes the arguments then ``n``
+        argument indices.
     name
         Identifier used for generated files. Defaults to the hash of the system
         definition.
@@ -404,12 +401,9 @@ class SymbolicODE(BaseODE):
         user_functions
             Custom callables referenced within ``dxdt`` expressions.
         user_function_derivatives
-            Mapping of user-function names to their analytic
-            derivatives: one callable for the first derivative, or a
-            list whose ``k``-th entry is the ``(k+1)``-th derivative.
-            The order-``n`` callable takes the function's arguments
-            followed by ``n`` argument indices. Used by index reduction
-            and the Jacobian-based solver helpers.
+            User-function name to its derivative: one callable, or a
+            list in increasing order. Order ``n`` takes the arguments
+            then ``n`` argument indices.
         name
             Identifier used for generated files. Defaults to the hash of the
             system definition.

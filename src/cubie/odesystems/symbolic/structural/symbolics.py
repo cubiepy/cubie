@@ -136,8 +136,7 @@ def total_derivative(
         The independent variable; explicit dependence differentiates
         through :func:`~.expr.diff`.
     derivative_names
-        User-function name to the name of its derivative helper,
-        passed to :func:`~.expr.diff`.
+        User-function name to its derivative helper's name.
 
     Notes
     -----

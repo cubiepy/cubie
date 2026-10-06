@@ -603,9 +603,7 @@ def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
     )
 
 
-# ---------------------------------------------------------------------------
-# Index-3 DAE whose reduction differentiates a user function twice
-# ---------------------------------------------------------------------------
+# Index-3 DAE whose reduction differentiates a user function twice.
 
 
 @cuda.jit(device=True, inline=True)
@@ -628,8 +626,6 @@ def growth_d3(x, i, j, k):
     return math.exp(x)
 
 
-# Index reduction differentiates the constraint twice, reading
-# growth_d1 and growth_d2; the Jacobian of the result reads growth_d3.
 # x = log(1 + p*t), v = p/(1 + p*t), w = -p**2/(1 + p*t)**2.
 USER_DERIVATIVE_EQUATIONS = ["dx = v", "dv = w", "0 = growth(x) - p*t"]
 USER_DERIVATIVE_PARAMETERS = {"p": 1.0}

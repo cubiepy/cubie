@@ -212,8 +212,8 @@ def parse_input(
     user_functions
         Mapping of callable names used in equations to their implementations.
     user_function_derivatives
-        Mapping of callable names to derivative helper functions, one
-        callable or a list of increasing derivative orders.
+        Callable name to its derivative helper, or a list in
+        increasing order.
     strict
         When ``False``, infer missing symbol declarations from equation usage.
     state_units

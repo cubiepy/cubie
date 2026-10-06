@@ -791,8 +791,7 @@ class TestUserFunctionDerivatives:
         return names
 
     def test_reduction_calls_each_supplied_derivative(self):
-        # Two differentiations of growth(x) read its first and second
-        # derivative helpers.
+        # Two differentiations read the first and second helpers.
         _i, _s, _f, parsed, _h = parse_dae_input(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},
