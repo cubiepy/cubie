@@ -49,6 +49,7 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
     _normalise_indexed_tokens,
     _rename_user_calls,
     _sanitise_input_math,
+    derivative_chain,
 )
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
@@ -150,18 +151,23 @@ def _derivative_print_names(
 ) -> Dict[str, str]:
     """Map renamed function names to derivative placeholder names.
 
-    Only functions with a user-supplied derivative helper appear;
-    every other function differentiates to the default
-    ``d_<name>`` placeholder.
+    Each supplied derivative helper maps the function, or the helper
+    one order below it, to its own name, so differentiating a helper
+    calls the next one. Every other function differentiates to the
+    default ``d_<name>`` placeholder.
     """
 
     names: Dict[str, str] = {}
-    for orig, deriv in (user_function_derivatives or {}).items():
+    for orig, entry in (user_function_derivatives or {}).items():
         if user_functions is not None and orig not in user_functions:
             continue
-        printed = getattr(deriv, "__name__", None)
-        if printed:
-            names[rename.get(orig, orig)] = printed
+        target = rename.get(orig, orig)
+        for deriv in derivative_chain(entry):
+            printed = getattr(deriv, "__name__", None)
+            if not printed:
+                break
+            names[target] = printed
+            target = printed
     return names
 
 

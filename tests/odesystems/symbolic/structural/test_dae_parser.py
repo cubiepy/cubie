@@ -17,6 +17,14 @@ from cubie.odesystems.symbolic.structural.errors import (
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import run_device_dxdt, run_device_observables
+from tests.system_fixtures import (
+    USER_DERIVATIVE_EQUATIONS,
+    USER_DERIVATIVE_PARAMETERS,
+    growth,
+    growth_d1,
+    growth_d2,
+    growth_d3,
+)
 
 
 def parse_dae_input(**kwargs):
@@ -764,3 +772,61 @@ class TestStructuralInputPaths:
         )
         satisfied = [holds(index_map, parsed, c) for c in constraints]
         assert satisfied.count(True) == 2
+
+
+class TestUserFunctionDerivatives:
+    def _calls(self, parsed):
+        """Return the names of every function the equations call."""
+        names = set()
+
+        def walk(node):
+            if isinstance(node, ir.Call):
+                names.add(node.name)
+            for child in getattr(node, "args", ()):
+                if isinstance(child, ir.Expr):
+                    walk(child)
+
+        for _, rhs in parsed.ordered:
+            walk(rhs)
+        return names
+
+    def test_reduction_calls_each_supplied_derivative(self):
+        # Two differentiations of growth(x) read its first and second
+        # derivative helpers.
+        _i, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=USER_DERIVATIVE_EQUATIONS,
+            states={"x": 0.0},
+            observables=["v", "w"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={
+                "growth": [growth_d1, growth_d2, growth_d3]
+            },
+        )
+        assert {"growth_d1", "growth_d2"} <= self._calls(parsed)
+        assert parsed.derivative_names == {
+            "growth_": "growth_d1",
+            "growth_d1": "growth_d2",
+            "growth_d2": "growth_d3",
+        }
+
+    def test_single_derivative_names_first_helper(self):
+        _i, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = v", "0 = growth(x) - p*t"],
+            states={"x": 0.0},
+            observables=["v"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={"growth": growth_d1},
+        )
+        assert "growth_d1" in self._calls(parsed)
+        assert parsed.derivative_names == {"growth_": "growth_d1"}
+
+    def test_non_callable_derivative_entry_rejected(self):
+        with pytest.raises(TypeError, match="list of callables"):
+            parse_dae_input(
+                dxdt=["dx = -growth(x)"],
+                states={"x": 0.0},
+                user_functions={"growth": growth},
+                user_function_derivatives={"growth": [growth_d1, 2.0]},
+            )
