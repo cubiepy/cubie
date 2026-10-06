@@ -716,14 +716,26 @@ class TestSingularIntegerSCC:
         # Conservative mode admits only unit coefficients into the
         # integer subsystem; the 2x + 2y - w row must leave mm
         # entirely rather than desync its coefficient row, and the
-        # system tears structurally.
-        x, y = syms("x y")
+        # system tears structurally: the unit row x + y + w = 0 is
+        # solved for one of x, y and the 2x + 2y - w row stays a
+        # residual unchanged.
+        x, y, w = syms("x y w")
         result = structural_simplify(
             self._singular_state(), conservative=True
         )
         assert len(result.residuals) == len(result.algebraic_states)
-        obs = dict(result.observed)
-        assert x in ir.free_atoms(obs[y])
+        assert len(result.observed) == 1
+        solved, expression = result.observed[0]
+        assert solved in (x, y)
+        assert sp.simplify(
+            to_sympy(solved - expression - (x + y + w))
+        ) == 0
+        nonunit_row = 2 * x + 2 * y - w
+        assert any(
+            sp.simplify(to_sympy(r - nonunit_row)) == 0
+            or sp.simplify(to_sympy(r + nonunit_row)) == 0
+            for r in result.residuals
+        )
 
 
 class TestPantelidesAndDummyDerivatives:
