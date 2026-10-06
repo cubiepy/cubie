@@ -183,9 +183,7 @@ class TestDigraphViews:
         matching = Matching([1, 0]).complete(2)
         dig = DiCMOBiGraphF(graph, matching)
         assert list(dig.outneighbors(0)) == [1]
-        order = toposort_equations(dig, [0, 1])
-        # Evaluation order is the reverse of the toposort.
-        assert list(reversed(order)) == [1, 0]
+        assert toposort_equations(dig, [0, 1]) == [1, 0]
 
     def test_neighborhood_in(self):
         graph = build_graph(2, 3, [(0, 0), (0, 1), (1, 1), (1, 2)])

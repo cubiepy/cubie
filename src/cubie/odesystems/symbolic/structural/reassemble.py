@@ -378,9 +378,7 @@ def get_sorted_scc(
         e = var_eq_matching[v]
         if isinstance(e, int):
             scc_solved_eqs.append(e)
-    sorted_solved = list(
-        reversed(toposort_equations(digraph, scc_solved_eqs))
-    )
+    sorted_solved = toposort_equations(digraph, scc_solved_eqs)
     solved_set = set(scc_solved_eqs)
     scc_eqs_sorted = sorted_solved + [
         e for e in scc_eqs if e not in solved_set
