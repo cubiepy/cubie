@@ -17,8 +17,7 @@ BipartiteGraphs.jl (commit 647b6a42, v0.1.14, ``src/dicmobigraph.jl``,
 c4177c335, ``src/structural_transformation/utils.jl``,
 ``find_var_sccs``, and
 ``src/structural_transformation/symbolics_tearing.jl``,
-``get_sorted_scc``). The topological sort ``_kahn_toposort`` is
-cubie's own.
+``get_sorted_scc``).
 
 BipartiteGraphs.jl: Copyright (c) 2022 Aayush Sabharwal; MIT.
 Graphs.jl: Copyright (c) 2015 Seth Bromberger and other contributors;

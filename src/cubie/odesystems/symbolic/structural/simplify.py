@@ -13,9 +13,7 @@ ModelingToolkit.jl (commit a2b6dc56, ``src/systems/systemstructure.jl``,
 (``src/structural_transformation/pantelides.jl``,
 ``pantelides_reassemble``) and ``_integer_jacobian`` from the integer
 Jacobian of ``dummy_derivative`` in the same commit
-(``src/structural_transformation/symbolics_tearing.jl``). Running
-singular derivative-block removal first is cubie's own, as are
-``SimplifiedSystem`` and the result assembly.
+(``src/structural_transformation/symbolics_tearing.jl``).
 
 Published Classes
 -----------------

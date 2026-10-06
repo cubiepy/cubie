@@ -15,9 +15,7 @@ Ported from ModelingToolkit.jl (commit c4177c335,
 ``get_sorted_scc``, ``EquationGenerator``, ``get_extra_eqs_vars``,
 ``generate_system_equations``, ``reorder_vars`` and ``var_order``,
 each from the function of the same name less any leading underscore
-or trailing ``!``. ``torn_partner``, which pairs each residual with
-the torn variable its matching reaches, is cubie's own, as are the
-``ReassembledSystem`` container and the ``_solve_for`` helper.
+or trailing ``!``.
 
 Published Classes
 -----------------

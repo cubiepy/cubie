@@ -13,9 +13,8 @@ and ``bareiss_update_virtual_colswap_clil``
 ``find_masked_pivot`` from ``src/singularity_removal.jl``. ``bareiss``
 combines the elimination loop of ``bareiss!`` (``src/math/bareiss.jl``)
 with the staged masked pivot search of ``do_bareiss!``
-(``src/singularity_removal.jl``). ``SparseMatrixCLIL.dropzeros`` is
-cubie's own. Arithmetic uses Python's arbitrary-precision integers
-without overflow checks.
+(``src/singularity_removal.jl``). Arithmetic uses Python's
+arbitrary-precision integers without overflow checks.
 
 Published Classes
 -----------------

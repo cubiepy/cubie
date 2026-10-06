@@ -39,7 +39,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`/`config_has
 | `engine/` | Hash-consed expression IR and its compute passes: SymPy conversion, differentiation, substitution, CSE, ordering, pruning, and the CUDA printer (see `engine/AGENTS.md`). |
 | `codegen/` | CUDA source emitters for dxdt, observables, Jacobian/JVP, linear operators, preconditioners, residuals, and time derivatives, all computing on the `engine/` IR (see `codegen/AGENTS.md`). |
 | `parsing/` | Converts string / SymPy / callable / CellML input into `ParsedEquations` + `IndexedBases`, plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end feeds every system through `structural/` (see `parsing/AGENTS.md`). |
-| `structural/` | Structural simplification and tearing (singular derivative-block removal, alias elimination, Pantelides index reduction, dummy derivatives, exact integer-linear SCC matching, Modia tearing); runs on every parsed system. Ported from ModelingToolkit.jl (c4177c335, a2b6dc56), StateSelection.jl (74df007e), BipartiteGraphs.jl (647b6a42), Graphs.jl (dffc7a64) and Modia.jl (via ModelingToolkit.jl), plus cubie's own passes (see `structural/AGENTS.md`). |
+| `structural/` | Structural simplification and tearing (singular derivative-block removal, alias elimination, Pantelides index reduction, dummy derivatives, exact integer-linear SCC matching, Modia tearing); runs on every parsed system. Ported from ModelingToolkit.jl (c4177c335, a2b6dc56), StateSelection.jl (74df007e), BipartiteGraphs.jl (647b6a42), Graphs.jl (dffc7a64) and Modia.jl (via ModelingToolkit.jl); see `structural/AGENTS.md`. |
 
 ## get_solver_helper
 `build()` compiles only `dxdt` and `observables`; every other device function comes from

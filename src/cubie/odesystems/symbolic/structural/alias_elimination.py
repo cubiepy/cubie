@@ -11,8 +11,6 @@ are ported from ModelingToolkit.jl (commit a2b6dc56,
 ``build_expr_from_coeffs_vars!`` and ``alias_elimination!``).
 ``trivial_tearing`` is ported from ModelingToolkit.jl (commit
 c4177c335, ``src/systems/systemstructure.jl``, ``trivial_tearing!``).
-The coefficient helpers ``_term_coeff_rest`` and ``_add_coeffs_dict``
-are cubie's own.
 
 Published Functions
 -------------------

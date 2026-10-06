@@ -38,7 +38,8 @@ result.
 
 ## Sources
 Ported code is translated to Python with 0-based indices; each module docstring names the
-source (package, commit, file, function) of every part, or says it is cubie's own.
+source (package, commit, file, function) of every ported part; code written for cubie in place
+of a ported design is marked "Not ported".
 
 | Source | Licence | Used in |
 |--------|---------|---------|
@@ -49,11 +50,7 @@ source (package, commit, file, function) of every part, or says it is cubie's ow
 | Graphs.jl dffc7a64 (v1.15.0) | BSD-2-Clause | `digraph.py` (`tarjan_scc`, `neighborhood_in`, `IncrementalCycleTracker`) |
 | Modia.jl, via ModelingToolkit.jl c4177c335 | MIT | `tearing.py` (Modia tearing) |
 
-Cubie's own: `derivative_block.py`, `exact_matching.py`, `symbolics.py`, the variable ranks,
-`eq_derivative` integer-matrix row and integer-coefficient admission in
-`system_structure.py`, `torn_partner` in `reassemble.py`, the topological sort in
-`digraph.py`, and `SimplifiedSystem`. Licence texts are in the repository's
-`THIRD_PARTY_LICENSES`.
+Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
 
 ## Conventions
 - Derivative terms are plain registered symbols (`DerivativeRegistry`), not
