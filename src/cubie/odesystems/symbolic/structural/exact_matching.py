@@ -1,6 +1,6 @@
 """Exact matching of integer-linear algebraic loops.
 
-Cubie's own design. A strongly connected component of homogeneous
+Not ported. A strongly connected component of homogeneous
 integer-linear equations is reduced with fraction-free elimination
 into equations that solve their variables explicitly one after
 another, so tearing never has to iterate on it.

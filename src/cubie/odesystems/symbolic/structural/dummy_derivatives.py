@@ -358,6 +358,7 @@ def _tear_with_dummies(
     def varfilter(v: int) -> bool:
         return can_eliminate[v]
 
+    # Not ported: exact matching runs before Modia tearing.
     match_linear_sccs(state, isder, varfilter)
     modia_tearing = ModiaTearing(isder=isder, varfilter=varfilter)
     tearing_result, _ = modia_tearing(

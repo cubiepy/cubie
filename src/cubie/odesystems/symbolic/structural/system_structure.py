@@ -13,9 +13,6 @@ equation renumbering and graph rebuild of ModelingToolkit.jl (commit
 c4177c335, ``src/systems/alias_elimination.jl``,
 ``alias_elimination!``).
 
-The integer-matrix row ``StructuralState.eq_derivative`` adds for a
-differentiated equation is cubie's own.
-
 Published Classes
 -----------------
 :class:`Equation`
@@ -493,7 +490,7 @@ class StructuralState:
                 eq_diff, to_rm, coeffs, **solv_kwargs
             )
             if self.mm is not None and all_int_vars and ir.is_zero(rem):
-                # The derivative is homogeneous integer-linear.
+                # Not ported: an integer-linear derivative joins mm.
                 self.mm.nzrows.append(eq_diff)
                 self.mm.row_cols.append(list(s.graph.s_neighbors(eq_diff)))
                 self.mm.row_vals.append(coeffs)
