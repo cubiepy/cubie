@@ -117,23 +117,26 @@ class ParsedSystem:
         }
         unknown_names = set(states) | set(observables)
         driver_derivatives = equations.driver_derivatives
+        # The reduced equations read driver derivatives as knowns.
+        known_with_derivatives = {
+            **known_symbol_map,
+            **{
+                symbol.name: sp.Symbol(symbol.name, real=True)
+                for symbol in driver_derivatives
+            },
+        }
         normalised = normalise_input(
             list(equations.ordered),
             unknown_names,
-            {
-                **known_symbol_map,
-                **{
-                    symbol.name: sp.Symbol(symbol.name, real=True)
-                    for symbol in driver_derivatives
-                },
-            },
+            known_with_derivatives,
             user_functions,
             user_function_derivatives,
             False,
             set(states),
         )
         normalised.derivative_names.update(equations.derivative_names)
-        # Lower orders first, so each derivative's chain exists.
+        # Register lower orders first, so that registry.derivative
+        # finds each lower-order symbol already registered.
         registry = normalised.registry
         for symbol, (driver, order) in sorted(
             driver_derivatives.items(), key=lambda item: item[1][1]

@@ -928,7 +928,6 @@ def driver_settings(
 def driver_array(
     driver_settings,
     solver_settings,
-    precision,
     system,
 ):
     """Instantiate :class:`ArrayInterpolator` for the configured system."""
@@ -937,7 +936,6 @@ def driver_array(
         return None
 
     return ArrayInterpolator(
-        precision=precision,
         drivers=driver_settings,
         order=int(solver_settings["order"]),
         wrap=bool(solver_settings["wrap"]),

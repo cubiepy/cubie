@@ -1078,13 +1078,14 @@ def test_rebuilt_system_keeps_driver_derivatives(system, precision):
 @pytest.mark.parametrize(
     "solver_settings_override", [DRIVER_DERIVATIVE_SYSTEM], indirect=True
 )
-def test_read_driver_derivatives_take_slots_by_order(system):
-    # Orders 1 and 2 are read, so slots 1 and 2 follow the drive.
-    assert system.driver_derivative_slots == ((0, 1), (0, 2))
+def test_read_driver_derivatives_follow_the_drive_by_order(system):
+    # Orders 1 and 2 are read, so they take buffer entries 1 and 2.
+    assert system.driver_derivatives == ((0, 1), (0, 2))
     assert system.sizes.drivers == 3
+    assert system.sizes.driver_derivatives == 2
     sysir = system_ir(system.equations, system.indices)
-    slots = {
+    entries = {
         order: sysir.arrayrefs[symbol.name]
         for symbol, (_, order) in system.equations.driver_derivatives.items()
     }
-    assert slots == {1: ir.arr("drivers", 1), 2: ir.arr("drivers", 2)}
+    assert entries == {1: ir.arr("drivers", 1), 2: ir.arr("drivers", 2)}

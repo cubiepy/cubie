@@ -11,7 +11,8 @@ from tests._utils import (
 )
 
 
-# Rosenbrock reads slot time derivatives; FIRK stacks stage drivers.
+# Rosenbrock reads the time derivatives of the driver derivatives,
+# and FIRK stacks the drivers of every stage.
 @pytest.mark.parametrize(
     "solver_settings_override",
     [

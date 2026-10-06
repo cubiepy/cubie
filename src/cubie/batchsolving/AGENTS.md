@@ -148,7 +148,11 @@ for reuse; they raise `ValueError` after a chunked run.
 seeded from the kernel-owned interpolator and refreshed through `kernel.update`; shape
 checks compare against it. A driverless kernel's layout has a zero first dimension. The
 `drivers` setting is a `DriverSamples`; `driver_sample_period` is its sample spacing and
-`dt` the integrator timestep.
+`dt` the integrator timestep. The kernel owns the interpolator and passes it
+`ArrayInterpolator.system_inputs(system)` (drivers-buffer length, driver-derivative count
+and list) on construction and on every update, as `SingleIntegratorRunCore` does for its
+children; a swept or fixed parameter change can change which driver derivatives the
+reduced equations read.
 
 ## Candidate comparisons (`Solver.calibrate`, `Solver.optimize`)
 - Both run on the solver through `comparison.ComparisonRunner`: one device input pair,

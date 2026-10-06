@@ -76,7 +76,10 @@ from cubie.cubie_cache import CUBIECache
 from cubie.time_logger import CUDAEvent, default_timelogger
 from numpy.typing import NDArray
 
-from cubie.array_interpolator import ArrayInterpolator
+from cubie.array_interpolator import (
+    ALL_INTERPOLATOR_PARAMETERS,
+    ArrayInterpolator,
+)
 from cubie.memory import default_memmgr
 from cubie.memory.mem_manager import (
     ALL_MEMORY_MANAGER_PARAMETERS,
@@ -346,13 +349,15 @@ class BatchSolverKernel(CUDAFactory):
         self._memory_manager = self._setup_memory_manager(memory_settings)
         self.resident_blocks = None
 
-        self.driver_interpolator = ArrayInterpolator(
-            precision=precision,
-            memory_manager=self._memory_manager,
+        interpolator_settings, _ = merge_kwargs_into_settings(
+            settings, ALL_INTERPOLATOR_PARAMETERS
         )
-        self.driver_interpolator.update(
-            {**settings, **ArrayInterpolator.system_inputs(system)},
-            silent=True,
+        self.driver_interpolator = ArrayInterpolator(
+            memory_manager=self._memory_manager,
+            **{
+                **interpolator_settings,
+                **ArrayInterpolator.system_inputs(system),
+            },
         )
 
         system_name = system.name
@@ -546,12 +551,14 @@ class BatchSolverKernel(CUDAFactory):
                 "This solver has been closed and its GPU resources "
                 "released; build a new Solver to run again."
             )
-        if self.system.sizes.drivers and (
+        sizes = self.system.sizes
+        if sizes.drivers and (
             self.single_integrator._loop.drivers_fn is None
         ):
             raise ValueError(
-                "System declares drivers but no driver samples are "
-                "given; pass drivers= to solve."
+                f"System declares {sizes.drivers - sizes.driver_derivatives}"
+                " driver(s) but no driver samples are given; pass "
+                "drivers= to solve."
             )
         stream = self.stream
         self._memory_manager.begin_work(self)

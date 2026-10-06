@@ -282,7 +282,16 @@ class DerivativeRegistry:
         return dsym
 
     def register(self, var: ir.Sym, dsym: ir.Sym) -> None:
-        """Record existing symbol ``dsym`` as the derivative of ``var``."""
+        """Record existing symbol ``dsym`` as the derivative of ``var``.
+
+        Parameters
+        ----------
+        var
+            The symbol differentiated.
+        dsym
+            The symbol standing for its time derivative; its name is
+            reserved so no new derivative symbol reuses it.
+        """
 
         self.reserved.add(dsym.name)
         self._to_derivative[var] = dsym

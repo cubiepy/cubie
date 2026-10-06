@@ -2508,7 +2508,8 @@ TIME_DRIVER_SETTINGS = {
     "boundary_condition": "periodic",
 }
 
-# State only: the slots' float32 spline error exceeds 1e-5.
+# Save states only: the float32 spline error in the driver
+# derivatives exceeds 1e-5.
 DRIVER_DERIVATIVE_SETTINGS = {
     **TIME_DRIVER_SETTINGS,
     "system_type": "driver_derivative",

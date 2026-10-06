@@ -115,6 +115,7 @@ class BaseODE(CUDAFactory):
         operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
         swept_parameters: Iterable[str] = (),
+        driver_derivatives: Tuple[Tuple[int, int], ...] = (),
     ) -> None:
         """Initialize the ODE system.
 
@@ -148,6 +149,9 @@ class BaseODE(CUDAFactory):
         swept_parameters
             Names of the parameters read from the parameters array.
             Every other parameter compiles in at its default.
+        driver_derivatives
+            ``(driver index, order)`` of each driver derivative the
+            equations read, in drivers-buffer order after the drivers.
         """
         super().__init__()
         system_data = ODEData.from_BaseODE_initargs(
@@ -161,6 +165,7 @@ class BaseODE(CUDAFactory):
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
             swept_parameters=swept_parameters,
+            driver_derivatives=driver_derivatives,
         )
         self.setup_compile_settings(system_data)
         self.name = name
@@ -293,9 +298,13 @@ class BaseODE(CUDAFactory):
         return self.compile_settings.num_drivers
 
     @property
-    def driver_derivative_slots(self) -> Tuple[Tuple[int, int], ...]:
-        """``(driver column, order)`` of each derivative slot."""
-        return ()
+    def driver_derivatives(self) -> Tuple[Tuple[int, int], ...]:
+        """``(driver index, order)`` of each driver derivative read.
+
+        The derivatives sit in the drivers buffer after the drivers, in
+        this order.
+        """
+        return self.compile_settings.driver_derivatives
 
     @property
     def sizes(self):
