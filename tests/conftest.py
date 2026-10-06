@@ -79,6 +79,8 @@ from tests.system_fixtures import (
     build_three_state_nonlinear_system,
     build_three_state_very_stiff_system,
     build_time_array_driver_system,
+    build_driver_derivative_system,
+    build_driver_second_derivative_system,
     build_time_function_driver_system,
     build_two_driver_system,
     build_torn_driver_system,
@@ -339,6 +341,10 @@ def system(request, solver_settings_override, precision):
         return build_time_array_driver_system(precision)
     if model_type == "torn_driver":
         return build_torn_driver_system(precision)
+    if model_type == "driver_derivative":
+        return build_driver_derivative_system(precision)
+    if model_type == "driver_second_derivative":
+        return build_driver_second_derivative_system(precision)
     if model_type == "torn_time":
         return build_torn_time_system(precision)
     if model_type == "torn_unsolvable":

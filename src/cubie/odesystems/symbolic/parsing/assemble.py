@@ -8,7 +8,7 @@ throughout; SymPy appears only in the ``all_symbols`` table consumed
 by GUIs and device-function injection.
 """
 
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from warnings import warn
 
 import sympy as sp
@@ -24,15 +24,49 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
     TIME_SYMBOL,
     derivative_helpers,
 )
+from cubie.odesystems.symbolic.structural.reassemble import (
+    SimplifiedSystem,
+)
 from cubie.odesystems.symbolic.structural.simplify import (
     structural_simplify,
 )
-from cubie.odesystems.symbolic.structural.symbolics import fixpoint_sub
+from cubie.odesystems.symbolic.structural.symbolics import (
+    DerivativeRegistry,
+    fixpoint_sub,
+)
 from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie._utils import devfunc_returns_nonfloat
+
+
+def _driver_derivatives(
+    simplified: SimplifiedSystem,
+    registry: DerivativeRegistry,
+    driver_names: Iterable[str],
+) -> Dict[ir.Sym, Tuple[ir.Sym, int]]:
+    """Map each driver derivative the simplified system reads to its
+    driver and derivative order, ordered by driver name then order."""
+
+    expressions = [
+        *simplified.dxdt.values(),
+        *simplified.residuals,
+        *(expr for _, expr in simplified.observed),
+    ]
+    atoms = set().union(*(ir.free_atoms(expr) for expr in expressions))
+    drivers = {ir.sym(name) for name in driver_names}
+    derivatives = {}
+    for atom in atoms:
+        driver, order = registry.base_and_order(atom)
+        if order > 0 and driver in drivers:
+            derivatives[atom] = (driver, order)
+    return dict(
+        sorted(
+            derivatives.items(),
+            key=lambda item: (item[1][0].name, item[1][1]),
+        )
+    )
 
 
 def _finalise_symbols_and_products(
@@ -44,6 +78,7 @@ def _finalise_symbols_and_products(
     derivative_names=None,
     extra_symbol_names=(),
     mass_matrix=None,
+    driver_derivatives=None,
 ):
     """Build ``all_symbols``, ``ParsedEquations``, and the hash."""
 
@@ -90,6 +125,7 @@ def _finalise_symbols_and_products(
         function_aliases=function_aliases,
         nonfloat_functions=nonfloat_functions,
         mass_matrix=mass_matrix,
+        driver_derivatives=driver_derivatives,
     )
     fn_hash = hash_system_definition(
         parsed_equations,
@@ -154,11 +190,15 @@ def assemble_simplified(
         {ir.sym(name) for name in known_symbol_map},
         ir.sym("t"),
         derivative_names=normalised.derivative_names,
+        drivers=[ir.sym(name) for name in driver_names],
         state_priorities=priorities,
         irreducibles=irreducible_syms,
     )
     simplified = structural_simplify(
         structural_state, **(simplify_options or {})
+    )
+    driver_derivatives = _driver_derivatives(
+        simplified, normalised.registry, driver_names
     )
 
     # Sorted, matching the layout IndexedBaseMap builds.
@@ -324,6 +364,7 @@ def assemble_simplified(
             derivative_names=normalised.derivative_names,
             extra_symbol_names=observed_names,
             mass_matrix=mass,
+            driver_derivatives=driver_derivatives,
         )
     )
     return (

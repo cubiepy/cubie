@@ -34,6 +34,7 @@ import math
 from types import MappingProxyType
 from typing import (
     Callable,
+    Dict,
     Iterable,
     Mapping,
     Optional,
@@ -91,11 +92,12 @@ class InterpolatorCache(CUDADispatcherCache):
     Attributes
     ----------
     drivers_fn
-        Device function evaluating every input at a time.
+        Device function evaluating every coefficient column at a
+        time: the inputs, then their requested time derivatives.
     driver_derivative_fn
-        Device function evaluating every input's time derivative.
+        Device function evaluating every column's time derivative.
     coefficients
-        Host ``(num_segments, num_inputs, order + 1)`` table.
+        Host ``(num_segments, num_columns, order + 1)`` table.
     coefficients_shape
         That table's layout.
     """
@@ -318,8 +320,15 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         selects ``"periodic"`` when wrapping, else ``"clamped"``.
     drivers : DriverSamples, optional
         The sampled drivers; ``None`` interpolates nothing.
+    derivative_columns : tuple of (int, int)
+        ``(input, order)`` of each coefficient column after the
+        inputs: the ``order``-th time derivative of sample column
+        ``input``. Supplied by the system, not the user.
     num_inputs : int
         Column count of the sample table.
+    num_columns : int
+        Coefficient columns: the inputs then ``derivative_columns``;
+        zero with no inputs.
     num_segments : int
         Polynomial segments in the table: samples minus one, plus two
         ghost segments for clamped non-wrapping inputs, zero with no
@@ -346,7 +355,15 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
             validators.instance_of(DriverSamples)
         ),
     )
+    derivative_columns: Tuple[Tuple[int, int], ...] = field(
+        default=(),
+        converter=lambda columns: tuple(
+            (int(column), int(order)) for column, order in columns
+        ),
+        validator=validators.instance_of(tuple),
+    )
     num_inputs: int = field(default=0, init=False)
+    num_columns: int = field(default=0, init=False)
     num_segments: int = field(default=0, init=False)
 
     def __attrs_post_init__(self):
@@ -358,10 +375,34 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
                 " splines.",
             )
         self._check_periodic(num_samples)
+        self._check_derivative_columns(num_inputs)
         object.__setattr__(self, "num_inputs", int(num_inputs))
+        object.__setattr__(
+            self,
+            "num_columns",
+            int(num_inputs + len(self.derivative_columns))
+            if num_inputs
+            else 0,
+        )
         object.__setattr__(
             self, "num_segments", self._segment_count(num_samples)
         )
+
+    def _check_derivative_columns(self, num_inputs: int) -> None:
+        """Reject derivative columns the spline cannot supply."""
+        for column, order in self.derivative_columns:
+            if order < 1 or order > self.order:
+                raise ValueError(
+                    f"The system reads the order-{order} time derivative "
+                    f"of a driver, but an order-{self.order} spline "
+                    f"supplies derivatives up to order {self.order}; "
+                    f"set the interpolation order to at least {order}."
+                )
+            if num_inputs and not 0 <= column < num_inputs:
+                raise ValueError(
+                    f"Derivative column reads input {column}, but the "
+                    f"samples hold {num_inputs} inputs."
+                )
 
     def _check_periodic(self, num_samples: int) -> None:
         """Reject periodic settings without wrap or matching ends."""
@@ -453,6 +494,11 @@ class ArrayInterpolator(CUDAFactory):
         )
         self._memory_manager = memory_manager
 
+    @classmethod
+    def system_inputs(cls, system: Any) -> Dict[str, Any]:
+        """Return interpolator settings from a system object."""
+        return dict(derivative_columns=system.driver_derivative_columns)
+
     # ---------------------------------------------------------------------- #
     # Evaluation function machinery
     # ---------------------------------------------------------------------- #
@@ -473,7 +519,7 @@ class ArrayInterpolator(CUDAFactory):
         precision = self.precision
 
         order = self.order
-        num_inputs = self.num_inputs
+        num_columns = self.num_columns
         resolution = precision(self.driver_sample_period)
         inv_resolution = precision(precision(1.0) / resolution)
         start_time = precision(self.t0)
@@ -530,7 +576,7 @@ class ArrayInterpolator(CUDAFactory):
 
             # Evaluate polynomials using Horner's rule
             for input_index in unroll_if(
-                range(num_inputs), unroll_other_small
+                range(num_columns), unroll_other_small
             ):
                 acc = zero_value
                 for k in unroll_if(
@@ -577,7 +623,7 @@ class ArrayInterpolator(CUDAFactory):
                 tau = precision(scaled - precision(seg))
 
             for input_index in unroll_if(
-                range(int32(num_inputs)), unroll_other_small
+                range(int32(num_columns)), unroll_other_small
             ):
                 acc = zero_value
                 for k in unroll_if(
@@ -619,7 +665,7 @@ class ArrayInterpolator(CUDAFactory):
     @property
     def coefficients_shape(self) -> Tuple[int, int, int]:
         """Exact coefficient layout captured by the device evaluators."""
-        return (self.num_segments, self.num_inputs, self.order + 1)
+        return (self.num_segments, self.num_columns, self.order + 1)
 
     # ---------------------------------------------------------------------- #
     # Inspection interface
@@ -675,7 +721,7 @@ class ArrayInterpolator(CUDAFactory):
         times_device = cuda.to_device(times, stream=stream)
         coefficients_device = cuda.to_device(coefficients, stream=stream)
         out_device = cuda.device_array(
-            (num_points, self.num_inputs),
+            (num_points, self.num_columns),
             dtype=self.precision,
             stream=stream,
         )
@@ -690,7 +736,7 @@ class ArrayInterpolator(CUDAFactory):
             out_device,
         )
         stream.synchronize()
-        return out_device.copy_to_host()
+        return out_device.copy_to_host()[:, : self.num_inputs]
 
     def plot_interpolated(
         self,
@@ -793,8 +839,9 @@ class ArrayInterpolator(CUDAFactory):
         Returns
         -------
         numpy.ndarray
-            Fresh pinned ``(num_segments, num_inputs, order + 1)``
-            array; zero-sized with no inputs.
+            Fresh pinned ``(num_segments, num_columns, order + 1)``
+            array: the inputs, then ``derivative_columns``; zero-sized
+            with no inputs.
 
         Raises
         ------
@@ -963,12 +1010,55 @@ class ArrayInterpolator(CUDAFactory):
         solution = np_solve(matrix, rhs)
         coefficients = solution.reshape(num_segments, order + 1, num_inputs)
         coefficients = np_transpose(coefficients, (0, 2, 1))
+        derived = self._derivative_coefficients(coefficients, falling)
+        coefficients = concatenate((coefficients, derived), axis=1)
         # Fresh pinned buffer per build.
         buffer = self._memory_manager.create_host_array(
             coefficients.shape, precision, "pinned"
         )
         buffer[...] = coefficients
         return buffer
+
+    def _derivative_coefficients(
+        self, coefficients: FloatArray, falling: FloatArray
+    ) -> FloatArray:
+        """Return the polynomial columns of the requested derivatives.
+
+        Parameters
+        ----------
+        coefficients
+            ``(num_segments, num_inputs, order + 1)`` input polynomials
+            in the segment-local coordinate.
+        falling
+            Falling-factorial table, ``falling[p, k] = p! / (p - k)!``.
+
+        Returns
+        -------
+        numpy.ndarray
+            ``(num_segments, len(derivative_columns), order + 1)``: the
+            ``order``-th time derivative of input ``input`` per entry
+            of ``derivative_columns``, its powers shifted down by the
+            order and the trailing powers zero.
+        """
+        precision = self.precision
+        order = self.order
+        inv_resolution = precision(1.0) / precision(
+            self.driver_sample_period
+        )
+        columns = self.compile_settings.derivative_columns
+        derived = zeros(
+            (coefficients.shape[0], len(columns), order + 1),
+            dtype=precision,
+        )
+        for index, (column, derivative) in enumerate(columns):
+            scale = inv_resolution**derivative
+            for power in range(derivative, order + 1):
+                derived[:, index, power - derivative] = (
+                    coefficients[:, column, power]
+                    * falling[power, derivative]
+                    * scale
+                )
+        return derived
 
     # ---------------------------------------------------------------------- #
     # Getters and pass-through
@@ -978,6 +1068,11 @@ class ArrayInterpolator(CUDAFactory):
     def num_inputs(self) -> int:
         """Return the number of input signals."""
         return self.compile_settings.num_inputs
+
+    @property
+    def num_columns(self) -> int:
+        """Return the coefficient columns: inputs then derivatives."""
+        return self.compile_settings.num_columns
 
     @property
     def num_samples(self) -> int:

@@ -280,6 +280,14 @@ class DerivativeRegistry:
         self._to_base[dsym] = var
         return dsym
 
+    def register(self, var: ir.Sym, dsym: ir.Sym) -> None:
+        """Record the existing symbol ``dsym`` as the derivative of
+        ``var``."""
+
+        self.reserved.add(dsym.name)
+        self._to_derivative[var] = dsym
+        self._to_base[dsym] = var
+
     def lower_order(self, var: ir.Sym) -> Optional[ir.Sym]:
         """Return the symbol ``var`` is the derivative of, if any."""
 

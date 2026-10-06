@@ -46,6 +46,7 @@ from typing import (
     Iterable,
     Optional,
     Set,
+    Tuple,
     Union,
 )
 
@@ -305,7 +306,9 @@ class SymbolicODE(BaseODE):
 
         self.name = name
 
-        ndriv = all_indexed_bases.drivers.length
+        ndriv = all_indexed_bases.drivers.length + len(
+            equations.driver_derivatives
+        )
         self.equations = equations
         self.indices = all_indexed_bases
         self.fn_hash = fn_hash
@@ -514,6 +517,19 @@ class SymbolicODE(BaseODE):
         """Return units for drivers."""
         return self.indices.drivers.units
 
+    @property
+    def driver_derivative_columns(self) -> Tuple[Tuple[int, int], ...]:
+        """``(driver, order)`` for each driver derivative the equations
+        read, in drivers-buffer slot order."""
+        columns = {
+            str(symbol): index
+            for symbol, index in self.indices.drivers.index_map.items()
+        }
+        return tuple(
+            (columns[driver.name], order)
+            for driver, order in self.equations.driver_derivatives.values()
+        )
+
     def _get_jvp_exprs(self) -> JVPEquations:
         """Return Jacobian-vector assignments for the current system.
 
@@ -705,6 +721,9 @@ class SymbolicODE(BaseODE):
                 precision,
                 name="Observables",
             )
+        updates["num_drivers"] = index_map.drivers.length + len(
+            parsed.driver_derivatives
+        )
         mass = parsed.mass_matrix
         if mass is not None:
             mass = asarray(mass, dtype=precision)

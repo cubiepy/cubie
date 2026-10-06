@@ -1542,3 +1542,119 @@ def test_coefficients_land_pinned_below_ceiling(precision):
         wrap=False,
     )
     assert is_pinned_array(interp.coefficients)
+
+
+@pytest.fixture(scope="session")
+def cubic_derivative_columns(precision) -> ArrayInterpolator:
+    """The cubic inputs with derivative columns of both inputs."""
+
+    times = np.linspace(0.0, 5.0, 11, dtype=precision)
+    samples = {
+        "cubic1": times**3 - 2.0 * times,
+        "cubic2": 0.5 * times**3 + 2 * times**2 + times,
+    }
+    return ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples(samples, time=times),
+        order=3,
+        boundary_condition="not-a-knot",
+        wrap=False,
+        derivative_columns=((0, 1), (0, 2), (1, 3)),
+    )
+
+
+def _cubic_query_times(interpolator):
+    return np.linspace(
+        interpolator.t0,
+        interpolator.t0
+        + interpolator.driver_sample_period
+        * (interpolator.num_segments - 1),
+        num=17,
+        dtype=interpolator.precision,
+    )
+
+
+def test_derivative_columns_follow_the_inputs(
+    cubic_derivative_columns, tolerance
+):
+    # Columns: cubic1, cubic2, cubic1', cubic1'', cubic2'''.
+    interpolator = cubic_derivative_columns
+    times = _cubic_query_times(interpolator)
+    evaluated = run_driver_device_eval(
+        interpolator.drivers_fn, interpolator.coefficients, times
+    )
+    expected = np.column_stack(
+        (
+            times**3 - 2.0 * times,
+            0.5 * times**3 + 2.0 * times**2 + times,
+            3.0 * times**2 - 2.0,
+            6.0 * times,
+            np.full_like(times, 3.0),
+        )
+    )
+    np.testing.assert_allclose(
+        evaluated,
+        expected,
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
+
+
+def test_time_derivative_of_a_derivative_column_is_the_next_order(
+    cubic_derivative_columns, tolerance
+):
+    interpolator = cubic_derivative_columns
+    times = _cubic_query_times(interpolator)
+    evaluated = run_driver_device_eval(
+        interpolator.driver_derivative_fn, interpolator.coefficients, times
+    )
+    expected = np.column_stack(
+        (
+            3.0 * times**2 - 2.0,
+            1.5 * times**2 + 4.0 * times + 1.0,
+            6.0 * times,
+            np.full_like(times, 6.0),
+            np.zeros_like(times),
+        )
+    )
+    np.testing.assert_allclose(
+        evaluated,
+        expected,
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
+
+
+def test_derivative_columns_widen_the_coefficient_table(
+    cubic_derivative_columns,
+):
+    interpolator = cubic_derivative_columns
+    assert interpolator.coefficients_shape == (
+        interpolator.num_segments, 5, 4
+    )
+    assert interpolator.coefficients.shape == (
+        interpolator.coefficients_shape
+    )
+
+
+def test_get_interpolated_returns_the_inputs(cubic_derivative_columns):
+    interpolator = cubic_derivative_columns
+    times = _cubic_query_times(interpolator)
+    np.testing.assert_array_equal(
+        interpolator.get_interpolated(times),
+        run_driver_device_eval(
+            interpolator.drivers_fn, interpolator.coefficients, times
+        )[:, :2],
+    )
+
+
+def test_derivative_column_above_the_spline_order_rejected(precision):
+    times = np.linspace(0.0, 5.0, 11, dtype=precision)
+    with pytest.raises(ValueError, match="interpolation order to at least 4"):
+        ArrayInterpolator(
+            precision=precision,
+            drivers=DriverSamples({"cubic": times**3}, time=times),
+            order=3,
+            wrap=False,
+            derivative_columns=((0, 4),),
+        )

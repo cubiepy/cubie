@@ -119,7 +119,8 @@ class SystemSizes:
     constants
         Number of constants in the system.
     drivers
-        Number of driver variables in the system.
+        Length of the drivers buffer: the drivers, then any driver
+        time derivatives the device functions read.
 
     Notes
     -----
@@ -152,7 +153,8 @@ class ODEData(CUDAFactoryConfig):
         Precision factory used for numerical calculations. Defaults to
         :class:`numpy.float32`.
     num_drivers
-        Number of driver or forcing functions. Defaults to ``1``.
+        Length of the drivers buffer: the drivers, then any driver
+        time derivatives the device functions read. Defaults to ``1``.
 
     Notes
     -----
@@ -329,7 +331,9 @@ class ODEData(CUDAFactoryConfig):
         precision
             Precision factory used for calculations.
         num_drivers
-            Number of driver or forcing functions. Defaults to ``1``.
+            Length of the drivers buffer: the drivers, then any driver
+            time derivatives the device functions read. Defaults to
+            ``1``.
         operation_ordering
             Generated-operation ordering policy: stable ``"kahn"``,
             fixed ``"greedy"`` or ``"dfs"``, or thresholded
