@@ -986,9 +986,9 @@ def test_user_derivative_residuals_vanish_on_the_solution(
 def test_user_derivative_jacobian_calls_the_third_helper(
     system, precision, tolerance
 ):
-    # The residuals are g(x) - t, x_t g'(x) - 1 and
-    # x_tt g'(x) + x_t**2 g''(x); the last one's x entry needs the
-    # third derivative of g.
+    # We check the x entry of the third residual,
+    # x_tt g'(x) + x_t**2 g''(x), because only it needs the third
+    # derivative of g.
     x, x_t, x_tt, h = 0.5, 0.3, -0.2, 0.01
     g1, g2, g3 = 1.0 + x * x, 2.0 * x, 2.0
     entries = {
