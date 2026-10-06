@@ -4,6 +4,12 @@ import numpy as np
 import pytest
 import sympy as sp
 
+from cubie.odesystems.symbolic.codegen.jacobian import (
+    generate_analytical_jvp,
+)
+from cubie.odesystems.symbolic.codegen.time_derivative import (
+    generate_time_derivative_lines,
+)
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.parsing import (
@@ -841,6 +847,61 @@ class TestUserFunctionDerivatives:
                 user_functions={"growth": growth},
                 user_function_derivatives={"growth": [growth_d1, 2.0]},
             )
+
+    def test_short_chain_for_reduction_names_the_order(self):
+        with pytest.raises(
+            ValueError,
+            match=(
+                r'"growth" gets differentiated 2 times when generating '
+                r"the reduced DAE.*up to order 2.*"
+                r'\{"growth": \[growth_d1, <order-2 derivative>\]\}'
+            ),
+        ):
+            parse_dae_input(
+                dxdt=USER_DERIVATIVE_EQUATIONS,
+                states={"x": 0.0},
+                observables=["v", "w"],
+                parameters=dict(USER_DERIVATIVE_PARAMETERS),
+                user_functions={"growth": growth},
+                user_function_derivatives={"growth": [growth_d1]},
+            )
+
+    def test_short_chain_for_jacobian_names_the_order(self):
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=USER_DERIVATIVE_EQUATIONS,
+            states={"x": 0.0},
+            observables=["v", "w"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={"growth": [growth_d1, growth_d2]},
+        )
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"differentiated 3 times when generating the Jacobian.*"
+                r"\[growth_d1, growth_d2, <order-3 derivative>\]"
+            ),
+        ):
+            generate_analytical_jvp(
+                parsed,
+                input_order=index_map.states.index_map,
+                output_order=index_map.dxdt.index_map,
+            )
+
+    def test_missing_derivative_for_time_derivative_names_the_order(self):
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = growth(t)"],
+            states={"x": 0.0},
+            user_functions={"growth": growth},
+        )
+        with pytest.raises(
+            ValueError,
+            match=(
+                r'"growth" gets differentiated once when generating the '
+                r"time derivative.*\[<order-1 derivative>\]"
+            ),
+        ):
+            generate_time_derivative_lines(parsed, index_map)
 
 
 # Rosenbrock's Jacobian helpers call the third helper.

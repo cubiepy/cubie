@@ -22,6 +22,7 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     ParsedEquations,
     TIME_SYMBOL,
+    check_derivative_orders,
     derivative_helpers,
 )
 from cubie.odesystems.symbolic.structural.simplify import (
@@ -90,6 +91,12 @@ def _finalise_symbols_and_products(
         function_aliases=function_aliases,
         nonfloat_functions=nonfloat_functions,
         mass_matrix=mass_matrix,
+    )
+    check_derivative_orders(
+        (rhs for _, rhs in parsed_equations.ordered),
+        function_aliases,
+        parsed_equations.derivative_names,
+        "reduced DAE",
     )
     fn_hash = hash_system_definition(
         parsed_equations,

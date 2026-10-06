@@ -42,6 +42,9 @@ from cubie.odesystems.symbolic.engine.from_sympy import (
     derivative_name_map,
 )
 from cubie.odesystems.symbolic.parsing import JVPEquations
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
+    check_derivative_orders,
+)
 
 CacheKey = Tuple[
     Tuple[Tuple[ir.Expr, ir.Expr], ...],
@@ -97,6 +100,18 @@ def _derivative_names(equations) -> Dict[str, str]:
     if names:
         return dict(names)
     return derivative_name_map(_sympy_equation_list(equations))
+
+
+def _check_jacobian_orders(
+    equations, jac: List[List[ir.Expr]], derivative_names: Dict[str, str]
+) -> None:
+    """Raise when ``jac`` needs a derivative no helper supplies."""
+    check_derivative_orders(
+        (entry for row in jac for entry in row),
+        getattr(equations, "function_aliases", None) or {},
+        derivative_names,
+        "Jacobian",
+    )
 
 
 def get_cache_key(
@@ -299,6 +314,7 @@ def generate_jacobian(
         derivative_names,
         operation_ordering,
     )
+    _check_jacobian_orders(equations, jac, derivative_names)
 
     if use_cache and cache_key is not None:
         entry = _cache.setdefault(cache_key, {})
@@ -388,6 +404,7 @@ def generate_analytical_jvp(
         derivative_names,
         operation_ordering,
     )
+    _check_jacobian_orders(equations, jac, derivative_names)
 
     prod_exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     j_symbols: Dict[Tuple[int, int], ir.Sym] = {}

@@ -406,6 +406,99 @@ def derivative_helpers(
     ]
 
 
+def _helper_chains(
+    function_aliases: Dict[str, str],
+    derivative_names: Dict[str, str],
+) -> Dict[str, List[str]]:
+    """Return each user function's call name then its helpers' names."""
+
+    helpers = set(derivative_names.values())
+    chains = {}
+    for name, user_name in function_aliases.items():
+        if name in helpers:
+            continue
+        chain = [name]
+        while chain[-1] in derivative_names:
+            chain.append(derivative_names[chain[-1]])
+        if len(chain) > len(chains.get(user_name, ())):
+            chains[user_name] = chain
+    return chains
+
+
+def _call_names(expressions: Iterable[ir_expr.Expr]) -> set:
+    """Return the name of every function ``expressions`` call."""
+
+    names = set()
+    seen = set()
+    stack = list(expressions)
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        if isinstance(node, ir_expr.Call):
+            names.add(node.name)
+        stack.extend(ir_expr._children(node))
+    return names
+
+
+def check_derivative_orders(
+    expressions: Iterable[ir_expr.Expr],
+    function_aliases: Dict[str, str],
+    derivative_names: Dict[str, str],
+    generating: str,
+) -> None:
+    """Raise when ``expressions`` need a derivative no helper supplies.
+
+    Parameters
+    ----------
+    expressions
+        Expressions to scan for ``d_<name>`` placeholder calls.
+    function_aliases
+        Call name to the user's function name.
+    derivative_names
+        Each function and helper to its next helper.
+    generating
+        What the expressions build, named in the message.
+
+    Raises
+    ------
+    ValueError
+        A user function is differentiated past its last helper.
+    """
+
+    chains = _helper_chains(function_aliases, derivative_names)
+    orders = {}
+    for user_name, chain in chains.items():
+        for order, member in enumerate(chain):
+            orders.setdefault(member.rstrip("_"), (user_name, order))
+    needed = {}
+    for name in _call_names(expressions):
+        base, extra = name, 0
+        while base not in orders and base.startswith("d_"):
+            base, extra = base[2:], extra + 1
+        if extra and base in orders:
+            user_name, order = orders[base]
+            needed[user_name] = max(needed.get(user_name, 0), order + extra)
+    if not needed:
+        return
+    user_name = min(needed)
+    count = needed[user_name]
+    given = chains[user_name][1:]
+    entries = given + [
+        f"<order-{order} derivative>"
+        for order in range(len(given) + 1, count + 1)
+    ]
+    times = "once" if count == 1 else f"{count} times"
+    raise ValueError(
+        f'The supplied function "{user_name}" gets differentiated '
+        f"{times} when generating the {generating}; you will need "
+        f"to provide derivative functions up to order {count} as a "
+        f"list, like: user_function_derivatives="
+        f'{{"{user_name}": [{", ".join(entries)}]}}'
+    )
+
+
 def _build_sympy_user_functions(
     user_functions: Optional[Dict[str, Callable]],
     rename: Dict[str, str],
