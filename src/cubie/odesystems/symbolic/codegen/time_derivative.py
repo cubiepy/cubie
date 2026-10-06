@@ -227,7 +227,7 @@ def generate_time_derivative_fac_code(
     equations
         Parsed equations describing the ODE system.
     index_map
-        Indexed bases providing symbol references and constants.
+        Indexed bases providing symbol references.
     func_name
         Name of the generated factory function.
     cse

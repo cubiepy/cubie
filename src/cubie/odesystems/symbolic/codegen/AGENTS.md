@@ -89,7 +89,7 @@ Non-cached paths substitute `state → base_state + a_ij*state`; cached paths re
 `cached_aux` with no substitution (`_build_operator_body`'s `use_cached_aux`).
 
 ## The `_cubie_codegen_` namespace
-User constants fold into the equations as literals and bind no name (the LU family also
+Fixed parameters fold into the equations as literals and add no name (the LU family also
 folds `operator_beta`/`operator_gamma`, keyed through `folded_args`). Every name the
 generators bind lives under `_cubie_codegen_`: scalings (`_cubie_codegen_beta`,
 `_cubie_codegen_gamma`), scalar device arguments (`_cubie_codegen_h`,

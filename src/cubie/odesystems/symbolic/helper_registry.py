@@ -491,8 +491,9 @@ class PrepareJac(SolverHelperRole):
 def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """Return the generated-source identity for a request.
 
-    Constants enter through ``fn_hash``; factory bindings key the
-    member hash; ``folded_args`` bake into the source, so key here.
+    Fixed parameters enter through ``fn_hash``. Factory arguments key the
+    member hash. ``folded_args`` are written into the source, so they
+    key it here.
     """
     selection = None
     if request.role.uses_cache_selection(request.variant):

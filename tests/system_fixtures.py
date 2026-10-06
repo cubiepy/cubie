@@ -58,8 +58,9 @@ THREE_STATE_LINEAR_EQUATIONS = [
 ]
 
 THREE_STATE_LINEAR_STATES = {"x0": 1.0, "x1": 1.0, "x2": 1.0}
-THREE_STATE_LINEAR_PARAMETERS = {"p0": 1.0, "p1": 2.0, "p2": 3.0}
-THREE_STATE_LINEAR_CONSTANTS = {"c0": 0.5, "c1": 1.0, "c2": 2.0}
+THREE_STATE_LINEAR_PARAMETERS = {
+    "p0": 1.0, "p1": 2.0, "p2": 3.0, "c0": 0.5, "c1": 1.0, "c2": 2.0,
+}
 THREE_STATE_LINEAR_DRIVERS = ["d0"]
 THREE_STATE_LINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 
@@ -71,7 +72,6 @@ def build_three_state_linear_system(precision: np_dtype) -> BaseODE:
         dxdt=THREE_STATE_LINEAR_EQUATIONS,
         states=THREE_STATE_LINEAR_STATES,
         parameters=THREE_STATE_LINEAR_PARAMETERS,
-        constants=THREE_STATE_LINEAR_CONSTANTS,
         drivers=THREE_STATE_LINEAR_DRIVERS,
         observables=THREE_STATE_LINEAR_OBSERVABLES,
         precision=precision,
@@ -96,8 +96,9 @@ THREE_STATE_NONLINEAR_EQUATIONS = [
 ]
 
 THREE_STATE_NONLINEAR_STATES = {"x0": 0.5, "x1": -0.25, "x2": 1.2}
-THREE_STATE_NONLINEAR_PARAMETERS = {"p0": 0.7, "p1": 0.9, "p2": 1.1}
-THREE_STATE_NONLINEAR_CONSTANTS = {"c0": 0.5, "c1": -0.3, "c2": 0.25}
+THREE_STATE_NONLINEAR_PARAMETERS = {
+    "p0": 0.7, "p1": 0.9, "p2": 1.1, "c0": 0.5, "c1": -0.3, "c2": 0.25,
+}
 THREE_STATE_NONLINEAR_DRIVERS = ["d0"]
 THREE_STATE_NONLINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 
@@ -109,7 +110,6 @@ def build_three_state_nonlinear_system(precision: np_dtype) -> BaseODE:
         dxdt=THREE_STATE_NONLINEAR_EQUATIONS,
         states=THREE_STATE_NONLINEAR_STATES,
         parameters=THREE_STATE_NONLINEAR_PARAMETERS,
-        constants=THREE_STATE_NONLINEAR_CONSTANTS,
         drivers=THREE_STATE_NONLINEAR_DRIVERS,
         observables=THREE_STATE_NONLINEAR_OBSERVABLES,
         precision=precision,
@@ -146,7 +146,6 @@ THREE_CHAMBER_PARAMETERS = {
     "R_c": 1.0 / 114.0,
     "V_s3": 2.0,
 }
-THREE_CHAMBER_CONSTANTS: dict[str, float] = {}
 THREE_CHAMBER_DRIVERS = ["d1"]
 THREE_CHAMBER_OBSERVABLES = ["P_a", "P_v", "P_h", "Q_i", "Q_o", "Q_c"]
 
@@ -158,7 +157,6 @@ def build_three_chamber_system(precision: np_dtype) -> BaseODE:
         dxdt=THREE_CHAMBER_EQUATIONS,
         states=THREE_CHAMBER_STATES,
         parameters=THREE_CHAMBER_PARAMETERS,
-        constants=THREE_CHAMBER_CONSTANTS,
         drivers=THREE_CHAMBER_DRIVERS,
         observables=THREE_CHAMBER_OBSERVABLES,
         precision=precision,
@@ -190,8 +188,8 @@ THREE_STATE_VERY_STIFF_PARAMETERS = {
     "n0": 40.0,
     "n1": 30.0,
     "n2": 20.0,
+    "c0": 0.5,
 }
-THREE_STATE_VERY_STIFF_CONSTANTS = {"c0": 0.5}
 THREE_STATE_VERY_STIFF_DRIVERS = ["d0"]
 THREE_STATE_VERY_STIFF_OBSERVABLES = ["r0", "r1", "r2"]
 
@@ -203,7 +201,6 @@ def build_three_state_very_stiff_system(precision: np_dtype) -> BaseODE:
         dxdt=THREE_STATE_VERY_STIFF_EQUATIONS,
         states=THREE_STATE_VERY_STIFF_STATES,
         parameters=THREE_STATE_VERY_STIFF_PARAMETERS,
-        constants=THREE_STATE_VERY_STIFF_CONSTANTS,
         drivers=THREE_STATE_VERY_STIFF_DRIVERS,
         observables=THREE_STATE_VERY_STIFF_OBSERVABLES,
         precision=precision,
@@ -234,20 +231,19 @@ def _coupled_nonlinear_equations(size: int) -> list[str]:
     return equations
 
 
-def _coupled_nonlinear_values(size: int) -> tuple[dict, dict, dict]:
+def _coupled_nonlinear_values(size: int) -> tuple[dict, dict]:
     states = {f"x{i}": 0.1 + 0.01 * i for i in range(size)}
     parameters = {f"p{i}": 0.5 + 0.005 * i for i in range(size)}
-    constants = {
-        f"c{i}": ((-1) ** i) * (0.01 + 0.002 * i) for i in range(size)
-    }
-    return states, parameters, constants
+    parameters.update(
+        {f"c{i}": ((-1) ** i) * (0.01 + 0.002 * i) for i in range(size)}
+    )
+    return states, parameters
 
 
 LARGE_SYSTEM_EQUATIONS = _coupled_nonlinear_equations(100)
 (
     LARGE_SYSTEM_STATES,
     LARGE_SYSTEM_PARAMETERS,
-    LARGE_SYSTEM_CONSTANTS,
 ) = _coupled_nonlinear_values(100)
 LARGE_SYSTEM_DRIVERS = ["d0"]
 
@@ -255,7 +251,6 @@ MEDIUM_SYSTEM_EQUATIONS = _coupled_nonlinear_equations(20)
 (
     MEDIUM_SYSTEM_STATES,
     MEDIUM_SYSTEM_PARAMETERS,
-    MEDIUM_SYSTEM_CONSTANTS,
 ) = _coupled_nonlinear_values(20)
 MEDIUM_SYSTEM_DRIVERS = ["d0"]
 
@@ -267,7 +262,6 @@ def build_medium_nonlinear_system(precision: np_dtype) -> BaseODE:
         dxdt=MEDIUM_SYSTEM_EQUATIONS,
         states=MEDIUM_SYSTEM_STATES,
         parameters=MEDIUM_SYSTEM_PARAMETERS,
-        constants=MEDIUM_SYSTEM_CONSTANTS,
         drivers=MEDIUM_SYSTEM_DRIVERS,
         precision=precision,
         name="medium_nonlinear_system",
@@ -292,7 +286,7 @@ HODGKIN_HUXLEY_EQUATIONS = [
 ]
 
 HODGKIN_HUXLEY_STATES = {"vm": -62.0, "m": 0.07, "hg": 0.55, "n": 0.34}
-HODGKIN_HUXLEY_CONSTANTS = {
+HODGKIN_HUXLEY_PARAMETERS = {
     "i_app": 10.0,
     "g_na": 120.0,
     "e_na": 50.0,
@@ -310,7 +304,7 @@ def build_hodgkin_huxley_system(precision: np_dtype) -> BaseODE:
     system = create_ODE_system(
         dxdt=HODGKIN_HUXLEY_EQUATIONS,
         states=HODGKIN_HUXLEY_STATES,
-        constants=HODGKIN_HUXLEY_CONSTANTS,
+        parameters=HODGKIN_HUXLEY_PARAMETERS,
         precision=precision,
         name="hodgkin_huxley",
     )
@@ -325,7 +319,6 @@ def build_large_nonlinear_system(precision: np_dtype) -> BaseODE:
         dxdt=LARGE_SYSTEM_EQUATIONS,
         states=LARGE_SYSTEM_STATES,
         parameters=LARGE_SYSTEM_PARAMETERS,
-        constants=LARGE_SYSTEM_CONSTANTS,
         drivers=LARGE_SYSTEM_DRIVERS,
         precision=precision,
         name="large_nonlinear_system",
@@ -349,8 +342,9 @@ THREE_STATE_CONSTANT_DERIV_EQUATIONS = [
 ]
 
 THREE_STATE_CONSTANT_DERIV_STATES = {"x0": 1.0, "x1": 1.0, "x2": 1.0}
-THREE_STATE_CONSTANT_DERIV_PARAMETERS = {"p0": 1.0, "p1": 2.0, "p2": 3.0}
-THREE_STATE_CONSTANT_DERIV_CONSTANTS = {"c0": 1.0, "c1": 2.0, "c2": 3.0}
+THREE_STATE_CONSTANT_DERIV_PARAMETERS = {
+    "p0": 1.0, "p1": 2.0, "p2": 3.0, "c0": 1.0, "c1": 2.0, "c2": 3.0,
+}
 THREE_STATE_CONSTANT_DERIV_DRIVERS = []
 THREE_STATE_CONSTANT_DERIV_OBSERVABLES = ["o0", "o1", "o2"]
 
@@ -368,7 +362,6 @@ def build_three_state_constant_deriv_system(precision: np_dtype) -> BaseODE:
         dxdt=THREE_STATE_CONSTANT_DERIV_EQUATIONS,
         states=THREE_STATE_CONSTANT_DERIV_STATES,
         parameters=THREE_STATE_CONSTANT_DERIV_PARAMETERS,
-        constants=THREE_STATE_CONSTANT_DERIV_CONSTANTS,
         drivers=THREE_STATE_CONSTANT_DERIV_DRIVERS,
         observables=THREE_STATE_CONSTANT_DERIV_OBSERVABLES,
         precision=precision,
@@ -430,27 +423,27 @@ def build_diagonally_dominant_system(precision: np_dtype) -> BaseODE:
 
 
 # ---------------------------------------------------------------------------
-# Solver-scaling constant collision system
+# Solver-scaling parameter collision system
 # ---------------------------------------------------------------------------
 
-COLLIDING_CONSTANTS_EQUATIONS = [
+COLLIDING_PARAMETERS_EQUATIONS = [
     "dx0 = -beta * x0 + gamma * x1",
     "dx1 = -gamma * x1",
 ]
 
-COLLIDING_CONSTANTS_STATES = {"x0": 1.0, "x1": 2.0}
-COLLIDING_CONSTANTS = {"beta": 2.5, "gamma": 0.75}
+COLLIDING_PARAMETERS_STATES = {"x0": 1.0, "x1": 2.0}
+COLLIDING_PARAMETERS = {"beta": 2.5, "gamma": 0.75}
 
 
-def build_colliding_constants_system(precision: np_dtype) -> BaseODE:
-    """Return a system whose constants share solver-scaling names."""
+def build_colliding_parameters_system(precision: np_dtype) -> BaseODE:
+    """Return a system whose parameters share solver-scaling names."""
 
     system = create_ODE_system(
-        dxdt=COLLIDING_CONSTANTS_EQUATIONS,
-        states=COLLIDING_CONSTANTS_STATES,
-        constants=COLLIDING_CONSTANTS,
+        dxdt=COLLIDING_PARAMETERS_EQUATIONS,
+        states=COLLIDING_PARAMETERS_STATES,
+        parameters=COLLIDING_PARAMETERS,
         precision=precision,
-        name="colliding_constants",
+        name="colliding_parameters",
         strict=True,
     )
 
@@ -468,8 +461,7 @@ LORENZ_JULIA_EQUATIONS = [
 ]
 
 LORENZ_JULIA_STATES = {"x": 1.0, "y": 0.0, "z": 0.0}
-LORENZ_JULIA_PARAMETERS = {"rho": 21.0}
-LORENZ_JULIA_CONSTANTS = {"sigma": 10.0, "beta": 8.0 / 3.0}
+LORENZ_JULIA_PARAMETERS = {"rho": 21.0, "sigma": 10.0, "beta": 8.0 / 3.0}
 
 
 def build_lorenz_julia_system(precision: np_dtype) -> BaseODE:
@@ -479,7 +471,6 @@ def build_lorenz_julia_system(precision: np_dtype) -> BaseODE:
         dxdt=LORENZ_JULIA_EQUATIONS,
         states=LORENZ_JULIA_STATES,
         parameters=LORENZ_JULIA_PARAMETERS,
-        constants=LORENZ_JULIA_CONSTANTS,
         precision=precision,
         name="lorenz_julia",
         strict=True,
@@ -602,7 +593,7 @@ def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
 
 
 __all__ = [
-    "build_colliding_constants_system",
+    "build_colliding_parameters_system",
     "build_coupled_oscillator_system",
     "build_status_staining_stiff_system",
     "build_lorenz_julia_system",
@@ -624,9 +615,9 @@ __all__ = [
 # Torn DAE twins (mass diag(1, 0)); quintic residuals keep x1 torn
 # ---------------------------------------------------------------------------
 
-TORN_DRIVER_CONSTANTS = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
+TORN_DRIVER_PARAMETERS = {"a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9}
 
-TORN_TIME_CONSTANTS = {
+TORN_TIME_PARAMETERS = {
     "a": 0.5, "b": 1.3, "c": -0.7, "d": 0.9, "e": 0.8,
 }
 
@@ -640,7 +631,7 @@ def build_torn_driver_system(precision: np_dtype) -> BaseODE:
             "0 = c*x0*x0 + d*x1 + d0*x1 + x1**5",
         ],
         states=["x0", "x1"],
-        constants=TORN_DRIVER_CONSTANTS,
+        parameters=TORN_DRIVER_PARAMETERS,
         drivers=["d0"],
         precision=precision,
         name="torn_driver",
@@ -656,7 +647,7 @@ def build_torn_time_system(precision: np_dtype) -> BaseODE:
             "0 = c*x0*x0 + d*x1 + x1**5",
         ],
         states=["x0", "x1"],
-        constants=TORN_TIME_CONSTANTS,
+        parameters=TORN_TIME_PARAMETERS,
         precision=precision,
         name="torn_time",
     )
@@ -676,7 +667,7 @@ def build_torn_unsolvable_system(precision: np_dtype) -> BaseODE:
     )
 
 
-RING_MODULATOR_CONSTANTS = {
+RING_MODULATOR_PARAMETERS = {
     "C": 1.6e-8,
     "Cp": 1.0e-8,
     "Lh": 4.45,
@@ -743,12 +734,11 @@ Cs * dU6 = -I6 - qD2 + qD4
 """ + RING_MODULATOR_DIFFERENTIAL_ROWS
 
 
-def _build_ring_modulator(equations, constants, system_name, precision):
+def _build_ring_modulator(equations, parameters, system_name, precision):
     return create_ODE_system(
         equations,
         states={name: 0.0 for name in RING_MODULATOR_STATES},
-        parameters={"Uin1_amplitude": 0.5},
-        constants=constants,
+        parameters={"Uin1_amplitude": 0.5, **parameters},
         observables=["U3", "U4", "U6", "I3"],
         precision=precision,
         name=system_name,
@@ -760,7 +750,7 @@ def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
 
     return _build_ring_modulator(
         RING_MODULATOR_EQUATIONS,
-        RING_MODULATOR_CONSTANTS,
+        RING_MODULATOR_PARAMETERS,
         "ring_modulator_index2",
         precision,
     )
@@ -773,7 +763,7 @@ def build_ring_modulator_index2_scaled_system(
 
     return _build_ring_modulator(
         RING_MODULATOR_SCALED_EQUATIONS,
-        dict(RING_MODULATOR_CONSTANTS, Cs=0.0),
+        dict(RING_MODULATOR_PARAMETERS, Cs=0.0),
         "ring_modulator_index2_scaled",
         precision,
     )
@@ -797,28 +787,27 @@ def build_scaled_cs_system(precision: np_dtype) -> BaseODE:
         return create_ODE_system(
             SCALED_CS_EQUATIONS,
             states=dict(SCALED_CS_STATES),
-            constants={"Cs": 0.0},
+            parameters={"Cs": 0.0},
             precision=precision,
             name="scaled_cs",
         )
 
 
-def build_amp_constant_system(precision: np_dtype) -> BaseODE:
-    """One-state decay system with folded constant ``amp``."""
+def build_amp_system(precision: np_dtype) -> BaseODE:
+    """One-state decay system scaled by parameter ``amp``."""
 
     return create_ODE_system(
         "dx = -k * x * (1.0 + amp)",
         states={"x": 1.0},
-        parameters={"k": 0.5},
-        constants={"amp": 2.0},
+        parameters={"k": 0.5, "amp": 2.0},
         precision=precision,
-        name="amp_constant",
+        name="amp",
     )
 
 
 DIODE_LINE_N = 8
 
-DIODE_LINE_CONSTANTS = {"gs": 0.1, "a": 3.0, "c": 0.5}
+DIODE_LINE_PARAMETERS = {"amp": 1.0, "gs": 0.1, "a": 3.0, "c": 0.5}
 
 
 def _diode_line_equations() -> str:
@@ -846,14 +835,13 @@ def build_diode_line_system(precision: np_dtype) -> BaseODE:
     return create_ODE_system(
         _diode_line_equations(),
         states=states,
-        parameters={"amp": 1.0},
-        constants=dict(DIODE_LINE_CONSTANTS),
+        parameters=dict(DIODE_LINE_PARAMETERS),
         precision=precision,
         name="diode_line",
     )
 
 
-TRANSAMP_CONSTANTS = {
+TRANSAMP_PARAMETERS = {
     "ub": 6.0,
     "uf": 0.026,
     "alfa": 0.99,
@@ -908,14 +896,14 @@ def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
         TRANSAMP_EQUATIONS,
         states=dict(TRANSAMP_DC_STATES),
         observables=["y1", "y4", "y7"],
-        constants=dict(TRANSAMP_CONSTANTS),
+        parameters=dict(TRANSAMP_PARAMETERS),
         precision=precision,
         name="transistor_amplifier",
     )
 
 
 def build_toggle_system(precision: np_dtype) -> BaseODE:
-    """SymPy-input system whose constant ``tog`` picks a branch."""
+    """SymPy-input system whose parameter ``tog`` picks a branch."""
 
     x = sp.Symbol("x", real=True)
     k = sp.Symbol("k", real=True)
@@ -927,8 +915,7 @@ def build_toggle_system(precision: np_dtype) -> BaseODE:
     return create_ODE_system(
         equations,
         states={"x": 1.0},
-        parameters={"k": 0.3},
-        constants={"tog": 1.0},
+        parameters={"k": 0.3, "tog": 1.0},
         precision=precision,
         name="toggle",
     )

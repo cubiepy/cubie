@@ -3,24 +3,19 @@
 This module provides :class:`SystemInterface`, which wraps
 :class:`cubie.odesystems.SystemValues` instances for parameters, states, and
 observables. It exposes helper methods for converting between user-facing
-labels or indices and internal representations.
+labels or indices and internal representations, and sets the swept
+parameters.
 
 Published Classes
 -----------------
 :class:`SystemInterface`
-    Wrapper providing label-to-index resolution and value updates for
-    parameters, states, and observables.
+    Wrapper providing label-to-index resolution for parameters, states,
+    and observables.
 
     >>> from cubie.batchsolving.SystemInterface import SystemInterface
     >>> interface = SystemInterface(system)
     >>> interface.state_indices(["x", "y"])
     array([0, 1], dtype=int32)
-
-Notes
------
-The interface allows updating default state or parameter values without
-navigating the full system hierarchy, providing a simplified entry point for
-common operations.
 
 See Also
 --------
@@ -32,7 +27,16 @@ See Also
     Primary consumer of this interface.
 """
 
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 from numpy import (
     ndarray,
@@ -64,11 +68,85 @@ class SystemInterface:
 
     def __init__(self, system: BaseODE):
         self._system = system
+        self._swept_values = None
 
     @property
     def parameters(self) -> SystemValues:
         """Parameter values, read live from the system."""
         return self._system.parameters
+
+    @property
+    def swept_parameters(self) -> Tuple[str, ...]:
+        """Names of the parameters array's rows, read live."""
+        return self._system.swept_parameters
+
+    @property
+    def swept_values(self) -> SystemValues:
+        """Default values of the swept parameters, in row order."""
+        settings = self._system.compile_settings
+        cached = self._swept_values
+        # Rebuild when the system's settings change.
+        if cached is None or cached[0] is not settings:
+            defaults = settings.parameters.values_dict
+            values = SystemValues(
+                {name: defaults[name] for name in settings.swept_parameters},
+                settings.precision,
+                name="Parameters",
+            )
+            cached = (settings, values)
+            self._swept_values = cached
+        return cached[1]
+
+    @property
+    def fixed_parameter_values(self) -> Dict[str, float]:
+        """Values compiled into the code, read live."""
+        return self._system.fixed_parameter_values
+
+    def set_swept_parameters(
+        self,
+        names: Sequence[str],
+        fixed_values: Optional[Mapping[str, float]] = None,
+    ) -> None:
+        """Sweep ``names`` and compile every other parameter in.
+
+        Parameters
+        ----------
+        names
+            Names of the parameters array's rows, in order.
+        fixed_values
+            Values to compile in for the other parameters. Defaults to
+            their default values.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name repeats.
+        """
+        names = tuple(names)
+        unknown = set(names) - set(self.parameters.names)
+        if unknown:
+            raise KeyError(
+                f"{sorted(unknown)} are not parameters of this system."
+            )
+        if fixed_values is None:
+            defaults = self.parameters.as_float_dict
+            fixed_values = {
+                name: value
+                for name, value in defaults.items()
+                if name not in names
+            }
+        if (
+            names == self.swept_parameters
+            and dict(fixed_values) == self.fixed_parameter_values
+        ):
+            return
+        # Pairs, as update reads a dict value as a settings group.
+        self._system.update(
+            swept_parameters=names,
+            fixed_parameters=tuple(fixed_values.items()),
+        )
 
     @property
     def states(self) -> SystemValues:
@@ -79,66 +157,6 @@ class SystemInterface:
     def observables(self) -> SystemValues:
         """Observable definitions, read live from the system."""
         return self._system.observables
-
-    def update(
-        self,
-        updates: Optional[Dict[str, Any]] = None,
-        silent: bool = False,
-        **kwargs,
-    ) -> Optional[Set[str]]:
-        """Update default parameter or state values.
-
-        Parameters
-        ----------
-        updates
-            Mapping of label to new value. If ``None``, only keyword arguments
-            are used for updates.
-        silent
-            If ``True``, suppresses ``KeyError`` for unrecognized update keys.
-        **kwargs
-            Additional keyword arguments merged with ``updates``. Each
-            key-value pair represents a label-value mapping for updating system
-            values.
-
-        Returns
-        -------
-        set of str or None
-            Set of recognized update keys that were successfully applied.
-            Returns None if no updates were provided.
-
-        Raises
-        ------
-        KeyError
-            If ``silent`` is False and unrecognized update keys are provided.
-
-        Notes
-        -----
-        The method attempts to update both parameters and states. Updates are
-        applied to whichever :class:`SystemValues` object recognizes each key.
-        """
-        if updates is None:
-            updates = {}
-        if kwargs:
-            updates.update(kwargs)
-        if not updates:
-            return
-
-        all_unrecognized = set(updates.keys())
-        for values_object in (self.parameters, self.states):
-            recognized = values_object.update_from_dict(updates, silent=True)
-            all_unrecognized -= recognized
-
-        if all_unrecognized:
-            if not silent:
-                unrecognized_list = sorted(all_unrecognized)
-                raise KeyError(
-                    "The following updates were not recognized by the system. "
-                    "Was this a typo?: "
-                    f"{unrecognized_list}"
-                )
-
-        recognized = set(updates.keys()) - all_unrecognized
-        return recognized
 
     def state_indices(
         self,

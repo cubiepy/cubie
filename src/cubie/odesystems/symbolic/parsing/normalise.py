@@ -462,8 +462,8 @@ def _parse_string_equations(
                 )
             elif lhs_str in known_symbol_map:
                 raise ValueError(
-                    f"{lhs_str} is an immutable input (constant, "
-                    "parameter, or driver) but is being assigned. It "
+                    f"{lhs_str} is an immutable input (parameter "
+                    "or driver) but is being assigned. It "
                     "must be a state, observable, or auxiliary."
                 )
             else:
@@ -696,8 +696,8 @@ def _parse_sympy_equations(
             and lhs_ir.name in known_symbol_map
         ):
             raise ValueError(
-                f"{lhs_ir.name} is an immutable input (constant, "
-                "parameter, or driver) but is being assigned. It "
+                f"{lhs_ir.name} is an immutable input (parameter "
+                "or driver) but is being assigned. It "
                 "must be a state, observable, or auxiliary."
             )
         equations.append((lhs_ir, rhs_ir))
@@ -788,7 +788,7 @@ def normalise_input(
         Names of the declared unknowns (states and observables).
         Mutated: inferred auxiliaries and states are added.
     known_symbol_map
-        Immutable inputs (parameters, constants, drivers) by name.
+        Immutable inputs (parameters and drivers) by name.
     user_functions, user_function_derivatives
         Callables referenced in the equations and their analytic
         derivative helpers.

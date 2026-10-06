@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import attrs
 import math
+from contextlib import contextmanager
 from functools import lru_cache
 from typing import Mapping, Optional, Union, Dict, Any, Callable
 
@@ -30,6 +31,43 @@ from numpy.typing import NDArray
 from tests.integrators.cpu_reference import CPUAdaptiveController
 
 Array = NDArray[np.floating]
+
+
+@contextmanager
+def restoring_values(system):
+    """Restore the system's parameters and initial values on exit."""
+    swept = system.swept_parameters
+    fixed = system.fixed_parameter_values
+    defaults = dict(system.compile_settings.parameter_values)
+    states = dict(system.compile_settings.initial_state_values)
+    try:
+        yield system
+    finally:
+        system.set_default_parameters(defaults)
+        system.update(
+            swept_parameters=swept, fixed_parameters=tuple(fixed.items())
+        )
+        system.initial_values.update_from_dict(states, silent=True)
+        system.indices.states.update_values(states)
+
+
+def sweep(system, names):
+    """Sweep ``names`` on ``system`` and compile the other defaults in."""
+    defaults = system.compile_settings.parameter_values
+    fixed = tuple(
+        (name, value) for name, value in defaults.items()
+        if name not in names
+    )
+    system.update(swept_parameters=tuple(names), fixed_parameters=fixed)
+
+
+def parse_input_swept(**kwargs):
+    """Return ``parse_input`` products with every parameter swept."""
+    from cubie.odesystems.symbolic.parsing.parser import parse_input
+
+    *_, parsed_system = parse_input(**kwargs)
+    swept = list(parsed_system.parameters)
+    return (*parsed_system.specialise(swept), parsed_system)
 
 
 class MockMemoryManager(MemoryManager):
@@ -971,9 +1009,11 @@ def run_device_loop(
     counters_output = np.zeros((save_samples, 4), dtype=np.int32)
 
     params = np.array(
-        system.parameters.values_array,
+        [
+            system.parameters.values_dict[name]
+            for name in system.swept_parameters
+        ],
         dtype=precision,
-        copy=True,
     )
     init_state = np.array(initial_state, dtype=precision, copy=True)
     status = np.zeros(1, dtype=np.int32)
@@ -1350,6 +1390,7 @@ NON_SOLVER_SETTINGS = {
     "n_observables",
     "fix_singularities",
     "voltage_variable",
+    "parameter_input",
 }
 
 
@@ -2138,14 +2179,14 @@ LINEAR_SYSTEM = {"system_type": "linear"}
 # Transcendental-heavy testbed for the auxiliary-cache planner.
 HODGKIN_HUXLEY_SYSTEM = {"system_type": "hodgkin_huxley"}
 
-# The colliding-constants system shadows generated-code symbol
+# The colliding-parameters system shadows generated-code symbol
 # names; the collision handling must hold at both precisions.
-COLLIDING_CONSTANTS_F32 = {
-    "system_type": "colliding_constants", "precision": np.float32,
+COLLIDING_PARAMETERS_F32 = {
+    "system_type": "colliding_parameters", "precision": np.float32,
 }
 
-COLLIDING_CONSTANTS_F64 = {
-    "system_type": "colliding_constants", "precision": np.float64,
+COLLIDING_PARAMETERS_F64 = {
+    "system_type": "colliding_parameters", "precision": np.float64,
 }
 
 

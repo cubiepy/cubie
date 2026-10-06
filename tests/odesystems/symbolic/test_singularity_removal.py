@@ -136,11 +136,11 @@ def test_fix_singularities_changes_cache_key(cellml_fixtures_dir):
     path = str(cellml_fixtures_dir / "ghk_singularity.cellml")
     cache = CellMLCache("ghk_singularity", path)
     key_off = cache.compute_cache_key(
-        None, None, np.float32, "ghk_singularity",
+        None, np.float32, "ghk_singularity",
         fix_singularities=False,
     )
     key_on = cache.compute_cache_key(
-        None, None, np.float32, "ghk_singularity",
+        None, np.float32, "ghk_singularity",
         fix_singularities=True, voltage_variable="membrane$V",
     )
     assert key_off != key_on

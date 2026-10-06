@@ -251,8 +251,7 @@ def build_solvers(n_fixed, n_adaptive, n_chunked, chunked_proportion):
         dz = x * y - beta * z
         """,
         states={"x": 1.0, "y": 0.0, "z": 0.0},
-        parameters={"rho": 21.0},
-        constants={"sigma": 10.0, "beta": 8.0 / 3.0},
+        parameters={"rho": 21.0, "sigma": 10.0, "beta": 8.0 / 3.0},
         name="Lorenz",
         precision=precision,
     )
@@ -351,15 +350,17 @@ def load_grid(solver, n_runs, grid_cache):
         if grid_cache is not None
         else None
     )
+    # Only rho is swept. Sigma and beta compile in.
+    solver.set_swept_parameters(["rho"])
     if gfile is not None and os.path.exists(gfile):
         # Cached grids come back pinned, as build_grid returns them.
         with np.load(gfile) as grid:
             return tuple(
                 pinned_copy(grid[name]) for name in ("inits", "params")
             )
-    parameters = {"rho": np.linspace(0.0, 21.0, n_runs)}
     inits, params = solver.build_grid(
-        initial_values=initial_conditions, parameters=parameters
+        initial_values=initial_conditions,
+        parameters={"rho": np.linspace(0.0, 21.0, n_runs)},
     )
     if gfile is not None:
         os.makedirs(grid_cache, exist_ok=True)

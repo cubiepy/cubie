@@ -255,14 +255,11 @@ class TestIndexedBases:
         """Create a sample IndexedBases instance for testing."""
         states = IndexedBaseMap("state", ["x", "y"])
         parameters = IndexedBaseMap("param", ["a", "b"])
-        constants = IndexedBaseMap("const", ["c"])
         observables = IndexedBaseMap("obs", ["o1"])
         drivers = IndexedBaseMap("drv", ["d1"])
         dxdt = IndexedBaseMap("dxdt", ["dx", "dy"])
 
-        return IndexedBases(
-            states, parameters, constants, observables, drivers, dxdt
-        )
+        return IndexedBases(states, parameters, observables, drivers, dxdt)
 
     def test_init(self, sample_indexed_bases):
         """Test IndexedBases initialization."""
@@ -270,29 +267,26 @@ class TestIndexedBases:
 
         assert isinstance(ib.states, IndexedBaseMap)
         assert isinstance(ib.parameters, IndexedBaseMap)
-        assert isinstance(ib.constants, IndexedBaseMap)
         assert isinstance(ib.observables, IndexedBaseMap)
         assert isinstance(ib.drivers, IndexedBaseMap)
         assert isinstance(ib.dxdt, IndexedBaseMap)
 
-        # Check all_indices combines all mappings except constants
+        # Check all_indices combines every mapping
         assert len(ib.all_indices) == 8  # 2+2+1+1+2 symbols
 
     def test_from_user_inputs(self):
         """Test creating IndexedBases from user inputs."""
         states = ["x", "y"]
         parameters = ["a", "b"]
-        constants = ["c"]
         observables = ["o1"]
         drivers = ["d1"]
 
         ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
+            states, parameters, observables, drivers
         )
 
         assert list(ib.state_names) == ["x", "y"]
         assert list(ib.parameter_names) == ["a", "b"]
-        assert list(ib.constant_names) == ["c"]
         assert list(ib.observable_names) == ["o1"]
         assert list(ib.driver_names) == ["d1"]
         assert list(ib.dxdt_names) == ["dx", "dy"]
@@ -301,12 +295,11 @@ class TestIndexedBases:
         """Test creating IndexedBases from user inputs with default values."""
         states = {"x": 1.5, "y": 2.3}
         parameters = {"a": 0.1, "b": 0.2}
-        constants = {"c": 3.14}
         observables = ["o1"]
         drivers = ["d1"]
 
         ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
+            states, parameters, observables, drivers
         )
 
         # Check that default values are properly passed through
@@ -314,7 +307,6 @@ class TestIndexedBases:
         assert ib.state_values[sp.Symbol("y", real=True)] == 2.3
         assert ib.parameter_values[sp.Symbol("a", real=True)] == 0.1
         assert ib.parameter_values[sp.Symbol("b", real=True)] == 0.2
-        assert ib.constant_values[sp.Symbol("c", real=True)] == 3.14
 
     def test_getters(self):
         """Test all getter properties for equality with symbols, strings, and
@@ -323,14 +315,12 @@ class TestIndexedBases:
         # Create test data with default values
         states_dict = {"x": 1.0, "y": 2.0}
         params_dict = {"a": 0.1, "b": 0.2}
-        constants_dict = {"c": 3.14, "d": 2.71}
         observables_list = ["obs1", "obs2"]
         drivers_list = ["drv1"]
 
         ib = IndexedBases.from_user_inputs(
             states=states_dict,
             parameters=params_dict,
-            constants=constants_dict,
             observables=observables_list,
             drivers=drivers_list,
         )
@@ -357,15 +347,6 @@ class TestIndexedBases:
         assert param_values[sp.Symbol("a", real=True)] == 0.1
         assert param_values[sp.Symbol("b", real=True)] == 0.2
 
-        # Test constant getters
-        const_names = ib.constant_names
-        const_values = ib.constant_values
-
-        assert set(const_names) == {"c", "d"}
-        assert len(const_values) == len(const_names)
-        assert const_values[sp.Symbol("c", real=True)] == 3.14
-        assert const_values[sp.Symbol("d", real=True)] == 2.71
-
         # Test observable getters
         obs_names = ib.observable_names
 
@@ -389,7 +370,6 @@ class TestIndexedBases:
         assert "y" in ib.state_names
         assert "a" in ib.parameter_names
         assert "b" in ib.parameter_names
-        assert "c" in ib.constant_names
         assert "o1" in ib.observable_names
         assert "d1" in ib.driver_names
         assert "dx" in ib.dxdt_names
@@ -411,145 +391,10 @@ class TestIndexedBases:
         ib = sample_indexed_bases
         symbols = ib.all_symbols
 
-        assert len(symbols) == 9
+        assert len(symbols) == 8
         assert "x" in symbols
         assert "a" in symbols
-        assert "c" in symbols
-
-    def test_update_constants_with_dict(self):
-        """Test updating constants using dictionary."""
-        states = {"x": 1.0, "y": 2.0}
-        parameters = {"a": 0.1, "b": 0.2}
-        constants = {"c": 3.14, "d": 2.71, "e": 1.0}
-        observables = ["obs1"]
-        drivers = ["drv1"]
-
-        ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
-        )
-
-        # Update constants using dictionary
-        ib.update_constants({"c": 100.0, "d": 200.0})
-
-        c, d, e = (
-            sp.Symbol("c", real=True),
-            sp.Symbol("d", real=True),
-            sp.Symbol("e", real=True),
-        )
-
-        assert ib.constant_values[c] == 100.0
-        assert ib.constant_values[d] == 200.0
-        assert ib.constant_values[e] == 1.0  # unchanged
-
-    def test_update_constants_with_kwargs(self):
-        """Test updating constants using kwargs."""
-        states = {"x": 1.0}
-        parameters = {"a": 0.1}
-        constants = {"c": 3.14, "d": 2.71}
-        observables = ["obs1"]
-        drivers = ["drv1"]
-
-        ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
-        )
-
-        # Update constants using kwargs
-        ib.update_constants(c=999.0, d=888.0)
-
-        c, d = sp.Symbol("c", real=True), sp.Symbol("d", real=True)
-
-        assert ib.constant_values[c] == 999.0
-        assert ib.constant_values[d] == 888.0
-
-    def test_update_constants_kwargs_override_dict(self):
-        """Test that kwargs override dictionary values for constants."""
-        states = {"x": 1.0}
-        parameters = {"a": 0.1}
-        constants = {"c": 3.14, "d": 2.71}
-        observables = ["obs1"]
-        drivers = ["drv1"]
-
-        ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
-        )
-
-        # kwargs should override dict values
-        ib.update_constants({"c": 10.0, "d": 20.0}, c=100.0)
-
-        c, d = sp.Symbol("c", real=True), sp.Symbol("d", real=True)
-
-        assert ib.constant_values[c] == 100.0  # overridden by kwargs
-        assert ib.constant_values[d] == 20.0  # from dict
-
-    def test_update_constants_ignores_unknown_keys(self):
-        """Test that unknown constant keys are silently ignored."""
-        states = {"x": 1.0}
-        parameters = {"a": 0.1}
-        constants = {"c": 3.14}
-        observables = ["obs1"]
-        drivers = ["drv1"]
-
-        ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
-        )
-
-        # Include unknown keys - should be ignored
-        ib.update_constants({"c": 100.0, "unknown_const": 999.0})
-
-        c = sp.Symbol("c", real=True)
-        assert ib.constant_values[c] == 100.0
-        # Should not raise error and should not add unknown keys
-
-    def test_update_constants_empty_updates(self):
-        """Test that empty constant updates don't change anything."""
-        states = {"x": 1.0}
-        parameters = {"a": 0.1}
-        constants = {"c": 3.14, "d": 2.71}
-        observables = ["obs1"]
-        drivers = ["drv1"]
-
-        ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
-        )
-
-        original_values = ib.constant_values.copy()
-
-        # Test empty dict
-        ib.update_constants({})
-        assert ib.constant_values == original_values
-
-        # Test None
-        ib.update_constants(None)
-        assert ib.constant_values == original_values
-
-        # Test no arguments
-        ib.update_constants()
-        assert ib.constant_values == original_values
-
-    def test_update_constants_only_affects_constants(self):
-        """Test that update_constants only affects constants, not other values.
-        """
-        states = {"x": 1.0, "y": 2.0}
-        parameters = {"a": 0.1, "b": 0.2}
-        constants = {"c": 3.14, "d": 2.71}
-        observables = ["obs1"]
-        drivers = ["drv1"]
-
-        ib = IndexedBases.from_user_inputs(
-            states, parameters, constants, observables, drivers
-        )
-
-        # Store original values
-        original_state_values = ib.state_values.copy()
-        original_param_values = ib.parameter_values.copy()
-
-        # Update constants
-        ib.update_constants({"c": 999.0})
-
-        # Check that only constants changed
-        assert ib.state_values == original_state_values
-        assert ib.parameter_values == original_param_values
-        assert ib.constant_values[sp.Symbol("c", real=True)] == 999.0
+        assert "o1" in symbols
 
 
 class TestIndexedBaseMapExtras:

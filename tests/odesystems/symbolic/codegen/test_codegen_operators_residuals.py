@@ -178,11 +178,11 @@ def test_residual_bakes_stage_diagonal(
 
 # ── n-stage linear operator ─────────────────────────────────────── #
 
-def test_n_stage_operator_isolates_user_constants_from_scalings(
+def test_n_stage_operator_isolates_user_parameters_from_scalings(
     solver_scaling_collision_equations,
     solver_scaling_collision_indexed_bases,
 ):
-    """User beta/gamma constants cannot replace solver scalings."""
+    """User beta/gamma parameters cannot replace solver scalings."""
     code = generate_linear_operator_code(
         solver_scaling_collision_equations,
         solver_scaling_collision_indexed_bases,
@@ -197,7 +197,7 @@ def test_n_stage_operator_isolates_user_constants_from_scalings(
     # their own values in the equation body.
     assert "precision(2.0)" in code
     assert "precision(3.0)" in code
-    # Constants fold to literals; no load or bare binding exists.
+    # No bare binding of the user names exists.
     assert "_cubie_codegen_const_" not in code
     assert "\n    beta = " not in code
     assert "\n    gamma = " not in code
@@ -244,7 +244,6 @@ def test_operator_zero_mass_row_emits_residual_form():
     index_map = IndexedBases.from_user_inputs(
         states=["x0", "x1"],
         parameters=[],
-        constants=[],
         observables=[],
         drivers=[],
     )
@@ -280,7 +279,6 @@ def test_operator_rejects_general_mass_matrix():
     index_map = IndexedBases.from_user_inputs(
         states=["x0", "x1"],
         parameters=[],
-        constants=[],
         observables=[],
         drivers=[],
     )

@@ -8,7 +8,7 @@ Published Classes
     The settings in effect: the given ones plus the resolved ones.
 """
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from attrs import Attribute, field, fields, frozen
 from numpy import array as np_array
@@ -226,9 +226,3 @@ class EffectiveSettings(SolverSettings):
             for fld in fields(type(self))
             if fld.init
         }
-
-
-def clashing_names(names: Any) -> Set[str]:
-    """Return the entries of ``names`` that are Solver settings."""
-    settings = {fld.name for fld in fields(SolverSettings) if fld.init}
-    return {str(name) for name in names} & settings

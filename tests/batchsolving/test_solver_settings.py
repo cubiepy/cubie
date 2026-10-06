@@ -38,8 +38,6 @@ from cubie.integrators.step_control.base_step_controller import (
     BaseStepController,
 )
 from cubie.memory.mem_manager import ALL_MEMORY_MANAGER_PARAMETERS
-from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.symbolic import create_ODE_system
 from cubie.outputhandling.output_functions import (
     ALL_OUTPUT_FUNCTION_PARAMETERS,
     OutputFunctions,
@@ -587,34 +585,6 @@ def test_empty_output_types_raise(system):
         _effective(system, output_types=[])
 
 
-# ── System definition ───────────────────────────────────────────────── #
-
-
-def test_constant_named_as_a_setting_is_rejected_at_definition():
-    """A constant sharing a setting's name cannot be defined."""
-    with pytest.raises(ValueError, match="order"):
-        create_ODE_system(
-            dxdt=["dx0 = -order * x0"],
-            states={"x0": 1.0},
-            constants={"order": 2.0},
-        )
-
-
-def test_default_constant_named_as_a_setting_is_rejected():
-    """A default constant sharing a setting's name cannot be defined."""
-
-    class ConstantsOnly(BaseODE):
-        def build(self):
-            raise NotImplementedError
-
-    with pytest.raises(ValueError, match="order"):
-        ConstantsOnly(
-            initial_values={"x0": 1.0},
-            constants={"c1": 2.0},
-            default_constants={"order": 2.0},
-        )
-
-
 # ── Solver ──────────────────────────────────────────────────────────── #
 
 
@@ -899,8 +869,8 @@ def test_output_selection_grows_on_update(solver_mutable):
 
 def test_rejected_update_changes_nothing(solver_mutable):
     """An update with an unknown name leaves the solver as it was."""
-    name = solver_mutable.system.constants.names[0]
-    before = float(solver_mutable.system.constants.values_dict[name])
+    name = solver_mutable.system.parameters.names[0]
+    before = float(solver_mutable.system.parameters.values_dict[name])
     given = solver_mutable.given
     verbosity = default_timelogger.verbosity
     with pytest.raises(KeyError, match="typo"):
@@ -908,7 +878,7 @@ def test_rejected_update_changes_nothing(solver_mutable):
             {name: before * 2.0, "dt": 0.123, "typo": 1,
              "time_logging_level": "silent"}
         )
-    assert float(solver_mutable.system.constants.values_dict[name]) == (
+    assert float(solver_mutable.system.parameters.values_dict[name]) == (
         pytest.approx(before)
     )
     assert solver_mutable.given is given
@@ -1053,22 +1023,12 @@ def test_compile_flags_reach_every_factory(solver_mutable):
         assert factory.compile_settings.jit_flags.lineinfo is True
 
 
-def test_constants_reach_the_system_by_name(
+def test_parameter_names_are_not_settings(
     system, solver_settings, driver_settings
 ):
-    """A constant given by name reaches the system; it is not a setting."""
-    name = system.constants.names[0]
-    value = float(system.constants.values_dict[name]) * 1.5
-    built = _build_solver_instance(
-        system.copy(), {**solver_settings, name: value}, driver_settings
-    )
-    assert float(built.system.constants.values_dict[name]) == (
-        pytest.approx(value)
-    )
-    assert set(built.settings_dict()) <= _names(SolverSettings)
-    recognised = built.update(**{name: value * 2.0})
-    assert recognised == {name}
-    assert float(built.system.constants.values_dict[name]) == (
-        pytest.approx(value * 2.0)
-    )
-    built.close()
+    """A parameter given by name is rejected, as it is not a setting."""
+    name = system.parameters.names[0]
+    with pytest.raises(KeyError, match="parameters argument"):
+        _build_solver_instance(
+            system.copy(), {**solver_settings, name: 1.0}, driver_settings
+        )

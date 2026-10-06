@@ -32,7 +32,7 @@ subpackages.
 |------|-------------|
 | `__init__.py` | Package entry point: checks numba-cuda-mlir is installed, imports `backend/_mlir_compat` and `backend/_mlir_cubie_extensions`, star-imports subpackages, defines `__all__` and `__version__`. |
 | `CUDAFactory.py` | Core cached-compilation framework: `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`; `update` merges, flattens groups and raises, `_update` is the subclass hook), `FrozenSettings` (frozen attrs base; `update(updates)` returns `(replacement, recognised, changed)` with converters and validators run on the replacement), `values_differ`, `build_config` (builds a config from a settings mapping; keys without a field go to its `FrozenSettings`-typed fields, e.g. `unroll_*`/`lineinfo`) and `nested_config_fields`, `JITFlags` (defaults from `backend.jit.JIT_FLAG_DEFAULTS`), `UnrollFlags`/`UnrollChoice`/`unroll_flag_converter`/`ALL_UNROLL_PARAMETERS`, `CUDAFactoryConfig`/`_CubieConfigBase` (`FrozenSettings` snapshots whose `update` recurses into nested settings fields; carry the `jit_flags: JITFlags` and `unroll: UnrollFlags` compile settings every factory honours, with a read-only `lineinfo` passthrough; `init_kwargs` returns the `__init__` fields by `__init__` name without device-function slots), `CUDADispatcherCache`, and the `MultipleInstance*` variants. `CUDAFactory.settings_dict` merges every child factory's `settings_dict` (the `config_hash` children), writes the config's `init_kwargs` over them and keeps the class's `settings_keys` (a factory's loose-key set; `None` keeps every key); a factory that derives values overrides it to return them only as given. `copy()` is `type(self)(**settings_dict)`; factories that take a system override it. Hashing derives from `_serialize`. |
-| `_serialize.py` | Versioned typed canonical serializer: `canonical_bytes`/`canonical_digest` with explicit type tags and length prefixes over the compile-setting value domain (no `str()` fallback — unsupported values raise). Every semantic identity (values_hash, config_hash, helper source/member hashes, ODE constants fold) derives from it; `SCHEMA_VERSION` prefixes every digest. Value objects join via a `_cubie_canonical_()` method. |
+| `_serialize.py` | Versioned typed canonical serializer: `canonical_bytes`/`canonical_digest` with explicit type tags and length prefixes over the compile-setting value domain (no `str()` fallback — unsupported values raise). Every semantic identity (values_hash, config_hash, helper source/member hashes, swept and fixed parameters) derives from it; `SCHEMA_VERSION` prefixes every digest. Value objects join via a `_cubie_canonical_()` method. |
 | `_env.py` | `CUBIE_*` environment-variable registry: `env_bool`, `lineinfo_default` (`CUBIE_LINEINFO`), `cache_dir_default` (`CUBIE_CACHE_DIR`), `kernel_cache_dir_default` (`CUBIE_KERNEL_CACHE_DIR`), `max_cache_entries_default` (`CUBIE_MAX_CACHE_ENTRIES`), `operation_ordering_default` (`CUBIE_OPERATION_ORDERING`, the codegen ordering-policy default consumed by every `operation_ordering` signature default), `block_schedule_default`/`active_block_schedule`/`set_active_block_schedule` (`CUBIE_BLOCK_SCHEDULE`, the typed-IR scheduler policy, default `anchor_dfs`; the active value folds into the kernel-cache fingerprint). Env values are defaults; explicit solver arguments always win. |
 | `cache_root.py` | Single source of truth for the on-disk cache root (`get_cache_root`/`set_cache_root`/`get_cache_root_override`; precedence: `set_cache_root` override → `CUBIE_CACHE_DIR` → `<cwd>/generated`). The codegen, CellML parse, and compiled-kernel caches all resolve through it. |
 | `buffer_registry.py` | Singleton `buffer_registry` (`BufferRegistry`) managing CUDA buffer metadata, layout, aliasing, and allocator generation; defines `CUDABuffer` and `BufferGroup`. |
@@ -52,7 +52,7 @@ subpackages.
 | `memory/` | GPU memory subsystem: `MemoryManager` singleton (`default_memmgr`), array request/response containers, stream groups, reused stream-ordered device and pinned allocations (see `memory/AGENTS.md`). |
 | `odesystems/` | ODE system definitions and IR-based CUDA code generation (see `odesystems/AGENTS.md`). |
 | `outputhandling/` | Output and summary-metric system (see `outputhandling/AGENTS.md`). |
-| `gui/` | Optional Qt-based editors for `SymbolicODE` constants/parameters/states (see `gui/AGENTS.md`). |
+| `gui/` | Optional Qt-based editors for `SymbolicODE` parameters and states (see `gui/AGENTS.md`). |
 | `vendored/` | Third-party code: the CUDA simulator and cellmlmanip (see `vendored/AGENTS.md`). |
 
 ## CUDAFactory (cached compilation)
@@ -69,8 +69,8 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
 - **Three cache layers:**
   1. **Compiled-kernel cache** (`cubie_cache`), keyed by `config_hash` (each
      factory's `values_hash` re-hashed with its children's). An unchanged
-     `config_hash` reuses the on-disk kernel. `BaseODE` folds constant *values*
-     into its `config_hash`.
+     `config_hash` reuses the on-disk kernel. A system's swept names and
+     fixed values are part of its `config_hash`.
   2. **Object build cache** (`CUDAFactory._cache` + `_cache_valid`).
      `update_compile_settings` invalidates it only when a setting changed.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`), keyed by
@@ -89,7 +89,7 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   fields, but a replaced `eq=False` callable still rebuilds the consumer.
   Snapshots are sealed: assignment raises, array fields are owned read-only copies,
   and `SystemValues` containers freeze at the snapshot boundary (structure always;
-  values too for constants). Updates modify a `copy()` and pass it through the
+  values too for parameters). Updates modify a `copy()` and pass it through the
   boundary. A subclass `update` documents only its additions.
 - **`config_hash` recurses into child `CUDAFactory` attributes** (direct attributes,
   alphabetical). Attribute names in `_excluded_child_factories` contribute nothing

@@ -38,7 +38,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
-from cubie._utils import is_device_array
+from cubie._utils import ensure_nonzero_size, is_device_array
 from cubie._cudasim_extensions import cuda
 from cubie.memory.chunk_buffer_pool import ChunkBufferPool
 from cubie.memory.mem_manager import HOST_STAGING_BYTES
@@ -268,7 +268,7 @@ class InputArrays(BaseArrayManager):
             slot = self.device.get_managed_array(name)
             expected = tuple(getattr(self._sizes, name))
             shape = tuple(arr.shape)
-            if shape != expected:
+            if ensure_nonzero_size(shape) != expected:
                 raise ValueError(
                     f"Device input '{name}' has shape {shape}; "
                     f"expected {expected}."
@@ -419,7 +419,7 @@ class InputArrays(BaseArrayManager):
             solver_instance.num_runs,
             solver_instance.precision,
             sysz.states,
-            sysz.parameters,
+            sysz.swept_parameters,
             sysz.drivers,
             solver_instance.coefficients_shape,
         )

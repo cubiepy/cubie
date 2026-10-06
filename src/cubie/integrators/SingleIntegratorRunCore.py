@@ -287,7 +287,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         return dict(
             precision=system.precision,
             n_states=sizes.states,
-            n_parameters=sizes.parameters,
+            n_parameters=sizes.swept_parameters,
             n_observables=sizes.observables,
             n_drivers=sizes.drivers,
             compile_flags=outputs["compile_flags"],

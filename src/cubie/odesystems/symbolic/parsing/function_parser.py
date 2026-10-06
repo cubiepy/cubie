@@ -126,11 +126,11 @@ def parse_function_input(
     for name, expr_node in inspection.assignments.items():
         if name in observable_set or name in dxdt_set or name in state_set:
             continue
-        if name in inspection.constant_params:
+        if name in inspection.parameter_args:
             continue
         if name == inspection.state_param:
             continue
-        # Skip aliases that are direct state/constant accesses
+        # Skip aliases that are direct state/parameter accesses
         if _is_access_alias(expr_node, inspection):
             continue
         aux_names.append(name)
@@ -257,16 +257,15 @@ def _build_name_hints(
     hints: Dict[str, str] = {}
     scalar_set = set(inspection.scalar_params)
     containers = [
-        cp for cp in inspection.constant_params if cp not in scalar_set
+        cp for cp in inspection.parameter_args if cp not in scalar_set
     ]
     container = containers[0] if containers else "p"
     # A trailing container argument (e.g. ``def f(t, y, p, d)``) is the
     # natural spelling for drivers; with a single container both hints
     # coincide.
     driver_container = containers[-1] if containers else "p"
-    for ibm in (index_map.parameters, index_map.constants):
-        for name in ibm.symbol_map:
-            hints[name] = f"{container}.{name}"
+    for name in index_map.parameters.symbol_map:
+        hints[name] = f"{container}.{name}"
     for name in index_map.drivers.symbol_map:
         hints[name] = f"{driver_container}.{name}"
     for name in index_map.states.symbol_map:
@@ -421,20 +420,19 @@ def _build_symbol_map(
                     f"{state_names}"
                 )
 
-    # Constant/parameter/driver accesses on generic container args
+    # Parameter/driver accesses on generic container args
     inferred_params: "OrderedDict[str, sp.Symbol]" = OrderedDict()
     searched_maps = (
         index_map.parameters,
-        index_map.constants,
         index_map.drivers,
     )
-    for acc in inspection.constant_accesses:
+    for acc in inspection.parameter_accesses:
         key = acc["key"]
         ptype = acc["pattern_type"]
         base = acc["base"]
         if ptype not in ("int", "string", "attribute"):
             continue
-        # Search parameters, then constants, then drivers
+        # Search parameters, then drivers
         target_sym = None
         for ibm in searched_maps:
             if ptype == "int":
@@ -458,9 +456,7 @@ def _build_symbol_map(
                 raise ValueError(
                     f"Container access '{lookup}' is out of range for "
                     f"the declared parameters "
-                    f"({list(index_map.parameters.symbol_map)}), "
-                    f"constants "
-                    f"({list(index_map.constants.symbol_map)}), and "
+                    f"({list(index_map.parameters.symbol_map)}) and "
                     f"drivers ({list(index_map.drivers.symbol_map)})."
                 )
             if key in index_map.states.symbol_map:
@@ -478,7 +474,7 @@ def _build_symbol_map(
             if strict:
                 raise ValueError(
                     f"Container access '{lookup}' does not match any "
-                    f"declared parameter, constant, or driver, and "
+                    f"declared parameter or driver, and "
                     f"strict=True forbids inference. Declare '{key}' "
                     f"or set strict=False."
                 )
@@ -489,7 +485,7 @@ def _build_symbol_map(
                 inferred_params[key] = target_sym
                 warnings.warn(
                     f"Container access '{lookup}' does not match any "
-                    f"declared parameter, constant, or driver; "
+                    f"declared parameter or driver; "
                     f"'{key}' was added as a parameter with a "
                     f"default value of 0.0.",
                     EquationWarning,
@@ -499,7 +495,7 @@ def _build_symbol_map(
 
     # Scalar extra arguments bind to the like-named declared symbol
     # (SciPy's args= convention: def f(t, y, mu, k) with mu, k
-    # declared as parameters, constants, or drivers).
+    # declared as parameters or drivers).
     for arg_name in inspection.scalar_params:
         target_sym = None
         for ibm in searched_maps:
@@ -517,7 +513,7 @@ def _build_symbol_map(
             if strict:
                 raise ValueError(
                     f"Scalar argument '{arg_name}' does not match any "
-                    f"declared parameter, constant, or driver, and "
+                    f"declared parameter or driver, and "
                     f"strict=True forbids inference. Declare "
                     f"'{arg_name}' or set strict=False."
                 )
@@ -528,7 +524,7 @@ def _build_symbol_map(
                 inferred_params[arg_name] = target_sym
                 warnings.warn(
                     f"Scalar argument '{arg_name}' does not match any "
-                    f"declared parameter, constant, or driver; it was "
+                    f"declared parameter or driver; it was "
                     f"added as a parameter with a default value of "
                     f"0.0.",
                     EquationWarning,
@@ -559,7 +555,7 @@ def _resolve_alias(
     inspection: FunctionInspection,
     smap: Dict[str, sp.Basic],
 ) -> Optional[sp.Basic]:
-    """If expr_node is a direct access on state/constant, return symbol."""
+    """If expr_node is a direct access on state/parameter, return symbol."""
     if isinstance(expr_node, ast.Subscript):
         if isinstance(expr_node.value, ast.Name):
             base = expr_node.value.id
@@ -581,20 +577,20 @@ def _resolve_alias(
 def _is_access_alias(
     expr_node: ast.expr, inspection: FunctionInspection
 ) -> bool:
-    """Check if an assignment is a direct state/constant access."""
+    """Check if an assignment is a direct state/parameter access."""
     if isinstance(expr_node, ast.Subscript):
         if isinstance(expr_node.value, ast.Name):
             base = expr_node.value.id
             return (
                 base == inspection.state_param
-                or base in inspection.constant_params
+                or base in inspection.parameter_args
             )
     elif isinstance(expr_node, ast.Attribute):
         if isinstance(expr_node.value, ast.Name):
             base = expr_node.value.id
             return (
                 base == inspection.state_param
-                or base in inspection.constant_params
+                or base in inspection.parameter_args
             )
     return False
 

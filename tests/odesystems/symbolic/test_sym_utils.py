@@ -471,21 +471,6 @@ class TestHashSystemDefinition:
 
         assert hash_from_parsed == hash_from_list
 
-    def test_hash_constant_sorting(self):
-        """Verify constants are sorted alphabetically before hashing."""
-        x = sp.symbols("x")
-        dx = sp.symbols("dx")
-        equations = [(dx, -x)]
-
-        # Constants in different orders
-        constants_a = {"alpha": 1.0, "beta": 2.0, "gamma": 3.0}
-        constants_b = {"gamma": 3.0, "alpha": 1.0, "beta": 2.0}
-
-        hash_a = hash_system_definition(equations, constants_a)
-        hash_b = hash_system_definition(equations, constants_b)
-
-        assert hash_a == hash_b
-
     def test_hash_empty_equations(self):
         """Verify hash handles empty equation list."""
         empty_equations = []
@@ -495,19 +480,6 @@ class TestHashSystemDefinition:
         # Should not raise and should return a valid hash string
         assert isinstance(hash_empty, str)
         assert len(hash_empty) > 0
-
-    def test_hash_none_constants(self):
-        """Verify hash handles None constants."""
-        x = sp.symbols("x")
-        dx = sp.symbols("dx")
-        equations = [(dx, -x)]
-
-        hash_with_none = hash_system_definition(equations, None)
-        hash_explicit_none = hash_system_definition(equations, constants=None)
-
-        # Both should produce identical hashes
-        assert hash_with_none == hash_explicit_none
-        assert isinstance(hash_with_none, str)
 
     def test_hash_observable_labels_included(self):
         """Verify observable labels are included in hash."""
@@ -597,38 +569,37 @@ class TestHashSystemDefinition:
         assert hash_a != hash_b
 
     def test_hash_all_components_combined(self):
-        """Verify hash includes equations, constants, observables, params."""
+        """Verify hash includes equations, parameters and observables."""
         x, k = sp.symbols("x k")
         dx = sp.symbols("dx")
         equations = [(dx, -k * x)]
-        constants = {"c1": 1.0}
+        parameters = ["k"]
         observables = ["obs1"]
 
         hash_full = hash_system_definition(
             equations,
-            constants,
             observable_labels=observables,
+            parameter_labels=parameters,
         )
 
         # Changing any component should change the hash
         hash_diff_eqs = hash_system_definition(
             [(dx, -x)],  # different equation
-            constants,
             observable_labels=observables,
+            parameter_labels=parameters,
         )
-
-        hash_diff_const = hash_system_definition(
+        hash_diff_params = hash_system_definition(
             equations,
-            {"c2": 0.2},  # different constants
-            observables,
+            observable_labels=observables,
+            parameter_labels=["k", "c"],  # different parameters
         )
         hash_diff_obs = hash_system_definition(
             equations,
-            constants,
             observable_labels=["obs2"],  # different observable
+            parameter_labels=parameters,
         )
 
         # All should differ from base hash
         assert hash_full != hash_diff_eqs
-        assert hash_full != hash_diff_const
+        assert hash_full != hash_diff_params
         assert hash_full != hash_diff_obs

@@ -30,13 +30,14 @@ When Recompilation Happens
 CuBIE recompiles when any of the following change:
 
 - The ODE equations.
-- Constant values (since they are baked into the compiled code).
+- Which parameters are swept, or the value of a parameter that
+  isn't (those values are compiled into the code).
 - Floating-point precision (``float32`` vs ``float64``).
 - Algorithm choice or algorithm settings.
 - Output configuration (saved variables, summary metrics).
 
-Changing *parameters* or *initial values* does **not** trigger
-recompilation---those are runtime inputs.
+Changing the values of swept *parameters* or *initial values* does
+**not** trigger recompilation---those are runtime inputs.
 
 Numba Kernel Cache
 ------------------

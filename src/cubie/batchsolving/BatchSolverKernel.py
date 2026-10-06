@@ -1064,6 +1064,7 @@ class BatchSolverKernel(CUDAFactory):
         save_state_summaries = output_flags.state_summaries
         save_observable_summaries = output_flags.observable_summaries
         save_iteration_counters = output_flags.iteration_counters
+        read_params = self.system_sizes.swept_parameters > 0
         needs_padding = self.shared_memory_needs_padding
 
         shared_elems_per_run = self.shared_memory_elements
@@ -1159,7 +1160,7 @@ class BatchSolverKernel(CUDAFactory):
                 precision
             )
             rx_inits = inits[:, run_index]
-            rx_params = params[:, run_index]
+            rx_params = params[:, run_index * read_params]
             rx_state = state_output[:, :, run_index * save_state]
             rx_observables = observables_output[
                 :, :, run_index * save_observables

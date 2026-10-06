@@ -9,6 +9,6 @@ construction.
 .. toctree::
    :maxdepth: 1
 
-   constants_editor
+   parameters_editor
    states_editor
    pre_parse_editor

@@ -235,7 +235,7 @@ def _run_time_derivative(del_t, system, query_times):
 
     numba_precision = system.numba_precision
     n_state = system.sizes.states
-    n_params = system.sizes.parameters
+    n_params = system.sizes.swept_parameters
     n_drivers = system.num_drivers
     n_obs = system.sizes.observables
     n_out = n_state

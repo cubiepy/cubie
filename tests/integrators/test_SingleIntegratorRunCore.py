@@ -81,17 +81,18 @@ def _variant_probe_tableau():
     [ALGORITHM_CHAIN_SETS["backwards_euler"]],
     indirect=True,
 )
-def test_constant_change_replaces_the_step_device_functions(
-    solver_mutable,
+def test_fixed_value_change_replaces_the_step_device_functions(
+    solver_mutable, system_restored
 ):
-    """A constant pushed through the Solver replaces every device function."""
+    """A new compiled-in value replaces every device function."""
     run = solver_mutable.kernel.single_integrator
     step = run._algo_step
     loop_fn = run.device_function
     dxdt_fn = step.compile_settings.dxdt_fn
     residual_fn = step.solver.compile_settings.residual_fn
     step_fn = step.step_fn
-    solver_mutable.update(c0=0.75)
+    system_restored.set_default_parameters({"c0": 0.75})
+    solver_mutable.update()
     assert step.compile_settings.dxdt_fn is not dxdt_fn
     assert step.solver.compile_settings.residual_fn is not residual_fn
     assert step.step_fn is not step_fn
@@ -737,7 +738,7 @@ def test_loop_n_observables_matches_system(single_integrator_run, system):
 def test_loop_n_parameters_matches_system(single_integrator_run, system):
     """Loop receives n_parameters from system via instantiate_loop."""
     loop_cfg = single_integrator_run._loop.compile_settings
-    assert loop_cfg.n_parameters == system.sizes.parameters
+    assert loop_cfg.n_parameters == system.sizes.swept_parameters
 
 
 def test_loop_n_error_matches_core(single_integrator_run):

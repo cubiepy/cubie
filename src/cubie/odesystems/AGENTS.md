@@ -6,8 +6,8 @@
 Defines the abstract and concrete representations of CUDA-backed ODE systems.
 `BaseODE(CUDAFactory)` is the abstract root — **never instantiated directly** — and owns the
 machinery every system needs: the `CUDAFactory` cache interaction, the `ODEData`
-compile-settings container (states, parameters, constants, observables, precision), and the
-`SystemValues` name↔value/array mappings. `SymbolicODE` (in `symbolic/`) is the sole concrete
+compile-settings container (states, parameters, swept parameters, observables, precision),
+and the `SystemValues` name↔value/array mappings. `SymbolicODE` (in `symbolic/`) is the sole concrete
 subclass, adding programmatic generation of the `dxdt`, Jacobian, and matrix-free solver-helper
 device functions. `ODECache` is the attrs cache `build()` returns (compiled `dxdt` + optional
 solver helpers); `ODEData`/`SystemSizes` bundle the system metadata integrator factories read.
@@ -38,12 +38,17 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 `NotImplementedError`; `SymbolicODE` overrides it.
 
 ## BaseODE updates and identity
-- `BaseODE._update()` routes constant-value changes through `set_constants()`, which
-  updates a copy of the constants container and passes it through
-  `update_compile_settings`. A `precision` change re-materialises all four
-  `SystemValues` through `ODEData.update`.
-- `BaseODE.config_hash` adds a digest of the sorted constant items; a `SystemValues`
-  canonical identity is its names and precision only.
+- `ODEData.parameters` holds every parameter's default. `swept_parameters` names the
+  rows of the parameters array, in order, and `fixed_parameters` holds the value
+  compiled in for every other parameter. Together they name each parameter once. A new
+  system sweeps nothing and fixes every parameter at its default.
+- Set `swept_parameters` and `fixed_parameters` through `update`. `SymbolicODE._update`
+  re-derives the equations when either changes. `set_default_parameters()` changes
+  defaults, and a parameter that isn't swept is compiled in at its new default.
+- A `precision` change re-materialises all three `SystemValues` through
+  `ODEData.update`.
+- The swept names and fixed values are part of `config_hash`. A `SystemValues`
+  canonical identity is its names and precision only, so defaults are not.
 - The mass matrix is a float64 array in `ODEData._mass` (`BaseODE.mass`); codegen reads
   it as boolean diagonal flags. Explicit algorithms and Neumann preconditioners reject a
   non-identity mass matrix.
@@ -59,12 +64,12 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 - `update_from_dict()` returns the recognised keys; `add_entry()`/`remove_entry()` mutate
   in place, on unfrozen instances only.
 - `ODEData`'s converters `freeze()` every container a snapshot takes: structure seals on
-  all four, and constants seal fully, so `system.constants.update_from_dict(...)` raises
-  (use `set_constants()`/`update()`). Parameter, state and observable values stay
-  writable. Instances compare by value and are unhashable.
+  all three, and parameters seal fully, so `system.parameters.update_from_dict(...)`
+  raises (use `set_default_parameters()`). State and observable values stay writable. Instances compare
+  by value and are unhashable.
 
 ## Adding a component category
-A fifth category (beyond states/parameters/constants/observables) needs, in `ODEData.py`,
+A fourth category (beyond states/parameters/observables) needs, in `ODEData.py`,
 the field, a `SystemSizes` count and entries in the precision propagation of
 `ODEData.update()` and `from_BaseODE_initargs()`; and in `baseODE.py`, a property.
 

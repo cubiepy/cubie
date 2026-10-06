@@ -157,8 +157,8 @@ class StructuralState:
         derivative chain.
     known_symbols
         Symbols with externally supplied values (parameters,
-        constants, drivers, and the time symbol). Every other symbol
-        of ``equations`` is an unknown.
+        drivers, and the time symbol). Every other symbol of
+        ``equations`` is an unknown.
     time_symbol
         The independent variable.
     state_priorities

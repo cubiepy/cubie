@@ -51,10 +51,10 @@ between the SMs and VRAM becomes saturated.
 
 CuBIE mitigates this in several ways:
 
-**Constants vs Parameters.**
-   Values that do not change between IVPs in a batch are declared as
-   *constants*.  Constants are embedded in the compiled kernel and occupy
-   no per-thread memory.
+**Fixed parameters.**
+   Parameters that hold one value across a batch are compiled into
+   the kernel as numbers, so they are never loaded from memory and
+   take up no per-thread memory.
 
 **Matrix-free Jacobians.**
    Storing an :math:`n \times n` Jacobian per thread would consume huge

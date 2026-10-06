@@ -24,84 +24,6 @@ def test_from_system_creates_interface(system):
     assert si.observables is system.observables
 
 
-# ── update ───────────────────────────────────────────────── #
-
-def test_update_returns_none_when_no_updates(system_interface):
-    """Returns None when updates is None and no kwargs."""
-    result = system_interface.update(None)
-    assert result is None
-
-
-def test_update_returns_none_when_empty(system_interface):
-    """Returns None when updates is empty dict and no kwargs."""
-    result = system_interface.update({})
-    assert result is None
-
-
-def test_update_merges_kwargs(system_interface_mutable, system):
-    """Merges kwargs into updates dict, writing the live system."""
-    name = system.initial_values.names[0]
-    recognized = system_interface_mutable.update(None, **{name: 99.0})
-    assert name in recognized
-    assert system_interface_mutable.states.values_dict[name] == 99.0
-    # The interface is a live view onto the system's containers.
-    assert system.initial_values.values_dict[name] == 99.0
-
-
-def test_update_merges_kwargs_into_updates_dict(
-    system_interface_mutable, system
-):
-    """Merges kwargs into a provided updates dict and applies values."""
-    name = system.parameters.names[0]
-    original = system_interface_mutable.parameters.values_dict[name]
-    new_val = original + 1.0
-    recognized = system_interface_mutable.update({}, **{name: new_val})
-    assert name in recognized
-    assert (
-        system_interface_mutable.parameters.values_dict[name] == new_val
-    )
-
-
-def test_update_applies_to_parameters_and_states(
-    system_interface_mutable, system
-):
-    """Attempts update on both parameters and states."""
-    state_name = system.initial_values.names[0]
-    param_name = system.parameters.names[0]
-    recognized = system_interface_mutable.update(
-        {state_name: 42.0, param_name: 3.14}
-    )
-    assert state_name in recognized
-    assert param_name in recognized
-    assert np.isclose(
-        system_interface_mutable.states.values_dict[state_name], 42.0
-    )
-    assert np.isclose(
-        system_interface_mutable.parameters.values_dict[param_name], 3.14
-    )
-
-
-def test_update_raises_keyerror_on_unrecognized(system_interface):
-    """Raises KeyError when unrecognized keys and silent=False."""
-    with pytest.raises(KeyError, match="not recognized"):
-        system_interface.update({"not_a_key": 1.0})
-
-
-def test_update_returns_recognized_when_silent(system_interface_mutable):
-    """Returns recognized keys set when silent=True."""
-    recognized = system_interface_mutable.update(
-        {"not_a_key": 1.0}, silent=True
-    )
-    assert recognized == set()
-
-
-def test_update_returns_recognized_keys(system_interface_mutable, system):
-    """Returns set of recognized keys on success."""
-    state_name = system.initial_values.names[0]
-    recognized = system_interface_mutable.update({state_name: 5.0})
-    assert recognized == {state_name}
-
-
 # ── state_indices / observable_indices / parameter_indices ─ #
 
 def test_state_indices_none_returns_all(system_interface, system):
@@ -138,7 +60,7 @@ def test_parameter_indices_delegates(system_interface, system):
     """Delegates to parameters.get_indices."""
     names = system.parameters.names
     result = system_interface.parameter_indices(names)
-    expected = np.arange(system.sizes.parameters, dtype=np.int32)
+    expected = np.arange(system.num_parameters, dtype=np.int32)
     assert_array_equal(result, expected)
 
 
