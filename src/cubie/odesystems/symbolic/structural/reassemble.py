@@ -508,6 +508,37 @@ def _extra_vars(
     ]
 
 
+def torn_partner(
+    eq: int,
+    var_eq_matching: Matching,
+    full_eq_var_matching: Matching,
+) -> Optional[int]:
+    """Torn variable reached from residual ``eq`` by alternating paths.
+
+    Follows the pre-tearing matching from ``eq`` to a variable and,
+    while that variable is solved by tearing, on through its solving
+    equation's pre-tearing partner. The torn variable reached enters
+    ``eq`` directly or through the solved variables passed on the
+    way, and distinct residuals reach distinct torn variables.
+    Returns ``None`` when the path ends without a torn variable.
+    """
+
+    def partner(e: int):
+        if e < len(full_eq_var_matching.match):
+            return full_eq_var_matching[e]
+        return UNASSIGNED
+
+    v = partner(eq)
+    while isinstance(v, int):
+        solving_eq = var_eq_matching[v]
+        if solving_eq is UNASSIGNED:
+            return v
+        if not isinstance(solving_eq, int):
+            return None
+        v = partner(solving_eq)
+    return None
+
+
 def generate_system_equations(
     state: StructuralState,
     neweqs: List[Equation],
@@ -597,7 +628,19 @@ def generate_system_equations(
     solved_vars_set = set(gen.solved_vars)
     extra_vars_set = set(extra_vars)
 
-    # Fill algebraic (torn) variable slots.
+    # Each residual takes the torn variable its matching reaches.
+    full_eq_var_matching = full_var_eq_matching.invview()
+    for i, v in enumerate(var_ordering):
+        if v >= 0:
+            continue
+        paired = torn_partner(
+            gen.eq_ordering[i], var_eq_matching, full_eq_var_matching
+        )
+        if paired is not None:
+            var_ordering[i] = paired
+
+    # Fill unpaired algebraic (torn) variable slots.
+    paired_vars = {v for v in var_ordering if v >= 0}
     offset = 0
     for i, v in enumerate(var_ordering):
         if v >= 0:
@@ -605,7 +648,7 @@ def generate_system_equations(
         index = None
         for j in range(offset, graph.ndsts()):
             if (
-                j not in diff_vars_set
+                j not in paired_vars
                 and j not in solved_vars_set
                 and j not in extra_vars_set
                 and diff_to_var[j] is None

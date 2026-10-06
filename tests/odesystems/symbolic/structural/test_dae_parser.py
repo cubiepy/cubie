@@ -93,31 +93,63 @@ class TestParseDaeInput:
         # Three torn residual rows leave three zero diagonals.
         assert sum(mass[i, i] == 0.0 for i in range(5)) == 3
 
-    def test_two_torn_residuals_pair_rows(self):
-        # Residual i constrains algebraic state i and the mass
-        # matrix carries identity for differential states, zeros
-        # for the residual rows, in state order.
+    @pytest.mark.parametrize(
+        "dxdt, observables",
+        [
+            (
+                """
+                dx = -z1
+                dy = -z2
+                0 = z1**5 + z1 - x
+                0 = z2**3 + z2 - y
+                """,
+                [],
+            ),
+            # z1's loop reads z2, so its residual comes second in
+            # solve order while z1 comes first by name.
+            (
+                """
+                dx = -z1
+                dy = -z2
+                0 = w2 - z2**3 - x
+                0 = z2**5 + z2 + w2
+                0 = w1 - z1**3 - z2
+                0 = z1**5 + z1 + w1
+                """,
+                ["w1", "w2"],
+            ),
+        ],
+        ids=["independent", "chained_loops"],
+    )
+    def test_torn_residuals_pair_rows(self, dxdt, observables):
+        # Each algebraic row's residual depends on that row's state,
+        # directly or through the assignments it reads.
         index_map, _s, _f, parsed, _h = parse_dae_input(
-            dxdt="""
-            dx = -z1
-            dy = -z2
-            0 = z1**5 + z1 - x
-            0 = z2**3 + z2 - y
-            """,
+            dxdt=dxdt,
             states={"x": 1.0, "y": 1.0, "z1": 0.5, "z2": 0.5},
+            observables=observables,
         )
-        z1, z2 = ir.sym("z1"), ir.sym("z2")
-        assert list(index_map.state_names) == ["x", "y", "z1", "z2"]
+        names = list(index_map.state_names)
         mass = np.asarray(parsed.mass_matrix)
-        assert mass.shape == (4, 4)
-        assert [mass[i, i] for i in range(4)] == [1, 1, 0, 0]
-        # Residual i constrains algebraic state i only: the torn
-        # state's derivative row carries its own residual.
-        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
-        for own, other in ((z1, z2), (z2, z1)):
-            residual = eqs["d" + own.name]
-            assert own in ir.free_atoms(residual)
-            assert other not in ir.free_atoms(residual)
+        algebraic = [n for i, n in enumerate(names) if mass[i, i] == 0]
+        assert sorted(algebraic) == ["z1", "z2"]
+        assignments = {lhs: rhs for lhs, rhs in parsed.ordered}
+
+        def dependencies(expr):
+            found = set()
+            pending = list(ir.free_atoms(expr))
+            while pending:
+                atom = pending.pop()
+                if atom in found:
+                    continue
+                found.add(atom)
+                if atom in assignments:
+                    pending.extend(ir.free_atoms(assignments[atom]))
+            return found
+
+        for name in algebraic:
+            residual = assignments[ir.sym("d" + name)]
+            assert ir.sym(name) in dependencies(residual)
 
     def test_numeric_literal_implicit_lhs(self):
         # Implicit equations accept any numeric-literal LHS, not
