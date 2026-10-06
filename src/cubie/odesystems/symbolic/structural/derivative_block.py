@@ -54,8 +54,7 @@ def _derivative_rows(
         if not known or not coeffs:
             continue
         rows.append((ieq, coeffs, term))
-    # Equations whose other terms read fewest algebraic unknowns come
-    # first, so they stay pivots.
+    # Rows reading fewest algebraic unknowns become pivots.
     rows.sort(key=lambda row: _algebraic_count(state, row[2]))
     return rows
 
