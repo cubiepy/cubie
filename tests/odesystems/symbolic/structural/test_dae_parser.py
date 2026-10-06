@@ -677,17 +677,25 @@ class TestStructuralInputPaths:
         assert parsed.mass_matrix is None
         assert holds(index_map, parsed, y - sp.sin(x))
 
-    def test_cancelling_alias_substitution_warns_singular_solve(self):
-        with pytest.warns(UserWarning, match=r"for Sym\(a\) is singular"):
-            parse_dae_input(
-                dxdt=[
-                    "dx = -x + a",
-                    "0 = a + b + c",
-                    "0 = a + b + 2*c",
-                    "0 = a + exp(b) - sin(x)",
-                ],
-                states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
-            )
+    def test_alias_substitution_nonlinear_equation_is_residual(self):
+        # b = -a makes the last equation nonlinear in a, its only
+        # unknown, so it stays as a's residual.
+        x, a, b, c = real_symbols("x a b c")
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=[
+                "dx = -x + a",
+                "0 = a + b + c",
+                "0 = a + b + 2*c",
+                "0 = a + exp(b) - sin(x)",
+            ],
+            states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
+        )
+        assert algebraic_states(index_map, parsed) == ["a"]
+        spare = residual(index_map, parsed, "a")
+        target = a + sp.exp(-a) - sp.sin(x)
+        assert equivalent(spare, target) or equivalent(spare, -target)
+        assert holds(index_map, parsed, a + b)
+        assert holds(index_map, parsed, c)
 
     def test_inconsistent_constraints_warn_singular(self):
         with pytest.warns(UserWarning) as record:

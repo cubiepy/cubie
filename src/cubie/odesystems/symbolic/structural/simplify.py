@@ -273,10 +273,12 @@ def structural_simplify(
     # clears obvious aliases before the integer-linear pass and its
     # return maps are not needed; the second call catches aliases
     # newly exposed by alias_elimination, and its maps rebase mm.
-    eliminate_perfect_aliases(state)
+    eliminate_perfect_aliases(state, **solve_kwargs)
     trivial_tearing(state)
     mm = alias_elimination(state, **solve_kwargs)
-    old_to_new_eq, old_to_new_var = eliminate_perfect_aliases(state)
+    old_to_new_eq, old_to_new_var = eliminate_perfect_aliases(
+        state, **solve_kwargs
+    )
     mm = get_new_mm(old_to_new_eq, old_to_new_var, mm)
     state.mm = mm
 
@@ -305,7 +307,7 @@ def structural_simplify(
         # Alias elimination rewrites integer-linear differential
         # equations to 0 ~ f, so they cannot be told apart from
         # their derivatives; only highest-order matches are kept.
-        var_eq_matching = pantelides(state)
+        var_eq_matching = pantelides(state, **solve_kwargs)
         state = _pantelides_reassemble_state(state, var_eq_matching)
         mm = alias_elimination(state, **solve_kwargs)
         state.mm = mm
@@ -322,7 +324,9 @@ def structural_simplify(
         )
     else:
         state.structure.complete()
-        tearing_result = _tear_with_dummies(state, set())
+        tearing_result = _tear_with_dummies(
+            state, set(), **solve_kwargs
+        )
         reassembled = default_reassemble(
             state, tearing_result, state.mm, **reassemble_kwargs
         )

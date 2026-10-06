@@ -28,7 +28,6 @@ Published Functions
     Run the default reassembly on a tearing result.
 """
 
-import warnings
 from typing import Dict, List, Optional, Tuple
 
 from cubie.odesystems.symbolic.engine import expr as ir
@@ -432,14 +431,7 @@ class EquationGenerator:
             self.var_ordering.append(diff_to_var[iv])
         elif issolvable:
             var = state.fullvars[iv]
-            residual = eq.lhs - eq.rhs
-            a, b, _ = linear_expansion(residual, var)
-            if ir.is_zero(a):
-                warnings.warn(
-                    f"Tearing: solving {eq} for {var} is singular!"
-                )
-                return
-            rhs = ir.div(ir.neg(b), a)
+            rhs = _solve_for(eq, var)
             neweq = Equation(var, fixpoint_sub(rhs, total_sub))
             self.solved_eqs.append(neweq)
             self.solved_vars.append(iv)
