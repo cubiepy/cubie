@@ -14,12 +14,13 @@ the device-code optimisation conventions.
 ## Setup
 - `pip install -e .[dev-cuda13]` from the repo root (use a venv; some deps are
   version-pinned). `dev` uses a system CUDA toolkit; `dev-cuda12`/`dev-cuda13` install one.
-- Every worktree runs in its own `.venv`. If you run `git worktree add`, run
-  `python ci/tools/worktree_setup.py` (or `python3 ...` where there is no
-  `python`) in the new worktree before anything else. The script builds the
-  venv but does not activate it, so run every command through the venv's
-  interpreter: `.venv/Scripts/python -m pytest` on Windows,
-  `.venv/bin/python -m pytest` elsewhere.
+- Give every worktree its own `.venv`. If you run `git worktree add`, run
+  `python ci/tools/worktree_setup.py` in the new worktree before anything
+  else, or `python3 ci/tools/worktree_setup.py` on a host without `python`.
+  We build the venv without activating it, and your shell forgets activation
+  between commands, so run every command through the venv's interpreter:
+  `.venv/Scripts/python -m pytest` on Windows, `.venv/bin/python -m pytest`
+  elsewhere.
 - **Python 3.11-3.14**, **CUDA 12 or 13** (via the `cuda12`/`cuda13` extras, or a
   system toolkit), **NVIDIA GPU (compute capability ≥6.0)**.
 - CPU-only dev/test without a GPU: set `NUMBA_ENABLE_CUDASIM=1` (the CUDA simulator
@@ -32,8 +33,8 @@ the device-code optimisation conventions.
   a project goal.
 
 ## Testing
-Run `.venv/Scripts/python -m pytest` from the repo root. `pyproject.toml` `addopts` already
-applies coverage and `-n logical` (xdist), so a bare run is parallel + covered. Only run files relevant to your
+Run `.venv/Scripts/python -m pytest` from the repo root. We set coverage and `-n logical`
+(xdist) in the `pyproject.toml` `addopts`, so a run without options is parallel and covered. Only run files relevant to your
 change — the full suite is slow. Run the complete simulator and real-GPU suites before opening or
 updating a PR; targeted subsets miss cross-cutting tests.
 - **Simulator (CPU, matches nocuda CI) — a first pass only:**
