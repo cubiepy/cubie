@@ -14,6 +14,13 @@ the device-code optimisation conventions.
 ## Setup
 - `pip install -e .[dev-cuda13]` from the repo root (use a venv; some deps are
   version-pinned). `dev` uses a system CUDA toolkit; `dev-cuda12`/`dev-cuda13` install one.
+- Give every worktree its own `.venv`. If you run `git worktree add`, run
+  `python ci/tools/worktree_setup.py` in the new worktree before anything
+  else, or `python3 ci/tools/worktree_setup.py` on a host without `python`.
+  We build the venv without activating it, and your shell forgets activation
+  between commands, so run every command through the venv's interpreter:
+  `.venv/Scripts/python -m pytest` on Windows, `.venv/bin/python -m pytest`
+  elsewhere.
 - **Python 3.11-3.14**, **CUDA 12 or 13** (via the `cuda12`/`cuda13` extras, or a
   system toolkit), **NVIDIA GPU (compute capability ≥6.0)**.
 - CPU-only dev/test without a GPU: set `NUMBA_ENABLE_CUDASIM=1` (the CUDA simulator
@@ -26,15 +33,15 @@ the device-code optimisation conventions.
   a project goal.
 
 ## Testing
-Run `pytest` from the repo root. `pyproject.toml` `addopts` already applies coverage and
-`-n logical` (xdist), so bare `pytest` is parallel + covered. Only run files relevant to your
-change — the full suite is slow. Run the complete simulator and real-GPU suites before opening or
-updating a PR; targeted subsets miss cross-cutting tests.
+Run `.venv/Scripts/python -m pytest` from the repo root. We set coverage and `-n logical`
+(xdist) in the `pyproject.toml` `addopts`, so you get parallel workers and coverage without
+passing any options. Run the complete simulator and real-GPU suites before opening or
+updating a PR.
 - **Simulator (CPU, matches nocuda CI) — a first pass only:**
-  `NUMBA_ENABLE_CUDASIM=1 pytest -m "not nocudasim and not specific_algos"`
+  `NUMBA_ENABLE_CUDASIM=1 .venv/Scripts/python -m pytest -m "not nocudasim and not specific_algos"`
 - **Real GPU (matches CUDA CI; CUDASIM off) — always run to verify results.** The simulator does
   not guarantee on-device correctness; a change is only verified once the real-GPU tests pass:
-  `pytest -m "not specific_algos and not sim_only"`
+  `.venv/Scripts/python -m pytest -m "not specific_algos and not sim_only"`
 - **Use the shared session-scoped fixtures in `tests/conftest.py`** with their default parameter
   sets unless the user explicitly excepts a case; don't hand-roll fixtures. **Mocks/patches may
   only be added with an explicit user exception.** Don't type-hint tests.
