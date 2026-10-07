@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.16.0](https://github.com/cubiepy/cubie/compare/v0.15.1...v0.16.0) (2026-10-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **odesystems:** `constants` vs `parameters` is no longer a user-facing decision ([#996](https://github.com/cubiepy/cubie/issues/996))
+
+### Features
+
+* **algorithms:** OrdinaryDiffEq.jl ROS and Rodas tableaus registered for the Rosenbrock-W step ([#1004](https://github.com/cubiepy/cubie/issues/1004)) ([f26cdb8](https://github.com/cubiepy/cubie/commit/f26cdb83e2f839bb0fb8bfd61e91d7d8c841e8e1))
+* **odesystems:** `constants` vs `parameters` is no longer a user-facing decision ([#996](https://github.com/cubiepy/cubie/issues/996)) ([a204c87](https://github.com/cubiepy/cubie/commit/a204c87801acd398e9e98834f48a110e82ba957c))
+
+
+### Bug Fixes
+
+* **algorithms:** error-row capture compiles out in fixed-step controllers, preventing OOB access ([#1003](https://github.com/cubiepy/cubie/issues/1003)) ([209c2af](https://github.com/cubiepy/cubie/commit/209c2af87bb0f9e2a7a1f1d50b9f13dfe505ba39))
+* **algorithms:** Rosenbrock C-term respects zero-mass-matrix entries ([#1001](https://github.com/cubiepy/cubie/issues/1001)) ([7c3dfc3](https://github.com/cubiepy/cubie/commit/7c3dfc33bdf55b442a48fd56aef95c56628c30f3))
+* **algorithms:** Rosenbrock stage solves share the step-start Jacobian ([#1002](https://github.com/cubiepy/cubie/issues/1002)) ([d3e5b86](https://github.com/cubiepy/cubie/commit/d3e5b86d5bd9d1271d0eb41dd08a51ab6ade8468))
+* **batchsolving:** batch-size max matches allocator's; busy-event tests defer frees so they don't sync ([#1006](https://github.com/cubiepy/cubie/issues/1006)) ([450ba7c](https://github.com/cubiepy/cubie/commit/450ba7c1a8e45935656178cfd85583432491f356))
+* **structural:** Bareiss pivoting, equation order and solve-block placement ported from MIT sources ([#1017](https://github.com/cubiepy/cubie/issues/1017)) ([467bc9c](https://github.com/cubiepy/cubie/commit/467bc9c5660486b0ddf949b63d4a2c16e642066a))
+* **structural:** driver time derivatives required by torn rhs function are included in the evaluate_all function ([#1038](https://github.com/cubiepy/cubie/issues/1038)) ([8bd082d](https://github.com/cubiepy/cubie/commit/8bd082dbdc4fd034cb548907b85d4ffb3eb7eb78))
+* **structural:** each torn residual sits in the row of the torn variable its matching reaches ([#1023](https://github.com/cubiepy/cubie/issues/1023)) ([fdef833](https://github.com/cubiepy/cubie/commit/fdef833fa9ce4d11269aba7cdf5bbff472add003))
+* **structural:** every member of a derivative chain takes the chain's highest state priority, as in ModelingToolkit.jl ([#1027](https://github.com/cubiepy/cubie/issues/1027)) ([ef4fd43](https://github.com/cubiepy/cubie/commit/ef4fd43c7835ea6e8b4eb185ee4547af9d6a2096))
+* **structural:** exact integer-linear SCC matching rewritten from scratch/requirements ([#1019](https://github.com/cubiepy/cubie/issues/1019)) ([9bac9ab](https://github.com/cubiepy/cubie/commit/9bac9ab9aba9b824f0eebe45ea44b36238f821b6))
+* **structural:** fullvars order rewritten ([#1028](https://github.com/cubiepy/cubie/issues/1028)) ([6fac573](https://github.com/cubiepy/cubie/commit/6fac573112d0d7a582ab6eb986e9aa0ce69da636))
+* **structural:** fully_determined=False results reject residuals and algebraic states left unpaired ([#1031](https://github.com/cubiepy/cubie/issues/1031)) ([6830779](https://github.com/cubiepy/cubie/commit/68307796cc33dcdfb6d1be40a03fb8c6426d6354))
+* **structural:** index compaction, matrix rebasing and trivial tearing ported from ModelingToolkit.jl ([#1018](https://github.com/cubiepy/cubie/issues/1018)) ([5946c5f](https://github.com/cubiepy/cubie/commit/5946c5f20d849df552d3a757f015695755902355))
+* **structural:** index reduction calls the user's derivative helpers up to the required order after tearing ([#1037](https://github.com/cubiepy/cubie/issues/1037)) ([c0485b6](https://github.com/cubiepy/cubie/commit/c0485b6c113461d24f5ee30ae024333448547c7f))
+* **structural:** MIT ports and cubie codegen integration fixes and dead code removal ([#1026](https://github.com/cubiepy/cubie/issues/1026)) ([7f7d23a](https://github.com/cubiepy/cubie/commit/7f7d23ae10afac9eafc4b95d1a14fd137e225e35))
+* **structural:** Modia tearing follows dummy-derivative selection ([#1015](https://github.com/cubiepy/cubie/issues/1015)) ([c7c0f04](https://github.com/cubiepy/cubie/commit/c7c0f040dd0c3f39198ad35dd88dca0b9b8a9b1f))
+* **structural:** Modia tearing ported from ModelingToolkit.jl ([#1016](https://github.com/cubiepy/cubie/issues/1016)) ([682ca7f](https://github.com/cubiepy/cubie/commit/682ca7f61d62fd5a5099988c39a87a69513ad6dc))
+* **structural:** perfect-alias elimination builds each missing target derivative from the level below ([#1021](https://github.com/cubiepy/cubie/issues/1021)) ([1c1fdc6](https://github.com/cubiepy/cubie/commit/1c1fdc6e04eaa7e36112b268338d6957d9d23080))
+* **structural:** SCC and solved-equation orders come from the engine's depth-first dfs_order ([#1025](https://github.com/cubiepy/cubie/issues/1025)) ([e4ee0a8](https://github.com/cubiepy/cubie/commit/e4ee0a88f5981312ac3831eff9ae46a08ddbb409))
+* **structural:** solvable edges rewritten equations are recomputed; tearing never drops an equation ([#1030](https://github.com/cubiepy/cubie/issues/1030)) ([ec59b1b](https://github.com/cubiepy/cubie/commit/ec59b1b851d3c4dfbef495b866b5dcff5e60f2a9))
+* **structural:** the simplest derivative definition wins the tie in pivot selection ([#1036](https://github.com/cubiepy/cubie/issues/1036)) ([1e97a2a](https://github.com/cubiepy/cubie/commit/1e97a2a8fe932c4e72584cc73077bf5118c26db1))
+* **structural:** variable ranks and integer-coefficient admission rewritten from scratch/requirements ([#1020](https://github.com/cubiepy/cubie/issues/1020)) ([fb2e085](https://github.com/cubiepy/cubie/commit/fb2e08575ef0a2f0c1fbd9eb458c1baa4503a7f4))
+* **summarymetrics:** peaks and negative_peaks count a plateau of equal samples as a single value ([#997](https://github.com/cubiepy/cubie/issues/997)) ([e59cab6](https://github.com/cubiepy/cubie/commit/e59cab6c41e882e2a959fe25f69cf619ec1b1ffb))
+
+
+### Documentation
+
+* **agents:** comments and docstrings are written in the programmer's voice in plain sentences ([#1042](https://github.com/cubiepy/cubie/issues/1042)) ([930c288](https://github.com/cubiepy/cubie/commit/930c288fb942d411bac53bf0931695e149f27d38))
+* **agents:** every worktree runs in its own venv, built by ci/tools/worktree_setup.py after git worktree add ([#1043](https://github.com/cubiepy/cubie/issues/1043)) ([94cb1a3](https://github.com/cubiepy/cubie/commit/94cb1a3e99d489e2a37dea5567bb8df9d22c1968))
+* **structural:** module docstrings, AGENTS.md and THIRD_PARTY_LICENSES name the MIT and BSD sources ([#1024](https://github.com/cubiepy/cubie/issues/1024)) ([b2b7068](https://github.com/cubiepy/cubie/commit/b2b7068f4875bd1a98e3c3fa188d5ae466901616))
+
+
+### Miscellaneous Chores
+
+* release 0.16.0 ([97df237](https://github.com/cubiepy/cubie/commit/97df237d25d813bd659da9e4431bb8f961db6dd4))
+
 ## [0.15.1](https://github.com/cubiepy/cubie/compare/v0.14.2...v0.15.1) (2026-09-27)
 
 
