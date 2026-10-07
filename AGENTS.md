@@ -35,8 +35,8 @@ the device-code optimisation conventions.
 ## Testing
 Run `.venv/Scripts/python -m pytest` from the repo root. We set coverage and `-n logical`
 (xdist) in the `pyproject.toml` `addopts`, so you get parallel workers and coverage without
-passing any options. We cover some code from tests in other directories, so run the
-complete simulator and real-GPU suites before opening or updating a PR.
+passing any options. Run the complete simulator and real-GPU suites before opening or
+updating a PR.
 - **Simulator (CPU, matches nocuda CI) — a first pass only:**
   `NUMBA_ENABLE_CUDASIM=1 .venv/Scripts/python -m pytest -m "not nocudasim and not specific_algos"`
 - **Real GPU (matches CUDA CI; CUDASIM off) — always run to verify results.** The simulator does
