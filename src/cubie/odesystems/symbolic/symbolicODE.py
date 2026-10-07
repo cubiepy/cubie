@@ -44,6 +44,7 @@ from typing import (
     Callable,
     Iterable,
     Optional,
+    Tuple,
     Union,
 )
 
@@ -106,6 +107,37 @@ def _unit_map(
     return {
         name: units.get(name, "dimensionless") for name in parameters
     }
+
+
+def _driver_derivative_indices(
+    equations, index_map
+) -> Tuple[Tuple[int, int], ...]:
+    """Return the driver index and order of each driver derivative.
+
+    Parameters
+    ----------
+    equations
+        ``ParsedEquations`` whose ``driver_derivatives`` maps each
+        derivative symbol to ``(driver, order)``.
+    index_map
+        ``IndexedBases`` giving each driver's index.
+
+    Returns
+    -------
+    tuple of (int, int)
+        One ``(driver index, order)`` pair per derivative the equations
+        read, in the order the derivatives follow the drivers in the
+        drivers buffer.
+    """
+
+    driver_indices = {
+        str(symbol): int(index)
+        for symbol, index in index_map.drivers.index_map.items()
+    }
+    return tuple(
+        (driver_indices[driver.name], int(order))
+        for driver, order in equations.driver_derivatives.values()
+    )
 
 
 def _operation_source_hash(fn_hash: str, operation_ordering: str) -> str:
@@ -316,7 +348,10 @@ class SymbolicODE(BaseODE):
 
         self.name = name
 
-        ndriv = all_indexed_bases.drivers.length
+        driver_derivatives = _driver_derivative_indices(
+            equations, all_indexed_bases
+        )
+        ndriv = all_indexed_bases.drivers.length + len(driver_derivatives)
         self.equations = equations
         self.indices = all_indexed_bases
         self.fn_hash = fn_hash
@@ -329,6 +364,7 @@ class SymbolicODE(BaseODE):
             observables=all_indexed_bases.observable_names,
             precision=precision,
             num_drivers=ndriv,
+            driver_derivatives=driver_derivatives,
             name=name,
             operation_ordering=operation_ordering,
         )
@@ -692,6 +728,11 @@ class SymbolicODE(BaseODE):
         if mass is not None:
             mass = asarray(mass, dtype=self.precision)
         derived["mass"] = mass
+        driver_derivatives = _driver_derivative_indices(parsed, index_map)
+        derived["driver_derivatives"] = driver_derivatives
+        derived["num_drivers"] = index_map.drivers.length + len(
+            driver_derivatives
+        )
         recognised = self.update_compile_settings(
             {**updates, **derived}, silent=True
         )

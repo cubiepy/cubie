@@ -638,6 +638,48 @@ def build_user_derivative_system(precision: np_dtype) -> BaseODE:
     )
 
 
+# Reads the drive's first and second derivatives: y = drive', w = drive''.
+DRIVER_DERIVATIVE_EQUATIONS = [
+    "dx = y",
+    "dy = w",
+    "0 = x - drive",
+    "dz = -z + y + w",
+]
+DRIVER_DERIVATIVE_FUNCTION_EQUATIONS = [
+    "dx = y",
+    "dy = w",
+    "0 = x - sin(t)",
+    "dz = -z + y + w",
+]
+
+
+def build_driver_derivative_system(precision: np_dtype) -> BaseODE:
+    """Return a DAE whose reduced dynamics read driver derivatives."""
+
+    return create_ODE_system(
+        dxdt=DRIVER_DERIVATIVE_EQUATIONS,
+        states={"z": 0.5},
+        observables=["x", "y", "w"],
+        drivers=["drive"],
+        precision=precision,
+        strict=True,
+        name="driver_derivative",
+    )
+
+
+def build_driver_derivative_function_system(precision: np_dtype) -> BaseODE:
+    """Return the twin of ``driver_derivative`` with the drive in-equation."""
+
+    return create_ODE_system(
+        dxdt=DRIVER_DERIVATIVE_FUNCTION_EQUATIONS,
+        states={"z": 0.5},
+        observables=["x", "y", "w"],
+        precision=precision,
+        strict=True,
+        name="driver_derivative_function",
+    )
+
+
 __all__ = [
     "build_colliding_parameters_system",
     "build_coupled_oscillator_system",
@@ -653,6 +695,8 @@ __all__ = [
     "build_diagonally_dominant_system",
     "build_time_function_driver_system",
     "build_time_array_driver_system",
+    "build_driver_derivative_system",
+    "build_driver_derivative_function_system",
     "build_torn_driver_system",
     "build_torn_time_system",
     "build_torn_unsolvable_system",

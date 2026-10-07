@@ -34,6 +34,7 @@ def quadratic_input(precision) -> ArrayInterpolator:
         drivers=DriverSamples({"values": values}, time=times),
         order=2,
         wrap=False,
+        n_drivers=1,
     )
 
 
@@ -53,6 +54,7 @@ def cubic_inputs(precision) -> ArrayInterpolator:
         order=3,
         boundary_condition="not-a-knot",
         wrap=False,
+        n_drivers=2,
     )
 
 
@@ -1258,6 +1260,7 @@ def test_empty_interpolator_populates_from_samples(precision):
         drivers=DriverSamples({"values": times**2}, time=times),
         order=2,
         wrap=False,
+        n_drivers=1,
     )
     assert {"drivers", "order", "wrap"} <= recognised
     assert interp.compile_settings.values_hash != identity
@@ -1376,6 +1379,7 @@ def test_settings_only_update_recomputes_coefficients(precision):
         order=2,
         wrap=False,
         boundary_condition="clamped",
+        n_drivers=1,
     )
     base_segments = interp.num_samples - 1
     assert interp.num_segments == base_segments + 2
@@ -1542,3 +1546,117 @@ def test_coefficients_land_pinned_below_ceiling(precision):
         wrap=False,
     )
     assert is_pinned_array(interp.coefficients)
+
+
+@pytest.fixture(scope="session")
+def cubic_with_derivatives(precision) -> ArrayInterpolator:
+    """Return the cubic inputs with driver derivatives of both."""
+
+    times = np.linspace(0.0, 5.0, 11, dtype=precision)
+    samples = {
+        "cubic1": times**3 - 2.0 * times,
+        "cubic2": 0.5 * times**3 + 2 * times**2 + times,
+    }
+    return ArrayInterpolator(
+        precision=precision,
+        drivers=DriverSamples(samples, time=times),
+        order=3,
+        boundary_condition="not-a-knot",
+        wrap=False,
+        n_drivers=5,
+        n_driver_derivatives=3,
+        driver_derivatives=((0, 1), (0, 2), (1, 3)),
+    )
+
+
+def _cubic_query_times(interpolator):
+    return np.linspace(
+        interpolator.t0,
+        interpolator.t0
+        + interpolator.driver_sample_period
+        * (interpolator.num_segments - 1),
+        num=17,
+        dtype=interpolator.precision,
+    )
+
+
+def test_driver_derivatives_follow_the_inputs(
+    cubic_with_derivatives, tolerance
+):
+    # Buffer: cubic1, cubic2, cubic1', cubic1'', cubic2'''.
+    interpolator = cubic_with_derivatives
+    times = _cubic_query_times(interpolator)
+    evaluated = run_driver_device_eval(
+        interpolator.drivers_fn, interpolator.coefficients, times, width=5
+    )
+    expected = np.column_stack(
+        (
+            times**3 - 2.0 * times,
+            0.5 * times**3 + 2.0 * times**2 + times,
+            3.0 * times**2 - 2.0,
+            6.0 * times,
+            np.full_like(times, 3.0),
+        )
+    )
+    np.testing.assert_allclose(
+        evaluated,
+        expected,
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
+
+
+def test_time_derivative_of_a_driver_derivative_is_the_next_order(
+    cubic_with_derivatives, tolerance
+):
+    interpolator = cubic_with_derivatives
+    times = _cubic_query_times(interpolator)
+    evaluated = run_driver_device_eval(
+        interpolator.driver_derivative_fn,
+        interpolator.coefficients,
+        times,
+        width=5,
+    )
+    expected = np.column_stack(
+        (
+            3.0 * times**2 - 2.0,
+            1.5 * times**2 + 4.0 * times + 1.0,
+            6.0 * times,
+            np.full_like(times, 6.0),
+            np.zeros_like(times),
+        )
+    )
+    np.testing.assert_allclose(
+        evaluated,
+        expected,
+        rtol=tolerance.rel_loose,
+        atol=tolerance.abs_loose,
+    )
+
+
+def test_get_interpolated_returns_the_inputs(cubic_with_derivatives):
+    interpolator = cubic_with_derivatives
+    times = _cubic_query_times(interpolator)
+    np.testing.assert_array_equal(
+        interpolator.get_interpolated(times),
+        run_driver_device_eval(
+            interpolator.drivers_fn,
+            interpolator.coefficients,
+            times,
+            width=5,
+        )[:, :2],
+    )
+
+
+def test_derivative_above_the_spline_order_rejected(precision):
+    times = np.linspace(0.0, 5.0, 11, dtype=precision)
+    with pytest.raises(ValueError, match="interpolation order to at least 4"):
+        ArrayInterpolator(
+            precision=precision,
+            drivers=DriverSamples({"cubic": times**3}, time=times),
+            order=3,
+            wrap=False,
+            n_drivers=2,
+            n_driver_derivatives=1,
+            driver_derivatives=((0, 4),),
+        )

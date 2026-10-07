@@ -6,7 +6,7 @@ Published Classes
     Frozen counts for each component category in an ODE system.
 
     >>> sizes = SystemSizes(states=4, observables=2, swept_parameters=3,
-    ...                     drivers=1)
+    ...                     drivers=1, driver_derivatives=0)
     >>> sizes.states
     4
 
@@ -54,6 +54,7 @@ from attrs import (
     frozen,
 )
 from attrs.validators import (
+    deep_iterable as attrsval_deep_iterable,
     in_ as attrsval_in,
     instance_of as attrsval_instance_of,
     optional as attrsval_optional,
@@ -140,7 +141,10 @@ class SystemSizes:
     swept_parameters
         Number of swept parameters.
     drivers
-        Number of driver variables in the system.
+        Drivers-buffer length: drivers plus driver derivatives read.
+    driver_derivatives
+        Number of driver derivatives the equations read; they sit in
+        the drivers buffer after the drivers.
 
     Notes
     -----
@@ -152,6 +156,7 @@ class SystemSizes:
     observables: int = field(validator=attrsval_instance_of(int))
     swept_parameters: int = field(validator=attrsval_instance_of(int))
     drivers: int = field(validator=attrsval_instance_of(int))
+    driver_derivatives: int = field(validator=attrsval_instance_of(int))
 
 
 @frozen
@@ -170,7 +175,12 @@ class ODEData(CUDAFactoryConfig):
         Precision factory used for numerical calculations. Defaults to
         :class:`numpy.float32`.
     num_drivers
-        Number of driver or forcing functions. Defaults to ``1``.
+        Drivers-buffer length: drivers plus driver derivatives read.
+        Defaults to ``1``.
+    driver_derivatives
+        The driver index and order of each driver derivative the
+        equations read, in the order the derivatives follow the
+        drivers in the drivers buffer.
     swept_parameters
         Names of the parameters read from the parameters array, in
         row order.
@@ -214,6 +224,15 @@ class ODEData(CUDAFactoryConfig):
         ),
     )
     num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
+    driver_derivatives: Tuple[Tuple[int, int], ...] = field(
+        default=(),
+        validator=attrsval_deep_iterable(
+            attrsval_deep_iterable(
+                attrsval_instance_of(int), attrsval_instance_of(tuple)
+            ),
+            attrsval_instance_of(tuple),
+        ),
+    )
     swept_parameters: Tuple[str, ...] = field(
         default=(), converter=_ordered_names
     )
@@ -298,6 +317,7 @@ class ODEData(CUDAFactoryConfig):
             observables=self.num_observables,
             swept_parameters=self.num_swept_parameters,
             drivers=self.num_drivers,
+            driver_derivatives=len(self.driver_derivatives),
         )
 
     @property
@@ -333,6 +353,7 @@ class ODEData(CUDAFactoryConfig):
         num_drivers: int = 1,
         operation_ordering: str = operation_ordering_default(),
         swept_parameters: Iterable[str] = (),
+        driver_derivatives: Tuple[Tuple[int, int], ...] = (),
     ) -> "ODEData":
         """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
 
@@ -353,7 +374,8 @@ class ODEData(CUDAFactoryConfig):
         precision
             Precision factory used for calculations.
         num_drivers
-            Number of driver or forcing functions. Defaults to ``1``.
+            Drivers-buffer length: drivers plus driver derivatives read.
+            Defaults to ``1``.
         operation_ordering
             Generated-operation ordering policy: stable ``"kahn"``,
             fixed ``"greedy"`` or ``"dfs"``, or thresholded
@@ -361,6 +383,10 @@ class ODEData(CUDAFactoryConfig):
         swept_parameters
             Names of the parameters read from the parameters array.
             Every other parameter compiles in at its default.
+        driver_derivatives
+            The driver index and order of each driver derivative the
+            equations read, in the order the derivatives follow the
+            drivers in the drivers buffer.
 
         Returns
         -------
@@ -395,6 +421,7 @@ class ODEData(CUDAFactoryConfig):
             observables=observables,
             precision=precision,
             num_drivers=num_drivers,
+            driver_derivatives=driver_derivatives,
             operation_ordering=operation_ordering,
             swept_parameters=swept_parameters,
             fixed_parameters=fixed_parameters,

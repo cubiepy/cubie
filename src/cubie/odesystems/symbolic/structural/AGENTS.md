@@ -70,6 +70,7 @@ Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
 - `find_eq_solvables` recomputes an equation's solvable edges from scratch.
 - Differentiation passes `StructuralState.derivative_names` to `ir.diff`.
 - `bareiss` returns the pivot columns in elimination order; their count is the rank.
+- Differentiating a driver term (`StructuralState(drivers=...)`) adds its derivative as a known.
 - Discrete systems, state machines, hierarchical connections and SDE tearing are not
   supported.
 

@@ -115,6 +115,7 @@ class BaseODE(CUDAFactory):
         operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
         swept_parameters: Iterable[str] = (),
+        driver_derivatives: Tuple[Tuple[int, int], ...] = (),
     ) -> None:
         """Initialize the ODE system.
 
@@ -136,7 +137,8 @@ class BaseODE(CUDAFactory):
             Precision factory used for calculations. Defaults to
             :class:`numpy.float32`.
         num_drivers
-            Number of driver or forcing functions. Defaults to ``1``.
+            Drivers-buffer length: drivers plus driver derivatives read.
+            Defaults to ``1``.
         operation_ordering
             Generated-operation ordering policy:
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
@@ -147,6 +149,10 @@ class BaseODE(CUDAFactory):
         swept_parameters
             Names of the parameters read from the parameters array.
             Every other parameter compiles in at its default.
+        driver_derivatives
+            The driver index and order of each driver derivative the
+            equations read, in the order the derivatives follow the
+            drivers in the drivers buffer.
         """
         super().__init__()
         system_data = ODEData.from_BaseODE_initargs(
@@ -160,6 +166,7 @@ class BaseODE(CUDAFactory):
             num_drivers=num_drivers,
             operation_ordering=operation_ordering,
             swept_parameters=swept_parameters,
+            driver_derivatives=driver_derivatives,
         )
         self.setup_compile_settings(system_data)
         self.name = name
@@ -288,8 +295,17 @@ class BaseODE(CUDAFactory):
 
     @property
     def num_drivers(self) -> int:
-        """Number of driver variables."""
+        """Length of the drivers buffer the device functions read."""
         return self.compile_settings.num_drivers
+
+    @property
+    def driver_derivatives(self) -> Tuple[Tuple[int, int], ...]:
+        """The driver index and order of each driver derivative read.
+
+        The derivatives follow the drivers in the drivers buffer, in
+        this order.
+        """
+        return self.compile_settings.driver_derivatives
 
     @property
     def sizes(self):

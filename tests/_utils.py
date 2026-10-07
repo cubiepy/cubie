@@ -1761,7 +1761,9 @@ def _driver_eval_kernel(device_fn):
     return kernel
 
 
-def run_driver_device_eval(device_fn, coefficients, query_times):
+def run_driver_device_eval(
+    device_fn, coefficients, query_times, width=None
+):
     """Evaluate a driver interpolation device function on the GPU.
 
     Parameters
@@ -1773,6 +1775,8 @@ def run_driver_device_eval(device_fn, coefficients, query_times):
         Segment-major polynomial coefficients.
     query_times : numpy.ndarray
         Time samples to evaluate on the device.
+    width : int, optional
+        Output entries per time; defaults to the input count.
 
     Returns
     -------
@@ -1780,7 +1784,7 @@ def run_driver_device_eval(device_fn, coefficients, query_times):
         Evaluated input values, one row per query time.
     """
     n_times = query_times.size
-    n_inputs = coefficients.shape[1]
+    n_inputs = coefficients.shape[1] if width is None else width
     # Zero-filled: headless population runs never launch the kernel.
     out_host = np.zeros((n_times, n_inputs), dtype=coefficients.dtype)
 
@@ -2502,6 +2506,16 @@ TIME_DRIVER_SETTINGS = {
     "output_types": ["state", "observables", "time"],
     "wrap": True,
     "boundary_condition": "periodic",
+}
+
+# Save states only: the float32 spline error in the driver
+# derivatives exceeds 1e-5.
+DRIVER_DERIVATIVE_SETTINGS = {
+    **TIME_DRIVER_SETTINGS,
+    "system_type": "driver_derivative",
+    "output_types": ["state", "time"],
+    "saved_observable_indices": [],
+    "summarised_observable_indices": [],
 }
 
 SINUSOID_DRIVER_SAMPLES = DriverSamples(

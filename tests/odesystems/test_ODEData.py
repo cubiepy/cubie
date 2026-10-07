@@ -18,12 +18,17 @@ from cubie.odesystems.ODEData import (
 def test_system_sizes_construction():
     """All fields stored correctly on frozen attrs class."""
     sizes = SystemSizes(
-        states=3, observables=2, swept_parameters=4, drivers=1,
+        states=3,
+        observables=2,
+        swept_parameters=4,
+        drivers=1,
+        driver_derivatives=0,
     )
     assert sizes.states == 3
     assert sizes.observables == 2
     assert sizes.swept_parameters == 4
     assert sizes.drivers == 1
+    assert sizes.driver_derivatives == 0
 
 
 @pytest.mark.parametrize(
@@ -33,8 +38,15 @@ def test_system_sizes_construction():
         ("observables", "x"),
         ("swept_parameters", None),
         ("drivers", 2.0),
+        ("driver_derivatives", 1.5),
     ],
-    ids=["states", "observables", "swept_parameters", "drivers"],
+    ids=[
+        "states",
+        "observables",
+        "swept_parameters",
+        "drivers",
+        "driver_derivatives",
+    ],
 )
 def test_system_sizes_validates_int(field, bad_value):
     """Each field rejects non-int values."""
@@ -43,6 +55,7 @@ def test_system_sizes_validates_int(field, bad_value):
         observables=1,
         swept_parameters=1,
         drivers=1,
+        driver_derivatives=0,
     )
     kwargs[field] = bad_value
     with pytest.raises(TypeError):

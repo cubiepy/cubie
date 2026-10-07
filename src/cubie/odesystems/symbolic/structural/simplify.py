@@ -115,6 +115,7 @@ def _pantelides_reassemble_state(
         state.known_symbols - {state.time_symbol},
         state.time_symbol,
         derivative_names=state.derivative_names,
+        drivers=state.drivers,
         state_priorities=priorities,
         irreducibles=state.irreducibles,
     )

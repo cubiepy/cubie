@@ -34,6 +34,7 @@ import math
 from types import MappingProxyType
 from typing import (
     Callable,
+    Dict,
     Iterable,
     Mapping,
     Optional,
@@ -43,6 +44,8 @@ from typing import (
 )
 
 from numpy import (
+    bool_ as np_bool,
+    int32 as np_int32,
     allclose,
     any as np_any,
     arange,
@@ -66,13 +69,17 @@ from cubie.backend.intrinsics import unroll_if
 from numpy.typing import NDArray
 
 from cubie.CUDAFactory import (
+    ALL_JIT_PARAMETERS,
+    ALL_UNROLL_PARAMETERS,
     CUDAFactory,
     CUDAFactoryConfig,
     CUDADispatcherCache,
     FrozenSettings,
+    build_config,
 )
 from cubie._utils import (
     PrecisionDType,
+    getype_validator,
     gttype_validator,
 )
 from cubie.memory import default_memmgr
@@ -91,9 +98,9 @@ class InterpolatorCache(CUDADispatcherCache):
     Attributes
     ----------
     drivers_fn
-        Device function evaluating every input at a time.
+        Device function filling the drivers buffer.
     driver_derivative_fn
-        Device function evaluating every input's time derivative.
+        Device function filling each buffer entry's time derivative.
     coefficients
         Host ``(num_segments, num_inputs, order + 1)`` table.
     coefficients_shape
@@ -106,8 +113,10 @@ class InterpolatorCache(CUDADispatcherCache):
     coefficients_shape: Tuple[int, int, int] = field(default=(0, 0, 0))
 
 
-ALL_INTERPOLATOR_PARAMETERS = frozenset(
-    {"drivers", "order", "wrap", "boundary_condition"}
+ALL_INTERPOLATOR_PARAMETERS = (
+    frozenset({"drivers", "order", "wrap", "boundary_condition"})
+    | ALL_UNROLL_PARAMETERS
+    | ALL_JIT_PARAMETERS
 )
 """Keyword args for the driver samples and interpolation settings."""
 
@@ -318,8 +327,17 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         selects ``"periodic"`` when wrapping, else ``"clamped"``.
     drivers : DriverSamples, optional
         The sampled drivers; ``None`` interpolates nothing.
-    num_inputs : int
-        Column count of the sample table.
+    n_drivers : int
+        Length of the system's drivers buffer, which holds the drivers
+        followed by the driver derivatives the equations read. The
+        system supplies it.
+    n_driver_derivatives : int
+        Number of driver derivatives in the drivers buffer. The system
+        supplies it.
+    driver_derivatives : tuple of (int, int)
+        The driver index and order of each driver derivative, in the
+        order they follow the drivers in the buffer. The system
+        supplies it.
     num_segments : int
         Polynomial segments in the table: samples minus one, plus two
         ghost segments for clamped non-wrapping inputs, zero with no
@@ -346,22 +364,52 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
             validators.instance_of(DriverSamples)
         ),
     )
-    num_inputs: int = field(default=0, init=False)
+    n_drivers: int = field(default=0, validator=getype_validator(int, 0))
+    n_driver_derivatives: int = field(
+        default=0, validator=getype_validator(int, 0)
+    )
+    driver_derivatives: Tuple[Tuple[int, int], ...] = field(
+        default=(),
+        validator=validators.deep_iterable(
+            validators.deep_iterable(
+                validators.instance_of(int), validators.instance_of(tuple)
+            ),
+            validators.instance_of(tuple),
+        ),
+    )
     num_segments: int = field(default=0, init=False)
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
-        num_samples, num_inputs = self.input_array.shape
-        if num_inputs and num_samples < self.order + 1:
+        if self.num_inputs and self.num_samples < self.order + 1:
             raise ValueError(
                 "At least order + 1 samples are required to construct"
                 " splines.",
             )
-        self._check_periodic(num_samples)
-        object.__setattr__(self, "num_inputs", int(num_inputs))
+        self._check_periodic(self.num_samples)
+        self._check_derivative_orders()
         object.__setattr__(
-            self, "num_segments", self._segment_count(num_samples)
+            self, "num_segments", self._segment_count(self.num_samples)
         )
+
+    def _check_derivative_orders(self) -> None:
+        """Reject a driver derivative above the spline's order.
+
+        Raises
+        ------
+        ValueError
+            The system reads a driver derivative of higher order than
+            the spline polynomial, which would make it zero
+            everywhere.
+        """
+        for _, order in self.driver_derivatives:
+            if order > self.order:
+                raise ValueError(
+                    f"The system reads the order-{order} time derivative "
+                    f"of a driver, but an order-{self.order} spline "
+                    f"supplies derivatives up to order {self.order}; "
+                    f"set the interpolation order to at least {order}."
+                )
 
     def _check_periodic(self, num_samples: int) -> None:
         """Reject periodic settings without wrap or matching ends."""
@@ -409,6 +457,11 @@ class ArrayInterpolatorConfig(CUDAFactoryConfig):
         return int(self.input_array.shape[0])
 
     @property
+    def num_inputs(self) -> int:
+        """Number of sampled drivers; zero with no samples."""
+        return int(self.input_array.shape[1])
+
+    @property
     def t0(self) -> float:
         """Time of the first sample."""
         return 0.0 if self.drivers is None else self.drivers.t0
@@ -443,15 +496,42 @@ class ArrayInterpolator(CUDAFactory):
         memory_manager : MemoryManager
             Manager whose policy sizes the pinned coefficients buffer.
         **settings
-            ``order``, ``wrap`` and ``boundary_condition``.
+            ``order``, ``wrap``, ``boundary_condition``, the unroll and
+            jit flags, and the system inputs from
+            :meth:`system_inputs`.
         """
         super().__init__()
         self.setup_compile_settings(
-            ArrayInterpolatorConfig(
-                precision=precision, drivers=drivers, **settings
+            build_config(
+                ArrayInterpolatorConfig,
+                required={"precision": precision, "drivers": drivers},
+                **settings,
             )
         )
         self._memory_manager = memory_manager
+
+    @classmethod
+    def system_inputs(cls, system: Any) -> Dict[str, Any]:
+        """Return interpolator settings from a system object.
+
+        Parameters
+        ----------
+        system
+            The ODE system whose drivers buffer the evaluators fill.
+
+        Returns
+        -------
+        dict
+            The precision, the drivers-buffer length, the number of
+            driver derivatives, and the driver index and order of each
+            derivative.
+        """
+        return dict(
+            precision=system.precision,
+            n_drivers=system.sizes.drivers,
+            n_driver_derivatives=system.sizes.driver_derivatives,
+            driver_derivatives=system.driver_derivatives,
+        )
 
     # ---------------------------------------------------------------------- #
     # Evaluation function machinery
@@ -471,9 +551,20 @@ class ArrayInterpolator(CUDAFactory):
                 coefficients_shape=self.coefficients_shape,
             )
         precision = self.precision
+        config = self.compile_settings
+        jit_kwargs = self.jit_kwargs
 
-        order = self.order
-        num_inputs = self.num_inputs
+        order = int32(self.order)
+        n_inputs = int32(self.num_inputs)
+        n_derivatives = int32(config.n_driver_derivatives)
+        has_derivatives = config.n_driver_derivatives > 0
+        # Unroll the derivative loops fully to compile out unused
+        # operations.
+        always_unroll = (True, None)
+        derivative_drivers = asarray(
+            [driver for driver, _ in config.driver_derivatives],
+            dtype=np_int32,
+        )
         resolution = precision(self.driver_sample_period)
         inv_resolution = precision(precision(1.0) / resolution)
         start_time = precision(self.t0)
@@ -481,116 +572,155 @@ class ArrayInterpolator(CUDAFactory):
         wrap = self.wrap
         boundary_condition = self.boundary_condition
         pad_clamped = (not wrap) and (boundary_condition == "clamped")
-        unroll_other_small = self.compile_settings.unroll.unroll_other_small
+        unroll_other_small = config.unroll.unroll_other_small
         zero_value = precision(0.0)
         evaluation_start = precision(
             start_time - (resolution if pad_clamped else precision(0.0))
         )
 
-        # no cover: start
-        @cuda.jit(
-            # (numba_precision,
-            #  numba_precision[:,:,::1],
-            #  numba_precision[::1]),
-            device=True,
-            inline=True,
-            **self.jit_kwargs,
+        def derivative_filler(
+            coefficient_index, factor, is_leading_power, is_lower_power
+        ):
+            """Return a device function that writes each driver
+            derivative into the drivers buffer after the drivers.
+
+            Parameters
+            ----------
+            coefficient_index, factor, is_leading_power, is_lower_power
+                Horner's-rule terms from
+                :meth:`_derivative_horner_terms`.
+
+            Returns
+            -------
+            callable
+                ``fill_derivatives(seg, tau, in_range, coefficients,
+                out)``, evaluating every derivative on segment ``seg``
+                at position ``tau``.
+            """
+
+            # no cover: start
+            @cuda.jit(device=True, inline=True, **jit_kwargs)
+            def fill_derivatives(seg, tau, in_range, coefficients, out):
+                for derivative in unroll_if(
+                    range(n_derivatives), always_unroll
+                ):
+                    driver = derivative_drivers[derivative]
+                    acc = zero_value
+                    for power in unroll_if(
+                        range(order, int32(-1), int32(-1)), always_unroll
+                    ):
+                        term = (
+                            coefficients[
+                                seg,
+                                driver,
+                                coefficient_index[derivative, power],
+                            ]
+                            * factor[derivative, power]
+                        )
+                        if is_leading_power[derivative, power]:
+                            acc = term
+                        elif is_lower_power[derivative, power]:
+                            acc = acc * tau + term
+                    out[n_inputs + derivative] = (
+                        acc if in_range else zero_value
+                    )
+
+            # no cover: end
+            return fill_derivatives
+
+        fill_driver_derivatives = derivative_filler(
+            *self._derivative_horner_terms(0)
         )
+        fill_next_derivatives = derivative_filler(
+            *self._derivative_horner_terms(1)
+        )
+
+        # no cover: start
+        @cuda.jit(device=True, inline=True, **jit_kwargs)
+        def locate(time):
+            """Return the segment, the position in it and whether
+            ``time`` lies inside the samples."""
+            time = precision(time)
+            scaled = (time - evaluation_start) * inv_resolution
+            scaled_floor = precision(math.floor(scaled))
+            idx = int32(scaled_floor)
+            if wrap:
+                seg = int32(idx % num_segments)
+                tau = precision(scaled - scaled_floor)
+                in_range = True
+            else:
+                in_range = (scaled >= precision(0.0)) and (
+                    scaled <= num_segments
+                )
+                seg = cuda.selp(idx < int32(0), int32(0), idx)
+                seg = cuda.selp(
+                    seg >= num_segments, int32(num_segments - 1), seg
+                )
+                tau = precision(scaled - precision(seg))
+            return seg, tau, in_range
+
+        @cuda.jit(device=True, inline=True, **jit_kwargs)
         def evaluate_all(time, coefficients, out) -> None:
-            """Evaluate all input polynomials at ``time`` on the device.
+            """Fill the drivers buffer at ``time``.
 
             Parameters
             ----------
             time : float
-                Query time for evaluation.
+                Query time.
             coefficients : device array
                 Segment-major coefficients with trailing polynomial degrees.
             out : device array
-                Output array to populate with evaluated input values.
+                Drivers buffer to fill with the drivers followed by
+                their derivatives.
             """
-            # Just in case, should no-op if input is precision-type
-            time = precision(time)
-            scaled = (time - evaluation_start) * inv_resolution
-            scaled_floor = precision(math.floor(scaled))
-            idx = int32(scaled_floor)
-
-            if wrap:
-                seg = int32(idx % num_segments)
-                tau = precision(scaled - scaled_floor)
-                in_range = True
-            else:
-                in_range = (scaled >= precision(0.0)) and (
-                    scaled <= num_segments
-                )
-                seg = cuda.selp(idx < int32(0), int32(0), idx)
-                seg = cuda.selp(
-                    seg >= num_segments, int32(num_segments - 1), seg
-                )
-                tau = precision(scaled - precision(seg))
-
-            # Evaluate polynomials using Horner's rule
+            seg, tau, in_range = locate(time)
             for input_index in unroll_if(
-                range(num_inputs), unroll_other_small
+                range(n_inputs), unroll_other_small
             ):
-                acc = zero_value
+                acc = coefficients[seg, input_index, order]
+                # Horner's rule below the top power, down to 0.
                 for k in unroll_if(
-                    range(int32(order), int32(-1), int32(-1)),
+                    range(order - int32(1), int32(-1), int32(-1)),
                     unroll_other_small,
                 ):
                     acc = acc * tau + coefficients[seg, input_index, k]
                 out[input_index] = acc if in_range else zero_value
+            if has_derivatives:
+                fill_driver_derivatives(seg, tau, in_range, coefficients, out)
 
-        # no cover: end
+        @cuda.jit(device=True, inline=True, **jit_kwargs)
+        def evaluate_time_derivative(time, coefficients, out) -> None:
+            """Fill the time derivative of each drivers-buffer entry.
 
-        # no cover: start
-        @cuda.jit(
-            # [(numba_precision,
-            #   numba_precision[:,:,::1],
-            #   numba_precision[::1])],
-            device=True,
-            inline=True,
-            **self.jit_kwargs,
-        )
-        def evaluate_time_derivative(
-            time,
-            coefficients,
-            out,
-        ) -> None:
-            """Evaluate the derivative of each driver polynomial."""
-            time = precision(time)
-            scaled = (time - evaluation_start) * inv_resolution
-            scaled_floor = precision(math.floor(scaled))
-            idx = int32(scaled_floor)
-
-            if wrap:
-                seg = int32(idx % num_segments)
-                tau = precision(scaled - scaled_floor)
-                in_range = True
-            else:
-                in_range = (scaled >= precision(0.0)) and (
-                    scaled <= num_segments
-                )
-                seg = cuda.selp(idx < int32(0), int32(0), idx)
-                seg = cuda.selp(
-                    seg >= num_segments, int32(num_segments - 1), seg
-                )
-                tau = precision(scaled - precision(seg))
-
+            Parameters
+            ----------
+            time : float
+                Query time.
+            coefficients : device array
+                Segment-major coefficients with trailing polynomial degrees.
+            out : device array
+                Buffer to fill with the time derivatives of the drivers,
+                followed by those of the driver derivatives, which are
+                one order higher.
+            """
+            seg, tau, in_range = locate(time)
             for input_index in unroll_if(
-                range(int32(num_inputs)), unroll_other_small
+                range(n_inputs), unroll_other_small
             ):
-                acc = zero_value
+                acc = precision(order) * coefficients[seg, input_index, order]
+                # Horner's rule below the top power, down to 1.
                 for k in unroll_if(
-                    range(int32(order), int32(0), int32(-1)),
+                    range(order - int32(1), int32(0), int32(-1)),
                     unroll_other_small,
                 ):
-                    acc = (
-                        acc * tau
-                        + precision(k) * (coefficients[seg, input_index, k])
+                    acc = acc * tau + precision(k) * (
+                        coefficients[seg, input_index, k]
                     )
                 out[input_index] = (
                     acc * inv_resolution if in_range else zero_value
                 )
+            if has_derivatives:
+                fill_next_derivatives(seg, tau, in_range, coefficients, out)
 
         # no cover: end
         cache = InterpolatorCache(
@@ -675,7 +805,7 @@ class ArrayInterpolator(CUDAFactory):
         times_device = cuda.to_device(times, stream=stream)
         coefficients_device = cuda.to_device(coefficients, stream=stream)
         out_device = cuda.device_array(
-            (num_points, self.num_inputs),
+            (num_points, self.compile_settings.n_drivers),
             dtype=self.precision,
             stream=stream,
         )
@@ -690,7 +820,7 @@ class ArrayInterpolator(CUDAFactory):
             out_device,
         )
         stream.synchronize()
-        return out_device.copy_to_host()
+        return out_device.copy_to_host()[:, : self.num_inputs]
 
     def plot_interpolated(
         self,
@@ -970,13 +1100,71 @@ class ArrayInterpolator(CUDAFactory):
         buffer[...] = coefficients
         return buffer
 
+    def _derivative_horner_terms(
+        self, extra_order: int
+    ) -> Tuple[NDArray, ...]:
+        """Return the Horner's-rule terms of each driver derivative.
+
+        On one segment, a driver is the polynomial ``sum_j c_j s**j``,
+        where ``s`` is the position in the segment measured in sample
+        periods. Its order-``k`` time derivative is a polynomial in
+        ``s`` whose coefficient of ``s**q`` is
+        ``c_(q+k) * (q+k)!/q! / period**k``, for ``q`` from 0 up to
+        ``order - k``. We evaluate it by Horner's rule, starting at the
+        leading power ``order - k`` and working down to ``s**0``. We
+        loop over every power from ``order`` down, so the loop unrolls
+        to the same shape for every derivative, and use the flags to
+        start the sum at the leading power and to skip the powers above
+        it.
+
+        Parameters
+        ----------
+        extra_order
+            Added to every derivative's order: 0 evaluates the
+            driver derivatives, 1 their time derivatives.
+
+        Returns
+        -------
+        coefficient_index
+            An int32 array of shape ``(derivatives, order + 1)`` giving
+            the spline coefficient that power ``q`` of each derivative
+            reads.
+        factor
+            An array of the same shape holding the factor
+            ``(q+k)!/q! / period**k`` that multiplies that coefficient.
+        is_leading_power
+            A boolean array of the same shape, true at the power where
+            Horner's rule starts.
+        is_lower_power
+            A boolean array of the same shape, true at the powers below
+            the leading one.
+        """
+        precision = self.precision
+        order = self.order
+        derivatives = self.compile_settings.driver_derivatives
+        rows = len(derivatives)
+        inv_period = 1.0 / float(self.driver_sample_period)
+        coefficient_index = zeros((rows, order + 1), dtype=np_int32)
+        factor = zeros((rows, order + 1), dtype=precision)
+        is_leading_power = zeros((rows, order + 1), dtype=np_bool)
+        is_lower_power = zeros((rows, order + 1), dtype=np_bool)
+        for row, (_, derivative_order) in enumerate(derivatives):
+            k = derivative_order + extra_order
+            for q in range(order + 1):
+                coefficient_index[row, q] = min(q + k, order)
+                if q + k <= order:
+                    factor[row, q] = math.perm(q + k, k) * inv_period**k
+                is_leading_power[row, q] = q == order - k
+                is_lower_power[row, q] = q < order - k
+        return coefficient_index, factor, is_leading_power, is_lower_power
+
     # ---------------------------------------------------------------------- #
     # Getters and pass-through
     # ---------------------------------------------------------------------- #
 
     @property
     def num_inputs(self) -> int:
-        """Return the number of input signals."""
+        """Return the number of sampled drivers."""
         return self.compile_settings.num_inputs
 
     @property
