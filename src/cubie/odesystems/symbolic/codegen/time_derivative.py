@@ -35,6 +35,9 @@ from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
 )
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
+    check_derivative_orders,
+)
 from cubie.time_logger import default_timelogger
 
 
@@ -153,6 +156,12 @@ def _build_time_derivative_assignments(
         derivative_symbols[lhs] = deriv_symbol
         derivative_assignments.append((deriv_symbol, total))
 
+    check_derivative_orders(
+        (total for _, total in derivative_assignments),
+        sysir.function_aliases,
+        derivative_names,
+        "time derivative",
+    )
     assignments.extend(derivative_assignments)
 
     for position, dx_sym in enumerate(sysir.dxdt_symbols):

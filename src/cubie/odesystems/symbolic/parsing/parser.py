@@ -26,7 +26,7 @@ from .function_parser import (
     parse_function_input,
 )
 from .normalise import normalise_input
-from .parse_primitives import TIME_SYMBOL
+from .parse_primitives import TIME_SYMBOL, derivative_helpers
 from .parsed_system import ParsedSystem
 
 def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
@@ -224,7 +224,9 @@ def parse_input(
     user_functions
         Mapping of callable names used in equations to their implementations.
     user_function_derivatives
-        Mapping of callable names to derivative helper functions.
+        Mapping of callable names to derivative helper functions. A
+        value may also be a list of helpers evaluating the first,
+        second, ... derivatives.
     strict
         When ``False``, infer missing symbol declarations from equation usage.
     state_units
@@ -487,14 +489,12 @@ def _parse_function_path(
     all_symbols.setdefault("t", TIME_SYMBOL)
     if funcs:
         all_symbols.update({name: fn for name, fn in funcs.items()})
-        if user_function_derivatives:
-            all_symbols.update(
-                {
-                    fn.__name__: fn
-                    for fn in user_function_derivatives.values()
-                    if callable(fn)
-                }
-            )
+        all_symbols.update(
+            {
+                fn.__name__: fn
+                for fn in derivative_helpers(user_function_derivatives)
+            }
+        )
 
     return (
         index_map,

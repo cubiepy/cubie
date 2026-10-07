@@ -68,6 +68,7 @@ Licence texts are in the repository's `THIRD_PARTY_LICENSES`.
   `always_present`) grow only through `add_variable` and shrink only through
   `rm_eqs_vars`; equations grow only through `add_equation`.
 - `find_eq_solvables` recomputes an equation's solvable edges from scratch.
+- Differentiation passes `StructuralState.derivative_names` to `ir.diff`.
 - `bareiss` returns the pivot columns in elimination order; their count is the rank.
 - Discrete systems, state machines, hierarchical connections and SDE tearing are not
   supported.

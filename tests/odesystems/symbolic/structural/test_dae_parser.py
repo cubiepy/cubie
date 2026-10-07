@@ -4,6 +4,13 @@ import numpy as np
 import pytest
 import sympy as sp
 
+from cubie.odesystems.symbolic.codegen.jacobian import (
+    generate_analytical_jvp,
+    generate_jacobian,
+)
+from cubie.odesystems.symbolic.codegen.time_derivative import (
+    generate_time_derivative_lines,
+)
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.parsing import (
@@ -19,8 +26,17 @@ from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     sweep,
     parse_input_swept,
+    run_dense_at_state_operator,
     run_device_dxdt,
     run_device_observables,
+)
+from tests.system_fixtures import (
+    USER_DERIVATIVE_EQUATIONS,
+    USER_DERIVATIVE_PARAMETERS,
+    growth,
+    growth_d1,
+    growth_d2,
+    growth_d3,
 )
 
 
@@ -776,3 +792,232 @@ class TestStructuralInputPaths:
         )
         satisfied = [holds(index_map, parsed, c) for c in constraints]
         assert satisfied.count(True) == 2
+
+
+def _another_growth_d1():
+    """Return a helper named like ``growth_d1`` but a different object."""
+
+    def growth_d1(x, i):
+        return -1.0
+
+    return growth_d1
+
+
+class TestUserFunctionDerivatives:
+    def _calls(self, parsed):
+        """Return the names of every function the equations call."""
+        names = set()
+
+        def walk(node):
+            if isinstance(node, ir.Call):
+                names.add(node.name)
+            for child in getattr(node, "args", ()):
+                if isinstance(child, ir.Expr):
+                    walk(child)
+
+        for _, rhs in parsed.ordered:
+            walk(rhs)
+        return names
+
+    def test_reduction_calls_each_supplied_derivative(self):
+        # Expect calls to the first and second helpers, because
+        # reducing the system differentiates growth twice.
+        _i, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=USER_DERIVATIVE_EQUATIONS,
+            states={"x": 0.0},
+            observables=["v", "w"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={
+                "growth": [growth_d1, growth_d2, growth_d3]
+            },
+        )
+        assert {"growth_d1", "growth_d2"} <= self._calls(parsed)
+        assert parsed.derivative_names == {
+            "growth_": "growth_d1",
+            "growth_d1": "growth_d2",
+            "growth_d2": "growth_d3",
+        }
+
+    def test_single_derivative_names_first_helper(self):
+        _i, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = v", "0 = growth(x) - p*t"],
+            states={"x": 0.0},
+            observables=["v"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={"growth": growth_d1},
+        )
+        assert "growth_d1" in self._calls(parsed)
+        assert parsed.derivative_names == {"growth_": "growth_d1"}
+
+    @pytest.mark.parametrize("entry", [[growth_d1, 2.0], None, 2.0])
+    def test_non_callable_derivative_entry_rejected(self, entry):
+        with pytest.raises(TypeError, match="list of callables"):
+            parse_dae_input(
+                dxdt=["dx = -growth(x)"],
+                states={"x": 0.0},
+                user_functions={"growth": growth},
+                user_function_derivatives={"growth": entry},
+            )
+
+    def test_distinct_helpers_sharing_a_name_rejected(self):
+        def shrink(x):
+            return -x
+
+        with pytest.raises(ValueError, match='both named "growth_d1"'):
+            parse_dae_input(
+                dxdt=["dx = -growth(x) - shrink(x)"],
+                states={"x": 0.0},
+                user_functions={"growth": growth, "shrink": shrink},
+                user_function_derivatives={
+                    "growth": growth_d1,
+                    "shrink": _another_growth_d1(),
+                },
+            )
+
+    def test_too_few_derivatives_for_reduction_names_the_order(self):
+        with pytest.raises(
+            ValueError,
+            match=(
+                r'"growth" gets differentiated 2 times when generating '
+                r"the reduced DAE.*up to order 2.*"
+                r'\{"growth": \[growth_d1, <order-2 derivative>\]\}'
+            ),
+        ):
+            parse_dae_input(
+                dxdt=USER_DERIVATIVE_EQUATIONS,
+                states={"x": 0.0},
+                observables=["v", "w"],
+                parameters=dict(USER_DERIVATIVE_PARAMETERS),
+                user_functions={"growth": growth},
+                user_function_derivatives={"growth": [growth_d1]},
+            )
+
+    def test_too_few_derivatives_for_jacobian_names_the_order(self):
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=USER_DERIVATIVE_EQUATIONS,
+            states={"x": 0.0},
+            observables=["v", "w"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={"growth": [growth_d1, growth_d2]},
+        )
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"differentiated 3 times when generating the Jacobian.*"
+                r"\[growth_d1, growth_d2, <order-3 derivative>\]"
+            ),
+        ):
+            generate_analytical_jvp(
+                parsed,
+                input_order=index_map.states.index_map,
+                output_order=index_map.dxdt.index_map,
+            )
+
+    def test_jacobian_after_a_failed_jvp_names_the_order(self):
+        # Request the JVP first, so its Jacobian is already cached
+        # under the key the full Jacobian looks up.
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=USER_DERIVATIVE_EQUATIONS,
+            states={"x": 0.0},
+            observables=["v", "w"],
+            parameters=dict(USER_DERIVATIVE_PARAMETERS),
+            user_functions={"growth": growth},
+            user_function_derivatives={"growth": [growth_d1, growth_d2]},
+        )
+        orders = dict(
+            input_order=index_map.states.index_map,
+            output_order=index_map.dxdt.index_map,
+        )
+        with pytest.raises(ValueError, match="up to order 3"):
+            generate_analytical_jvp(parsed, **orders)
+        with pytest.raises(ValueError, match="up to order 3"):
+            generate_jacobian(parsed, **orders)
+
+    def test_missing_derivative_for_time_derivative_names_the_order(self):
+        index_map, _s, _f, parsed, _h = parse_dae_input(
+            dxdt=["dx = growth(t)"],
+            states={"x": 0.0},
+            user_functions={"growth": growth},
+        )
+        with pytest.raises(
+            ValueError,
+            match=(
+                r'"growth" gets differentiated once when generating the '
+                r"time derivative.*\[<order-1 derivative>\]"
+            ),
+        ):
+            generate_time_derivative_lines(parsed, index_map)
+
+
+USER_DERIVATIVE_SYSTEM = {"system_type": "user_derivative"}
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
+)
+@pytest.mark.parametrize("x", [0.0, 0.5, 1.2])
+def test_user_derivative_residuals_vanish_on_the_solution(
+    system, precision, tolerance, x
+):
+    # On x + x**3/3 = t: x_t = 1/g'(x), x_tt = -g''(x) x_t**2 / g'(x).
+    time = x + x**3 / 3.0
+    x_t = 1.0 / (1.0 + x * x)
+    solution = {"x": x, "x_t": x_t, "x_tt": -2.0 * x * x_t**3}
+    names = list(system.indices.state_names)
+    state = np.array([solution[name] for name in names], dtype=precision)
+    params = np.array([1.0], dtype=precision)
+    drivers = np.zeros(1, dtype=precision)
+    obs = np.zeros(system.sizes.observables, dtype=precision)
+    out = np.ones(len(names), dtype=precision)
+    run_device_dxdt(
+        system.dxdt_fn, state, params, drivers, obs, out, precision(time)
+    )
+    np.testing.assert_allclose(
+        out, np.zeros(len(names)), rtol=0.0, atol=tolerance.abs_loose
+    )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [USER_DERIVATIVE_SYSTEM], indirect=True
+)
+def test_user_derivative_jacobian_calls_the_third_helper(
+    system, precision, tolerance
+):
+    # We check the x entry of the third residual,
+    # x_tt g'(x) + x_t**2 g''(x), because only it needs the third
+    # derivative of g.
+    x, x_t, x_tt, h = 0.5, 0.3, -0.2, 0.01
+    g1, g2, g3 = 1.0 + x * x, 2.0 * x, 2.0
+    entries = {
+        "x": {"x": g1},
+        "x_t": {"x": x_t * g2, "x_t": g1},
+        "x_tt": {"x": x_tt * g2 + x_t**2 * g3, "x_t": 2.0 * x_t * g2,
+                 "x_tt": g1},
+    }
+    names = list(system.indices.state_names)
+    jacobian = np.array(
+        [[entries[row].get(column, 0.0) for column in names]
+         for row in names]
+    )
+    values = {"x": x, "x_t": x_t, "x_tt": x_tt}
+    state = np.array([values[name] for name in names], dtype=precision)
+    operator = system.get_solver_helper(
+        role="linear_operator", jacobian_at="state"
+    ).device_function
+    dense = run_dense_at_state_operator(
+        operator,
+        state,
+        np.ones(1, dtype=precision),
+        np.zeros(1, dtype=precision),
+        0.0,
+        h,
+    )
+    np.testing.assert_allclose(
+        dense,
+        -h * jacobian,
+        rtol=tolerance.rel_tight,
+        atol=tolerance.abs_tight,
+    )

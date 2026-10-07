@@ -49,6 +49,7 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
     _normalise_indexed_tokens,
     _rename_user_calls,
     _sanitise_input_math,
+    ordered_derivatives,
 )
 from cubie.odesystems.symbolic.structural.symbolics import (
     DerivativeRegistry,
@@ -148,20 +149,65 @@ def _derivative_print_names(
     user_function_derivatives: Optional[Dict[str, Callable]],
     rename: Dict[str, str],
 ) -> Dict[str, str]:
-    """Map renamed function names to derivative placeholder names.
+    """Map each function, and each helper, to its next derivative's name.
 
-    Only functions with a user-supplied derivative helper appear;
-    every other function differentiates to the default
-    ``d_<name>`` placeholder.
+    The generated module looks every helper up by its ``__name__``, so
+    two different callables with one name would silently replace each
+    other. We reject that, a helper named like a user function, and a
+    helper given two different next derivatives.
+
+    Parameters
+    ----------
+    user_functions
+        User functions by name; ``None`` accepts every entry of
+        ``user_function_derivatives``.
+    user_function_derivatives
+        User-function name to its helper or list of helpers.
+    rename
+        Maps each original user-function name to the name it is
+        called by.
+
+    Returns
+    -------
+    dict
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative. Functions without a
+        helper are left out and differentiate to ``d_<name>``.
+
+    Raises
+    ------
+    ValueError
+        Helper names clash as described above.
     """
 
+    function_names = set(user_functions or ()) | set(rename.values())
+    helpers_by_name: Dict[str, Callable] = {}
     names: Dict[str, str] = {}
-    for orig, deriv in (user_function_derivatives or {}).items():
+    for orig, entry in (user_function_derivatives or {}).items():
         if user_functions is not None and orig not in user_functions:
             continue
-        printed = getattr(deriv, "__name__", None)
-        if printed:
-            names[rename.get(orig, orig)] = printed
+        target = rename.get(orig, orig)
+        for helper in ordered_derivatives(entry):
+            printed = getattr(helper, "__name__", None)
+            if not printed:
+                break
+            if printed in function_names:
+                raise ValueError(
+                    f'The derivative helper "{printed}" has the same name '
+                    f"as a user function; give it a different name."
+                )
+            if helpers_by_name.setdefault(printed, helper) is not helper:
+                raise ValueError(
+                    f"Two different derivative helpers are both named "
+                    f'"{printed}"; give each helper a distinct name.'
+                )
+            if names.setdefault(target, printed) != printed:
+                raise ValueError(
+                    f'"{target}" is given two different next derivatives, '
+                    f'"{names[target]}" and "{printed}"; give each '
+                    f"function its own helpers."
+                )
+            target = printed
     return names
 
 

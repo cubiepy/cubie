@@ -42,6 +42,9 @@ from cubie.odesystems.symbolic.engine.from_sympy import (
     derivative_name_map,
 )
 from cubie.odesystems.symbolic.parsing import JVPEquations
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
+    check_derivative_orders,
+)
 
 CacheKey = Tuple[
     Tuple[Tuple[ir.Expr, ir.Expr], ...],
@@ -97,6 +100,34 @@ def _derivative_names(equations) -> Dict[str, str]:
     if names:
         return dict(names)
     return derivative_name_map(_sympy_equation_list(equations))
+
+
+def _check_jacobian_orders(
+    equations, jac: List[List[ir.Expr]], derivative_names: Dict[str, str]
+) -> None:
+    """Raise when ``jac`` needs a derivative no helper supplies.
+
+    Parameters
+    ----------
+    equations
+        Parsed equations carrying the user-function aliases.
+    jac
+        Row-major Jacobian of IR expressions.
+    derivative_names
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative.
+
+    Raises
+    ------
+    ValueError
+        A user function is differentiated past its last helper.
+    """
+    check_derivative_orders(
+        (entry for row in jac for entry in row),
+        getattr(equations, "function_aliases", None) or {},
+        derivative_names,
+        "Jacobian",
+    )
 
 
 def get_cache_key(
@@ -278,20 +309,16 @@ def generate_jacobian(
     ir_outputs = _ir_order(output_order)
     derivative_names = _derivative_names(equations)
 
-    cache_key = None
     if use_cache:
-        cache_key = get_cache_key(
+        return _cached_jacobian_for(
+            equations,
             eq_list,
             ir_inputs,
             ir_outputs,
-            cse=cache_cse,
-            operation_ordering=operation_ordering,
-            derivative_names=derivative_names,
+            cache_cse,
+            derivative_names,
+            operation_ordering,
         )
-        cached_entry = _cache.get(cache_key)
-        if isinstance(cached_entry, dict) and "jac" in cached_entry:
-            return cached_entry["jac"]
-
     jac = _chain_rule_jacobian(
         eq_list,
         ir_inputs,
@@ -299,10 +326,7 @@ def generate_jacobian(
         derivative_names,
         operation_ordering,
     )
-
-    if use_cache and cache_key is not None:
-        entry = _cache.setdefault(cache_key, {})
-        entry["jac"] = jac
+    _check_jacobian_orders(equations, jac, derivative_names)
     return jac
 
 
@@ -381,6 +405,7 @@ def generate_analytical_jvp(
 
     n_inputs = len(ir_inputs)
     jac = _cached_jacobian_for(
+        equations,
         substituted,
         ir_inputs,
         ir_outputs,
@@ -444,6 +469,7 @@ def generate_analytical_jvp(
 
 
 def _cached_jacobian_for(
+    equations,
     substituted: List[Tuple[ir.Expr, ir.Expr]],
     ir_inputs: Dict[ir.Sym, int],
     ir_outputs: Dict[ir.Sym, int],
@@ -451,7 +477,37 @@ def _cached_jacobian_for(
     derivative_names: Dict[str, str],
     operation_ordering: str = operation_ordering_default(),
 ) -> List[List[ir.Expr]]:
-    """Return the Jacobian for pre-substituted IR equations, cached."""
+    """Return the Jacobian for pre-substituted IR equations, cached.
+
+    We check the derivative orders before caching, so every cached
+    Jacobian has passed the check.
+
+    Parameters
+    ----------
+    equations
+        Parsed equations carrying the user-function aliases.
+    substituted
+        IR equation pairs to differentiate.
+    ir_inputs, ir_outputs
+        Map each input and output symbol to its vector position.
+    cse
+        Whether CSE is on; it is part of the cache key.
+    derivative_names
+        Maps the name of each user function, and of each helper, to the
+        name of the helper for its next derivative.
+    operation_ordering
+        The operation-ordering policy, which is part of the cache key.
+
+    Returns
+    -------
+    list of list
+        Row-major Jacobian of IR expressions.
+
+    Raises
+    ------
+    ValueError
+        A user function is differentiated past its last helper.
+    """
     cache_key = get_cache_key(
         substituted,
         ir_inputs,
@@ -470,6 +526,7 @@ def _cached_jacobian_for(
         derivative_names,
         operation_ordering,
     )
+    _check_jacobian_orders(equations, jac, derivative_names)
     entry = _cache.setdefault(cache_key, {})
     entry["jac"] = jac
     return jac

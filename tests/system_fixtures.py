@@ -20,6 +20,7 @@ from numpy import (
 )
 from numpy.typing import NDArray
 
+from cubie._cudasim_extensions import cuda
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
@@ -592,6 +593,51 @@ def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
     )
 
 
+# Index-3 DAE whose reduction differentiates a user function twice.
+
+
+@cuda.jit(device=True, inline=True)
+def growth(x):
+    return x + x * x * x / 3.0
+
+
+@cuda.jit(device=True, inline=True)
+def growth_d1(x, i):
+    return 1.0 + x * x
+
+
+@cuda.jit(device=True, inline=True)
+def growth_d2(x, i, j):
+    return 2.0 * x
+
+
+@cuda.jit(device=True, inline=True)
+def growth_d3(x, i, j, k):
+    return 2.0
+
+
+USER_DERIVATIVE_EQUATIONS = ["dx = v", "dv = w", "0 = growth(x) - p*t"]
+USER_DERIVATIVE_PARAMETERS = {"p": 1.0}
+
+
+def build_user_derivative_system(precision: np_dtype) -> BaseODE:
+    """Return a DAE whose reduction reads user-supplied derivatives."""
+
+    return create_ODE_system(
+        dxdt=USER_DERIVATIVE_EQUATIONS,
+        states={"x": 0.0},
+        observables=["v", "w"],
+        parameters=dict(USER_DERIVATIVE_PARAMETERS),
+        user_functions={"growth": growth},
+        user_function_derivatives={
+            "growth": [growth_d1, growth_d2, growth_d3]
+        },
+        precision=precision,
+        strict=True,
+        name="user_derivative",
+    )
+
+
 __all__ = [
     "build_colliding_parameters_system",
     "build_coupled_oscillator_system",
@@ -610,6 +656,7 @@ __all__ = [
     "build_torn_driver_system",
     "build_torn_time_system",
     "build_torn_unsolvable_system",
+    "build_user_derivative_system",
 ]
 # ---------------------------------------------------------------------------
 # Torn DAE twins (mass diag(1, 0)); quintic residuals keep x1 torn

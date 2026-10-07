@@ -72,7 +72,11 @@ def _integer_jacobian(state: StructuralState):
             rhs = state.eqs[e][1]
             row = []
             for v in var_idxs:
-                entry = ir.diff(rhs, state.fullvars[v])
+                entry = ir.diff(
+                    rhs,
+                    state.fullvars[v],
+                    derivative_names=state.derivative_names,
+                )
                 value = ir.int_value(entry)
                 if value is None or abs(value) > MAX_INTEGER_COEFFICIENT:
                     return None
@@ -110,6 +114,7 @@ def _pantelides_reassemble_state(
         state.registry,
         state.known_symbols - {state.time_symbol},
         state.time_symbol,
+        derivative_names=state.derivative_names,
         state_priorities=priorities,
         irreducibles=state.irreducibles,
     )

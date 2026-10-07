@@ -1717,6 +1717,39 @@ def run_device_observables(device_fn, state, params, drivers, obs, t):
     stream.synchronize()
 
 
+def run_dense_at_state_operator(device_fn, state, params, drivers, t, h):
+    """Return the dense ``M - h*J`` from basis-vector applies."""
+    precision = state.dtype.type
+    n = state.shape[0]
+    stream = default_memmgr.get_group_stream()
+    state_dev = cuda.to_device(state, stream=stream)
+    params_dev = cuda.to_device(params, stream=stream)
+    drivers_dev = cuda.to_device(drivers, stream=stream)
+
+    @cuda.jit(**compile_kwargs)
+    def kernel(state_in, params_in, drivers_in, vec, out):
+        cached_aux = cuda.local.array(1, precision)
+        device_fn(
+            state_in, params_in, drivers_in, cached_aux, state_in,
+            precision(t), precision(h), precision(1.0), vec, out,
+        )
+
+    columns = []
+    for column in range(n):
+        vec = np.zeros(n, dtype=precision)
+        vec[column] = 1.0
+        vec_dev = cuda.to_device(vec, stream=stream)
+        out_dev = cuda.to_device(
+            np.zeros(n, dtype=precision), stream=stream
+        )
+        kernel[1, 1, stream](
+            state_dev, params_dev, drivers_dev, vec_dev, out_dev
+        )
+        columns.append(out_dev.copy_to_host(stream=stream))
+    stream.synchronize()
+    return np.column_stack(columns).astype(np.float64)
+
+
 @lru_cache(maxsize=None)
 def _driver_eval_kernel(device_fn):
     @cuda.jit(**compile_kwargs)

@@ -164,7 +164,10 @@ def create_ODE_system(
     user_function_derivatives
         Mapping of user-function names to callables evaluating their
         analytic derivatives, used when generating Jacobian-based
-        solver helpers.
+        solver helpers. A value may also be a list of callables
+        evaluating the first, second, ... derivatives; the order-``n``
+        callable takes the function's arguments followed by ``n``
+        argument indices.
     name
         Identifier used for generated files. Defaults to the hash of the system
         definition.
@@ -405,7 +408,10 @@ class SymbolicODE(BaseODE):
         user_function_derivatives
             Mapping of user-function names to callables evaluating
             their analytic derivatives, used when generating
-            Jacobian-based solver helpers.
+            Jacobian-based solver helpers. A value may also be a list
+            of callables evaluating the first, second, ...
+            derivatives; the order-``n`` callable takes the function's
+            arguments followed by ``n`` argument indices.
         name
             Identifier used for generated files. Defaults to the hash of the
             system definition.

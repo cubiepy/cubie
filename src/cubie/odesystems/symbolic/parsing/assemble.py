@@ -22,6 +22,8 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     ParsedEquations,
     TIME_SYMBOL,
+    check_derivative_orders,
+    derivative_helpers,
 )
 from cubie.odesystems.symbolic.structural.simplify import (
     structural_simplify,
@@ -55,14 +57,12 @@ def _finalise_symbols_and_products(
         all_symbols.update(
             {name: fn for name, fn in user_functions.items()}
         )
-        if user_function_derivatives:
-            all_symbols.update(
-                {
-                    fn.__name__: fn
-                    for fn in user_function_derivatives.values()
-                    if callable(fn)
-                }
-            )
+        all_symbols.update(
+            {
+                fn.__name__: fn
+                for fn in derivative_helpers(user_function_derivatives)
+            }
+        )
         if rename:
             all_symbols["__function_aliases__"] = {
                 v: k for k, v in rename.items()
@@ -81,8 +81,8 @@ def _finalise_symbols_and_products(
             renamed = (rename or {}).get(orig_name)
             if renamed:
                 nonfloat_functions.add(renamed)
-    for func in (user_function_derivatives or {}).values():
-        if callable(func) and devfunc_returns_nonfloat(func):
+    for func in derivative_helpers(user_function_derivatives):
+        if devfunc_returns_nonfloat(func):
             nonfloat_functions.add(func.__name__)
     parsed_equations = ParsedEquations.from_equations(
         equation_map,
@@ -91,6 +91,12 @@ def _finalise_symbols_and_products(
         function_aliases=function_aliases,
         nonfloat_functions=nonfloat_functions,
         mass_matrix=mass_matrix,
+    )
+    check_derivative_orders(
+        (rhs for _, rhs in parsed_equations.ordered),
+        function_aliases,
+        parsed_equations.derivative_names,
+        "reduced DAE",
     )
     fn_hash = hash_system_definition(
         parsed_equations,
@@ -145,6 +151,7 @@ def assemble_simplified(
         normalised.registry,
         {ir.sym(name) for name in known_symbol_map},
         ir.sym("t"),
+        derivative_names=normalised.derivative_names,
         state_priorities=priorities,
         irreducibles=irreducible_syms,
     )

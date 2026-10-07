@@ -32,6 +32,7 @@ from tests._utils import (
     TORN_INIT_COMMON,
     TORN_NO_OBSERVABLES,
     UNSET_LINEAR_SOLVE,
+    run_dense_at_state_operator,
 )
 
 
@@ -687,39 +688,6 @@ def test_brown_init_corrects_diode_line_algebraic_start(
         assert residual == pytest.approx(0.0, abs=1e-5)
 
 
-def _dense_at_state_operator(device_fn, state, params, drivers, t, h):
-    """Return the dense ``M - h*J`` from basis-vector applies."""
-    precision = state.dtype.type
-    n = state.shape[0]
-    stream = default_memmgr.get_group_stream()
-    state_dev = cuda.to_device(state, stream=stream)
-    params_dev = cuda.to_device(params, stream=stream)
-    drivers_dev = cuda.to_device(drivers, stream=stream)
-
-    @cuda.jit(**compile_kwargs)
-    def kernel(state_in, params_in, drivers_in, vec, out):
-        cached_aux = cuda.local.array(1, precision)
-        device_fn(
-            state_in, params_in, drivers_in, cached_aux, state_in,
-            precision(t), precision(h), precision(1.0), vec, out,
-        )
-
-    columns = []
-    for column in range(n):
-        vec = np.zeros(n, dtype=precision)
-        vec[column] = 1.0
-        vec_dev = cuda.to_device(vec, stream=stream)
-        out_dev = cuda.to_device(
-            np.zeros(n, dtype=precision), stream=stream
-        )
-        kernel[1, 1, stream](
-            state_dev, params_dev, drivers_dev, vec_dev, out_dev
-        )
-        columns.append(out_dev.copy_to_host(stream=stream))
-    stream.synchronize()
-    return np.column_stack(columns).astype(np.float64)
-
-
 @pytest.mark.parametrize(
     "solver_settings_override", [DIODE_LINE_DIRK], indirect=True
 )
@@ -742,7 +710,7 @@ def test_diode_line_stacked_prefactored_lu_matches_dense(
     mass = np.asarray(system.mass, dtype=np.float64)
     jacobian = (
         mass
-        - _dense_at_state_operator(
+        - run_dense_at_state_operator(
             operator, state, params, drivers, t, h
         )
     ) / h
