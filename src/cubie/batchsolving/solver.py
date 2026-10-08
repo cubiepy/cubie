@@ -720,9 +720,10 @@ class Solver:
         Parameters
         ----------
         parameters
-            Parameter values as in :meth:`solve`. ``None`` compiles for
-            the current :attr:`swept_parameters` and
-            :attr:`fixed_values`.
+            Parameter values as in :meth:`solve`. ``None`` sweeps
+            nothing and compiles every parameter in at its default, as
+            :meth:`solve` does. To compile for the current sweep, pass
+            an array with a row per swept parameter.
         fix_constant_parameters
             Check whether any parameters are set to the same value across
             all runs, and compile them into the code if they are.
@@ -734,11 +735,10 @@ class Solver:
             Options forwarded to :meth:`update`.
         """
         self.update(**kwargs)
-        if parameters is not None:
-            _, swept, fixed = self.input_handler.split_parameters(
-                parameters, fix_constant_parameters
-            )
-            self._set_batch_parameters(swept, fixed)
+        _, swept, fixed = self.input_handler.split_parameters(
+            parameters, fix_constant_parameters
+        )
+        self._set_batch_parameters(swept, fixed)
 
         if optimize_candidates:
             run_optimization(
@@ -857,8 +857,8 @@ class Solver:
 
     def calibrate(
         self,
-        initial_values: Union[ndarray, Dict[str, Any]],
-        parameters: Union[ndarray, Dict[str, Any]],
+        initial_values: Union[None, ndarray, Dict[str, Any]] = None,
+        parameters: Union[None, ndarray, Dict[str, Any]] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
@@ -890,11 +890,13 @@ class Solver:
             sets to test the solver at full capacity. Accepts
             dictionaries mapping state names to values for grid
             construction, or pre-built arrays in (n_states, n_runs)
-            format.
+            format. ``None`` starts every run from the system's
+            default initial values.
         parameters
             Parameter values for each run. Accepts dictionaries
             mapping parameter names to values, or pre-built arrays
-            in (n_params, n_runs) format.
+            in (n_params, n_runs) format. ``None`` sweeps nothing and
+            compiles every parameter in at its default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -961,8 +963,8 @@ class Solver:
 
     def optimize(
         self,
-        initial_values: Union[ndarray, Dict[str, Any]],
-        parameters: Union[ndarray, Dict[str, Any]],
+        initial_values: Union[None, ndarray, Dict[str, Any]] = None,
+        parameters: Union[None, ndarray, Dict[str, Any]] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
@@ -986,8 +988,12 @@ class Solver:
         ----------
         initial_values
             Dict of state names to values, or an (n_states, n_runs) array.
+            ``None`` starts every run from the system's default initial
+            values.
         parameters
             Dict of parameter names to values, or an (n_params, n_runs) array.
+            ``None`` sweeps nothing and compiles every parameter in at its
+            default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.

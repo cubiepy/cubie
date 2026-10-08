@@ -247,6 +247,14 @@ def set_arm_parameters(solver, system_name):
     solver.set_swept_parameters(entry["swept"])
 
 
+def compile_arm(solver):
+    """Compile an arm's solver for the sweep set_arm_parameters chose."""
+    # Pass one run of swept defaults, because an array with a row per
+    # swept parameter keeps the sweep, and no parameters sweeps nothing.
+    swept = solver.system.swept_values.values_array[:, None]
+    solver.compile(parameters=swept)
+
+
 # --- algorithms --------------------------------------------------------
 
 LU = dict(linear_correction_type="lu", inexact_newton=True, prefactored=True)
@@ -539,7 +547,7 @@ def _compile_worker(payload):
             system, system_name, algo_name, spec, duration
         )
         set_arm_parameters(solver, system_name)
-        solver.compile()
+        compile_arm(solver)
         return (
             system_name, algo_name, label, solver.kernel.config_hash,
             time.perf_counter() - started, None,
@@ -772,7 +780,7 @@ def _build_arm(arm, system, system_name, algo_name, duration):
     )
     arm.solver = solver
     set_arm_parameters(solver, system_name)
-    solver.compile()
+    compile_arm(solver)
     solver.kernel.launch_geometry(REFERENCE_BLOCKSIZE)
     return solver
 
