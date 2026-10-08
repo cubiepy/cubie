@@ -137,7 +137,8 @@ def _system_from_equations(
         equation strings.
     y0
         Initial-value input. A dict supplies state names and default
-        initial values; an array defers state naming to inference.
+        initial values. With an array or ``None`` we infer the states
+        from the equations.
     parameters
         Parameter input. A dict supplies parameter names and default
         values (the first value of each entry). Arrays are rejected
@@ -190,7 +191,7 @@ def _system_from_equations(
 
 def solve_ivp(
     system: Union[BaseODE, str, Callable, Iterable[str]],
-    y0: Union[ndarray, Dict[str, ndarray]],
+    y0: Optional[Union[ndarray, Dict[str, ndarray]]] = None,
     parameters: Optional[Union[ndarray, Dict[str, ndarray]]] = None,
     drivers: Optional[DriverSamples] = None,
     method: str = "euler",
@@ -221,10 +222,15 @@ def solve_ivp(
         ``create_ODE_system`` and reuse a :class:`Solver` instead.
     y0
         Initial state values for each run as arrays or dictionaries mapping
-        labels to arrays.
+        labels to arrays. ``None`` starts every run from the system's
+        default initial values. With raw equations and no ``y0`` dict,
+        the states are inferred from the equations, as
+        :func:`~cubie.odesystems.symbolic.symbolicODE.create_ODE_system`
+        infers them.
     parameters
         Parameter values for each run as arrays or dictionaries mapping labels
-        to arrays.
+        to arrays. ``None`` sweeps nothing and compiles every parameter in
+        at its default.
     drivers
         The :class:`~cubie.array_interpolator.DriverSamples` to
         interpolate during integration.
@@ -548,8 +554,12 @@ class Solver:
 
     def solve(
         self,
-        initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
-        parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        initial_values: Union[
+            None, ndarray, Dict[str, Union[float, ndarray]]
+        ] = None,
+        parameters: Union[
+            None, ndarray, Dict[str, Union[float, ndarray]]
+        ] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
@@ -571,14 +581,16 @@ class Solver:
             construction, or pre-built arrays in (n_states, n_runs)
             format for fast-path execution. Device arrays (CuPy or
             Numba) are used in place with no host-to-device transfer;
-            they must already match the system precision.
+            they must already match the system precision. ``None``
+            starts every run from the system's default initial values.
         parameters
             Parameter values for each run. Accepts dictionaries
             mapping parameter names to values, or pre-built arrays
             in (n_params, n_runs) format. ``n_params`` is either the
             number of parameters you've set as swept with
             :meth:`set_swept_parameters`, or the system's full number
-            of parameters.
+            of parameters. ``None`` sweeps nothing and compiles every
+            parameter in at its default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -708,9 +720,10 @@ class Solver:
         Parameters
         ----------
         parameters
-            Parameter values as in :meth:`solve`. ``None`` compiles for
-            the current :attr:`swept_parameters` and
-            :attr:`fixed_values`.
+            Parameter values as in :meth:`solve`. ``None`` sweeps
+            nothing and compiles every parameter in at its default, as
+            :meth:`solve` does. To compile for the current sweep, pass
+            an array with a row per swept parameter.
         fix_constant_parameters
             Check whether any parameters are set to the same value across
             all runs, and compile them into the code if they are.
@@ -722,11 +735,10 @@ class Solver:
             Options forwarded to :meth:`update`.
         """
         self.update(**kwargs)
-        if parameters is not None:
-            _, swept, fixed = self.input_handler.split_parameters(
-                parameters, fix_constant_parameters
-            )
-            self._set_batch_parameters(swept, fixed)
+        _, swept, fixed = self.input_handler.split_parameters(
+            parameters, fix_constant_parameters
+        )
+        self._set_batch_parameters(swept, fixed)
 
         if optimize_candidates:
             run_optimization(
@@ -845,8 +857,8 @@ class Solver:
 
     def calibrate(
         self,
-        initial_values: Union[ndarray, Dict[str, Any]],
-        parameters: Union[ndarray, Dict[str, Any]],
+        initial_values: Union[None, ndarray, Dict[str, Any]] = None,
+        parameters: Union[None, ndarray, Dict[str, Any]] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
@@ -878,11 +890,13 @@ class Solver:
             sets to test the solver at full capacity. Accepts
             dictionaries mapping state names to values for grid
             construction, or pre-built arrays in (n_states, n_runs)
-            format.
+            format. ``None`` starts every run from the system's
+            default initial values.
         parameters
             Parameter values for each run. Accepts dictionaries
             mapping parameter names to values, or pre-built arrays
-            in (n_params, n_runs) format.
+            in (n_params, n_runs) format. ``None`` sweeps nothing and
+            compiles every parameter in at its default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -949,8 +963,8 @@ class Solver:
 
     def optimize(
         self,
-        initial_values: Union[ndarray, Dict[str, Any]],
-        parameters: Union[ndarray, Dict[str, Any]],
+        initial_values: Union[None, ndarray, Dict[str, Any]] = None,
+        parameters: Union[None, ndarray, Dict[str, Any]] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
@@ -974,8 +988,12 @@ class Solver:
         ----------
         initial_values
             Dict of state names to values, or an (n_states, n_runs) array.
+            ``None`` starts every run from the system's default initial
+            values.
         parameters
             Dict of parameter names to values, or an (n_params, n_runs) array.
+            ``None`` sweeps nothing and compiles every parameter in at its
+            default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.

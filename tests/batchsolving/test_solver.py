@@ -58,6 +58,7 @@ from tests._utils import (
     MOVABLE_LOCATION_KEYS,
     UNROLL_SETTINGS,
     extract_state_and_time,
+    swept_defaults,
 )
 
 
@@ -335,7 +336,10 @@ def test_compile_then_solve(
         parameters=simple_parameters,
         grid_type="combinatorial",
     )
-    solver_mutable.compile(drivers=driver_settings)
+    solver_mutable.compile(
+        parameters=swept_defaults(solver_mutable.system),
+        drivers=driver_settings,
+    )
     kernel = solver_mutable.kernel
     assert kernel.run_params.runs == 1
     assert _batch_bytes(kernel) == 0
@@ -418,7 +422,9 @@ def test_launch_geometry_needs_no_batch(solver_mutable, driver_settings):
     """A fresh kernel sizes full and partial blocks."""
     solver = solver_mutable
     kernel = solver.kernel
-    solver.compile(drivers=driver_settings)
+    solver.compile(
+        parameters=swept_defaults(solver.system), drivers=driver_settings
+    )
     pad = 4 if kernel.shared_memory_needs_padding else 0
     per_run = kernel.shared_memory_bytes + pad
     shapes = kernel.launchable_shapes()
@@ -524,7 +530,9 @@ def test_signature_rebuilds_after_compile_setting_change(
     driver_settings,
 ):
     solver = solver_mutable
-    solver.compile(drivers=driver_settings)
+    solver.compile(
+        parameters=swept_defaults(solver.system), drivers=driver_settings
+    )
     original_cache = solver.kernel._cache
     solver.update(max_registers=64)
     signature = solver.kernel.signature
@@ -1364,10 +1372,9 @@ def test_solve_ivp_accepts_callable():
 
 
 def test_solve_ivp_accepts_equation_strings():
-    """solve_ivp builds the system from equation strings."""
+    """solve_ivp builds the system from equation strings alone."""
     result = solve_ivp(
-        ["dx = v", "dv = mu * (1 - x*x) * v - x"],
-        y0={"x": [1.0], "v": [0.0]},
+        ["dx = v", "dv = mu"],
         parameters={"mu": [1.5]},
         dt=1e-2,
         duration=0.05,
@@ -1377,7 +1384,11 @@ def test_solve_ivp_accepts_equation_strings():
     )
     assert isinstance(result, SolveResult)
     values = np.asarray(result.as_numpy["time_domain_array"])
-    assert np.all(np.isfinite(values))
+    # Both inferred states start at zero, and the equations move them
+    # away from it, so a solve that stops integrating leaves a zero.
+    assert values.shape[1] == 2
+    assert np.all(values[0] == 0.0)
+    assert np.all(values[-1] > 0.0)
 
 
 def test_equations_take_driver_names_from_the_samples(precision):
@@ -3267,14 +3278,10 @@ def test_parameter_changes_between_solves(
     assert solver.fixed_parameter_values == defaults
 
     duration = solver_settings["duration"]
-    first = solver.solve(
-        None, None, duration=duration
-    ).time_domain_array.copy()
+    first = solver.solve(duration=duration).time_domain_array.copy()
     value = 2.0 * defaults[names[0]] + 1.0
     system.set_default_parameters({names[0]: value})
-    second = solver.solve(
-        None, None, duration=duration
-    ).time_domain_array.copy()
+    second = solver.solve(duration=duration).time_domain_array.copy()
     assert solver.fixed_parameter_values[names[0]] == pytest.approx(value)
     assert not np.array_equal(first, second)
 

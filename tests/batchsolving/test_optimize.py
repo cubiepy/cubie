@@ -27,7 +27,7 @@ from cubie.batchsolving.optimize import (
 from cubie.CUDAFactory import UnrollChoice
 from cubie._cudasim_extensions import cuda
 from cubie.time_logger import default_timelogger
-from tests._utils import LARGE_FIRK
+from tests._utils import LARGE_FIRK, swept_defaults
 
 FULL = UnrollChoice.FULL
 ROLLED = UnrollChoice.ROLLED
@@ -481,7 +481,10 @@ def test_kernel_is_cached_follows_the_cache_directory(
     kernel.set_cache_dir(tmp_path / "fresh")
     assert not kernel.kernel_is_cached()
     kernel.set_cache_dir(cache_root)
-    solver_mutable.compile(drivers=driver_settings)
+    solver_mutable.compile(
+        parameters=swept_defaults(solver_mutable.system),
+        drivers=driver_settings,
+    )
     assert kernel.kernel_is_cached()
     assert kernel._disk_cache.cache_path.parent == cache_root
 
@@ -504,6 +507,7 @@ def test_compile_caches_the_optimize_candidates_without_a_solve(
     )
     verbosity = default_timelogger.verbosity
     solver.compile(
+        parameters=swept_defaults(solver.system),
         drivers=driver_settings,
         optimize_candidates=True,
         max_parallel=1,

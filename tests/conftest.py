@@ -835,8 +835,12 @@ def parameter_solve(solver, system, solver_settings, parameter_batch):
         solver.compile(parameters=as_dict)
         record["swept_before"] = solver.swept_parameters
         record["kernel_before"] = solver.kernel.kernel
+    # Leave initial values out unless the form built them, so the
+    # parameter-only forms solve from the default states.
+    if inits is not None:
+        options["initial_values"] = inits
     record["result"] = solver.solve(
-        inits, params, duration=duration, **options
+        parameters=params, duration=duration, **options
     )
     return record
 
