@@ -639,7 +639,8 @@ class TestSweptParameters:
         assert ode.indices.parameter_names == ["k"]
         assert ode.fixed_parameter_values == {"c": 0.5}
 
-    def test_created_sweep_matches_a_later_sweep(self, precision):
+    @pytest.mark.parametrize("container", [list, iter])
+    def test_created_sweep_matches_a_later_sweep(self, precision, container):
         """Creating with a sweep builds the system a later sweep builds."""
         definition = dict(
             dxdt=["dx = -k * x + c"],
@@ -648,7 +649,9 @@ class TestSweptParameters:
             parameters={"k": 0.1, "c": 0.5},
             name="test_created_sweep",
         )
-        created = SymbolicODE.create(**definition, swept_parameters=["c"])
+        created = SymbolicODE.create(
+            **definition, swept_parameters=container(["c"])
+        )
         later = SymbolicODE.create(**definition)
         later.set_swept_parameters(["c"])
 

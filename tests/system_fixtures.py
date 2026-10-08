@@ -30,9 +30,9 @@ Array = NDArray[np_floating]
 def _case_sweep(swept_parameters, parameters):
     """Return the names a builder sweeps.
 
-    Without given names we sweep the first two parameters by name, the
-    ones ``simple_parameters`` gives two values each, so every test of a
-    case compiles against one sweep.
+    Sweep the given names, or by default the first two parameters by
+    name, which are the two that ``simple_parameters`` gives two values
+    each.
     """
     if swept_parameters is None:
         return tuple(sorted(parameters))[:2]

@@ -275,6 +275,10 @@ def load_cellml_model(
     - CellML models from Physiome repository are compatible
     - The cellmlmanip library handles the complex CellML XML parsing
     """
+    # Parsing and construction both read the names, so take them as a
+    # tuple in case the caller passed an iterator.
+    swept_parameters = tuple(swept_parameters)
+
     # Validate input type
     if not isinstance(path, str):
         raise TypeError(

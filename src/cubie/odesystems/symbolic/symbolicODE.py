@@ -327,6 +327,7 @@ class SymbolicODE(BaseODE):
             Names of the parameters ``equations`` reads from the
             parameters array, in row order.
         """
+        swept_parameters = tuple(swept_parameters)
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
         self.all_symbols = all_symbols
@@ -497,6 +498,9 @@ class SymbolicODE(BaseODE):
         SymbolicODE
             Fully constructed symbolic system ready for compilation.
         """
+        # Parsing and construction both read the names, so take them as
+        # a tuple in case the caller passed an iterator.
+        swept_parameters = tuple(swept_parameters)
 
         # Register timing event for parsing (one-time registration)
         default_timelogger.register_event(
@@ -578,6 +582,7 @@ class SymbolicODE(BaseODE):
         SymbolicODE
             Fully constructed symbolic system ready for compilation.
         """
+        swept_parameters = tuple(swept_parameters)
         (
             index_map,
             all_symbols,
