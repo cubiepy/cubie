@@ -38,7 +38,7 @@ from cubie.vendored import cellmlmanip
 import sympy as sp
 from pathlib import Path
 import numpy as np
-from typing import Optional, List
+from typing import Iterable, List, Optional
 import re
 import logging
 import warnings
@@ -189,6 +189,7 @@ def load_cellml_model(
     fix_singularities: bool = True,
     voltage_variable: Optional[str] = None,
     show_gui: bool = False,
+    swept_parameters: Iterable[str] = (),
 ):
     """Load a CellML model and return an initialized SymbolicODE system.
 
@@ -223,6 +224,9 @@ def load_cellml_model(
     show_gui : bool, optional
         If True, launch the parameter and initial-value editor GUI
         before parsing. Default is False.
+    swept_parameters : iterable of str, optional
+        Names of the parameters to read from the parameters array, in
+        row order. We compile every other parameter in at its default.
 
     Returns
     -------
@@ -309,15 +313,11 @@ def load_cellml_model(
                     SymbolicODE,
                 )
 
-                ode = SymbolicODE(
-                    equations=cached_data['parsed_equations'],
-                    all_indexed_bases=cached_data['indexed_bases'],
-                    all_symbols=cached_data['all_symbols'],
-                    fn_hash=cached_data['fn_hash'],
-                    user_functions=cached_data['user_functions'],
-                    name=cached_data['name'],
+                ode = SymbolicODE.from_parsed_system(
+                    cached_data['parsed_system'],
                     precision=precision,
-                    parsed_system=cached_data['parsed_system'],
+                    name=cached_data['name'],
+                    swept_parameters=swept_parameters,
                 )
                 default_timelogger.print_message(
                     f"Loaded {name} from CellML cache "
@@ -484,15 +484,11 @@ def load_cellml_model(
         if cached_data is not None:
             from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 
-            ode = SymbolicODE(
-                equations=cached_data['parsed_equations'],
-                all_indexed_bases=cached_data['indexed_bases'],
-                all_symbols=cached_data['all_symbols'],
-                fn_hash=cached_data['fn_hash'],
-                user_functions=cached_data['user_functions'],
-                name=cached_data['name'],
+            ode = SymbolicODE.from_parsed_system(
+                cached_data['parsed_system'],
                 precision=precision,
-                parsed_system=cached_data['parsed_system'],
+                name=cached_data['name'],
+                swept_parameters=swept_parameters,
             )
             default_timelogger.print_message(
                 f"Loaded {name} from CellML cache "
@@ -526,6 +522,7 @@ def load_cellml_model(
         parameter_units=parameter_units if parameter_units else None,
         observable_units=observable_units if observable_units else None,
         driver_units=None,
+        swept_parameters=swept_parameters,
     )
     (
         index_map,
@@ -539,15 +536,7 @@ def load_cellml_model(
 
     # Save to cache
     cache.save_to_cache(
-        args_hash=args_hash,
-        parsed_equations=equations,
-        indexed_bases=index_map,
-        all_symbols=all_symbols,
-        user_functions=functions,
-        fn_hash=fn_hash,
-        precision=precision,
-        name=name,
-        parsed_system=parsed_system,
+        args_hash=args_hash, parsed_system=parsed_system, name=name
     )
 
     # Construct SymbolicODE directly (not via .create())
@@ -560,6 +549,7 @@ def load_cellml_model(
         user_functions=functions,
         precision=precision,
         parsed_system=parsed_system,
+        swept_parameters=swept_parameters,
     )
 
     return symbolic_ode

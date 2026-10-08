@@ -258,51 +258,29 @@ class CellMLCache:
     def save_to_cache(
         self,
         args_hash: str,
-        parsed_equations,
-        indexed_bases,
-        all_symbols: dict,
-        user_functions: Optional[dict],
-        fn_hash: str,
-        precision,
+        parsed_system,
         name: str,
-        parsed_system=None,
     ) -> None:
         """Save cached data for given args_hash. Handles LRU eviction.
+
+        We cache the parsed system before specialisation, so one entry
+        serves every choice of swept parameters.
 
         Parameters
         ----------
         args_hash : str
             Cache key computed from arguments
-        parsed_equations : ParsedEquations
-            Equation container from parse_input
-        indexed_bases : IndexedBases
-            Index maps from parse_input
-        all_symbols : dict
-            Symbol mapping from parse_input
-        user_functions : dict or None
-            User-provided functions (may be None)
-        fn_hash : str
-            System hash from parse_input
-        precision : PrecisionDType
-            Floating-point precision
-        name : str
-            Model name
         parsed_system : ParsedSystem
             Parsed system from parse_input with every parameter left
-            as a symbol, used to rebuild the equations when the swept
-            parameters change.
+            as a symbol.
+        name : str
+            Model name
         """
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
             # Build cache dictionary
             cache_data = {
-                "parsed_equations": parsed_equations,
-                "indexed_bases": indexed_bases,
-                "all_symbols": all_symbols,
-                "user_functions": user_functions,
-                "fn_hash": fn_hash,
-                "precision": precision,
                 "name": name,
                 "parsed_system": parsed_system,
             }

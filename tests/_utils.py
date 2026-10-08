@@ -61,15 +61,6 @@ def swept_defaults(system, runs=2):
     }
 
 
-def parse_input_swept(**kwargs):
-    """Return ``parse_input`` products with every parameter swept."""
-    from cubie.odesystems.symbolic.parsing.parser import parse_input
-
-    *_, parsed_system = parse_input(**kwargs)
-    swept = list(parsed_system.parameters)
-    return (*parsed_system.specialise(swept), parsed_system)
-
-
 class MockMemoryManager(MemoryManager):
     """Memory manager whose reported free memory is settable.
 

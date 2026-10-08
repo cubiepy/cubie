@@ -146,8 +146,8 @@ def observables_kernel_system(precision):
         precision=precision,
         strict=True,
         name="observables_kernel_system",
+        swept_parameters=["alpha", "beta"],
     )
-    system.set_swept_parameters(["alpha", "beta"])
 
     return system
 

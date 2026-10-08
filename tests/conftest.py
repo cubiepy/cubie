@@ -292,69 +292,50 @@ def tolerance(tolerance_override, precision):
     raise ValueError("Unsupported precision for tolerance fixture")
 
 
-def _build_system(model_type, precision):
+_SYSTEM_BUILDERS = {
+    "linear": build_three_state_linear_system,
+    "nonlinear": build_three_state_nonlinear_system,
+    "three_chamber": build_three_chamber_system,
+    "threecm": build_three_chamber_system,
+    "two_driver": build_two_driver_system,
+    "stiff": build_three_state_very_stiff_system,
+    "large": build_large_nonlinear_system,
+    "medium": build_medium_nonlinear_system,
+    "constant_deriv": build_three_state_constant_deriv_system,
+    "colliding_parameters": build_colliding_parameters_system,
+    "diagonally_dominant": build_diagonally_dominant_system,
+    "hodgkin_huxley": build_hodgkin_huxley_system,
+    "lorenz_julia": build_lorenz_julia_system,
+    "coupled_oscillator": build_coupled_oscillator_system,
+    "staining_stiff": build_status_staining_stiff_system,
+    "time_function_driver": build_time_function_driver_system,
+    "time_array_driver": build_time_array_driver_system,
+    "torn_driver": build_torn_driver_system,
+    "driver_derivative": build_driver_derivative_system,
+    "torn_time": build_torn_time_system,
+    "torn_unsolvable": build_torn_unsolvable_system,
+    "user_derivative": build_user_derivative_system,
+    "ring_modulator_index2": build_ring_modulator_index2_system,
+    "ring_modulator_index2_scaled": build_ring_modulator_index2_scaled_system,
+    "scaled_cs": build_scaled_cs_system,
+    "diode_line": build_diode_line_system,
+    "transistor_amplifier": build_transistor_amplifier_system,
+    "amp": build_amp_system,
+    "toggle": build_toggle_system,
+}
+
+
+def _build_system(model_type, precision, swept_parameters):
     """Build the named symbolic system, or return a prebuilt one."""
-    if model_type == "linear":
-        return build_three_state_linear_system(precision)
-    if model_type == "nonlinear":
-        return build_three_state_nonlinear_system(precision)
-    if model_type in ["three_chamber", "threecm"]:
-        return build_three_chamber_system(precision)
-    if model_type == "two_driver":
-        return build_two_driver_system(precision)
-    if model_type == "stiff":
-        return build_three_state_very_stiff_system(precision)
-    if model_type == "large":
-        return build_large_nonlinear_system(precision)
-    if model_type == "medium":
-        return build_medium_nonlinear_system(precision)
-    if model_type == "constant_deriv":
-        return build_three_state_constant_deriv_system(precision)
-    if model_type == "colliding_parameters":
-        return build_colliding_parameters_system(precision)
-    if model_type == "diagonally_dominant":
-        return build_diagonally_dominant_system(precision)
-    if model_type == "hodgkin_huxley":
-        return build_hodgkin_huxley_system(precision)
-    if model_type == "lorenz_julia":
-        return build_lorenz_julia_system(precision)
-    if model_type == "coupled_oscillator":
-        return build_coupled_oscillator_system(precision)
-    if model_type == "staining_stiff":
-        return build_status_staining_stiff_system(precision)
-    if model_type == "time_function_driver":
-        return build_time_function_driver_system(precision)
-    if model_type == "time_array_driver":
-        return build_time_array_driver_system(precision)
-    if model_type == "torn_driver":
-        return build_torn_driver_system(precision)
-    if model_type == "driver_derivative":
-        return build_driver_derivative_system(precision)
-    if model_type == "torn_time":
-        return build_torn_time_system(precision)
-    if model_type == "torn_unsolvable":
-        return build_torn_unsolvable_system(precision)
-    if model_type == "user_derivative":
-        return build_user_derivative_system(precision)
-    if model_type == "ring_modulator_index2":
-        return build_ring_modulator_index2_system(precision)
-    if model_type == "ring_modulator_index2_scaled":
-        return build_ring_modulator_index2_scaled_system(precision)
-    if model_type == "scaled_cs":
-        return build_scaled_cs_system(precision)
-    if model_type == "diode_line":
-        return build_diode_line_system(precision)
-    if model_type == "transistor_amplifier":
-        return build_transistor_amplifier_system(precision)
-    if model_type == "amp":
-        return build_amp_system(precision)
-    if model_type == "toggle":
-        return build_toggle_system(precision)
     if not isinstance(model_type, str):
         # A prebuilt system object passed directly as system_type.
+        if swept_parameters is None:
+            swept_parameters = model_type.parameters.names[:2]
+        model_type.set_swept_parameters(swept_parameters)
         return model_type
-
-    raise ValueError(f"Unknown model type: {model_type}")
+    if model_type not in _SYSTEM_BUILDERS:
+        raise ValueError(f"Unknown model type: {model_type}")
+    return _SYSTEM_BUILDERS[model_type](precision, swept_parameters)
 
 
 @pytest.fixture(scope="session")
@@ -375,11 +356,9 @@ def system(request, solver_settings_override, precision):
     """
     override = solver_settings_override or {}
     model_type = override.get("system_type", "nonlinear")
-    system = _build_system(model_type, precision)
-    system.set_swept_parameters(
-        override.get("system_sweep", system.parameters.names[:2])
+    return _build_system(
+        model_type, precision, override.get("system_sweep")
     )
-    return system
 
 
 @pytest.fixture(scope="function")
@@ -435,7 +414,7 @@ def ring_modulator_scaled_system(precision):
     The explicit-0 form arrives through the chain as ``system``;
     equivalence tests compare the two.
     """
-    return build_ring_modulator_index2_scaled_system(precision)
+    return build_ring_modulator_index2_scaled_system(precision, ())
 
 
 @pytest.fixture(scope="session")

@@ -1,7 +1,6 @@
 import os
 import pytest
 import numpy as np
-from attrs import evolve as attrs_evolve
 
 from cubie import solve_ivp, SolveResult
 from cubie.odesystems.symbolic.parsing.cellml import (
@@ -412,50 +411,25 @@ def test_repeat_load_hits_persistent_cache(
     assert second.num_states == first.num_states
 
 
-@pytest.mark.parametrize(
-    "model_precision", [np.float32, np.float64]
-)
-def test_early_cache_hit_restores_mass(
-    cellml_fixtures_dir, isolated_cache_root, model_precision
+def test_cache_hit_builds_the_requested_sweep(
+    cellml_fixtures_dir, isolated_cache_root
 ):
-    """The early cache path reads mass from the cached equations."""
-
+    """A cache hit specialises the cached parse for the requested sweep."""
     path = str(cellml_fixtures_dir / "basic_ode.cellml")
-    load_cellml_model(
-        path, precision=model_precision, fix_singularities=False
-    )
+    unswept = load_cellml_model(path, fix_singularities=False)
     cache = CellMLCache("basic_ode", path)
     args_hash = cache.compute_cache_key(
-        None,
-        model_precision,
-        "basic_ode",
-        fix_singularities=False,
+        None, np.float32, "basic_ode", fix_singularities=False
     )
-    cached = cache.load_from_cache(args_hash)
-    assert cached is not None
-    forged = attrs_evolve(
-        cached["parsed_equations"],
-        mass_matrix=((0.0,),),
-    )
-    cache.save_to_cache(
-        args_hash=args_hash,
-        parsed_equations=forged,
-        indexed_bases=cached["indexed_bases"],
-        all_symbols=cached["all_symbols"],
-        user_functions=cached["user_functions"],
-        fn_hash=cached["fn_hash"],
-        precision=cached["precision"],
-        name=cached["name"],
-        parsed_system=cached["parsed_system"],
-    )
+    assert cache.cache_valid(args_hash)
 
-    restored = load_cellml_model(
-        path, precision=model_precision, fix_singularities=False
+    name = unswept.parameters.names[0]
+    swept = load_cellml_model(
+        path, fix_singularities=False, swept_parameters=[name]
     )
-    np.testing.assert_array_equal(
-        restored.mass,
-        np.asarray([[0.0]], dtype=model_precision),
-    )
+    assert unswept.swept_parameters == ()
+    assert swept.swept_parameters == (name,)
+    assert swept.indices.parameter_names == [name]
 
 
 def test_parameter_layout_is_canonical(

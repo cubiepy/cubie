@@ -196,6 +196,7 @@ def parse_input(
     state_priority: Optional[Dict[str, float]] = None,
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[Dict[str, Any]] = None,
+    swept_parameters: Iterable[str] = (),
 ):
     """Process user equations and symbol metadata into structured components.
 
@@ -245,6 +246,9 @@ def parse_input(
     simplify_options
         Extra keyword arguments forwarded to
         :func:`~cubie.odesystems.symbolic.structural.simplify.structural_simplify`.
+    swept_parameters
+        Names of the parameters to read from the parameters array, in
+        row order. We compile every other parameter in at its default.
 
     Returns
     -------
@@ -259,8 +263,8 @@ def parse_input(
     -----
     With ``strict=False``, undeclared variables inferred from usage
     are added automatically as parameters. The products fix every
-    parameter at its default, so ``parsed_equations`` and ``fn_hash``
-    are value-specific.
+    parameter that is not swept at its default, so
+    ``parsed_equations`` and ``fn_hash`` are value-specific.
     """
     input_type = _detect_input_type(dxdt)
     state_units = _units_by_name(states, state_units, "state")
@@ -286,6 +290,7 @@ def parse_input(
             parameter_units=parameter_units,
             observable_units=observable_units,
             driver_units=driver_units,
+            swept_parameters=swept_parameters,
         )
 
     if states is None and strict:
@@ -360,7 +365,7 @@ def parse_input(
         observable_units=observable_units,
         driver_units=driver_units,
     )
-    products = parsed_system.specialise()
+    products = parsed_system.specialise(swept_parameters)
     return (*products, parsed_system)
 
 
@@ -377,6 +382,7 @@ def _parse_function_path(
     parameter_units,
     observable_units,
     driver_units,
+    swept_parameters,
 ):
     """Parse callable ``dxdt`` input."""
 
@@ -476,7 +482,7 @@ def _parse_function_path(
         observable_units=observable_units,
         driver_units=driver_units,
     )
-    products = parsed_system.specialise()
+    products = parsed_system.specialise(swept_parameters)
     (
         index_map,
         all_symbols,

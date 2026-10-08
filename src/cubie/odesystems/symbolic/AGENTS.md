@@ -73,7 +73,9 @@ an identity row the plain form.
 Fixed parameter values are substituted into the equations as IR literals at the start
 of code generation (`parsing/parsed_system.py`). Generated source never names a fixed
 parameter, and device functions capture no values. Swept parameters stay symbols and are
-read from the parameters array. When the swept names or fixed values change,
+read from the parameters array. Pass `swept_parameters` to `create_ODE_system`,
+`SymbolicODE.create` or `load_cellml_model` to build the system with its sweep, which
+specialises once. When the swept names or fixed values change,
 `SymbolicODE._update` rebuilds the equations from `SymbolicODE._parsed_system`:
 substitution, folding, structural simplification and tearing, which can change the state
 layout and mass matrix. All of it goes through one `update_compile_settings`. A live
