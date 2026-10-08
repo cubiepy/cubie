@@ -41,10 +41,9 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 - We keep every parameter's default in `ODEData.parameters` and the names of the
   parameters array's rows, in order, in `swept_parameters`. A batch can compile in values
   other than the defaults for parameters it does not sweep; we keep those in
-  `fixed_values`, a `FixedParameterValues` or `None`. We compile every other parameter in
-  at its default. `ODEData.compiled_values` holds the value we compile in for each
-  parameter that is not swept, and `fixed_parameter_values` returns it as a dict. A new
-  system sweeps nothing and has no fixed values.
+  `fixed_values`, a sealed `SystemValues` or `None`. We compile every other parameter in
+  at its default. `fixed_parameter_values` returns the value we compile in for each
+  parameter that is not swept. A new system sweeps nothing and has no fixed values.
 - Choose the sweep with `set_swept_parameters(names)`. Sweeping a parameter discards its
   fixed value. Compile values in without changing the defaults with
   `set_fixed_values(values)`, and pass an empty mapping to return to the defaults. Use
@@ -54,10 +53,11 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
   compiles in at its new default.
 - In `SymbolicODE._update` we derive the equations again only when the swept names or the
   compiled-in values change. Any other update goes straight to `update_compile_settings`.
-- A `precision` change re-materialises all three `SystemValues` through
-  `ODEData.update`.
-- The swept names and the compiled-in values are part of `config_hash`. A
-  `SystemValues` canonical identity is its names and precision only, so defaults are not.
+- A `precision` change re-materialises every `SystemValues` through `ODEData.update`.
+- A `SystemValues` canonical identity is its names and precision only, so
+  `ODEData.values_hash` holds no parameter values. `BaseODE.config_hash` folds in a digest
+  of `fixed_parameter_values`, so the swept names and every compiled-in value are part of
+  the identity and the defaults of swept parameters are not.
 - The mass matrix is a float64 array in `ODEData._mass` (`BaseODE.mass`); codegen reads
   it as boolean diagonal flags. Explicit algorithms and Neumann preconditioners reject a
   non-identity mass matrix.

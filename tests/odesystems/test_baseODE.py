@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.ODEData import FixedParameterValues
+from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 
 
@@ -67,7 +67,7 @@ class TestSweptParameters:
         """Fixed values are the values the system compiles in."""
         tiny_system.update(
             swept_parameters=("k",),
-            fixed_values=FixedParameterValues({"c0": 4.0}),
+            fixed_values=SystemValues({"c0": 4.0}, np.float32),
         )
         assert tiny_system.fixed_parameter_values == {"c0": 4.0}
         assert tiny_system.parameters.values_dict["c0"] == 1.0
@@ -76,12 +76,12 @@ class TestSweptParameters:
         """Repeating the swept names and fixed values keeps the build."""
         tiny_system.update(
             swept_parameters=("k",),
-            fixed_values=FixedParameterValues({"c0": 4.0}),
+            fixed_values=SystemValues({"c0": 4.0}, np.float32),
         )
         tiny_system.dxdt_fn
         tiny_system.update(
             swept_parameters=("k",),
-            fixed_values=FixedParameterValues({"c0": 4.0}),
+            fixed_values=SystemValues({"c0": 4.0}, np.float32),
         )
         assert tiny_system.cache_valid is True
 
@@ -92,12 +92,21 @@ class TestSweptParameters:
         tiny_system.set_fixed_values({"c0": 5.0})
         assert tiny_system.config_hash != first
 
+    def test_compiled_in_defaults_change_the_identity(self, tiny_system):
+        """A new default changes the hash only when it is compiled in."""
+        tiny_system.set_swept_parameters(["k"])
+        first = tiny_system.config_hash
+        tiny_system.set_default_parameters({"k": 3.0})
+        assert tiny_system.config_hash == first
+        tiny_system.set_default_parameters({"c0": 3.0})
+        assert tiny_system.config_hash != first
+
     def test_fixed_value_of_a_swept_name_raises(self, tiny_system):
         """A fixed value for a swept parameter raises."""
         with pytest.raises(ValueError, match="not swept"):
             tiny_system.update(
                 swept_parameters=("k",),
-                fixed_values=FixedParameterValues({"k": 4.0}),
+                fixed_values=SystemValues({"k": 4.0}, np.float32),
             )
 
 

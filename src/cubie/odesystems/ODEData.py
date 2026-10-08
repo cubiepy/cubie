@@ -34,12 +34,10 @@ See Also
     Abstract ODE factory that owns an ``ODEData`` as compile settings.
 """
 
-from types import MappingProxyType
 from typing import (
     Any,
     Dict,
     Iterable,
-    Mapping,
     Optional,
     Set,
     Tuple,
@@ -117,38 +115,6 @@ def _ordered_names(names: Iterable[str]) -> Tuple[str, ...]:
     return ordered
 
 
-def _sorted_floats(values: Mapping[str, float]) -> Dict[str, float]:
-    """Return a copy of ``values`` with float values, sorted by name."""
-    return {str(name): float(values[name]) for name in sorted(values)}
-
-
-@frozen
-class FixedParameterValues:
-    """Parameter values compiled into the generated code, by name.
-
-    Instances compare by value, and the values are part of the owning
-    system's identity.
-
-    Parameters
-    ----------
-    values
-        Parameter names mapped to the values to compile in.
-    """
-
-    _values: Mapping[str, float] = field(
-        alias="values", converter=_sorted_floats
-    )
-
-    @property
-    def values(self) -> Mapping[str, float]:
-        """Read-only view of the values, keyed by parameter name."""
-        return MappingProxyType(self._values)
-
-    def _cubie_canonical_(self) -> tuple:
-        """Return the names and values, which the generated code reads."""
-        return ("FixedParameterValues", tuple(self._values.items()))
-
-
 @define
 class SystemSizes:
     """Store counts for each component category in an ODE system.
@@ -210,11 +176,6 @@ class ODEData(CUDAFactoryConfig):
         of some parameters it does not sweep. ``None`` compiles every
         parameter that is not swept in at its default.
 
-    Attributes
-    ----------
-    compiled_values
-        The value compiled in for every parameter that is not swept.
-
     Notes
     -----
     This container holds only ODE-system state. Solver-helper request
@@ -264,11 +225,10 @@ class ODEData(CUDAFactoryConfig):
     swept_parameters: Tuple[str, ...] = field(
         default=(), converter=_ordered_names
     )
-    fixed_values: Optional[FixedParameterValues] = field(
+    fixed_values: Optional[SystemValues] = field(
         default=None,
-        validator=attrsval_optional(
-            attrsval_instance_of(FixedParameterValues)
-        ),
+        converter=_parameters_converter,
+        validator=attrsval_optional(attrsval_instance_of(SystemValues)),
     )
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
@@ -278,9 +238,6 @@ class ODEData(CUDAFactoryConfig):
         default=None,
         converter=_mass_matrix_converter,
         eq=attrs_cmp_using(eq=mass_equal),
-    )
-    compiled_values: Optional[FixedParameterValues] = field(
-        default=None, init=False
     )
 
     def __attrs_post_init__(self):
@@ -294,25 +251,14 @@ class ODEData(CUDAFactoryConfig):
                 f"Swept parameters {sorted(swept - names)} are not "
                 f"parameters of this system."
             )
-        compiled = {
-            name: value
-            for name, value in self.parameters.as_float_dict.items()
-            if name not in swept
-        }
-        if self.fixed_values is not None:
-            misplaced = set(self.fixed_values.values) - set(compiled)
-            if misplaced:
-                raise ValueError(
-                    f"Fixed values {sorted(misplaced)} must name "
-                    f"parameters of this system that are not swept."
-                )
-            compiled.update(self.fixed_values.values)
-        # We store the compiled-in values as a field so that they enter
-        # the system's identity. Defaults stay out of the identity, but
-        # the generated code reads every value it compiles in.
-        object.__setattr__(
-            self, "compiled_values", FixedParameterValues(compiled)
-        )
+        if self.fixed_values is None:
+            return
+        misplaced = set(self.fixed_values.names) - (names - swept)
+        if misplaced:
+            raise ValueError(
+                f"Fixed values {sorted(misplaced)} must name parameters "
+                f"of this system that are not swept."
+            )
 
     def update(
         self, updates_dict: dict = None, **kwargs
@@ -332,6 +278,7 @@ class ODEData(CUDAFactoryConfig):
             reprecisioned = {}
             for name in (
                 "parameters",
+                "fixed_values",
                 "initial_states",
                 "observables",
             ):
@@ -379,7 +326,15 @@ class ODEData(CUDAFactoryConfig):
         Every parameter that is not swept appears, at its fixed value
         when the batch gives one and at its default otherwise.
         """
-        return dict(self.compiled_values.values)
+        swept = self.swept_parameters
+        values = {
+            name: value
+            for name, value in self.parameters.as_float_dict.items()
+            if name not in swept
+        }
+        if self.fixed_values is not None:
+            values.update(self.fixed_values.as_float_dict)
+        return values
 
     @property
     def mass(self) -> Any:

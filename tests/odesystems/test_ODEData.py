@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 import sympy as sp
 
+from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.ODEData import (
-    FixedParameterValues,
     ODEData,
     OPERATION_ORDERINGS,
     SystemSizes,
@@ -255,11 +255,16 @@ def test_default_fixes_every_parameter():
     )
 
 
+def _fixed(data, values):
+    """Return ``values`` as a fixed-values container for ``data``."""
+    return SystemValues(values, data.precision)
+
+
 def test_swept_names_keep_their_order():
     """Swept names keep their order and the rest are compiled in."""
-    data, _, changed = _make_odedata().update(
-        swept_parameters=["b", "a"],
-        fixed_values=FixedParameterValues({"g": 9.0}),
+    data = _make_odedata()
+    data, _, changed = data.update(
+        swept_parameters=["b", "a"], fixed_values=_fixed(data, {"g": 9.0})
     )
     assert changed == {"swept_parameters", "fixed_values"}
     assert data.swept_parameters == ("b", "a")
@@ -281,25 +286,22 @@ def test_fixed_values_name_parameters_that_are_not_swept():
     data = _make_odedata()
     with pytest.raises(ValueError, match="not swept"):
         data.update(
-            swept_parameters=["a"],
-            fixed_values=FixedParameterValues({"a": 1.0}),
+            swept_parameters=["a"], fixed_values=_fixed(data, {"a": 1.0})
         )
     with pytest.raises(ValueError, match="not swept"):
-        data.update(fixed_values=FixedParameterValues({"nope": 1.0}))
+        data.update(fixed_values=_fixed(data, {"nope": 1.0}))
 
 
-def test_compiled_in_values_participate_in_identity():
-    """Compiled-in values and swept names enter values_hash."""
+def test_new_fixed_value_is_a_change():
+    """Replacing the fixed values with different values is a change."""
+    data = _make_odedata()
+    first = data.update(fixed_values=_fixed(data, {"a": 0.7}))[0]
+    _, _, changed = first.update(fixed_values=_fixed(data, {"a": 0.8}))
+    assert changed == {"fixed_values"}
+
+
+def test_swept_names_participate_in_identity():
+    """Swept names enter values_hash."""
     data = _make_odedata()
     swept = data.update(swept_parameters=["a"])[0]
-    refixed = data.update(fixed_values=FixedParameterValues({"a": 0.7}))[0]
-    parameters = swept.parameters.copy()
-    parameters.update_from_dict({"a": 0.7})
-    swept_default = swept.update(parameters=parameters)[0]
-    parameters = data.parameters.copy()
-    parameters.update_from_dict({"a": 0.7})
-    fixed_default = data.update(parameters=parameters)[0]
     assert swept.values_hash != data.values_hash
-    assert refixed.values_hash != data.values_hash
-    assert swept_default.values_hash == swept.values_hash
-    assert fixed_default.values_hash != data.values_hash

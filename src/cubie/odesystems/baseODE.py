@@ -50,9 +50,10 @@ from attrs import define, field
 from numpy import float32
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
+from cubie._serialize import canonical_digest
 from cubie._utils import PrecisionDType
 from cubie._env import operation_ordering_default
-from cubie.odesystems.ODEData import FixedParameterValues, ODEData
+from cubie.odesystems.ODEData import ODEData
 from cubie.odesystems._mass_utils import mass_diagonal_flags
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -261,18 +262,15 @@ class BaseODE(CUDAFactory):
         if names == self.swept_parameters:
             return
         self._check_parameter_names(names)
-        fixed = self.compile_settings.fixed_values
-        if fixed is None or not set(names) & set(fixed.values):
+        fixed = self.fixed_values
+        if not set(names) & set(fixed):
             self.update(swept_parameters=names)
             return
         kept = {
-            name: value
-            for name, value in fixed.values.items()
-            if name not in names
+            name: value for name, value in fixed.items() if name not in names
         }
         self.update(
-            swept_parameters=names,
-            fixed_values=FixedParameterValues(kept) if kept else None,
+            swept_parameters=names, fixed_values=self._fixed_values(kept)
         )
 
     def set_fixed_values(self, values: Mapping[str, float]) -> None:
@@ -343,14 +341,15 @@ class BaseODE(CUDAFactory):
                 f"{sorted(unknown)} are not parameters of this system."
             )
 
-    @staticmethod
     def _fixed_values(
-        values: Mapping[str, float],
-    ) -> Optional[FixedParameterValues]:
-        """Return ``values`` as a settings value, ``None`` when empty."""
+        self, values: Mapping[str, float]
+    ) -> Optional[SystemValues]:
+        """Return ``values`` as a container, ``None`` when empty."""
         if not values:
             return None
-        return FixedParameterValues(values)
+        return SystemValues(
+            dict(values), self.precision, name="Fixed values"
+        )
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
@@ -385,7 +384,7 @@ class BaseODE(CUDAFactory):
         fixed = self.compile_settings.fixed_values
         if fixed is None:
             return {}
-        return dict(fixed.values)
+        return fixed.as_float_dict
 
     @property
     def parameters(self) -> "SystemValues":
@@ -471,6 +470,18 @@ class BaseODE(CUDAFactory):
         """Binary-operator count of the ``dxdt`` and observables sources."""
         return self.get_cached_output("operation_counts").total(
             ("dxdt", "observables")
+        )
+
+    @property
+    def config_hash(self) -> str:
+        """Configuration hash including the values compiled into the code.
+
+        A ``SystemValues`` hashes its names only, so we fold in a digest
+        of every compiled-in value, sorted by name.
+        """
+        compiled_in = tuple(sorted(self.fixed_parameter_values.items()))
+        return canonical_digest(
+            ("cubie-ode-config", super().config_hash, compiled_in)
         )
 
     def get_solver_helper(
