@@ -1364,10 +1364,9 @@ def test_solve_ivp_accepts_callable():
 
 
 def test_solve_ivp_accepts_equation_strings():
-    """solve_ivp builds the system from equation strings."""
+    """solve_ivp builds the system from equation strings alone."""
     result = solve_ivp(
         ["dx = v", "dv = mu * (1 - x*x) * v - x"],
-        y0={"x": [1.0], "v": [0.0]},
         parameters={"mu": [1.5]},
         dt=1e-2,
         duration=0.05,
@@ -3267,14 +3266,10 @@ def test_parameter_changes_between_solves(
     assert solver.fixed_parameter_values == defaults
 
     duration = solver_settings["duration"]
-    first = solver.solve(
-        None, None, duration=duration
-    ).time_domain_array.copy()
+    first = solver.solve(duration=duration).time_domain_array.copy()
     value = 2.0 * defaults[names[0]] + 1.0
     system.set_default_parameters({names[0]: value})
-    second = solver.solve(
-        None, None, duration=duration
-    ).time_domain_array.copy()
+    second = solver.solve(duration=duration).time_domain_array.copy()
     assert solver.fixed_parameter_values[names[0]] == pytest.approx(value)
     assert not np.array_equal(first, second)
 

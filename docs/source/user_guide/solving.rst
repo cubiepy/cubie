@@ -113,12 +113,16 @@ It's simplest to provide a dict of parameter and initial values, with
 each value that differs from the system's defaults assigned a constant
 value and any swept parameters or states assigned a group or range of
 values. Cubie compiles a constant parameter value into the code for that
-solve and leaves the system's default as it was. Cubie takes a few
-milliseconds to interpret and sort these, which is fine if your solve
-takes several seconds. If you're looking for something a bit faster and
-more programmatic, you can pass Cubie an array instead. If you want to go *really* fast and you are comfortable
-with the CUDA environment, you can pass arrays on the GPU (device arrays)
-directly to cut out the few milliseconds of transfer time as well.
+solve and leaves the system's default as it was. You can leave out
+either input: without initial values every run starts from the system's
+defaults, and without parameters every parameter is compiled in at its
+default, so you can sweep only states, only parameters, or both. Cubie
+takes a few milliseconds to interpret and sort these, which is fine if
+your solve takes several seconds. If you're looking for something a bit
+faster and more programmatic, you can pass Cubie an array instead. If
+you want to go *really* fast and you are comfortable with the CUDA
+environment, you can pass arrays on the GPU (device arrays) directly to
+cut out the few milliseconds of transfer time as well.
 
 There is one additional step required when passing an array of swept
 parameters: you need to tell Cubie which parameters they correspond to.
