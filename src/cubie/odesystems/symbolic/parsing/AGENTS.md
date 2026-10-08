@@ -33,7 +33,8 @@ Returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash, parsed_syste
 consumed by `SymbolicODE.create` and `cellml.load_cellml_model`. The derived mass matrix
 is `parsed_equations.mass_matrix` (`None` for solved systems). `parsed_system` is the
 parsed system with every parameter left as a symbol (`parsed_system.py`). The other
-products fix every parameter at its default. Assembly runs inside `specialise` after the
+products read the names in `swept_parameters` from the parameters array and fix every
+other parameter at its default. Assembly runs inside `specialise` after the
 values are substituted, so structure can change with fixed values. Inferred parameters
 join `parsed_system.parameters`.
 `_detect_input_type` dispatches to `"string"`, `"sympy"` or `"function"`, and every
@@ -82,7 +83,9 @@ registers them again on the rebuilt registry.
 observables or auxiliaries. `CellMLCache` is a disk LRU (≤5
 configs per model) under `<cache root>/<model>/`, keyed by file-content SHA-256 plus
 serialised args in `cellml_cache_manifest.json`; any content change (whitespace
-included) invalidates.
+included) invalidates. We cache the `ParsedSystem` before specialisation, so one entry
+serves every sweep: a hit builds the system with `SymbolicODE.from_parsed_system`, which
+specialises it for the requested `swept_parameters`.
 
 ## User functions
 String parsing renames user functions with a trailing underscore to avoid SymPy

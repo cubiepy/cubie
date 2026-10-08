@@ -4,7 +4,6 @@ import warnings
 import pytest
 import sympy as sp
 
-from tests._utils import parse_input_swept
 
 from cubie.odesystems.symbolic.codegen import (
     generate_linear_operator_code,
@@ -324,12 +323,13 @@ class TestLhsSemantics:
 
     def test_strict_unlisted_auxiliary(self):
         """Unlisted LHS assignments stay anonymous in strict mode."""
-        _, all_symbols, _, parsed, _, _, *_ = parse_input_swept(
+        _, all_symbols, _, parsed, _, _, *_ = parse_input(
             dxdt=["obs = x + a", "aux_val = obs", "dx = obs"],
             states=["x"],
             parameters=["a"],
             observables=["obs"],
             strict=True,
+            swept_parameters=["a"],
         )
         assert all_symbols["aux_val"] == sp.Symbol(
             "aux_val", real=True
@@ -400,10 +400,11 @@ class TestRhsSemantics:
 
     def test_if_else_becomes_piecewise(self):
         """Inline conditionals parse to Piecewise."""
-        _, _, _, parsed, _, _, *_ = parse_input_swept(
+        _, _, _, parsed, _, _, *_ = parse_input(
             dxdt=["dx = a if x > 0 else b"],
             states=["x"],
             parameters=["a", "b"],
+            swept_parameters=["a", "b"],
         )
         x, a, b = sp.symbols("x a b", real=True)
         assert parsed.ordered[0][1] is from_sympy(
@@ -509,12 +510,13 @@ class TestParseInput:
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
-                parse_input_swept(
+                parse_input(
                     states=states,
                     parameters=parameters,
                     observables=observables,
                     drivers=drivers,
                     dxdt=dxdt_str,
+                    swept_parameters=list(parameters),
                 )
             )
 
@@ -623,12 +625,13 @@ class TestParseInput:
         drivers = []
         dxdt = ["dx = x + a", "", "  ", "y = x"]  # Contains empty lines
         index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
-            parse_input_swept(
+            parse_input(
                 states=states,
                 parameters=parameters,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt,
+                swept_parameters=parameters,
             )
         )
 
@@ -808,12 +811,12 @@ class TestNonStrictInput:
 
         with pytest.raises(ValueError, match="strict"):
             parse_input(dxdt=dxdt_str, strict=True)
-        index_map, all_symbols, _, equation_map, fn_hash, _, *_ = (
-            parse_input_swept(dxdt=dxdt_str, strict=False)
+        index_map, all_symbols, _, equation_map, fn_hash, parsed_system = (
+            parse_input(dxdt=dxdt_str, strict=False)
         )
-        assert "apple" in index_map.parameter_names
-        assert "zebra" in index_map.parameter_names
-        assert "driver1" in index_map.parameter_names
+        assert "apple" in parsed_system.parameters
+        assert "zebra" in parsed_system.parameters
+        assert "driver1" in parsed_system.parameters
         assert "one" in index_map.state_names
         assert "safari" not in index_map.observable_names
         assert "uninited" not in index_map.observable_names
@@ -830,8 +833,8 @@ class TestFunctions:
         user input
         """
         eqs = ("dx = sin(a) + exp(b)", "dy = min(c,d) + log(e)")
-        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input_swept(
-            dxdt=eqs
+        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
+            dxdt=eqs, swept_parameters=["a", "b", "c", "d", "e"]
         )
         code = print_cuda_multiple(eq_map, symbols)
         assert code == [
@@ -850,8 +853,8 @@ class TestFunctions:
         userfuncs = {"ex_squared": custom_func, "exp": lambda x: math.exp(x)}
 
         eqs = ["dx = exp(a) + exp(b)", "dy = x"]
-        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input_swept(
-            dxdt=eqs, user_functions=userfuncs
+        index_map, symbols, funcs, eq_map, fn_hash, _, *_ = parse_input(
+            dxdt=eqs, user_functions=userfuncs, swept_parameters=["a", "b"]
         )
         code = print_cuda_multiple(eq_map, symbols)
 
@@ -911,8 +914,12 @@ class TestSympyInputPathway:
         dxdt = [sp.Eq(dx, -k * x)]
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input_swept(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            parse_input(
+                dxdt=dxdt,
+                states=["x"],
+                parameters=["k"],
+                strict=True,
+                swept_parameters=["k"],
             )
         )
 
@@ -1030,13 +1037,11 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x)]
 
-        index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input_swept(
-                dxdt=dxdt, states=["x"], parameters=[], strict=False
-            )
+        *_, parsed_system = parse_input(
+            dxdt=dxdt, states=["x"], parameters=[], strict=False
         )
 
-        assert "k" in index_map.parameter_names
+        assert "k" in parsed_system.parameters
 
     def test_sympy_user_functions_symbols_dict(self):
         """Test user functions are properly added to symbols dict in SymPy
@@ -1076,8 +1081,12 @@ class TestSympyInputPathway:
         dxdt = [sp.Eq(sp.Derivative(x, t), -k * x)]
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input_swept(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            parse_input(
+                dxdt=dxdt,
+                states=["x"],
+                parameters=["k"],
+                strict=True,
+                swept_parameters=["k"],
             )
         )
 
@@ -1094,8 +1103,12 @@ class TestSympyInputPathway:
         dxdt = [(sp.Derivative(x, t), -k * x)]
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash, _, *_ = (
-            parse_input_swept(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            parse_input(
+                dxdt=dxdt,
+                states=["x"],
+                parameters=["k"],
+                strict=True,
+                swept_parameters=["k"],
             )
         )
 

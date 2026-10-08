@@ -639,6 +639,28 @@ class TestSweptParameters:
         assert ode.indices.parameter_names == ["k"]
         assert ode.fixed_parameter_values == {"c": 0.5}
 
+    @pytest.mark.parametrize("container", [list, iter])
+    def test_created_sweep_matches_a_later_sweep(self, precision, container):
+        """Creating with a sweep builds the system a later sweep builds."""
+        definition = dict(
+            dxdt=["dx = -k * x + c"],
+            precision=precision,
+            states={"x": 1.0},
+            parameters={"k": 0.1, "c": 0.5},
+            name="test_created_sweep",
+        )
+        created = SymbolicODE.create(
+            **definition, swept_parameters=container(["c"])
+        )
+        later = SymbolicODE.create(**definition)
+        later.set_swept_parameters(["c"])
+
+        assert created.swept_parameters == ("c",)
+        assert created.indices.parameter_names == ["c"]
+        assert created.fixed_parameter_values == {"k": 0.1}
+        assert created.fn_hash == later.fn_hash
+        assert created.config_hash == later.config_hash
+
     def test_sweeping_an_unknown_name_raises(self, metadata_ode):
         """Sweeping an unknown parameter raises KeyError."""
         with pytest.raises(KeyError, match="nonexistent"):

@@ -28,7 +28,6 @@ from cubie.odesystems.symbolic.symbolicODE import (
     create_ODE_system,
 )
 from tests._utils import (
-    parse_input_swept,
     run_dense_at_state_operator,
     run_device_dxdt,
     run_device_observables,
@@ -49,20 +48,15 @@ def parse_dae_input(**kwargs):
     return parse_input(**kwargs)[:5]
 
 
-def parse_dae_input_swept(**kwargs):
-    """Parse with every parameter swept, without the parsed system."""
-
-    return parse_input_swept(**kwargs)[:5]
-
-
 class TestParseDaeInput:
     def test_string_implicit_and_alias(self):
         index_map, _syms, _funcs, parsed, _h = (
-            parse_dae_input_swept(
+            parse_dae_input(
                 dxdt=["dx = -k*x + y", "y = 2*x"],
                 states={"x": 1.0},
                 observables=["y"],
                 parameters={"k": 0.5},
+                swept_parameters=["k"],
             )
         )
         assert list(index_map.state_names) == ["x"]
@@ -104,7 +98,7 @@ class TestParseDaeInput:
     def test_torn_system_mass_and_defaults_warning(self):
         with pytest.warns(EquationWarning):
             index_map, _s, _f, parsed, _h = (
-                parse_dae_input_swept(
+                parse_dae_input(
                     dxdt="""
                     dx = vx
                     dy = vy
@@ -121,6 +115,7 @@ class TestParseDaeInput:
                     },
                     parameters={"g": 9.81, "L": 1.0},
                     state_priority={"y": 10, "vy": 10},
+                    swept_parameters=["g", "L"],
                 )
             )
         assert len(index_map.state_names) == 5
@@ -201,11 +196,11 @@ class TestParseDaeInput:
         assert sp.simplify(to_sympy(eqs["z"] + 2 * x)) == 0
 
     def test_undeclared_symbol_inferred_parameter(self):
-        index_map, _s, _f, _p, _h = parse_dae_input_swept(
+        *_, parsed_system = parse_input(
             dxdt=["dx = -mu * x"],
             states={"x": 1.0},
         )
-        assert "mu" in index_map.parameter_names
+        assert "mu" in parsed_system.parameters
 
     def test_strict_rejects_undeclared(self):
         with pytest.raises(ValueError, match="(?i)undefined symbol"):
@@ -390,8 +385,8 @@ class TestDerivativeBlockPolicy:
             precision=np.float32,
             simplify_options={"allow_parameter": False},
             name="policy_pivot",
+            swept_parameters=["p"],
         )
-        system.set_swept_parameters(["p"])
         assert list(system.indices.states.symbol_map) == ["x", "y"]
         assert system.mass.tolist() == [[1.0, 0.0], [0.0, 0.0]]
         p = sp.Symbol("p", real=True)

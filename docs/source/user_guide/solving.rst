@@ -131,12 +131,16 @@ You can do this two ways:
   ``fix_constant_parameters=True``, Cubie can scan your array, filter
   out each value that doesn't change over the batch, and compile it into
   the code as a number instead.
-- By calling ``solver.set_swept_parameters(param_names)`` before you
-  pass the array, and then passing an array of only the parameters that
-  vary over a batch. This can cut down the size of the arrays you pass
-  considerably, and is how Cubie's benchmarks use it. The parameters you
-  don't sweep run at their defaults unless you call
-  ``solver.set_fixed_values({name: value})`` to compile in other values.
+- By telling the system which parameters will be swept, then passing an
+  array of only those parameters' values. You can build the system and
+  solver as normal and then call
+  ``solver.set_swept_parameters(param_names)``, or pass
+  ``swept_parameters=param_names`` to ``create_ODE_system`` or
+  ``load_cellml_model`` when you create the system. This can cut down
+  the size of the arrays you pass considerably, and is how Cubie's
+  benchmarks use it. The parameters you don't sweep run at their
+  defaults unless you call ``solver.set_fixed_values({name: value})`` to
+  compile in other values.
 
 Arrays are laid out ``(n_variables, n_runs)`` and must match the system
 precision. Device arrays (CuPy or Numba) are wired directly into the

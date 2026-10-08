@@ -29,7 +29,6 @@ from cubie.odesystems.symbolic.parsing import (
     parse_input,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
-from tests._utils import parse_input_swept
 
 
 def _walk(node):
@@ -218,10 +217,11 @@ class TestParseInput:
                 total += y[i] * p[i]
             return [-total, total * 0.5, -total * 0.25]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _, _, *_ = parse_input(
             dxdt=f,
             states={"a": 1.0, "b": 0.5, "c": 0.0},
             parameters={"p0": 0.1, "p1": 0.2, "p2": 0.3},
+            swept_parameters=["p0", "p1", "p2"],
         )
         assert len(eqs.state_derivatives) == 3
         # ``total`` auxiliary should contain all three terms
@@ -298,10 +298,11 @@ class TestParseInput:
                 rate = 0.0
             return [-rate]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _, _, *_ = parse_input(
             dxdt=f,
             states={"x": 1.0},
             parameters={"k1": 1.0, "k2": 2.0},
+            swept_parameters=["k1", "k2"],
         )
         assert len(eqs.auxiliaries) == 1
         _, aux_rhs = eqs.auxiliaries[0]
@@ -319,10 +320,11 @@ class TestParseInput:
                 total = 1.0
             return [-total, total]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _, _, *_ = parse_input(
             dxdt=f,
             states={"a": 1.0, "b": 0.5},
             parameters={"k0": 0.1, "k1": 0.2},
+            swept_parameters=["k0", "k1"],
         )
         assert len(eqs.auxiliaries) == 1
         _, aux_rhs = eqs.auxiliaries[0]
@@ -652,10 +654,8 @@ class TestUndeclaredSymbols:
             return [-p.k_new * y.x]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, _, _, _, *_ = parse_input_swept(
-                dxdt=f, states={"x": 1.0}
-            )
-        assert "k_new" in index_map.parameter_names
+            *_, parsed_system = parse_input(dxdt=f, states={"x": 1.0})
+        assert "k_new" in parsed_system.parameters
 
     def test_container_access_strict_raises(self):
         """strict=True forbids container-access inference."""
@@ -712,11 +712,12 @@ class TestUserFunctions:
             dx = -hill(y.x, p.km)
             return [dx]
 
-        index_map, _, funcs, eqs, _, _, *_ = parse_input_swept(
+        index_map, _, funcs, eqs, _, _, *_ = parse_input(
             dxdt=f,
             states={"x": 1.0},
             parameters={"km": 0.5},
             user_functions={"hill": hill},
+            swept_parameters=["km"],
         )
         assert funcs["hill"] is hill
         x = sp.Symbol("x", real=True)
@@ -810,10 +811,11 @@ class TestScalarArguments:
         def f(t, y, mu):
             return [y[1], mu * (1 - y[0] ** 2) * y[1] - y[0]]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input_swept(
+        index_map, _, _, eqs, _, _, *_ = parse_input(
             dxdt=f,
             states={"x": 1.0, "v": 0.0},
             parameters={"mu": 1.5},
+            swept_parameters=["mu"],
         )
         rhs_symbols = set()
         for _, rhs in eqs.state_derivatives:
@@ -841,10 +843,8 @@ class TestScalarArguments:
             return [-k_new * y[0]]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, _, _, _, *_ = parse_input_swept(
-                dxdt=f, states={"x": 1.0}
-            )
-        assert "k_new" in index_map.parameter_names
+            *_, parsed_system = parse_input(dxdt=f, states={"x": 1.0})
+        assert "k_new" in parsed_system.parameters
 
     def test_undeclared_scalar_arg_strict_raises(self):
         """strict=True forbids scalar-argument inference."""
@@ -859,10 +859,11 @@ class TestScalarArguments:
         def f(t, y, mu, p):
             return [-mu * y[0] + p.k]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _, _, *_ = parse_input(
             dxdt=f,
             states={"x": 1.0},
             parameters={"mu": 1.0, "k": 2.0},
+            swept_parameters=["mu", "k"],
         )
         rhs = eqs.state_derivatives[0][1]
         assert {ir.sym("mu"), ir.sym("k")} <= ir.free_atoms(rhs)
@@ -1087,10 +1088,8 @@ class TestParseFunctionErrors:
             return [-p.k_new * y[0] + p.k_new]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, eqs, _, _, *_ = parse_input_swept(
-                dxdt=f, states={"x": 1.0}
-            )
-        assert index_map.parameter_names.count("k_new") == 1
+            *_, parsed_system = parse_input(dxdt=f, states={"x": 1.0})
+        assert list(parsed_system.parameters) == ["k_new"]
 
     def test_scalar_arg_reuses_inferred_container_symbol(self):
         """A scalar arg matching an inferred container key reuses it."""
@@ -1098,10 +1097,8 @@ class TestParseFunctionErrors:
             return [-p.k_new * y[0] + k_new]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, eqs, _, _, *_ = parse_input_swept(
-                dxdt=f, states={"x": 1.0}
-            )
-        assert index_map.parameter_names.count("k_new") == 1
+            *_, parsed_system = parse_input(dxdt=f, states={"x": 1.0})
+        assert list(parsed_system.parameters) == ["k_new"]
 
     def test_string_subscript_alias_resolves(self):
         """A local aliasing a string-subscript state resolves to it."""

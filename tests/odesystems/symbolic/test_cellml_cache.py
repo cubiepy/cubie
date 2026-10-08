@@ -257,38 +257,16 @@ def test_save_and_load_roundtrip(tmp_cellml_file, isolated_cache_root):
     Tests the complete save/load cycle, ensuring that all data saved to
     the cache can be successfully retrieved with the same values.
     """
-    from sympy import symbols
-
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
     args_hash = cache.compute_cache_key(None, float64, "test")
 
-    # Create minimal mock objects for testing
-    # (In real use, these come from parse_input)
-    x = symbols('x')
-
-    # Create mock ParsedEquations with minimal required attributes
-    # Using a simple dict to represent it for testing
-    mock_equations = {"states": [x], "derivatives": [x]}
-
-    # Create mock IndexedBases (simple dict representation)
-    mock_indices = {"states": {"x": 0}}
-
-    # Create test data
-    all_symbols = {"x": x}
-    user_functions = None
-    fn_hash = "test_hash_12345"
-    precision = float64
+    # A string stands in for the ParsedSystem parse_input returns.
+    parsed_system = "parsed_system_12345"
     name = "test"
 
-    # Save to cache
     cache.save_to_cache(
         args_hash=args_hash,
-        parsed_equations=mock_equations,
-        indexed_bases=mock_indices,
-        all_symbols=all_symbols,
-        user_functions=user_functions,
-        fn_hash=fn_hash,
-        precision=precision,
+        parsed_system=parsed_system,
         name=name,
     )
 
@@ -308,20 +286,8 @@ def test_save_and_load_roundtrip(tmp_cellml_file, isolated_cache_root):
     # Verify data was loaded
     assert loaded_data is not None
 
-    # Verify expected keys are present (note: no 'cellml_hash' in new format)
-    assert 'parsed_equations' in loaded_data
-    assert 'indexed_bases' in loaded_data
-    assert 'all_symbols' in loaded_data
-    assert 'user_functions' in loaded_data
-    assert 'fn_hash' in loaded_data
-    assert 'precision' in loaded_data
-    assert 'name' in loaded_data
-
-    # Verify data matches what was saved
-    assert loaded_data['fn_hash'] == fn_hash
+    assert loaded_data['parsed_system'] == parsed_system
     assert loaded_data['name'] == name
-    assert loaded_data['precision'] == precision
-    assert loaded_data['user_functions'] is None
 
 
 def test_corrupted_cache_returns_none(tmp_cellml_file, isolated_cache_root):
@@ -363,8 +329,6 @@ def test_lru_eviction_on_sixth_entry(tmp_cellml_file, isolated_cache_root):
     Tests that the cache correctly evicts the oldest entry when
     the max_entries limit (5) is exceeded.
     """
-    from sympy import symbols
-
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
 
     # Create 6 different configurations
@@ -377,12 +341,6 @@ def test_lru_eviction_on_sixth_entry(tmp_cellml_file, isolated_cache_root):
         (None, ["obs1", "obs2"], float64, "test"),
     ]
 
-    # Create minimal test data
-    x = symbols('x')
-    mock_equations = {"states": [x]}
-    mock_indices = {"states": {"x": 0}}
-    all_symbols = {"x": x}
-
     # Save all 6 configs
     hashes = []
     for params, obs, prec, name in configs:
@@ -392,12 +350,7 @@ def test_lru_eviction_on_sixth_entry(tmp_cellml_file, isolated_cache_root):
         hashes.append(args_hash)
         cache.save_to_cache(
             args_hash=args_hash,
-            parsed_equations=mock_equations,
-            indexed_bases=mock_indices,
-            all_symbols=all_symbols,
-            user_functions=None,
-            fn_hash="test_hash",
-            precision=prec,
+            parsed_system="test_hash",
             name=name,
         )
 
@@ -427,26 +380,13 @@ def test_cache_hit_with_different_params(tmp_cellml_file, isolated_cache_root):
     Tests that the cache correctly handles multiple configurations
     for the same CellML file.
     """
-    from sympy import symbols
-
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
-
-    # Create minimal test data
-    x = symbols('x')
-    mock_equations = {"states": [x]}
-    mock_indices = {"states": {"x": 0}}
-    all_symbols = {"x": x}
 
     # Save config 1: no params/obs
     hash1 = cache.compute_cache_key(None, float64, "test")
     cache.save_to_cache(
         args_hash=hash1,
-        parsed_equations=mock_equations,
-        indexed_bases=mock_indices,
-        all_symbols=all_symbols,
-        user_functions=None,
-        fn_hash="hash1",
-        precision=float64,
+        parsed_system="hash1",
         name="test",
     )
 
@@ -456,12 +396,7 @@ def test_cache_hit_with_different_params(tmp_cellml_file, isolated_cache_root):
     )
     cache.save_to_cache(
         args_hash=hash2,
-        parsed_equations=mock_equations,
-        indexed_bases=mock_indices,
-        all_symbols=all_symbols,
-        user_functions=None,
-        fn_hash="hash2",
-        precision=float64,
+        parsed_system="hash2",
         name="test",
     )
 
@@ -475,8 +410,8 @@ def test_cache_hit_with_different_params(tmp_cellml_file, isolated_cache_root):
 
     assert data1 is not None
     assert data2 is not None
-    assert data1['fn_hash'] == "hash1"
-    assert data2['fn_hash'] == "hash2"
+    assert data1['parsed_system'] == "hash1"
+    assert data2['parsed_system'] == "hash2"
 
 
 def test_file_hash_change_invalidates_all_configs(
@@ -487,15 +422,7 @@ def test_file_hash_change_invalidates_all_configs(
     Tests that when the source CellML file is modified, all cached
     configurations become invalid regardless of their args_hash.
     """
-    from sympy import symbols
-
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
-
-    # Create minimal test data
-    x = symbols('x')
-    mock_equations = {"states": [x]}
-    mock_indices = {"states": {"x": 0}}
-    all_symbols = {"x": x}
 
     # Save two different configs
     hash1 = cache.compute_cache_key(None, float64, "test")
@@ -506,12 +433,7 @@ def test_file_hash_change_invalidates_all_configs(
     for h in [hash1, hash2]:
         cache.save_to_cache(
             args_hash=h,
-            parsed_equations=mock_equations,
-            indexed_bases=mock_indices,
-            all_symbols=all_symbols,
-            user_functions=None,
-            fn_hash="test_hash",
-            precision=float64,
+            parsed_system="test_hash",
             name="test",
         )
 
@@ -589,12 +511,5 @@ def test_save_to_cache_swallows_pickle_failure(isolated_cache):
     # A lambda in the payload makes pickle.dump raise; the method must
     # swallow it rather than propagate.
     isolated_cache.save_to_cache(
-        "hash123",
-        parsed_equations=None,
-        indexed_bases=None,
-        all_symbols=unpicklable,
-        user_functions=unpicklable,
-        fn_hash="abc",
-        precision=float64,
-        name="model",
+        "hash123", parsed_system=unpicklable, name="model"
     )

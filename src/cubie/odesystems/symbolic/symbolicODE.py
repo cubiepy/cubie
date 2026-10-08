@@ -163,6 +163,7 @@ def create_ODE_system(
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
     operation_ordering: str = operation_ordering_default(),
+    swept_parameters: Iterable[str] = (),
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
 
@@ -221,6 +222,9 @@ def create_ODE_system(
         preserves stable breadth-first ordering, and ``"greedy"``
         and ``"dfs"`` select fixed alternatives. Defaults to
         ``CUBIE_OPERATION_ORDERING`` (``liveness_auto`` when unset).
+    swept_parameters
+        Names of the parameters to read from the parameters array, in
+        row order. We compile every other parameter in at its default.
 
     Returns
     -------
@@ -242,6 +246,7 @@ def create_ODE_system(
         irreducible=irreducible,
         simplify_options=simplify_options,
         operation_ordering=operation_ordering,
+        swept_parameters=swept_parameters,
     )
     return symbolic_ode
 
@@ -288,6 +293,7 @@ class SymbolicODE(BaseODE):
         name: Optional[str] = None,
         operation_ordering: str = operation_ordering_default(),
         parsed_system: Optional[ParsedSystem] = None,
+        swept_parameters: Iterable[str] = (),
     ):
         """Initialise the symbolic system instance.
 
@@ -315,8 +321,13 @@ class SymbolicODE(BaseODE):
         parsed_system
             Parsed system from the parser with every parameter left as
             a symbol. ``equations`` is this system with every parameter
-            compiled in. Rebuilt from ``equations`` when omitted.
+            but the swept ones compiled in. Rebuilt from ``equations``
+            when omitted.
+        swept_parameters
+            Names of the parameters ``equations`` reads from the
+            parameters array, in row order.
         """
+        swept_parameters = tuple(swept_parameters)
         if all_symbols is None:
             all_symbols = all_indexed_bases.all_symbols
         self.all_symbols = all_symbols
@@ -333,7 +344,7 @@ class SymbolicODE(BaseODE):
                 user_functions,
                 equations,
                 fn_hash,
-            ) = parsed_system.specialise()
+            ) = parsed_system.specialise(swept_parameters)
         self._parsed_system = parsed_system
         self._parameter_units = _unit_map(
             parsed_system.parameters, parsed_system.parameter_units
@@ -367,6 +378,7 @@ class SymbolicODE(BaseODE):
             driver_derivatives=driver_derivatives,
             name=name,
             operation_ordering=operation_ordering,
+            swept_parameters=swept_parameters,
         )
         self._seed_derived_mass(derived_mass_matrix)
         self.gen_file = ODEFile(
@@ -418,6 +430,7 @@ class SymbolicODE(BaseODE):
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
         operation_ordering: str = operation_ordering_default(),
+        swept_parameters: Iterable[str] = (),
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
 
@@ -475,12 +488,19 @@ class SymbolicODE(BaseODE):
             Generated-operation ordering policy:
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
             ``"dfs"``. Defaults to ``CUBIE_OPERATION_ORDERING``.
+        swept_parameters
+            Names of the parameters to read from the parameters array,
+            in row order. We compile every other parameter in at its
+            default.
 
         Returns
         -------
         SymbolicODE
             Fully constructed symbolic system ready for compilation.
         """
+        # Parsing and construction both read the names, so take them as
+        # a tuple in case the caller passed an iterator.
+        swept_parameters = tuple(swept_parameters)
 
         # Register timing event for parsing (one-time registration)
         default_timelogger.register_event(
@@ -514,6 +534,7 @@ class SymbolicODE(BaseODE):
             state_priority=state_priority,
             irreducible=irreducible,
             simplify_options=simplify_options,
+            swept_parameters=swept_parameters,
         )
         symbolic_ode = cls(
             equations=equations,
@@ -525,9 +546,62 @@ class SymbolicODE(BaseODE):
             precision=precision,
             operation_ordering=operation_ordering,
             parsed_system=parsed_system,
+            swept_parameters=swept_parameters,
         )
         default_timelogger.stop_event("symbolic_ode_parsing")
         return symbolic_ode
+
+    @classmethod
+    def from_parsed_system(
+        cls,
+        parsed_system: ParsedSystem,
+        precision: PrecisionDType,
+        name: Optional[str] = None,
+        operation_ordering: str = operation_ordering_default(),
+        swept_parameters: Iterable[str] = (),
+    ) -> "SymbolicODE":
+        """Specialise a parsed system for a sweep and build it.
+
+        Parameters
+        ----------
+        parsed_system
+            Parsed system with every parameter left as a symbol.
+        precision
+            Target floating-point precision used for generated kernels.
+        name
+            Identifier used for generated modules.
+        operation_ordering
+            Generated-operation ordering policy.
+        swept_parameters
+            Names of the parameters to read from the parameters array,
+            in row order. We compile every other parameter in at its
+            default.
+
+        Returns
+        -------
+        SymbolicODE
+            Fully constructed symbolic system ready for compilation.
+        """
+        swept_parameters = tuple(swept_parameters)
+        (
+            index_map,
+            all_symbols,
+            functions,
+            equations,
+            fn_hash,
+        ) = parsed_system.specialise(swept_parameters)
+        return cls(
+            equations=equations,
+            all_indexed_bases=index_map,
+            all_symbols=all_symbols,
+            name=name,
+            fn_hash=fn_hash,
+            user_functions=functions,
+            precision=precision,
+            operation_ordering=operation_ordering,
+            parsed_system=parsed_system,
+            swept_parameters=swept_parameters,
+        )
 
     @property
     def state_units(self) -> dict[str, str]:

@@ -27,6 +27,18 @@ from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 Array = NDArray[np_floating]
 
 
+def _case_sweep(swept_parameters, parameters):
+    """Return the names a builder sweeps.
+
+    Sweep the given names, or by default the first two parameters by
+    name, which are the two that ``simple_parameters`` gives two values
+    each.
+    """
+    if swept_parameters is None:
+        return tuple(sorted(parameters))[:2]
+    return tuple(swept_parameters)
+
+
 def _as_array(vector: Union[Sequence[float], Array], dt: np_dtype) -> Array:
     """Return ``vector`` as a one-dimensional array of ``dt``.
 
@@ -66,13 +78,18 @@ THREE_STATE_LINEAR_DRIVERS = ["d0"]
 THREE_STATE_LINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 
 
-def build_three_state_linear_system(precision: np_dtype) -> BaseODE:
+def build_three_state_linear_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the symbolic three-state linear system."""
 
     system = create_ODE_system(
         dxdt=THREE_STATE_LINEAR_EQUATIONS,
         states=THREE_STATE_LINEAR_STATES,
         parameters=THREE_STATE_LINEAR_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, THREE_STATE_LINEAR_PARAMETERS
+        ),
         drivers=THREE_STATE_LINEAR_DRIVERS,
         observables=THREE_STATE_LINEAR_OBSERVABLES,
         precision=precision,
@@ -104,13 +121,18 @@ THREE_STATE_NONLINEAR_DRIVERS = ["d0"]
 THREE_STATE_NONLINEAR_OBSERVABLES = ["o0", "o1", "o2"]
 
 
-def build_three_state_nonlinear_system(precision: np_dtype) -> BaseODE:
+def build_three_state_nonlinear_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the symbolic three-state nonlinear system."""
 
     system = create_ODE_system(
         dxdt=THREE_STATE_NONLINEAR_EQUATIONS,
         states=THREE_STATE_NONLINEAR_STATES,
         parameters=THREE_STATE_NONLINEAR_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, THREE_STATE_NONLINEAR_PARAMETERS
+        ),
         drivers=THREE_STATE_NONLINEAR_DRIVERS,
         observables=THREE_STATE_NONLINEAR_OBSERVABLES,
         precision=precision,
@@ -151,13 +173,18 @@ THREE_CHAMBER_DRIVERS = ["d1"]
 THREE_CHAMBER_OBSERVABLES = ["P_a", "P_v", "P_h", "Q_i", "Q_o", "Q_c"]
 
 
-def build_three_chamber_system(precision: np_dtype) -> BaseODE:
+def build_three_chamber_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the symbolic three chamber cardiovascular system."""
 
     system = create_ODE_system(
         dxdt=THREE_CHAMBER_EQUATIONS,
         states=THREE_CHAMBER_STATES,
         parameters=THREE_CHAMBER_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, THREE_CHAMBER_PARAMETERS
+        ),
         drivers=THREE_CHAMBER_DRIVERS,
         observables=THREE_CHAMBER_OBSERVABLES,
         precision=precision,
@@ -195,13 +222,18 @@ THREE_STATE_VERY_STIFF_DRIVERS = ["d0"]
 THREE_STATE_VERY_STIFF_OBSERVABLES = ["r0", "r1", "r2"]
 
 
-def build_three_state_very_stiff_system(precision: np_dtype) -> BaseODE:
+def build_three_state_very_stiff_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the symbolic very stiff nonlinear system."""
 
     system = create_ODE_system(
         dxdt=THREE_STATE_VERY_STIFF_EQUATIONS,
         states=THREE_STATE_VERY_STIFF_STATES,
         parameters=THREE_STATE_VERY_STIFF_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, THREE_STATE_VERY_STIFF_PARAMETERS
+        ),
         drivers=THREE_STATE_VERY_STIFF_DRIVERS,
         observables=THREE_STATE_VERY_STIFF_OBSERVABLES,
         precision=precision,
@@ -256,13 +288,18 @@ MEDIUM_SYSTEM_EQUATIONS = _coupled_nonlinear_equations(20)
 MEDIUM_SYSTEM_DRIVERS = ["d0"]
 
 
-def build_medium_nonlinear_system(precision: np_dtype) -> BaseODE:
+def build_medium_nonlinear_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the symbolic 20-state nonlinear system."""
 
     system = create_ODE_system(
         dxdt=MEDIUM_SYSTEM_EQUATIONS,
         states=MEDIUM_SYSTEM_STATES,
         parameters=MEDIUM_SYSTEM_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, MEDIUM_SYSTEM_PARAMETERS
+        ),
         drivers=MEDIUM_SYSTEM_DRIVERS,
         precision=precision,
         name="medium_nonlinear_system",
@@ -299,13 +336,18 @@ HODGKIN_HUXLEY_PARAMETERS = {
 }
 
 
-def build_hodgkin_huxley_system(precision: np_dtype) -> BaseODE:
+def build_hodgkin_huxley_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the 4-state Hodgkin-Huxley system with exp-heavy rates."""
 
     system = create_ODE_system(
         dxdt=HODGKIN_HUXLEY_EQUATIONS,
         states=HODGKIN_HUXLEY_STATES,
         parameters=HODGKIN_HUXLEY_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, HODGKIN_HUXLEY_PARAMETERS
+        ),
         precision=precision,
         name="hodgkin_huxley",
     )
@@ -313,13 +355,18 @@ def build_hodgkin_huxley_system(precision: np_dtype) -> BaseODE:
     return system
 
 
-def build_large_nonlinear_system(precision: np_dtype) -> BaseODE:
+def build_large_nonlinear_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the symbolic 100-state nonlinear system."""
 
     system = create_ODE_system(
         dxdt=LARGE_SYSTEM_EQUATIONS,
         states=LARGE_SYSTEM_STATES,
         parameters=LARGE_SYSTEM_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, LARGE_SYSTEM_PARAMETERS
+        ),
         drivers=LARGE_SYSTEM_DRIVERS,
         precision=precision,
         name="large_nonlinear_system",
@@ -350,7 +397,9 @@ THREE_STATE_CONSTANT_DERIV_DRIVERS = []
 THREE_STATE_CONSTANT_DERIV_OBSERVABLES = ["o0", "o1", "o2"]
 
 
-def build_three_state_constant_deriv_system(precision: np_dtype) -> BaseODE:
+def build_three_state_constant_deriv_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return a system with constant derivatives.
 
     For this system, dx/dt = constant (independent of state), which means
@@ -363,6 +412,9 @@ def build_three_state_constant_deriv_system(precision: np_dtype) -> BaseODE:
         dxdt=THREE_STATE_CONSTANT_DERIV_EQUATIONS,
         states=THREE_STATE_CONSTANT_DERIV_STATES,
         parameters=THREE_STATE_CONSTANT_DERIV_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, THREE_STATE_CONSTANT_DERIV_PARAMETERS
+        ),
         drivers=THREE_STATE_CONSTANT_DERIV_DRIVERS,
         observables=THREE_STATE_CONSTANT_DERIV_OBSERVABLES,
         precision=precision,
@@ -386,7 +438,9 @@ TWO_DRIVER_STATES = {"u0": 0.0, "u1": 0.0}
 TWO_DRIVER_DRIVERS = ["d_a", "d_b"]
 
 
-def build_two_driver_system(precision: np_dtype) -> BaseODE:
+def build_two_driver_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the symbolic two-driver linear system.
 
     Each state derivative tracks a distinct driver, so driver-to-column
@@ -399,6 +453,7 @@ def build_two_driver_system(precision: np_dtype) -> BaseODE:
         drivers=TWO_DRIVER_DRIVERS,
         precision=precision,
         name="two_driver_linear",
+        swept_parameters=_case_sweep(swept_parameters, {}),
         strict=True,
     )
 
@@ -410,7 +465,9 @@ def build_two_driver_system(precision: np_dtype) -> BaseODE:
 # ---------------------------------------------------------------------------
 
 
-def build_diagonally_dominant_system(precision: np_dtype) -> BaseODE:
+def build_diagonally_dominant_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return a decoupled, strongly diagonal two-state system."""
 
     system = create_ODE_system(
@@ -418,6 +475,7 @@ def build_diagonally_dominant_system(precision: np_dtype) -> BaseODE:
         states={"x": 1.0, "y": 1.0},
         precision=precision,
         name="diagonally_dominant",
+        swept_parameters=_case_sweep(swept_parameters, {}),
     )
 
     return system
@@ -436,13 +494,18 @@ COLLIDING_PARAMETERS_STATES = {"x0": 1.0, "x1": 2.0}
 COLLIDING_PARAMETERS = {"beta": 2.5, "gamma": 0.75}
 
 
-def build_colliding_parameters_system(precision: np_dtype) -> BaseODE:
+def build_colliding_parameters_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return a system whose parameters share solver-scaling names."""
 
     system = create_ODE_system(
         dxdt=COLLIDING_PARAMETERS_EQUATIONS,
         states=COLLIDING_PARAMETERS_STATES,
         parameters=COLLIDING_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, COLLIDING_PARAMETERS
+        ),
         precision=precision,
         name="colliding_parameters",
         strict=True,
@@ -465,13 +528,18 @@ LORENZ_JULIA_STATES = {"x": 1.0, "y": 0.0, "z": 0.0}
 LORENZ_JULIA_PARAMETERS = {"rho": 21.0, "sigma": 10.0, "beta": 8.0 / 3.0}
 
 
-def build_lorenz_julia_system(precision: np_dtype) -> BaseODE:
+def build_lorenz_julia_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the Lorenz system with rho as a parameter."""
 
     system = create_ODE_system(
         dxdt=LORENZ_JULIA_EQUATIONS,
         states=LORENZ_JULIA_STATES,
         parameters=LORENZ_JULIA_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, LORENZ_JULIA_PARAMETERS
+        ),
         precision=precision,
         name="lorenz_julia",
         strict=True,
@@ -501,7 +569,12 @@ def _coupled_oscillator_dxdt(t, y, p):
     return [dx1, dv1, dx2, dv2]
 
 
-def build_coupled_oscillator_system(precision: np_dtype) -> BaseODE:
+COUPLED_OSCILLATOR_PARAMETERS = {"k": 4.0, "c_couple": 0.3, "omega": 2.5}
+
+
+def build_coupled_oscillator_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the driven coupled oscillator with piecewise damping.
 
     An adaptive solver on this system is squeezed into very small
@@ -512,7 +585,10 @@ def build_coupled_oscillator_system(precision: np_dtype) -> BaseODE:
     return create_ODE_system(
         dxdt=_coupled_oscillator_dxdt,
         states={"x1": 1.0, "v1": 0.0, "x2": -0.5, "v2": 0.0},
-        parameters={"k": 4.0, "c_couple": 0.3, "omega": 2.5},
+        parameters=dict(COUPLED_OSCILLATOR_PARAMETERS),
+        swept_parameters=_case_sweep(
+            swept_parameters, COUPLED_OSCILLATOR_PARAMETERS
+        ),
         precision=precision,
         name="coupled_oscillator",
     )
@@ -532,7 +608,12 @@ def _status_staining_stiff_dxdt(t, y, p):
     return [dx0, dx1]
 
 
-def build_status_staining_stiff_system(precision: np_dtype) -> BaseODE:
+STATUS_STAINING_PARAMETERS = {"k": 500.0}
+
+
+def build_status_staining_stiff_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the moderately stiff system for transient-recovery tests.
 
     The recovery scenario needs an oversized first step to exhaust a
@@ -545,7 +626,10 @@ def build_status_staining_stiff_system(precision: np_dtype) -> BaseODE:
     return create_ODE_system(
         dxdt=_status_staining_stiff_dxdt,
         states={"x0": 1.0, "x1": 0.0},
-        parameters={"k": 500.0},
+        parameters=dict(STATUS_STAINING_PARAMETERS),
+        swept_parameters=_case_sweep(
+            swept_parameters, STATUS_STAINING_PARAMETERS
+        ),
         precision=precision,
         name="status_staining_stiff",
     )
@@ -565,7 +649,9 @@ TIME_FUNCTION_DRIVER_EQUATIONS = ["dx = -x + sin(t)", "obs = x"]
 TIME_ARRAY_DRIVER_EQUATIONS = ["dx = -x + drive", "obs = x"]
 
 
-def build_time_function_driver_system(precision: np_dtype) -> BaseODE:
+def build_time_function_driver_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the twin whose sinusoid lives in the equations."""
 
     return create_ODE_system(
@@ -575,10 +661,13 @@ def build_time_function_driver_system(precision: np_dtype) -> BaseODE:
         precision=precision,
         strict=True,
         name="time_function_driver",
+        swept_parameters=_case_sweep(swept_parameters, {}),
     )
 
 
-def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
+def build_time_array_driver_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the twin whose sinusoid arrives as an interpolated
     driver."""
 
@@ -590,6 +679,7 @@ def build_time_array_driver_system(precision: np_dtype) -> BaseODE:
         precision=precision,
         strict=True,
         name="time_array_driver",
+        swept_parameters=_case_sweep(swept_parameters, {}),
     )
 
 
@@ -620,7 +710,9 @@ USER_DERIVATIVE_EQUATIONS = ["dx = v", "dv = w", "0 = growth(x) - p*t"]
 USER_DERIVATIVE_PARAMETERS = {"p": 1.0}
 
 
-def build_user_derivative_system(precision: np_dtype) -> BaseODE:
+def build_user_derivative_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return a DAE whose reduction reads user-supplied derivatives."""
 
     return create_ODE_system(
@@ -628,6 +720,9 @@ def build_user_derivative_system(precision: np_dtype) -> BaseODE:
         states={"x": 0.0},
         observables=["v", "w"],
         parameters=dict(USER_DERIVATIVE_PARAMETERS),
+        swept_parameters=_case_sweep(
+            swept_parameters, USER_DERIVATIVE_PARAMETERS
+        ),
         user_functions={"growth": growth},
         user_function_derivatives={
             "growth": [growth_d1, growth_d2, growth_d3]
@@ -653,7 +748,9 @@ DRIVER_DERIVATIVE_FUNCTION_EQUATIONS = [
 ]
 
 
-def build_driver_derivative_system(precision: np_dtype) -> BaseODE:
+def build_driver_derivative_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return a DAE whose reduced dynamics read driver derivatives."""
 
     return create_ODE_system(
@@ -664,10 +761,13 @@ def build_driver_derivative_system(precision: np_dtype) -> BaseODE:
         precision=precision,
         strict=True,
         name="driver_derivative",
+        swept_parameters=_case_sweep(swept_parameters, {}),
     )
 
 
-def build_driver_derivative_function_system(precision: np_dtype) -> BaseODE:
+def build_driver_derivative_function_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Return the twin of ``driver_derivative`` with the drive in-equation."""
 
     return create_ODE_system(
@@ -677,6 +777,7 @@ def build_driver_derivative_function_system(precision: np_dtype) -> BaseODE:
         precision=precision,
         strict=True,
         name="driver_derivative_function",
+        swept_parameters=_case_sweep(swept_parameters, {}),
     )
 
 
@@ -713,7 +814,9 @@ TORN_TIME_PARAMETERS = {
 }
 
 
-def build_torn_driver_system(precision: np_dtype) -> BaseODE:
+def build_torn_driver_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Torn two-state DAE whose Jacobian depends on a driver."""
 
     return create_ODE_system(
@@ -723,13 +826,18 @@ def build_torn_driver_system(precision: np_dtype) -> BaseODE:
         ],
         states=["x0", "x1"],
         parameters=TORN_DRIVER_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, TORN_DRIVER_PARAMETERS
+        ),
         drivers=["d0"],
         precision=precision,
         name="torn_driver",
     )
 
 
-def build_torn_time_system(precision: np_dtype) -> BaseODE:
+def build_torn_time_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Driverless torn DAE whose Jacobian depends on time."""
 
     return create_ODE_system(
@@ -739,12 +847,17 @@ def build_torn_time_system(precision: np_dtype) -> BaseODE:
         ],
         states=["x0", "x1"],
         parameters=TORN_TIME_PARAMETERS,
+        swept_parameters=_case_sweep(
+            swept_parameters, TORN_TIME_PARAMETERS
+        ),
         precision=precision,
         name="torn_time",
     )
 
 
-def build_torn_unsolvable_system(precision: np_dtype) -> BaseODE:
+def build_torn_unsolvable_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Torn DAE whose constraint has no real root below x0 = 2."""
 
     return create_ODE_system(
@@ -755,6 +868,7 @@ def build_torn_unsolvable_system(precision: np_dtype) -> BaseODE:
         states=["x0", "x1"],
         precision=precision,
         name="torn_unsolvable",
+        swept_parameters=_case_sweep(swept_parameters, {}),
     )
 
 
@@ -825,18 +939,24 @@ Cs * dU6 = -I6 - qD2 + qD4
 """ + RING_MODULATOR_DIFFERENTIAL_ROWS
 
 
-def _build_ring_modulator(equations, parameters, system_name, precision):
+def _build_ring_modulator(
+    equations, parameters, system_name, precision, swept_parameters
+):
+    parameters = {"Uin1_amplitude": 0.5, **parameters}
     return create_ODE_system(
         equations,
         states={name: 0.0 for name in RING_MODULATOR_STATES},
-        parameters={"Uin1_amplitude": 0.5, **parameters},
+        parameters=parameters,
+        swept_parameters=_case_sweep(swept_parameters, parameters),
         observables=["U3", "U4", "U6", "I3"],
         precision=precision,
         name=system_name,
     )
 
 
-def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
+def build_ring_modulator_index2_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Index-2 ring modulator (Test Set II-3, Cs = 0)."""
 
     return _build_ring_modulator(
@@ -844,11 +964,12 @@ def build_ring_modulator_index2_system(precision: np_dtype) -> BaseODE:
         RING_MODULATOR_PARAMETERS,
         "ring_modulator_index2",
         precision,
+        swept_parameters,
     )
 
 
 def build_ring_modulator_index2_scaled_system(
-    precision: np_dtype,
+    precision: np_dtype, swept_parameters=None
 ) -> BaseODE:
     """Ring modulator in ``Cs*dX = ...`` form with ``Cs = 0``."""
 
@@ -857,6 +978,7 @@ def build_ring_modulator_index2_scaled_system(
         dict(RING_MODULATOR_PARAMETERS, Cs=0.0),
         "ring_modulator_index2_scaled",
         precision,
+        swept_parameters,
     )
 
 
@@ -869,7 +991,12 @@ dI3 = U3 - 0.1*I3
 SCALED_CS_STATES = {"U3": 0.0, "I1": 0.1, "I3": 0.2}
 
 
-def build_scaled_cs_system(precision: np_dtype) -> BaseODE:
+SCALED_CS_PARAMETERS = {"Cs": 0.0}
+
+
+def build_scaled_cs_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """``Cs*dU3`` system at ``Cs = 0``; flips explicit when
     ``Cs`` is nonzero."""
 
@@ -878,19 +1005,28 @@ def build_scaled_cs_system(precision: np_dtype) -> BaseODE:
         return create_ODE_system(
             SCALED_CS_EQUATIONS,
             states=dict(SCALED_CS_STATES),
-            parameters={"Cs": 0.0},
+            parameters=dict(SCALED_CS_PARAMETERS),
+            swept_parameters=_case_sweep(
+                swept_parameters, SCALED_CS_PARAMETERS
+            ),
             precision=precision,
             name="scaled_cs",
         )
 
 
-def build_amp_system(precision: np_dtype) -> BaseODE:
+AMP_PARAMETERS = {"k": 0.5, "amp": 2.0}
+
+
+def build_amp_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """One-state decay system scaled by parameter ``amp``."""
 
     return create_ODE_system(
         "dx = -k * x * (1.0 + amp)",
         states={"x": 1.0},
-        parameters={"k": 0.5, "amp": 2.0},
+        parameters=dict(AMP_PARAMETERS),
+        swept_parameters=_case_sweep(swept_parameters, AMP_PARAMETERS),
         precision=precision,
         name="amp",
     )
@@ -915,7 +1051,9 @@ def _diode_line_equations() -> str:
     return "\n".join(lines)
 
 
-def build_diode_line_system(precision: np_dtype) -> BaseODE:
+def build_diode_line_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Semi-explicit index-1 diode ladder; the chain-boundary
     constraint slot does not contain its own variable."""
 
@@ -927,6 +1065,9 @@ def build_diode_line_system(precision: np_dtype) -> BaseODE:
         _diode_line_equations(),
         states=states,
         parameters=dict(DIODE_LINE_PARAMETERS),
+        swept_parameters=_case_sweep(
+            swept_parameters, DIODE_LINE_PARAMETERS
+        ),
         precision=precision,
         name="diode_line",
     )
@@ -980,7 +1121,9 @@ TRANSAMP_DC_STATES = {
 }
 
 
-def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
+def build_transistor_amplifier_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """Test Set transistor amplifier (II-2) at its DC point."""
 
     return create_ODE_system(
@@ -988,12 +1131,20 @@ def build_transistor_amplifier_system(precision: np_dtype) -> BaseODE:
         states=dict(TRANSAMP_DC_STATES),
         observables=["y1", "y4", "y7"],
         parameters=dict(TRANSAMP_PARAMETERS),
+        swept_parameters=_case_sweep(
+            swept_parameters, TRANSAMP_PARAMETERS
+        ),
         precision=precision,
         name="transistor_amplifier",
     )
 
 
-def build_toggle_system(precision: np_dtype) -> BaseODE:
+TOGGLE_PARAMETERS = {"k": 0.3, "tog": 1.0}
+
+
+def build_toggle_system(
+    precision: np_dtype, swept_parameters=None
+) -> BaseODE:
     """SymPy-input system whose parameter ``tog`` picks a branch."""
 
     x = sp.Symbol("x", real=True)
@@ -1006,7 +1157,8 @@ def build_toggle_system(precision: np_dtype) -> BaseODE:
     return create_ODE_system(
         equations,
         states={"x": 1.0},
-        parameters={"k": 0.3, "tog": 1.0},
+        parameters=dict(TOGGLE_PARAMETERS),
+        swept_parameters=_case_sweep(swept_parameters, TOGGLE_PARAMETERS),
         precision=precision,
         name="toggle",
     )
