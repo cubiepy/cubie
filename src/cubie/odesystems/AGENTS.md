@@ -38,21 +38,26 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 `NotImplementedError`; `SymbolicODE` overrides it.
 
 ## BaseODE updates and identity
-- `ODEData.parameters` holds every parameter's default. `swept_parameters` names the
-  rows of the parameters array, in order, and `fixed_parameters` holds the value
-  compiled in for every other parameter. Together they name each parameter once. A new
-  system sweeps nothing and fixes every parameter at its default.
-- Call `set_swept_parameters(names, fixed_values=None)` to choose the sweep. We compile
-  every other parameter in at the fixed value you give or at its default, and skip the
-  update when nothing changed. `SystemInterface` and `Solver` go through it. You can also
-  pass `swept_parameters` and `fixed_parameters` to `update`, but then you must give a
-  fixed value for every parameter you don't sweep. `SymbolicODE._update` re-derives
-  the equations when either changes. `set_default_parameters()` changes
-  defaults, and a parameter that isn't swept is compiled in at its new default.
+- We keep every parameter's default in `ODEData.parameters` and the names of the
+  parameters array's rows, in order, in `swept_parameters`. A batch can compile in values
+  other than the defaults for parameters it does not sweep; we keep those in
+  `fixed_values`, a `FixedParameterValues` or `None`. We compile every other parameter in
+  at its default. `ODEData.compiled_values` holds the value we compile in for each
+  parameter that is not swept, and `fixed_parameter_values` returns it as a dict. A new
+  system sweeps nothing and has no fixed values.
+- Choose the sweep with `set_swept_parameters(names)`. Sweeping a parameter discards its
+  fixed value. Compile values in without changing the defaults with
+  `set_fixed_values(values)`, and pass an empty mapping to return to the defaults. Use
+  `set_batch_parameters(names, values)` to set both in one update, so that the equations
+  are derived once. `Solver.solve`, `compile` and `build_grid` call it. Change defaults
+  with `set_default_parameters()`; a parameter that is neither swept nor fixed then
+  compiles in at its new default.
+- In `SymbolicODE._update` we derive the equations again only when the swept names or the
+  compiled-in values change. Any other update goes straight to `update_compile_settings`.
 - A `precision` change re-materialises all three `SystemValues` through
   `ODEData.update`.
-- The swept names and fixed values are part of `config_hash`. A `SystemValues`
-  canonical identity is its names and precision only, so defaults are not.
+- The swept names and the compiled-in values are part of `config_hash`. A
+  `SystemValues` canonical identity is its names and precision only, so defaults are not.
 - The mass matrix is a float64 array in `ODEData._mass` (`BaseODE.mass`); codegen reads
   it as boolean diagonal flags. Explicit algorithms and Neumann preconditioners reject a
   non-identity mass matrix.

@@ -89,20 +89,58 @@ class SystemInterface:
         """Values compiled into the code, read live."""
         return self._system.fixed_parameter_values
 
-    def set_swept_parameters(
-        self,
-        names: Sequence[str],
-        fixed_values: Optional[Mapping[str, float]] = None,
-    ) -> None:
-        """Sweep ``names`` and compile every other parameter in.
+    @property
+    def fixed_values(self) -> Dict[str, float]:
+        """Values the batch compiles in instead of their defaults."""
+        return self._system.fixed_values
+
+    def set_swept_parameters(self, names: Sequence[str]) -> None:
+        """Read ``names`` from the parameters array, in this order.
 
         Parameters
         ----------
         names
             Names of the parameters array's rows, in order.
-        fixed_values
-            Values to compile in, keyed by parameter name. We compile in
-            the default of any parameter you neither sweep nor name here.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name repeats.
+        """
+        self._system.set_swept_parameters(names)
+
+    def set_fixed_values(self, values: Mapping[str, float]) -> None:
+        """Compile ``values`` in instead of those parameters' defaults.
+
+        Parameters
+        ----------
+        values
+            Names of parameters that are not swept, mapped to the
+            values to compile in.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name is swept.
+        """
+        self._system.set_fixed_values(values)
+
+    def set_batch_parameters(
+        self, names: Sequence[str], values: Mapping[str, float]
+    ) -> None:
+        """Set the swept names and the fixed values in one update.
+
+        Parameters
+        ----------
+        names
+            Names of the parameters array's rows, in order.
+        values
+            Names of parameters that are not swept, mapped to the
+            values to compile in.
 
         Raises
         ------
@@ -111,7 +149,7 @@ class SystemInterface:
         ValueError
             If a swept name repeats or also has a fixed value.
         """
-        self._system.set_swept_parameters(names, fixed_values)
+        self._system.set_batch_parameters(names, values)
 
     @property
     def states(self) -> SystemValues:

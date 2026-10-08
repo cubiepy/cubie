@@ -71,7 +71,7 @@ Examples
 ... )
 >>> swept, fixed
 (('p0',), {'p1': 3.0})
->>> handler.interface.set_swept_parameters(swept, fixed)
+>>> handler.interface.set_batch_parameters(swept, fixed)
 >>> states = {"x": [1.0, 2.0], "y": [0.5, 1.5]}
 >>> inits, params = handler(states=states, params=sweep, kind="verbatim")
 >>> print(inits)
@@ -629,12 +629,13 @@ class BatchInputHandler:
         """Split a parameter input into swept values and fixed values.
 
         A dict sweeps entries with several values and fixes entries
-        with one value. Parameters left out are fixed at their
+        with one value. Parameters left out compile in at their
         defaults. An array with a row per parameter sweeps every row.
         An array with a row per swept parameter keeps the current
-        swept and fixed parameters. With ``fix_constant_parameters``,
+        swept names and fixed values. With ``fix_constant_parameters``,
         a host array's rows that hold one value are fixed instead.
-        ``None`` fixes every parameter at its default.
+        ``None`` sweeps nothing and fixes nothing, so every parameter
+        compiles in at its default.
 
         Parameters
         ----------
@@ -648,8 +649,8 @@ class BatchInputHandler:
         -------
         tuple
             ``(sweep, swept, fixed)``: the swept values for
-            :meth:`__call__`, their names in row order, and every other
-            parameter's value.
+            :meth:`__call__`, their names in row order, and the values
+            to compile in instead of the defaults.
 
         Raises
         ------
@@ -685,13 +686,7 @@ class BatchInputHandler:
             sweep, swept, given = self._split_array(
                 params, fix_constant_parameters
             )
-        defaults = self.parameters.as_float_dict
-        fixed = {
-            name: given.get(name, value)
-            for name, value in defaults.items()
-            if name not in swept
-        }
-        return sweep, swept, fixed
+        return sweep, swept, given
 
     def _split_array(
         self,
@@ -728,9 +723,9 @@ class BatchInputHandler:
         return grid[keep], swept, given
 
     def _current_fixed(self, names: Tuple[str, ...]) -> Dict[str, float]:
-        """Return the compiled-in values when ``names`` are the swept names."""
+        """Return the current fixed values when ``names`` are swept now."""
         if names == self.interface.swept_parameters:
-            return self.interface.fixed_parameter_values
+            return self.interface.fixed_values
         return {}
 
     def _array_names(self, n_rows: int) -> Tuple[str, ...]:

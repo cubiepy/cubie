@@ -112,10 +112,11 @@ Dicts and arrays
 It's simplest to provide a dict of parameter and initial values, with
 each value that differs from the system's defaults assigned a constant
 value and any swept parameters or states assigned a group or range of
-values. Cubie takes a few milliseconds to interpret and sort these,
-which is fine if your solve takes several seconds. If you're looking for
-something a bit faster and more programmatic, you can pass Cubie an
-array instead. If you want to go *really* fast and you are comfortable
+values. Cubie compiles a constant parameter value into the code for that
+solve and leaves the system's default as it was. Cubie takes a few
+milliseconds to interpret and sort these, which is fine if your solve
+takes several seconds. If you're looking for something a bit faster and
+more programmatic, you can pass Cubie an array instead. If you want to go *really* fast and you are comfortable
 with the CUDA environment, you can pass arrays on the GPU (device arrays)
 directly to cut out the few milliseconds of transfer time as well.
 
@@ -133,7 +134,9 @@ You can do this two ways:
 - By calling ``solver.set_swept_parameters(param_names)`` before you
   pass the array, and then passing an array of only the parameters that
   vary over a batch. This can cut down the size of the arrays you pass
-  considerably, and is how Cubie's benchmarks use it.
+  considerably, and is how Cubie's benchmarks use it. The parameters you
+  don't sweep run at their defaults unless you call
+  ``solver.set_fixed_values({name: value})`` to compile in other values.
 
 Arrays are laid out ``(n_variables, n_runs)`` and must match the system
 precision. Device arrays (CuPy or Numba) are wired directly into the

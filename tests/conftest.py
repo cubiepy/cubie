@@ -843,13 +843,8 @@ def parameter_solve(solver, system, solver_settings, parameter_batch):
         params = parameter_batch
         options = {"fix_constant_parameters": True}
     elif form in ("swept_rows", "device"):
-        fixed = {
-            name: value
-            for name, value in defaults.items()
-            if name not in names[:2]
-        }
-        fixed[names[2]] = as_dict[names[2]]
-        solver.set_swept_parameters((names[1], names[0]), fixed)
+        solver.set_swept_parameters((names[1], names[0]))
+        solver.set_fixed_values({names[2]: as_dict[names[2]]})
         params = parameter_batch[[1, 0]]
         if form == "device":
             params = cuda.to_device(params)
@@ -1578,7 +1573,7 @@ def batch_input_arrays(
     # A copy takes the sweep, leaving the session system as it is.
     handler = BatchInputHandler.from_system(system.copy())
     values, swept, fixed = handler.split_parameters(params_dict)
-    handler.interface.set_swept_parameters(swept, fixed)
+    handler.interface.set_batch_parameters(swept, fixed)
     inits, params = handler(
         states=states_dict, params=values, kind=batch_settings["kind"]
     )
