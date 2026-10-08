@@ -1166,10 +1166,17 @@ def stage_residual_factory(operator_system, precision):
 
 @pytest.fixture(scope="session")
 def residual_kernel(precision):
-    def make_kernel(residual):
+    def make_kernel(residual, parameter_values=None):
+        if parameter_values is None:
+            parameter_values = np.zeros(1, dtype=precision)
+        n_params = parameter_values.shape[0]
+        param_len = max(n_params, 1)
+
         @cuda.jit(**compile_kwargs)
         def kernel(t, h, aij, vec, base_state, out):
-            parameters = cuda.local.array(1, precision)
+            parameters = cuda.local.array(param_len, precision)
+            for idx in range(n_params):
+                parameters[idx] = parameter_values[idx]
             drivers = cuda.local.array(1, precision)
             residual(vec, parameters, drivers, t, h, aij, base_state, out)
 
@@ -1251,7 +1258,9 @@ def test_solver_helper_preserves_colliding_parameters(
     assert system.parameters.values_dict["beta"] == precision(2.5)
     assert system.parameters.values_dict["gamma"] == precision(0.75)
 
-    kernel = residual_kernel(residual)
+    kernel = residual_kernel(
+        residual, system.swept_values.values_array.astype(precision)
+    )
     stage = np.zeros(2, dtype=precision)
     base = np.array([1.0, 2.0], dtype=precision)
     stream = default_memmgr.get_group_stream()
@@ -1318,7 +1327,9 @@ def test_solver_helper_rebuilds_on_scaling_change(
             operator_gamma=gamma,
         ).device_function
         helpers.append(residual)
-        kernel = residual_kernel(residual)
+        kernel = residual_kernel(
+            residual, system.swept_values.values_array.astype(precision)
+        )
         out_dev = cuda.to_device(
             np.zeros(2, dtype=precision), stream=stream
         )
@@ -2176,6 +2187,7 @@ def test_torn_structure_selects_distinct_cached_helpers(
 def system_operator_pair_kernel(system, precision):
     """Kernel comparing cached and at-state operators on ``system``."""
 
+    parameter_values = system.swept_values.values_array.astype(precision)
     n_state = len(system.indices.states.index_map)
     n_params = len(system.indices.parameters.index_map)
     n_drivers = len(system.indices.drivers.index_map)
@@ -2195,6 +2207,8 @@ def system_operator_pair_kernel(system, precision):
             cached_aux = cuda.local.array(aux_len, precision)
             for idx in range(n_state):
                 state[idx] = state_values[idx]
+            for idx in range(n_params):
+                parameters[idx] = parameter_values[idx]
             prepare(state, parameters, drivers, t, h, cached_aux)
             cached_op(
                 state,
@@ -2230,6 +2244,7 @@ def system_operator_pair_kernel(system, precision):
 def system_cached_precond_kernel(system, precision):
     """Kernel applying prepare plus a cached preconditioner on ``system``."""
 
+    parameter_values = system.swept_values.values_array.astype(precision)
     n_state = len(system.indices.states.index_map)
     n_params = len(system.indices.parameters.index_map)
     n_drivers = len(system.indices.drivers.index_map)
@@ -2248,6 +2263,8 @@ def system_cached_precond_kernel(system, precision):
             jvp = cuda.local.array(n_state, precision)
             for idx in range(n_state):
                 state[idx] = state_values[idx]
+            for idx in range(n_params):
+                parameters[idx] = parameter_values[idx]
             prepare(state, parameters, drivers, t, h, cached_aux)
             pre(
                 state,

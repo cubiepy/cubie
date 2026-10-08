@@ -42,8 +42,12 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
   rows of the parameters array, in order, and `fixed_parameters` holds the value
   compiled in for every other parameter. Together they name each parameter once. A new
   system sweeps nothing and fixes every parameter at its default.
-- Set `swept_parameters` and `fixed_parameters` through `update`. `SymbolicODE._update`
-  re-derives the equations when either changes. `set_default_parameters()` changes
+- Call `set_swept_parameters(names, fixed_values=None)` to choose the sweep. We compile
+  every other parameter in at the fixed value you give or at its default, and skip the
+  update when nothing changed. `SystemInterface` and `Solver` go through it. You can also
+  pass `swept_parameters` and `fixed_parameters` to `update`, but then you must give a
+  fixed value for every parameter you don't sweep. `SymbolicODE._update` re-derives
+  the equations when either changes. `set_default_parameters()` changes
   defaults, and a parameter that isn't swept is compiled in at its new default.
 - A `precision` change re-materialises all three `SystemValues` through
   `ODEData.update`.

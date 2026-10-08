@@ -28,7 +28,6 @@ from cubie.odesystems.symbolic.symbolicODE import (
     create_ODE_system,
 )
 from tests._utils import (
-    sweep,
     parse_input_swept,
     run_dense_at_state_operator,
     run_device_dxdt,
@@ -336,6 +335,7 @@ class TestScaledDerivativeLhs:
         [
             {
                 "system_type": "ring_modulator_index2",
+                "system_sweep": (),
                 "precision": np.float64,
             }
         ],
@@ -391,7 +391,7 @@ class TestDerivativeBlockPolicy:
             simplify_options={"allow_parameter": False},
             name="policy_pivot",
         )
-        sweep(system, ["p"])
+        system.set_swept_parameters(["p"])
         assert list(system.indices.states.symbol_map) == ["x", "y"]
         assert system.mass.tolist() == [[1.0, 0.0], [0.0, 0.0]]
         p = sp.Symbol("p", real=True)

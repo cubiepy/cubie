@@ -16,7 +16,6 @@ from tests._utils import (
     _get_driver_del_t,
     restoring_values,
 )
-import attrs
 
 from cubie._cudasim_extensions import cuda
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
@@ -293,22 +292,8 @@ def tolerance(tolerance_override, precision):
     raise ValueError("Unsupported precision for tolerance fixture")
 
 
-@pytest.fixture(scope="session")
-def system(request, solver_settings_override, precision):
-    """Return the appropriate symbolic system, defaulting to nonlinear.
-
-    Usage:
-    @pytest.mark.parametrize("solver_settings_override",
-        [{"system_type": "three_chamber"}], indirect=True)
-    def test_something(system):
-        # system will be the cardiovascular symbolic model here
-    """
-    model_type = "nonlinear"
-    if solver_settings_override:
-        model_type = solver_settings_override.get(
-            "system_type", model_type
-        )
-
+def _build_system(model_type, precision):
+    """Build the named symbolic system, or return a prebuilt one."""
     if model_type == "linear":
         return build_three_state_linear_system(precision)
     if model_type == "nonlinear":
@@ -370,6 +355,31 @@ def system(request, solver_settings_override, precision):
         return model_type
 
     raise ValueError(f"Unknown model type: {model_type}")
+
+
+@pytest.fixture(scope="session")
+def system(request, solver_settings_override, precision):
+    """Return the appropriate symbolic system, defaulting to nonlinear.
+
+    We sweep the first two parameters, the ones ``simple_parameters``
+    gives two values each, so every solve and device test on the
+    session system compiles the same kernel. Give an override a
+    ``system_sweep`` to sweep other names for its case, as the tests
+    that study fixed parameters do.
+
+    Usage:
+    @pytest.mark.parametrize("solver_settings_override",
+        [{"system_type": "three_chamber"}], indirect=True)
+    def test_something(system):
+        # system will be the cardiovascular symbolic model here
+    """
+    override = solver_settings_override or {}
+    model_type = override.get("system_type", "nonlinear")
+    system = _build_system(model_type, precision)
+    system.set_swept_parameters(
+        override.get("system_sweep", system.parameters.names[:2])
+    )
+    return system
 
 
 @pytest.fixture(scope="function")
@@ -590,7 +600,7 @@ def chunked_solved_solver(
 
     n_runs = 5
     n_states = system.sizes.states
-    n_params = system.num_parameters
+    n_params = system.sizes.swept_parameters
 
     inits = np.ones((n_states, n_runs), dtype=precision)
     params = np.ones((n_params, n_runs), dtype=precision)
@@ -624,7 +634,7 @@ def unchunked_solved_solver(
     solver = unchunking_solver
     n_runs = 5
     n_states = system.sizes.states
-    n_params = system.num_parameters
+    n_params = system.sizes.swept_parameters
 
     inits = np.ones((n_states, n_runs), dtype=precision)
     params = np.ones((n_params, n_runs), dtype=precision)
@@ -1498,7 +1508,7 @@ def batch_settings(batch_settings_override) -> dict:
         "num_state_vals_0": 2,
         "num_state_vals_1": 0,
         "num_param_vals_0": 2,
-        "num_param_vals_1": 0,
+        "num_param_vals_1": 1,
         "kind": "combinatorial",
     }
     defaults.update(
@@ -1554,7 +1564,7 @@ def batch_input_arrays(
     batch_settings,
     system,
 ) -> tuple[Array, Array]:
-    """Return the batch's initial states and a row per parameter."""
+    """Return the batch's initial states and a row per swept parameter."""
     state_names = set(system.initial_values.names)
     param_names = set(system.parameters.names)
 
@@ -1572,69 +1582,7 @@ def batch_input_arrays(
     inits, params = handler(
         states=states_dict, params=values, kind=batch_settings["kind"]
     )
-    rows = [
-        params[swept.index(name)]
-        if name in swept
-        else np.full(params.shape[1], fixed[name])
-        for name in system.parameters.names
-    ]
-    return inits, np.asarray(rows, dtype=params.dtype)
-
-
-@attrs.define
-class BatchResult:
-    """Container for CPU reference outputs for a single batch run."""
-
-    state: Array
-    observables: Array
-    state_summaries: Array
-    observable_summaries: Array
-    status: int
-
-
-@pytest.fixture(scope="session")
-def cpu_batch_results(
-    batch_input_arrays,
-    cpu_loop_runner,
-    system,
-    solver_settings,
-    precision,
-    driver_array,
-) -> BatchResult:
-    """Compute CPU reference outputs for each run in the batch."""
-    initial_sets, parameter_sets = batch_input_arrays
-    results: list[BatchResult] = []
-    coefficients = (
-        driver_array.coefficients if driver_array is not None else None
-    )
-    n_runs = initial_sets.shape[1]
-    for idx in range(n_runs):
-        loop_result = cpu_loop_runner(
-            initial_values=initial_sets[:, idx],
-            parameters=parameter_sets[:, idx],
-            driver_coefficients=coefficients,
-        )
-        results.append(
-            BatchResult(
-                state=loop_result["state"],
-                observables=loop_result["observables"],
-                state_summaries=loop_result["state_summaries"],
-                observable_summaries=loop_result["observable_summaries"],
-                status=int(loop_result["status"]),
-            )
-        )
-
-    return BatchResult(
-        state=np.stack([r.state for r in results], axis=2),
-        observables=np.stack([r.observables for r in results], axis=2),
-        state_summaries=np.stack(
-            [r.state_summaries for r in results], axis=2,
-        ),
-        observable_summaries=np.stack(
-            [r.observable_summaries for r in results], axis=2,
-        ),
-        status=0 if all(r.status == 0 for r in results) else 1,
-    )
+    return inits, params
 
 
 # ========================================

@@ -87,6 +87,60 @@ class TestSweptParameters:
             )
 
 
+class TestSetSweptParameters:
+    """Cover BaseODE.set_swept_parameters."""
+
+    def test_unnamed_parameters_compile_in_at_their_defaults(
+        self, tiny_system
+    ):
+        """Parameters not swept and not given compile in at defaults."""
+        tiny_system.set_swept_parameters(["k"])
+        assert tiny_system.swept_parameters == ("k",)
+        assert tiny_system.fixed_parameter_values == {"c0": 1.0}
+
+    def test_given_fixed_values_compile_in(self, tiny_system):
+        """A given fixed value is the value compiled in."""
+        tiny_system.set_swept_parameters(["k"], {"c0": 4.0})
+        assert tiny_system.fixed_parameter_values == {"c0": 4.0}
+        assert tiny_system.parameters.values_dict["c0"] == 1.0
+
+    def test_unchanged_sweep_keeps_the_build(self, tiny_system):
+        """Repeating the current sweep keeps the build."""
+        tiny_system.set_swept_parameters(["k"])
+        tiny_system.dxdt_fn
+        tiny_system.set_swept_parameters(["k"])
+        assert tiny_system.cache_valid is True
+
+    def test_unknown_name_raises(self, tiny_system):
+        """A swept or fixed name outside the parameters raises KeyError."""
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_swept_parameters(["not_a_key"])
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_swept_parameters(["k"], {"not_a_key": 1.0})
+
+    def test_swept_values_follow_the_sweep_in_row_order(self, tiny_system):
+        """Swept values hold each swept default in row order."""
+        tiny_system.set_swept_parameters(["c0", "k"])
+        assert list(tiny_system.swept_values.values_dict.items()) == [
+            ("c0", 1.0),
+            ("k", 0.5),
+        ]
+        tiny_system.set_swept_parameters(["k"])
+        assert list(tiny_system.swept_values.values_dict) == ["k"]
+
+    def test_swept_values_are_reused_until_the_settings_change(
+        self, tiny_system
+    ):
+        """Unchanged settings return the same swept values object."""
+        first = tiny_system.swept_values
+        assert tiny_system.swept_values is first
+
+    def test_swept_name_with_a_fixed_value_raises(self, tiny_system):
+        """A name both swept and given a fixed value raises."""
+        with pytest.raises(ValueError, match="swept and given"):
+            tiny_system.set_swept_parameters(["k"], {"k": 1.0})
+
+
 class TestSetDefaultParameters:
     """Cover BaseODE.set_default_parameters."""
 

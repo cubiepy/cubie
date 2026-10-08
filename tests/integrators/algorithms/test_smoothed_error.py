@@ -371,7 +371,7 @@ def _dense_columns(kernel, n):
     return np.column_stack(columns)
 
 
-def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
+def _helper_columns(device_fn, params, state, drivers, t, h, sigma, shape):
     """Return a helper's dense matrix from basis-vector applies."""
     n = state.shape[0]
     garbage = np.full(n, 97.0)
@@ -380,7 +380,6 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
 
         @cuda.jit(**compile_kwargs)
         def kernel(vec, out):
-            params = cuda.local.array(1, np.float64)
             cached_aux = cuda.local.array(1, np.float64)
             device_fn(
                 state, params, drivers, cached_aux, garbage, t, h,
@@ -391,7 +390,6 @@ def _helper_columns(device_fn, state, drivers, t, h, sigma, shape):
 
         @cuda.jit(**compile_kwargs)
         def kernel(vec, out):
-            params = cuda.local.array(1, np.float64)
             cached_aux = cuda.local.array(1, np.float64)
             jvp = cuda.local.array(n, np.float64)
             device_fn(
@@ -424,18 +422,21 @@ def test_at_state_operator_and_apply_mass_match_dense(system):
 
     state = np.array([0.3, -1.2])
     drivers = np.array([0.7])
+    params = system.swept_values.values_array.astype(np.float64)
     h, sigma, t = 0.05, 0.274888, 0.0
     expected = ORACLE_MASS - sigma * h * _oracle_jacobian(
         state, drivers[0]
     )
 
     dense = _helper_columns(
-        operator, state, drivers, t, h, sigma, "operator"
+        operator, params, state, drivers, t, h, sigma,
+        "operator",
     )
     np.testing.assert_allclose(dense, expected, atol=1e-13)
 
     dense_mass = _helper_columns(
-        apply_mass, state, drivers, t, h, sigma, "mass"
+        apply_mass, params, state, drivers, t, h, sigma,
+        "mass",
     )
     np.testing.assert_allclose(dense_mass, ORACLE_MASS, atol=1e-15)
 
@@ -466,12 +467,14 @@ def test_at_state_jacobi_linearizes_at_state(system):
 
     state = np.array([0.3, -1.2])
     drivers = np.array([0.7])
+    params = system.swept_values.values_array.astype(np.float64)
     h, sigma, t = 0.05, 0.274888, 0.0
     jac = _oracle_jacobian(state, drivers[0])
 
     # Jacobi: v / diag(M - sigma*h*J).
     dense_jacobi = _helper_columns(
-        jacobi, state, drivers, t, h, sigma, "preconditioner"
+        jacobi, params, state, drivers, t, h, sigma,
+        "preconditioner",
     )
     diagonal = np.diag(ORACLE_MASS) - sigma * h * np.diag(jac)
     np.testing.assert_allclose(
@@ -494,11 +497,13 @@ def test_at_state_jacobi_series_expands_about_the_diagonal(system):
 
     state = np.array([0.3, -1.2])
     drivers = np.array([0.7])
+    params = system.swept_values.values_array.astype(np.float64)
     h, sigma, t = 0.05, 0.274888, 0.0
     jac = _oracle_jacobian(state, drivers[0])
 
     dense_jacobi = _helper_columns(
-        jacobi, state, drivers, t, h, sigma, "preconditioner"
+        jacobi, params, state, drivers, t, h, sigma,
+        "preconditioner",
     )
     operator = ORACLE_MASS - sigma * h * jac
     diagonal = np.diag(np.diag(operator))
@@ -574,6 +579,7 @@ def test_error_solver_solves_the_at_state_dense_system(
     tableau = step.tableau
     h, sigma, t = 0.05, float(tableau.smoothing_gamma), 0.4
     rhs = np.array([0.11, -0.045])
+    params = system.swept_values.values_array.astype(np.float64)
     matrix = ORACLE_MASS - sigma * h * _step_oracle_jacobian(state, t)
     expected = np.linalg.solve(matrix, rhs)
 
@@ -590,7 +596,6 @@ def test_error_solver_solves_the_at_state_dense_system(
     @cuda.jit(**compile_kwargs)
     def kernel(rhs_io, x_io, shared_mem, persistent_mem, iters_out,
                status_out):
-        params = cuda.local.array(1, np.float64)
         cached_aux = cuda.local.array(1, np.float64)
         status_out[0] = error_solver(
             state,
@@ -660,7 +665,7 @@ def _torn_time_consistent_x1(x0):
     return z
 
 
-def _run_one_device_step(step, state, dt, time_value):
+def _run_one_device_step(step, params, state, dt, time_value):
     """Run one accepted device step; return (proposed, error)."""
     n = state.shape[0]
     numba_precision = from_dtype(np.float64)
@@ -675,7 +680,6 @@ def _run_one_device_step(step, state, dt, time_value):
         persistent = cuda.local.array(
             persistent_len, dtype=numba_precision
         )
-        params = cuda.local.array(1, dtype=numba_precision)
         driver_coeffs = cuda.local.array(
             (1, 1, 1), dtype=numba_precision
         )
@@ -745,7 +749,7 @@ def _newton_dense(residual_fn, jacobian_fn, guess):
 @pytest.mark.parametrize(
     "solver_settings_override", [DIRK_ORACLE_SETTINGS], indirect=True
 )
-def test_dirk_step_smoothed_error_matches_dense_oracle(step_object):
+def test_dirk_step_smoothed_error_matches_dense_oracle(step_object, system):
     """One smoothed SDIRK step on the torn system filters
     M @ raw_error through the final stage's W: J at the converged
     final stage state and time."""
@@ -757,8 +761,9 @@ def test_dirk_step_smoothed_error_matches_dense_oracle(step_object):
     x0 = 0.3
     state = np.array([x0, _torn_time_consistent_x1(x0)])
     dt, time_value = 0.05, 0.4
+    params = system.swept_values.values_array.astype(np.float64)
     proposed, error = _run_one_device_step(
-        step, state, dt, time_value
+        step, params, state, dt, time_value
     )
 
     # Stage i solves M @ K = dt * f(base + a_ii * K, t_i).
@@ -814,7 +819,7 @@ def test_dirk_step_smoothed_error_matches_dense_oracle(step_object):
 @pytest.mark.parametrize(
     "solver_settings_override", [FIRK_ORACLE_SETTINGS], indirect=True
 )
-def test_firk_step_smoothed_error_matches_dense_oracle(step_object):
+def test_firk_step_smoothed_error_matches_dense_oracle(step_object, system):
     """One smoothed radau step builds the RADAU5 estimator:
     M @ (weighted stage sum) - gamma*h*f(y_n) filtered through
     M - gamma*h*J at the step-start state."""
@@ -826,8 +831,9 @@ def test_firk_step_smoothed_error_matches_dense_oracle(step_object):
     x0 = 0.3
     state = np.array([x0, _torn_time_consistent_x1(x0)])
     dt, time_value = 0.05, 0.4
+    params = system.swept_values.values_array.astype(np.float64)
     proposed, error = _run_one_device_step(
-        step, state, dt, time_value
+        step, params, state, dt, time_value
     )
 
     # K_i satisfies M K_i = dt * f(y + sum_j a_ij K_j, t_i).

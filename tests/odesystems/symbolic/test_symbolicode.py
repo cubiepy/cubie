@@ -14,7 +14,6 @@ from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
     create_ODE_system,
 )
-from tests._utils import sweep
 
 
 def _helper_fn(system, role, **kwargs):
@@ -451,7 +450,7 @@ class TestCacheSkipsCodegen:
             parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
-        sweep(first, ["a", "b"])
+        first.set_swept_parameters(["a", "b"])
         _ = first.dxdt_fn
         first_source = first.gen_file.file_path.read_text()
 
@@ -462,7 +461,7 @@ class TestCacheSkipsCodegen:
             parameters={"a": 3.0, "b": 4.0},
             name=name,
         )
-        sweep(second, ["a"])
+        second.set_swept_parameters(["a"])
         _ = second.dxdt_fn
         second_source = second.gen_file.file_path.read_text()
 
@@ -618,7 +617,7 @@ class TestSweptParameters:
 
         assert ode.indices.parameter_names == []
 
-        sweep(ode, ["c"])
+        ode.set_swept_parameters(["c"])
 
         assert ode.indices.parameter_names == ["c"]
         assert ode.parameters["c"] == precision(0.5)
@@ -632,10 +631,10 @@ class TestSweptParameters:
             parameters={"k": 0.1, "c": 0.5},
             name="test_fix_param",
         )
-        sweep(ode, ["c", "k"])
+        ode.set_swept_parameters(["c", "k"])
         assert ode.indices.parameter_names == ["c", "k"]
 
-        sweep(ode, ["k"])
+        ode.set_swept_parameters(["k"])
 
         assert ode.indices.parameter_names == ["k"]
         assert ode.fixed_parameter_values == {"c": 0.5}
@@ -643,7 +642,7 @@ class TestSweptParameters:
     def test_sweeping_an_unknown_name_raises(self, metadata_ode):
         """Sweeping an unknown parameter raises KeyError."""
         with pytest.raises(KeyError, match="nonexistent"):
-            sweep(metadata_ode, ["nonexistent"])
+            metadata_ode.set_swept_parameters(["nonexistent"])
 
     def test_sweeping_regenerates_source(self, precision):
         """Generated source reads a swept parameter from the array."""
@@ -654,10 +653,10 @@ class TestSweptParameters:
             parameters={"k": 0.1, "c": 0.5},
             name="fixed_to_swept_source",
         )
-        sweep(ode, ["k"])
+        ode.set_swept_parameters(["k"])
         _ = ode.dxdt_fn
 
-        sweep(ode, ["c", "k"])
+        ode.set_swept_parameters(["c", "k"])
         _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 
@@ -672,10 +671,10 @@ class TestSweptParameters:
             parameters={"k": 0.1, "c": 0.5},
             name="swept_to_fixed_source",
         )
-        sweep(ode, ["c", "k"])
+        ode.set_swept_parameters(["c", "k"])
         _ = ode.dxdt_fn
 
-        sweep(ode, ["k"])
+        ode.set_swept_parameters(["k"])
         _ = ode.dxdt_fn
         source = ode.gen_file.file_path.read_text()
 
@@ -839,6 +838,6 @@ def test_list_units_follow_declared_names(dxdt, precision):
     assert system.state_units == {"aa": "aa_unit", "zz": "zz_unit"}
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}
 
-    sweep(system, ["k"])
+    system.set_swept_parameters(["k"])
     assert system.indices.parameters.units == {"k": "k_unit"}
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}

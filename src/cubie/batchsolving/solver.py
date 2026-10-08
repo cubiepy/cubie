@@ -807,15 +807,15 @@ class Solver:
         names
             Parameter names, in the order of the array's rows.
         fixed_values
-            Values to compile in for the other parameters. Defaults to
-            their default values.
+            Values to compile in, keyed by parameter name. We compile in
+            the default of any parameter you neither sweep nor name here.
 
         Raises
         ------
         KeyError
             If a name is not a parameter of the system.
         ValueError
-            If a name repeats.
+            If a swept name repeats or also has a fixed value.
         """
         self.system_interface.set_swept_parameters(names, fixed_values)
         self.update()

@@ -10,7 +10,6 @@ from cubie.odesystems.symbolic.parsing.cellml import (
 )
 from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
 from cubie._utils import is_devfunc
-from tests._utils import sweep
 
 
 def test_load_simple_cellml_model(basic_model):
@@ -182,7 +181,7 @@ def test_numeric_assignments_become_parameters(basic_model):
 def test_swept_numeric_assignment_reads_parameters_array(basic_model):
     """A numeric assignment can be swept."""
     model = basic_model.copy()
-    sweep(model, ["main_a"])
+    model.set_swept_parameters(["main_a"])
     assert model.indices.parameter_names == ["main_a"]
     assert model.indices.parameters.defaults["main_a"] == 0.5
 

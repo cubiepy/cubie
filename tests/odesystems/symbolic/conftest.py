@@ -11,7 +11,6 @@ from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
     create_ODE_system,
 )
-from tests._utils import sweep
 
 
 @pytest.fixture(scope="session")
@@ -148,7 +147,7 @@ def observables_kernel_system(precision):
         strict=True,
         name="observables_kernel_system",
     )
-    sweep(system, ["alpha", "beta"])
+    system.set_swept_parameters(["alpha", "beta"])
 
     return system
 

@@ -155,6 +155,7 @@ class BaseODE(CUDAFactory):
             drivers in the drivers buffer.
         """
         super().__init__()
+        self._swept_values = None
         system_data = ODEData.from_BaseODE_initargs(
             initial_values=initial_values,
             parameters=parameters,
@@ -248,10 +249,79 @@ class BaseODE(CUDAFactory):
             parameters=parameters, fixed_parameters=tuple(fixed.items())
         )
 
+    def set_swept_parameters(
+        self,
+        names: Iterable[str],
+        fixed_values: Optional[Mapping[str, float]] = None,
+    ) -> None:
+        """Sweep ``names`` and compile every other parameter in.
+
+        Parameters
+        ----------
+        names
+            Names of the parameters array's rows, in order.
+        fixed_values
+            Values to compile in, keyed by parameter name. We compile in
+            the default of any parameter you neither sweep nor name here.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a swept name repeats or also has a fixed value.
+        """
+        names = tuple(names)
+        fixed_values = dict(fixed_values or {})
+        unknown = (set(names) | set(fixed_values)) - set(
+            self.parameters.names
+        )
+        if unknown:
+            raise KeyError(
+                f"{sorted(unknown)} are not parameters of this system."
+            )
+        both = set(names) & set(fixed_values)
+        if both:
+            raise ValueError(
+                f"{sorted(both)} are swept and given a fixed value."
+            )
+        fixed = {
+            name: float(fixed_values.get(name, value))
+            for name, value in self.parameters.as_float_dict.items()
+            if name not in names
+        }
+        if (
+            names == self.swept_parameters
+            and fixed == self.fixed_parameter_values
+        ):
+            return
+        # Pass pairs, because update would read a dict as a settings
+        # group.
+        self.update(
+            swept_parameters=names, fixed_parameters=tuple(fixed.items())
+        )
+
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
         """Names of the parameters array's rows, in order."""
         return self.compile_settings.swept_parameters
+
+    @property
+    def swept_values(self) -> "SystemValues":
+        """Default values of the swept parameters, in row order."""
+        settings = self.compile_settings
+        cached = self._swept_values
+        # Rebuild when the settings snapshot is replaced.
+        if cached is None or cached[0] is not settings:
+            defaults = settings.parameters.values_dict
+            values = SystemValues(
+                {name: defaults[name] for name in settings.swept_parameters},
+                settings.precision,
+                name="Parameters",
+            )
+            cached = (settings, values)
+            self._swept_values = cached
+        return cached[1]
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
