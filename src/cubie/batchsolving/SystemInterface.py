@@ -68,7 +68,6 @@ class SystemInterface:
 
     def __init__(self, system: BaseODE):
         self._system = system
-        self._swept_values = None
 
     @property
     def parameters(self) -> SystemValues:
@@ -83,39 +82,25 @@ class SystemInterface:
     @property
     def swept_values(self) -> SystemValues:
         """Default values of the swept parameters, in row order."""
-        settings = self._system.compile_settings
-        cached = self._swept_values
-        # Rebuild when the system's settings change.
-        if cached is None or cached[0] is not settings:
-            defaults = settings.parameters.values_dict
-            values = SystemValues(
-                {name: defaults[name] for name in settings.swept_parameters},
-                settings.precision,
-                name="Parameters",
-            )
-            cached = (settings, values)
-            self._swept_values = cached
-        return cached[1]
+        return self._system.swept_values
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
         """Values compiled into the code, read live."""
         return self._system.fixed_parameter_values
 
-    def set_swept_parameters(
-        self,
-        names: Sequence[str],
-        fixed_values: Optional[Mapping[str, float]] = None,
-    ) -> None:
-        """Sweep ``names`` and compile every other parameter in.
+    @property
+    def fixed_values(self) -> Dict[str, float]:
+        """Values the batch compiles in instead of their defaults."""
+        return self._system.fixed_values
+
+    def set_swept_parameters(self, names: Sequence[str]) -> None:
+        """Read ``names`` from the parameters array, in this order.
 
         Parameters
         ----------
         names
             Names of the parameters array's rows, in order.
-        fixed_values
-            Values to compile in for the other parameters. Defaults to
-            their default values.
 
         Raises
         ------
@@ -124,29 +109,47 @@ class SystemInterface:
         ValueError
             If a name repeats.
         """
-        names = tuple(names)
-        unknown = set(names) - set(self.parameters.names)
-        if unknown:
-            raise KeyError(
-                f"{sorted(unknown)} are not parameters of this system."
-            )
-        if fixed_values is None:
-            defaults = self.parameters.as_float_dict
-            fixed_values = {
-                name: value
-                for name, value in defaults.items()
-                if name not in names
-            }
-        if (
-            names == self.swept_parameters
-            and dict(fixed_values) == self.fixed_parameter_values
-        ):
-            return
-        # Pairs, as update reads a dict value as a settings group.
-        self._system.update(
-            swept_parameters=names,
-            fixed_parameters=tuple(fixed_values.items()),
-        )
+        self._system.set_swept_parameters(names)
+
+    def set_fixed_values(self, values: Mapping[str, float]) -> None:
+        """Compile ``values`` in instead of those parameters' defaults.
+
+        Parameters
+        ----------
+        values
+            Names of parameters that are not swept, mapped to the
+            values to compile in.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name is swept.
+        """
+        self._system.set_fixed_values(values)
+
+    def set_batch_parameters(
+        self, names: Sequence[str], values: Mapping[str, float]
+    ) -> None:
+        """Set the swept names and the fixed values in one update.
+
+        Parameters
+        ----------
+        names
+            Names of the parameters array's rows, in order.
+        values
+            Names of parameters that are not swept, mapped to the
+            values to compile in.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a swept name repeats or also has a fixed value.
+        """
+        self._system.set_batch_parameters(names, values)
 
     @property
     def states(self) -> SystemValues:

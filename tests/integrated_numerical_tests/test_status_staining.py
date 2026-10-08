@@ -19,6 +19,7 @@ from cubie import CUBIE_RESULT_CODES
 from tests._utils import (
     IRRECOVERABLE,
     RECOVERED_TRANSIENT,
+    swept_defaults,
 )
 
 
@@ -32,7 +33,7 @@ MAX_LINEAR = int(CUBIE_RESULT_CODES.MAX_LINEAR_ITERATIONS_EXCEEDED)
     indirect=True,
 )
 def test_recovered_transient_failure_reports_success(
-    solver, solver_settings, driver_settings
+    system, solver, solver_settings, driver_settings
 ):
     """A run that fails transiently then recovers ends with status 0.
 
@@ -58,7 +59,7 @@ def test_recovered_transient_failure_reports_success(
             "x0": np.array([1.0], dtype=np.float64),
             "x1": np.array([0.0], dtype=np.float64),
         },
-        parameters={"k": np.array([500.0], dtype=np.float64)},
+        parameters=swept_defaults(system),
         drivers=driver_settings,
         duration=float(solver_settings["duration"]),
     )
@@ -102,7 +103,7 @@ def test_irrecoverable_failure_preserves_fatal_flags(
     }
     result = solver.solve(
         initial_values=initial_values,
-        parameters={},
+        parameters=swept_defaults(system),
         drivers=driver_settings,
         duration=float(solver_settings["duration"]),
         nan_error_trajectories=False,

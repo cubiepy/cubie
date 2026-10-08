@@ -747,7 +747,7 @@ def test_device_results_match_host(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.num_parameters, n_runs), dtype=precision
+        (system.sizes.swept_parameters, n_runs), dtype=precision
     )
 
     host = solver.solve(
@@ -798,7 +798,7 @@ def test_device_results_chunked_raises(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.num_parameters, n_runs), dtype=precision
+        (system.sizes.swept_parameters, n_runs), dtype=precision
     )
     with pytest.raises(ValueError, match="single chunk"):
         low_mem_solver.solve(
@@ -828,7 +828,7 @@ def test_device_inputs_match_host_inputs(
         (system.sizes.states, n_runs)
     ).astype(precision)
     params = np.ones(
-        (system.num_parameters, n_runs), dtype=precision
+        (system.sizes.swept_parameters, n_runs), dtype=precision
     )
 
     host_result = solver.solve(
@@ -882,7 +882,7 @@ def test_driverless_copy_solves_device_inputs_without_warning(
     """A copy staging device inputs attaches its empty driver table."""
     n_runs = 4
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
-    params = np.ones((system.num_parameters, n_runs), dtype=precision)
+    params = np.ones((system.sizes.swept_parameters, n_runs), dtype=precision)
     twin = solver_mutable.copy()
     try:
         with warnings.catch_warnings():
@@ -917,7 +917,7 @@ def test_device_inputs_device_results_roundtrip(
     n_runs = 3
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.num_parameters, n_runs), dtype=precision
+        (system.sizes.swept_parameters, n_runs), dtype=precision
     )
 
     reference = solver.solve(
@@ -962,7 +962,7 @@ def test_device_inputs_chunked_raises(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.num_parameters, n_runs), dtype=precision
+        (system.sizes.swept_parameters, n_runs), dtype=precision
     )
     with pytest.raises(ValueError, match="single chunk"):
         low_mem_solver.solve(
@@ -990,7 +990,7 @@ def test_resident_device_inputs_run_without_an_upload(
         0.5, 1.5, system.sizes.states * n_runs
     ).reshape((system.sizes.states, n_runs)).astype(precision)
     params = np.ones(
-        (system.num_parameters, n_runs), dtype=precision
+        (system.sizes.swept_parameters, n_runs), dtype=precision
     )
 
     host = solver.solve(
@@ -1062,7 +1062,7 @@ def test_device_inputs_after_a_chunked_run_raise(
     n_runs = 5
     inits = np.ones((system.sizes.states, n_runs), dtype=precision)
     params = np.ones(
-        (system.num_parameters, n_runs), dtype=precision
+        (system.sizes.swept_parameters, n_runs), dtype=precision
     )
     low_mem_solver.solve(
         inits,
@@ -1711,7 +1711,7 @@ def test_solve_ivp_positional_argument_order(
     The underlying routing is verified in test_batch_input_handler.py.
     """
     n_states = system.sizes.states
-    n_params = system.num_parameters
+    n_params = system.sizes.swept_parameters
 
     # Use distinctive values to verify routing
     states = np.full((n_states, 2), 1.5, dtype=system.precision)
@@ -1923,14 +1923,16 @@ def test_array_only_fast_path(solver):
     assert fast_time < 1.0
 
 
-def test_solve_ivp_with_save_variables(system, driver_settings):
+def test_solve_ivp_with_save_variables(
+    system, simple_parameters, driver_settings
+):
     """Test solve_ivp accepts save_variables and produces correct output."""
     state_names = list(system.initial_values.names)[:2]
 
     result = solve_ivp(
         system,
         y0={state_names[0]: [1.0, 2.0]},
-        parameters={list(system.parameters.names)[0]: [0.1, 0.2]},
+        parameters=simple_parameters,
         drivers=driver_settings,
         save_variables=state_names,
         save_every=0.01,
@@ -1949,14 +1951,14 @@ def test_solve_ivp_with_save_variables(system, driver_settings):
 
 
 def test_solver_solve_with_save_variables(
-    solver_mutable, system, driver_settings
+    solver_mutable, system, simple_parameters, driver_settings
 ):
     """Test Solver.solve accepts save_variables parameter."""
     state_names = list(system.initial_values.names)[:1]
 
     result = solver_mutable.solve(
         initial_values={state_names[0]: [1.0, 2.0]},
-        parameters={list(system.parameters.names)[0]: [0.1, 0.2]},
+        parameters=simple_parameters,
         drivers=driver_settings,
         save_variables=state_names,
         duration=0.1,
@@ -2258,13 +2260,15 @@ def test_solve_ivp_raw_equations_precision_override():
     assert result.solve_settings.precision == np.float64
 
 
-def test_solve_ivp_forwards_summarise_variables(system, driver_settings):
+def test_solve_ivp_forwards_summarise_variables(
+    system, simple_parameters, driver_settings
+):
     """solve_ivp threads summarise_variables through to Solver kwargs."""
     state_names = list(system.initial_values.names)[:1]
     result = solve_ivp(
         system,
         y0={state_names[0]: [1.0, 2.0]},
-        parameters={list(system.parameters.names)[0]: [0.1, 0.2]},
+        parameters=simple_parameters,
         drivers=driver_settings,
         summarise_variables=state_names,
         save_every=0.01,

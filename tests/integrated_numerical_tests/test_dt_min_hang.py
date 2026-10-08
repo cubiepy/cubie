@@ -12,6 +12,7 @@ from tests._utils import (
     ROUNDED_DOWN_COUNT,
     SAVE_DRIFT,
     STEP_SIZED_SAVES,
+    swept_defaults,
 )
 
 
@@ -77,9 +78,8 @@ def test_f32_save_drift_does_not_hang(
             "v2": np.zeros(n, dtype=precision),
         },
         parameters={
-            "k": np.full(n, 3.0, dtype=precision),
-            "c_couple": np.full(n, 0.3, dtype=precision),
-            "omega": np.full(n, 2.5, dtype=precision),
+            "k": np.full(2, 3.0, dtype=precision),
+            "c_couple": np.full(2, 0.3, dtype=precision),
         },
         duration=float(solver_settings["duration"]),
     )
@@ -160,7 +160,9 @@ def test_adaptive_saves_land_on_schedule(solver, solver_settings):
         2.196480938416422,
         2.2375366568914954,
     ]
-    inits, params = solver.build_grid(parameters={"rho": rhos})
+    inits, params = solver.build_grid(
+        parameters={**swept_defaults(solver.system, len(rhos)), "rho": rhos}
+    )
     result = solver.solve(
         inits, params, duration=float(solver_settings["duration"])
     )

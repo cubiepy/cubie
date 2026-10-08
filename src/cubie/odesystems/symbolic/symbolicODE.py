@@ -689,19 +689,15 @@ class SymbolicODE(BaseODE):
             The recognised names.
         """
         settings = self.compile_settings
-        swept = tuple(
-            updates.get("swept_parameters", settings.swept_parameters)
-        )
-        fixed = dict(
-            updates.get("fixed_parameters", settings.fixed_parameters)
-        )
+        candidate, _, _ = settings.update(updates)
+        swept = candidate.swept_parameters
+        compiled_in = candidate.fixed_parameter_values
         if (
             swept == settings.swept_parameters
-            and fixed == settings.fixed_parameter_values
+            and compiled_in == settings.fixed_parameter_values
         ):
             return self.update_compile_settings(updates, silent=True)
 
-        defaults = updates.get("parameters", settings.parameters)
         (
             index_map,
             all_symbols,
@@ -710,7 +706,7 @@ class SymbolicODE(BaseODE):
             fn_hash,
         ) = self._parsed_system.specialise(
             swept,
-            {**defaults.as_float_dict, **fixed},
+            compiled_in,
             state_values=settings.initial_state_values,
         )
         derived = {}

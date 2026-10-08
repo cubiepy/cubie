@@ -38,11 +38,9 @@ from typing import (
     Any,
     Dict,
     Iterable,
-    Mapping,
     Optional,
     Set,
     Tuple,
-    Union,
 )
 
 from attrs import (
@@ -117,17 +115,6 @@ def _ordered_names(names: Iterable[str]) -> Tuple[str, ...]:
     return ordered
 
 
-def _sorted_values(
-    values: Union[Mapping[str, float], Iterable[Tuple[str, float]]],
-) -> Tuple[Tuple[str, float], ...]:
-    """Return ``values`` as name-sorted ``(name, value)`` pairs."""
-    if isinstance(values, Mapping):
-        values = values.items()
-    return tuple(
-        sorted((str(name), float(value)) for name, value in values)
-    )
-
-
 @define
 class SystemSizes:
     """Store counts for each component category in an ODE system.
@@ -184,8 +171,10 @@ class ODEData(CUDAFactoryConfig):
     swept_parameters
         Names of the parameters read from the parameters array, in
         row order.
-    fixed_parameters
-        Values compiled into the code for every other parameter.
+    fixed_values
+        Values the current batch compiles in instead of the defaults
+        of some parameters it does not sweep. ``None`` compiles every
+        parameter that is not swept in at its default.
 
     Notes
     -----
@@ -236,8 +225,10 @@ class ODEData(CUDAFactoryConfig):
     swept_parameters: Tuple[str, ...] = field(
         default=(), converter=_ordered_names
     )
-    fixed_parameters: Tuple[Tuple[str, float], ...] = field(
-        default=(), converter=_sorted_values
+    fixed_values: Optional[SystemValues] = field(
+        default=None,
+        converter=_parameters_converter,
+        validator=attrsval_optional(attrsval_instance_of(SystemValues)),
     )
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
@@ -248,18 +239,25 @@ class ODEData(CUDAFactoryConfig):
         converter=_mass_matrix_converter,
         eq=attrs_cmp_using(eq=mass_equal),
     )
+
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
         if self.parameters is None:
             return
         names = set(self.parameters.names)
         swept = set(self.swept_parameters)
-        fixed = {name for name, _ in self.fixed_parameters}
-        if not swept <= names or fixed != names - swept:
+        if not swept <= names:
             raise ValueError(
-                f"Swept parameters {sorted(swept)} and fixed parameters "
-                f"{sorted(fixed)} must together name each parameter of "
-                f"this system once."
+                f"Swept parameters {sorted(swept - names)} are not "
+                f"parameters of this system."
+            )
+        if self.fixed_values is None:
+            return
+        misplaced = set(self.fixed_values.names) - (names - swept)
+        if misplaced:
+            raise ValueError(
+                f"Fixed values {sorted(misplaced)} must name parameters "
+                f"of this system that are not swept."
             )
 
     def update(
@@ -280,6 +278,7 @@ class ODEData(CUDAFactoryConfig):
             reprecisioned = {}
             for name in (
                 "parameters",
+                "fixed_values",
                 "initial_states",
                 "observables",
             ):
@@ -322,8 +321,20 @@ class ODEData(CUDAFactoryConfig):
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
-        """Values compiled into the code, keyed by parameter name."""
-        return dict(self.fixed_parameters)
+        """Values compiled into the code, keyed by parameter name.
+
+        Every parameter that is not swept appears, at its fixed value
+        when the batch gives one and at its default otherwise.
+        """
+        swept = self.swept_parameters
+        values = {
+            name: value
+            for name, value in self.parameters.as_float_dict.items()
+            if name not in swept
+        }
+        if self.fixed_values is not None:
+            values.update(self.fixed_values.as_float_dict)
+        return values
 
     @property
     def mass(self) -> Any:
@@ -409,12 +420,6 @@ class ODEData(CUDAFactoryConfig):
             name="Observables",
         )
 
-        swept_parameters = tuple(swept_parameters)
-        fixed_parameters = {
-            name: value
-            for name, value in parameters.as_float_dict.items()
-            if name not in swept_parameters
-        }
         return cls(
             parameters=parameters,
             initial_states=init_values,
@@ -424,5 +429,4 @@ class ODEData(CUDAFactoryConfig):
             driver_derivatives=driver_derivatives,
             operation_ordering=operation_ordering,
             swept_parameters=swept_parameters,
-            fixed_parameters=fixed_parameters,
         )

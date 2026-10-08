@@ -221,7 +221,7 @@ def test_device_only_solves_share_the_host_solves_device_buffers(
     """Device-only solves make no host buffer; host solves still match."""
     solver, first = unchunked_solved_solver
     inits = np.ones((system.sizes.states, 5), dtype=precision)
-    params = np.ones((system.num_parameters, 5), dtype=precision)
+    params = np.ones((system.sizes.swept_parameters, 5), dtype=precision)
     kwargs = dict(
         drivers=driver_settings,
         duration=0.05,
@@ -257,7 +257,7 @@ def test_device_only_solve_keeps_a_dead_result_loan_for_the_next_host_solve(
     rng = np.random.default_rng(99)
     inits = rng.uniform(0.5, 1.5, (system.sizes.states, 5)).astype(precision)
     params = rng.uniform(
-        0.5, 1.5, (system.num_parameters, 5)
+        0.5, 1.5, (system.sizes.swept_parameters, 5)
     ).astype(precision)
     kwargs = dict(
         drivers=driver_settings,

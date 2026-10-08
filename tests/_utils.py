@@ -37,28 +37,28 @@ Array = NDArray[np.floating]
 def restoring_values(system):
     """Restore the system's parameters and initial values on exit."""
     swept = system.swept_parameters
-    fixed = system.fixed_parameter_values
+    fixed = system.fixed_values
     defaults = dict(system.compile_settings.parameter_values)
     states = dict(system.compile_settings.initial_state_values)
     try:
         yield system
     finally:
         system.set_default_parameters(defaults)
-        system.update(
-            swept_parameters=swept, fixed_parameters=tuple(fixed.items())
-        )
+        system.set_batch_parameters(swept, fixed)
         system.initial_values.update_from_dict(states, silent=True)
         system.indices.states.update_values(states)
 
 
-def sweep(system, names):
-    """Sweep ``names`` on ``system`` and compile the other defaults in."""
-    defaults = system.compile_settings.parameter_values
-    fixed = tuple(
-        (name, value) for name, value in defaults.items()
-        if name not in names
-    )
-    system.update(swept_parameters=tuple(names), fixed_parameters=fixed)
+def swept_defaults(system, runs=2):
+    """Return each swept parameter's default, repeated for ``runs`` runs.
+
+    Pass this as a solve's parameters to run the system's own sweep at
+    its default values.
+    """
+    return {
+        name: np.full(runs, value)
+        for name, value in system.swept_values.values_dict.items()
+    }
 
 
 def parse_input_swept(**kwargs):
@@ -1008,13 +1008,7 @@ def run_device_loop(
     # Iteration counters output (4 counters per save)
     counters_output = np.zeros((save_samples, 4), dtype=np.int32)
 
-    params = np.array(
-        [
-            system.parameters.values_dict[name]
-            for name in system.swept_parameters
-        ],
-        dtype=precision,
-    )
+    params = system.swept_values.values_array.astype(precision)
     init_state = np.array(initial_state, dtype=precision, copy=True)
     status = np.zeros(1, dtype=np.int32)
 
@@ -1391,6 +1385,7 @@ NON_SOLVER_SETTINGS = {
     "fix_singularities",
     "voltage_variable",
     "parameter_input",
+    "system_sweep",
 }
 
 

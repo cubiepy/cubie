@@ -30,7 +30,7 @@ def _handle(
     values, swept, fixed = handler.split_parameters(
         params, fix_constant_parameters
     )
-    handler.interface.set_swept_parameters(swept, fixed)
+    handler.interface.set_batch_parameters(swept, fixed)
     inits, built = handler(states, values, kind)
     return inits, built, swept, fixed
 
@@ -750,7 +750,7 @@ def test_fill_aligned_combinatorial(input_handler):
 
 
 def test_call_none_returns_defaults(input_handler_mutable, system):
-    """Empty inputs return one run with every default fixed."""
+    """Empty inputs return one run with every default compiled in."""
     inits, params, swept, fixed = _handle(
         input_handler_mutable, states=None, params=None
     )
@@ -758,7 +758,11 @@ def test_call_none_returns_defaults(input_handler_mutable, system):
     assert params.shape == (0, 1)
     assert_allclose(inits[:, 0], system.initial_values.values_array)
     assert swept == ()
-    assert fixed == system.compile_settings.parameter_values
+    assert fixed == {}
+    assert (
+        input_handler_mutable.interface.fixed_parameter_values
+        == system.compile_settings.parameter_values
+    )
 
 
 def test_call_verbatim_mismatch_raises(input_handler_mutable, system):
@@ -804,7 +808,7 @@ def test_call_verbatim_broadcast_single(input_handler_mutable, system):
 
 
 def test_call_single_param_sweep(input_handler_mutable, system):
-    """A single-parameter sweep fixes the rest at their defaults."""
+    """A single-parameter sweep compiles the rest in at their defaults."""
     param_names = list(system.parameters.names)
     values = np.linspace(0, 1, 50)
     inits, params, swept, fixed = _handle(
@@ -814,8 +818,9 @@ def test_call_single_param_sweep(input_handler_mutable, system):
     assert params.shape == (1, 50)
     assert_allclose(params[0, :], values, rtol=1e-6)
     assert swept == (param_names[0],)
+    assert fixed == {}
     defaults = system.compile_settings.parameter_values
-    assert fixed == {
+    assert input_handler_mutable.interface.fixed_parameter_values == {
         name: value
         for name, value in defaults.items()
         if name != param_names[0]
@@ -1217,15 +1222,10 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
 def test_swept_height_array_keeps_the_compiled_parameters(
     input_handler_mutable, system
 ):
-    """A row per swept parameter keeps the swept and fixed parameters."""
+    """A row per swept parameter keeps the swept names and fixed values."""
     names = list(system.parameters.names)
-    fixed = {
-        name: value
-        for name, value in system.parameters.as_float_dict.items()
-        if name != names[0]
-    }
-    fixed[names[1]] = 0.25
-    input_handler_mutable.interface.set_swept_parameters(names[:1], fixed)
+    fixed = {names[1]: 0.25}
+    input_handler_mutable.interface.set_batch_parameters(names[:1], fixed)
     params = np.ones((1, 4), dtype=system.precision)
     _, result, swept, result_fixed = _handle(
         input_handler_mutable, params=params, kind="verbatim"
@@ -1255,13 +1255,17 @@ def _sweep_reversed(handler):
 
 @pytest.mark.parametrize("empty", [None, {}, np.empty(0)])
 def test_empty_params_sweep_nothing(input_handler_mutable, system, empty):
-    """No parameter input sweeps nothing and fixes every default."""
+    """No parameter input sweeps nothing and compiles in every default."""
     _sweep_reversed(input_handler_mutable)
     _, params, swept, fixed = _handle(
         input_handler_mutable, params=empty, kind="verbatim"
     )
     assert swept == ()
-    assert fixed == system.compile_settings.parameter_values
+    assert fixed == {}
+    assert (
+        input_handler_mutable.interface.fixed_parameter_values
+        == system.compile_settings.parameter_values
+    )
     assert params.shape == (0, 1)
 
 

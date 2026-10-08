@@ -84,7 +84,7 @@ def _execute_step_twice(
     )
     observables_fn = system.observables_fn
 
-    params = step_inputs["parameters"]
+    params = system.swept_values.values_array.astype(precision)
     state = np.asarray(step_inputs["state"], dtype=precision)
     driver_coefficients = step_inputs["driver_coefficients"]
 

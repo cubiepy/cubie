@@ -658,7 +658,7 @@ class Solver:
         sweep, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self.set_swept_parameters(swept, fixed)
+        self._set_batch_parameters(swept, fixed)
         inits, params = self.input_handler(
             states=initial_values, params=sweep, kind=grid_type
         )
@@ -710,7 +710,7 @@ class Solver:
         parameters
             Parameter values as in :meth:`solve`. ``None`` compiles for
             the current :attr:`swept_parameters` and
-            :attr:`fixed_parameter_values`.
+            :attr:`fixed_values`.
         fix_constant_parameters
             Check whether any parameters are set to the same value across
             all runs, and compile them into the code if they are.
@@ -726,7 +726,7 @@ class Solver:
             _, swept, fixed = self.input_handler.split_parameters(
                 parameters, fix_constant_parameters
             )
-            self.set_swept_parameters(swept, fixed)
+            self._set_batch_parameters(swept, fixed)
 
         if optimize_candidates:
             run_optimization(
@@ -787,28 +787,22 @@ class Solver:
         sweep, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self.set_swept_parameters(swept, fixed)
+        self._set_batch_parameters(swept, fixed)
         return self.input_handler(
             states=initial_values, params=sweep, kind=grid_type
         )
 
-    def set_swept_parameters(
-        self,
-        names: Sequence[str],
-        fixed_values: Optional[Dict[str, float]] = None,
-    ) -> None:
+    def set_swept_parameters(self, names: Sequence[str]) -> None:
         """Set the parameters an array input gives values for.
 
         A parameters array can then have one row per name, in this
-        order. Every other parameter is compiled in.
+        order. Every other parameter is compiled in. Sweeping a
+        parameter discards any fixed value it had.
 
         Parameters
         ----------
         names
             Parameter names, in the order of the array's rows.
-        fixed_values
-            Values to compile in for the other parameters. Defaults to
-            their default values.
 
         Raises
         ------
@@ -817,7 +811,36 @@ class Solver:
         ValueError
             If a name repeats.
         """
-        self.system_interface.set_swept_parameters(names, fixed_values)
+        self.system_interface.set_swept_parameters(names)
+        self.update()
+
+    def set_fixed_values(self, values: Dict[str, float]) -> None:
+        """Compile ``values`` in instead of those parameters' defaults.
+
+        The defaults stay as they are. An empty dict compiles every
+        parameter that is not swept in at its default.
+
+        Parameters
+        ----------
+        values
+            Names of parameters that are not swept, mapped to the
+            values to compile in.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name is swept.
+        """
+        self.system_interface.set_fixed_values(values)
+        self.update()
+
+    def _set_batch_parameters(
+        self, names: Sequence[str], values: Dict[str, float]
+    ) -> None:
+        """Set a batch's swept names and fixed values in one update."""
+        self.system_interface.set_batch_parameters(names, values)
         self.update()
 
     def calibrate(
@@ -1337,6 +1360,11 @@ class Solver:
     def fixed_parameter_values(self) -> Dict[str, float]:
         """Values compiled into the kernel, keyed by parameter name."""
         return self.system_interface.fixed_parameter_values
+
+    @property
+    def fixed_values(self) -> Dict[str, float]:
+        """Values the batch compiles in instead of their defaults."""
+        return self.system_interface.fixed_values
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:

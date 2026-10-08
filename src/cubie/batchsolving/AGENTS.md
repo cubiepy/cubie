@@ -17,7 +17,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 ## Key Files
 | File | Description |
 |------|-------------|
-| `solver.py` | `Solver` + `solve_ivp()` — the public API. `solve_ivp` also accepts raw equations (callable / string / iterable of strings), building the system via `_system_from_equations` (state names from a `y0` dict, parameter defaults from a `parameters` dict; array `parameters` rejected). `Solver` owns `system_interface`, `input_handler` (`BatchInputHandler`), and `kernel` (`BatchSolverKernel`); `driver_interpolator` is a passthrough to the kernel-owned interpolator, and most getters are thin pass-throughs to `kernel`. `Solver.compile(parameters)` compiles the kernel a solve with those parameters would use. `Solver.set_swept_parameters(names)` sets the parameters a parameters array has rows for. Parameter names given as keyword arguments raise. `Solver.given` (a `SolverSettings`) and `Solver.effective` (an `EffectiveSettings`) are the settings the user set and the settings in use; `Solver.is_given(name)`; `Solver.settings_dict()` is the given record with the logger's level (multiprocessing safe with `for_new_process=True`); `Solver.copy()` is `Solver(system.copy(), **settings_dict())` at the current logging level; `optimisation_candidates(force)` keeps the given performance keys fixed. |
+| `solver.py` | `Solver` + `solve_ivp()` — the public API. `solve_ivp` also accepts raw equations (callable / string / iterable of strings), building the system via `_system_from_equations` (state names from a `y0` dict, parameter defaults from a `parameters` dict; array `parameters` rejected). `Solver` owns `system_interface`, `input_handler` (`BatchInputHandler`), and `kernel` (`BatchSolverKernel`); `driver_interpolator` is a passthrough to the kernel-owned interpolator, and most getters are thin pass-throughs to `kernel`. `Solver.compile(parameters)` compiles the kernel a solve with those parameters would use. `Solver.set_swept_parameters(names)` sets the parameters a parameters array has rows for, and `Solver.set_fixed_values(values)` compiles values in without changing the defaults. Parameter names given as keyword arguments raise. `Solver.given` (a `SolverSettings`) and `Solver.effective` (an `EffectiveSettings`) are the settings the user set and the settings in use; `Solver.is_given(name)`; `Solver.settings_dict()` is the given record with the logger's level (multiprocessing safe with `for_new_process=True`); `Solver.copy()` is `Solver(system.copy(), **settings_dict())` at the current logging level; `optimisation_candidates(force)` keeps the given performance keys fixed. |
 | `solver_settings.py` | `SolverSettings`, one field per setting a Solver accepts (`None` = not given) on `_CubieConfigBase`, and `EffectiveSettings` (adds the names only resolution sets; its `as_kwargs` keeps a `None` interval or memory proportion, the `passes_none` fields). Given arrays are stored as read-only copies and lists as tuples. |
 | `resolve_defaults.py` | `resolve(given, system, interface)` returns the `EffectiveSettings` (algorithm, controller and gains, step bounds, family/tableau/DAE step defaults, inner tolerances, output indices via `VariableSelection`, loop intervals and flags). |
 | `BatchSolverKernel.py` | `BatchSolverKernel(CUDAFactory)` — the batch `@cuda.jit` kernel; maps each run to the `SingleIntegratorRun` device loop. Owns the `ArrayInterpolator` as a direct child factory (`driver_interpolator`, filled by the `drivers` setting; `update` refreshes the evaluator settings only when the interpolator's config hash changes; `run()` raises `ValueError` when the system declares drivers and none are given). `build_kernel()` attaches a `CUBIECache` built from the config's `cache` settings and `config_hash` to the dispatcher and keeps it for the flush-on-change path in `_invalidate_cache`. Defines `RunParams` (frozen: duration/warmup/t0/runs + chunk metadata) and `BatchSolverCache`; owns the `InputArrays`/`OutputArrays` managers and memory-manager registration. `compile()` records time parameters and compiles the kernel; `kernel_is_cached()` asks the disk cache instead. The constructor takes one flat dict (`BatchSolverKernel(system, **settings)`): the memory keys, its own config fields and everything the integrator's children take; the driver interpolator takes its keys from the same dict. `update` runs `memory_manager.update`, the interpolator, the integrator, then its own config with the integrator's `loop_fn` and compile flags. |
@@ -39,8 +39,8 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ## Data flow
 `Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
-effective timing → `input_handler.split_parameters` picks the swept parameters →
-`set_swept_parameters` sets them on the system → `input_handler(...)` builds
+effective timing → `input_handler.split_parameters` picks the swept parameters and the
+fixed values → `set_batch_parameters` sets both on the system → `input_handler(...)` builds
 `(n_vars, n_runs)` `inits`/`params` →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
@@ -73,8 +73,10 @@ into the code at a fixed value.
 - `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
 - `None` or `{}`: every parameter is fixed at its default.
 
-Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
-or a fixed value rebuilds the system and kernel.
+The fixed values a solve compiles in last until the next solve, and they never change
+the defaults. Defaults
+change only through `BaseODE.set_default_parameters`. Changing the swept names or a
+compiled-in value rebuilds the system and kernel.
 
 ## Teardown and memory pressure
 `Solver.close()` waits for its last run stream, drains staging work and deregisters the

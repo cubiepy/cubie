@@ -50,6 +50,7 @@ from attrs import define, field
 from numpy import float32
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
+from cubie._serialize import canonical_digest
 from cubie._utils import PrecisionDType
 from cubie._env import operation_ordering_default
 from cubie.odesystems.ODEData import ODEData
@@ -155,6 +156,7 @@ class BaseODE(CUDAFactory):
             drivers in the drivers buffer.
         """
         super().__init__()
+        self._swept_values = None
         system_data = ODEData.from_BaseODE_initargs(
             initial_values=initial_values,
             parameters=parameters,
@@ -222,7 +224,8 @@ class BaseODE(CUDAFactory):
     def set_default_parameters(self, values: Mapping[str, float]) -> None:
         """Set parameter defaults.
 
-        Parameters that are not swept compile in at their new default.
+        Parameters that are neither swept nor given a fixed value
+        compile in at their new default.
 
         Parameters
         ----------
@@ -236,16 +239,116 @@ class BaseODE(CUDAFactory):
         """
         parameters = self.parameters.copy()
         parameters.update_from_dict(dict(values))
-        fixed = self.fixed_parameter_values
-        fixed.update(
-            {
-                name: value
-                for name, value in values.items()
-                if name in fixed
-            }
-        )
+        self.update(parameters=parameters)
+
+    def set_swept_parameters(self, names: Iterable[str]) -> None:
+        """Read ``names`` from the parameters array, in this order.
+
+        Sweeping a parameter discards any fixed value it had.
+
+        Parameters
+        ----------
+        names
+            Names of the parameters array's rows, in order.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name repeats.
+        """
+        names = tuple(names)
+        if names == self.swept_parameters:
+            return
+        self._check_parameter_names(names)
+        fixed = self.fixed_values
+        if not set(names) & set(fixed):
+            self.update(swept_parameters=names)
+            return
+        kept = {
+            name: value for name, value in fixed.items() if name not in names
+        }
         self.update(
-            parameters=parameters, fixed_parameters=tuple(fixed.items())
+            swept_parameters=names, fixed_values=self._fixed_values(kept)
+        )
+
+    def set_fixed_values(self, values: Mapping[str, float]) -> None:
+        """Compile ``values`` in instead of those parameters' defaults.
+
+        The defaults stay as they are. Every parameter not named here
+        and not swept compiles in at its default. An empty mapping
+        returns every such parameter to its default.
+
+        Parameters
+        ----------
+        values
+            Names of parameters that are not swept, mapped to the
+            values to compile in.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a name is swept.
+        """
+        fixed = self._fixed_values(values)
+        if fixed == self.compile_settings.fixed_values:
+            return
+        self._check_parameter_names(values)
+        self.update(fixed_values=fixed)
+
+    def set_batch_parameters(
+        self, names: Iterable[str], values: Mapping[str, float]
+    ) -> None:
+        """Set the swept names and the fixed values together.
+
+        This does the work of :meth:`set_swept_parameters` followed by
+        :meth:`set_fixed_values` in one update, so the system rebuilds
+        its equations at most once.
+
+        Parameters
+        ----------
+        names
+            Names of the parameters array's rows, in order.
+        values
+            Names of parameters that are not swept, mapped to the
+            values to compile in.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a swept name repeats or also has a fixed value.
+        """
+        names = tuple(names)
+        fixed = self._fixed_values(values)
+        if (
+            names == self.swept_parameters
+            and fixed == self.compile_settings.fixed_values
+        ):
+            return
+        self._check_parameter_names((*names, *values))
+        self.update(swept_parameters=names, fixed_values=fixed)
+
+    def _check_parameter_names(self, names: Iterable[str]) -> None:
+        """Raise ``KeyError`` when a name is not a parameter."""
+        unknown = set(names) - set(self.parameters.names)
+        if unknown:
+            raise KeyError(
+                f"{sorted(unknown)} are not parameters of this system."
+            )
+
+    def _fixed_values(
+        self, values: Mapping[str, float]
+    ) -> Optional[SystemValues]:
+        """Return ``values`` as a container, ``None`` when empty."""
+        if not values:
+            return None
+        return SystemValues(
+            dict(values), self.precision, name="Fixed values"
         )
 
     @property
@@ -254,9 +357,34 @@ class BaseODE(CUDAFactory):
         return self.compile_settings.swept_parameters
 
     @property
+    def swept_values(self) -> "SystemValues":
+        """Default values of the swept parameters, in row order."""
+        settings = self.compile_settings
+        cached = self._swept_values
+        # Rebuild when the settings snapshot is replaced.
+        if cached is None or cached[0] is not settings:
+            defaults = settings.parameters.values_dict
+            values = SystemValues(
+                {name: defaults[name] for name in settings.swept_parameters},
+                settings.precision,
+                name="Parameters",
+            )
+            cached = (settings, values)
+            self._swept_values = cached
+        return cached[1]
+
+    @property
     def fixed_parameter_values(self) -> Dict[str, float]:
         """Values compiled into the code, keyed by parameter name."""
         return self.compile_settings.fixed_parameter_values
+
+    @property
+    def fixed_values(self) -> Dict[str, float]:
+        """Values the batch compiles in instead of their defaults."""
+        fixed = self.compile_settings.fixed_values
+        if fixed is None:
+            return {}
+        return fixed.as_float_dict
 
     @property
     def parameters(self) -> "SystemValues":
@@ -342,6 +470,18 @@ class BaseODE(CUDAFactory):
         """Binary-operator count of the ``dxdt`` and observables sources."""
         return self.get_cached_output("operation_counts").total(
             ("dxdt", "observables")
+        )
+
+    @property
+    def config_hash(self) -> str:
+        """Configuration hash including the values compiled into the code.
+
+        A ``SystemValues`` hashes its names only, so we fold in a digest
+        of every compiled-in value, sorted by name.
+        """
+        compiled_in = tuple(sorted(self.fixed_parameter_values.items()))
+        return canonical_digest(
+            ("cubie-ode-config", super().config_hash, compiled_in)
         )
 
     def get_solver_helper(

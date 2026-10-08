@@ -33,6 +33,7 @@ from tests._utils import (
     TORN_NO_OBSERVABLES,
     UNSET_LINEAR_SOLVE,
     run_dense_at_state_operator,
+    swept_defaults,
 )
 
 
@@ -242,7 +243,7 @@ def _ring_constraint_residuals(values, voltages):
 def _solve_ring(solver, system):
     inits = np.zeros((system.sizes.states, 1), dtype=np.float64)
     result = solver.solve(
-        inits, {"Uin1_amplitude": 0.5}, duration=2e-6
+        inits, swept_defaults(system), duration=2e-6
     )
     legend = {
         label: idx for idx, label in result.time_domain_legend.items()
@@ -311,7 +312,9 @@ UNSOLVABLE_INIT = {
 def _solve_torn(solver, x0, x1, **solve_kwargs):
     """Solve from (x0, x1) and return the result and t0-saved pair."""
     y0 = {"x0": np.array([x0]), "x1": np.array([x1])}
-    result = solver.solve(y0, {}, duration=0.05, **solve_kwargs)
+    result = solver.solve(
+        y0, swept_defaults(solver.system), duration=0.05, **solve_kwargs
+    )
     legend = {
         label: idx for idx, label in result.time_domain_legend.items()
     }
@@ -604,7 +607,7 @@ def _transamp_trajectory(solver, system, duration):
         name: np.array([float(value)])
         for name, value in system.initial_values.values_dict.items()
     }
-    result = solver.solve(inits, {}, duration=duration)
+    result = solver.solve(inits, swept_defaults(system), duration=duration)
     legend = {
         label: idx for idx, label in result.time_domain_legend.items()
     }
@@ -637,7 +640,7 @@ def test_diode_line_solves(solver, system):
     """The mid-size semi-explicit DAE integrates cleanly."""
     t_end = 0.3
     inits = np.zeros((system.sizes.states, 1), dtype=np.float32)
-    result = solver.solve(inits, {"amp": 1.0}, duration=t_end)
+    result = solver.solve(inits, swept_defaults(system), duration=t_end)
     legend = {
         label: idx for idx, label in result.time_domain_legend.items()
     }
@@ -670,7 +673,7 @@ def test_brown_init_corrects_diode_line_algebraic_start(
         {f"w{i}": np.array([0.25]) for i in range(1, 9)}
     )
     result = solver.solve(
-        inits, {"amp": np.array([1.0])}, duration=0.2
+        inits, swept_defaults(system), duration=0.2
     )
     assert result.status_messages == {}
     legend = {
