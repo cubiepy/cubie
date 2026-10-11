@@ -112,12 +112,11 @@ Dicts and arrays
 It's simplest to provide a dict of parameter and initial values, with
 each value that differs from the system's defaults assigned a constant
 value and any swept parameters or states assigned a group or range of
-values. You can leave out either input: without initial values every
-run starts from the system's default initial values, and without
-parameters every parameter runs at its default. The values you pass
-apply to that solve only, and the system's defaults stay as they are.
-The same goes for ``solve_ivp``, ``Solver.compile``,
-``Solver.calibrate`` and ``Solver.optimize``. Cubie takes a few
+values. You can leave out either input, and Cubie uses the system's
+defaults for it. The values you pass apply to that solve only, so to
+change a default for every solve, call ``set_default_parameters`` on
+the system. ``solve_ivp``, ``Solver.compile``, ``Solver.calibrate`` and
+``Solver.optimize`` treat their inputs the same way. Cubie takes a few
 milliseconds to interpret and sort these,
 which is fine if your solve takes several seconds. If you're looking for
 something a bit faster and more programmatic, you can pass Cubie an
