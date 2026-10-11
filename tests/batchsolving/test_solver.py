@@ -1364,10 +1364,9 @@ def test_solve_ivp_accepts_callable():
 
 
 def test_solve_ivp_accepts_equation_strings():
-    """solve_ivp builds the system from equation strings."""
+    """solve_ivp builds the system from equation strings alone."""
     result = solve_ivp(
-        ["dx = v", "dv = mu * (1 - x*x) * v - x"],
-        y0={"x": [1.0], "v": [0.0]},
+        ["dx = v", "dv = mu"],
         parameters={"mu": [1.5]},
         dt=1e-2,
         duration=0.05,
@@ -1377,7 +1376,11 @@ def test_solve_ivp_accepts_equation_strings():
     )
     assert isinstance(result, SolveResult)
     values = np.asarray(result.as_numpy["time_domain_array"])
-    assert np.all(np.isfinite(values))
+    # Both inferred states start at zero, and the equations move them
+    # away from it, so a solve that stops integrating leaves a zero.
+    assert values.shape[1] == 2
+    assert np.all(values[0] == 0.0)
+    assert np.all(values[-1] > 0.0)
 
 
 def test_equations_take_driver_names_from_the_samples(precision):
@@ -3263,19 +3266,17 @@ def test_parameter_changes_between_solves(
     )
     assert solver.fixed_parameter_values[names[1]] == 0.75
     solver.build_grid(None, None)
-    assert solver.swept_parameters == ()
-    assert solver.fixed_parameter_values == defaults
+    assert solver.swept_parameters == (names[0],)
+    assert solver.fixed_parameter_values == {
+        name: value for name, value in defaults.items() if name != names[0]
+    }
 
     duration = solver_settings["duration"]
-    first = solver.solve(
-        None, None, duration=duration
-    ).time_domain_array.copy()
-    value = 2.0 * defaults[names[0]] + 1.0
-    system.set_default_parameters({names[0]: value})
-    second = solver.solve(
-        None, None, duration=duration
-    ).time_domain_array.copy()
-    assert solver.fixed_parameter_values[names[0]] == pytest.approx(value)
+    first = solver.solve(duration=duration).time_domain_array.copy()
+    value = 2.0 * defaults[names[2]] + 1.0
+    system.set_default_parameters({names[2]: value})
+    second = solver.solve(duration=duration).time_domain_array.copy()
+    assert solver.fixed_parameter_values[names[2]] == pytest.approx(value)
     assert not np.array_equal(first, second)
 
 
