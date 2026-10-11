@@ -18,6 +18,7 @@ from cubie.batchsolving.BatchInputHandler import (
     unique_cartesian_product,
     verbatim_grid,
 )
+from cubie.batchsolving.BatchInputHandler import ParameterBatch
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.driver_memory import is_pinned_array
 
@@ -1221,10 +1222,35 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
         )
 
 
-def test_swept_height_array_keeps_the_compiled_parameters(
+def test_swept_height_array_compiles_the_defaults_in(
     input_handler_mutable, system
 ):
-    """A row per swept parameter keeps the swept and fixed parameters."""
+    """A row per swept parameter keeps the sweep and fixes defaults.
+
+    The values a previous batch compiled in last that batch only.
+    """
+    names = list(system.parameters.names)
+    _handle(
+        input_handler_mutable,
+        params={names[0]: [1.0, 2.0], names[1]: 0.25},
+        kind="verbatim",
+    )
+    params = np.ones((1, 4), dtype=system.precision)
+    _, result, swept, fixed = _handle(
+        input_handler_mutable, params=params, kind="verbatim"
+    )
+    defaults = system.parameters.as_float_dict
+    assert swept == (names[0],)
+    assert fixed == {
+        name: value for name, value in defaults.items() if name != names[0]
+    }
+    assert result is params
+
+
+def test_parameter_batch_applies_its_sweep_and_values(
+    input_handler_mutable, system
+):
+    """A ParameterBatch compiles in the values it carries."""
     names = list(system.parameters.names)
     fixed = {
         name: value
@@ -1232,14 +1258,14 @@ def test_swept_height_array_keeps_the_compiled_parameters(
         if name != names[0]
     }
     fixed[names[1]] = 0.25
-    input_handler_mutable.interface.set_swept_parameters(names[:1], fixed)
-    params = np.ones((1, 4), dtype=system.precision)
+    values = np.ones((1, 4), dtype=system.precision)
+    batch = ParameterBatch(values, (names[0],), fixed)
     _, result, swept, result_fixed = _handle(
-        input_handler_mutable, params=params, kind="verbatim"
+        input_handler_mutable, params=batch, kind="verbatim"
     )
     assert swept == (names[0],)
     assert result_fixed == fixed
-    assert result is params
+    assert result is values
 
 
 def test_ragged_verbatim_entries_raise(input_handler_mutable, system):

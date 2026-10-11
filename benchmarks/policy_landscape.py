@@ -833,7 +833,8 @@ def run_config(
                     deepcopy(system), system_name, algo_name, spec,
                     duration,
                 )
-                inits, params = SYSTEMS[system_name]["grid"](probe, n_runs)
+                inits, batch = SYSTEMS[system_name]["grid"](probe, n_runs)
+                params = batch.values
                 probe.close()
             _build_arm(arm, system, system_name, algo_name, duration)
             _arm_facts(arm, blocksizes, started)

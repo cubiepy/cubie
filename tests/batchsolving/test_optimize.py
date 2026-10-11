@@ -555,7 +555,7 @@ def test_optimize_takes_device_grids(
     )
     result = solver_mutable.optimize(
         cuda.to_device(inits),
-        parameters=cuda.to_device(params),
+        parameters=cuda.to_device(params.values),
         duration=0.1,
         verbose=False,
         apply=False,

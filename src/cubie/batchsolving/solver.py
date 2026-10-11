@@ -53,7 +53,10 @@ from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie._utils import PrecisionDType
 from cubie.result_codes import decode_status_codes
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
-from cubie.batchsolving.BatchInputHandler import BatchInputHandler
+from cubie.batchsolving.BatchInputHandler import (
+    BatchInputHandler,
+    ParameterBatch,
+)
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.batchsolving.calibration import (
     CalibrationResult,
@@ -589,7 +592,9 @@ class Solver:
             in (n_params, n_runs) format. ``n_params`` is either the
             number of parameters you've set as swept with
             :meth:`set_swept_parameters`, or the system's full number
-            of parameters. ``None`` runs the current
+            of parameters. A :class:`ParameterBatch` from
+            :meth:`build_grid` also compiles in the values it carries.
+            ``None`` runs the current
             :attr:`swept_parameters` at their defaults and compiles every
             other parameter in at its default.
         drivers
@@ -671,7 +676,7 @@ class Solver:
         sweep, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self.set_swept_parameters(swept, fixed)
+        self._set_batch_parameters(swept, fixed)
         inits, params = self.input_handler(
             states=initial_values, params=sweep, kind=grid_type
         )
@@ -738,7 +743,7 @@ class Solver:
         _, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self.set_swept_parameters(swept, fixed)
+        self._set_batch_parameters(swept, fixed)
 
         if optimize_candidates:
             run_optimization(
@@ -761,7 +766,7 @@ class Solver:
         ] = None,
         grid_type: str = "verbatim",
         fix_constant_parameters: bool = False,
-    ) -> Tuple[ndarray, ndarray]:
+    ) -> Tuple[ndarray, ParameterBatch]:
         """Build state and parameter arrays to pass to :meth:`solve`.
 
         Parameters
@@ -782,12 +787,13 @@ class Solver:
 
         Returns
         -------
-        Tuple[ndarray, ndarray]
-            Tuple of (initial_values, parameters) arrays in
-            (n_vars, n_runs) format with system precision dtype. The
-            parameter rows are :attr:`swept_parameters`.
-            These arrays can be passed directly to :meth:`solve`
-            for fast-path execution.
+        Tuple[ndarray, ParameterBatch]
+            The ``(n_states, n_runs)`` initial values and a
+            :class:`ParameterBatch` holding the ``(n_swept, n_runs)``
+            parameter array with its row names and the values compiled
+            in for every other parameter. Pass both to :meth:`solve`
+            for fast-path execution, and the solve compiles in the
+            same values.
 
         Examples
         --------
@@ -799,28 +805,24 @@ class Solver:
         sweep, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self.set_swept_parameters(swept, fixed)
-        return self.input_handler(
+        self._set_batch_parameters(swept, fixed)
+        inits, params = self.input_handler(
             states=initial_values, params=sweep, kind=grid_type
         )
+        return inits, ParameterBatch(
+            params, swept, self.fixed_parameter_values
+        )
 
-    def set_swept_parameters(
-        self,
-        names: Sequence[str],
-        fixed_values: Optional[Dict[str, float]] = None,
-    ) -> None:
+    def set_swept_parameters(self, names: Sequence[str]) -> None:
         """Set the parameters an array input gives values for.
 
         A parameters array can then have one row per name, in this
-        order. Every other parameter is compiled in.
+        order. Every other parameter is compiled in at its default.
 
         Parameters
         ----------
         names
             Parameter names, in the order of the array's rows.
-        fixed_values
-            Values to compile in for the other parameters. Defaults to
-            their default values.
 
         Raises
         ------
@@ -828,6 +830,17 @@ class Solver:
             If a name is not a parameter of the system.
         ValueError
             If a name repeats.
+        """
+        self._set_batch_parameters(names, None)
+
+    def _set_batch_parameters(
+        self,
+        names: Sequence[str],
+        fixed_values: Optional[Dict[str, float]],
+    ) -> None:
+        """Sweep ``names`` and compile ``fixed_values`` in for the rest.
+
+        ``None`` compiles every other parameter in at its default.
         """
         self.system_interface.set_swept_parameters(names, fixed_values)
         self.update()
