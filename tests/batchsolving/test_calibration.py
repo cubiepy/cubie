@@ -339,7 +339,7 @@ class TestCalibrateGuards:
         with pytest.raises(ValueError, match="grid type"):
             solver_mutable.calibrate(
                 {"x0": [0.5], "x1": [-0.25], "x2": [1.2]},
-                {"p0": [0.7], "p1": [0.9], "p2": [1.1]},
+                {"c0": [0.5, 0.6], "c1": [-0.3, -0.2]},
                 duration=0.2,
                 grid_type="nowhere",
                 verbose=False,

@@ -494,9 +494,8 @@ def solved_batch_solver_errorcode(error_injection_solver, driver_settings):
             "x2": [0.0, 0.0, 0.0],
         },
         parameters={
-            "p0": [0.1, 0.2, 0.3],
-            "p1": [0.1, 0.2, 0.3],
-            "p2": [0.1, 0.2, 0.3],
+            "c0": [0.1, 0.2, 0.3],
+            "c1": [0.1, 0.2, 0.3],
         },
         drivers=driver_settings,
         duration=0.1,
@@ -671,9 +670,8 @@ def solved_summary_only_solver(system, driver_settings):
             "x2": [0.0, 0.0, 0.0],
         },
         parameters={
-            "p0": [0.1, 0.2, 0.3],
-            "p1": [0.1, 0.2, 0.3],
-            "p2": [0.1, 0.2, 0.3],
+            "c0": [0.1, 0.2, 0.3],
+            "c1": [0.1, 0.2, 0.3],
         },
         drivers=driver_settings,
         duration=0.1,
