@@ -591,8 +591,7 @@ class Solver:
             :meth:`set_swept_parameters`, or the system's full number
             of parameters. ``None`` runs the current
             :attr:`swept_parameters` at their defaults and compiles every
-            other parameter in at its default. Values given here apply
-            to this solve only and leave the defaults as they are.
+            other parameter in at its default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -672,7 +671,7 @@ class Solver:
         sweep, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self._set_batch_parameters(swept, fixed)
+        self.set_swept_parameters(swept, fixed)
         inits, params = self.input_handler(
             states=initial_values, params=sweep, kind=grid_type
         )
@@ -739,7 +738,7 @@ class Solver:
         _, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self._set_batch_parameters(swept, fixed)
+        self.set_swept_parameters(swept, fixed)
 
         if optimize_candidates:
             run_optimization(
@@ -800,21 +799,28 @@ class Solver:
         sweep, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
-        self._set_batch_parameters(swept, fixed)
+        self.set_swept_parameters(swept, fixed)
         return self.input_handler(
             states=initial_values, params=sweep, kind=grid_type
         )
 
-    def set_swept_parameters(self, names: Sequence[str]) -> None:
+    def set_swept_parameters(
+        self,
+        names: Sequence[str],
+        fixed_values: Optional[Dict[str, float]] = None,
+    ) -> None:
         """Set the parameters an array input gives values for.
 
         A parameters array can then have one row per name, in this
-        order. Every other parameter is compiled in at its default.
+        order. Every other parameter is compiled in.
 
         Parameters
         ----------
         names
             Parameter names, in the order of the array's rows.
+        fixed_values
+            Values to compile in for the other parameters. Defaults to
+            their default values.
 
         Raises
         ------
@@ -822,17 +828,6 @@ class Solver:
             If a name is not a parameter of the system.
         ValueError
             If a name repeats.
-        """
-        self._set_batch_parameters(names, None)
-
-    def _set_batch_parameters(
-        self,
-        names: Sequence[str],
-        fixed_values: Optional[Dict[str, float]],
-    ) -> None:
-        """Sweep ``names`` and compile one batch's values in for the rest.
-
-        ``None`` compiles every other parameter in at its default.
         """
         self.system_interface.set_swept_parameters(names, fixed_values)
         self.update()
