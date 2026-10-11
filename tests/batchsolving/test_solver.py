@@ -356,7 +356,7 @@ def test_compile_then_solve(
     )
     assert (
         kernel.input_arrays.device_parameters.shape
-        == expected_params.shape
+        == expected_params.values.shape
     )
     assert _batch_bytes(kernel) > 0
     assert np.all(np.isfinite(result.state))
@@ -479,9 +479,10 @@ def test_compile_and_solve_device_input_layouts(
 ):
     """Device layouts preserve results across compilation and sizing."""
     solver = solver_mutable
-    initial, parameters = solver.build_grid(
+    initial, batch = solver.build_grid(
         simple_initial_values, simple_parameters
     )
+    parameters = batch.values
     solver.compile(parameters=simple_parameters, drivers=driver_settings)
     for runs in (4, 8):
         columns = np.arange(runs) % initial.shape[1]
@@ -1621,9 +1622,10 @@ def test_build_grid_returns_correct_shape(
     solver, simple_initial_values, simple_parameters
 ):
     """Test that build_grid returns arrays with correct shapes."""
-    inits, params = solver.build_grid(
+    inits, batch = solver.build_grid(
         simple_initial_values, simple_parameters, grid_type="verbatim"
     )
+    params = batch.values
 
     assert isinstance(inits, np.ndarray)
     assert isinstance(params, np.ndarray)
@@ -1639,9 +1641,10 @@ def test_build_grid_combinatorial(
     solver, simple_initial_values, simple_parameters
 ):
     """Test that build_grid with combinatorial creates product grid."""
-    inits, params = solver.build_grid(
+    inits, batch = solver.build_grid(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
+    params = batch.values
 
     # Combinatorial produces more runs than verbatim
     n_init_values = len(list(simple_initial_values.values())[0])
@@ -1655,10 +1658,10 @@ def test_build_grid_precision(
     solver, simple_initial_values, simple_parameters
 ):
     """Test that build_grid returns arrays with correct precision."""
-    inits, params = solver.build_grid(simple_initial_values, simple_parameters)
+    inits, batch = solver.build_grid(simple_initial_values, simple_parameters)
 
     assert inits.dtype == solver.precision
-    assert params.dtype == solver.precision
+    assert batch.values.dtype == solver.precision
 
 
 # ============================================================================
@@ -2940,9 +2943,11 @@ def test_timing_events_kept_while_timing_is_on(
 
 def _prepare_batch(solver, inits, params):
     """Queue a batch's uploads and allocations without launching it."""
-    inits, params = solver.build_grid(inits, params)
+    inits, batch = solver.build_grid(inits, params)
     kernel = solver.kernel
-    kernel._prepare_batch(inits, params, 0.05, 0.0, 0.0, kernel.stream)
+    kernel._prepare_batch(
+        inits, batch.values, 0.05, 0.0, 0.0, kernel.stream
+    )
     return kernel.input_arrays
 
 
@@ -3162,8 +3167,8 @@ PARAMETER_FORM_SWEEPS = {
     "dict": (0, 1),
     "full_array": None,
     "fixed_rows": (0, 1),
-    "swept_rows": (0, 1),
-    "device": (0, 1),
+    "swept_rows": (0, 1, 2),
+    "device": (0, 1, 2),
     "build_grid": (0, 1),
     "compile": (0, 1),
 }
@@ -3213,7 +3218,11 @@ def test_parameter_inputs_sweep_their_varying_parameters(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [form for form in PARAMETER_FORMS if form.id != "full_array"],
+    [
+        pytest.param({"parameter_input": form}, id=form)
+        for form, rows in PARAMETER_FORM_SWEEPS.items()
+        if rows is not None and 2 not in rows
+    ],
     indirect=True,
 )
 def test_single_values_compile_in(

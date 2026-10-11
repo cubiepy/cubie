@@ -23,7 +23,7 @@ from math import ceil, isfinite
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from warnings import warn
 
-from attrs import define, field
+from attrs import define, evolve as attrs_evolve, field
 from numpy import arange as np_arange
 from numpy import asarray as np_asarray
 from numpy import count_nonzero as np_count_nonzero
@@ -37,6 +37,7 @@ from cubie.backend.utils import (
     active_blocks_per_multiprocessor,
     device_hardware,
 )
+from cubie.batchsolving.BatchInputHandler import ParameterBatch
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from numba_cuda_mlir.types import float32
 from cubie._cudasim_extensions import cuda
@@ -394,6 +395,12 @@ class ComparisonRunner:
         self._solver = solver
         self._max_parallel = int(max_parallel)
         self._grid = None
+        # Wrap the staged parameters in the batch's sweep and fixed
+        # values, so each device-only solve compiles them in.
+        self._batch = None
+        if isinstance(params, ParameterBatch):
+            self._batch = params
+            params = params.values
         if inits is not None:
             self._grid = (device_to_host(inits), device_to_host(params))
         self.duration = float(duration)
@@ -573,9 +580,12 @@ class ComparisonRunner:
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""
         solver = self._solver
+        params = self._params
+        if self._batch is not None:
+            params = attrs_evolve(self._batch, values=params)
         solver.solve(
             self._inits,
-            self._params,
+            params,
             duration=self.duration,
             settling_time=self.settling,
             t0=self._t0,
