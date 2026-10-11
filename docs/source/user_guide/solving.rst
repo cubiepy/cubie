@@ -109,36 +109,80 @@ skip grid construction.
 Dicts and arrays
 ----------------
 
-It's simplest to provide a dict of parameter and initial values, with
-each value that differs from the system's defaults assigned a constant
-value and any swept parameters or states assigned a group or range of
-values. You can leave out either input, and Cubie uses the system's
-defaults for it. The values you pass apply to that solve only, so to
-change a default for every solve, call ``set_default_parameters`` on
-the system. ``solve_ivp``, ``Solver.compile``, ``Solver.calibrate`` and
-``Solver.optimize`` treat their inputs the same way. Cubie takes a few
-milliseconds to interpret and sort these,
-which is fine if your solve takes several seconds. If you're looking for
-something a bit faster and more programmatic, you can pass Cubie an
-array instead. If you want to go *really* fast and you are comfortable
-with the CUDA environment, you can pass arrays on the GPU (device arrays)
-directly to cut out the few milliseconds of transfer time as well.
+It's probably simplest to provide a dict of parameter and initial
+values, like this:
 
-There is one additional step required when passing an array of swept
-parameters: you need to tell Cubie which parameters they correspond to.
-You can do this two ways:
+.. code-block:: python
 
-- By passing an array that has a row for *every* parameter in your
-  system, Cubie will assume that all parameters are changing over a
-  batch. This can make the solver run slower, as it needs to load every
-  parameter from memory for each run in the batch. If you pass
-  ``fix_constant_parameters=True``, Cubie can scan your array, filter
-  out each value that doesn't change over the batch, and compile it into
-  the code as a number instead.
-- By calling ``solver.set_swept_parameters(param_names)`` before you
-  pass the array, and then passing an array of only the parameters that
-  vary over a batch. This can cut down the size of the arrays you pass
-  considerably, and is how Cubie's benchmarks use it.
+    solver.solve(
+        initial_values={"y0": np.linspace(1, 100, 1000), "y1": 0.3},
+        parameters={"x0": 0.4, "x1": np.logspace(1, 3, 1000)},
+        duration=1.0,
+    )
+
+If you set default values for the states or parameters, you can leave
+them out of the dicts and they will use their default values. You can
+leave either dict out entirely, too. If you didn't set defaults when you
+built the system, you can set them on the system with
+``system.set_default_parameters({"x0": 0.4})`` for parameters and
+``system.set_initial_value("y1", 0.3)`` for states. If you include a
+constant value for a parameter or initial value that has a different
+default, the default doesn't change: Cubie presumes that arguments to
+``solve`` are intended for that run only. ``solve_ivp``,
+``Solver.compile``, ``Solver.calibrate`` and ``Solver.optimize`` treat
+their inputs the same way.
+
+If you're looking for something faster (tens of ms per solve) or are
+generating values programmatically, you can pass arrays instead.
+Initial values arrays have one row per state in your system. The
+parameters array can either have one row per parameter in your system,
+or one row per parameter that you've marked as "swept". When you pass
+parameters as a dict, whichever parameters have multiple values are
+marked internally as swept, and the rest are treated as constant and
+compiled into your code. To mark the swept parameters yourself before
+passing a swept-only parameters array, call
+``solver.set_swept_parameters``, or pass ``swept_parameters`` when you
+build the system, which saves Cubie building it twice:
+
+.. code-block:: python
+
+    system = create_ODE_system(
+        dxdt, parameters={"x0": 0.4, "x1": 1.0}, swept_parameters=["x1"]
+    )
+    solver = Solver(system)
+    solver.solve(inits, np.logspace(1, 3, 1000)[np.newaxis, :])
+
+    # or, on an existing solver
+    solver.set_swept_parameters(["x1"])
+
+A swept-only array runs every other parameter at its default. To fix
+some of them at other values for a batch, build the batch with
+``solver.build_grid``. It returns the initial values array and a
+``ParameterBatch``, which holds the swept parameters' array, the name of
+each row, and the values to compile in for the rest. Pass both straight
+to ``solve``:
+
+.. code-block:: python
+
+    inits, params = solver.build_grid(
+        {"y0": np.linspace(1, 100, 1000)},
+        {"x0": 0.5, "x1": np.logspace(1, 3, 1000)},
+    )
+    result = solver.solve(inits, params)
+
+Arrays of swept parameters only are intended as a convenience: some
+models have hundreds of parameters, and if you're only sweeping two of
+them you probably don't want to throw hundreds-high arrays around. If it
+ends up being easier to pass all-parameter arrays because of how you
+generate the values, you can set ``fix_constant_parameters=True`` in
+your call to ``solve``, and Cubie will scan your array for values that
+don't change over the whole batch and compile them into your code. This
+keeps the performance benefits when running the solve, at the expense of
+a few milliseconds scanning the array.
+
+If you want to go *really* fast and you are comfortable with the CUDA
+environment, you can pass arrays on the GPU (device arrays) directly to
+cut out the few milliseconds of transfer time as well.
 
 Arrays are laid out ``(n_variables, n_runs)`` and must match the system
 precision. Device arrays (CuPy or Numba) are wired directly into the
