@@ -255,7 +255,7 @@ class PreParseEditor(QDialog):
     """Dialog for editing parameter and initial values before parsing.
 
     Operates on raw dictionaries rather than a constructed SymbolicODE,
-    so the edited values feed ``parse_input()`` and the codegen cache
+    so the edited values feed ``parse_system()`` and the codegen cache
     key.
 
     Parameters

@@ -26,7 +26,6 @@ from .function_parser import (
     parse_function_input,
 )
 from .normalise import normalise_input
-from .parse_primitives import TIME_SYMBOL, derivative_helpers
 from .parsed_system import ParsedSystem
 
 def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
@@ -180,7 +179,7 @@ def _units_by_name(
     return dict(zip(names, units))
 
 
-def parse_input(
+def parse_system(
     dxdt: Union[str, Iterable, Callable],
     states: Optional[Union[Dict[str, float], Iterable[str]]] = None,
     observables: Optional[Iterable[str]] = None,
@@ -197,7 +196,7 @@ def parse_input(
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[Dict[str, Any]] = None,
 ):
-    """Process user equations and symbol metadata into structured components.
+    """Parse user equations and symbol metadata into a parsed system.
 
     Parameters
     ----------
@@ -248,19 +247,15 @@ def parse_input(
 
     Returns
     -------
-    tuple
-        ``(index_map, all_symbols, funcs, parsed_equations, fn_hash,
-        parsed_system)``. The derived mass matrix rides on
-        ``parsed_equations.mass_matrix``. ``parsed_system`` is the
-        parsed system with every parameter left as a symbol, used to
-        rebuild the equations when the swept parameters change.
+    ParsedSystem
+        The parsed system with every parameter left as a symbol.
+        :meth:`ParsedSystem.specialise` builds the equations for a
+        choice of swept parameters.
 
     Notes
     -----
     With ``strict=False``, undeclared variables inferred from usage
-    are added automatically as parameters. The products fix every
-    parameter at its default, so ``parsed_equations`` and ``fn_hash``
-    are value-specific.
+    are added automatically as parameters.
     """
     input_type = _detect_input_type(dxdt)
     state_units = _units_by_name(states, state_units, "state")
@@ -360,8 +355,28 @@ def parse_input(
         observable_units=observable_units,
         driver_units=driver_units,
     )
-    products = parsed_system.specialise()
-    return (*products, parsed_system)
+    return parsed_system
+
+
+def parse_input(**kwargs):
+    """Parse user equations and specialise them with nothing swept.
+
+    Parameters
+    ----------
+    **kwargs
+        Arguments of :func:`parse_system`.
+
+    Returns
+    -------
+    tuple
+        ``(index_map, all_symbols, funcs, parsed_equations, fn_hash,
+        parsed_system)``. Every parameter is compiled in at its
+        default, so ``parsed_equations`` and ``fn_hash`` are
+        value-specific. The derived mass matrix rides on
+        ``parsed_equations.mass_matrix``.
+    """
+    parsed_system = parse_system(**kwargs)
+    return (*parsed_system.specialise(), parsed_system)
 
 
 def _parse_function_path(
@@ -378,7 +393,7 @@ def _parse_function_path(
     observable_units,
     driver_units,
 ):
-    """Parse callable ``dxdt`` input."""
+    """Parse callable ``dxdt`` input into a parsed system."""
 
     if states is None:
         if strict:
@@ -476,31 +491,4 @@ def _parse_function_path(
         observable_units=observable_units,
         driver_units=driver_units,
     )
-    products = parsed_system.specialise()
-    (
-        index_map,
-        all_symbols,
-        assembled_funcs,
-        parsed_equations,
-        fn_hash,
-    ) = products
-    # Inlined non-device callables keep their entries.
-    funcs = {**funcs, **(assembled_funcs or {})}
-    all_symbols.setdefault("t", TIME_SYMBOL)
-    if funcs:
-        all_symbols.update({name: fn for name, fn in funcs.items()})
-        all_symbols.update(
-            {
-                fn.__name__: fn
-                for fn in derivative_helpers(user_function_derivatives)
-            }
-        )
-
-    return (
-        index_map,
-        all_symbols,
-        funcs,
-        parsed_equations,
-        fn_hash,
-        parsed_system,
-    )
+    return parsed_system
