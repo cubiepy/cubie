@@ -15,14 +15,13 @@ compile in for every other parameter:
 - A dict sweeps entries with several values and fixes entries with one
   value. Parameters left out are fixed at their defaults.
 - An array with a row per parameter sweeps every row.
-- An array with a row per swept parameter keeps the current sweep.
+- An array with a row per swept parameter keeps the current swept and
+  fixed parameters.
 - With ``fix_constant_parameters``, an array's rows that hold one value
   are fixed instead of swept.
-- ``None``, an empty dict or an empty array keeps the current sweep and
-  runs it at its defaults.
-
-The values fixed for one batch never carry over to the next: every
-parameter a batch's input leaves out is fixed at its default.
+- ``None``, an empty dict or an empty array keeps the current sweep,
+  runs it at its defaults and fixes every other parameter at its
+  default.
 
 Arrays of any other height raise. Once the swept names are set on the
 system, ``BatchInputHandler.__call__`` builds the arrays from three
@@ -635,12 +634,11 @@ class BatchInputHandler:
         with one value. Parameters left out are fixed at their
         defaults. An array with a row per parameter sweeps every row.
         An array with a row per swept parameter keeps the current
-        sweep. With ``fix_constant_parameters``, a host array's rows
-        that hold one value are fixed instead. ``None``, an empty dict
-        or an empty array keeps the current sweep, whose rows
-        :meth:`__call__` fills with defaults. The values fixed here
-        apply to one batch: every parameter they leave out is fixed
-        at its default.
+        swept and fixed parameters. With ``fix_constant_parameters``,
+        a host array's rows that hold one value are fixed instead.
+        ``None``, an empty dict or an empty array keeps the current
+        sweep, whose rows :meth:`__call__` fills with defaults, and
+        fixes every other parameter at its default.
 
         Parameters
         ----------
@@ -686,6 +684,7 @@ class BatchInputHandler:
                     f"format, got a {len(params.shape)}D array."
                 )
             sweep, swept = params, self._array_names(params.shape[0])
+            given = self._current_fixed(swept)
         else:
             sweep, swept, given = self._split_array(
                 params, fix_constant_parameters
@@ -713,7 +712,7 @@ class BatchInputHandler:
         if arr.size == 0 and arr.ndim < 2:
             return None, self.interface.swept_parameters, {}
         names = self._array_names(arr.shape[0])
-        given = {}
+        given = self._current_fixed(names)
         grid = arr[:, np_newaxis] if arr.ndim == 1 else arr
         if not fix_constant_parameters or grid.shape[1] == 0:
             return arr, names, given
@@ -731,6 +730,12 @@ class BatchInputHandler:
         if keep.size == len(names):
             return arr, swept, given
         return grid[keep], swept, given
+
+    def _current_fixed(self, names: Tuple[str, ...]) -> Dict[str, float]:
+        """Return the compiled-in values when ``names`` are the swept names."""
+        if names == self.interface.swept_parameters:
+            return self.interface.fixed_parameter_values
+        return {}
 
     def _array_names(self, n_rows: int) -> Tuple[str, ...]:
         """Return the parameter names of an array's rows."""

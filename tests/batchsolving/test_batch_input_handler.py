@@ -300,16 +300,17 @@ def test_call_device_arrays_pass_through(input_handler_mutable, system):
 
 
 def test_call_device_states_none_params(input_handler_mutable, system):
-    """Device states pair with every parameter fixed."""
+    """Device states pair with the current sweep's default rows."""
     n_states = system.sizes.states
+    current = input_handler_mutable.interface.swept_parameters
     states = _FakeDeviceArray((n_states, 4), system.precision)
     result_s, result_p, swept, _ = _handle(
         input_handler_mutable, states, None, "verbatim"
     )
     assert result_s is states
-    assert result_p.shape == (0, 4)
+    assert result_p.shape == (len(current), 4)
     assert result_p.dtype == system.precision
-    assert swept == ()
+    assert swept == current
 
 
 def test_call_device_states_single_column_params(
@@ -1220,28 +1221,24 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
         )
 
 
-def test_swept_height_array_compiles_the_defaults_in(
+def test_swept_height_array_keeps_the_compiled_parameters(
     input_handler_mutable, system
 ):
-    """A row per swept parameter keeps the sweep and fixes defaults.
-
-    Values a previous batch compiled in last that batch only.
-    """
+    """A row per swept parameter keeps the swept and fixed parameters."""
     names = list(system.parameters.names)
-    _handle(
-        input_handler_mutable,
-        params={names[0]: [1.0, 2.0], names[1]: 0.25},
-        kind="verbatim",
-    )
+    fixed = {
+        name: value
+        for name, value in system.parameters.as_float_dict.items()
+        if name != names[0]
+    }
+    fixed[names[1]] = 0.25
+    input_handler_mutable.interface.set_swept_parameters(names[:1], fixed)
     params = np.ones((1, 4), dtype=system.precision)
-    _, result, swept, fixed = _handle(
+    _, result, swept, result_fixed = _handle(
         input_handler_mutable, params=params, kind="verbatim"
     )
-    defaults = system.parameters.as_float_dict
     assert swept == (names[0],)
-    assert fixed == {
-        name: value for name, value in defaults.items() if name != names[0]
-    }
+    assert result_fixed == fixed
     assert result is params
 
 

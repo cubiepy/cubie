@@ -69,13 +69,13 @@ into the code at a fixed value.
 - Dict: entries with several values are swept, in the system's parameter order. Entries
   with one value are fixed at it, and parameters left out are fixed at their defaults.
 - Array with a row per parameter: every row is swept.
-- Array with a row per swept parameter: the sweep stays as it is.
+- Array with a row per swept parameter: the swept and fixed parameters stay as they are.
 - `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
-- `None`, `{}` or an empty array: the sweep stays as it is, and its rows hold defaults.
+- `None`, `{}` or an empty array: the sweep stays as it is, its rows hold defaults, and
+  every other parameter is fixed at its default.
 
-Values fixed for one batch last that batch only: every parameter the input leaves out is
-fixed at its default. `Solver.compile()` without parameters compiles the kernel a solve
-without parameters uses.
+`Solver.compile()` without parameters compiles the kernel a solve without parameters
+uses.
 
 Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
 or a fixed value rebuilds the system and kernel.
