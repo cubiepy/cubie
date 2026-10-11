@@ -750,15 +750,21 @@ def test_fill_aligned_combinatorial(input_handler):
 
 
 def test_call_none_returns_defaults(input_handler_mutable, system):
-    """Empty inputs return one run with every default fixed."""
+    """Empty inputs return one run of defaults for the current sweep."""
+    current = input_handler_mutable.interface.swept_parameters
     inits, params, swept, fixed = _handle(
         input_handler_mutable, states=None, params=None
     )
+    defaults = system.compile_settings.parameter_values
     assert inits.shape[1] == 1
-    assert params.shape == (0, 1)
     assert_allclose(inits[:, 0], system.initial_values.values_array)
-    assert swept == ()
-    assert fixed == system.compile_settings.parameter_values
+    assert swept == current
+    assert_allclose(params[:, 0], [defaults[name] for name in swept])
+    assert fixed == {
+        name: value
+        for name, value in defaults.items()
+        if name not in swept
+    }
 
 
 def test_call_verbatim_mismatch_raises(input_handler_mutable, system):
@@ -1214,24 +1220,28 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
         )
 
 
-def test_swept_height_array_keeps_the_compiled_parameters(
+def test_swept_height_array_compiles_the_defaults_in(
     input_handler_mutable, system
 ):
-    """A row per swept parameter keeps the swept and fixed parameters."""
+    """A row per swept parameter keeps the sweep and fixes defaults.
+
+    Values a previous batch compiled in last that batch only.
+    """
     names = list(system.parameters.names)
-    fixed = {
-        name: value
-        for name, value in system.parameters.as_float_dict.items()
-        if name != names[0]
-    }
-    fixed[names[1]] = 0.25
-    input_handler_mutable.interface.set_swept_parameters(names[:1], fixed)
+    _handle(
+        input_handler_mutable,
+        params={names[0]: [1.0, 2.0], names[1]: 0.25},
+        kind="verbatim",
+    )
     params = np.ones((1, 4), dtype=system.precision)
-    _, result, swept, result_fixed = _handle(
+    _, result, swept, fixed = _handle(
         input_handler_mutable, params=params, kind="verbatim"
     )
+    defaults = system.parameters.as_float_dict
     assert swept == (names[0],)
-    assert result_fixed == fixed
+    assert fixed == {
+        name: value for name, value in defaults.items() if name != names[0]
+    }
     assert result is params
 
 
@@ -1254,15 +1264,22 @@ def _sweep_reversed(handler):
 
 
 @pytest.mark.parametrize("empty", [None, {}, np.empty(0)])
-def test_empty_params_sweep_nothing(input_handler_mutable, system, empty):
-    """No parameter input sweeps nothing and fixes every default."""
-    _sweep_reversed(input_handler_mutable)
+def test_empty_params_keep_the_sweep(input_handler_mutable, system, empty):
+    """No parameter input runs the current sweep at its defaults."""
+    names = _sweep_reversed(input_handler_mutable)
     _, params, swept, fixed = _handle(
         input_handler_mutable, params=empty, kind="verbatim"
     )
-    assert swept == ()
-    assert fixed == system.compile_settings.parameter_values
-    assert params.shape == (0, 1)
+    defaults = system.compile_settings.parameter_values
+    assert swept == (names[1], names[0])
+    assert_allclose(
+        params[:, 0], [defaults[names[1]], defaults[names[0]]]
+    )
+    assert fixed == {
+        name: value
+        for name, value in defaults.items()
+        if name not in names[:2]
+    }
 
 
 def test_dict_rows_follow_the_parameter_order(input_handler_mutable):
