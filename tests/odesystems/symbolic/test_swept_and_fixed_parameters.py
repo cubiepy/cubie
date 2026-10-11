@@ -9,12 +9,13 @@ from cubie import create_ODE_system
 from cubie.odesystems.symbolic.engine import expr as ir
 from tests._utils import sweep
 
-AMP_SETTINGS = {"system_type": "amp"}
+AMP_SETTINGS = {"system_type": "amp", "system_sweep": ()}
 
-TOGGLE_SETTINGS = {"system_type": "toggle"}
+TOGGLE_SETTINGS = {"system_type": "toggle", "system_sweep": ()}
 
 SCALED_CS_SETTINGS = {
     "system_type": "scaled_cs",
+    "system_sweep": (),
     "precision": np.float64,
 }
 

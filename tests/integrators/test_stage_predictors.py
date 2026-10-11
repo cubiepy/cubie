@@ -30,6 +30,7 @@ from tests._utils import (
     DENSE_PREDICTION_ITERATION_CASES,
     LORENZ_DIRK,
     RADAU_ADAPTIVE_CASE,
+    swept_defaults,
 )
 
 SHARED_PREDICTOR_LOCATIONS = {
@@ -467,7 +468,7 @@ def test_device_predictor_commit_flag(precision, apply_flag):
     DENSE_PREDICTION_ITERATION_CASES,
     indirect=True,
 )
-def test_dense_prediction_reduces_newton_iterations(solver_mutable):
+def test_dense_prediction_reduces_newton_iterations(solver_mutable, system):
     """A live predictor strictly beats carried increments.
 
     Guards against the predictor silently compiling to a no-op
@@ -485,7 +486,7 @@ def test_dense_prediction_reduces_newton_iterations(solver_mutable):
             "y": np.array([0.97]),
             "z": np.array([1.02]),
         },
-        parameters={"rho": np.array([28.0])},
+        parameters={**swept_defaults(system), "rho": np.full(2, 28.0)},
         grid_type="verbatim",
         duration=0.1,
         save_every=0.025,
