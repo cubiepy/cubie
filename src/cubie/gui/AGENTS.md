@@ -5,7 +5,7 @@
 ## Purpose
 Qt editor dialogs for a `SymbolicODE`'s parameters and initial states.
 `ParametersEditor` and `StatesEditor` edit a live `SymbolicODE`; `PreParseEditor` edits raw dicts
-*before* a `SymbolicODE` is built, so its result can feed `parse_input()`. The Qt binding is
+*before* a `SymbolicODE` is built, so its result can feed `parse_system()`. The Qt binding is
 abstracted through `qtpy` (PyQt6/PyQt5/PySide6/PySide2).
 
 ## Key Files

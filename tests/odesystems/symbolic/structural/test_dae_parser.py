@@ -23,10 +23,7 @@ from cubie.odesystems.symbolic.structural.errors import (
     ExtraVariablesSystemError,
     InvalidSystemError,
 )
-from cubie.odesystems.symbolic.symbolicODE import (
-    SymbolicODE,
-    create_ODE_system,
-)
+from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     sweep,
     parse_input_swept,
@@ -1059,21 +1056,6 @@ def test_reduction_reads_first_and_second_driver_derivatives(system):
         + _driver_derivative(system.equations, 2)
     )
     assert equivalent(_reduced_dz(system), expected)
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", [DRIVER_DERIVATIVE_SYSTEM], indirect=True
-)
-def test_rebuilt_system_keeps_driver_derivatives(system, precision):
-    rebuilt = SymbolicODE(
-        equations=system.equations,
-        all_indexed_bases=system.indices,
-        precision=precision,
-    )
-    assert rebuilt.equations.driver_derivatives == (
-        system.equations.driver_derivatives
-    )
-    assert equivalent(_reduced_dz(rebuilt), _reduced_dz(system))
 
 
 @pytest.mark.parametrize(

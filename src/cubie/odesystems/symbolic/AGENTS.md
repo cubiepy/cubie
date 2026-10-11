@@ -14,7 +14,7 @@ hashing, printing) runs on IR nodes. This top level holds the user-facing system
 utilities (hashing, the reserved codegen prefix). Equation parsing lives in `parsing/`,
 and every parsed system runs through the structural simplification in `structural/`;
 the CUDA source emitters live in `codegen/`. `SymbolicODE` orchestrates both: parse via
-`parsing.parse_input`, generate
+`parsing.parse_system`, specialise the result for the swept parameters, generate
 `dxdt`/`observables`/solver-helper factories via `codegen`, write them to a per-system module on
 disk, and reload the compiled factories. As the sole concrete `BaseODE` subclass it is the main
 entry point for defining systems — users construct one via `create_ODE_system()` (string / SymPy
@@ -73,7 +73,10 @@ an identity row the plain form.
 Fixed parameter values are substituted into the equations as IR literals at the start
 of code generation (`parsing/parsed_system.py`). Generated source never names a fixed
 parameter, and device functions capture no values. Swept parameters stay symbols and are
-read from the parameters array. When the swept names or fixed values change,
+read from the parameters array. `SymbolicODE(parsed_system, precision,
+swept_parameters=...)` specialises once, for the sweep it is given; `create_ODE_system`,
+`SymbolicODE.create` and `load_cellml_model` pass `swept_parameters` through. When the
+swept names or fixed values change,
 `SymbolicODE._update` rebuilds the equations from `SymbolicODE._parsed_system`:
 substitution, folding, structural simplification and tearing, which can change the state
 layout and mass matrix. All of it goes through one `update_compile_settings`. A live

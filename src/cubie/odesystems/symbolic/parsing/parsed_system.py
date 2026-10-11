@@ -3,14 +3,10 @@
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import attrs
-import sympy as sp
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.parsing.assemble import assemble_simplified
-from cubie.odesystems.symbolic.parsing.normalise import (
-    NormalisedSystem,
-    normalise_input,
-)
+from cubie.odesystems.symbolic.parsing.normalise import NormalisedSystem
 from cubie.odesystems.symbolic.sym_utils import RESERVED_CODEGEN_PREFIX
 
 
@@ -76,91 +72,6 @@ class ParsedSystem:
                     f"Name '{name}' is reserved: user symbols cannot "
                     f"start with '{RESERVED_CODEGEN_PREFIX}'."
                 )
-
-    @classmethod
-    def from_parsed_equations(
-        cls,
-        equations,
-        index_map,
-        user_functions: Optional[Dict[str, Callable]] = None,
-        user_function_derivatives: Optional[Dict[str, Callable]] = None,
-    ) -> "ParsedSystem":
-        """Build a checkpoint from pre-parsed equation products.
-
-        Parameters
-        ----------
-        equations
-            The system's :class:`~.parser.ParsedEquations`.
-        index_map
-            The system's :class:`~..indexedbasemaps.IndexedBases`.
-        user_functions, user_function_derivatives
-            Equation callables and their analytic derivative helpers.
-        """
-
-        states = {
-            str(name): float(value)
-            for name, value in index_map.state_values.items()
-        }
-        parameters = {
-            str(name): float(value)
-            for name, value in index_map.parameter_values.items()
-        }
-        observables = list(index_map.observable_names)
-        driver_defaults = {
-            str(name): value
-            for name, value in index_map.drivers.default_values.items()
-        }
-        driver_names = list(driver_defaults)
-        known_symbol_map = {
-            name: sp.Symbol(name, real=True)
-            for name in list(parameters) + driver_names
-        }
-        unknown_names = set(states) | set(observables)
-        driver_derivatives = equations.driver_derivatives
-        # Treat the driver derivatives the reduced equations read as
-        # known symbols.
-        known_with_derivatives = {
-            **known_symbol_map,
-            **{
-                symbol.name: sp.Symbol(symbol.name, real=True)
-                for symbol in driver_derivatives
-            },
-        }
-        normalised = normalise_input(
-            list(equations.ordered),
-            unknown_names,
-            known_with_derivatives,
-            user_functions,
-            user_function_derivatives,
-            False,
-            set(states),
-        )
-        normalised.derivative_names.update(equations.derivative_names)
-        # Register lower orders first, so that registry.derivative
-        # finds each lower-order symbol already registered.
-        registry = normalised.registry
-        for symbol, (driver, order) in sorted(
-            driver_derivatives.items(), key=lambda item: item[1][1]
-        ):
-            lower = driver
-            for _ in range(order - 1):
-                lower = registry.derivative(lower)
-            registry.register(lower, symbol)
-        return cls(
-            normalised=normalised,
-            states=states,
-            observables=observables,
-            parameters=parameters,
-            driver_names=driver_names,
-            driver_dict=driver_defaults or None,
-            known_symbol_map=known_symbol_map,
-            user_functions=user_functions,
-            user_function_derivatives=user_function_derivatives,
-            state_units=index_map.states.units or None,
-            parameter_units=index_map.parameters.units or None,
-            observable_units=index_map.observables.units or None,
-            driver_units=index_map.drivers.units or None,
-        )
 
     def specialise(
         self,
