@@ -82,10 +82,10 @@ into the code at a fixed value.
 - With `fix_constant_parameters`, we compile in the rows of an array that hold one value.
 - `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.
 
-`Solver.prepare_grid_arrays` gives a dict entry with one value its own row, holding that
-value for every run, so a solve of its arrays with `fix_constant_parameters=True` compiles
-it in. `Solver.compile(parameters)` compiles the kernel that a solve with the same
-parameters would use.
+In `Solver.prepare_grid_arrays` we give a dict entry with one value its own row, holding
+that value for every run. Pass `fix_constant_parameters=True` to the solve to compile it
+in. `Solver.compile(parameters)` compiles the kernel that a solve with the same parameters
+would use.
 
 Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
 or a fixed value rebuilds the system and kernel.
