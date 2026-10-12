@@ -364,9 +364,8 @@ def system(request, solver_settings_override, precision):
 
     We sweep the first two parameters, the ones ``simple_parameters``
     gives two values each, so every solve and device test on the
-    session system compiles the same kernel. Give an override a
-    ``system_sweep`` to sweep other names for its case, as the tests
-    that study fixed parameters do.
+    session system compiles the same kernel. To use a different set of
+    swept parameters, parametrize ``system_sweep`` with their names.
 
     Usage:
     @pytest.mark.parametrize("solver_settings_override",
