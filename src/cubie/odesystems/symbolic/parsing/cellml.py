@@ -226,9 +226,15 @@ def load_cellml_model(
         If True, launch the parameter and initial-value editor GUI
         before parsing. Default is False.
     swept_parameters : iterable of str, optional
-        Names of the parameters to read from the parameters array, in
-        row order. We compile every other parameter in at its default.
-        Setting them here builds the system once, for that sweep.
+        Names of the parameters that will vary in each batch/sweep.
+        Parameters not listed here will be treated as constant across
+        every run. Optional, if not given the system will be built
+        assuming that all parameters are constant. The names given at
+        this level are used when we first specialise the system, but
+        every time you call solve() on a system the swept parameters
+        will change to match the set you give. Setting them here just
+        means that the system will be ready to go for your first solve,
+        instead of taking a few ms to specialise.
 
     Returns
     -------
