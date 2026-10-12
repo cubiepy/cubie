@@ -21,9 +21,9 @@ compile in for every other parameter:
   carries.
 - With ``fix_constant_parameters``, an array's rows that hold one value
   are fixed instead of swept.
-- ``None``, an empty dict or an empty array keeps the current sweep,
-  runs it at its defaults and fixes every other parameter at its
-  default.
+- ``None``, an empty dict or a one-dimensional empty array keeps the
+  current sweep, runs it at its defaults and fixes every other
+  parameter at its default.
 
 Arrays of any other height raise. Once the swept names are set on the
 system, ``BatchInputHandler.__call__`` builds the arrays from three
@@ -668,9 +668,10 @@ class BatchInputHandler:
         sweep. A :class:`ParameterBatch` applies its own sweep and
         fixed values. With ``fix_constant_parameters``, a host array's
         rows that hold one value are fixed instead. ``None``, an empty
-        dict or an empty array keeps the current sweep, whose rows
-        :meth:`__call__` fills with defaults. Every parameter that is
-        neither swept nor given a value here is fixed at its default.
+        dict or a one-dimensional empty array keeps the current sweep,
+        whose rows :meth:`__call__` fills with defaults. Every
+        parameter that is neither swept nor given a value here is
+        fixed at its default.
 
         Parameters
         ----------

@@ -69,9 +69,11 @@ into the code at a fixed value.
 - Dict: entries with several values are swept, in the system's parameter order. Entries
   with one value are fixed at it, and parameters left out are fixed at their defaults.
 - Array with a row per parameter: every row is swept.
-- Array with a row per swept parameter: the swept and fixed parameters stay as they are.
+- Array with a row per swept parameter: the sweep stays as it is, and every other
+  parameter is fixed at its default.
 - `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
-- `None`, `{}` or an empty array: the sweep stays as it is, its rows hold defaults, and
+- `ParameterBatch` (from `Solver.build_grid`): the sweep and fixed values it carries.
+- `None`, `{}` or a 1-D empty array: the sweep stays as it is, its rows hold defaults, and
   every other parameter is fixed at its default.
 
 `Solver.compile()` without parameters compiles the kernel a solve without parameters
