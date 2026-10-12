@@ -72,7 +72,8 @@ into the code at a fixed value.
 - Array with a row per swept parameter: the sweep stays as it is, and every other
   parameter is fixed at its default.
 - `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
-- `ParameterBatch` (from `Solver.build_grid`): the sweep and fixed values it carries.
+- `ParameterBatch` (from `Solver.build_grid`): we compile in the sweep and fixed values
+  the batch carries.
 - `None`, `{}` or a 1-D empty array: the sweep stays as it is, its rows hold defaults, and
   every other parameter is fixed at its default.
 
