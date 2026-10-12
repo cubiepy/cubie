@@ -287,12 +287,11 @@ def test_cache_invalidated_on_file_change(
 
     # Verify cache becomes invalid (file hash changed)
     from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
-    import numpy as np
 
     cache = CellMLCache("basic_ode", str(tmp_cellml))
-    # Compute args_hash for default arguments (precision=np.float32)
+    # Compute args_hash for default arguments
     args_hash = cache.compute_cache_key(
-        None, np.float32, "basic_ode", fix_singularities=False
+        None, "basic_ode", fix_singularities=False
     )
     assert not cache.cache_valid(args_hash), (
         "Cache should be invalid after file change"
@@ -306,7 +305,7 @@ def test_cache_invalidated_on_file_change(
     # Verify new cache is valid (need fresh CellMLCache for updated file hash)
     cache2 = CellMLCache("basic_ode", str(tmp_cellml))
     args_hash2 = cache2.compute_cache_key(
-        None, np.float32, "basic_ode", fix_singularities=False
+        None, "basic_ode", fix_singularities=False
     )
     assert cache2.cache_valid(args_hash2), (
         "Cache should be valid after re-parse"
@@ -422,7 +421,7 @@ def test_cache_hit_builds_the_requested_sweep(
     )
     cache = CellMLCache("basic_ode", path)
     args_hash = cache.compute_cache_key(
-        None, np.float64, "basic_ode", fix_singularities=False
+        None, "basic_ode", fix_singularities=False
     )
     assert cache.cache_valid(args_hash)
 

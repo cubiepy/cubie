@@ -3,7 +3,6 @@
 
 import pytest
 from pathlib import Path
-from numpy import float64
 
 from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
 
@@ -100,24 +99,24 @@ def test_serialize_args_consistent(tmp_cellml_file):
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
 
     # Test with no observables
-    args1 = cache._serialize_args(None, float64, "test")
-    args2 = cache._serialize_args(None, float64, "test")
+    args1 = cache._serialize_args(None, "test")
+    args2 = cache._serialize_args(None, "test")
     assert args1 == args2
 
     # Test with value dicts - order should be normalized
     values1 = {"param1": 1.0, "param2": 2.0, "param3": 3.0}
     values2 = {"param3": 3.0, "param1": 1.0, "param2": 2.0}
     args3 = cache._serialize_args(
-        None, float64, "test", parameter_values=values1
+        None, "test", parameter_values=values1
     )
     args4 = cache._serialize_args(
-        None, float64, "test", parameter_values=values2
+        None, "test", parameter_values=values2
     )
     assert args3 == args4  # Should be same after sorting
 
     # Test with observables
     obs = ["obs1", "obs2"]
-    args5 = cache._serialize_args(obs, float64, "test")
+    args5 = cache._serialize_args(obs, "test")
     assert "obs1" in args5
     assert "obs2" in args5
 
@@ -131,19 +130,19 @@ def test_compute_cache_key_different_args(tmp_cellml_file):
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
 
     # Different parameter values should give different keys
-    key1 = cache.compute_cache_key(None, float64, "test")
+    key1 = cache.compute_cache_key(None, "test")
     key2 = cache.compute_cache_key(
-        None, float64, "test", parameter_values={"param1": 1.0}
+        None, "test", parameter_values={"param1": 1.0}
     )
     assert key1 != key2
 
     # Different observables should give different keys
-    key3 = cache.compute_cache_key(["obs1"], float64, "test")
+    key3 = cache.compute_cache_key(["obs1"], "test")
     assert key1 != key3
     assert key2 != key3
 
     # Same args should give same key
-    key4 = cache.compute_cache_key(None, float64, "test")
+    key4 = cache.compute_cache_key(None, "test")
     assert key1 == key4
 
     # Verify key is 16 characters (truncated hash)
@@ -155,17 +154,17 @@ def test_compute_cache_key_includes_edited_values(tmp_cellml_file):
 
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
     base = cache.compute_cache_key(
-        None, float64, "test",
+        None, "test",
         parameter_values={"p": 2.0},
         initial_values={"x": 3.0},
     )
     changed_parameter = cache.compute_cache_key(
-        None, float64, "test",
+        None, "test",
         parameter_values={"p": 4.0},
         initial_values={"x": 3.0},
     )
     changed_initial = cache.compute_cache_key(
-        None, float64, "test",
+        None, "test",
         parameter_values={"p": 2.0},
         initial_values={"x": 4.0},
     )
@@ -180,10 +179,10 @@ def test_compute_cache_key_includes_parameter_dict_values(
 
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
     first = cache.compute_cache_key(
-        None, float64, "test", parameter_values={"p": 1.0}
+        None, "test", parameter_values={"p": 1.0}
     )
     second = cache.compute_cache_key(
-        None, float64, "test", parameter_values={"p": 2.0}
+        None, "test", parameter_values={"p": 2.0}
     )
     assert first != second
 
@@ -195,7 +194,7 @@ def test_cache_valid_missing_file(basic_cellml_path, isolated_cache_root):
     is present in the expected location.
     """
     cache = CellMLCache(model_name="basic_ode", cellml_path=basic_cellml_path)
-    args_hash = cache.compute_cache_key(None, float64, "basic_ode")
+    args_hash = cache.compute_cache_key(None, "basic_ode")
 
     # Cache file should not exist yet
     assert not cache.manifest_file.exists()
@@ -209,7 +208,7 @@ def test_cache_valid_hash_mismatch(tmp_cellml_file, isolated_cache_root):
     modified after cache creation.
     """
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
-    args_hash = cache.compute_cache_key(None, float64, "test")
+    args_hash = cache.compute_cache_key(None, "test")
 
     # Create manifest with wrong file hash
     cache.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -233,7 +232,7 @@ def test_load_from_cache_returns_none_invalid(
     returns None rather than raising an exception.
     """
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
-    args_hash = cache.compute_cache_key(None, float64, "test")
+    args_hash = cache.compute_cache_key(None, "test")
 
     # No cache file exists
     assert cache.load_from_cache(args_hash) is None
@@ -260,7 +259,7 @@ def test_save_and_load_roundtrip(tmp_cellml_file, isolated_cache_root):
     from sympy import symbols
 
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
-    args_hash = cache.compute_cache_key(None, float64, "test")
+    args_hash = cache.compute_cache_key(None, "test")
 
     # A dict stands in for the ParsedSystem.
     x = symbols('x')
@@ -302,7 +301,7 @@ def test_corrupted_cache_returns_none(tmp_cellml_file, isolated_cache_root):
     None rather than raising exceptions that would crash the parsing.
     """
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
-    args_hash = cache.compute_cache_key(None, float64, "test")
+    args_hash = cache.compute_cache_key(None, "test")
 
     # Create cache directory
     cache.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -340,12 +339,12 @@ def test_lru_eviction_on_sixth_entry(tmp_cellml_file, isolated_cache_root):
 
     # Create 6 different configurations
     configs = [
-        (None, None, float64, "test"),
-        ({"param1": 1.0}, None, float64, "test"),
-        (None, ["obs1"], float64, "test"),
-        ({"param1": 1.0}, ["obs1"], float64, "test"),
-        ({"param1": 1.0, "param2": 2.0}, None, float64, "test"),
-        (None, ["obs1", "obs2"], float64, "test"),
+        (None, None, "test"),
+        ({"param1": 1.0}, None, "test"),
+        (None, ["obs1"], "test"),
+        ({"param1": 1.0}, ["obs1"], "test"),
+        ({"param1": 1.0, "param2": 2.0}, None, "test"),
+        (None, ["obs1", "obs2"], "test"),
     ]
 
     # Create minimal test data
@@ -354,9 +353,9 @@ def test_lru_eviction_on_sixth_entry(tmp_cellml_file, isolated_cache_root):
 
     # Save all 6 configs
     hashes = []
-    for params, obs, prec, name in configs:
+    for params, obs, name in configs:
         args_hash = cache.compute_cache_key(
-            obs, prec, name, parameter_values=params
+            obs, name, parameter_values=params
         )
         hashes.append(args_hash)
         cache.save_to_cache(
@@ -394,7 +393,7 @@ def test_cache_hit_with_different_params(tmp_cellml_file, isolated_cache_root):
     cache = CellMLCache(model_name="test", cellml_path=tmp_cellml_file)
 
     # Save config 1: no params/obs
-    hash1 = cache.compute_cache_key(None, float64, "test")
+    hash1 = cache.compute_cache_key(None, "test")
     cache.save_to_cache(
         args_hash=hash1,
         parsed_system={"id": "hash1"},
@@ -403,7 +402,7 @@ def test_cache_hit_with_different_params(tmp_cellml_file, isolated_cache_root):
 
     # Save config 2: with params
     hash2 = cache.compute_cache_key(
-        None, float64, "test", parameter_values={"param1": 1.0}
+        None, "test", parameter_values={"param1": 1.0}
     )
     cache.save_to_cache(
         args_hash=hash2,
@@ -442,9 +441,9 @@ def test_file_hash_change_invalidates_all_configs(
     mock_parsed_system = {"states": [x]}
 
     # Save two different configs
-    hash1 = cache.compute_cache_key(None, float64, "test")
+    hash1 = cache.compute_cache_key(None, "test")
     hash2 = cache.compute_cache_key(
-        None, float64, "test", parameter_values={"param1": 1.0}
+        None, "test", parameter_values={"param1": 1.0}
     )
 
     for h in [hash1, hash2]:
@@ -476,13 +475,6 @@ def isolated_cache(basic_cellml_path, tmp_path):
     cache.cache_dir = tmp_path / "cache"
     cache.manifest_file = cache.cache_dir / "manifest.json"
     return cache
-
-
-def test_compute_cache_key_with_none_precision(isolated_cache):
-    """A None precision serialises without error."""
-    key = isolated_cache.compute_cache_key(None, None, "model")
-    assert isinstance(key, str)
-    assert len(key) == 16
 
 
 def test_load_manifest_recovers_from_corrupt_json(isolated_cache):

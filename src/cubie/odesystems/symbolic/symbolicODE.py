@@ -66,6 +66,7 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
+from cubie.odesystems.ODEData import sorted_swept_names
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -159,8 +160,8 @@ def create_ODE_system(
     state_priority: Optional[dict[str, float]] = None,
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
-    operation_ordering: str = operation_ordering_default(),
-    swept_parameters: Iterable[str] = (),
+    operation_ordering: Optional[str] = None,
+    swept_parameters: Optional[Iterable[str]] = None,
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
 
@@ -199,8 +200,8 @@ def create_ODE_system(
         callable takes the function's arguments followed by ``n``
         argument indices.
     name
-        Identifier used for generated files. Defaults to the hash of the system
-        definition.
+        Identifier used for generated files. Defaults to ``unnamed_``
+        and the start of a hash of the system's equations.
     precision
         Target floating-point precision used when compiling the system.
     strict
@@ -279,10 +280,10 @@ class SymbolicODE(BaseODE):
         parsed_system: ParsedSystem,
         precision: PrecisionDType,
         name: Optional[str] = None,
-        operation_ordering: str = operation_ordering_default(),
-        swept_parameters: Iterable[str] = (),
+        operation_ordering: Optional[str] = None,
+        swept_parameters: Optional[Iterable[str]] = None,
     ):
-        """Specialise a parsed system for a sweep and build it.
+        """Specialise a parsed system for a set of swept parameters.
 
         Parameters
         ----------
@@ -291,16 +292,20 @@ class SymbolicODE(BaseODE):
         precision
             Target floating-point precision used for generated kernels.
         name
-            Identifier used for generated modules. Defaults to the hash
-            of the specialised system.
+            Identifier used for generated modules. Defaults to
+            ``unnamed_`` and the start of a hash of the parsed system,
+            which does not depend on the swept parameters.
         operation_ordering
-            Generated-operation ordering policy.
+            Generated-operation ordering policy. Defaults to
+            ``CUBIE_OPERATION_ORDERING`` (``liveness_auto`` when unset).
         swept_parameters
             Names of the parameters to read from the parameters array,
             in row order. We compile every other parameter in at its
             default.
         """
-        swept_parameters = tuple(swept_parameters)
+        if operation_ordering is None:
+            operation_ordering = operation_ordering_default()
+        swept_parameters = sorted_swept_names(swept_parameters or ())
         (
             all_indexed_bases,
             self.all_symbols,
@@ -316,7 +321,7 @@ class SymbolicODE(BaseODE):
         derived_mass_matrix = equations.mass_matrix
 
         if name is None:
-            name = fn_hash
+            name = f"unnamed_{parsed_system.definition_hash[:8]}"
 
         self.name = name
 
@@ -390,8 +395,8 @@ class SymbolicODE(BaseODE):
         state_priority: Optional[dict[str, float]] = None,
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
-        operation_ordering: str = operation_ordering_default(),
-        swept_parameters: Iterable[str] = (),
+        operation_ordering: Optional[str] = None,
+        swept_parameters: Optional[Iterable[str]] = None,
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
 
@@ -423,8 +428,9 @@ class SymbolicODE(BaseODE):
             derivatives; the order-``n`` callable takes the function's
             arguments followed by ``n`` argument indices.
         name
-            Identifier used for generated files. Defaults to the hash of the
-            system definition.
+            Identifier used for generated files. Defaults to
+            ``unnamed_`` and the start of a hash of the system's
+            equations.
         precision
             Target floating-point precision used when compiling the system.
         strict
@@ -656,7 +662,7 @@ class SymbolicODE(BaseODE):
             The recognised names.
         """
         settings = self.compile_settings
-        swept = tuple(
+        swept = sorted_swept_names(
             updates.get("swept_parameters", settings.swept_parameters)
         )
         fixed = dict(

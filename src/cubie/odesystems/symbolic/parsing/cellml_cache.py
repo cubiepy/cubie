@@ -89,7 +89,6 @@ class CellMLCache:
     def _serialize_args(
         self,
         observables: Optional[Iterable[str]],
-        precision,
         name: str,
         fix_singularities: bool = True,
         voltage_variable: Optional[str] = None,
@@ -97,19 +96,8 @@ class CellMLCache:
         initial_values: Optional[Mapping[str, Any]] = None,
     ) -> str:
         """Return a stable JSON cache-key payload."""
-        # Handle precision consistently - convert numpy dtype to string name
-        if precision is not None:
-            precision_str = (
-                precision.__name__
-                if hasattr(precision, "__name__")
-                else str(precision)
-            )
-        else:
-            precision_str = "None"
-
         args_dict = {
             "observables": sorted(observables) if observables else None,
-            "precision": precision_str,
             "name": name,
             "fix_singularities": fix_singularities,
             "voltage_variable": voltage_variable,
@@ -135,7 +123,6 @@ class CellMLCache:
     def compute_cache_key(
         self,
         observables: Optional[Iterable[str]],
-        precision,
         name: str,
         fix_singularities: bool = True,
         voltage_variable: Optional[str] = None,
@@ -144,11 +131,13 @@ class CellMLCache:
     ) -> str:
         """Compute cache key from file content hash and argument hash.
 
-        Returns a short hash (first 16 chars) for use in filename.
+        Returns a short hash (first 16 chars) for use in filename. We
+        leave precision out of the key because the cached parsed system
+        is the same at every precision.
         """
         file_hash = self.get_cellml_hash()
         args_str = self._serialize_args(
-            observables, precision, name,
+            observables, name,
             fix_singularities=fix_singularities,
             voltage_variable=voltage_variable,
             parameter_values=parameter_values,

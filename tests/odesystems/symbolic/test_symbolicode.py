@@ -642,25 +642,28 @@ class TestSweptParameters:
     def test_created_sweep_matches_a_later_sweep(self, precision):
         """Creating with a sweep builds what sweeping afterwards builds."""
         definition = dict(
-            dxdt=["dx = -k * x + c"],
+            dxdt=["dx = -k * x + c * b"],
             states={"x": 1.0},
-            parameters={"k": 0.1, "c": 0.5},
+            parameters={"k": 0.1, "c": 0.5, "b": 2.0},
             precision=precision,
         )
+        names = ["k", "c"]
         created = create_ODE_system(
-            **definition,
-            name="created_with_sweep",
-            swept_parameters=iter(["k"]),
+            **definition, swept_parameters=iter(names)
         )
-        later = create_ODE_system(**definition, name="swept_later")
-        sweep(later, ["k"])
+        later = create_ODE_system(**definition)
+        sweep(later, names)
 
-        assert created.swept_parameters == ("k",)
-        assert later.swept_parameters == ("k",)
+        assert created.swept_parameters == tuple(sorted(names))
+        assert later.swept_parameters == created.swept_parameters
+        assert created.indices.parameter_names == list(
+            created.swept_parameters
+        )
         assert created.fn_hash == later.fn_hash
         assert (
             created.fixed_parameter_values == later.fixed_parameter_values
         )
+        assert created.name == later.name
 
     def test_sweeping_an_unknown_name_raises(self, metadata_ode):
         """Sweeping an unknown parameter raises KeyError."""
