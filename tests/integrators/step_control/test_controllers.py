@@ -60,7 +60,12 @@ class TestControllers:
 
     @pytest.mark.parametrize(
         "flag, value",
-        [("afn", False), ("lto", False), ("lineinfo", True)],
+        [
+            ("afn", False),
+            ("reassoc", True),
+            ("lto", False),
+            ("lineinfo", True),
+        ],
     )
     def test_jit_flag_updates_reach_compile_settings(
         self, step_controller, flag, value

@@ -193,6 +193,7 @@ class SolverSettings(_CubieConfigBase):
     contract: Optional[bool] = None
     arcp: Optional[bool] = None
     afn: Optional[bool] = None
+    reassoc: Optional[bool] = None
     ftz: Optional[bool] = None
     lto: Optional[bool] = None
 

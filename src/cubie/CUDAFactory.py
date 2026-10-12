@@ -403,6 +403,9 @@ class JITFlags(FrozenSettings):
     afn
         Allow approximate transcendental functions (``LG2``/``EX2``
         hardware paths for ``log``/``exp``/``pow``).
+    reassoc
+        Allow reassociation of floating-point operations, so the
+        compiler may regroup and fold chains of adds and multiplies.
     ftz
         Flush denormal float results and inputs to zero.
     lto
@@ -417,6 +420,7 @@ class JITFlags(FrozenSettings):
     contract: bool = _jit_flag_field("contract")
     arcp: bool = _jit_flag_field("arcp")
     afn: bool = _jit_flag_field("afn")
+    reassoc: bool = _jit_flag_field("reassoc")
     ftz: bool = _jit_flag_field("ftz")
     lto: bool = _jit_flag_field("lto")
 
@@ -428,6 +432,7 @@ class JITFlags(FrozenSettings):
             "contract": self.contract,
             "arcp": self.arcp,
             "afn": self.afn,
+            "reassoc": self.reassoc,
             "ftz": self.ftz,
         }
         return {name for name, on in enabled.items() if on}
