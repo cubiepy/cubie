@@ -849,10 +849,13 @@ def parameter_solve(solver, system, solver_settings, parameter_batch):
         params = parameter_batch[[0, 1, 2]]
         if form == "device":
             params = cuda.to_device(params)
-    elif form == "build_grid":
-        inits, params = solver.build_grid(None, as_dict)
+    elif form == "prepare_grid_arrays":
+        # The single value gets a row of its own, and the solve compiles
+        # it in again, as the user guide shows.
+        inits, params = solver.prepare_grid_arrays(None, as_dict)
         record["swept_before"] = solver.swept_parameters
-        record["rows"] = params.values.shape[0]
+        record["rows"] = params.shape[0]
+        options = {"fix_constant_parameters": True}
     elif form == "compile":
         solver.compile(parameters=as_dict)
         record["swept_before"] = solver.swept_parameters

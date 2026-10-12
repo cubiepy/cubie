@@ -599,7 +599,7 @@ def run_optimization(
         return OptimizeResult(
             launches=launches, best=None, applied_settings={}
         )
-    inits, params = parent.build_grid(
+    inits, params = parent._prepare_inputs(
         initial_values,
         parameters,
         grid_type=grid_type,

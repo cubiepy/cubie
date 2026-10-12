@@ -163,7 +163,7 @@ def build_chain(n, consts_per_eq, n_params=2):
 
 def grid_param(name, low, high):
     def grid(solver, n_runs):
-        return solver.build_grid(
+        return solver.prepare_grid_arrays(
             parameters={name: np.linspace(low, high, n_runs)}
         )
 
@@ -178,17 +178,16 @@ def grid_fabbri(solver, n_runs):
     )
     # Evenly spaced mesh indices keep the whole Iso range for any count.
     index = np.linspace(0, side * side - 1, n_runs).round().astype(int)
-    return solver.build_grid(
+    return solver.prepare_grid_arrays(
         parameters={
             FABBRI_PARAMETERS[0]: ach.ravel()[index],
             FABBRI_PARAMETERS[1]: iso.ravel()[index],
-            **FABBRI_FIXED,
         }
     )
 
 
 def grid_chain(solver, n_runs):
-    return solver.build_grid(
+    return solver.prepare_grid_arrays(
         parameters={
             "p0": np.linspace(0.9, 1.1, n_runs),
             "p1": np.linspace(1.1, 0.9, n_runs),
@@ -833,8 +832,7 @@ def run_config(
                     deepcopy(system), system_name, algo_name, spec,
                     duration,
                 )
-                inits, batch = SYSTEMS[system_name]["grid"](probe, n_runs)
-                params = batch.values
+                inits, params = SYSTEMS[system_name]["grid"](probe, n_runs)
                 probe.close()
             _build_arm(arm, system, system_name, algo_name, duration)
             _arm_facts(arm, blocksizes, started)

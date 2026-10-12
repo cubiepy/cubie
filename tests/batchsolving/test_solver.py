@@ -330,7 +330,7 @@ def test_compile_then_solve(
     driver_settings,
 ):
     """A compiled solver produces a valid batch result."""
-    expected_inits, expected_params = solver_mutable.build_grid(
+    expected_inits, expected_params = solver_mutable.prepare_grid_arrays(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         grid_type="combinatorial",
@@ -356,7 +356,7 @@ def test_compile_then_solve(
     )
     assert (
         kernel.input_arrays.device_parameters.shape
-        == expected_params.values.shape
+        == expected_params.shape
     )
     assert _batch_bytes(kernel) > 0
     assert np.all(np.isfinite(result.state))
@@ -479,10 +479,9 @@ def test_compile_and_solve_device_input_layouts(
 ):
     """Device layouts preserve results across compilation and sizing."""
     solver = solver_mutable
-    initial, batch = solver.build_grid(
+    initial, parameters = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters
     )
-    parameters = batch.values
     solver.compile(parameters=simple_parameters, drivers=driver_settings)
     for runs in (4, 8):
         columns = np.arange(runs) % initial.shape[1]
@@ -1613,18 +1612,17 @@ def test_time_precision_with_float64_states(solver_mutable):
 
 
 # ============================================================================
-# build_grid() Tests
+# prepare_grid_arrays() Tests
 # ============================================================================
 
 
-def test_build_grid_returns_correct_shape(
+def test_prepare_grid_arrays_returns_correct_shape(
     solver, simple_initial_values, simple_parameters
 ):
-    """Test that build_grid returns arrays with correct shapes."""
-    inits, batch = solver.build_grid(
+    """Test that prepare_grid_arrays returns arrays with correct shapes."""
+    inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="verbatim"
     )
-    params = batch.values
 
     assert isinstance(inits, np.ndarray)
     assert isinstance(params, np.ndarray)
@@ -1636,14 +1634,13 @@ def test_build_grid_returns_correct_shape(
     assert inits.shape[1] == params.shape[1]
 
 
-def test_build_grid_combinatorial(
+def test_prepare_grid_arrays_combinatorial(
     solver, simple_initial_values, simple_parameters
 ):
-    """Test that build_grid with combinatorial creates product grid."""
-    inits, batch = solver.build_grid(
+    """Test that a combinatorial prepare_grid_arrays builds a product."""
+    inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
-    params = batch.values
 
     # Combinatorial produces more runs than verbatim
     n_init_values = len(list(simple_initial_values.values())[0])
@@ -1653,14 +1650,16 @@ def test_build_grid_combinatorial(
     assert params.shape[1] >= n_param_values
 
 
-def test_build_grid_precision(
+def test_prepare_grid_arrays_precision(
     solver, simple_initial_values, simple_parameters
 ):
-    """Test that build_grid returns arrays with correct precision."""
-    inits, batch = solver.build_grid(simple_initial_values, simple_parameters)
+    """Test that prepare_grid_arrays returns arrays with correct precision."""
+    inits, params = solver.prepare_grid_arrays(
+        simple_initial_values, simple_parameters
+    )
 
     assert inits.dtype == solver.precision
-    assert batch.values.dtype == solver.precision
+    assert params.dtype == solver.precision
 
 
 # ============================================================================
@@ -1683,7 +1682,7 @@ def test_solve_array_path_matches_dict_path(
     )
 
     # Build grid and solve with arrays
-    inits, params = solver_mutable.build_grid(
+    inits, params = solver_mutable.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="verbatim"
     )
     result_array = solver_mutable.solve(
@@ -2942,10 +2941,10 @@ def test_timing_events_kept_while_timing_is_on(
 
 def _prepare_batch(solver, inits, params):
     """Queue a batch's uploads and allocations without launching it."""
-    inits, batch = solver.build_grid(inits, params)
+    inits, params = solver.prepare_grid_arrays(inits, params)
     kernel = solver.kernel
     kernel._prepare_batch(
-        inits, batch.values, 0.05, 0.0, 0.0, kernel.stream
+        inits, params, 0.05, 0.0, 0.0, kernel.stream
     )
     return kernel.input_arrays
 
@@ -3168,7 +3167,7 @@ PARAMETER_FORM_SWEEPS = {
     "fixed_rows": (0, 1),
     "swept_rows": (0, 1, 2),
     "device": (0, 1, 2),
-    "build_grid": (0, 1),
+    "prepare_grid_arrays": (0, 1),
     "compile": (0, 1),
 }
 PARAMETER_FORMS = [
@@ -3250,16 +3249,25 @@ def test_solve_leaves_defaults_and_the_system_current(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [{"parameter_input": "build_grid"}, {"parameter_input": "compile"}],
+    [{"parameter_input": "compile"}],
     indirect=True,
 )
-def test_prepared_parameters_solve_without_a_change(parameter_solve, solver):
-    """build_grid and compile set the sweep the solve then uses."""
+def test_compiled_parameters_solve_without_a_change(parameter_solve, solver):
+    """compile sets the sweep and kernel the solve then uses."""
     assert solver.swept_parameters == parameter_solve["swept_before"]
-    if "rows" in parameter_solve:
-        assert parameter_solve["rows"] == len(solver.swept_parameters)
-    if "kernel_before" in parameter_solve:
-        assert solver.kernel.kernel is parameter_solve["kernel_before"]
+    assert solver.kernel.kernel is parameter_solve["kernel_before"]
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override",
+    [{"parameter_input": "prepare_grid_arrays"}],
+    indirect=True,
+)
+def test_grid_arrays_give_single_values_a_row(parameter_solve, system):
+    """prepare_grid_arrays sweeps every given parameter, one row each."""
+    names = list(system.parameters.names)
+    assert parameter_solve["swept_before"] == tuple(names[:3])
+    assert parameter_solve["rows"] == len(parameter_solve["swept_before"])
 
 
 def test_parameter_changes_between_solves(
@@ -3269,11 +3277,12 @@ def test_parameter_changes_between_solves(
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.compile_settings.parameter_values)
-    solver.build_grid(
+    _, params = solver.prepare_grid_arrays(
         None, {names[0]: simple_parameters[names[0]], names[1]: 0.75}
     )
-    assert solver.fixed_parameter_values[names[1]] == 0.75
-    solver.build_grid(None, None)
+    assert solver.swept_parameters == (names[0], names[1])
+    assert np.all(params[1] == system.precision(0.75))
+    solver.prepare_grid_arrays(None, None)
     assert solver.swept_parameters == ()
     assert solver.fixed_parameter_values == defaults
 

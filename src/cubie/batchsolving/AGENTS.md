@@ -39,13 +39,21 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ## Data flow
 `Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
-effective timing → `input_handler.split_parameters` picks the swept parameters →
-`set_swept_parameters` sets them on the system → `input_handler(...)` builds
-`(n_vars, n_runs)` `inits`/`params` →
+effective timing → `_apply_parameters`, where `input_handler.split_parameters` picks the
+swept parameters and compiled-in values and `system_interface.set_swept_parameters` sets
+them on the system → `update()` rebuilds the kernel for the re-specialised system →
+`_run`: `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
 (which may split the batch into chunks) and launches per chunk. Results return through
 `OutputArrays` → `SolveResult.from_solver`.
+
+We apply the parameters before we build the arrays because a compiled-in value can
+change which states the equations keep, and the initial-values array needs one row per
+state of the system as compiled. `prepare_grid_arrays`, `calibrate` and `optimize` go
+through `_prepare_inputs`, which applies the parameters and builds the arrays the same
+way. `ComparisonRunner` solves its staged arrays through `_run`, so every timed solve
+keeps the parameters the grid was prepared for.
 
 ## Solver settings
 `__init__` and `update` flatten the settings groups, record `given`, update the system's
@@ -66,19 +74,18 @@ pushes the whole effective record so every child re-reads its products.
 ## Swept and fixed parameters
 The parameters array has one row per swept parameter. Every other parameter is compiled
 into the code at a fixed value.
-- Dict: entries with several values are swept, in the system's parameter order. Entries
-  with one value are fixed at it, and parameters left out are fixed at their defaults.
-- Array with a row per parameter: every row is swept.
-- Array with a row per swept parameter: the sweep stays as it is, and every other
-  parameter is fixed at its default.
-- `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
-- `ParameterBatch` (from `Solver.build_grid`): we compile in the sweep and fixed values
-  the batch carries.
-- `None`, `{}` or a 1-D empty array: nothing is swept, and every parameter is fixed at its
-  default.
+- A dict varies the entries with several values between runs, and holds each entry
+  with one value at that value. Parameters left out use their defaults.
+- An array with a row per parameter varies every parameter.
+- An array with a row per swept parameter varies those parameters, and every other
+  parameter uses its default.
+- With `fix_constant_parameters`, we compile in the rows of an array that hold one value.
+- `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.
 
-`Solver.compile()` without parameters compiles the kernel a solve without parameters
-uses.
+`Solver.prepare_grid_arrays` gives a dict entry with one value its own row, holding that
+value for every run, so a solve of its arrays with `fix_constant_parameters=True` compiles
+it in. `Solver.compile(parameters)` compiles the kernel that a solve with the same
+parameters would use.
 
 Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
 or a fixed value rebuilds the system and kernel.
@@ -96,7 +103,7 @@ staged through the pinned pool; results keep the disk backing until close, and
 ## Grids and variable selection
 `BatchInputHandler` builds `(variable, run)` arrays with the module-level grid builders:
 `combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). `solve_ivp`
-defaults to `"combinatorial"`, `Solver.solve`/`Solver.build_grid` to `"verbatim"`.
+defaults to `"combinatorial"`, `Solver.solve`/`Solver.prepare_grid_arrays` to `"verbatim"`.
 
 For states and observables, `None` = all, `[]` = none, labels plus index kwargs = union.
 `SystemInterface.merge_variable_labels_and_idxs` pops `save_variables`/

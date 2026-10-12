@@ -136,7 +136,7 @@ def test_settings_label_names_enums_and_placements():
 
 
 def _device_grid(solver, simple_initial_values, simple_parameters):
-    return solver.build_grid(
+    return solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
 
@@ -208,7 +208,7 @@ def test_runner_isolates_candidates_and_restores_the_solver(
     assert solver.kernel.resident_blocks == 3
     # A grid with no variables stages as None, the host-path default.
     runner = ComparisonRunner(
-        solver, inits, params.values[:0], 0.1, 0.0, 0.0, max_parallel=1
+        solver, inits, params[:0], 0.1, 0.0, 0.0, max_parallel=1
     )
     runner.set_batch(2 * inits.shape[1])
     assert runner._params is None
@@ -320,4 +320,4 @@ def test_runner_stages_the_batch_on_the_device(
     with runner:
         runner.set_batch(4 * inits.shape[1])
         assert runner.runs == 4 * inits.shape[1]
-        assert runner.staged_bytes == 4 * (inits.nbytes + params.values.nbytes)
+        assert runner.staged_bytes == 4 * (inits.nbytes + params.nbytes)
