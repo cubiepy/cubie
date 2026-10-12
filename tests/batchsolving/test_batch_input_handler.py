@@ -1277,17 +1277,18 @@ def test_dict_rows_follow_the_parameter_order(input_handler_mutable):
     assert_array_equal(params, [[1.0, 2.0], [3.0, 4.0]])
 
 
-def test_device_swept_rows_follow_the_swept_order(
+def test_device_swept_rows_are_in_name_order(
     input_handler_mutable, system
 ):
-    """A device array with a row per swept name keeps the order."""
+    """A device array's rows are in name order, whatever order the
+    swept parameters were given in."""
     names = _sweep_reversed(input_handler_mutable)
     params = _FakeDeviceArray((2, 3), system.precision)
     _, result, swept, _ = _handle(
         input_handler_mutable, None, params, "verbatim"
     )
     assert result is params
-    assert swept == (names[1], names[0])
+    assert swept == (names[0], names[1])
 
 
 def test_device_system_height_params_sweep_every_row(

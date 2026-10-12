@@ -39,7 +39,7 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 
 ## BaseODE updates and identity
 - `ODEData.parameters` holds every parameter's default. `swept_parameters` names the
-  rows of the parameters array, in order, and `fixed_parameters` holds the value
+  rows of the parameters array, sorted by name whatever order the caller gives, and `fixed_parameters` holds the value
   compiled in for every other parameter. Together they name each parameter once. A new
   system sweeps nothing and fixes every parameter at its default.
 - Set `swept_parameters` and `fixed_parameters` through `update`. `SymbolicODE._update`

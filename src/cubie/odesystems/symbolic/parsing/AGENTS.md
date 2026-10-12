@@ -83,7 +83,8 @@ observables or auxiliaries. `CellMLCache` is a disk LRU (≤5
 configs per model) under `<cache root>/<model>/`, keyed by file-content SHA-256 plus
 serialised args in `cellml_cache_manifest.json`; any content change (whitespace
 included) invalidates. We cache the `ParsedSystem` before specialisation, so one entry
-serves every sweep: a hit builds the system for the requested `swept_parameters`.
+serves every choice of swept parameters and every precision: a hit builds the system
+for the requested `swept_parameters` and precision.
 
 ## User functions
 String parsing renames user functions with a trailing underscore to avoid SymPy

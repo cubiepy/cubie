@@ -74,8 +74,11 @@ Fixed parameter values are substituted into the equations as IR literals at the 
 of code generation (`parsing/parsed_system.py`). Generated source never names a fixed
 parameter, and device functions capture no values. Swept parameters stay symbols and are
 read from the parameters array. `SymbolicODE(parsed_system, precision,
-swept_parameters=...)` specialises once, for the sweep it is given; `create_ODE_system`,
-`SymbolicODE.create` and `load_cellml_model` pass `swept_parameters` through. When the
+swept_parameters=...)` specialises once, for the swept parameters it is given;
+`create_ODE_system`, `SymbolicODE.create` and `load_cellml_model` pass `swept_parameters`
+through. We name an unnamed system from `ParsedSystem.definition_hash`, which leaves out
+the swept parameters and their values, so its generated-code and kernel-cache
+directories stay the same whichever parameters are swept. When the
 swept names or fixed values change,
 `SymbolicODE._update` rebuilds the equations from `SymbolicODE._parsed_system`:
 substitution, folding, structural simplification and tearing, which can change the state

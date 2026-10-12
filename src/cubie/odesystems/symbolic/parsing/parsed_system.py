@@ -7,7 +7,10 @@ import attrs
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.parsing.assemble import assemble_simplified
 from cubie.odesystems.symbolic.parsing.normalise import NormalisedSystem
-from cubie.odesystems.symbolic.sym_utils import RESERVED_CODEGEN_PREFIX
+from cubie.odesystems.symbolic.sym_utils import (
+    RESERVED_CODEGEN_PREFIX,
+    hash_system_definition,
+)
 
 
 def _literal_rules(
@@ -72,6 +75,24 @@ class ParsedSystem:
                     f"Name '{name}' is reserved: user symbols cannot "
                     f"start with '{RESERVED_CODEGEN_PREFIX}'."
                 )
+
+    @property
+    def definition_hash(self) -> str:
+        """Hash of the equations and names, with parameters as symbols.
+
+        The hash does not depend on which parameters are swept or on
+        their values, so we use it to name a system the user left
+        unnamed.
+        """
+        return hash_system_definition(
+            self.normalised.equations,
+            observable_labels=self.observables,
+            state_labels=sorted(self.states),
+            parameter_labels=sorted(self.parameters),
+            driver_labels=self.driver_names,
+            derivative_names=self.normalised.derivative_names,
+            function_aliases=self.normalised.rename,
+        )
 
     def specialise(
         self,

@@ -360,11 +360,7 @@ class BatchSolverKernel(CUDAFactory):
             },
         )
 
-        system_name = system.name
-        system_hash = system.fn_hash
-        if system_name == system_hash:
-            system_name = f"unnamed_{system_hash[:8]}"
-        self._system_name = system_name
+        self._system_name = system.name
 
         self.single_integrator = SingleIntegratorRun(
             system,
