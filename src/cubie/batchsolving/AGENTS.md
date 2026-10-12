@@ -74,8 +74,8 @@ into the code at a fixed value.
 - `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
 - `ParameterBatch` (from `Solver.build_grid`): we compile in the sweep and fixed values
   the batch carries.
-- `None`, `{}` or a 1-D empty array: the sweep stays as it is, its rows hold defaults, and
-  every other parameter is fixed at its default.
+- `None`, `{}` or a 1-D empty array: nothing is swept, and every parameter is fixed at its
+  default.
 
 `Solver.compile()` without parameters compiles the kernel a solve without parameters
 uses.

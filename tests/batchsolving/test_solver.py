@@ -3274,17 +3274,15 @@ def test_parameter_changes_between_solves(
     )
     assert solver.fixed_parameter_values[names[1]] == 0.75
     solver.build_grid(None, None)
-    assert solver.swept_parameters == (names[0],)
-    assert solver.fixed_parameter_values == {
-        name: value for name, value in defaults.items() if name != names[0]
-    }
+    assert solver.swept_parameters == ()
+    assert solver.fixed_parameter_values == defaults
 
     duration = solver_settings["duration"]
     first = solver.solve(duration=duration).time_domain_array.copy()
-    value = 2.0 * defaults[names[2]] + 1.0
-    system.set_default_parameters({names[2]: value})
+    value = 2.0 * defaults[names[0]] + 1.0
+    system.set_default_parameters({names[0]: value})
     second = solver.solve(duration=duration).time_domain_array.copy()
-    assert solver.fixed_parameter_values[names[2]] == pytest.approx(value)
+    assert solver.fixed_parameter_values[names[0]] == pytest.approx(value)
     assert not np.array_equal(first, second)
 
 
