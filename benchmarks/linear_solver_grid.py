@@ -151,8 +151,7 @@ def fabbri_grid(solver, n_runs: int):
         np.linspace(0.0, 2e-8, side),
         np.linspace(0.0, 1.0, side),
     )
-    # Hold ANS at 1 through its default so it is compiled in rather
-    # than given a row of its own.
+    # Set ANS to 1 as its default so that we compile it in.
     solver.system.set_default_parameters(
         {"Rate_modulation_experiments_ANS": 1.0}
     )
