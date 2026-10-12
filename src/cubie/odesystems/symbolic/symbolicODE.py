@@ -200,8 +200,9 @@ def create_ODE_system(
         callable takes the function's arguments followed by ``n``
         argument indices.
     name
-        Identifier used for generated files. Defaults to ``unnamed_``
-        and the start of a hash of the system's equations.
+        Identifier used for generated files. When you leave it out, we
+        name the system ``unnamed_`` followed by the start of a hash of
+        its equations.
     precision
         Target floating-point precision used when compiling the system.
     strict
@@ -292,12 +293,14 @@ class SymbolicODE(BaseODE):
         precision
             Target floating-point precision used for generated kernels.
         name
-            Identifier used for generated modules. Defaults to
-            ``unnamed_`` and the start of a hash of the parsed system,
-            which does not depend on the swept parameters.
+            Identifier used for generated modules. When you leave it
+            out, we name the system ``unnamed_`` followed by the start
+            of a hash of its equations, so the name stays the same
+            whichever parameters are swept.
         operation_ordering
-            Generated-operation ordering policy. Defaults to
-            ``CUBIE_OPERATION_ORDERING`` (``liveness_auto`` when unset).
+            Policy for ordering the generated operations. When you
+            leave it out, we read ``CUBIE_OPERATION_ORDERING`` as the
+            system is built, and use ``liveness_auto`` if it is unset.
         swept_parameters
             Names of the parameters to read from the parameters array,
             in row order. We compile every other parameter in at its
@@ -428,9 +431,9 @@ class SymbolicODE(BaseODE):
             derivatives; the order-``n`` callable takes the function's
             arguments followed by ``n`` argument indices.
         name
-            Identifier used for generated files. Defaults to
-            ``unnamed_`` and the start of a hash of the system's
-            equations.
+            Identifier used for generated files. When you leave it out,
+            we name the system ``unnamed_`` followed by the start of a
+            hash of its equations.
         precision
             Target floating-point precision used when compiling the system.
         strict
