@@ -232,8 +232,8 @@ def solve_ivp(
         infers them.
     parameters
         Parameter values for each run as arrays or dictionaries mapping labels
-        to arrays. ``None`` runs the system's swept parameters at their
-        defaults and compiles every other parameter in at its default.
+        to arrays. ``None`` sweeps nothing and compiles every parameter in
+        at its default.
     drivers
         The :class:`~cubie.array_interpolator.DriverSamples` to
         interpolate during integration.
@@ -594,9 +594,8 @@ class Solver:
             :meth:`set_swept_parameters`, or the system's full number
             of parameters. A :class:`ParameterBatch` from
             :meth:`build_grid` also compiles in the values it carries.
-            ``None`` runs the current
-            :attr:`swept_parameters` at their defaults and compiles every
-            other parameter in at its default.
+            ``None`` sweeps nothing and compiles every parameter in at
+            its default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -726,9 +725,9 @@ class Solver:
         Parameters
         ----------
         parameters
-            Parameter values as in :meth:`solve`. ``None`` compiles for
-            the current :attr:`swept_parameters`, with every other
-            parameter at its default, as :meth:`solve` does.
+            Parameter values as in :meth:`solve`. ``None`` sweeps
+            nothing and compiles every parameter in at its default, as
+            :meth:`solve` does.
         fix_constant_parameters
             Check whether any parameters are set to the same value across
             all runs, and compile them into the code if they are.
@@ -885,8 +884,8 @@ class Solver:
         parameters
             Parameter values for each run. Accepts dictionaries
             mapping parameter names to values, or pre-built arrays
-            in (n_params, n_runs) format. ``None`` runs the current
-            :attr:`swept_parameters` at their defaults.
+            in (n_params, n_runs) format. ``None`` sweeps nothing and
+            compiles every parameter in at its default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -982,8 +981,8 @@ class Solver:
             values.
         parameters
             Dict of parameter names to values, or an (n_params, n_runs) array.
-            ``None`` runs the current :attr:`swept_parameters` at their
-            defaults.
+            ``None`` sweeps nothing and compiles every parameter in at
+            its default.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
