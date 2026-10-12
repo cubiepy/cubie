@@ -555,8 +555,8 @@ def _load_cached_system(cache, args_hash, precision, swept_parameters):
     Returns
     -------
     SymbolicODE or None
-        The specialised system, or ``None`` when the cache holds no
-        valid entry for ``args_hash``.
+        The specialised system, or ``None`` when we find no valid
+        entry for ``args_hash``.
     """
     if not cache.cache_valid(args_hash):
         return None

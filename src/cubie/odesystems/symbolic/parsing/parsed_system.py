@@ -78,11 +78,12 @@ class ParsedSystem:
 
     @property
     def definition_hash(self) -> str:
-        """Hash of the equations and names, with parameters as symbols.
+        """Return a hash of the equations and variable names.
 
-        The hash does not depend on which parameters are swept or on
-        their values, so we use it to name a system the user left
-        unnamed.
+        We hash the equations with every parameter left as a symbol and
+        leave out which parameters are swept and their values, so we
+        can name an unnamed system the same way whichever parameters
+        it sweeps.
         """
         return hash_system_definition(
             self.normalised.equations,

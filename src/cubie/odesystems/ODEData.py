@@ -110,10 +110,11 @@ def _parameters_converter(value: Any) -> Any:
 
 
 def sorted_swept_names(names: Iterable[str]) -> Tuple[str, ...]:
-    """Return swept parameter names sorted, rejecting repeats.
+    """Return the swept parameter names in sorted order.
 
-    We sort the names so the rows of the parameters array come in the
-    same order however the caller listed the swept parameters.
+    We sort the names so that we lay out the rows of the parameters
+    array in the same order however the caller listed them. We raise
+    ``ValueError`` when a name appears twice.
     """
     given = [str(name) for name in names]
     if len(set(given)) != len(given):
@@ -186,8 +187,8 @@ class ODEData(CUDAFactoryConfig):
         equations read, in the order the derivatives follow the
         drivers in the drivers buffer.
     swept_parameters
-        Names of the parameters read from the parameters array,
-        sorted by name. The array holds their rows in this order.
+        Names of the parameters we read from the parameters array, in
+        the order of the array's rows. We keep them sorted by name.
     fixed_parameters
         Values compiled into the code for every other parameter.
 
