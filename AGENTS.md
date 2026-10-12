@@ -66,6 +66,8 @@ updating a PR.
 - Use whole sentences in plain words, comment only where the code is hard to read, and say why
   when the reason is not visible in the code. Never describe what used to exist ("now", "no
   longer", "changed from"), a bug avoided, or an alternative rejected.
+- Never write "carries" (or "carry") in documentation. Say what holds the value and where it
+  goes, in plain words.
 - Docstrings describe what the code does and any non-obvious behaviour, in the same plain
   sentences. `AGENTS.md` files tell the reader what they need to use, extend or debug the code.
 - Cite a source only for directly ported code (see `odesystems/symbolic/structural/AGENTS.md`).
