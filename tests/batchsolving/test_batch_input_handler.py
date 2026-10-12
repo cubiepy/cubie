@@ -18,7 +18,6 @@ from cubie.batchsolving.BatchInputHandler import (
     unique_cartesian_product,
     verbatim_grid,
 )
-from cubie.batchsolving.BatchInputHandler import ParameterBatch
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.driver_memory import is_pinned_array
 
@@ -1240,25 +1239,31 @@ def test_swept_height_array_compiles_the_defaults_in(
     assert result is params
 
 
-def test_parameter_batch_applies_its_sweep_and_values(
+def test_single_values_as_rows_give_each_entry_a_row(
     input_handler_mutable, system
 ):
-    """A ParameterBatch compiles in the values it carries."""
+    """A single value gets a row holding it for every run."""
     names = list(system.parameters.names)
-    fixed = {
-        name: value
-        for name, value in system.parameters.as_float_dict.items()
-        if name != names[0]
-    }
-    fixed[names[1]] = 0.25
-    values = np.ones((1, 4), dtype=system.precision)
-    batch = ParameterBatch(values, (names[0],), fixed)
-    _, result, swept, result_fixed = _handle(
-        input_handler_mutable, params=batch, kind="verbatim"
+    varying, swept, fixed = input_handler_mutable.split_parameters(
+        {names[0]: [1.0, 2.0, 3.0], names[1]: 0.25},
+        single_values_as_rows=True,
     )
-    assert swept == (names[0],)
-    assert result_fixed == fixed
-    assert result is values
+    assert swept == (names[0], names[1])
+    assert names[1] not in fixed
+    input_handler_mutable.interface.set_swept_parameters(swept, fixed)
+    _, params = input_handler_mutable(None, varying, "verbatim")
+    assert_array_equal(
+        params[1], np.full(3, 0.25, dtype=system.precision)
+    )
+
+
+def test_verbatim_repeats_single_values(system):
+    """A verbatim entry with one value repeats across every run."""
+    names = list(system.parameters.names)
+    _, grid = verbatim_grid(
+        {names[0]: [1.0, 2.0, 3.0], names[1]: [0.5]}, system.parameters
+    )
+    assert_array_equal(grid[1], np.full(3, 0.5))
 
 
 def test_ragged_verbatim_entries_raise(input_handler_mutable, system):

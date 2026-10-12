@@ -26,7 +26,6 @@ ArrayTypes = Optional[Union[NDArray, DeviceNDArrayBase, MappedNDArray]]
 
 from cubie.batchsolving.BatchInputHandler import (  # noqa: E402
     BatchInputHandler,
-    ParameterBatch,
 )
 from cubie.batchsolving.BatchSolverConfig import BatchSolverConfig, \
     ActiveOutputs  # noqa: E402
@@ -78,7 +77,6 @@ __all__ = [
     "ManagedArray",
     "OutputArrayContainer",
     "OutputArrays",
-    "ParameterBatch",
     "Solver",
     "SolveResult",
     "SolveSpec",

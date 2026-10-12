@@ -100,7 +100,7 @@ Two further ``Solver`` methods are useful in interactive loops:
 :meth:`~cubie.batchsolving.solver.Solver.update` reconfigures a live
 solver (tolerances, algorithm, output settings) without rebuilding it
 from scratch, and
-:meth:`~cubie.batchsolving.solver.Solver.build_grid` pre-builds the
+:meth:`~cubie.batchsolving.solver.Solver.prepare_grid_arrays` pre-builds the
 input grid once so repeated ``solve`` calls with the same batch layout
 skip grid construction.
 
@@ -135,14 +135,13 @@ their inputs the same way.
 If you're looking for something faster (tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead.
 Initial values arrays have one row per state in your system. The
-parameters array can either have one row per parameter in your system,
-or one row per parameter that you've marked as "swept". When you pass
-parameters as a dict, whichever parameters have multiple values are
-marked internally as swept, and the rest are treated as constant and
-compiled into your code. To mark the swept parameters yourself before
-passing a swept-only parameters array, call
-``solver.set_swept_parameters``, or pass ``swept_parameters`` when you
-build the system, which saves Cubie building it twice:
+parameters array can either have one row for every parameter in your
+system, or one row per parameter that will vary across a batch only. In
+both cases, rows should be ordered by parameter names. To pass just the
+varying parameters, you will need to tell the system which parameters to
+expect. To do this, call ``solver.set_swept_parameters`` with a set of
+the parameter names you want to vary, or pass the same set to the
+``swept_parameters`` argument when building the system.
 
 .. code-block:: python
 
@@ -155,20 +154,20 @@ build the system, which saves Cubie building it twice:
     # or, on an existing solver
     solver.set_swept_parameters(["x1"])
 
-A swept-only array runs every other parameter at its default. To fix
-some of them at other values for a batch, build the batch with
-``solver.build_grid``. It returns the initial values array and a
-``ParameterBatch``, which holds the swept parameters' array, the name of
-each row, and the values to compile in for the rest. Pass both straight
-to ``solve``:
+``solver.prepare_grid_arrays`` can generate arrays from a dict of symbol
+names, to avoid doing it on every solve. If you use this to set single
+values for a parameter (the same over all runs), they'll be treated as
+"swept" and occupy a full row in the array. Calling solve with
+``fix_constant_parameters=True`` will nudge cubie to recognise rows with
+a uniform value, and compile them out at solve time.
 
 .. code-block:: python
 
-    inits, params = solver.build_grid(
+    inits, params = solver.prepare_grid_arrays(
         {"y0": np.linspace(1, 100, 1000)},
         {"x0": 0.5, "x1": np.logspace(1, 3, 1000)},
     )
-    result = solver.solve(inits, params)
+    result = solver.solve(inits, params, fix_constant_parameters=True)
 
 Arrays of swept parameters only are intended as a convenience: some
 models have hundreds of parameters, and if you're only sweeping two of

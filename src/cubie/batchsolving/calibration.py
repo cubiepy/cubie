@@ -720,7 +720,7 @@ def run_calibration(
             "driver samples that solves will use."
         )
 
-    inits, params = parent.build_grid(
+    inits, params = parent._prepare_inputs(
         initial_values,
         parameters,
         grid_type=grid_type,
