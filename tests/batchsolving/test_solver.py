@@ -1377,11 +1377,10 @@ def test_solve_ivp_accepts_equation_strings():
     )
     assert isinstance(result, SolveResult)
     values = np.asarray(result.as_numpy["time_domain_array"])
-    # Both inferred states start at zero, and the equations move them
-    # away from it, so a solve that stops integrating leaves a zero.
+    # The equations move both inferred states, so a solve that stops
+    # integrating leaves a state where it started.
     assert values.shape[1] == 2
-    assert np.all(values[0] == 0.0)
-    assert np.all(values[-1] > 0.0)
+    assert np.all(values[-1] > values[0])
 
 
 def test_equations_take_driver_names_from_the_samples(precision):
