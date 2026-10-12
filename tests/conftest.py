@@ -841,16 +841,13 @@ def parameter_solve(solver, system, solver_settings, parameter_batch):
         params = parameter_batch
         options = {"fix_constant_parameters": True}
     elif form in ("swept_rows", "device"):
-        # Sweep the changed row too, because we run every parameter
-        # without a row at its default. Name the swept parameters in
-        # reverse to check that the rows are still in name order.
+        # List the names in reverse to check that the rows are still
+        # read in parameter-name order.
         solver.set_swept_parameters((names[2], names[1], names[0]))
         params = parameter_batch[[0, 1, 2]]
         if form == "device":
             params = cuda.to_device(params)
     elif form == "prepare_grid_arrays":
-        # Give the single value a row of its own, then compile it in at
-        # the solve, as the user guide shows.
         inits, params = solver.prepare_grid_arrays(None, as_dict)
         record["swept_before"] = solver.swept_parameters
         record["rows"] = params.shape[0]
