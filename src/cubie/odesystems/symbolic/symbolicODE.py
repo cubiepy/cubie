@@ -222,9 +222,15 @@ def create_ODE_system(
         and ``"dfs"`` select fixed alternatives. Defaults to
         ``CUBIE_OPERATION_ORDERING`` (``liveness_auto`` when unset).
     swept_parameters
-        Names of the parameters to read from the parameters array, in
-        row order. We compile every other parameter in at its default.
-        Setting them here builds the system once, for that sweep.
+        Names of the parameters that will vary in each batch/sweep.
+        Parameters not listed here will be treated as constant across
+        every run. Optional, if not given the system will be built
+        assuming that all parameters are constant. The names given at
+        this level are used when we first specialise the system, but
+        every time you call solve() on a system the swept parameters
+        will change to match the set you give. Setting them here just
+        means that the system will be ready to go for your first solve,
+        instead of taking a few ms to specialise.
 
     Returns
     -------
@@ -269,8 +275,8 @@ class SymbolicODE(BaseODE):
     operation_ordering
         Generated-operation ordering policy.
     swept_parameters
-        Names of the parameters to read from the parameters array, in
-        row order.
+        Names of parameters that won't be compiled in as constants
+        during specialisation. These get sorted by name internally.
     """
 
     # Diagnostic evaluators live in a dict so child-factory
@@ -302,9 +308,8 @@ class SymbolicODE(BaseODE):
             leave it out, we read ``CUBIE_OPERATION_ORDERING`` as the
             system is built, and use ``liveness_auto`` if it is unset.
         swept_parameters
-            Names of the parameters to read from the parameters array,
-            in row order. We compile every other parameter in at its
-            default.
+            Names of parameters that won't be compiled in as constants
+            during specialisation. These get sorted by name internally.
         """
         if operation_ordering is None:
             operation_ordering = operation_ordering_default()
@@ -459,9 +464,16 @@ class SymbolicODE(BaseODE):
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
             ``"dfs"``. Defaults to ``CUBIE_OPERATION_ORDERING``.
         swept_parameters
-            Names of the parameters to read from the parameters array,
-            in row order. We compile every other parameter in at its
-            default.
+            Names of the parameters that will vary in each batch/sweep.
+            Parameters not listed here will be treated as constant
+            across every run. Optional, if not given the system will be
+            built assuming that all parameters are constant. The names
+            given at this level are used when we first specialise the
+            system, but every time you call solve() on a system the
+            swept parameters will change to match the set you give.
+            Setting them here just means that the system will be ready
+            to go for your first solve, instead of taking a few ms to
+            specialise.
 
         Returns
         -------
