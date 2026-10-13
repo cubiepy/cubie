@@ -62,7 +62,7 @@ def test_eldirk_tableaus_match_cpu_reference(
     )
     assert step_object_mutable.tableau.explicit_last_stage
     params = np.asarray(
-        system.parameters.values_array, dtype=precision
+        system.parameters.defaults_array(system.precision), dtype=precision
     )
     state = np.asarray(initial_state, dtype=precision)
     base_dt = precision(0.005)
@@ -189,7 +189,7 @@ def test_non_adjacent_repeat_matches_cpu_reference(
     )
     assert step_object_mutable.dense_prediction
     params = np.asarray(
-        system.parameters.values_array, dtype=precision
+        system.parameters.defaults_array(system.precision), dtype=precision
     )
     state = np.asarray(initial_state, dtype=precision)
     base_dt = precision(0.005)

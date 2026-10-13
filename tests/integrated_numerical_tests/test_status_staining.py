@@ -98,7 +98,7 @@ def test_irrecoverable_failure_preserves_fatal_flags(
         name: np.array([value], dtype=np.float64)
         for name, value in zip(
             system.initial_values.names,
-            system.initial_values.values_array,
+            system.initial_values.defaults_array(system.precision),
         )
     }
     result = solver.solve(

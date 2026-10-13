@@ -22,10 +22,7 @@ class CPUODESystem:
     def __init__(self, system: SymbolicODE) -> None:
         # Every parameter is swept, so any parameters array maps by name.
         system = system.copy()
-        system.update(
-            swept_parameters=tuple(system.parameters.names),
-            fixed_parameters=(),
-        )
+        system.set_swept_parameters(system.parameters.names)
         self.system = system
         self.precision = system.precision
         self.n_states = system.sizes.states

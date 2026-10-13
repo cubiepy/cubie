@@ -55,6 +55,7 @@ from cubie.result_codes import decode_status_codes
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
+from cubie.batchsolving._utils import format_time_domain_label
 from cubie.batchsolving.calibration import (
     CalibrationResult,
     run_calibration,
@@ -927,12 +928,12 @@ class Solver:
             The values that vary between runs, for
             :class:`~cubie.batchsolving.BatchInputHandler.BatchInputHandler`.
         """
-        varying_values, swept, fixed = self.input_handler.split_parameters(
+        varying_values, batch = self.input_handler.split_parameters(
             parameters,
             fix_constant_parameters,
             single_values_as_rows=single_values_as_rows,
         )
-        self.system_interface.set_swept_parameters(swept, fixed)
+        self.system_interface.apply_batch(batch)
         return varying_values
 
     def _prepare_inputs(
@@ -1521,6 +1522,20 @@ class Solver:
     def parameters(self):
         """Expose parameter array used in the last run."""
         return self.kernel.parameters
+
+    @property
+    def parameter_legend(self) -> Dict[int, str]:
+        """Label of each row of the parameters array.
+
+        Each label is the swept parameter's name, with its unit in
+        brackets unless it is dimensionless.
+        """
+        return {
+            row: format_time_domain_label(parameter.name, parameter.unit)
+            for row, parameter in enumerate(
+                self.system_interface.swept_set
+            )
+        }
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:

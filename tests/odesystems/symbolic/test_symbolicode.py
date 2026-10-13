@@ -75,15 +75,9 @@ def test_create_ODE_system_strict(
         strict=True,
     )
     sys2 = simple_ode_strict
-    assert_array_equal(
-        sys1.parameters.values_array, sys2.parameters.values_array
-    )
-    assert_array_equal(
-        sys1.initial_values.values_array, sys2.initial_values.values_array
-    )
-    assert_array_equal(
-        sys1.observables.values_array, sys2.observables.values_array
-    )
+    assert sys1.parameters.defaults == sys2.parameters.defaults
+    assert sys1.initial_values.defaults == sys2.initial_values.defaults
+    assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
 
@@ -96,15 +90,9 @@ def test_create_ODE_system_nonstrict(
         name="simpletest_nonstrict",
     )
     sys2 = simple_ode_nonstrict
-    assert_array_equal(
-        sys1.parameters.values_array, sys2.parameters.values_array
-    )
-    assert_array_equal(
-        sys1.initial_values.values_array, sys2.initial_values.values_array
-    )
-    assert_array_equal(
-        sys1.observables.values_array, sys2.observables.values_array
-    )
+    assert sys1.parameters.defaults == sys2.parameters.defaults
+    assert sys1.initial_values.defaults == sys2.initial_values.defaults
+    assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
 
@@ -620,7 +608,7 @@ class TestSweptParameters:
         sweep(ode, ["c"])
 
         assert ode.indices.parameter_names == ["c"]
-        assert ode.parameters["c"] == precision(0.5)
+        assert ode.parameters["c"].default == 0.5
 
     def test_fixing_a_parameter_folds_its_value(self, precision):
         """A fixed parameter leaves the parameters array."""
@@ -722,7 +710,7 @@ class TestValueSetters:
         )
 
         ode.set_default_parameters({"k": 0.5})
-        assert ode.parameters["k"] == 0.5
+        assert ode.parameters["k"].default == 0.5
 
     def test_parameters_getter_is_sealed_against_bypass(self, precision):
         """In-place mutation through the public getter raises.
@@ -740,24 +728,22 @@ class TestValueSetters:
         _ = ode.dxdt_fn
         hash_before = ode.config_hash
 
-        with pytest.raises(ValueError):
-            ode.parameters.update_from_dict({"c": 2.0})
-        with pytest.raises(ValueError):
-            ode.parameters["c"] = 2.0
-        with pytest.raises(ValueError):
-            ode.parameters.values_array[0] = 2.0
-        with pytest.raises(TypeError):
-            ode.parameters.values_dict["c"] = 2.0
+        with pytest.raises(AttributeError):
+            ode.parameters["c"].default = 2.0
+        with pytest.raises(AttributeError):
+            ode.compiled_parameters["c"].value = 2.0
+        ode.parameters.defaults["c"] = 2.0
+        ode.fixed_parameter_values["c"] = 2.0
 
-        assert ode.parameters["c"] == precision(0.5)
+        assert ode.parameters["c"].default == 0.5
         assert ode.config_hash == hash_before
 
         ode.set_default_parameters({"c": 2.0})
-        assert ode.parameters["c"] == precision(2.0)
+        assert ode.parameters["c"].default == 2.0
         assert ode.config_hash != hash_before
 
     def test_set_initial_value(self, precision):
-        """Verify set_initial_value updates state correctly."""
+        """set_initial_values sets a state's default initial value."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x"],
             precision=precision,
@@ -766,8 +752,8 @@ class TestValueSetters:
             name="test_set_init",
         )
 
-        ode.set_initial_value("x", 2.0)
-        assert ode.initial_values["x"] == 2.0
+        ode.set_initial_values({"x": 2.0})
+        assert ode.initial_values["x"].default == 2.0
 
 
 class TestInfoGetters:

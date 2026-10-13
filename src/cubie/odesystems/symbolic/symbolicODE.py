@@ -43,6 +43,7 @@ from typing import (
     Any,
     Callable,
     Iterable,
+    Mapping,
     Optional,
     Tuple,
     Union,
@@ -66,8 +67,14 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
-from cubie.odesystems.ODEData import sorted_swept_names
-from cubie.odesystems.SystemValues import SystemValues
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    State,
+    Variable,
+    ValuedSet,
+    VariableSet,
+)
 from cubie.odesystems.solver_helpers import (
     HelperResult,
     OperationCounts,
@@ -105,6 +112,13 @@ def _unit_map(
     return {
         name: units.get(name, "dimensionless") for name in parameters
     }
+
+
+def _observable_set(index_map) -> VariableSet:
+    """Return the observables of ``index_map`` with their units."""
+    return VariableSet.of(
+        Variable, index_map.observable_names, index_map.observables.units
+    )
 
 
 def _driver_derivative_indices(
@@ -313,18 +327,29 @@ class SymbolicODE(BaseODE):
         """
         if operation_ordering is None:
             operation_ordering = operation_ordering_default()
-        swept_parameters = sorted_swept_names(swept_parameters or ())
+        parameters = VariableSet.of(
+            Parameter,
+            dict(sorted(parsed_system.parameters.items())),
+            _unit_map(
+                parsed_system.parameters, parsed_system.parameter_units
+            ),
+        )
+        # Specialise from the compiled set, so the device function reads
+        # the parameters array in the same row order the solver fills.
+        batch = ParameterSet.build(parameters, swept_parameters or ())
+        self._parsed_system = parsed_system
+        # Keep every initial value we have been given, including those
+        # of states structural simplification has dropped, so a state
+        # that a later batch restores starts from the value it was set
+        # to.
+        self._state_defaults = dict(parsed_system.states)
         (
             all_indexed_bases,
             self.all_symbols,
             user_functions,
             equations,
             fn_hash,
-        ) = parsed_system.specialise(swept_parameters)
-        self._parsed_system = parsed_system
-        self._parameter_units = _unit_map(
-            parsed_system.parameters, parsed_system.parameter_units
-        )
+        ) = parsed_system.specialise(batch.swept, batch.fixed)
 
         derived_mass_matrix = equations.mass_matrix
 
@@ -344,15 +369,15 @@ class SymbolicODE(BaseODE):
         self.driver_defaults = all_indexed_bases.drivers.default_values
 
         super().__init__(
-            initial_values=all_indexed_bases.state_values,
-            parameters=dict(sorted(parsed_system.parameters.items())),
-            observables=all_indexed_bases.observable_names,
-            precision=precision,
+            precision,
+            self._states_with_defaults(all_indexed_bases),
+            parameters,
+            _observable_set(all_indexed_bases),
+            swept_parameters=batch.swept,
             num_drivers=ndriv,
             driver_derivatives=driver_derivatives,
-            name=name,
             operation_ordering=operation_ordering,
-            swept_parameters=swept_parameters,
+            name=name,
         )
         self._seed_derived_mass(derived_mass_matrix)
         self.gen_file = ODEFile(
@@ -364,6 +389,14 @@ class SymbolicODE(BaseODE):
         )
         self._jvp_exprs: Optional[JVPEquations] = None
         self._jvp_exprs_key = None
+
+    def _states_with_defaults(self, index_map) -> ValuedSet:
+        """Return the states of ``index_map`` with our initial values."""
+        defaults = {
+            name: self._state_defaults.get(name, value)
+            for name, value in index_map.states.defaults.items()
+        }
+        return VariableSet.of(State, defaults, index_map.states.units)
 
     def _seed_derived_mass(self, mass_matrix) -> None:
         """Seed compile settings with the simplification-derived mass.
@@ -520,17 +553,17 @@ class SymbolicODE(BaseODE):
     @property
     def state_units(self) -> dict[str, str]:
         """Return units for state variables."""
-        return self.indices.states.units
+        return self.states.units
 
     @property
     def parameter_units(self) -> dict[str, str]:
         """Return units for parameters."""
-        return dict(self._parameter_units)
+        return self.parameters.units
 
     @property
     def observable_units(self) -> dict[str, str]:
         """Return units for observables."""
-        return self.indices.observables.units
+        return self.observables.units
 
     @property
     def driver_units(self) -> dict[str, str]:
@@ -677,19 +710,10 @@ class SymbolicODE(BaseODE):
             The recognised names.
         """
         settings = self.compile_settings
-        swept = sorted_swept_names(
-            updates.get("swept_parameters", settings.swept_parameters)
-        )
-        fixed = dict(
-            updates.get("fixed_parameters", settings.fixed_parameters)
-        )
-        if (
-            swept == settings.swept_parameters
-            and fixed == settings.fixed_parameter_values
-        ):
+        parameters = updates.get("parameters", settings.parameters)
+        if parameters == settings.parameters:
             return self.update_compile_settings(updates, silent=True)
 
-        defaults = updates.get("parameters", settings.parameters)
         (
             index_map,
             all_symbols,
@@ -697,21 +721,14 @@ class SymbolicODE(BaseODE):
             parsed,
             fn_hash,
         ) = self._parsed_system.specialise(
-            swept,
-            {**defaults.as_float_dict, **fixed},
-            state_values=settings.initial_state_values,
+            parameters.swept, parameters.fixed
         )
         derived = {}
-        if index_map.state_names != settings.initial_states.names:
-            derived["initial_states"] = SystemValues(
-                index_map.state_values, self.precision, name="States"
-            )
-        if index_map.observable_names != settings.observables.names:
-            derived["observables"] = SystemValues(
-                index_map.observable_names,
-                self.precision,
-                name="Observables",
-            )
+        if tuple(index_map.state_names) != settings.states.names:
+            self._states = self._states_with_defaults(index_map)
+            derived["states"] = self._states.without_values()
+        if tuple(index_map.observable_names) != settings.observables.names:
+            derived["observables"] = _observable_set(index_map)
         mass = parsed.mass_matrix
         if mass is not None:
             mass = asarray(mass, dtype=self.precision)
@@ -733,23 +750,24 @@ class SymbolicODE(BaseODE):
         self.driver_defaults = index_map.drivers.default_values
         return recognised - (set(derived) - set(updates))
 
-    def set_initial_value(self, name: str, value: float) -> None:
-        """Set the initial value of a state variable.
+    def set_initial_values(self, values: Mapping[str, float]) -> None:
+        """Set the default initial values of states.
+
+        We read initial values only when a run starts, so setting them
+        never rebuilds the system.
 
         Parameters
         ----------
-        name
-            Name of the state variable.
-        value
-            New initial value.
+        values
+            State names mapped to new default initial values.
 
         Raises
         ------
         KeyError
-            If the name is not found in states.
+            If a name is not a state of the system.
         """
-        self.initial_values[name] = value
-        self.indices.states.update_values({name: value})
+        super().set_initial_values(values)
+        self._state_defaults.update(values)
 
     def get_parameters_info(self) -> list[dict]:
         """Return information about all parameters.
@@ -759,14 +777,13 @@ class SymbolicODE(BaseODE):
         list of dict
             Each dict contains 'name', 'value', and 'unit' keys.
         """
-        units = self.parameter_units
         return [
             {
-                'name': name,
-                'value': value,
-                'unit': units.get(name, 'dimensionless'),
+                'name': parameter.name,
+                'value': parameter.default,
+                'unit': parameter.unit,
             }
-            for name, value in self.parameters.values_dict.items()
+            for parameter in self.parameters
         ]
 
     def get_states_info(self) -> list[dict]:
@@ -777,14 +794,14 @@ class SymbolicODE(BaseODE):
         list of dict
             Each dict contains 'name', 'value', and 'unit' keys.
         """
-        result = []
-        for name in self.indices.state_names:
-            result.append({
-                'name': name,
-                'value': self.initial_values.values_dict.get(name, 0.0),
-                'unit': self.state_units.get(name, 'dimensionless'),
-            })
-        return result
+        return [
+            {
+                'name': state.name,
+                'value': state.default,
+                'unit': state.unit,
+            }
+            for state in self.states
+        ]
 
     def parameters_gui(self, blocking: bool = True) -> None:
         # no cover: start

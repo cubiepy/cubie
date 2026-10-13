@@ -771,6 +771,8 @@ def test_device_results_match_host(
     assert is_device_array(device.state)
     assert is_device_array(device.status_codes)
     assert device.stream is solver.kernel.stream
+    assert device.parameter_legend == host.parameter_legend
+    assert device.fixed_parameters == host.fixed_parameters
 
     # The documented host-read pattern: synchronize the solve's
     # stream, then copy the handles.
@@ -1629,7 +1631,7 @@ def test_prepare_grid_arrays_returns_correct_shape(
     assert inits.ndim == 2
     assert params.ndim == 2
     assert inits.shape[0] == solver.system_sizes.states
-    assert params.shape[0] == solver.system_sizes.swept_parameters
+    assert params.shape[0] == len(solver.swept_parameters)
     # Verbatim: run count matches input length
     assert inits.shape[1] == params.shape[1]
 
@@ -2870,7 +2872,7 @@ def test_repeat_solve_reuses_the_build_state(
     assert kernel.run_params.chunk_length == partition.chunk_length
 
     name = sorted(system_restored.fixed_parameter_values)[0]
-    value = float(system_restored.parameters.values_dict[name])
+    value = float(system_restored.parameters.defaults[name])
     system_restored.set_default_parameters({name: 2.0 * value + 1.0})
     assert kernel.system_config_stale
     solver.solve(
@@ -2888,7 +2890,7 @@ def test_repeat_solve_reuses_the_build_state(
     rebuilt_legend = kernel.time_domain_legend
     assert rebuilt_legend is not legend
     assert rebuilt_legend == legend
-    assert float(kernel.system.parameters.values_dict[name]) == (
+    assert float(kernel.system.parameters.defaults[name]) == (
         pytest.approx(2.0 * value + 1.0)
     )
     assert kernel.system.fixed_parameter_values[name] == (
@@ -3241,10 +3243,30 @@ def test_solve_leaves_defaults_and_the_system_current(
 ):
     """A solve changes no defaults and leaves the kernel up to date."""
     assert (
-        system.compile_settings.parameter_values
+        system.parameters.defaults
         == parameter_solve["defaults"]
     )
     assert not solver.kernel.system_config_stale
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", PARAMETER_FORMS, indirect=True
+)
+def test_results_record_the_parameters_they_ran(parameter_solve, solver):
+    """A result labels each parameter row and keeps the fixed values."""
+    result = parameter_solve["result"]
+    names = [
+        label.split(" [")[0] for label in result.parameter_legend.values()
+    ]
+    assert names == list(solver.swept_parameters)
+    assert result.fixed_parameters == solver.fixed_parameter_values
+    exported = result.as_numpy
+    assert exported["parameter_legend"] == result.parameter_legend
+    assert exported["fixed_parameters"] == result.fixed_parameters
+    assert (
+        result.as_pandas["fixed_parameters"].to_dict()
+        == result.fixed_parameters
+    )
 
 
 @pytest.mark.parametrize(
@@ -3276,7 +3298,7 @@ def test_parameter_changes_between_solves(
     """Single values last one call; a new default reaches the next solve."""
     system = system_restored
     names = list(system.parameters.names)
-    defaults = dict(system.compile_settings.parameter_values)
+    defaults = dict(system.parameters.defaults)
     _, params = solver.prepare_grid_arrays(
         None, {names[0]: simple_parameters[names[0]], names[1]: 0.75}
     )

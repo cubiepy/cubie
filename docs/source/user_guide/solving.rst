@@ -125,7 +125,7 @@ them out of the dicts and they will use their default values. You can
 leave either dict out entirely, too. If you didn't set defaults when you
 built the system, you can set them on the system with
 ``system.set_default_parameters({"x0": 0.4})`` for parameters and
-``system.set_initial_value("y1", 0.3)`` for states. If you include a
+``system.set_initial_values({"y1": 0.3})`` for states. If you include a
 constant value for a parameter or initial value that has a different
 default, the default doesn't change: Cubie presumes that arguments to
 ``solve`` are intended for that run only. ``solve_ivp``,

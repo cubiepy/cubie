@@ -812,8 +812,8 @@ def simple_parameters(system):
 def parameter_batch(system, simple_parameters, precision):
     """A row per parameter: two swept rows and one changed fixed row."""
     rows = np.tile(
-        system.parameters.values_array[:, np.newaxis], (1, 2)
-    ).astype(precision)
+        system.parameters.defaults_array(precision)[:, np.newaxis], (1, 2)
+    )
     names = list(system.parameters.names)
     rows[0] = simple_parameters[names[0]]
     rows[1] = simple_parameters[names[1]]
@@ -832,7 +832,7 @@ def parameter_solve(solver, system, solver_settings, parameter_batch):
         names[1]: parameter_batch[1],
         names[2]: float(parameter_batch[2, 0]),
     }
-    defaults = dict(system.compile_settings.parameter_values)
+    defaults = dict(system.parameters.defaults)
     record = {"defaults": defaults, "swept_before": None}
     inits, params, options = None, as_dict, {}
     if form == "full_array":
@@ -1335,7 +1335,7 @@ def initial_state(system, precision, request):
                 "initial state override could not be coerced into numpy array",
             ) from error
         return request_inits
-    return system.initial_values.values_array.astype(precision, copy=True)
+    return system.initial_values.defaults_array(precision)
 
 
 # ========================================
@@ -1364,7 +1364,7 @@ def cpu_loop_runner(
             np.array(initial_values, dtype=precision, copy=True)
             if initial_values is not None
             else np.array(
-                system.initial_values.values_array,
+                system.initial_values.defaults_array(system.precision),
                 dtype=precision,
                 copy=True,
             )
@@ -1373,7 +1373,7 @@ def cpu_loop_runner(
             np.array(parameters, dtype=precision, copy=True)
             if parameters is not None
             else np.array(
-                system.parameters.values_array,
+                system.parameters.defaults_array(system.precision),
                 dtype=precision,
                 copy=True,
             )
@@ -1426,7 +1426,7 @@ def cpu_loop_outputs(
     """Execute the CPU reference loop with the provided configuration."""
     inputs = {
         "initial_values": initial_state.copy(),
-        "parameters": system.parameters.values_array.copy(),
+        "parameters": system.parameters.defaults_array(system.precision),
     }
     coefficients = (
         driver_array.coefficients if driver_array is not None else None
@@ -1528,7 +1528,7 @@ def batch_request(system, batch_settings, precision) -> dict[str, Array]:
                 batch_settings["num_state_vals_0"],
                 dtype=precision,
             ),
-            [system.initial_values.values_dict[state_names[0]]],
+            [system.initial_values.defaults[state_names[0]]],
         ]),
         state_names[1]: np.concatenate([
             np.linspace(
@@ -1536,7 +1536,7 @@ def batch_request(system, batch_settings, precision) -> dict[str, Array]:
                 batch_settings["num_state_vals_1"],
                 dtype=precision,
             ),
-            [system.initial_values.values_dict[state_names[1]]],
+            [system.initial_values.defaults[state_names[1]]],
         ]),
         param_names[0]: np.concatenate([
             np.linspace(
@@ -1544,7 +1544,7 @@ def batch_request(system, batch_settings, precision) -> dict[str, Array]:
                 batch_settings["num_param_vals_0"],
                 dtype=precision,
             ),
-            [system.parameters.values_dict[param_names[0]]],
+            [system.parameters.defaults[param_names[0]]],
         ]),
         param_names[1]: np.concatenate([
             np.linspace(
@@ -1552,7 +1552,7 @@ def batch_request(system, batch_settings, precision) -> dict[str, Array]:
                 batch_settings["num_param_vals_1"],
                 dtype=precision,
             ),
-            [system.parameters.values_dict[param_names[1]]],
+            [system.parameters.defaults[param_names[1]]],
         ]),
     }
 
@@ -1574,14 +1574,13 @@ def batch_input_arrays(
         k: v for k, v in batch_request.items() if k in param_names
     }
 
-    # A copy takes the sweep, leaving the session system as it is.
+    # A copy takes the batch, leaving the session system as it is.
     handler = BatchInputHandler.from_system(system.copy())
-    values, swept, fixed = handler.split_parameters(params_dict)
-    handler.interface.set_swept_parameters(swept, fixed)
-    inits, params = handler(
+    values, batch = handler.split_parameters(params_dict)
+    handler.interface.apply_batch(batch)
+    return handler(
         states=states_dict, params=values, kind=batch_settings["kind"]
     )
-    return inits, params
 
 
 # ========================================

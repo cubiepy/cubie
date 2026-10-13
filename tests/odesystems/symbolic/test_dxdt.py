@@ -417,11 +417,15 @@ class TestObservablesDeviceParity:
             precision(0.0),
         )
 
-        state_idx = system.states.indices_dict
-        param_idx = system.parameters.indices_dict
+        state_idx = {
+            name: row for row, name in enumerate(system.states.names)
+        }
+        param_idx = {
+            name: row for row, name in enumerate(system.parameters.names)
+        }
         driver_names = system.indices.driver_names
         drive_idx = driver_names.index("drive")
-        const_value = precision(system.parameters.values_dict["c0"])
+        const_value = precision(system.parameters.defaults["c0"])
 
         x_val = state_kernel[state_idx["x"]]
         y_val = state_kernel[state_idx["y"]]

@@ -517,9 +517,9 @@ class _CubieConfigBase(FrozenSettings):
     Memoizing the hash is only sound because nested values seal at
     the snapshot boundary: converters on array-valued fields store
     owned read-only copies (never aliases of caller arrays), and
-    container values such as ``SystemValues`` freeze in place when a
-    snapshot takes them. A converter that stores a mutable alias
-    would silently break this contract — copy and seal instead.
+    value objects such as the variable sets are frozen. A converter
+    that stores a mutable alias would silently break this contract —
+    copy and seal instead.
     """
 
     _values_hash_memo: Optional[str] = field(

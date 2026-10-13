@@ -150,23 +150,19 @@ class StatesEditor(QDialog):
             )
             return
 
-        errors = []
-
-        for name, ve in self._value_edits.items():
-            try:
-                self._ode.set_initial_value(name, ve.value())
-            except Exception as e:
-                errors.append(f"{name}: {e}")
-
-        if errors:
+        values = {
+            name: edit.value() for name, edit in self._value_edits.items()
+        }
+        try:
+            self._ode.set_initial_values(values)
+        except Exception as error:
             QMessageBox.warning(
                 self,
                 "Errors Applying Changes",
-                "Some changes could not be applied:\n"
-                + "\n".join(errors)
+                f"The values could not be applied:\n{error}",
             )
-        else:
-            self.accept()
+            return
+        self.accept()
 
 
 def show_states_editor(

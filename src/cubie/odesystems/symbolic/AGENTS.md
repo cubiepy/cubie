@@ -10,7 +10,7 @@ converts to the hash-consed IR in `engine/` inside `parsing/normalise.py`, and a
 compute (structural simplification, differentiation, substitution, CSE,
 hashing, printing) runs on IR nodes. This top level holds the user-facing system class
 (`SymbolicODE`), the disk-backed source cache (`ODEFile`), the symbol-to-device-index maps
-(`IndexedBaseMap`/`IndexedBases`, SymPy-facing for GUIs and `SystemValues`), and shared
+(`IndexedBaseMap`/`IndexedBases`, SymPy-facing for codegen), and shared
 utilities (hashing, the reserved codegen prefix). Equation parsing lives in `parsing/`,
 and every parsed system runs through the structural simplification in `structural/`;
 the CUDA source emitters live in `codegen/`. `SymbolicODE` orchestrates both: parse via

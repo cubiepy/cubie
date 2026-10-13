@@ -173,7 +173,7 @@ def test_custom_units_for_symbolic_ode():
 
 def test_numeric_assignments_become_parameters(basic_model):
     """Variables with numeric assignments become fixed parameters."""
-    values = basic_model.parameters.values_dict
+    values = basic_model.parameters.defaults
     assert values["main_a"] == 0.5
     assert basic_model.fixed_parameter_values["main_a"] == 0.5
 
