@@ -137,11 +137,12 @@ generating values programmatically, you can pass arrays instead.
 Initial values arrays have one row per state in your system. The
 parameters array can either have one row for every parameter in your
 system, or one row per parameter that will vary across a batch only. In
-both cases, rows should be ordered by parameter names. To pass just the
-varying parameters, you will need to tell the system which parameters to
-expect. To do this, call ``solver.set_swept_parameters`` with a set of
-the parameter names you want to vary, or pass the same set to the
-``swept_parameters`` argument when building the system.
+both cases, rows should be ordered by parameter names.
+``solver.parameter_legend`` lists the parameter name of each row. To pass
+just the varying parameters, you will need to tell the system which
+parameters to expect. To do this, call ``solver.set_swept_parameters``
+with a set of the parameter names you want to vary, or pass the same set
+to the ``swept_parameters`` argument when building the system.
 
 .. code-block:: python
 
