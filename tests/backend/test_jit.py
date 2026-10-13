@@ -27,6 +27,15 @@ def test_jit_flags_render_over_live_defaults():
     assert compile_kwargs["lto"] is True
 
 
+def test_reassoc_flag_renders_into_fastmath():
+    """The reassoc flag adds exactly ``reassoc`` to the fastmath set."""
+
+    enabled = get_jit_kwargs(JITFlags(reassoc=True))["fastmath"]
+    disabled = get_jit_kwargs(JITFlags(reassoc=False))["fastmath"]
+    assert enabled - disabled == {"reassoc"}
+    assert disabled <= enabled
+
+
 def test_jit_kwargs_carry_ast_transform_flag():
     """Every build requests the MLIR AST transforms."""
 

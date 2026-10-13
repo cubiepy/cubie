@@ -27,6 +27,7 @@ JIT_FLAG_DEFAULTS: Mapping[str, bool] = MappingProxyType(
         "contract": True,
         "arcp": True,
         "afn": True,
+        "reassoc": False,
         "ftz": True,
         "lto": True,
     }
