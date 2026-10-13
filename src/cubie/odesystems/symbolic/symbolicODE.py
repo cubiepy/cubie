@@ -43,12 +43,11 @@ from typing import (
     Any,
     Callable,
     Iterable,
-    Mapping,
     Optional,
-    Tuple,
     Union,
 )
 
+from attrs import evolve as attrs_evolve
 from numpy import asarray, dtype as np_dtype, float32
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
@@ -59,22 +58,17 @@ from cubie.odesystems.symbolic.helper_registry import (
     helper_member_hash,
     helper_source_hash,
 )
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.odefile import ODEFile
 from cubie.odesystems.symbolic.parsing import (
     JVPEquations,
     parse_system,
 )
+from cubie.odesystems.symbolic.parsing.assemble import SpecialisedSystem
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
-from cubie.odesystems.variables import (
-    Parameter,
-    ParameterSet,
-    State,
-    Variable,
-    ValuedSet,
-    VariableSet,
-)
+from cubie.odesystems.variables import ParameterSet
 from cubie.odesystems.solver_helpers import (
     HelperResult,
     OperationCounts,
@@ -85,71 +79,25 @@ from cubie._serialize import canonical_digest
 from cubie._env import operation_ordering_default
 from cubie._utils import PrecisionDType, is_devfunc
 from cubie.time_logger import default_timelogger
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
-def _system_source_hash(equations, index_map) -> str:
+def _system_source_hash(equations, layout: SystemLayout) -> str:
     """Return the source hash for equations and their array layout."""
 
     return hash_system_definition(
         equations,
-        state_labels=index_map.state_names,
-        dxdt_labels=index_map.dxdt_names,
-        parameter_labels=index_map.parameter_names,
-        driver_labels=index_map.driver_names,
-        observable_labels=index_map.observable_names,
+        state_labels=layout.state_names,
+        dxdt_labels=layout.dxdt_names,
+        parameter_labels=layout.swept_names,
+        driver_labels=layout.driver_names,
+        observable_labels=layout.observable_names,
         derivative_names=equations.derivative_names,
         function_aliases=equations.function_aliases,
         nonfloat_functions=equations.nonfloat_functions,
     )
 
 
-def _unit_map(
-    parameters: dict, units: Optional[dict[str, str]]
-) -> dict[str, str]:
-    """Return a unit string for every parameter name."""
-
-    units = units or {}
-    return {
-        name: units.get(name, "dimensionless") for name in parameters
-    }
-
-
-def _observable_set(index_map) -> VariableSet:
-    """Return the observables of ``index_map`` with their units."""
-    return VariableSet.of(
-        Variable, index_map.observable_names, index_map.observables.units
-    )
-
-
-def _driver_derivative_indices(
-    equations, index_map
-) -> Tuple[Tuple[int, int], ...]:
-    """Return the driver index and order of each driver derivative.
-
-    Parameters
-    ----------
-    equations
-        ``ParsedEquations`` whose ``driver_derivatives`` maps each
-        derivative symbol to ``(driver, order)``.
-    index_map
-        ``IndexedBases`` giving each driver's index.
-
-    Returns
-    -------
-    tuple of (int, int)
-        One ``(driver index, order)`` pair per derivative the equations
-        read, in the order the derivatives follow the drivers in the
-        drivers buffer.
-    """
-
-    driver_indices = {
-        str(symbol): int(index)
-        for symbol, index in index_map.drivers.index_map.items()
-    }
-    return tuple(
-        (driver_indices[driver.name], int(order))
-        for driver, order in equations.driver_derivatives.values()
-    )
 
 
 def _operation_source_hash(fn_hash: str, operation_ordering: str) -> str:
@@ -327,76 +275,63 @@ class SymbolicODE(BaseODE):
         """
         if operation_ordering is None:
             operation_ordering = operation_ordering_default()
-        parameters = VariableSet.of(
-            Parameter,
-            dict(sorted(parsed_system.parameters.items())),
-            _unit_map(
-                parsed_system.parameters, parsed_system.parameter_units
-            ),
-        )
-        # Specialise from the compiled set, so the device function reads
-        # the parameters array in the same row order the solver fills.
-        batch = ParameterSet.build(parameters, swept_parameters or ())
+        parameters = parsed_system.declared_parameters
         self._parsed_system = parsed_system
-        # Keep every initial value we have been given, including those
-        # of states structural simplification has dropped, so a state
-        # that a later batch restores starts from the value it was set
-        # to.
-        self._state_defaults = dict(parsed_system.states)
-        (
-            all_indexed_bases,
-            self.all_symbols,
-            user_functions,
-            equations,
-            fn_hash,
-        ) = parsed_system.specialise(batch.swept, batch.fixed)
-
-        derived_mass_matrix = equations.mass_matrix
+        specialised = self._specialise(
+            ParameterSet.build(parameters, swept_parameters or ())
+        )
 
         if name is None:
             name = f"unnamed_{parsed_system.definition_hash[:8]}"
-
         self.name = name
+        self.equations = specialised.equations
+        self.fn_hash = specialised.fn_hash
+        self.user_functions = specialised.functions
 
-        driver_derivatives = _driver_derivative_indices(
-            equations, all_indexed_bases
-        )
-        ndriv = all_indexed_bases.drivers.length + len(driver_derivatives)
-        self.equations = equations
-        self.indices = all_indexed_bases
-        self.fn_hash = fn_hash
-        self.user_functions = user_functions
-        self.driver_defaults = all_indexed_bases.drivers.default_values
-
+        # We keep every initial value we are given, including those of
+        # states structural simplification drops, so a state that a
+        # later batch restores starts from the value it was set to.
         super().__init__(
             precision,
-            self._states_with_defaults(all_indexed_bases),
             parameters,
-            _observable_set(all_indexed_bases),
-            swept_parameters=batch.swept,
-            num_drivers=ndriv,
-            driver_derivatives=driver_derivatives,
+            specialised.layout,
+            initial_values=parsed_system.states,
             operation_ordering=operation_ordering,
             name=name,
         )
-        self._seed_derived_mass(derived_mass_matrix)
+        self._seed_derived_mass(specialised.equations.mass_matrix)
         self.gen_file = ODEFile(
             name,
             _operation_source_hash(
-                fn_hash,
+                specialised.fn_hash,
                 self.compile_settings.operation_ordering,
             ),
         )
         self._jvp_exprs: Optional[JVPEquations] = None
         self._jvp_exprs_key = None
 
-    def _states_with_defaults(self, index_map) -> ValuedSet:
-        """Return the states of ``index_map`` with our initial values."""
-        defaults = {
-            name: self._state_defaults.get(name, value)
-            for name, value in index_map.states.defaults.items()
-        }
-        return VariableSet.of(State, defaults, index_map.states.units)
+    def _specialise(self, parameters: ParameterSet) -> SpecialisedSystem:
+        """Return the parsed system specialised for a batch's parameters.
+
+        Parameters
+        ----------
+        parameters
+            The parameters as the batch compiles them.
+
+        Returns
+        -------
+        SpecialisedSystem
+            The result of :meth:`ParsedSystem.specialise`.
+        """
+        specialised = self._parsed_system.specialise(
+            parameters.swept, parameters.fixed
+        )
+        # Hold the batch itself in the layout, so the compiled
+        # parameters are the object a repeated batch arrives as.
+        return attrs_evolve(
+            specialised,
+            layout=attrs_evolve(specialised.layout, parameters=parameters),
+        )
 
     def _seed_derived_mass(self, mass_matrix) -> None:
         """Seed compile settings with the simplification-derived mass.
@@ -568,7 +503,7 @@ class SymbolicODE(BaseODE):
     @property
     def driver_units(self) -> dict[str, str]:
         """Return units for drivers."""
-        return self.indices.drivers.units
+        return self.layout.drivers.units
 
     def _get_jvp_exprs(self) -> JVPEquations:
         """Return Jacobian-vector assignments for the current system.
@@ -581,9 +516,9 @@ class SymbolicODE(BaseODE):
         if self._jvp_exprs is None or self._jvp_exprs_key != key:
             self._jvp_exprs = generate_analytical_jvp(
                 self.equations,
-                input_order=self.indices.states.index_map,
-                output_order=self.indices.dxdt.index_map,
-                observables=self.indices.observable_symbols,
+                input_order=buffer_maps(self.layout).state_order,
+                output_order=buffer_maps(self.layout).dxdt_order,
+                observables=buffer_maps(self.layout).observable_symbols,
                 cse=True,
                 operation_ordering=(
                     self.compile_settings.operation_ordering
@@ -605,24 +540,17 @@ class SymbolicODE(BaseODE):
         dict[str, Callable]
             Mapping from printed function name to device callable.
         """
-        injections = {}
-        for name, func in (self.user_functions or {}).items():
-            if is_devfunc(func):
-                injections[name] = func
-        all_symbols = self.all_symbols or {}
-        for name, obj in all_symbols.items():
-            if name == "__function_aliases__":
-                continue
-            if is_devfunc(obj):
-                injections[name] = obj
+        functions = self.user_functions or {}
+        injections = {
+            name: func for name, func in functions.items() if is_devfunc(func)
+        }
         # The string parser renames user functions (trailing
         # underscore), and generated source prints the renamed symbol,
         # so each device callable is injected under its alias too.
-        aliases = all_symbols.get("__function_aliases__", {}) or {}
-        for sym_name, orig_name in aliases.items():
-            func = (self.user_functions or {}).get(orig_name)
+        for alias, original in self.equations.function_aliases.items():
+            func = functions.get(original)
             if func is not None and is_devfunc(func):
-                injections[sym_name] = func
+                injections[alias] = func
         return injections
 
     def build(self) -> ODECache:
@@ -635,7 +563,7 @@ class SymbolicODE(BaseODE):
         """
         numba_precision = self.numba_precision
         lineinfo = self.compile_settings.lineinfo
-        new_hash = _system_source_hash(self.equations, self.indices)
+        new_hash = _system_source_hash(self.equations, self.layout)
         source_hash = _operation_source_hash(
             new_hash,
             self.compile_settings.operation_ordering,
@@ -648,7 +576,7 @@ class SymbolicODE(BaseODE):
         if not self.gen_file.function_is_cached("dxdt_factory"):
             dxdt_code = generate_dxdt_fac_code(
                 self.equations,
-                self.indices,
+                self.layout,
                 "dxdt_factory",
                 operation_ordering=(
                     self.compile_settings.operation_ordering
@@ -667,7 +595,7 @@ class SymbolicODE(BaseODE):
         obs_code = None
         if not self.gen_file.function_is_cached("observables_factory"):
             obs_code = generate_observables_fac_code(
-                self.equations, self.indices,
+                self.equations, self.layout,
                 func_name="observables_factory",
                 operation_ordering=(
                     self.compile_settings.operation_ordering
@@ -709,65 +637,27 @@ class SymbolicODE(BaseODE):
         set[str]
             The recognised names.
         """
-        settings = self.compile_settings
-        parameters = updates.get("parameters", settings.parameters)
-        if parameters == settings.parameters:
+        if "parameters" not in updates:
             return self.update_compile_settings(updates, silent=True)
+        parameters = updates.pop("parameters")
+        if parameters == self.compile_settings.parameters:
+            return self.update_compile_settings(updates, silent=True) | {
+                "parameters"
+            }
 
-        (
-            index_map,
-            all_symbols,
-            funcs,
-            parsed,
-            fn_hash,
-        ) = self._parsed_system.specialise(
-            parameters.swept, parameters.fixed
-        )
-        derived = {}
-        if tuple(index_map.state_names) != settings.states.names:
-            self._states = self._states_with_defaults(index_map)
-            derived["states"] = self._states.without_values()
-        if tuple(index_map.observable_names) != settings.observables.names:
-            derived["observables"] = _observable_set(index_map)
-        mass = parsed.mass_matrix
+        specialised = self._specialise(parameters)
+        mass = specialised.equations.mass_matrix
         if mass is not None:
             mass = asarray(mass, dtype=self.precision)
-        derived["mass"] = mass
-        driver_derivatives = _driver_derivative_indices(parsed, index_map)
-        derived["driver_derivatives"] = driver_derivatives
-        derived["num_drivers"] = index_map.drivers.length + len(
-            driver_derivatives
-        )
         recognised = self.update_compile_settings(
-            {**updates, **derived}, silent=True
+            {**updates, "layout": specialised.layout, "mass": mass},
+            silent=True,
         )
-
-        self.equations = parsed
-        self.indices = index_map
-        self.all_symbols = all_symbols
-        self.user_functions = funcs
-        self.fn_hash = fn_hash
-        self.driver_defaults = index_map.drivers.default_values
-        return recognised - (set(derived) - set(updates))
-
-    def set_initial_values(self, values: Mapping[str, float]) -> None:
-        """Set the default initial values of states.
-
-        We read initial values only when a run starts, so setting them
-        never rebuilds the system.
-
-        Parameters
-        ----------
-        values
-            State names mapped to new default initial values.
-
-        Raises
-        ------
-        KeyError
-            If a name is not a state of the system.
-        """
-        super().set_initial_values(values)
-        self._state_defaults.update(values)
+        self.equations = specialised.equations
+        self.user_functions = specialised.functions
+        self.fn_hash = specialised.fn_hash
+        derived = {"layout", "mass"} - set(updates)
+        return (recognised - derived) | {"parameters"}
 
     def get_parameters_info(self) -> list[dict]:
         """Return information about all parameters.

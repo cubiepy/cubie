@@ -42,14 +42,15 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.parsing import (
-    IndexedBases,
     ParsedEquations,
 )
+from cubie.odesystems.layout import SystemLayout
 from cubie.time_logger import default_timelogger
 
 from ._matrix_utils import mass_diagonal_flags
 from ._stage_utils import build_stage_metadata, prepare_stage_data
 from .nonlinear_residuals import build_stage_substitutions
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -273,7 +274,7 @@ def _build_prepare_body(
 
 def _resolve_jvp(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     cse: bool,
     jvp_equations: Optional[JVPEquations],
     operation_ordering: str = operation_ordering_default(),
@@ -283,9 +284,9 @@ def _resolve_jvp(
         return jvp_equations
     return generate_analytical_jvp(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
-        observables=index_map.observable_symbols,
+        input_order=buffer_maps(layout).state_order,
+        output_order=buffer_maps(layout).dxdt_order,
+        observables=buffer_maps(layout).observable_symbols,
         cse=cse,
         operation_ordering=operation_ordering,
     )
@@ -293,7 +294,7 @@ def _resolve_jvp(
 
 def generate_linear_operator_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     variant: HelperVariant = HelperVariant.PLAIN,
     M: Optional[Union[Iterable, object]] = None,
     stage_coefficients: Optional[
@@ -314,8 +315,8 @@ def generate_linear_operator_code(
     ----------
     equations
         Parsed ODE equations.
-    index_map
-        Symbol-to-array mapping for states, parameters, etc.
+    layout
+        The buffer layout that gives each symbol's array reference.
     variant
         Helper variant selecting the evaluation-point and auxiliary
         conventions.
@@ -346,11 +347,11 @@ def generate_linear_operator_code(
     event = f"codegen_linear_operator_{variant.value}"
     default_timelogger.start_event(event)
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     jvp_equations = _resolve_jvp(
         equations,
-        index_map,
+        layout,
         cse,
         jvp_equations,
         operation_ordering,
@@ -421,7 +422,7 @@ def generate_linear_operator_code(
 
 def generate_prepare_jac_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     func_name: str = "prepare_jac",
     cse: bool = True,
     jvp_equations: Optional[JVPEquations] = None,
@@ -430,10 +431,10 @@ def generate_prepare_jac_code(
     """Generate the cached auxiliary preparation factory."""
     default_timelogger.start_event("codegen_prepare_jac")
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     jvp_equations = _resolve_jvp(
         equations,
-        index_map,
+        layout,
         cse,
         jvp_equations,
         operation_ordering,
@@ -820,14 +821,14 @@ def _mass_apply_body(mass_diag, sysir, n: int) -> str:
 
 def generate_apply_mass_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     M: Optional[Union[Iterable, object]] = None,
     func_name: str = "apply_mass_factory",
 ) -> str:
     """Generate a factory applying the mass matrix to a vector."""
     default_timelogger.start_event("codegen_apply_mass")
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
 

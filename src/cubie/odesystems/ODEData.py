@@ -11,27 +11,22 @@ Published Classes
     4
 
 :class:`ODEData`
-    A system's states, parameters and observables, with derived sizes,
-    as the compile settings of a :class:`~cubie.odesystems.baseODE.BaseODE`.
+    A system's buffer layout, with derived sizes, as the compile
+    settings of a :class:`~cubie.odesystems.baseODE.BaseODE`.
 
     >>> from numpy import float32
-    >>> from cubie.odesystems.variables import (
-    ...     Parameter, ParameterSet, Variable, VariableSet,
-    ... )
-    >>> declared = VariableSet.of(Parameter, {"a": 0.5, "g": 9.81})
+    >>> from cubie.odesystems.layout import SystemLayout
     >>> data = ODEData(
     ...     precision=float32,
-    ...     states=VariableSet.of(Variable, ["x", "y"]),
-    ...     parameters=ParameterSet.build(declared, ["a"]),
-    ...     observables=VariableSet.of(Variable, ["v"]),
+    ...     layout=SystemLayout(states=["x", "y"], parameters=["a"]),
     ... )
     >>> data.num_states
     2
 
 See Also
 --------
-:mod:`cubie.odesystems.variables`
-    The variable sets ``ODEData`` holds.
+:class:`~cubie.odesystems.layout.SystemLayout`
+    The layout ``ODEData`` holds.
 :class:`~cubie.CUDAFactory.CUDAFactoryConfig`
     Parent class providing precision and hashing.
 :class:`~cubie.odesystems.baseODE.BaseODE`
@@ -48,7 +43,6 @@ from attrs import (
     frozen,
 )
 from attrs.validators import (
-    deep_iterable as attrsval_deep_iterable,
     in_ as attrsval_in,
     instance_of as attrsval_instance_of,
 )
@@ -57,6 +51,7 @@ from numpy import array as np_array, float64 as np_float64
 from cubie._env import operation_ordering_default
 from cubie.CUDAFactory import CUDAFactoryConfig
 from cubie._utils import mass_equal
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.variables import ParameterSet, VariableSet
 
 
@@ -113,33 +108,24 @@ class SystemSizes:
 
 @frozen
 class ODEData(CUDAFactoryConfig):
-    """Bundle the variables and metadata an ODE system compiles against.
+    """Bundle the layout and metadata an ODE system compiles against.
 
     We keep only fields that change the generated code here, so a
     change to any of them rebuilds the system. We keep defaults on the
     system instead: a state's default initial value never reaches the
     build, and a parameter's default reaches it only as a fixed value in
-    ``parameters``.
+    the layout's parameters.
 
     Parameters
     ----------
-    parameters
-        Each parameter as the current batch compiles it: swept, or
-        fixed at a value.
-    states
-        The names and units of the states, in array order.
-    observables
-        The names and units of the observables, in array order.
+    layout
+        The variables in each device buffer and the parameters as the
+        current batch compiles them.
     precision
         Precision factory used for numerical calculations. Defaults to
         :class:`numpy.float32`.
-    num_drivers
-        Drivers-buffer length: drivers plus driver derivatives read.
-        Defaults to ``1``.
-    driver_derivatives
-        The driver index and order of each driver derivative the
-        equations read, in the order the derivatives follow the
-        drivers in the drivers buffer.
+    operation_ordering
+        Generated-operation ordering policy.
 
     Notes
     -----
@@ -152,24 +138,8 @@ class ODEData(CUDAFactoryConfig):
     order.
     """
 
-    parameters: ParameterSet = field(
-        validator=attrsval_instance_of(ParameterSet)
-    )
-    states: VariableSet = field(
-        validator=attrsval_instance_of(VariableSet)
-    )
-    observables: VariableSet = field(
-        validator=attrsval_instance_of(VariableSet)
-    )
-    num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
-    driver_derivatives: Tuple[Tuple[int, int], ...] = field(
-        default=(),
-        validator=attrsval_deep_iterable(
-            attrsval_deep_iterable(
-                attrsval_instance_of(int), attrsval_instance_of(tuple)
-            ),
-            attrsval_instance_of(tuple),
-        ),
+    layout: SystemLayout = field(
+        validator=attrsval_instance_of(SystemLayout)
     )
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
@@ -180,6 +150,31 @@ class ODEData(CUDAFactoryConfig):
         converter=_mass_matrix_converter,
         eq=attrs_cmp_using(eq=mass_equal),
     )
+
+    @property
+    def parameters(self) -> ParameterSet:
+        """Each parameter as the current batch compiles it."""
+        return self.layout.parameters
+
+    @property
+    def states(self) -> VariableSet:
+        """The names and units of the states, in array order."""
+        return self.layout.states
+
+    @property
+    def observables(self) -> VariableSet:
+        """The names and units of the observables, in array order."""
+        return self.layout.observables
+
+    @property
+    def num_drivers(self) -> int:
+        """Drivers-buffer length: drivers plus driver derivatives read."""
+        return self.layout.num_drivers
+
+    @property
+    def driver_derivatives(self) -> Tuple[Tuple[int, int], ...]:
+        """The driver index and order of each driver derivative read."""
+        return self.layout.driver_derivatives
 
     @property
     def num_states(self) -> int:

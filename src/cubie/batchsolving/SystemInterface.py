@@ -93,7 +93,33 @@ class SystemInterface:
     @property
     def swept_set(self) -> ValuedSet:
         """The swept parameters with their defaults, in row order."""
-        return self._system.parameters.subset(self.swept_parameters)
+        return self._system.swept_set_for(self.compiled_parameters)
+
+    def batch_for(
+        self,
+        swept: Sequence[str] = (),
+        values: Optional[Dict[str, float]] = None,
+    ) -> ParameterSet:
+        """Return the system's parameters as a batch compiles them.
+
+        Parameters
+        ----------
+        swept
+            Names of the parameters to sweep, in any order.
+        values
+            Values to compile in for some of the other parameters.
+        """
+        return self._system.batch_for(swept, values)
+
+    def swept_set_for(self, parameters: ParameterSet) -> ValuedSet:
+        """Return a batch's swept parameters with their defaults.
+
+        Parameters
+        ----------
+        parameters
+            The parameters as the batch compiles them.
+        """
+        return self._system.swept_set_for(parameters)
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:

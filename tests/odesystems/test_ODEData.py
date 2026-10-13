@@ -11,12 +11,8 @@ from cubie.odesystems.ODEData import (
     OPERATION_ORDERINGS,
     SystemSizes,
 )
-from cubie.odesystems.variables import (
-    Parameter,
-    ParameterSet,
-    Variable,
-    VariableSet,
-)
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import Parameter, ParameterSet, VariableSet
 
 
 DECLARED = VariableSet.of(Parameter, {"a": 0.5, "b": 0.3, "g": 9.81})
@@ -73,24 +69,31 @@ def test_system_sizes_validates_int(field, bad_value):
 
 # ── ODEData construction ──────────────────────────────────────── #
 
+def _layout(parameters=None, drivers=()):
+    """Return a two-state layout compiling ``parameters``."""
+    return SystemLayout(
+        states=["x", "y"],
+        parameters=parameters or ParameterSet.build(DECLARED),
+        observables=["v", "w"],
+        drivers=drivers,
+    )
+
+
 def _make_odedata(
     precision=np.float32,
-    num_drivers=1,
+    drivers=("u",),
     operation_ordering="kahn",
 ):
-    """Helper to create ODEData from variable sets."""
+    """Helper to create ODEData from a layout."""
     return ODEData(
         precision=precision,
-        states=VariableSet.of(Variable, ["x", "y"]),
-        parameters=ParameterSet.build(DECLARED),
-        observables=VariableSet.of(Variable, ["v", "w"]),
-        num_drivers=num_drivers,
+        layout=_layout(drivers=drivers),
         operation_ordering=operation_ordering,
     )
 
 
 def test_odedata_construction():
-    """ODEData stores a variable set for each component."""
+    """ODEData reads each component from its layout."""
     data = _make_odedata()
     assert data.states.n == 2
     assert data.parameters.n == 3
@@ -149,7 +152,7 @@ def test_odedata_count_properties(prop, expected):
 
 def test_odedata_sizes_returns_system_sizes():
     """sizes property returns SystemSizes with all counts."""
-    data = _make_odedata(num_drivers=3)
+    data = _make_odedata(drivers=("u", "w", "z"))
     sizes = data.sizes
     assert sizes.states == 2
     assert sizes.observables == 2
@@ -210,9 +213,9 @@ def test_swept_names_follow_the_parameter_order():
     """Swept names take the parameters' order; the rest compile in."""
     data = _make_odedata()
     data, _, changed = data.update(
-        parameters=ParameterSet.build(DECLARED, ["b", "a"], {"g": 2.0})
+        layout=_layout(ParameterSet.build(DECLARED, ["b", "a"], {"g": 2.0}))
     )
-    assert changed == {"parameters"}
+    assert changed == {"layout"}
     assert data.swept_parameters == ("a", "b")
     assert data.fixed_parameter_values == pytest.approx({"g": 2.0})
     assert data.sizes.swept_parameters == 2
@@ -222,13 +225,15 @@ def test_compiled_in_values_participate_in_identity():
     """Changing the sweep or a fixed value changes values_hash, and
     changing a swept parameter's default does not."""
     data = _make_odedata()
-    swept = data.update(parameters=ParameterSet.build(DECLARED, ["a"]))[0]
+    swept = data.update(
+        layout=_layout(ParameterSet.build(DECLARED, ["a"]))
+    )[0]
     refixed = data.update(
-        parameters=ParameterSet.build(DECLARED, (), {"a": 0.7})
+        layout=_layout(ParameterSet.build(DECLARED, (), {"a": 0.7}))
     )[0]
     new_default, _, changed = swept.update(
-        parameters=ParameterSet.build(
-            DECLARED.with_defaults({"a": 0.7}), ["a"]
+        layout=_layout(
+            ParameterSet.build(DECLARED.with_defaults({"a": 0.7}), ["a"])
         )
     )
     assert swept.values_hash != data.values_hash

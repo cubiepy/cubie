@@ -4,7 +4,7 @@
 
 ## Purpose
 IR-to-CUDA **source generators**. Each public `generate_*` function takes parsed equations
-(`ParsedEquations`/`JVPEquations`) plus an index map (`IndexedBases`), converts them once to
+(`ParsedEquations`/`JVPEquations`) plus a buffer layout (`SystemLayout`), converts them once to
 the `engine/` IR through `engine.adapter.system_ir`, and returns a
 **Python source string** defining a `*_factory(precision, ...)` function. Nothing here
 compiles CUDA: `symbolicODE.get_solver_helper()` writes the string to disk via `ODEFile`, imports
@@ -97,7 +97,7 @@ generators bind lives under `_cubie_codegen_`: scalings (`_cubie_codegen_beta`,
 `_cubie_codegen_total_n`, ...), tableau metadata (`_cubie_codegen_c_<i>`,
 `_cubie_codegen_a_<i>_<j>`) and IR locals (`_cubie_codegen_dx_*`,
 `_cubie_codegen_aux_*`, `_cubie_codegen_j_*`, `_cubie_codegen_diag_*`, stage renames
-`_cubie_codegen_s<i>_*`). `IndexedBases.from_user_inputs` rejects user names with that
+`_cubie_codegen_s<i>_*`). `ParsedSystem` rejects user names with that
 prefix. A new generator binds nothing outside the namespace except the template's
 positional argument names (`t` stays bare). Factory signatures expose `precision` (plus
 `order` for preconditioners).
@@ -140,7 +140,7 @@ indices stay plain integers), integer powers as multiplication chains up to
 
 ## Dependencies
 ### Internal
-- `cubie.odesystems.symbolic.parsing` (`ParsedEquations`, `IndexedBases`, `JVPEquations`,
+- `cubie.odesystems.layout` (`SystemLayout`); `cubie.odesystems.symbolic.engine.adapter` (`buffer_maps`); `cubie.odesystems.symbolic.parsing` (`ParsedEquations`, `JVPEquations`,
   `TIME_SYMBOL`); `cubie.time_logger`
   (`default_timelogger` codegen timing). Consumed by `symbolicODE` and, downstream,
   `cubie.integrators.matrix_free_solvers` and the implicit algorithms.

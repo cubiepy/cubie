@@ -36,7 +36,8 @@ from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
 from cubie._env import operation_ordering_default
-from cubie.odesystems.symbolic.parsing import IndexedBases, ParsedEquations
+from cubie.odesystems.symbolic.parsing import ParsedEquations
+from cubie.odesystems.layout import SystemLayout
 from cubie.time_logger import default_timelogger
 
 from ._matrix_utils import mass_matrix_is_identity
@@ -99,7 +100,7 @@ OBSERVABLES_TEMPLATE = (
 
 def generate_dxdt_lines(
     equations: ParsedEquations,
-    index_map: Optional[IndexedBases] = None,
+    layout: Optional[SystemLayout] = None,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> list[str]:
@@ -109,8 +110,8 @@ def generate_dxdt_lines(
     ----------
     equations
         Parsed equations describing ``dx/dt`` assignments.
-    index_map
-        Indexed bases that supply CUDA array references for each symbol.
+    layout
+        The buffer layout that gives each symbol's array reference.
     cse
         Whether to apply common subexpression elimination before emission.
 
@@ -119,7 +120,7 @@ def generate_dxdt_lines(
     list of str
         CUDA source lines that evaluate the ``dx/dt`` equations.
     """
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     working_equations = sysir.non_observable_equations()
 
     if cse:
@@ -156,7 +157,7 @@ def generate_dxdt_lines(
 
 def generate_observables_lines(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> list[str]:
@@ -166,8 +167,8 @@ def generate_observables_lines(
     ----------
     equations
         Parsed equations describing observable assignments.
-    index_map
-        Indexed bases used to substitute CUDA array references.
+    layout
+        The buffer layout that gives each symbol's array reference.
     cse
         Whether to apply common subexpression elimination before emission.
 
@@ -177,10 +178,10 @@ def generate_observables_lines(
         CUDA source lines that compute the observables.
     """
     # Early return if no observables
-    if not index_map.observables.ref_map:
+    if not layout.observable_names:
         return ["pass"]
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     working_equations = list(sysir.equations)
 
     if cse:
@@ -230,7 +231,7 @@ def generate_observables_lines(
 
 def generate_dxdt_fac_code(
     equations: ParsedEquations,
-    index_map: Optional[IndexedBases] = None,
+    layout: Optional[SystemLayout] = None,
     func_name: str = "dxdt_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
@@ -241,8 +242,8 @@ def generate_dxdt_fac_code(
     ----------
     equations
         Parsed equations describing ``dx/dt`` assignments.
-    index_map
-        Indexed bases that provide symbol references.
+    layout
+        The buffer layout that gives each symbol's array reference.
     func_name
         Name of the generated factory function.
     cse
@@ -261,7 +262,7 @@ def generate_dxdt_fac_code(
     default_timelogger.start_event("codegen_generate_dxdt_fac_code")
     dxdt_lines = generate_dxdt_lines(
         equations,
-        index_map=index_map,
+        layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
     )
@@ -305,7 +306,7 @@ INV_MASS_F_TEMPLATE = (
 
 def generate_evaluate_inv_mass_f_code(
     equations: ParsedEquations,
-    index_map: Optional[IndexedBases] = None,
+    layout: Optional[SystemLayout] = None,
     M=None,
     func_name: str = "evaluate_inv_mass_f_factory",
     cse: bool = True,
@@ -334,7 +335,7 @@ def generate_evaluate_inv_mass_f_code(
         )
     lines = generate_dxdt_lines(
         equations,
-        index_map=index_map,
+        layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
     )
@@ -351,7 +352,7 @@ def generate_evaluate_inv_mass_f_code(
 
 def generate_observables_fac_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     func_name: str = "observables",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
@@ -362,8 +363,8 @@ def generate_observables_fac_code(
     ----------
     equations
         Parsed equations describing observable assignments.
-    index_map
-        Indexed bases that provide symbol lookups.
+    layout
+        The buffer layout that gives each symbol's array reference.
     func_name
         Name of the generated factory function.
     cse
@@ -378,7 +379,7 @@ def generate_observables_fac_code(
 
     obs_lines = generate_observables_lines(
         equations,
-        index_map=index_map,
+        layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
     )

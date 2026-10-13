@@ -475,6 +475,24 @@ class ParameterSet(VariableSet):
         One :class:`CompiledParameter` per parameter, in system order.
     """
 
+    _key: tuple = field(init=False, eq=False, repr=False)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        # We key specialisations and compile settings on this tuple on
+        # every solve, so we build it once.
+        object.__setattr__(
+            self,
+            "_key",
+            (
+                "ParameterSet",
+                tuple(
+                    (entry.name, entry.swept, entry.value)
+                    for entry in self.entries
+                ),
+            ),
+        )
+
     @classmethod
     def build(
         cls,
@@ -540,13 +558,7 @@ class ParameterSet(VariableSet):
 
     def _cubie_canonical_(self) -> tuple:
         """Return the names, the sweep and every compiled-in value."""
-        return (
-            "ParameterSet",
-            tuple(
-                (entry.name, entry.swept, entry.value)
-                for entry in self.entries
-            ),
-        )
+        return self._key
 
     @property
     def swept(self) -> Tuple[str, ...]:

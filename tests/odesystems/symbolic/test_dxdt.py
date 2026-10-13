@@ -9,10 +9,10 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_observables_fac_code,
 )
 from cubie.odesystems.symbolic.parsing import (
-    IndexedBases,
     ParsedEquations,
-    parse_input,
+    parse_system,
 )
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 from tests._utils import run_device_dxdt, run_device_observables
 
@@ -50,9 +50,9 @@ class TestDxdtTemplate:
 class TestGenerateDxdtFacCode:
     """Test the generate_dxdt_fac_code function."""
 
-    def test_simple_equations(self, simple_equations, indexed_bases):
+    def test_simple_equations(self, simple_equations, layout):
         """Test code generation with simple equations."""
-        code = generate_dxdt_fac_code(simple_equations, indexed_bases)
+        code = generate_dxdt_fac_code(simple_equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
@@ -62,115 +62,115 @@ class TestGenerateDxdtFacCode:
         assert "dxdt[" not in code
         assert "return dxdt" in code
 
-    def test_custom_function_name(self, simple_equations, indexed_bases):
+    def test_custom_function_name(self, simple_equations, layout):
         """Test code generation with custom function name."""
         func_name = "custom_dxdt_factory"
         code = generate_dxdt_fac_code(
-            simple_equations, indexed_bases, func_name
+            simple_equations, layout, func_name
         )
 
         assert f"def {func_name}" in code
         assert "def dxdt_factory" not in code
 
-    def test_complex_equations(self, complex_equations, indexed_bases):
+    def test_complex_equations(self, complex_equations, layout):
         """Test code generation with complex equations containing auxiliaries.
         """
-        code = generate_dxdt_fac_code(complex_equations, indexed_bases)
+        code = generate_dxdt_fac_code(complex_equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
         assert len(code) > 100  # Should be substantial code
 
-    def test_linear_system(self, linear_system_equations, indexed_bases):
+    def test_linear_system(self, linear_system_equations, layout):
         """Test code generation with linear system."""
-        code = generate_dxdt_fac_code(linear_system_equations, indexed_bases)
+        code = generate_dxdt_fac_code(linear_system_equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
 
-    def test_nonlinear_equations(self, nonlinear_equations, indexed_bases):
+    def test_nonlinear_equations(self, nonlinear_equations, layout):
         """Test code generation with nonlinear equations."""
-        code = generate_dxdt_fac_code(nonlinear_equations, indexed_bases)
+        code = generate_dxdt_fac_code(nonlinear_equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
 
-    def test_empty_equations(self, indexed_bases):
+    def test_empty_equations(self, layout):
         """Test code generation with empty equations list."""
-        empty_equations = ParsedEquations.from_equations([], indexed_bases)
-        code = generate_dxdt_fac_code(empty_equations, indexed_bases)
+        empty_equations = ParsedEquations.from_equations([], layout)
+        code = generate_dxdt_fac_code(empty_equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
 
-    def test_single_equation(self, indexed_bases):
+    def test_single_equation(self, layout):
         """Test code generation with single equation."""
-        x = indexed_bases.states.symbol_map["x"]
-        a = indexed_bases.parameters.symbol_map["a"]
-        dx = indexed_bases.dxdt.symbol_map["dx"]
+        x = sp.Symbol("x", real=True)
+        a = sp.Symbol("a", real=True)
+        dx = sp.Symbol("dx", real=True)
         single_eq = ParsedEquations.from_equations(
             [(dx, a * x)],
-            indexed_bases,
+            layout,
         )
 
-        code = generate_dxdt_fac_code(single_eq, indexed_bases)
+        code = generate_dxdt_fac_code(single_eq, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
 
-    def test_equations_with_numeric_constants(self, indexed_bases):
+    def test_equations_with_numeric_constants(self, layout):
         """Test equations that reference numeric constants."""
-        x = indexed_bases.states.symbol_map["x"]
-        y = indexed_bases.states.symbol_map["y"]
-        dx = indexed_bases.dxdt.symbol_map["dx"]
-        dy = indexed_bases.dxdt.symbol_map["dy"]
+        x = sp.Symbol("x", real=True)
+        y = sp.Symbol("y", real=True)
+        dx = sp.Symbol("dx", real=True)
+        dy = sp.Symbol("dy", real=True)
         equations = ParsedEquations.from_equations(
             [
                 (dx, sp.pi * x + sp.E * y),
                 (dy, sp.sqrt(2) * x - y),
             ],
-            indexed_bases,
+            layout,
         )
 
-        code = generate_dxdt_fac_code(equations, indexed_bases)
+        code = generate_dxdt_fac_code(equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
 
-    def test_equations_with_functions(self, indexed_bases):
+    def test_equations_with_functions(self, layout):
         """Test equations with mathematical functions."""
-        x = indexed_bases.states.symbol_map["x"]
-        y = indexed_bases.states.symbol_map["y"]
-        a = indexed_bases.parameters.symbol_map["a"]
-        dx = indexed_bases.dxdt.symbol_map["dx"]
-        dy = indexed_bases.dxdt.symbol_map["dy"]
+        x = sp.Symbol("x", real=True)
+        y = sp.Symbol("y", real=True)
+        a = sp.Symbol("a", real=True)
+        dx = sp.Symbol("dx", real=True)
+        dy = sp.Symbol("dy", real=True)
         equations = ParsedEquations.from_equations(
             [
                 (dx, sp.sin(a * x) + sp.cos(y)),
                 (dy, sp.exp(-a * x) * y),
             ],
-            indexed_bases,
+            layout,
         )
 
-        code = generate_dxdt_fac_code(equations, indexed_bases)
+        code = generate_dxdt_fac_code(equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
 
     def test_code_contains_cuda_signatures(
-        self, simple_equations, indexed_bases
+        self, simple_equations, layout
     ):
         """Test that generated code contains proper CUDA signatures."""
-        code = generate_dxdt_fac_code(simple_equations, indexed_bases)
+        code = generate_dxdt_fac_code(simple_equations, layout)
 
         # Should contain proper parameter types
         assert "precision[::1]" in code
         assert "device=True" in code
         assert "inline=True" in code
 
-    def test_code_parameter_order(self, simple_equations, indexed_bases):
+    def test_code_parameter_order(self, simple_equations, layout):
         """Test that function parameters are in correct order."""
-        code = generate_dxdt_fac_code(simple_equations, indexed_bases)
+        code = generate_dxdt_fac_code(simple_equations, layout)
 
         # Find the function signature line
         lines = code.splitlines()
@@ -188,16 +188,16 @@ class TestGenerateDxdtFacCode:
         assert "out" in func_def_line
         assert "t" in func_def_line
 
-    def test_fixed_parameters_never_named(self, indexed_bases):
+    def test_fixed_parameters_never_named(self, layout):
         """Folded parameters emit no load binding in the factory."""
-        x = indexed_bases.states.symbol_map["x"]
-        c = indexed_bases.parameters.symbol_map["c"]
-        dx = indexed_bases.dxdt.symbol_map["dx"]
+        x = sp.Symbol("x", real=True)
+        c = sp.Symbol("c", real=True)
+        dx = sp.Symbol("dx", real=True)
         equations = ParsedEquations.from_equations(
             [(dx, c * x)],
-            indexed_bases,
+            layout,
         )
-        code = generate_dxdt_fac_code(equations, indexed_bases)
+        code = generate_dxdt_fac_code(equations, layout)
         assert "_cubie_codegen_const_" not in code
         assert "constants[" not in code
 
@@ -213,19 +213,19 @@ class TestDxdtIntegration:
         observables = []
         drivers = []
 
-        indexed_bases = IndexedBases.from_user_inputs(
-            states=states,
-            parameters=parameters,
-            observables=observables,
-            drivers=drivers,
+        layout = SystemLayout(
+            states=sorted(states),
+            parameters=sorted(parameters),
+            observables=sorted(observables),
+            drivers=sorted(drivers),
         )
 
         # Define equations symbolically
         prey, predator = sp.symbols("prey predator")
         alpha, beta, gamma, delta = sp.symbols("alpha beta gamma delta")
 
-        dx_prey = indexed_bases.dxdt.symbol_map["dprey"]
-        dx_predator = indexed_bases.dxdt.symbol_map["dpredator"]
+        dx_prey = sp.Symbol("dprey", real=True)
+        dx_predator = sp.Symbol("dpredator", real=True)
         equations = ParsedEquations.from_equations(
             [
                 (dx_prey, alpha * prey - beta * prey * predator),
@@ -234,10 +234,10 @@ class TestDxdtIntegration:
                     gamma * prey * predator - delta * predator,
                 ),
             ],
-            indexed_bases,
+            layout,
         )
 
-        code = generate_dxdt_fac_code(equations, indexed_bases)
+        code = generate_dxdt_fac_code(equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
@@ -250,29 +250,29 @@ class TestDxdtIntegration:
         observables = ["total"]
         drivers = []
 
-        indexed_bases = IndexedBases.from_user_inputs(
-            states=states,
-            parameters=parameters,
-            observables=observables,
-            drivers=drivers,
+        layout = SystemLayout(
+            states=sorted(states),
+            parameters=sorted(parameters),
+            observables=sorted(observables),
+            drivers=sorted(drivers),
         )
 
         x, y = sp.symbols("x y")
         k1, k2, c1 = sp.symbols("k1 k2 c1")
 
-        total = indexed_bases.observables.symbol_map["total"]
-        dx = indexed_bases.dxdt.symbol_map["dx"]
-        dy = indexed_bases.dxdt.symbol_map["dy"]
+        total = sp.Symbol("total", real=True)
+        dx = sp.Symbol("dx", real=True)
+        dy = sp.Symbol("dy", real=True)
         equations = ParsedEquations.from_equations(
             [
                 (total, x + y),
                 (dx, k1 * total - k2 * x + c1),
                 (dy, -k1 * total + k2 * x),
             ],
-            indexed_bases,
+            layout,
         )
 
-        code = generate_dxdt_fac_code(equations, indexed_bases)
+        code = generate_dxdt_fac_code(equations, layout)
 
         assert isinstance(code, str)
         assert "def dxdt_factory" in code
@@ -294,7 +294,7 @@ class TestDxdtIntegration:
             "dx3 = x3 * a1",
         ]
 
-        index_map, _, _, equations, _, _, *_ = parse_input(
+        parsed = parse_system(
             dxdt=dxdt_lines,
             states={"x1": 0.0, "x2": 0.0, "x3": 0.0},
             observables=["o1", "o2"],
@@ -302,8 +302,11 @@ class TestDxdtIntegration:
             drivers=[],
             strict=False,
         )
+        specialised = parsed.specialise()
+        layout = specialised.layout
+        equations = specialised.equations
 
-        code = generate_dxdt_fac_code(equations, index_map)
+        code = generate_dxdt_fac_code(equations, layout)
 
         body = code.split("def dxdt(", 1)[1]
         assert "observables[" not in body
@@ -312,22 +315,22 @@ class TestDxdtIntegration:
 class TestGenerateObservablesFacCode:
     """Tests for observables-only factory generation."""
 
-    def test_observables_factory_structure(self, indexed_bases):
+    def test_observables_factory_structure(self, layout):
         """Generated code should expose the observables factory."""
 
         x, y = sp.symbols("x y", real=True)
         a = sp.symbols("a", real=True)
-        obs = indexed_bases.observables.symbol_map["obs1"]
-        dx = indexed_bases.dxdt.symbol_map["dx"]
+        obs = sp.Symbol("obs1", real=True)
+        dx = sp.Symbol("dx", real=True)
         equations = ParsedEquations.from_equations(
             [
                 (obs, x + a),
                 (dx, y + x),
             ],
-            indexed_bases,
+            layout,
         )
 
-        code = generate_observables_fac_code(equations, indexed_bases)
+        code = generate_observables_fac_code(equations, layout)
 
         assert "def observables" in code
         assert "def get_observables" in code
@@ -336,24 +339,24 @@ class TestGenerateObservablesFacCode:
         assert "observables, t" in code
 
     def test_observables_factory_includes_cse_dependencies(
-        self, indexed_bases
+        self, layout
     ):
         """CSE expressions shared with dxdt should still be emitted."""
 
-        x = indexed_bases.states.symbol_map["x"]
-        y = indexed_bases.states.symbol_map["y"]
+        x = sp.Symbol("x", real=True)
+        y = sp.Symbol("y", real=True)
         repeated = (x + y) ** 2
-        obs = indexed_bases.observables.symbol_map["obs1"]
-        dx = indexed_bases.dxdt.symbol_map["dx"]
+        obs = sp.Symbol("obs1", real=True)
+        dx = sp.Symbol("dx", real=True)
         equations = ParsedEquations.from_equations(
             [
                 (obs, repeated),
                 (dx, repeated + x),
             ],
-            indexed_bases,
+            layout,
         )
 
-        code = generate_observables_fac_code(equations, indexed_bases)
+        code = generate_observables_fac_code(equations, layout)
 
         # Power replacement optimization converts **2 to explicit
         # multiplication
@@ -423,7 +426,7 @@ class TestObservablesDeviceParity:
         param_idx = {
             name: row for row, name in enumerate(system.parameters.names)
         }
-        driver_names = system.indices.driver_names
+        driver_names = system.layout.driver_names
         drive_idx = driver_names.index("drive")
         const_value = precision(system.parameters.defaults["c0"])
 

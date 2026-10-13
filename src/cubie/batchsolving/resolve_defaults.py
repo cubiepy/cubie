@@ -688,7 +688,5 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     resolved.update(timing)
     if given.drivers is not None:
         # The kernel reads driver columns in the system's declared order.
-        resolved["drivers"] = given.drivers.ordered(
-            system.indices.driver_names
-        )
+        resolved["drivers"] = given.drivers.ordered(system.layout.driver_names)
     return EffectiveSettings(**{**given.as_kwargs(), **resolved})

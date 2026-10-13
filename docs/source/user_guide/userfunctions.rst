@@ -13,7 +13,7 @@ main cases:
 Providing functions
 -------------------
 
-Pass a mapping of names to callables via user_functions to parse_input. If your
+Pass a mapping of names to callables via user_functions to parse_system. If your
 function name collides with a SymPy built-in (e.g., exp), the user function
 takes precedence.
 
@@ -30,12 +30,13 @@ Example (Python function):
 
   .. code-block:: python
 
-     index_map, symbols, funcs, eqs, fn_hash = parse_input(
+     specialised = parse_system(
          dxdt=["dx = ex_squared(a)", "y = x"],
          user_functions={"ex_squared": ex_squared}
-     )
+     ).specialise()
+     eqs = specialised.equations
 
-- print_cuda_multiple(eqs, symbols) will emit a*a in code if it can inline the
+- print_cuda_multiple(eqs) will emit a*a in code if it can inline the
   function (i.e. it's simple and uses Sympy-compatible logic, otherwise it will
   call ex_squared(a) in code. If it calls ex_squared(a), it will also call
   ex_squared_grad(a, 0) in Jacobian terms, so you need to provide that function
@@ -82,12 +83,12 @@ Example:
 
   .. code-block:: python
 
-     index_map, symbols, funcs, eqs, fn_hash = parse_input(
+     specialised = parse_system(
          dxdt=["dx = myfunc(x, y)", "dy = x"],
          states=["x", "y"], parameters=[], observables=[],
          user_functions={"myfunc": myfunc},
          user_function_derivatives={"myfunc": myfunc_grad}
-     )
+     ).specialise()
 
 - Generate JVP code:
 
@@ -97,7 +98,9 @@ Example:
          generate_linear_operator_code,
      )
 
-     code = generate_linear_operator_code(eqs, index_map)
+     code = generate_linear_operator_code(
+         specialised.equations, specialised.layout
+     )
      # The code will contain calls to myfunc_grad(..., argindex) in the
      # Jacobian terms.
 

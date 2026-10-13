@@ -923,7 +923,7 @@ def driver_settings(
         n_drivers=system.num_drivers,
         precision=precision,
     )
-    driver_names = list(system.indices.driver_names)
+    driver_names = list(system.layout.driver_names)
     samples = {
         name: np.array(driver_matrix[:, idx], dtype=precision, copy=True)
         for idx, name in enumerate(driver_names)

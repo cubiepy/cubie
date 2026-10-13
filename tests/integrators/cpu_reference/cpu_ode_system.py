@@ -16,6 +16,14 @@ from .cpu_utils import Array
 TIME_SYMBOL = sp.Symbol("t", real=True)
 
 
+def _sympy_order(names) -> Dict[sp.Symbol, int]:
+    """Map each name's real SymPy symbol to its buffer position."""
+    return {
+        sp.Symbol(name, real=True): index
+        for index, name in enumerate(names)
+    }
+
+
 class CPUODESystem:
     """Evaluator for symbolic systems using compiled numerical functions."""
 
@@ -32,13 +40,12 @@ class CPUODESystem:
             self.n_observables, dtype=self.precision
         )
 
-        indexed = system.indices
-        self._state_index = indexed.states.index_map
-        self._parameter_index = indexed.parameters.index_map
-        self._driver_index = indexed.drivers.index_map
-        self._observable_index = indexed.observables.index_map
-
-        self._dx_index = indexed.dxdt.index_map
+        layout = system.layout
+        self._state_index = _sympy_order(layout.state_names)
+        self._parameter_index = _sympy_order(layout.swept_names)
+        self._driver_index = _sympy_order(layout.driver_names)
+        self._observable_index = _sympy_order(layout.observable_names)
+        self._dx_index = _sympy_order(layout.dxdt_names)
         # The parser emits engine-IR pairs; the CPU reference
         # lambdifies SymPy expressions, so convert once here.
         sympy_equations = [
@@ -138,10 +145,10 @@ class CPUODESystem:
         # Build a dense symbol slot mapping covering base symbols and all
         # equation LHS. Order categories by their integer index for stable,
         # deterministic layout.
-        def sorted_symbols(index_map: Dict[sp.Symbol, int]) -> list[sp.Symbol]:
+        def sorted_symbols(layout: Dict[sp.Symbol, int]) -> list[sp.Symbol]:
             return [
                 sym
-                for sym, _ in sorted(index_map.items(), key=lambda kv: kv[1])
+                for sym, _ in sorted(layout.items(), key=lambda kv: kv[1])
             ]
 
         symbol_order: list[sp.Symbol] = []
@@ -168,11 +175,11 @@ class CPUODESystem:
 
         # Map array indices (state/param/driver/observable) -> slots for fast
         # vectorized fill
-        def slots_for(index_map: Dict[sp.Symbol, int]) -> np.ndarray:
+        def slots_for(layout: Dict[sp.Symbol, int]) -> np.ndarray:
             # Build array where position is the category index and value is the
             # slot index
-            arr = np.empty(len(index_map), dtype=np.int64)
-            for sym, idx in index_map.items():
+            arr = np.empty(len(layout), dtype=np.int64)
+            for sym, idx in layout.items():
                 arr[idx] = symbol_to_slot[sym]
             return arr
 

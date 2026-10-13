@@ -11,18 +11,22 @@ Published Classes
     containers, precision selection, and cache invalidation.
 
     >>> from numpy import float32
+    >>> from cubie.odesystems.layout import SystemLayout
     >>> from cubie.odesystems.variables import (
-    ...     Parameter, State, Variable, VariableSet,
+    ...     Parameter, ParameterSet, VariableSet,
     ... )
     >>> # Subclass and override build() to use:
     >>> class MyODE(BaseODE):
     ...     def build(self):
     ...         pass  # compile dxdt here
+    >>> parameters = VariableSet.of(Parameter, {"k": 1.0})
     >>> ode = MyODE(
     ...     float32,
-    ...     VariableSet.of(State, {"x": 0.0}),
-    ...     VariableSet.of(Parameter, {"k": 1.0}),
-    ...     VariableSet.of(Variable, []),
+    ...     parameters,
+    ...     SystemLayout(
+    ...         states=["x"], parameters=ParameterSet.build(parameters)
+    ...     ),
+    ...     initial_values={"x": 0.0},
     ... )
     >>> ode.num_states
     1
@@ -39,6 +43,7 @@ See Also
 """
 
 from abc import abstractmethod
+from collections import OrderedDict
 from copy import deepcopy
 from typing import (
     Any,
@@ -62,11 +67,30 @@ from cubie.odesystems.solver_helpers import (
     OperationCounts,
     SolverHelperCache,
 )
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.variables import (
     ParameterSet,
+    State,
     ValuedSet,
     VariableSet,
 )
+
+
+# The number of batches, layouts and sweeps whose compiled parameters
+# and variable sets a system keeps, so repeated solves rebuild nothing.
+VIEW_CACHE_SIZE = 8
+
+
+def _remember(cache: OrderedDict, key: Any, build: Callable) -> Any:
+    """Return ``cache[key]``, building and storing it when missing."""
+    if key in cache:
+        cache.move_to_end(key)
+        return cache[key]
+    value = build()
+    cache[key] = value
+    if len(cache) > VIEW_CACHE_SIZE:
+        cache.popitem(last=False)
+    return value
 
 
 @define
@@ -108,20 +132,17 @@ class BaseODE(CUDAFactory):
     operator or preconditioner are generated only by subclasses like
     :class:`SymbolicODE`.
 
-    We keep the declared states and parameters, with their defaults,
-    outside the compile settings, so changing a default rebuilds nothing
+    We keep the parameters' defaults and the states' initial values
+    outside the compile settings, so changing one rebuilds nothing
     unless it changes a value we compile into the code.
     """
 
     def __init__(
         self,
         precision: PrecisionDType,
-        states: ValuedSet,
         parameters: ValuedSet,
-        observables: VariableSet,
-        swept_parameters: Iterable[str] = (),
-        num_drivers: int = 1,
-        driver_derivatives: Tuple[Tuple[int, int], ...] = (),
+        layout: SystemLayout,
+        initial_values: Optional[Mapping[str, float]] = None,
         operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
     ) -> None:
@@ -131,22 +152,14 @@ class BaseODE(CUDAFactory):
         ----------
         precision
             Precision factory used for calculations.
-        states
-            The state variables with their default initial values.
         parameters
             The parameters with their defaults.
-        observables
-            The observables the system records.
-        swept_parameters
-            Names of the parameters to read from the parameters array.
-            Every other parameter compiles in at its default.
-        num_drivers
-            Drivers-buffer length: drivers plus driver derivatives read.
-            Defaults to ``1``.
-        driver_derivatives
-            The driver index and order of each driver derivative the
-            equations read, in the order the derivatives follow the
-            drivers in the drivers buffer.
+        layout
+            The variables in each device buffer and the parameters as
+            the first batch compiles them.
+        initial_values
+            Default initial values by state name. States left out start
+            from ``0.0``.
         operation_ordering
             Generated-operation ordering policy:
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
@@ -154,18 +167,24 @@ class BaseODE(CUDAFactory):
             (``liveness_auto`` when unset).
         name
             Printable identifier for the system. Defaults to ``None``.
+
+        Raises
+        ------
+        ValueError
+            If the layout compiles different parameters from
+            ``parameters``.
         """
         super().__init__()
-        self._states = states
         self._parameters = parameters
+        self._check_parameters(layout.parameters)
+        self._initial_values = dict(initial_values or {})
+        self._batches = OrderedDict()
+        self._swept_sets = OrderedDict()
+        self._state_sets = OrderedDict()
         self.setup_compile_settings(
             ODEData(
                 precision=precision,
-                states=states.without_values(),
-                parameters=ParameterSet.build(parameters, swept_parameters),
-                observables=observables,
-                num_drivers=num_drivers,
-                driver_derivatives=driver_derivatives,
+                layout=layout,
                 operation_ordering=operation_ordering,
             )
         )
@@ -238,6 +257,8 @@ class BaseODE(CUDAFactory):
             If a name is not a parameter of the system.
         """
         self._parameters = self._parameters.with_defaults(values)
+        self._batches.clear()
+        self._swept_sets.clear()
         self.set_swept_parameters(self.swept_parameters)
 
     def set_initial_values(self, values: Mapping[str, float]) -> None:
@@ -256,7 +277,13 @@ class BaseODE(CUDAFactory):
         KeyError
             If a name is not a state of the system.
         """
-        self._states = self._states.with_defaults(values)
+        unknown = sorted(set(values) - set(self.states.names))
+        if unknown:
+            raise KeyError(f"{unknown} are not states of this system.")
+        self._initial_values.update(
+            {name: float(value) for name, value in values.items()}
+        )
+        self._state_sets.clear()
 
     def set_swept_parameters(self, names: Iterable[str]) -> None:
         """Sweep ``names`` and compile every other parameter at its default.
@@ -274,7 +301,7 @@ class BaseODE(CUDAFactory):
         ValueError
             If a name repeats.
         """
-        self.apply_batch(ParameterSet.build(self._parameters, names))
+        self.apply_batch(self.batch_for(names))
 
     def apply_batch(self, parameters: ParameterSet) -> None:
         """Compile the system for a batch's parameters.
@@ -291,13 +318,82 @@ class BaseODE(CUDAFactory):
             If ``parameters`` names different parameters from the
             system.
         """
+        self._check_parameters(parameters)
+        compiled = self.compile_settings.parameters
+        if parameters is not compiled and parameters != compiled:
+            self.update(parameters=parameters)
+
+    def _check_parameters(self, parameters: ParameterSet) -> None:
+        """Raise ``ValueError`` if ``parameters`` are not this system's."""
         if parameters.names != self._parameters.names:
             raise ValueError(
                 f"The batch compiles parameters {list(parameters.names)}, "
                 f"but the system has {list(self._parameters.names)}."
             )
-        if parameters != self.compile_settings.parameters:
-            self.update(parameters=parameters)
+
+    def batch_for(
+        self,
+        swept: Iterable[str] = (),
+        values: Optional[Mapping[str, float]] = None,
+    ) -> ParameterSet:
+        """Return this system's parameters as a batch compiles them.
+
+        We build the same batch once, so a repeated solve compares it
+        with the compiled parameters by identity.
+
+        Parameters
+        ----------
+        swept
+            Names of the parameters to sweep, in any order.
+        values
+            Values to compile in for some of the other parameters.
+
+        Returns
+        -------
+        ParameterSet
+            The compiled parameters, as :meth:`ParameterSet.build`
+            makes them from this system's parameters.
+        """
+        swept = tuple(swept)
+        values = values or {}
+        key = (swept, tuple(sorted(values.items())))
+        return _remember(
+            self._batches,
+            key,
+            lambda: ParameterSet.build(self._parameters, swept, values),
+        )
+
+    def swept_set_for(self, parameters: ParameterSet) -> ValuedSet:
+        """Return a batch's swept parameters with their defaults.
+
+        Parameters
+        ----------
+        parameters
+            The parameters as the batch compiles them.
+        """
+        swept = parameters.swept
+        return _remember(
+            self._swept_sets,
+            swept,
+            lambda: self._parameters.subset(swept),
+        )
+
+    def _states_of(self, layout: SystemLayout) -> ValuedSet:
+        """Return the states of ``layout`` with our initial values."""
+        return _remember(
+            self._state_sets,
+            layout,
+            lambda: ValuedSet(
+                [
+                    State(
+                        state.name,
+                        state.unit,
+                        self._initial_values.get(state.name, 0.0),
+                    )
+                    for state in layout.states
+                ]
+            ),
+        )
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
@@ -322,12 +418,17 @@ class BaseODE(CUDAFactory):
     @property
     def states(self) -> ValuedSet:
         """Every state with its default initial value."""
-        return self._states
+        return self._states_of(self.compile_settings.layout)
 
     @property
     def initial_values(self) -> ValuedSet:
         """Alias for :attr:`states`."""
-        return self._states
+        return self.states
+
+    @property
+    def layout(self) -> SystemLayout:
+        """The variables in each device buffer, in buffer order."""
+        return self.compile_settings.layout
 
     @property
     def observables(self) -> VariableSet:

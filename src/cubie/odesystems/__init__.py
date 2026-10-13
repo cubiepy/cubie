@@ -15,6 +15,7 @@ Subpackages
     solver helpers that integrate with :mod:`cubie.integrators`.
 """
 
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.ODEData import ODEData, SystemSizes
 from cubie.odesystems.variables import (
     CompiledParameter,
@@ -37,6 +38,7 @@ __all__ = [
     "Parameter",
     "ParameterSet",
     "State",
+    "SystemLayout",
     "SystemSizes",
     "Variable",
     "ValuedSet",

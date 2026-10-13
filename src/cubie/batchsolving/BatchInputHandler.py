@@ -711,9 +711,7 @@ class BatchInputHandler:
             varying_values, swept, given = self._split_array(
                 params, fix_constant_parameters
             )
-        return varying_values, ParameterSet.build(
-            self.parameters, swept, given
-        )
+        return varying_values, self.interface.batch_for(swept, given)
 
     def _split_array(
         self,

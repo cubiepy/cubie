@@ -61,7 +61,7 @@ class TestSweptParameters:
         tiny_system.set_swept_parameters(("k", "c0"))
         assert tiny_system.swept_parameters == ("c0", "k")
         assert tiny_system.sizes.swept_parameters == 2
-        assert tiny_system.indices.parameter_names == ["c0", "k"]
+        assert tiny_system.layout.swept_names == ("c0", "k")
 
     def test_a_sweep_given_at_creation_reads_rows_in_system_order(self):
         """The device function reads the rows the solver fills."""
@@ -73,7 +73,7 @@ class TestSweptParameters:
             swept_parameters=("k", "c0"),
         )
         assert system.swept_parameters == ("c0", "k")
-        assert system.indices.parameter_names == ["c0", "k"]
+        assert system.layout.swept_names == ("c0", "k")
 
     def test_batch_values_are_compiled_in(self, tiny_system):
         """A batch's values compile in without changing the defaults."""
@@ -133,6 +133,24 @@ class TestSetDefaultParameters:
         """A name outside the system's parameters raises KeyError."""
         with pytest.raises(KeyError, match="not_a_key"):
             tiny_system.set_default_parameters({"not_a_key": 1.0})
+
+
+class TestRepeatedBatches:
+    """Cover the reuse of compiled parameters and variable sets."""
+
+    def test_a_repeated_batch_is_the_compiled_one(self, tiny_system):
+        """Applying the same batch twice compares it by identity."""
+        batch = tiny_system.batch_for(("k",), {"c0": 2.0})
+        assert tiny_system.batch_for(("k",), {"c0": 2.0}) is batch
+        tiny_system.apply_batch(batch)
+        assert tiny_system.compiled_parameters is batch
+
+    def test_new_initial_values_give_a_new_state_set(self, tiny_system):
+        """The state set is reused until an initial value changes."""
+        states = tiny_system.states
+        assert tiny_system.states is states
+        tiny_system.set_initial_values({"x": 4.0})
+        assert tiny_system.states.defaults == {"x": 4.0}
 
 
 class TestSetInitialValues:
