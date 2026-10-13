@@ -15,6 +15,8 @@ from .backwards_euler import BackwardsEulerStep
 from .backwards_euler_predict_correct import BackwardsEulerPCStep
 from .crank_nicolson import CrankNicolsonStep
 from .explicit_euler import ExplicitEulerStep
+from .generic_bdf import BDFStep
+from .generic_bdf_tableaus import BDF_TABLEAU_REGISTRY, BDFTableau
 from .generic_dirk import (
     DIRKStep,
 )
@@ -49,11 +51,14 @@ __all__ = [
     "BackwardsEulerStep",
     "BackwardsEulerPCStep",
     "CrankNicolsonStep",
+    "BDFStep",
     "DIRKStep",
     "FIRKStep",
     "ERKStep",
     "GenericRosenbrockWStep",
     "_ALGORITHM_REGISTRY",
+    "BDFTableau",
+    "BDF_TABLEAU_REGISTRY",
     "DIRKTableau",
     "DIRK_TABLEAU_REGISTRY",
     "FIRKTableau",
@@ -69,6 +74,7 @@ _ALGORITHM_REGISTRY = {
     "backwards_euler": BackwardsEulerStep,
     "backwards_euler_pc": BackwardsEulerPCStep,
     "crank_nicolson": CrankNicolsonStep,
+    "bdf": BDFStep,
     "dirk": DIRKStep,
     "firk": FIRKStep,
     "erk": ERKStep,
@@ -88,6 +94,9 @@ for alias, tableau in DIRK_TABLEAU_REGISTRY.items():
 
 for alias, tableau in FIRK_TABLEAU_REGISTRY.items():
     _TABLEAU_REGISTRY_BY_ALGORITHM[alias] = (FIRKStep, tableau)
+
+for alias, tableau in BDF_TABLEAU_REGISTRY.items():
+    _TABLEAU_REGISTRY_BY_ALGORITHM[alias] = (BDFStep, tableau)
 
 for alias, tableau in ROSENBROCK_TABLEAUS.items():
     _TABLEAU_REGISTRY_BY_ALGORITHM[alias] = (
@@ -241,6 +250,8 @@ def resolve_supplied_tableau(
         return FIRKStep, tableau
     if isinstance(tableau, RosenbrockTableau):
         return GenericRosenbrockWStep, tableau
+    if isinstance(tableau, BDFTableau):
+        return BDFStep, tableau
     raise TypeError(
         "Received tableau of type "
         f"{type(tableau).__name__} which does not match known algorithms."
