@@ -225,9 +225,7 @@ def create_ODE_system(
         when you leave this out every parameter is compiled in. A solve
         sets the swept parameters to match its inputs, so giving them
         here saves specialising the system again at the first solve,
-        which takes a few milliseconds for a small model and around a
-        tenth of a second for a CellML model with over a hundred
-        parameters.
+        which can take 10-100 ms.
 
     Returns
     -------
@@ -277,9 +275,7 @@ class SymbolicODE(BaseODE):
         when you leave this out every parameter is compiled in. A solve
         sets the swept parameters to match its inputs, so giving them
         here saves specialising the system again at the first solve,
-        which takes a few milliseconds for a small model and around a
-        tenth of a second for a CellML model with over a hundred
-        parameters.
+        which can take 10-100 ms.
     """
 
     # Diagnostic evaluators live in a dict so child-factory
@@ -316,9 +312,7 @@ class SymbolicODE(BaseODE):
             value, and when you leave this out every parameter is
             compiled in. A solve sets the swept parameters to match its
             inputs, so giving them here saves specialising the system
-            again at the first solve, which takes a few milliseconds for
-            a small model and around a tenth of a second for a CellML
-            model with over a hundred parameters.
+            again at the first solve, which can take 10-100 ms.
         """
         if operation_ordering is None:
             operation_ordering = operation_ordering_default()
@@ -477,9 +471,7 @@ class SymbolicODE(BaseODE):
             value, and when you leave this out every parameter is
             compiled in. A solve sets the swept parameters to match its
             inputs, so giving them here saves specialising the system
-            again at the first solve, which takes a few milliseconds for
-            a small model and around a tenth of a second for a CellML
-            model with over a hundred parameters.
+            again at the first solve, which can take 10-100 ms.
 
         Returns
         -------
