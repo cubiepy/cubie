@@ -232,9 +232,7 @@ def load_cellml_model(
         when you leave this out every parameter is compiled in. A solve
         sets the swept parameters to match its inputs, so giving them
         here saves specialising the system again at the first solve,
-        which takes a few milliseconds for a small model and around a
-        tenth of a second for a CellML model with over a hundred
-        parameters.
+        which can take 10-100 ms.
 
     Returns
     -------
