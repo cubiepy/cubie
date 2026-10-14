@@ -62,7 +62,8 @@ updating a PR.
 - Write comments as the programmer explaining the code to a colleague, in the imperative
   ("Place driver derivatives after drivers in the buffer") or as narrative ("We sort first so
   the cache key is stable"). Data and objects are never the actor: "Driver derivatives take the
-  last slots; drivers carry priority" is unreadable.
+  last slots; drivers carry priority" is unreadable. Never write "carries", "carry" or "rides
+  on" in comments or documentation.
 - Use whole sentences in plain words, comment only where the code is hard to read, and say why
   when the reason is not visible in the code. Never describe what used to exist ("now", "no
   longer", "changed from"), a bug avoided, or an alternative rejected.

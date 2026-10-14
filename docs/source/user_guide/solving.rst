@@ -132,7 +132,7 @@ default, the default doesn't change: Cubie presumes that arguments to
 ``Solver.compile``, ``Solver.calibrate`` and ``Solver.optimize`` treat
 their inputs the same way.
 
-If you're looking for something faster (tens of ms per solve) or are
+If you're looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead.
 Initial values arrays have one row per state in your system. The
 parameters array can either have one row for every parameter in your
