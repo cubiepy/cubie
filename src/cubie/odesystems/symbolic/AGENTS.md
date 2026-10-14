@@ -76,10 +76,11 @@ parameter, and device functions capture no values. Swept parameters stay symbols
 read from the parameters array. `SymbolicODE(parsed_system, precision,
 swept_parameters=...)` specialises once, for the swept parameters it is given;
 `create_ODE_system`, `SymbolicODE.create` and `load_cellml_model` pass `swept_parameters`
-through. We name an unnamed system from `ParsedSystem.definition_hash`, which leaves out
-the swept parameters and their values, so its generated-code and kernel-cache
-directories stay the same whichever parameters are swept. When the
-swept names or fixed values change,
+through. `ParsedSystem.specialise` sorts the swept names and lays out the parameters
+array in that order, whatever order the caller lists them in. We name an unnamed
+system from `ParsedSystem.definition_hash`, which leaves out the swept parameters and
+their values, so its generated-code and kernel-cache directories stay the same
+whichever parameters are swept. When the swept names or fixed values change,
 `SymbolicODE._update` rebuilds the equations from `SymbolicODE._parsed_system`:
 substitution, folding, structural simplification and tearing, which can change the state
 layout and mass matrix. All of it goes through one `update_compile_settings`. A live
@@ -106,7 +107,7 @@ and function aliases. Equations sort by LHS name, so string and SymPy input hit 
 ## Dependencies
 ### Internal
 - `cubie.odesystems.baseODE` (`BaseODE`, `ODECache`); `cubie.odesystems.symbolic.codegen` (all
-  source emitters); `cubie.odesystems.symbolic.parsing` (`parse_input`, `IndexedBases`,
+  source emitters); `cubie.odesystems.symbolic.parsing` (`parse_system`, `IndexedBases`,
   `ParsedEquations`, `JVPEquations`); `cubie.array_interpolator.ArrayInterpolator`
   (driver-array setup); `cubie._utils` (`PrecisionDType`), `cubie.time_logger.default_timelogger`,
   `cubie._cudasim_extensions`, `cubie.backend.jit`, `cubie.backend.intrinsics` (in the generated module header), `cubie.gui.*` (lazy, optional).

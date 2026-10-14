@@ -9,7 +9,7 @@ into a frozen `ParsedEquations` container plus an `IndexedBases` symbol map and 
 All input converges on one normalised structural representation (`normalise.py`), folds its
 fixed parameter values in as literals, and assembles through `structural.structural_simplify`
 (`assemble.py`). `parse_system` is the single entry point used by `SymbolicODE.create`
-and CellML loading; `parse_input` also specialises the result with nothing swept. CellML
+and CellML loading. CellML
 loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEquations`,
 `plan_auxiliary_cache`) used later by `codegen` also live here.
 
@@ -17,9 +17,9 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 | File | Description |
 |------|-------------|
 | `__init__.py` | Star-imports `auxiliary_caching`, `cellml`, `jvp_equations`, `parse_primitives`, `parser`; declares `__all__ = ["load_cellml_model"]` (the rest is re-exported via star imports). |
-| `parser.py` | Orchestrator. `parse_system` dispatches on input type (callable → `function_parser` then normalise; symbolic → normalise) and returns the `ParsedSystem` checkpoint; `parse_input` specialises it with nothing swept; `DRIVER_SETTING_KEYS`. |
-| `parse_primitives.py` | Shared parse-layer primitives; the leaf module below `normalise`/`assemble`/`function_parser`. `ParsedEquations` (frozen attrs; partitions equations into state-derivatives/observables/auxiliaries and carries the derived `mass_matrix`), `EquationWarning`, `PARSE_TRANSFORMS`, `KNOWN_FUNCTIONS`, `TIME_SYMBOL`, and the lexing/user-function machinery (`_sanitise_input_math`, `_rename_user_calls`, `_build_sympy_user_functions`, `_inline_nondevice_calls`). |
-| `parsed_system.py` | `ParsedSystem`, the parsed system with every parameter left as a symbol. `ParsedSystem.specialise(swept, values)` substitutes the values of the parameters not in `swept` as IR literals and assembles the equations, with the swept parameters read from the parameters array, so structure follows values. Parameter names under the reserved codegen prefix raise. |
+| `parser.py` | Orchestrator. `parse_system` dispatches on input type (callable → `function_parser` then normalise; symbolic → normalise) and returns the `ParsedSystem` checkpoint; `DRIVER_SETTING_KEYS`. |
+| `parse_primitives.py` | Shared parse-layer primitives; the leaf module below `normalise`/`assemble`/`function_parser`. `ParsedEquations` (frozen attrs; partitions equations into state-derivatives/observables/auxiliaries and holds the derived `mass_matrix`), `EquationWarning`, `PARSE_TRANSFORMS`, `KNOWN_FUNCTIONS`, `TIME_SYMBOL`, and the lexing/user-function machinery (`_sanitise_input_math`, `_rename_user_calls`, `_build_sympy_user_functions`, `_inline_nondevice_calls`). |
+| `parsed_system.py` | `ParsedSystem`, the parsed system with every parameter left as a symbol. `ParsedSystem.specialise(swept, values)` substitutes the values of the parameters not in `swept` as IR literals and assembles the equations, with the swept parameters read from the parameters array in name order, so structure follows values. Parameter names under the reserved codegen prefix raise. |
 | `normalise.py` | The single symbolic front end and the SymPy→IR boundary. `normalise_input` parses string, SymPy, or pre-converted IR equations into `(lhs, rhs)` engine-IR pairs with `DerivativeRegistry` derivative symbols (`NormalisedSystem`); the registry reserves every name in the input, so derivative symbols (`x_t`, `x_tt`, ...) never collide with a user symbol. Holds the state-aware LHS rules, derivative-token binding, and symbol inference. SymPy appears only during string parsing, derivative-notation replacement, and non-device user-function inlining; every expression converts to IR before the normaliser returns. |
 | `assemble.py` | The single assembly backend, computing on IR pairs throughout. `assemble_simplified` runs `structural_simplify` and maps the result into parser products (name-sorted states, residuals paired by state, eliminated-state warnings), inlining observable definitions into consuming dynamics with `fixpoint_sub`; when residuals exist the mass matrix is built over that order from the differential states and attached as `ParsedEquations.mass_matrix`. |
 | `cellml.py` | `load_cellml_model` — sanitises CellML symbols, converts equations to IR, classifies values, and calls `parse_system`. |
@@ -29,13 +29,13 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 | `function_inspector.py` | AST analysis of a callable ODE. `inspect_ode_function` → `FunctionInspection`; `_OdeAstVisitor` collects state/parameter accesses, assignments (incl. annotated), calls, unrolls `for` (also inside if-branches), synthesises `IfExp` from if/elif/else, rejects unsupported constructs (`while`/`with`/`try`/`match`/nested `def`/comprehensions; branch bodies raise on statements other than assignments and nested `if`/`for`); `AstToSympyConverter` maps AST nodes to SymPy — resolves user-function calls before `KNOWN_FUNCTIONS` (inlining non-device callables), inlines dxdt-named locals, and (in `strict_names` mode) raises on unknown bare names, suggesting the container access when the name is declared. Extra args used only by bare name are `scalar_params` (SciPy `args=` convention), bound to the like-named declared symbol. |
 | `function_parser.py` | `parse_function_input` — bridges `FunctionInspection` to the parser's `(equation_map, funcs, new_params)` triple: builds the symbol map (container accesses search parameters → drivers; undeclared attribute/string accesses infer parameters in non-strict mode with `EquationWarning`), emits auxiliary/observable/dxdt equations, inlines `dx = expr; return [dx]` aliases. `infer_function_states` derives state names from dict-return keys or synthesises them for pure positional access when `states` is omitted. |
 
-## parse_system and parse_input
+## parse_system
 `parse_system` returns the `ParsedSystem`, with every parameter left as a symbol
-(`parsed_system.py`). `SymbolicODE` specialises it for its swept parameters.
-`parse_input` returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash,
-parsed_system)`, with every parameter fixed at its default. The derived mass matrix is
-`parsed_equations.mass_matrix` (`None` for solved systems). Assembly runs inside `specialise` after the
-values are substituted, so structure can change with fixed values. Inferred parameters
+(`parsed_system.py`). `SymbolicODE` specialises it for its swept parameters;
+`specialise` returns `(index_map, all_symbols, funcs, parsed_equations, fn_hash)`. The
+derived mass matrix is `parsed_equations.mass_matrix` (`None` for solved systems).
+Assembly runs inside `specialise` after the values are substituted, so structure can
+change with fixed values. Inferred parameters
 join `parsed_system.parameters`.
 `_detect_input_type` dispatches to `"string"`, `"sympy"` or `"function"`, and every
 pathway goes through `normalise_input`. `strict=False` (default) infers undeclared RHS

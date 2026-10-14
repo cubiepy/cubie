@@ -2,7 +2,7 @@
 
 Converts the AST metadata from :func:`inspect_ode_function` into
 ``(equation_map, funcs, new_params)`` — the same triple that the string
-and SymPy branches of :func:`parse_input` produce.
+and SymPy branches of :func:`parse_system` produce.
 
 Published Functions
 -------------------
@@ -76,7 +76,7 @@ def parse_function_input(
     -------
     tuple
         ``(equation_map, funcs, new_params)`` matching the output contract
-        of the string and SymPy branches in :func:`parse_input`.
+        of the string and SymPy branches in :func:`parse_system`.
     """
     if observables is None:
         observables = []

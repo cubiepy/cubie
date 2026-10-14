@@ -48,6 +48,7 @@ from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import from_sympy
 from cubie.time_logger import default_timelogger
 from .cellml_cache import CellMLCache
+from .parsed_system import ParsedSystem
 from .parser import parse_system
 
 logger = logging.getLogger(__name__)
@@ -226,15 +227,14 @@ def load_cellml_model(
         If True, launch the parameter and initial-value editor GUI
         before parsing. Default is False.
     swept_parameters : iterable of str, optional
-        Names of the parameters that will vary in each batch/sweep.
-        Parameters not listed here will be treated as constant across
-        every run. Optional, if not given the system will be built
-        assuming that all parameters are constant. The names given at
-        this level are used when we first specialise the system, but
-        every time you call solve() on a system the swept parameters
-        will change to match the set you give. Setting them here just
-        means that the system will be ready to go for your first solve,
-        instead of taking a few ms to specialise.
+        Names of the parameters that vary between the runs of a batch.
+        Every other parameter is compiled in at its default value, and
+        when you leave this out every parameter is compiled in. A solve
+        sets the swept parameters to match its inputs, so giving them
+        here saves specialising the system again at the first solve,
+        which takes a few milliseconds for a small model and around a
+        tenth of a second for a CellML model with over a hundred
+        parameters.
 
     Returns
     -------
@@ -283,9 +283,6 @@ def load_cellml_model(
     - CellML models from Physiome repository are compatible
     - The cellmlmanip library handles the complex CellML XML parsing
     """
-    # Create new tuple in case user provided an exhaustible iterator.
-    swept_parameters = tuple(swept_parameters or ())
-
     # Validate input type
     if not isinstance(path, str):
         raise TypeError(
@@ -310,6 +307,7 @@ def load_cellml_model(
     # When no GUI is requested, check the cache early to skip the
     # expensive cellmlmanip parse entirely.  When the GUI is active
     # the cache check must wait until after user edits.
+    parsed_system = None
     if not show_gui:
         cache = CellMLCache(model_name=name, cellml_path=path)
         args_hash = cache.compute_cache_key(
@@ -317,12 +315,50 @@ def load_cellml_model(
             fix_singularities=fix_singularities,
             voltage_variable=voltage_variable,
         )
-        ode = _load_cached_system(
-            cache, args_hash, precision, swept_parameters
+        parsed_system = _cached_parsed_system(cache, args_hash, name)
+    if parsed_system is None:
+        parsed_system = _parse_model(
+            path, name, observables, fix_singularities, voltage_variable,
+            show_gui,
         )
-        if ode is not None:
-            return ode
 
+    # Import here because symbolicODE imports the parsing package,
+    # which imports this module.
+    from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
+
+    return SymbolicODE(
+        parsed_system,
+        precision,
+        name=name,
+        swept_parameters=swept_parameters,
+    )
+
+
+def _parse_model(
+    path: str,
+    name: str,
+    observables: Optional[List[str]],
+    fix_singularities: bool,
+    voltage_variable: Optional[str],
+    show_gui: bool,
+) -> ParsedSystem:
+    """Parse a CellML file into a parsed system and cache it.
+
+    When the values edited in the GUI match a cached entry, return the
+    cached parsed system without parsing.
+
+    Parameters
+    ----------
+    path, name, observables
+        As in :func:`load_cellml_model`.
+    fix_singularities, voltage_variable, show_gui
+        As in :func:`load_cellml_model`.
+
+    Returns
+    -------
+    ParsedSystem
+        The parsed model, with every parameter left as a symbol.
+    """
     default_timelogger.start_event("codegen_cellml_load_model")
     model = cellmlmanip.load_model(path)
     if fix_singularities:
@@ -476,9 +512,9 @@ def load_cellml_model(
         parameter_values=parameters_dict if show_gui else None,
         initial_values=initial_values if show_gui else None,
     )
-    ode = _load_cached_system(cache, args_hash, precision, swept_parameters)
-    if ode is not None:
-        return ode
+    cached = _cached_parsed_system(cache, args_hash, name)
+    if cached is not None:
+        return cached
 
     # ---- Cache miss: parse from source ----
     # Register parsing event (same as SymbolicODE.create)
@@ -510,42 +546,13 @@ def load_cellml_model(
         args_hash=args_hash, parsed_system=parsed_system, name=name
     )
 
-    return _build_system(parsed_system, precision, name, swept_parameters)
+    return parsed_system
 
 
-def _build_system(parsed_system, precision, name, swept_parameters):
-    """Return a SymbolicODE specialised from a parsed CellML model.
-
-    Parameters
-    ----------
-    parsed_system
-        Parsed system with every parameter left as a symbol.
-    precision
-        Target floating-point precision for compiled kernels.
-    name
-        Identifier for the generated system.
-    swept_parameters
-        Names of the parameters read from the parameters array.
-
-    Returns
-    -------
-    SymbolicODE
-        The specialised system.
-    """
-    # Import here because symbolicODE imports the parsing package,
-    # which imports this module.
-    from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
-
-    return SymbolicODE(
-        parsed_system,
-        precision,
-        name=name,
-        swept_parameters=swept_parameters,
-    )
-
-
-def _load_cached_system(cache, args_hash, precision, swept_parameters):
-    """Return the cached model as a SymbolicODE, or ``None`` on a miss.
+def _cached_parsed_system(
+    cache: CellMLCache, args_hash: str, name: str
+) -> Optional[ParsedSystem]:
+    """Return the cached parsed system, or ``None`` on a miss.
 
     Parameters
     ----------
@@ -553,30 +560,21 @@ def _load_cached_system(cache, args_hash, precision, swept_parameters):
         The model's :class:`CellMLCache`.
     args_hash
         Cache key for the loading arguments.
-    precision
-        Target floating-point precision for compiled kernels.
-    swept_parameters
-        Names of the parameters read from the parameters array.
+    name
+        Model name, for the log message.
 
     Returns
     -------
-    SymbolicODE or None
-        The specialised system, or ``None`` when we find no valid
-        entry for ``args_hash``.
+    ParsedSystem or None
+        The cached parsed system, or ``None`` when the cache holds no
+        valid entry for ``args_hash``.
     """
     if not cache.cache_valid(args_hash):
         return None
     cached_data = cache.load_from_cache(args_hash)
     if cached_data is None:
         return None
-    ode = _build_system(
-        cached_data["parsed_system"],
-        precision,
-        cached_data["name"],
-        swept_parameters,
-    )
     default_timelogger.print_message(
-        f"Loaded {cached_data['name']} from CellML cache "
-        f"(config: {args_hash[:8]})"
+        f"Loaded {name} from CellML cache (config: {args_hash[:8]})"
     )
-    return ode
+    return cached_data["parsed_system"]

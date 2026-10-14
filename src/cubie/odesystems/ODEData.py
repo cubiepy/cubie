@@ -109,17 +109,12 @@ def _parameters_converter(value: Any) -> Any:
     return value.freeze(values_writable=False)
 
 
-def sorted_swept_names(names: Iterable[str]) -> Tuple[str, ...]:
-    """Return the swept parameter names in sorted order.
-
-    We sort the names so that we lay out the rows of the parameters
-    array in the same order however the caller listed them. We raise
-    ``ValueError`` when a name appears twice.
-    """
-    given = [str(name) for name in names]
-    if len(set(given)) != len(given):
-        raise ValueError(f"Swept parameters {given} repeat a name.")
-    return tuple(sorted(given))
+def _ordered_names(names: Iterable[str]) -> Tuple[str, ...]:
+    """Return ``names`` as a tuple of strings, rejecting repeats."""
+    ordered = tuple(str(name) for name in names)
+    if len(set(ordered)) != len(ordered):
+        raise ValueError(f"Swept parameters {list(ordered)} repeat a name.")
+    return ordered
 
 
 def _sorted_values(
@@ -187,8 +182,7 @@ class ODEData(CUDAFactoryConfig):
         equations read, in the order the derivatives follow the
         drivers in the drivers buffer.
     swept_parameters
-        Names of the parameters we read from the parameters array, in
-        the order of the array's rows. We keep them sorted by name.
+        Names of the parameters read from the parameters array.
     fixed_parameters
         Values compiled into the code for every other parameter.
 
@@ -239,7 +233,7 @@ class ODEData(CUDAFactoryConfig):
         ),
     )
     swept_parameters: Tuple[str, ...] = field(
-        default=(), converter=sorted_swept_names
+        default=(), converter=_ordered_names
     )
     fixed_parameters: Tuple[Tuple[str, float], ...] = field(
         default=(), converter=_sorted_values

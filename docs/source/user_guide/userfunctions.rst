@@ -13,9 +13,9 @@ main cases:
 Providing functions
 -------------------
 
-Pass a mapping of names to callables via user_functions to parse_input. If your
-function name collides with a SymPy built-in (e.g., exp), the user function
-takes precedence.
+Pass a mapping of names to callables as ``user_functions`` when you build the
+system with :func:`~cubie.create_ODE_system`. If your function name collides
+with a SymPy built-in (e.g., exp), the user function takes precedence.
 
 Example (Python function):
 
@@ -30,16 +30,15 @@ Example (Python function):
 
   .. code-block:: python
 
-     index_map, symbols, funcs, eqs, fn_hash = parse_input(
+     system = create_ODE_system(
          dxdt=["dx = ex_squared(a)", "y = x"],
-         user_functions={"ex_squared": ex_squared}
+         user_functions={"ex_squared": ex_squared},
      )
 
-- print_cuda_multiple(eqs, symbols) will emit a*a in code if it can inline the
-  function (i.e. it's simple and uses Sympy-compatible logic, otherwise it will
-  call ex_squared(a) in code. If it calls ex_squared(a), it will also call
-  ex_squared_grad(a, 0) in Jacobian terms, so you need to provide that function
-  in user_function_derivatives.
+- If Cubie can inline the function (it is simple and uses SymPy-compatible
+  logic), it writes a*a into the generated code. Otherwise it writes a call to
+  ex_squared(a), and a call to the derivative of ex_squared in the Jacobian
+  terms, so you need to provide that function in user_function_derivatives.
 
 Device functions and derivatives
 --------------------------------
@@ -78,32 +77,19 @@ Example:
              return a
          return 0
 
-- Parse equations with both maps:
+- Build the system with both maps:
 
   .. code-block:: python
 
-     index_map, symbols, funcs, eqs, fn_hash = parse_input(
+     system = create_ODE_system(
          dxdt=["dx = myfunc(x, y)", "dy = x"],
-         states=["x", "y"], parameters=[], observables=[],
+         states=["x", "y"],
          user_functions={"myfunc": myfunc},
-         user_function_derivatives={"myfunc": myfunc_grad}
+         user_function_derivatives={"myfunc": myfunc_grad},
      )
 
-- Generate JVP code:
-
-  .. code-block:: python
-
-     from cubie.odesystems.symbolic.codegen.linear_operators import (
-         generate_linear_operator_code,
-     )
-
-     code = generate_linear_operator_code(eqs, index_map)
-     # The code will contain calls to myfunc_grad(..., argindex) in the
-     # Jacobian terms.
-
-  (This is internal plumbing — when you solve through
-  :func:`~cubie.solve_ivp` or :class:`~cubie.Solver`, the JVP code is
-  generated for you.)
+- When you solve with an implicit method, Cubie writes calls to
+  myfunc_grad(..., argindex) into the Jacobian terms.
 
 End-to-end example
 ------------------
