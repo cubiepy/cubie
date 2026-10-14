@@ -689,8 +689,9 @@ class SymbolicODE(BaseODE):
         fixed = dict(
             updates.get("fixed_parameters", settings.fixed_parameters)
         )
-        # Specialisation sorts the swept names, so the same names in
-        # another order give the same system and keep the stored order.
+        # We compare the names as sets because specialise sorts them,
+        # so listing the same names in another order builds the same
+        # system. Keep the stored order in that case.
         same_names = len(swept) == len(settings.swept_parameters) and set(
             swept
         ) == set(settings.swept_parameters)
