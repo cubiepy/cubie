@@ -1227,9 +1227,12 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
 def test_swept_height_array_compiles_the_defaults_in(
     input_handler_mutable, system
 ):
-    """A row per swept parameter keeps the sweep and fixes defaults.
+    """Compile in the defaults for an array of swept rows.
 
-    The values a previous batch compiled in last that batch only.
+    The handler keeps the swept names for an array with a row per swept
+    parameter. It compiles in every other parameter's default, including
+    a parameter that the user fixed at another value in the previous
+    input.
     """
     names = list(system.parameters.names)
     _handle(
@@ -1249,17 +1252,19 @@ def test_swept_height_array_compiles_the_defaults_in(
     assert result is params
 
 
-def test_single_values_as_rows_give_each_entry_a_row(
+def test_split_into_rows_gives_each_entry_a_row(
     input_handler_mutable, system
 ):
     """A single value gets a row holding it for every run."""
     names = list(system.parameters.names)
-    varying, swept, fixed = input_handler_mutable.split_parameters(
+    varying, swept, fixed = input_handler_mutable.split_parameters_into_rows(
         {names[0]: [1.0, 2.0, 3.0], names[1]: 0.25},
-        single_values_as_rows=True,
     )
+    defaults = system.parameters.as_float_dict
     assert swept == (names[0], names[1])
-    assert names[1] not in fixed
+    assert fixed == {
+        name: value for name, value in defaults.items() if name not in swept
+    }
     input_handler_mutable.interface.set_swept_parameters(swept, fixed)
     _, params = input_handler_mutable(None, varying, "verbatim")
     assert_array_equal(

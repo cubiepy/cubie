@@ -25,8 +25,11 @@ the values to compile in for every other parameter:
 - ``None``, an empty dict, or an empty 1D array uses the default
   parameters for all runs.
 
-Arrays of any other height raise. Once the swept names are set on the
-system, ``BatchInputHandler.__call__`` builds the arrays from three
+Arrays of any other height raise.
+:meth:`BatchInputHandler.split_parameters_into_rows` reads arrays the
+same way, and marks every parameter a dict names as swept, giving a
+single number a row of its own. Once the swept names are set on the
+system,``BatchInputHandler.__call__`` builds the arrays from three
 arguments:
 
 ``states``
@@ -641,7 +644,6 @@ class BatchInputHandler:
         self,
         params: Optional[Union[Dict, ArrayLike]] = None,
         fix_constant_parameters: bool = False,
-        single_values_as_rows: bool = False,
     ) -> tuple[object, Tuple[str, ...], Dict[str, float]]:
         """Split a parameter input into varying values and fixed values.
 
@@ -663,10 +665,6 @@ class BatchInputHandler:
         fix_constant_parameters
             Scan a full-height host parameter array for parameters whose
             rows are all the same value, and mark those fixed.
-        single_values_as_rows
-            Mark each dict entry with a single number as swept, giving it
-            a row with that number in every run, instead of compiling it
-            in.
 
         Returns
         -------
@@ -687,17 +685,13 @@ class BatchInputHandler:
         if params is None:
             varying_values, swept = None, ()
         elif isinstance(params, dict):
-            names = self.parameters.names
             varying = {}
-            for key, value in params.items():
-                value = np_atleast_1d(value)
-                name = names[self.parameters.get_indices(key)[0]]
-                if value.size == 1 and not single_values_as_rows:
+            for name, value in self._named_values(params).items():
+                if value.size == 1:
                     given[name] = float(value[0])
                 elif value.size > 0:
                     varying[name] = value
-            swept = tuple(name for name in names if name in varying)
-            varying_values = {name: varying[name] for name in swept}
+            varying_values, swept = self._in_name_order(varying)
         elif is_device_array(params):
             if len(params.shape) != 2:
                 raise ValueError(
@@ -710,13 +704,77 @@ class BatchInputHandler:
             varying_values, swept, given = self._split_array(
                 params, fix_constant_parameters
             )
+        return varying_values, swept, self._fixed_values(swept, given)
+
+    def split_parameters_into_rows(
+        self,
+        params: Optional[Union[Dict, ArrayLike]] = None,
+    ) -> tuple[object, Tuple[str, ...], Dict[str, float]]:
+        """Split a parameter input, giving every dict entry a row.
+
+        Mark every parameter a dict names as swept, so that a parameter
+        given a single number has a row with that number in every run.
+        Read arrays and ``None`` as :meth:`split_parameters` does.
+
+        Parameters
+        ----------
+        params
+            A dict, a host or device array, or ``None``.
+
+        Returns
+        -------
+        tuple
+            ``(varying_values, swept, fixed)``: the values for
+            :meth:`__call__`, the names of their rows in order, and every
+            other parameter's default value.
+
+        Raises
+        ------
+        ValueError
+            If an array has neither a row per swept parameter nor a row
+            per parameter, or has more than two dimensions.
+        """
+        if not isinstance(params, dict):
+            return self.split_parameters(params)
+        varying = {
+            name: value
+            for name, value in self._named_values(params).items()
+            if value.size > 0
+        }
+        varying_values, swept = self._in_name_order(varying)
+        return varying_values, swept, self._fixed_values(swept, {})
+
+    def _named_values(self, params: Dict) -> Dict[str, ndarray]:
+        """Return a dict input's values as 1D arrays keyed by name."""
+        names = self.parameters.names
+        return {
+            names[self.parameters.get_indices(key)[0]]: np_atleast_1d(value)
+            for key, value in params.items()
+        }
+
+    def _in_name_order(
+        self, varying: Dict[str, ndarray]
+    ) -> tuple[Dict[str, ndarray], Tuple[str, ...]]:
+        """Return the varying values and their names in name order."""
+        swept = tuple(
+            name for name in self.parameters.names if name in varying
+        )
+        return {name: varying[name] for name in swept}, swept
+
+    def _fixed_values(
+        self, swept: Tuple[str, ...], given: Dict[str, float]
+    ) -> Dict[str, float]:
+        """Return a value for every parameter not in ``swept``.
+
+        Use the value in ``given`` where there is one, and the
+        parameter's default otherwise.
+        """
         defaults = self.parameters.as_float_dict
-        fixed = {
+        return {
             name: given.get(name, value)
             for name, value in defaults.items()
             if name not in swept
         }
-        return varying_values, swept, fixed
 
     def _split_array(
         self,

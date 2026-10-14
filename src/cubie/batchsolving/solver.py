@@ -686,9 +686,10 @@ class Solver:
             kwargs["drivers"] = drivers
         self.update(**kwargs)
         check_duration(self.effective, duration, self.precision)
-        varying_values = self._apply_parameters(
+        varying_values, swept, fixed = self.input_handler.split_parameters(
             parameters, fix_constant_parameters
         )
+        self._apply_parameters(swept, fixed)
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
@@ -756,7 +757,10 @@ class Solver:
             Options forwarded to :meth:`update`.
         """
         self.update(**kwargs)
-        self._apply_parameters(parameters, fix_constant_parameters)
+        _, swept, fixed = self.input_handler.split_parameters(
+            parameters, fix_constant_parameters
+        )
+        self._apply_parameters(swept, fixed)
 
         if optimize_candidates:
             run_optimization(
@@ -815,9 +819,10 @@ class Solver:
         ... )
         >>> result = solver.solve(inits, params)  # Uses fast path
         """
-        varying_values = self._apply_parameters(
-            parameters, single_values_as_rows=True
+        varying_values, swept, fixed = (
+            self.input_handler.split_parameters_into_rows(parameters)
         )
+        self._apply_parameters(swept, fixed)
         return self.input_handler(
             states=initial_values, params=varying_values, kind=grid_type
         )
@@ -849,46 +854,28 @@ class Solver:
 
     def _apply_parameters(
         self,
-        parameters: Any,
-        fix_constant_parameters: bool = False,
-        single_values_as_rows: bool = False,
-    ) -> Any:
-        """Set the swept parameters and compiled-in values for an input.
+        swept: Tuple[str, ...],
+        fixed: Dict[str, float],
+    ) -> None:
+        """Set the swept parameters and compiled-in values, and update.
 
-        Set them on the system and update the kernel before anything
-        builds an array, because a compiled-in value can change which
-        states a DAE keeps, and the initial-values array needs one row
-        per state of the system as it is compiled.
+        Call this before building the input arrays. Compiling in a
+        value can remove states from a DAE, and you need one row in the
+        initial-values array for each state of the compiled system.
 
         Parameters
         ----------
-        parameters
-            A parameter input, as :meth:`solve` takes it.
-        fix_constant_parameters
-            Compile in the parameters whose rows in a full-height host
-            parameter array are all the same value.
-        single_values_as_rows
-            Mark each dict entry with a single number as swept, giving it
-            a row with that number in every run, instead of compiling it
-            in.
-
-        Returns
-        -------
-        object
-            The values that vary between runs, for
-            :class:`~cubie.batchsolving.BatchInputHandler.BatchInputHandler`.
+        swept
+            Names of the parameters with a row in the parameters array.
+        fixed
+            The value to compile in for every other parameter.
 
         Warns
         -----
         UserWarning
-            If the system is a DAE and the input compiles in a value
-            that differs from the parameter's default.
+            If the system is a DAE and you fix a parameter at a value
+            other than its default.
         """
-        varying_values, swept, fixed = self.input_handler.split_parameters(
-            parameters,
-            fix_constant_parameters,
-            single_values_as_rows=single_values_as_rows,
-        )
         defaults = self.system.parameters.as_float_dict
         changed = any(
             value != defaults[name] for name, value in fixed.items()
@@ -897,7 +884,6 @@ class Solver:
             warn(DAE_FIXED_PARAMETER_WARNING, UserWarning, stacklevel=3)
         self.system_interface.set_swept_parameters(swept, fixed)
         self.update()
-        return varying_values
 
     def calibrate(
         self,
