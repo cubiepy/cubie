@@ -254,13 +254,13 @@ def test_default_fixes_every_parameter():
     )
 
 
-def test_swept_names_are_sorted():
-    """Swept names are sorted and the rest are compiled in."""
+def test_swept_names_keep_their_order():
+    """Swept names keep their order and the rest are compiled in."""
     data, _, changed = _make_odedata().update(
         swept_parameters=["b", "a"], fixed_parameters={"g": 9.81}
     )
     assert changed == {"swept_parameters", "fixed_parameters"}
-    assert data.swept_parameters == ("a", "b")
+    assert data.swept_parameters == ("b", "a")
     assert data.fixed_parameter_values == pytest.approx({"g": 9.81})
     assert data.sizes.swept_parameters == 2
 

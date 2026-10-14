@@ -101,12 +101,16 @@ class ParsedSystem:
         values: Optional[Dict[str, float]] = None,
         state_values: Optional[Dict[str, float]] = None,
     ):
-        """Assemble the system with ``swept`` as the array's rows.
+        """Assemble the equations for the swept parameters ``swept``.
+
+        Lay out the parameters array with one row per swept parameter,
+        sorted by name, so that the layout does not depend on the order
+        the caller lists the names in.
 
         Parameters
         ----------
         swept
-            Names read from the parameters array, in order. Every
+            Names read from the parameters array, in any order. Every
             other parameter is substituted as a number.
         values
             Values for the parameters. Defaults to the parsed values.
@@ -117,12 +121,22 @@ class ParsedSystem:
         -------
         tuple
             ``(index_map, all_symbols, funcs, parsed_equations,
-            fn_hash)``; ``index_map.parameters`` holds the swept
-            parameters and the derived mass matrix rides on
-            ``parsed_equations.mass_matrix``.
+            fn_hash)``. ``index_map.parameters`` holds the swept
+            parameters in row order, and
+            ``parsed_equations.mass_matrix`` holds the derived mass
+            matrix.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a swept name repeats.
         """
 
-        swept = tuple(swept)
+        swept = tuple(sorted(swept))
+        if len(set(swept)) != len(swept):
+            raise ValueError(f"Swept parameters {list(swept)} repeat a name.")
         values = {**self.parameters, **(values or {})}
         unknown = (set(swept) | set(values)) - set(self.parameters)
         if unknown:

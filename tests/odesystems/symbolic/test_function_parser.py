@@ -26,10 +26,10 @@ from cubie.odesystems.symbolic.parsing.function_parser import (
 )
 from cubie.odesystems.symbolic.parsing import (
     EquationWarning,
-    parse_input,
+    parse_system,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
-from tests._utils import parse_input_swept
+from tests._utils import specialise_all_swept
 
 
 def _walk(node):
@@ -47,17 +47,17 @@ def _has_piecewise(node):
 
 
 class TestParseInput:
-    """End-to-end tests through parse_input with callable dxdt."""
+    """End-to-end tests through parse_system with callable dxdt."""
 
     def test_simple_exponential_decay(self):
         """Single-state exponential decay via function."""
         def f(t, y):
             return [-0.1 * y[0]]
 
-        index_map, syms, fns, eqs, h, _, *_ = parse_input(
+        index_map, syms, fns, eqs, h = parse_system(
             dxdt=f,
             states={"x": 1.0},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 1
         assert len(index_map.state_names) == 1
 
@@ -66,11 +66,11 @@ class TestParseInput:
         def f(t, y, p):
             return [-p[0] * y[1], y[0]]
 
-        index_map, syms, fns, eqs, h, _, *_ = parse_input(
+        index_map, syms, fns, eqs, h = parse_system(
             dxdt=f,
             states={"velocity": 1.0, "position": 0.0},
             parameters={"k": 0.5},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 2
 
     def test_named_states_positional(self):
@@ -78,10 +78,10 @@ class TestParseInput:
         def f(t, y):
             return [-y[0], y[0] - y[1]]
 
-        index_map, syms, fns, eqs, h, _, *_ = parse_input(
+        index_map, syms, fns, eqs, h = parse_system(
             dxdt=f,
             states={"a": 0.0, "b": 1.0},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 2
 
     def test_positional_binding_follows_written_order(self):
@@ -89,10 +89,10 @@ class TestParseInput:
         def f(t, y):
             return [-y[0], y[0] - y[1]]
 
-        index_map, _, _, eqs, _, _ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"z": 0.0, "a": 1.0},
-        )
+        ).specialise()
         assert index_map.state_names == ["a", "z"]
         derivatives = {
             lhs.name: str(rhs) for lhs, rhs in eqs.state_derivatives
@@ -105,10 +105,10 @@ class TestParseInput:
         def f(t, y):
             return [-y["velocity"]]
 
-        index_map, syms, fns, eqs, h, _, *_ = parse_input(
+        index_map, syms, fns, eqs, h = parse_system(
             dxdt=f,
             states={"velocity": 1.0},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 1
 
     def test_parameters_attribute_access(self):
@@ -116,11 +116,11 @@ class TestParseInput:
         def f(t, y, c):
             return [-c.damping * y[0]]
 
-        index_map, syms, fns, eqs, h, _, *_ = parse_input(
+        index_map, syms, fns, eqs, h = parse_system(
             dxdt=f,
             states={"x": 1.0},
             parameters={"damping": 0.1},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 1
 
     def test_parameters_string_subscript(self):
@@ -128,11 +128,11 @@ class TestParseInput:
         def f(t, y, c):
             return [-c["damping"] * y[0]]
 
-        index_map, syms, fns, eqs, h, _, *_ = parse_input(
+        index_map, syms, fns, eqs, h = parse_system(
             dxdt=f,
             states={"x": 1.0},
             parameters={"damping": 0.1},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 1
 
     def test_equivalence_with_string_input(self):
@@ -140,15 +140,15 @@ class TestParseInput:
         def f(t, y):
             return [-0.1 * y[0]]
 
-        _, _, _, eqs_func, _, _, *_ = parse_input(
+        _, _, _, eqs_func, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
-        )
+        ).specialise()
 
-        _, _, _, eqs_str, _, _, *_ = parse_input(
+        _, _, _, eqs_str, _ = parse_system(
             dxdt="dx = -0.1 * x",
             states={"x": 1.0},
-        )
+        ).specialise()
 
         assert len(eqs_func.state_derivatives) == len(
             eqs_str.state_derivatives
@@ -164,10 +164,10 @@ class TestParseInput:
             from math import sin
             return [sin(y[0])]
 
-        index_map, syms, fns, eqs, h, _, *_ = parse_input(
+        index_map, syms, fns, eqs, h = parse_system(
             dxdt=f,
             states={"x": 1.0},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 1
 
     def test_local_alias(self):
@@ -176,10 +176,10 @@ class TestParseInput:
             v = y[0]
             return [-0.1 * v]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
-        )
+        ).specialise()
         # Alias should not appear as auxiliary
         assert len(eqs.auxiliaries) == 0
         assert len(eqs.state_derivatives) == 1
@@ -192,10 +192,10 @@ class TestParseInput:
             total += y[2]
             return [-total, total * 0.5, -total * 0.25]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"a": 1.0, "b": 0.5, "c": 0.0},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 3
         # ``total`` becomes an auxiliary: total = a + b + c
         # Derivatives reference the auxiliary symbol.
@@ -218,7 +218,7 @@ class TestParseInput:
                 total += y[i] * p[i]
             return [-total, total * 0.5, -total * 0.25]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _ = specialise_all_swept(
             dxdt=f,
             states={"a": 1.0, "b": 0.5, "c": 0.0},
             parameters={"p0": 0.1, "p1": 0.2, "p2": 0.3},
@@ -244,10 +244,10 @@ class TestParseInput:
             a, b = y[0], y[1]
             return [-a, b]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0, "v": 0.5},
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 2
 
     def test_if_else_piecewise(self):
@@ -259,10 +259,10 @@ class TestParseInput:
                 result = -y[0]
             return [-result]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
-        )
+        ).specialise()
         # The Piecewise appears in the auxiliary for 'result'
         assert len(eqs.auxiliaries) == 1
         _, aux_rhs = eqs.auxiliaries[0]
@@ -279,10 +279,10 @@ class TestParseInput:
                 rate = 0.0
             return [-rate]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
-        )
+        ).specialise()
         assert len(eqs.auxiliaries) == 1
         _, aux_rhs = eqs.auxiliaries[0]
         assert _has_piecewise(aux_rhs)
@@ -298,7 +298,7 @@ class TestParseInput:
                 rate = 0.0
             return [-rate]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _ = specialise_all_swept(
             dxdt=f,
             states={"x": 1.0},
             parameters={"k1": 1.0, "k2": 2.0},
@@ -319,7 +319,7 @@ class TestParseInput:
                 total = 1.0
             return [-total, total]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _ = specialise_all_swept(
             dxdt=f,
             states={"a": 1.0, "b": 0.5},
             parameters={"k0": 0.1, "k1": 0.2},
@@ -345,7 +345,7 @@ class TestParseInput:
             return [y[0]]
 
         with pytest.raises(NotImplementedError, match="return"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_while_inside_branch_raises(self):
         """A while-loop inside an if-branch raises."""
@@ -359,7 +359,7 @@ class TestParseInput:
             return [-a]
 
         with pytest.raises(NotImplementedError, match="While"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_for_else_raises(self):
         """A for/else loop raises."""
@@ -372,7 +372,7 @@ class TestParseInput:
             return [-total, total]
 
         with pytest.raises(NotImplementedError, match="for/else"):
-            parse_input(dxdt=f, states={"a": 1.0, "b": 0.5})
+            parse_system(dxdt=f, states={"a": 1.0, "b": 0.5}).specialise()
 
     def test_try_except_raises(self):
         """try/except raises instead of merging branch assignments."""
@@ -384,7 +384,7 @@ class TestParseInput:
             return [-a]
 
         with pytest.raises(NotImplementedError, match="try/except"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_match_statement_raises(self):
         """match statements raise instead of merging case bodies."""
@@ -397,7 +397,7 @@ class TestParseInput:
             return [a]
 
         with pytest.raises(NotImplementedError, match="match"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_nested_def_raises(self):
         """Nested function definitions raise with guidance."""
@@ -409,7 +409,7 @@ class TestParseInput:
         with pytest.raises(
             NotImplementedError, match="user_functions"
         ):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_annotated_assignment(self):
         """An annotated assignment is treated as an assignment."""
@@ -417,7 +417,7 @@ class TestParseInput:
             a: float = 2.0 * y[0]
             return [-a]
 
-        _, _, _, eqs, _, _, *_ = parse_input(dxdt=f, states={"x": 1.0})
+        _, _, _, eqs, _ = parse_system(dxdt=f, states={"x": 1.0}).specialise()
         assert len(eqs.auxiliaries) == 1
         _, aux_rhs = eqs.auxiliaries[0]
         x = sp.Symbol("x", real=True)
@@ -483,11 +483,11 @@ class TestDriverAccess:
             dv = -y.x + p.forcing
             return [dx, dv]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0, "v": 0.0},
             drivers=["forcing"],
-        )
+        ).specialise()
         driver_sym = index_map.drivers.symbol_map["forcing"]
         rhs_symbols = set()
         for _, rhs in eqs.state_derivatives:
@@ -502,12 +502,12 @@ class TestDriverAccess:
             dv = -p.k * y.x + d.forcing
             return [dx, dv]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0, "v": 0.0},
             parameters={"k": 2.0},
             drivers=["forcing"],
-        )
+        ).specialise()
         driver_sym = index_map.drivers.symbol_map["forcing"]
         rhs_symbols = set()
         for _, rhs in eqs.state_derivatives:
@@ -519,11 +519,11 @@ class TestDriverAccess:
         def f(t, y, p):
             return [-y["x"] + p["forcing"]]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
             drivers=["forcing"],
-        )
+        ).specialise()
         driver_sym = index_map.drivers.symbol_map["forcing"]
         rhs = eqs.state_derivatives[0][1]
         assert ir.sym(driver_sym.name) in ir.free_atoms(rhs)
@@ -534,11 +534,11 @@ class TestDriverAccess:
             return [-y.x + forcing]  # noqa: F821
 
         with pytest.raises(ValueError, match=r"p\.forcing"):
-            parse_input(
+            parse_system(
                 dxdt=f,
                 states={"x": 1.0},
                 drivers=["forcing"],
-            )
+            ).specialise()
 
 
 class TestStateInference:
@@ -551,10 +551,10 @@ class TestStateInference:
             dv = y.x
             return {"x": dx, "v": dv}
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             parameters={"k": 0.5},
-        )
+        ).specialise()
         assert index_map.state_names == ["v", "x"]
         assert len(eqs.state_derivatives) == 2
         assert index_map.states.defaults == {"x": 0.0, "v": 0.0}
@@ -564,7 +564,7 @@ class TestStateInference:
         def f(t, y):
             return [-0.1 * y[0], y[0] - y[1]]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(dxdt=f)
+        index_map, _, _, eqs, _ = parse_system(dxdt=f).specialise()
         assert index_map.state_names == ["y0", "y1"]
         assert len(eqs.state_derivatives) == 2
 
@@ -573,7 +573,7 @@ class TestStateInference:
         def f(t, y):
             return -0.5 * y[0]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(dxdt=f)
+        index_map, _, _, eqs, _ = parse_system(dxdt=f).specialise()
         assert index_map.state_names == ["y0"]
         assert len(eqs.state_derivatives) == 1
 
@@ -583,7 +583,7 @@ class TestStateInference:
             return [-y.x, y.x - y.v]
 
         with pytest.raises(ValueError, match="return a dict"):
-            parse_input(dxdt=f)
+            parse_system(dxdt=f).specialise()
 
     def test_strict_without_states_still_raises(self):
         """strict=True keeps requiring explicit states."""
@@ -591,7 +591,7 @@ class TestStateInference:
             return [-0.1 * y[0]]
 
         with pytest.raises(ValueError, match="No state symbols"):
-            parse_input(dxdt=f, strict=True)
+            parse_system(dxdt=f, strict=True).specialise()
 
     def test_inferred_states_match_explicit_equations(self):
         """Inferred dict-return system equals the explicit-states one."""
@@ -599,12 +599,12 @@ class TestStateInference:
             dx = -p.k * y.x
             return {"x": dx}
 
-        _, _, _, eqs_inferred, _, _, *_ = parse_input(
+        _, _, _, eqs_inferred, _ = parse_system(
             dxdt=f, parameters={"k": 0.5}
-        )
-        _, _, _, eqs_explicit, _, _, *_ = parse_input(
+        ).specialise()
+        _, _, _, eqs_explicit, _ = parse_system(
             dxdt=f, parameters={"k": 0.5}, states={"x": 0.0}
-        )
+        ).specialise()
         lhs_i, rhs_i = eqs_inferred.state_derivatives[0]
         lhs_e, rhs_e = eqs_explicit.state_derivatives[0]
         assert lhs_i == lhs_e
@@ -621,7 +621,7 @@ class TestUndeclaredSymbols:
             return [dx]
 
         with pytest.raises(ValueError, match="k_leak"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_bare_declared_parameter_raises_with_hint(self):
         """A declared parameter used bare names its container access."""
@@ -629,9 +629,9 @@ class TestUndeclaredSymbols:
             return [-mu * y.x]  # noqa: F821
 
         with pytest.raises(ValueError, match=r"p\.mu"):
-            parse_input(
+            parse_system(
                 dxdt=f, states={"x": 1.0}, parameters={"mu": 2.0}
-            )
+            ).specialise()
 
     def test_bare_driver_hints_dedicated_driver_argument(self):
         """A bare driver name hints the trailing container argument."""
@@ -639,12 +639,12 @@ class TestUndeclaredSymbols:
             return [forcing - p.k * y.x]  # noqa: F821
 
         with pytest.raises(ValueError, match=r"d\.forcing"):
-            parse_input(
+            parse_system(
                 dxdt=f,
                 states={"x": 1.0},
                 parameters={"k": 1.0},
                 drivers=["forcing"],
-            )
+            ).specialise()
 
     def test_container_access_infers_parameter(self):
         """Undeclared container access infers a parameter and warns."""
@@ -652,7 +652,7 @@ class TestUndeclaredSymbols:
             return [-p.k_new * y.x]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, _, _, _, *_ = parse_input_swept(
+            index_map, _, _, _, _ = specialise_all_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert "k_new" in index_map.parameter_names
@@ -663,7 +663,7 @@ class TestUndeclaredSymbols:
             return [-p.k_new * y.x]
 
         with pytest.raises(ValueError, match="strict"):
-            parse_input(dxdt=f, states={"x": 1.0}, strict=True)
+            parse_system(dxdt=f, states={"x": 1.0}, strict=True).specialise()
 
     def test_unknown_state_attribute_raises(self):
         """Accessing an undeclared state names the declared states."""
@@ -671,7 +671,7 @@ class TestUndeclaredSymbols:
             return [-y.z]
 
         with pytest.raises(ValueError, match="Declared states"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_state_index_out_of_range_raises(self):
         """Out-of-range positional state access raises."""
@@ -679,7 +679,7 @@ class TestUndeclaredSymbols:
             return [-y[3]]
 
         with pytest.raises(ValueError, match="out of range"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_container_index_out_of_range_raises(self):
         """Out-of-range positional container access raises."""
@@ -687,9 +687,9 @@ class TestUndeclaredSymbols:
             return [-p[4] * y[0]]
 
         with pytest.raises(ValueError, match="out of range"):
-            parse_input(
+            parse_system(
                 dxdt=f, states={"x": 1.0}, parameters={"k": 1.0}
-            )
+            ).specialise()
 
     def test_state_accessed_via_container_raises(self):
         """A state reached through p.* points back at the state arg."""
@@ -697,7 +697,7 @@ class TestUndeclaredSymbols:
             return [-p.x]
 
         with pytest.raises(ValueError, match=r"y\.x"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
 
 class TestUserFunctions:
@@ -712,7 +712,7 @@ class TestUserFunctions:
             dx = -hill(y.x, p.km)
             return [dx]
 
-        index_map, _, funcs, eqs, _, _, *_ = parse_input_swept(
+        index_map, _, funcs, eqs, _ = specialise_all_swept(
             dxdt=f,
             states={"x": 1.0},
             parameters={"km": 0.5},
@@ -732,11 +732,11 @@ class TestUserFunctions:
         def my_exp(v):
             return 2 * v
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
             user_functions={"exp": my_exp},
-        )
+        ).specialise()
         x = sp.Symbol("x", real=True)
         rhs = to_sympy(eqs.state_derivatives[0][1])
         assert sp.simplify(rhs + 2 * x) == 0
@@ -753,11 +753,11 @@ class TestUserFunctions:
             dx = -myfunc(y.x, y.v)  # noqa: F821
             return [dx, y.x]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0, "v": 0.0},
             user_functions={"myfunc": MyFuncDevice()},
-        )
+        ).specialise()
         rhs = {
             lhs.name: expr for lhs, expr in eqs.state_derivatives
         }["dx"]
@@ -782,12 +782,12 @@ class TestUserFunctions:
             dx = -myfunc(y.x, y.v)  # noqa: F821
             return [dx, y.x]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0, "v": 0.0},
             user_functions={"myfunc": MyFuncDevice()},
             user_function_derivatives={"myfunc": myfunc_grad},
-        )
+        ).specialise()
         code = generate_linear_operator_code(
             equations=eqs, index_map=index_map
         )
@@ -799,7 +799,7 @@ class TestUserFunctions:
             return [-mystery(y[0])]  # noqa: F821
 
         with pytest.raises(NotImplementedError, match="mystery"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
 
 class TestScalarArguments:
@@ -810,7 +810,7 @@ class TestScalarArguments:
         def f(t, y, mu):
             return [y[1], mu * (1 - y[0] ** 2) * y[1] - y[0]]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input_swept(
+        index_map, _, _, eqs, _ = specialise_all_swept(
             dxdt=f,
             states={"x": 1.0, "v": 0.0},
             parameters={"mu": 1.5},
@@ -825,12 +825,12 @@ class TestScalarArguments:
         def f(t, y, k, forcing):
             return [-k * y[0] + forcing]
 
-        index_map, _, _, eqs, _, _, *_ = parse_input(
+        index_map, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
             parameters={"k": 0.5},
             drivers=["forcing"],
-        )
+        ).specialise()
         driver_sym = index_map.drivers.symbol_map["forcing"]
         rhs = eqs.state_derivatives[0][1]
         assert ir.sym(driver_sym.name) in ir.free_atoms(rhs)
@@ -841,7 +841,7 @@ class TestScalarArguments:
             return [-k_new * y[0]]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, _, _, _, *_ = parse_input_swept(
+            index_map, _, _, _, _ = specialise_all_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert "k_new" in index_map.parameter_names
@@ -852,14 +852,14 @@ class TestScalarArguments:
             return [-k_new * y[0]]
 
         with pytest.raises(ValueError, match="strict"):
-            parse_input(dxdt=f, states={"x": 1.0}, strict=True)
+            parse_system(dxdt=f, states={"x": 1.0}, strict=True).specialise()
 
     def test_scalar_and_container_args_mix(self):
         """Scalar and container extra args coexist."""
         def f(t, y, mu, p):
             return [-mu * y[0] + p.k]
 
-        _, _, _, eqs, _, _, *_ = parse_input_swept(
+        _, _, _, eqs, _ = specialise_all_swept(
             dxdt=f,
             states={"x": 1.0},
             parameters={"mu": 1.0, "k": 2.0},
@@ -872,7 +872,9 @@ class TestScalarArguments:
         def f(t, y, p):
             return [-0.5 * y[0]]
 
-        index_map, _, _, _, _, _, *_ = parse_input(dxdt=f, states={"x": 1.0})
+        index_map, _, _, _, _ = parse_system(
+            dxdt=f, states={"x": 1.0}
+        ).specialise()
         assert "p" not in index_map.parameter_names
 
     def test_scalar_arg_matching_state_raises(self):
@@ -881,7 +883,7 @@ class TestScalarArguments:
             return [-x * y[0]]
 
         with pytest.raises(ValueError, match=r"y\.x"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
 
 class TestDerivativeAliasReference:
@@ -894,11 +896,11 @@ class TestDerivativeAliasReference:
             flux = dx * 2.0  # noqa: F841
             return [dx]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f,
             states={"x": 1.0},
             observables=["flux"],
-        )
+        ).specialise()
         assert len(eqs.observables) == 1
         _, obs_rhs = eqs.observables[0]
         x = sp.Symbol("x", real=True)
@@ -1002,7 +1004,7 @@ class TestParseFunctionInputDirect:
 
 
 class TestParseFunctionErrors:
-    """Error and edge paths reached through ``parse_input``."""
+    """Error and edge paths reached through ``parse_system``."""
 
     def test_local_named_like_parameter_arg_skipped(self):
         """A local reassigning a parameter arg is not an auxiliary."""
@@ -1010,9 +1012,9 @@ class TestParseFunctionErrors:
             k = 2.0  # noqa: F841
             return [-k * y[0]]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f, states={"x": 1.0}, parameters={"k": 1.0}
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 1
         aux_names = [str(lhs) for lhs, _ in eqs.auxiliaries]
         assert "k" not in aux_names
@@ -1023,7 +1025,7 @@ class TestParseFunctionErrors:
             y = y[0]
             return [-y]
 
-        _, _, _, eqs, _, _, *_ = parse_input(dxdt=f, states={"x": 1.0})
+        _, _, _, eqs, _ = parse_system(dxdt=f, states={"x": 1.0}).specialise()
         assert len(eqs.state_derivatives) == 1
         assert len(eqs.auxiliaries) == 0
 
@@ -1033,7 +1035,7 @@ class TestParseFunctionErrors:
             return [-y[0], y[0]]
 
         with pytest.raises(ValueError, match="Return has"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_dict_return_non_constant_key_raises(self):
         """A dict return with a non-literal key raises."""
@@ -1041,7 +1043,7 @@ class TestParseFunctionErrors:
             return {t: -y[0]}
 
         with pytest.raises(ValueError, match="string literals"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_dict_return_unknown_state_raises(self):
         """A dict return keyed by an undeclared state raises."""
@@ -1049,7 +1051,7 @@ class TestParseFunctionErrors:
             return {"z": -y[0]}
 
         with pytest.raises(ValueError, match="not a declared state"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_unknown_string_state_raises(self):
         """A string subscript for an undeclared state raises."""
@@ -1057,7 +1059,7 @@ class TestParseFunctionErrors:
             return [-y["z"]]
 
         with pytest.raises(ValueError, match="Unknown state 'z'"):
-            parse_input(dxdt=f, states={"x": 1.0})
+            parse_system(dxdt=f, states={"x": 1.0}).specialise()
 
     def test_non_constant_container_subscript_raises(self):
         """A computed container subscript raises NotImplementedError."""
@@ -1067,9 +1069,9 @@ class TestParseFunctionErrors:
         with pytest.raises(
             NotImplementedError, match="constant subscripts"
         ):
-            parse_input(
+            parse_system(
                 dxdt=f, states={"x": 1.0}, parameters={"k": 1.0}
-            )
+            ).specialise()
 
     def test_observable_via_container_raises(self):
         """Accessing an observable through a container argument raises."""
@@ -1077,9 +1079,9 @@ class TestParseFunctionErrors:
             return [-p.flux * y[0]]
 
         with pytest.raises(ValueError, match="observable"):
-            parse_input(
+            parse_system(
                 dxdt=f, states={"x": 1.0}, observables=["flux"]
-            )
+            ).specialise()
 
     def test_repeated_container_inference_reuses_symbol(self):
         """A second access to an inferred container key reuses it."""
@@ -1087,7 +1089,7 @@ class TestParseFunctionErrors:
             return [-p.k_new * y[0] + p.k_new]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, eqs, _, _, *_ = parse_input_swept(
+            index_map, _, _, eqs, _ = specialise_all_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert index_map.parameter_names.count("k_new") == 1
@@ -1098,7 +1100,7 @@ class TestParseFunctionErrors:
             return [-p.k_new * y[0] + k_new]
 
         with pytest.warns(EquationWarning, match="k_new"):
-            index_map, _, _, eqs, _, _, *_ = parse_input_swept(
+            index_map, _, _, eqs, _ = specialise_all_swept(
                 dxdt=f, states={"x": 1.0}
             )
         assert index_map.parameter_names.count("k_new") == 1
@@ -1109,7 +1111,7 @@ class TestParseFunctionErrors:
             v = y["x"]
             return [-v]
 
-        _, _, _, eqs, _, _, *_ = parse_input(dxdt=f, states={"x": 1.0})
+        _, _, _, eqs, _ = parse_system(dxdt=f, states={"x": 1.0}).specialise()
         assert len(eqs.state_derivatives) == 1
         assert len(eqs.auxiliaries) == 0
         x = sp.Symbol("x", real=True)
@@ -1122,8 +1124,8 @@ class TestParseFunctionErrors:
             a = p.k
             return [-a * y[0]]
 
-        _, _, _, eqs, _, _, *_ = parse_input(
+        _, _, _, eqs, _ = parse_system(
             dxdt=f, states={"x": 1.0}, parameters={"k": 1.0}
-        )
+        ).specialise()
         assert len(eqs.state_derivatives) == 1
         assert len(eqs.auxiliaries) == 0

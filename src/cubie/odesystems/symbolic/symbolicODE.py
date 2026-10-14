@@ -66,7 +66,6 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.baseODE import BaseODE, ODECache
-from cubie.odesystems.ODEData import sorted_swept_names
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -200,9 +199,8 @@ def create_ODE_system(
         callable takes the function's arguments followed by ``n``
         argument indices.
     name
-        Identifier used for generated files. When you leave it out, we
-        name the system ``unnamed_`` followed by the start of a hash of
-        its equations.
+        Identifier used for generated files. Defaults to ``unnamed_``
+        followed by the start of a hash of the equations.
     precision
         Target floating-point precision used when compiling the system.
     strict
@@ -222,15 +220,14 @@ def create_ODE_system(
         and ``"dfs"`` select fixed alternatives. Defaults to
         ``CUBIE_OPERATION_ORDERING`` (``liveness_auto`` when unset).
     swept_parameters
-        Names of the parameters that will vary in each batch/sweep.
-        Parameters not listed here will be treated as constant across
-        every run. Optional, if not given the system will be built
-        assuming that all parameters are constant. The names given at
-        this level are used when we first specialise the system, but
-        every time you call solve() on a system the swept parameters
-        will change to match the set you give. Setting them here just
-        means that the system will be ready to go for your first solve,
-        instead of taking a few ms to specialise.
+        Names of the parameters that vary between the runs of a batch.
+        Every other parameter is compiled in at its default value, and
+        when you leave this out every parameter is compiled in. A solve
+        sets the swept parameters to match its inputs, so giving them
+        here saves specialising the system again at the first solve,
+        which takes a few milliseconds for a small model and around a
+        tenth of a second for a CellML model with over a hundred
+        parameters.
 
     Returns
     -------
@@ -275,8 +272,14 @@ class SymbolicODE(BaseODE):
     operation_ordering
         Generated-operation ordering policy.
     swept_parameters
-        Names of parameters that won't be compiled in as constants
-        during specialisation. These get sorted by name internally.
+        Names of the parameters that vary between the runs of a batch.
+        Every other parameter is compiled in at its default value, and
+        when you leave this out every parameter is compiled in. A solve
+        sets the swept parameters to match its inputs, so giving them
+        here saves specialising the system again at the first solve,
+        which takes a few milliseconds for a small model and around a
+        tenth of a second for a CellML model with over a hundred
+        parameters.
     """
 
     # Diagnostic evaluators live in a dict so child-factory
@@ -299,28 +302,33 @@ class SymbolicODE(BaseODE):
         precision
             Target floating-point precision used for generated kernels.
         name
-            Identifier used for generated modules. When you leave it
-            out, we name the system ``unnamed_`` followed by the start
-            of a hash of its equations, so the name stays the same
-            whichever parameters are swept.
+            Identifier used for generated modules. Defaults to
+            ``unnamed_`` followed by the start of a hash of the
+            equations, which is the same whichever parameters are
+            swept.
         operation_ordering
-            Policy for ordering the generated operations. When you
-            leave it out, we read ``CUBIE_OPERATION_ORDERING`` as the
-            system is built, and use ``liveness_auto`` if it is unset.
+            Policy for ordering the generated operations. Defaults to
+            ``CUBIE_OPERATION_ORDERING``, read when the system is
+            built, or ``liveness_auto`` if that is unset.
         swept_parameters
-            Names of parameters that won't be compiled in as constants
-            during specialisation. These get sorted by name internally.
+            Names of the parameters that vary between the runs of a
+            batch. Every other parameter is compiled in at its default
+            value, and when you leave this out every parameter is
+            compiled in. A solve sets the swept parameters to match its
+            inputs, so giving them here saves specialising the system
+            again at the first solve, which takes a few milliseconds for
+            a small model and around a tenth of a second for a CellML
+            model with over a hundred parameters.
         """
         if operation_ordering is None:
             operation_ordering = operation_ordering_default()
-        swept_parameters = sorted_swept_names(swept_parameters or ())
         (
             all_indexed_bases,
             self.all_symbols,
             user_functions,
             equations,
             fn_hash,
-        ) = parsed_system.specialise(swept_parameters)
+        ) = parsed_system.specialise(swept_parameters or ())
         self._parsed_system = parsed_system
         self._parameter_units = _unit_map(
             parsed_system.parameters, parsed_system.parameter_units
@@ -352,7 +360,7 @@ class SymbolicODE(BaseODE):
             driver_derivatives=driver_derivatives,
             name=name,
             operation_ordering=operation_ordering,
-            swept_parameters=swept_parameters,
+            swept_parameters=all_indexed_bases.parameter_names,
         )
         self._seed_derived_mass(derived_mass_matrix)
         self.gen_file = ODEFile(
@@ -436,9 +444,9 @@ class SymbolicODE(BaseODE):
             derivatives; the order-``n`` callable takes the function's
             arguments followed by ``n`` argument indices.
         name
-            Identifier used for generated files. When you leave it out,
-            we name the system ``unnamed_`` followed by the start of a
-            hash of its equations.
+            Identifier used for generated files. Defaults to
+            ``unnamed_`` followed by the start of a hash of the
+            equations.
         precision
             Target floating-point precision used when compiling the system.
         strict
@@ -464,16 +472,14 @@ class SymbolicODE(BaseODE):
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
             ``"dfs"``. Defaults to ``CUBIE_OPERATION_ORDERING``.
         swept_parameters
-            Names of the parameters that will vary in each batch/sweep.
-            Parameters not listed here will be treated as constant
-            across every run. Optional, if not given the system will be
-            built assuming that all parameters are constant. The names
-            given at this level are used when we first specialise the
-            system, but every time you call solve() on a system the
-            swept parameters will change to match the set you give.
-            Setting them here just means that the system will be ready
-            to go for your first solve, instead of taking a few ms to
-            specialise.
+            Names of the parameters that vary between the runs of a
+            batch. Every other parameter is compiled in at its default
+            value, and when you leave this out every parameter is
+            compiled in. A solve sets the swept parameters to match its
+            inputs, so giving them here saves specialising the system
+            again at the first solve, which takes a few milliseconds for
+            a small model and around a tenth of a second for a CellML
+            model with over a hundred parameters.
 
         Returns
         -------
@@ -677,16 +683,23 @@ class SymbolicODE(BaseODE):
             The recognised names.
         """
         settings = self.compile_settings
-        swept = sorted_swept_names(
+        swept = tuple(
             updates.get("swept_parameters", settings.swept_parameters)
         )
         fixed = dict(
             updates.get("fixed_parameters", settings.fixed_parameters)
         )
-        if (
-            swept == settings.swept_parameters
-            and fixed == settings.fixed_parameter_values
-        ):
+        # Specialisation sorts the swept names, so the same names in
+        # another order give the same system and keep the stored order.
+        same_names = len(swept) == len(settings.swept_parameters) and set(
+            swept
+        ) == set(settings.swept_parameters)
+        if same_names and fixed == settings.fixed_parameter_values:
+            if "swept_parameters" in updates:
+                updates = {
+                    **updates,
+                    "swept_parameters": settings.swept_parameters,
+                }
             return self.update_compile_settings(updates, silent=True)
 
         defaults = updates.get("parameters", settings.parameters)
@@ -701,6 +714,11 @@ class SymbolicODE(BaseODE):
             {**defaults.as_float_dict, **fixed},
             state_values=settings.initial_state_values,
         )
+        if "swept_parameters" in updates:
+            updates = {
+                **updates,
+                "swept_parameters": index_map.parameter_names,
+            }
         derived = {}
         if index_map.state_names != settings.initial_states.names:
             derived["initial_states"] = SystemValues(

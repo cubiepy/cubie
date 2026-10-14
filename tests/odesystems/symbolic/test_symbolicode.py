@@ -8,7 +8,7 @@ from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_linear_operator_code,
 )
 from cubie.odesystems.symbolic.helper_registry import helper_source_hash
-from cubie.odesystems.symbolic.parsing.parser import parse_input
+from cubie.odesystems.symbolic.parsing.parser import parse_system
 from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
     create_ODE_system,
@@ -281,17 +281,17 @@ class TestSympyStringEquivalence:
 
         dxdt_string = "dx = -k * x"
 
-        result_sympy = parse_input(
+        result_sympy = parse_system(
             dxdt=dxdt_sympy,
             states=['x'],
             parameters=['k'],
-        )
+        ).specialise()
 
-        result_string = parse_input(
+        result_string = parse_system(
             dxdt=dxdt_string,
             states=['x'],
             parameters=['k'],
-        )
+        ).specialise()
 
         hash_sympy = result_sympy[4]
         hash_string = result_string[4]
@@ -335,18 +335,15 @@ class TestSymbolicODEHash:
 
     def test_symbolic_ode_hash_fallback(self, precision):
         """Verify __init__ correctly computes hash when fn_hash=None."""
-        from cubie.odesystems.symbolic.parsing.parser import parse_input
-
         dxdt = ["dx = -k * x", "dy = k * x"]
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
 
-        # Create via parse_input (provides fn_hash)
-        parsed_result = parse_input(
+        parsed_result = parse_system(
             dxdt=dxdt,
             states=list(states.keys()),
             parameters=parameters,
-        )
+        ).specialise()
         expected_hash = parsed_result[4]
 
         # Create via SymbolicODE.create (computes hash internally)
@@ -639,8 +636,11 @@ class TestSweptParameters:
         assert ode.indices.parameter_names == ["k"]
         assert ode.fixed_parameter_values == {"c": 0.5}
 
-    def test_created_sweep_matches_a_later_sweep(self, precision):
-        """Creating with a sweep builds what sweeping afterwards builds."""
+    def test_creating_with_swept_parameters_matches_setting_them_later(
+        self, precision
+    ):
+        """Swept parameters given at creation build what setting them
+        afterwards builds."""
         definition = dict(
             dxdt=["dx = -k * x + c * b"],
             states={"x": 1.0},

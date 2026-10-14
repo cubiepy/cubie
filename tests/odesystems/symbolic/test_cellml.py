@@ -411,10 +411,11 @@ def test_repeat_load_hits_persistent_cache(
     assert second.num_states == first.num_states
 
 
-def test_cache_hit_builds_the_requested_sweep(
+def test_cache_hit_reads_the_requested_swept_parameters(
     cellml_fixtures_dir, isolated_cache_root
 ):
-    """A cache hit specialises the cached system for the sweep asked for."""
+    """A cache hit specialises the cached system for the swept
+    parameters asked for."""
     path = str(cellml_fixtures_dir / "basic_ode.cellml")
     unswept = load_cellml_model(
         path, precision=np.float64, fix_singularities=False

@@ -799,13 +799,13 @@ class Solver:
     ) -> None:
         """Set the parameters an array input gives values for.
 
-        A parameters array can then have one row per name, in this
-        order. Every other parameter is compiled in.
+        Pass a parameters array with one row per name, in name order.
+        Every other parameter is compiled in.
 
         Parameters
         ----------
         names
-            Parameter names, in the order of the array's rows.
+            Parameter names, in any order.
         fixed_values
             Values to compile in for the other parameters. Defaults to
             their default values.
@@ -1340,7 +1340,10 @@ class Solver:
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
-        """Names of the parameters array's rows, in order."""
+        """Names of the swept parameters, sorted by name.
+
+        Pass a parameters array with one row per name, in this order.
+        """
         return self.system_interface.swept_parameters
 
     @property

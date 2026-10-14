@@ -358,27 +358,6 @@ def parse_system(
     return parsed_system
 
 
-def parse_input(**kwargs):
-    """Parse user equations and specialise them with nothing swept.
-
-    Parameters
-    ----------
-    **kwargs
-        Arguments of :func:`parse_system`.
-
-    Returns
-    -------
-    tuple
-        ``(index_map, all_symbols, funcs, parsed_equations, fn_hash,
-        parsed_system)``. Every parameter is compiled in at its
-        default, so ``parsed_equations`` and ``fn_hash`` are
-        value-specific. The derived mass matrix rides on
-        ``parsed_equations.mass_matrix``.
-    """
-    parsed_system = parse_system(**kwargs)
-    return (*parsed_system.specialise(), parsed_system)
-
-
 def _parse_function_path(
     dxdt: Callable,
     states,

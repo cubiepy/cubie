@@ -11,7 +11,7 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
 from cubie.odesystems.symbolic.parsing import (
     IndexedBases,
     ParsedEquations,
-    parse_input,
+    parse_system,
 )
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 from tests._utils import run_device_dxdt, run_device_observables
@@ -294,14 +294,14 @@ class TestDxdtIntegration:
             "dx3 = x3 * a1",
         ]
 
-        index_map, _, _, equations, _, _, *_ = parse_input(
+        index_map, _, _, equations, _ = parse_system(
             dxdt=dxdt_lines,
             states={"x1": 0.0, "x2": 0.0, "x3": 0.0},
             observables=["o1", "o2"],
             parameters={"p1": 0.0, "p2": 0.0},
             drivers=[],
             strict=False,
-        )
+        ).specialise()
 
         code = generate_dxdt_fac_code(equations, index_map)
 
