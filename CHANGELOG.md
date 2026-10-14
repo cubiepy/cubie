@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.0](https://github.com/cubiepy/cubie/compare/v0.16.0...v0.17.0) (2026-10-14)
+
+
+### Features
+
+* **jit:** reassoc fast-math added, off by default ([#1055](https://github.com/cubiepy/cubie/issues/1055)) ([ac268d3](https://github.com/cubiepy/cubie/commit/ac268d31e2c55d8573ee6fa2892150ae896961c0))
+
+
+### Documentation
+
+* **agents:** the code-style notes give docstrings the numpydoc imperative and rule out data and objects as the subject of a sentence ([#1057](https://github.com/cubiepy/cubie/issues/1057)) ([6f1dcf4](https://github.com/cubiepy/cubie/commit/6f1dcf4602b7103da0c050b5ff3f10795ee2e280))
+
 ## [0.16.0](https://github.com/cubiepy/cubie/compare/v0.15.1...v0.16.0) (2026-10-07)
 
 
