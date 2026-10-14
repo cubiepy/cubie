@@ -3160,36 +3160,31 @@ def test_auto_blocksize_of_shared_kernel_maximises_threads(
 # Swept and fixed parameters
 # ============================================================================
 
-# Expected swept rows of parameter_batch per input form, None for all.
-PARAMETER_FORM_SWEEPS = {
-    "dict": (0, 1),
-    "full_array": None,
-    "fixed_rows": (0, 1),
-    "swept_rows": (0, 1, 2),
-    "device": (0, 1, 2),
-    "prepare_grid_arrays": (0, 1, 2),
-    "compile": (0, 1),
-}
-PARAMETER_FORMS = [
-    pytest.param({"parameter_input": form}, id=form)
-    for form in PARAMETER_FORM_SWEEPS
-]
+def _batch_as_dict(system, parameter_batch):
+    """Return parameter_batch as a dict, its third entry a single value."""
+    names = list(system.parameters.names)
+    return {
+        names[0]: parameter_batch[0],
+        names[1]: parameter_batch[1],
+        names[2]: float(parameter_batch[2, 0]),
+    }
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override", PARAMETER_FORMS, indirect=True
-)
-def test_parameter_inputs_match_cpu_reference(
-    parameter_solve, parameter_batch_reference, output_functions, tolerance
+def _assert_solved_batch(
+    result, solver, system, defaults, swept, reference, output_functions,
+    tolerance,
 ):
-    """Every parameter input form solves the same batch."""
-    state = parameter_solve["result"].state
-    for run, reference in enumerate(parameter_batch_reference):
+    """Check a solve of parameter_batch against the CPU reference.
+
+    Also check that the solve swept ``swept``, changed no defaults and
+    left the kernel up to date.
+    """
+    for run, expected in enumerate(reference):
         device_state, _ = extract_state_and_time(
-            state[:, :, run], output_functions
+            result.state[:, :, run], output_functions
         )
         reference_state, _ = extract_state_and_time(
-            reference["state"], output_functions
+            expected["state"], output_functions
         )
         np.testing.assert_allclose(
             device_state,
@@ -3197,77 +3192,134 @@ def test_parameter_inputs_match_cpu_reference(
             rtol=tolerance.rel_tight,
             atol=tolerance.abs_tight,
         )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", PARAMETER_FORMS, indirect=True
-)
-def test_parameter_inputs_sweep_their_varying_parameters(
-    parameter_solve, solver, system, solver_settings
-):
-    """Each form sweeps the parameters it gives several values."""
-    names = list(system.parameters.names)
-    rows = PARAMETER_FORM_SWEEPS[solver_settings["parameter_input"]]
-    expected = tuple(names) if rows is None else tuple(
-        names[row] for row in rows
-    )
-    assert solver.swept_parameters == expected
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [
-        pytest.param({"parameter_input": form}, id=form)
-        for form, rows in PARAMETER_FORM_SWEEPS.items()
-        if rows is not None and 2 not in rows
-    ],
-    indirect=True,
-)
-def test_single_values_compile_in(
-    parameter_solve, solver, system, parameter_batch
-):
-    """A value that holds across the batch is compiled in."""
-    name = system.parameters.names[2]
-    assert solver.fixed_parameter_values[name] == pytest.approx(
-        float(parameter_batch[2, 0])
-    )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override", PARAMETER_FORMS, indirect=True
-)
-def test_solve_leaves_defaults_and_the_system_current(
-    parameter_solve, solver, system
-):
-    """A solve changes no defaults and leaves the kernel up to date."""
-    assert (
-        system.compile_settings.parameter_values
-        == parameter_solve["defaults"]
-    )
+    assert solver.swept_parameters == swept
+    assert system.compile_settings.parameter_values == defaults
     assert not solver.kernel.system_config_stale
 
 
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"parameter_input": "compile"}],
-    indirect=True,
-)
-def test_compiled_parameters_solve_without_a_change(parameter_solve, solver):
-    """compile sets the sweep and kernel the solve then uses."""
-    assert solver.swept_parameters == parameter_solve["swept_before"]
-    assert solver.kernel.kernel is parameter_solve["kernel_before"]
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [{"parameter_input": "prepare_grid_arrays"}],
-    indirect=True,
-)
-def test_grid_arrays_give_single_values_a_row(parameter_solve, system):
-    """prepare_grid_arrays sweeps every given parameter, one row each."""
+def test_dict_parameters_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    """A dict sweeps its varying entries and compiles in a single value."""
+    system = system_restored
     names = list(system.parameters.names)
-    assert parameter_solve["swept_before"] == tuple(names[:3])
-    assert parameter_solve["rows"] == len(parameter_solve["swept_before"])
+    defaults = dict(system.compile_settings.parameter_values)
+    result = solver_mutable.solve(
+        parameters=_batch_as_dict(system, parameter_batch),
+        duration=solver_settings["duration"],
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:2]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+    assert solver_mutable.fixed_parameter_values[names[2]] == (
+        pytest.approx(float(parameter_batch[2, 0]))
+    )
+
+
+def test_full_array_parameters_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    """An array with a row per parameter sweeps every parameter."""
+    system = system_restored
+    defaults = dict(system.compile_settings.parameter_values)
+    result = solver_mutable.solve(
+        parameters=parameter_batch, duration=solver_settings["duration"]
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults,
+        tuple(system.parameters.names), parameter_batch_reference,
+        output_functions, tolerance,
+    )
+
+
+def test_fixed_constant_rows_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    """fix_constant_parameters compiles in the rows that hold one value."""
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.compile_settings.parameter_values)
+    result = solver_mutable.solve(
+        parameters=parameter_batch,
+        duration=solver_settings["duration"],
+        fix_constant_parameters=True,
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:2]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+    assert solver_mutable.fixed_parameter_values[names[2]] == (
+        pytest.approx(float(parameter_batch[2, 0]))
+    )
+
+
+@pytest.mark.parametrize("on_device", [False, True], ids=["host", "device"])
+def test_swept_rows_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance, on_device,
+):
+    """An array with a row per swept parameter reads its rows in name
+    order, whatever order the names were set in."""
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.compile_settings.parameter_values)
+    solver_mutable.set_swept_parameters([names[2], names[1], names[0]])
+    params = parameter_batch[:3]
+    if on_device:
+        params = cuda.to_device(params)
+    result = solver_mutable.solve(
+        parameters=params, duration=solver_settings["duration"]
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:3]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+
+
+def test_prepared_grid_arrays_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    """prepare_grid_arrays gives every given parameter a row."""
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.compile_settings.parameter_values)
+    inits, params = solver_mutable.prepare_grid_arrays(
+        None, _batch_as_dict(system, parameter_batch)
+    )
+    assert params.shape[0] == 3
+    result = solver_mutable.solve(
+        inits, params, duration=solver_settings["duration"]
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:3]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+
+
+def test_compiled_parameters_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    """compile builds the kernel a solve with the same parameters uses."""
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.compile_settings.parameter_values)
+    parameters = _batch_as_dict(system, parameter_batch)
+    solver_mutable.compile(parameters=parameters)
+    kernel = solver_mutable.kernel.kernel
+    result = solver_mutable.solve(
+        parameters=parameters, duration=solver_settings["duration"]
+    )
+    assert solver_mutable.kernel.kernel is kernel
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:2]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
 
 
 def test_parameter_changes_between_solves(

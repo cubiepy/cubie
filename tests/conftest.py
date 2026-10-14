@@ -540,7 +540,6 @@ def start_cuda_busy_work():
     from weakref import finalize
 
     from cuda.bindings import driver as cuda_driver
-    from cubie._cudasim_extensions import cuda
     from cubie.backend.jit import compile_kwargs
 
     @cuda.jit(**compile_kwargs)
@@ -728,7 +727,6 @@ def solver_settings(solver_settings_override, system, precision):
         "fix_singularities": True,
         "voltage_variable": None,
         "auto_performance": True,
-        "parameter_input": "dict",
     }
 
     float_keys = {
@@ -819,50 +817,6 @@ def parameter_batch(system, simple_parameters, precision):
     rows[1] = simple_parameters[names[1]]
     rows[2] = 2.0 * rows[2] + 1.0
     return rows
-
-
-@pytest.fixture(scope="session")
-def parameter_solve(solver, system, solver_settings, parameter_batch):
-    """Solve parameter_batch given in the form ``parameter_input`` names."""
-    form = solver_settings["parameter_input"]
-    duration = solver_settings["duration"]
-    names = list(system.parameters.names)
-    as_dict = {
-        names[0]: parameter_batch[0],
-        names[1]: parameter_batch[1],
-        names[2]: float(parameter_batch[2, 0]),
-    }
-    defaults = dict(system.compile_settings.parameter_values)
-    record = {"defaults": defaults, "swept_before": None}
-    inits, params, options = None, as_dict, {}
-    if form == "full_array":
-        params = parameter_batch
-    elif form == "fixed_rows":
-        params = parameter_batch
-        options = {"fix_constant_parameters": True}
-    elif form in ("swept_rows", "device"):
-        # List the names in reverse to check that the rows are still
-        # read in parameter-name order.
-        solver.set_swept_parameters((names[2], names[1], names[0]))
-        params = parameter_batch[[0, 1, 2]]
-        if form == "device":
-            params = cuda.to_device(params)
-    elif form == "prepare_grid_arrays":
-        inits, params = solver.prepare_grid_arrays(None, as_dict)
-        record["swept_before"] = solver.swept_parameters
-        record["rows"] = params.shape[0]
-    elif form == "compile":
-        solver.compile(parameters=as_dict)
-        record["swept_before"] = solver.swept_parameters
-        record["kernel_before"] = solver.kernel.kernel
-    # Leave initial values out unless the form built them, so the
-    # parameter-only forms solve from the default states.
-    if inits is not None:
-        options["initial_values"] = inits
-    record["result"] = solver.solve(
-        parameters=params, duration=duration, **options
-    )
-    return record
 
 
 @pytest.fixture(scope="session")
