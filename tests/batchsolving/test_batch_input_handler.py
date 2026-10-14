@@ -1162,6 +1162,16 @@ def test_fix_constant_parameters_fixes_uniform_rows(
     assert_array_equal(result, [[1.0, 2.0, 3.0]])
 
 
+def test_fix_constant_parameters_needs_a_row_per_parameter(
+    input_handler_mutable, system
+):
+    """fix_constant_parameters raises on a swept-parameters array."""
+    _sweep_reversed(input_handler_mutable)
+    params = np.ones((2, 3), dtype=system.precision)
+    with pytest.raises(ValueError, match="a row for every parameter"):
+        input_handler_mutable.split_parameters(params, True)
+
+
 def test_fix_constant_parameters_keeps_run_count(
     input_handler_mutable, system
 ):

@@ -3167,7 +3167,7 @@ PARAMETER_FORM_SWEEPS = {
     "fixed_rows": (0, 1),
     "swept_rows": (0, 1, 2),
     "device": (0, 1, 2),
-    "prepare_grid_arrays": (0, 1),
+    "prepare_grid_arrays": (0, 1, 2),
     "compile": (0, 1),
 }
 PARAMETER_FORMS = [

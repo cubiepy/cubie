@@ -40,20 +40,21 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 ## Data flow
 `Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
 effective timing → `_apply_parameters`, where `input_handler.split_parameters` picks the
-swept parameters and compiled-in values and `system_interface.set_swept_parameters` sets
-them on the system → `update()` rebuilds the kernel for the re-specialised system →
-`_run`: `input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
+swept parameters and compiled-in values, `system_interface.set_swept_parameters` sets
+them on the system and `update()` rebuilds the kernel for the re-specialised system →
+`input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
 (which may split the batch into chunks) and launches per chunk. Results return through
 `OutputArrays` → `SolveResult.from_solver`.
 
 We apply the parameters before we build the arrays because a compiled-in value can
-change which states the equations keep, and the initial-values array needs one row per
-state of the system as compiled. `prepare_grid_arrays`, `calibrate` and `optimize` go
-through `_prepare_inputs`, which applies the parameters and builds the arrays the same
-way. `ComparisonRunner` solves its staged arrays through `_run`, so every timed solve
-keeps the parameters the grid was prepared for.
+change which states a DAE keeps, and the initial-values array needs one row per state of
+the system as compiled. `_apply_parameters` warns when the system is a DAE and the input
+compiles in a value that differs from the parameter's default. `prepare_grid_arrays` and
+`compile` apply their parameters through `_apply_parameters` too. `calibrate` and
+`optimize` build their grid with `prepare_grid_arrays`, and `ComparisonRunner` times
+plain `solve` calls on the staged arrays.
 
 ## Solver settings
 `__init__` and `update` flatten the settings groups, record `given`, update the system's
@@ -79,13 +80,15 @@ into the code at a fixed value.
 - An array with a row per parameter varies every parameter.
 - An array with a row per swept parameter varies those parameters, and every other
   parameter uses its default.
-- With `fix_constant_parameters`, we compile in the rows of an array that hold one value.
+- With `fix_constant_parameters`, an array with a row per parameter varies only its rows
+  with more than one value, and the other rows are compiled in. Any other array raises.
 - `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.
 
-`Solver.prepare_grid_arrays` puts a parameter given a single value in a full row of the
-parameters array, holding that value for every run. Solving those arrays with
-`fix_constant_parameters=True` compiles it in. `Solver.compile(parameters)` compiles the
-kernel that a solve with the same parameters would use.
+`Solver.prepare_grid_arrays` sweeps every parameter its dict names and gives each a row,
+so a parameter given a single value has a row holding that value for every run. A user
+who wants a value compiled in sets it as the parameter's default and leaves it out of
+the dict. `Solver.compile(parameters)` compiles the kernel that a solve with the same
+parameters would use.
 
 Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
 or a fixed value rebuilds the system and kernel.

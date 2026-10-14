@@ -573,9 +573,7 @@ class ComparisonRunner:
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""
         solver = self._solver
-        # Run on the parameters the grid was prepared for, so every
-        # timed solve uses the kernel the caller's solve compiles.
-        solver._run(
+        solver.solve(
             self._inits,
             self._params,
             duration=self.duration,

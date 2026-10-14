@@ -33,6 +33,7 @@ See Also
 
 from pathlib import Path
 from functools import partial
+from warnings import warn
 from weakref import finalize
 from typing import (
     Any,
@@ -80,6 +81,15 @@ from cubie.time_logger import default_timelogger
 # Register module-level events
 default_timelogger.register_event(
     "solve_ivp", "runtime", "Wall-clock time for solve_ivp()"
+)
+
+DAE_FIXED_PARAMETER_WARNING = (
+    "If you change a constant parameter that changes the form of a DAE, "
+    "cubie will run structural simplification and tearing again, which "
+    "might result in extra/fewer state variables due to derivative terms "
+    "being added or removed. Your initial values array would then be the "
+    "wrong shape. When using DAEs, set default parameter values before "
+    "generating arrays to solve over."
 )
 
 
@@ -277,13 +287,8 @@ def solve_ivp(
     fix_constant_parameters : bool, default=False
         Check whether any parameters are set to the same value across
         all runs, and compile them into the code if they are.
-        Warning: If you change a constant parameter that changes the
-        form of a DAE, cubie will run structural simplification and
-        tearing again, which might result in extra/fewer state
-        variables due to derivative terms being added or removed.
-        Your initial values array would then be the wrong shape.
-        When using DAEs, set fixed parameters explicitly before
-        generating arrays to solve over.
+        Use this only with an array that has a row for every
+        parameter.
     **kwargs
         Additional keyword arguments passed to :class:`Solver`. Any
         system parameters passed as kwargs are rejected, as they should
@@ -636,13 +641,8 @@ class Solver:
         fix_constant_parameters
             Check whether any parameters are set to the same value across
             all runs, and compile them into the code if they are.
-            Warning: If you change a constant parameter that changes the
-            form of a DAE, cubie will run structural simplification and
-            tearing again, which might result in extra/fewer state
-            variables due to derivative terms being added or removed.
-            Your initial values array would then be the wrong shape.
-            When using DAEs, set fixed parameters explicitly before
-            generating arrays to solve over.
+            Use this only with an array that has a row for every
+            parameter.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
             Arguments" in the docs for possibilities. Any system
@@ -689,55 +689,6 @@ class Solver:
         varying_values = self._apply_parameters(
             parameters, fix_constant_parameters
         )
-        self.update()
-        return self._run(
-            initial_values,
-            varying_values,
-            grid_type=grid_type,
-            duration=duration,
-            settling_time=settling_time,
-            t0=t0,
-            blocksize=blocksize,
-            nan_error_trajectories=nan_error_trajectories,
-            on_device=on_device,
-        )
-
-    def _run(
-        self,
-        initial_values: Any,
-        varying_values: Any,
-        grid_type: str = "verbatim",
-        duration: float = 1.0,
-        settling_time: float = 0.0,
-        t0: float = 0.0,
-        blocksize: Optional[int] = None,
-        nan_error_trajectories: bool = True,
-        on_device: bool = False,
-    ) -> Union[SolveResult, DeviceSolveResult]:
-        """Solve on the system as it is compiled now.
-
-        We leave the swept parameters and the compiled-in values as they
-        are, so callers that solve the same arrays many times, such as
-        :class:`~cubie.batchsolving.comparison.ComparisonRunner`, keep
-        the parameters their first solve applied.
-
-        Parameters
-        ----------
-        initial_values
-            Initial values, as :meth:`solve` takes them.
-        varying_values
-            Values for the swept parameters only.
-        grid_type, duration, settling_time, t0, blocksize
-            As in :meth:`solve`.
-        nan_error_trajectories, on_device
-            As in :meth:`solve`.
-
-        Returns
-        -------
-        SolveResult or DeviceSolveResult
-            As in :meth:`solve`.
-        """
-        check_duration(self.effective, duration, self.precision)
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
@@ -790,18 +741,13 @@ class Solver:
         Parameters
         ----------
         parameters
-            Parameter values as in :meth:`solve`. We compile the kernel
+            Parameter values as in :meth:`solve`. Compile the kernel
             that a solve with the same parameters would use.
         fix_constant_parameters
             Check whether any parameters are set to the same value across
             all runs, and compile them into the code if they are.
-            Warning: If you change a constant parameter that changes the
-            form of a DAE, cubie will run structural simplification and
-            tearing again, which might result in extra/fewer state
-            variables due to derivative terms being added or removed.
-            Your initial values array would then be the wrong shape.
-            When using DAEs, set fixed parameters explicitly before
-            generating arrays to solve over.
+            Use this only with an array that has a row for every
+            parameter.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
@@ -811,7 +757,6 @@ class Solver:
         """
         self.update(**kwargs)
         self._apply_parameters(parameters, fix_constant_parameters)
-        self.update()
 
         if optimize_candidates:
             run_optimization(
@@ -836,6 +781,10 @@ class Solver:
     ) -> Tuple[ndarray, ndarray]:
         """Build state and parameter arrays to pass to :meth:`solve`.
 
+        Set the swept parameters to the parameters you give, so that
+        :meth:`solve` reads the returned parameter array's rows as
+        those parameters.
+
         Parameters
         ----------
         initial_values
@@ -845,7 +794,8 @@ class Solver:
             Parameter values for each run, as a dict mapping parameter
             names to values, or as an array. A parameter given a single
             value gets a row holding that value for every run. Every
-            parameter you leave out uses its default value.
+            parameter you leave out uses its default value, so set a
+            value as the default to compile it in.
         grid_type
             Strategy for constructing the grid. ``"combinatorial"``
             produces all combinations while ``"verbatim"`` preserves
@@ -865,11 +815,11 @@ class Solver:
         ... )
         >>> result = solver.solve(inits, params)  # Uses fast path
         """
-        return self._prepare_inputs(
-            initial_values,
-            parameters,
-            grid_type,
-            single_values_as_rows=True,
+        varying_values = self._apply_parameters(
+            parameters, single_values_as_rows=True
+        )
+        return self.input_handler(
+            states=initial_values, params=varying_values, kind=grid_type
         )
 
     def set_swept_parameters(self, names: Sequence[str]) -> None:
@@ -904,19 +854,18 @@ class Solver:
     ) -> Any:
         """Set the swept parameters and compiled-in values for an input.
 
-        We set them on the system before anything builds an array from
-        them, because a compiled-in value can change which states the
-        equations keep, and the initial-values array needs one row per
-        state of the system as it is compiled. Call :meth:`update`
-        afterwards to rebuild the kernel for the re-specialised system.
+        Set them on the system and update the kernel before anything
+        builds an array, because a compiled-in value can change which
+        states a DAE keeps, and the initial-values array needs one row
+        per state of the system as it is compiled.
 
         Parameters
         ----------
         parameters
             A parameter input, as :meth:`solve` takes it.
         fix_constant_parameters
-            Compile in the rows of a host parameter array that hold one
-            value.
+            Compile in the rows of a full-size host parameter array that
+            hold one value.
         single_values_as_rows
             Give each dict entry with one value its own row instead of
             compiling it in.
@@ -926,55 +875,27 @@ class Solver:
         object
             The values that vary between runs, for
             :class:`~cubie.batchsolving.BatchInputHandler.BatchInputHandler`.
+
+        Warns
+        -----
+        UserWarning
+            If the system is a DAE and the input compiles in a value
+            that differs from the parameter's default.
         """
         varying_values, swept, fixed = self.input_handler.split_parameters(
             parameters,
             fix_constant_parameters,
             single_values_as_rows=single_values_as_rows,
         )
+        defaults = self.system.parameters.as_float_dict
+        changed = any(
+            value != defaults[name] for name, value in fixed.items()
+        )
+        if changed and self.system.mass is not None:
+            warn(DAE_FIXED_PARAMETER_WARNING, UserWarning, stacklevel=3)
         self.system_interface.set_swept_parameters(swept, fixed)
-        return varying_values
-
-    def _prepare_inputs(
-        self,
-        initial_values: Any,
-        parameters: Any,
-        grid_type: str,
-        fix_constant_parameters: bool = False,
-        single_values_as_rows: bool = False,
-        **updates: Any,
-    ) -> Tuple[Any, Any]:
-        """Compile the system for the inputs and build their arrays.
-
-        We apply any other settings first, so they are checked before
-        the system is specialised, then the parameters, then build the
-        arrays, so the initial-values array has one row per state of the
-        system as it is compiled for this batch.
-
-        Parameters
-        ----------
-        initial_values, parameters, grid_type
-            Inputs as :meth:`solve` takes them.
-        fix_constant_parameters, single_values_as_rows
-            As in :meth:`_apply_parameters`.
-        **updates
-            Settings passed to :meth:`update`.
-
-        Returns
-        -------
-        tuple
-            The initial values and parameter arrays for the batch.
-        """
-        self.update(**updates)
-        varying_values = self._apply_parameters(
-            parameters,
-            fix_constant_parameters,
-            single_values_as_rows=single_values_as_rows,
-        )
         self.update()
-        return self.input_handler(
-            states=initial_values, params=varying_values, kind=grid_type
-        )
+        return varying_values
 
     def calibrate(
         self,
@@ -985,7 +906,6 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         auto_size: bool = True,
@@ -1037,16 +957,6 @@ class Solver:
             Strategy for constructing the integration grid from
             inputs. Only used when dict inputs trigger grid
             construction.
-        fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
-            Warning: If you change a constant parameter that changes the
-            form of a DAE, cubie will run structural simplification and
-            tearing again, which might result in extra/fewer state
-            variables due to derivative terms being added or removed.
-            Your initial values array would then be the wrong shape.
-            When using DAEs, set fixed parameters explicitly before
-            generating arrays to solve over.
         apply
             Apply the winner's configuration to this solver when
             ``True`` (default). Pass ``False`` to only report.
@@ -1086,7 +996,6 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
-            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             auto_size=auto_size,
@@ -1104,7 +1013,6 @@ class Solver:
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
@@ -1146,16 +1054,6 @@ class Solver:
             Initial integration time. Default ``0.0``.
         grid_type
             Grid strategy when dict inputs build a grid.
-        fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
-            Warning: If you change a constant parameter that changes the
-            form of a DAE, cubie will run structural simplification and
-            tearing again, which might result in extra/fewer state
-            variables due to derivative terms being added or removed.
-            Your initial values array would then be the wrong shape.
-            When using DAEs, set fixed parameters explicitly before
-            generating arrays to solve over.
         apply
             Apply the fastest settings to this solver. Default ``True``.
         verbose
@@ -1194,7 +1092,6 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
-            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             force=force,

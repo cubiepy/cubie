@@ -18,8 +18,9 @@ the values to compile in for every other parameter:
 - An array with a row per parameter varies every parameter.
 - An array with a row per swept parameter varies those parameters,
   and every other parameter uses its default.
-- With ``fix_constant_parameters``, we compile in the rows of an array
-  that hold one value.
+- With ``fix_constant_parameters``, an array with a row per parameter
+  varies only the rows that hold more than one value, and the other
+  rows are compiled in.
 - ``None``, an empty dict, or an empty 1D array uses the default
   parameters for all runs.
 
@@ -647,19 +648,19 @@ class BatchInputHandler:
         holds each entry with one value at that value. An array with a
         row per parameter varies every parameter. An array with a row
         per swept parameter varies those parameters. With
-        ``fix_constant_parameters``, we compile in the rows of a host
-        array that hold one value. ``None``, an empty dict, or an empty
-        1D array uses the default parameters for all runs. Every
-        parameter that does not vary and is not given a value here uses
-        its default.
+        ``fix_constant_parameters``, compile in the rows of a host array
+        with a row per parameter that hold one value. ``None``, an empty
+        dict, or an empty 1D array uses the default parameters for all
+        runs. Every parameter that does not vary and is not given a
+        value here uses its default.
 
         Parameters
         ----------
         params
             A dict, a host or device array, or ``None``.
         fix_constant_parameters
-            Compile in the rows of a host parameter array that hold one
-            value.
+            Compile in the rows of a host array with a row per parameter
+            that hold one value.
         single_values_as_rows
             Give each dict entry with one value its own row, holding that
             value for every run, instead of compiling it in.
@@ -676,7 +677,8 @@ class BatchInputHandler:
         ValueError
             If an array's row count matches neither the swept names nor
             the system's parameters, or it has more than two
-            dimensions.
+            dimensions, or ``fix_constant_parameters`` is given an
+            array without a row per parameter.
         """
         given = {}
         if params is None:
@@ -732,6 +734,12 @@ class BatchInputHandler:
         grid = arr[:, np_newaxis] if arr.ndim == 1 else arr
         if not fix_constant_parameters or grid.shape[1] == 0:
             return arr, names, given
+        if arr.shape[0] != self.parameters.n:
+            raise ValueError(
+                f"fix_constant_parameters needs a parameters array with "
+                f"a row for every parameter ({self.parameters.n}), but "
+                f"the array has {arr.shape[0]} rows."
+            )
 
         cast = grid.astype(self.precision)
         uniform = np_all(cast == cast[:, :1], axis=1)

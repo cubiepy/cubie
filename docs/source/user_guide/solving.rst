@@ -155,19 +155,20 @@ the parameter names you want to vary, or pass the same set to the
     solver.set_swept_parameters(["x1"])
 
 ``solver.prepare_grid_arrays`` can generate arrays from a dict of symbol
-names, to avoid doing it on every solve. If you use this to set single
-values for a parameter (the same over all runs), they'll be treated as
-"swept" and occupy a full row in the array. Calling solve with
-``fix_constant_parameters=True`` will nudge cubie to recognise rows with
-a uniform value, and compile them out at solve time.
+names, to avoid doing it on every solve. It sets the swept parameters to
+the parameters in your dict and gives each of them a row, so if you give
+a parameter a single value, it occupies a full row holding that value
+for every run. To compile a value into the code instead, set it as the
+parameter's default and leave it out of the dict:
 
 .. code-block:: python
 
+    system.set_default_parameters({"x0": 0.5})
     inits, params = solver.prepare_grid_arrays(
         {"y0": np.linspace(1, 100, 1000)},
-        {"x0": 0.5, "x1": np.logspace(1, 3, 1000)},
+        {"x1": np.logspace(1, 3, 1000)},
     )
-    result = solver.solve(inits, params, fix_constant_parameters=True)
+    result = solver.solve(inits, params)
 
 Arrays of swept parameters only are intended as a convenience: some
 models have hundreds of parameters, and if you're only sweeping two of
@@ -177,7 +178,8 @@ generate the values, you can set ``fix_constant_parameters=True`` in
 your call to ``solve``, and Cubie will scan your array for values that
 don't change over the whole batch and compile them into your code. This
 keeps the performance benefits when running the solve, at the expense of
-a few milliseconds scanning the array.
+a few milliseconds scanning the array. ``fix_constant_parameters`` only
+works with all-parameter arrays.
 
 If you want to go *really* fast and you are comfortable with the CUDA
 environment, you can pass arrays on the GPU (device arrays) directly to

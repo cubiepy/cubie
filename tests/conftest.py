@@ -851,7 +851,6 @@ def parameter_solve(solver, system, solver_settings, parameter_batch):
         inits, params = solver.prepare_grid_arrays(None, as_dict)
         record["swept_before"] = solver.swept_parameters
         record["rows"] = params.shape[0]
-        options = {"fix_constant_parameters": True}
     elif form == "compile":
         solver.compile(parameters=as_dict)
         record["swept_before"] = solver.swept_parameters

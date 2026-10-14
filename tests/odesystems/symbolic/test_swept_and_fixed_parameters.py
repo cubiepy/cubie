@@ -384,3 +384,15 @@ class TestLiveSolverRespecialisation:
         assert np.array_equal(
             live.time_domain_array, fresh.time_domain_array
         )
+
+    @pytest.mark.parametrize(
+        "solver_settings_override",
+        [SCALED_CS_LIVE_SETTINGS],
+        indirect=True,
+    )
+    def test_compiled_in_value_warns_on_a_dae(
+        self, solver_mutable, system_restored
+    ):
+        assert system_restored.mass is not None
+        with pytest.warns(UserWarning, match="form of a DAE"):
+            solver_mutable.compile(parameters={"Cs": 2e-2})
