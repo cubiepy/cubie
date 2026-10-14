@@ -61,13 +61,22 @@ updating a PR.
   `from __future__ import annotations` (min Python 3.11). numpydoc docstrings on public API.
 - Write comments as the programmer explaining the code to a colleague, in the imperative
   ("Place driver derivatives after drivers in the buffer") or as narrative ("We sort first so
-  the cache key is stable"). Data and objects are never the actor: "Driver derivatives take the
-  last slots; drivers carry priority" is unreadable.
-- Use whole sentences in plain words, comment only where the code is hard to read, and say why
-  when the reason is not visible in the code. Never describe what used to exist ("now", "no
-  longer", "changed from"), a bug avoided, or an alternative rejected.
-- Docstrings describe what the code does and any non-obvious behaviour, in the same plain
-  sentences. `AGENTS.md` files tell the reader what they need to use, extend or debug the code.
+  the cache key is stable"). Comment only where the code is hard to read, and say why when the
+  reason is not visible in the code.
+- Write docstrings in the numpydoc imperative, describing what the code does for its caller:
+  "Return the names as a sorted tuple." and "Raise ValueError if a name repeats.", not "We sort
+  the names". When a docstring tells the user how to use the code, address the user directly:
+  "Pass parameter arrays with their rows in this order."
+- Keep a docstring to the object it documents. Cut sentences about related behaviour that a
+  reader of this docstring does not need.
+- Give every verb a person, or the function or class being documented, as its subject. Data
+  and objects do not act:
+  "Driver derivatives take the last slots; drivers carry priority" and "The array's rows follow
+  this order" are unreadable. Never write "carries", "carry" or "rides on" in documentation, and
+  never coin a name for an object ("the sweep") and then make it the subject of a sentence.
+- Use whole sentences in plain words. Never describe what used to exist ("now", "no longer",
+  "changed from"), a bug avoided, or an alternative rejected.
+- `AGENTS.md` files tell the reader what they need to use, extend or debug the code.
 - Cite a source only for directly ported code (see `odesystems/symbolic/structural/AGENTS.md`).
 - **Never edit `changelog.md`** (plugin-managed).
 
