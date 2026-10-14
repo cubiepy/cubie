@@ -12,15 +12,16 @@ Notes
 returns the values that vary between runs, the swept parameter names and
 the values to compile in for every other parameter:
 
-- A dict varies the entries with several values between runs, and
-  holds each entry with one value at that value. Parameters left out
-  use their defaults.
-- An array with a row per parameter varies every parameter.
-- An array with a row per swept parameter varies those parameters,
-  and every other parameter uses its default.
-- With ``fix_constant_parameters``, an array with a row per parameter
-  varies only the rows that hold more than one value, and the other
-  rows are compiled in.
+- A dict input marks entries with several values as swept, and
+  entries with a single number as fixed. Parameters left out use their
+  defaults.
+- An array the same height as the number of parameters currently set
+  swept sets the batch values for those parameters, and every other
+  parameter uses its default.
+- A full-height parameter array, with a row for every parameter, sets
+  every parameter to swept. With ``fix_constant_parameters``, the
+  handler scans it for parameters whose rows are all the same value,
+  and marks those fixed.
 - ``None``, an empty dict, or an empty 1D array uses the default
   parameters for all runs.
 
@@ -644,26 +645,28 @@ class BatchInputHandler:
     ) -> tuple[object, Tuple[str, ...], Dict[str, float]]:
         """Split a parameter input into varying values and fixed values.
 
-        A dict varies the entries with several values between runs, and
-        holds each entry with one value at that value. An array with a
-        row per parameter varies every parameter. An array with a row
-        per swept parameter varies those parameters. With
-        ``fix_constant_parameters``, compile in the rows of a host array
-        with a row per parameter that hold one value. ``None``, an empty
-        dict, or an empty 1D array uses the default parameters for all
-        runs. Every parameter that does not vary and is not given a
-        value here uses its default.
+        A dict input marks entries with several values as swept, and
+        single numbers as fixed. An array the same height as the number
+        of parameters currently set swept sets the batch values for
+        those parameters. An array the same height as the total number
+        of parameters sets all parameters to swept, unless
+        ``fix_constant_parameters`` is True, in which case it scans for
+        parameters whose rows are all the same value, and marks those
+        fixed. ``None``, an empty dict, or an empty 1D array uses the
+        default parameters for all runs. Every parameter that is not
+        swept and is not given a value here uses its default.
 
         Parameters
         ----------
         params
             A dict, a host or device array, or ``None``.
         fix_constant_parameters
-            Compile in the rows of a host array with a row per parameter
-            that hold one value.
+            Scan a full-height host parameter array for parameters whose
+            rows are all the same value, and mark those fixed.
         single_values_as_rows
-            Give each dict entry with one value its own row, holding that
-            value for every run, instead of compiling it in.
+            Mark each dict entry with a single number as swept, giving it
+            a row with that number in every run, instead of compiling it
+            in.
 
         Returns
         -------

@@ -244,7 +244,7 @@ def solve_ivp(
         it at that value for every run of this solve. Parameters you
         leave out use their default values. An array has either one
         row per parameter in the system, or one row per swept
-        parameter, in parameter name order, in which case every
+        parameter in parameter name order, in which case every
         other parameter uses its default value. None, an empty dict,
         or an empty 1D array uses the default parameters for all
         runs.
@@ -285,10 +285,10 @@ def solve_ivp(
         invalid data. When ``False``, all trajectories are returned with
         original values.
     fix_constant_parameters : bool, default=False
-        Check whether any parameters are set to the same value across
-        all runs, and compile them into the code if they are.
-        Use this only with an array that has a row for every
-        parameter.
+        Identify parameters in a full-height parameter array which don't
+        change over the batch and compile them into the code. Makes the
+        code go faster than it would with all parameters passed as array
+        rows internally.
     **kwargs
         Additional keyword arguments passed to :class:`Solver`. Any
         system parameters passed as kwargs are rejected, as they should
@@ -609,7 +609,7 @@ class Solver:
             it at that value for every run of this solve. Parameters you
             leave out use their default values. An array has either one
             row per parameter in the system, or one row per swept
-            parameter, in parameter name order, in which case every
+            parameter in parameter name order, in which case every
             other parameter uses its default value. None, an empty dict,
             or an empty 1D array uses the default parameters for all
             runs.
@@ -639,10 +639,10 @@ class Solver:
             solver's device output buffers plus the CUDA stream the
             solve ran on; see Notes. Default ``False``.
         fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
-            Use this only with an array that has a row for every
-            parameter.
+            Identify parameters in a full-height parameter array which
+            don't change over the batch and compile them into the code.
+            Makes the code go faster than it would with all parameters
+            passed as array rows internally.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
             Arguments" in the docs for possibilities. Any system
@@ -744,10 +744,10 @@ class Solver:
             Parameter values as in :meth:`solve`. Compile the kernel
             that a solve with the same parameters would use.
         fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
-            Use this only with an array that has a row for every
-            parameter.
+            Identify parameters in a full-height parameter array which
+            don't change over the batch and compile them into the code.
+            Makes the code go faster than it would with all parameters
+            passed as array rows internally.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
@@ -793,7 +793,7 @@ class Solver:
         parameters
             Parameter values for each run, as a dict mapping parameter
             names to values, or as an array. A parameter given a single
-            value gets a row holding that value for every run. Every
+            number gets a row with that number in every run. Every
             parameter you leave out uses its default value, so set a
             value as the default to compile it in.
         grid_type
@@ -827,9 +827,10 @@ class Solver:
 
         You only need to use this method if you will provide an array to
         solve() that contains varying parameters only - if you're
-        providing an all-parameters array or a dict, this is handled
-        internally. Parameter names can appear in any order, the array
-        you provide to solve must have rows in parameter name order.
+        providing a full-height parameter array or a dict, this is
+        handled internally. Parameter names can appear in any order, the
+        array you provide to solve must have rows in parameter name
+        order.
 
         Parameters
         ----------
@@ -864,11 +865,12 @@ class Solver:
         parameters
             A parameter input, as :meth:`solve` takes it.
         fix_constant_parameters
-            Compile in the rows of a full-size host parameter array that
-            hold one value.
+            Compile in the parameters whose rows in a full-height host
+            parameter array are all the same value.
         single_values_as_rows
-            Give each dict entry with one value its own row instead of
-            compiling it in.
+            Mark each dict entry with a single number as swept, giving it
+            a row with that number in every run, instead of compiling it
+            in.
 
         Returns
         -------
@@ -940,7 +942,7 @@ class Solver:
             it at that value for every run of this solve. Parameters you
             leave out use their default values. An array has either one
             row per parameter in the system, or one row per swept
-            parameter, in parameter name order, in which case every
+            parameter in parameter name order, in which case every
             other parameter uses its default value. None, an empty dict,
             or an empty 1D array uses the default parameters for all
             runs.
@@ -1039,7 +1041,7 @@ class Solver:
             it at that value for every run of this solve. Parameters you
             leave out use their default values. An array has either one
             row per parameter in the system, or one row per swept
-            parameter, in parameter name order, in which case every
+            parameter in parameter name order, in which case every
             other parameter uses its default value. None, an empty dict,
             or an empty 1D array uses the default parameters for all
             runs.

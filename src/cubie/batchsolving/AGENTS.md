@@ -75,17 +75,18 @@ pushes the whole effective record so every child re-reads its products.
 ## Swept and fixed parameters
 The parameters array has one row per swept parameter. Every other parameter is compiled
 into the code at a fixed value.
-- A dict varies the entries with several values between runs, and holds each entry
-  with one value at that value. Parameters left out use their defaults.
-- An array with a row per parameter varies every parameter.
-- An array with a row per swept parameter varies those parameters, and every other
-  parameter uses its default.
-- With `fix_constant_parameters`, an array with a row per parameter varies only its rows
-  with more than one value, and the other rows are compiled in. Any other array raises.
+- A dict input marks entries with several values as swept, and entries with a single
+  number as fixed. Parameters left out use their defaults.
+- An array the same height as the number of swept parameters sets the batch values for
+  those parameters, and every other parameter uses its default.
+- A full-height parameter array, with a row for every parameter, sets every parameter
+  to swept. With `fix_constant_parameters`, `split_parameters` scans it for parameters
+  whose rows are all the same value and marks those fixed. `fix_constant_parameters`
+  with any other array raises.
 - `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.
 
 `Solver.prepare_grid_arrays` sweeps every parameter its dict names and gives each a row,
-so a parameter given a single value has a row holding that value for every run. A user
+so a parameter given a single number has a row with that number in every run. A user
 who wants a value compiled in sets it as the parameter's default and leaves it out of
 the dict. `Solver.compile(parameters)` compiles the kernel that a solve with the same
 parameters would use.

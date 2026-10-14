@@ -136,7 +136,8 @@ If you're looking for something faster (tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead.
 Initial values arrays have one row per state in your system. The
 parameters array can either have one row for every parameter in your
-system, or one row per parameter that will vary across a batch only. In
+system (a full-height parameter array), or one row per parameter that
+will vary across a batch only. In
 both cases, rows should be ordered by parameter names. To pass just the
 varying parameters, you will need to tell the system which parameters to
 expect. To do this, call ``solver.set_swept_parameters`` with a set of
@@ -157,8 +158,8 @@ the parameter names you want to vary, or pass the same set to the
 ``solver.prepare_grid_arrays`` can generate arrays from a dict of symbol
 names, to avoid doing it on every solve. It sets the swept parameters to
 the parameters in your dict and gives each of them a row, so if you give
-a parameter a single value, it occupies a full row holding that value
-for every run. To compile a value into the code instead, set it as the
+a parameter a single value, it occupies a full row with that value in
+every run. To compile a value into the code instead, set it as the
 parameter's default and leave it out of the dict:
 
 .. code-block:: python
@@ -173,13 +174,13 @@ parameter's default and leave it out of the dict:
 Arrays of swept parameters only are intended as a convenience: some
 models have hundreds of parameters, and if you're only sweeping two of
 them you probably don't want to throw hundreds-high arrays around. If it
-ends up being easier to pass all-parameter arrays because of how you
-generate the values, you can set ``fix_constant_parameters=True`` in
+ends up being easier to pass full-height parameter arrays because of how
+you generate the values, you can set ``fix_constant_parameters=True`` in
 your call to ``solve``, and Cubie will scan your array for values that
 don't change over the whole batch and compile them into your code. This
 keeps the performance benefits when running the solve, at the expense of
 a few milliseconds scanning the array. ``fix_constant_parameters`` only
-works with all-parameter arrays.
+works with full-height parameter arrays.
 
 If you want to go *really* fast and you are comfortable with the CUDA
 environment, you can pass arrays on the GPU (device arrays) directly to
