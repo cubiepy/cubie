@@ -182,8 +182,7 @@ class ODEData(CUDAFactoryConfig):
         equations read, in the order the derivatives follow the
         drivers in the drivers buffer.
     swept_parameters
-        Names of the parameters read from the parameters array, in
-        row order.
+        Names of the parameters read from the parameters array.
     fixed_parameters
         Values compiled into the code for every other parameter.
 

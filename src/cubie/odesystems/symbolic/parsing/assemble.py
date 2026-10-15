@@ -1,8 +1,8 @@
 """Assemble normalised systems into parser products.
 
 :func:`assemble_simplified` structurally simplifies a normalised
-system and maps the result into ``ParsedEquations``; the derived
-mass matrix for torn systems rides on
+system and maps the result into ``ParsedEquations``, storing the
+derived mass matrix of a torn system in
 ``ParsedEquations.mass_matrix``. Equations are engine IR pairs
 throughout; SymPy appears only in the ``all_symbols`` table consumed
 by GUIs and device-function injection.
@@ -185,8 +185,8 @@ def assemble_simplified(
 
     ``parameters`` holds the swept parameters, in order. The others are
     already numbers in ``normalised``. Returns
-    ``(index_map, all_symbols, funcs, parsed_equations, fn_hash)``;
-    the derived mass matrix rides on ``parsed_equations.mass_matrix``.
+    ``(index_map, all_symbols, funcs, parsed_equations, fn_hash)``,
+    with the derived mass matrix in ``parsed_equations.mass_matrix``.
     Solver states are held in sorted name order.
     """
 

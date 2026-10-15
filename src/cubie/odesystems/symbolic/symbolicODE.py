@@ -49,7 +49,6 @@ from typing import (
 )
 
 from numpy import asarray, dtype as np_dtype, float32
-import sympy as sp
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
     generate_observables_fac_code,
@@ -61,10 +60,8 @@ from cubie.odesystems.symbolic.helper_registry import (
 )
 from cubie.odesystems.symbolic.odefile import ODEFile
 from cubie.odesystems.symbolic.parsing import (
-    IndexedBases,
     JVPEquations,
-    ParsedEquations,
-    parse_input,
+    parse_system,
 )
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
@@ -162,7 +159,8 @@ def create_ODE_system(
     state_priority: Optional[dict[str, float]] = None,
     irreducible: Optional[Iterable[str]] = None,
     simplify_options: Optional[dict[str, Any]] = None,
-    operation_ordering: str = operation_ordering_default(),
+    operation_ordering: Optional[str] = None,
+    swept_parameters: Optional[Iterable[str]] = None,
 ) -> "SymbolicODE":
     """Create a :class:`SymbolicODE` from SymPy definitions.
 
@@ -201,8 +199,8 @@ def create_ODE_system(
         callable takes the function's arguments followed by ``n``
         argument indices.
     name
-        Identifier used for generated files. Defaults to the hash of the system
-        definition.
+        Identifier used for generated files. Defaults to ``unnamed_``
+        followed by the start of a hash of the equations.
     precision
         Target floating-point precision used when compiling the system.
     strict
@@ -221,6 +219,13 @@ def create_ODE_system(
         preserves stable breadth-first ordering, and ``"greedy"``
         and ``"dfs"`` select fixed alternatives. Defaults to
         ``CUBIE_OPERATION_ORDERING`` (``liveness_auto`` when unset).
+    swept_parameters
+        Names of the parameters that vary between the runs of a batch.
+        Every other parameter is compiled in at its default value, and
+        when you leave this out every parameter is compiled in. A solve
+        sets the swept parameters to match its inputs, so giving them
+        here saves specialising the system again at the first solve,
+        which can take 10-100 ms.
 
     Returns
     -------
@@ -242,6 +247,7 @@ def create_ODE_system(
         irreducible=irreducible,
         simplify_options=simplify_options,
         operation_ordering=operation_ordering,
+        swept_parameters=swept_parameters,
     )
     return symbolic_ode
 
@@ -249,29 +255,27 @@ def create_ODE_system(
 class SymbolicODE(BaseODE):
     """Symbolic representation of an ODE system.
 
-    Parameters are provided as SymPy symbols and the differential equations are
-    supplied as ``(lhs, rhs)`` tuples where the left-hand side is a derivative
-    or observable symbol. Right-hand sides combine states, parameters,
-    drivers, and intermediate observables.
+    The system holds a :class:`ParsedSystem`, with every parameter
+    left as a symbol, and the equations specialised from it for the
+    current swept parameters.
 
     Parameters
     ----------
-    equations
-        Parsed equations describing the system dynamics.
-    all_indexed_bases
-        Indexed base collections providing access to state, parameter,
-        and observable metadata.
-    all_symbols
-        Mapping from symbol names to their :class:`sympy.Symbol` instances.
+    parsed_system
+        Parsed system with every parameter left as a symbol.
     precision
         Target floating-point precision used for generated kernels.
-    fn_hash
-        Precomputed system hash. When omitted it is derived from the
-        equations.
-    user_functions
-        Runtime callables referenced within the symbolic expressions.
     name
         Identifier used for generated modules.
+    operation_ordering
+        Generated-operation ordering policy.
+    swept_parameters
+        Names of the parameters that vary between the runs of a batch.
+        Every other parameter is compiled in at its default value, and
+        when you leave this out every parameter is compiled in. A solve
+        sets the swept parameters to match its inputs, so giving them
+        here saves specialising the system again at the first solve,
+        which can take 10-100 ms.
     """
 
     # Diagnostic evaluators live in a dict so child-factory
@@ -279,61 +283,46 @@ class SymbolicODE(BaseODE):
 
     def __init__(
         self,
-        equations: ParsedEquations,
+        parsed_system: ParsedSystem,
         precision: PrecisionDType,
-        all_indexed_bases: IndexedBases,
-        all_symbols: Optional[dict[str, sp.Symbol]] = None,
-        fn_hash: Optional[str] = None,
-        user_functions: Optional[dict[str, Callable]] = None,
         name: Optional[str] = None,
-        operation_ordering: str = operation_ordering_default(),
-        parsed_system: Optional[ParsedSystem] = None,
+        operation_ordering: Optional[str] = None,
+        swept_parameters: Optional[Iterable[str]] = None,
     ):
-        """Initialise the symbolic system instance.
+        """Specialise a parsed system for a set of swept parameters.
 
         Parameters
         ----------
-        equations
-            Parsed equations describing the system dynamics; the
-            solver mass matrix rides on ``equations.mass_matrix``.
-        all_indexed_bases
-            Indexed base collections providing access to state, parameter,
-            and observable metadata.
-        all_symbols
-            Mapping from symbol names to their :class:`sympy.Symbol` instances.
+        parsed_system
+            Parsed system with every parameter left as a symbol.
         precision
             Target floating-point precision used for generated kernels.
-        fn_hash
-            Precomputed system hash. When omitted it is derived from the
-            equations.
-        user_functions
-            Runtime callables referenced within the symbolic expressions.
         name
-            Identifier used for generated modules.
+            Identifier used for generated modules. Defaults to
+            ``unnamed_`` followed by the start of a hash of the
+            equations, which is the same whichever parameters are
+            swept.
         operation_ordering
-            Generated-operation ordering policy.
-        parsed_system
-            Parsed system from the parser with every parameter left as
-            a symbol. ``equations`` is this system with every parameter
-            compiled in. Rebuilt from ``equations`` when omitted.
+            Policy for ordering the generated operations. Defaults to
+            ``CUBIE_OPERATION_ORDERING``, read when the system is
+            built, or ``liveness_auto`` if that is unset.
+        swept_parameters
+            Names of the parameters that vary between the runs of a
+            batch. Every other parameter is compiled in at its default
+            value, and when you leave this out every parameter is
+            compiled in. A solve sets the swept parameters to match its
+            inputs, so giving them here saves specialising the system
+            again at the first solve, which can take 10-100 ms.
         """
-        if all_symbols is None:
-            all_symbols = all_indexed_bases.all_symbols
-        self.all_symbols = all_symbols
-
-        if parsed_system is None:
-            parsed_system = ParsedSystem.from_parsed_equations(
-                equations,
-                all_indexed_bases,
-                user_functions=user_functions,
-            )
-            (
-                all_indexed_bases,
-                self.all_symbols,
-                user_functions,
-                equations,
-                fn_hash,
-            ) = parsed_system.specialise()
+        if operation_ordering is None:
+            operation_ordering = operation_ordering_default()
+        (
+            all_indexed_bases,
+            self.all_symbols,
+            user_functions,
+            equations,
+            fn_hash,
+        ) = parsed_system.specialise(swept_parameters or ())
         self._parsed_system = parsed_system
         self._parameter_units = _unit_map(
             parsed_system.parameters, parsed_system.parameter_units
@@ -341,10 +330,8 @@ class SymbolicODE(BaseODE):
 
         derived_mass_matrix = equations.mass_matrix
 
-        if fn_hash is None:
-            fn_hash = _system_source_hash(equations, all_indexed_bases)
         if name is None:
-            name = fn_hash
+            name = f"unnamed_{parsed_system.definition_hash[:8]}"
 
         self.name = name
 
@@ -367,6 +354,7 @@ class SymbolicODE(BaseODE):
             driver_derivatives=driver_derivatives,
             name=name,
             operation_ordering=operation_ordering,
+            swept_parameters=all_indexed_bases.parameter_names,
         )
         self._seed_derived_mass(derived_mass_matrix)
         self.gen_file = ODEFile(
@@ -417,7 +405,8 @@ class SymbolicODE(BaseODE):
         state_priority: Optional[dict[str, float]] = None,
         irreducible: Optional[Iterable[str]] = None,
         simplify_options: Optional[dict[str, Any]] = None,
-        operation_ordering: str = operation_ordering_default(),
+        operation_ordering: Optional[str] = None,
+        swept_parameters: Optional[Iterable[str]] = None,
     ) -> "SymbolicODE":
         """Parse user inputs and instantiate a :class:`SymbolicODE`.
 
@@ -449,8 +438,9 @@ class SymbolicODE(BaseODE):
             derivatives; the order-``n`` callable takes the function's
             arguments followed by ``n`` argument indices.
         name
-            Identifier used for generated files. Defaults to the hash of the
-            system definition.
+            Identifier used for generated files. Defaults to
+            ``unnamed_`` followed by the start of a hash of the
+            equations.
         precision
             Target floating-point precision used when compiling the system.
         strict
@@ -475,6 +465,13 @@ class SymbolicODE(BaseODE):
             Generated-operation ordering policy:
             ``"liveness_auto"``, ``"kahn"``, ``"greedy"``, or
             ``"dfs"``. Defaults to ``CUBIE_OPERATION_ORDERING``.
+        swept_parameters
+            Names of the parameters that vary between the runs of a
+            batch. Every other parameter is compiled in at its default
+            value, and when you leave this out every parameter is
+            compiled in. A solve sets the swept parameters to match its
+            inputs, so giving them here saves specialising the system
+            again at the first solve, which can take 10-100 ms.
 
         Returns
         -------
@@ -491,14 +488,7 @@ class SymbolicODE(BaseODE):
 
         # Start timing for parsing operation
         default_timelogger.start_event("symbolic_ode_parsing")
-        (
-            index_map,
-            all_symbols,
-            functions,
-            equations,
-            fn_hash,
-            parsed_system,
-        ) = parse_input(
+        parsed_system = parse_system(
             dxdt=dxdt,
             states=states,
             observables=observables,
@@ -516,15 +506,11 @@ class SymbolicODE(BaseODE):
             simplify_options=simplify_options,
         )
         symbolic_ode = cls(
-            equations=equations,
-            all_indexed_bases=index_map,
-            all_symbols=all_symbols,
+            parsed_system,
+            precision,
             name=name,
-            fn_hash=fn_hash,
-            user_functions=functions,
-            precision=precision,
             operation_ordering=operation_ordering,
-            parsed_system=parsed_system,
+            swept_parameters=swept_parameters,
         )
         default_timelogger.stop_event("symbolic_ode_parsing")
         return symbolic_ode
@@ -695,10 +681,18 @@ class SymbolicODE(BaseODE):
         fixed = dict(
             updates.get("fixed_parameters", settings.fixed_parameters)
         )
-        if (
-            swept == settings.swept_parameters
-            and fixed == settings.fixed_parameter_values
-        ):
+        # We compare the names as sets because specialise sorts them,
+        # so listing the same names in another order builds the same
+        # system. Keep the stored order in that case.
+        same_names = len(swept) == len(settings.swept_parameters) and set(
+            swept
+        ) == set(settings.swept_parameters)
+        if same_names and fixed == settings.fixed_parameter_values:
+            if "swept_parameters" in updates:
+                updates = {
+                    **updates,
+                    "swept_parameters": settings.swept_parameters,
+                }
             return self.update_compile_settings(updates, silent=True)
 
         defaults = updates.get("parameters", settings.parameters)
@@ -713,6 +707,11 @@ class SymbolicODE(BaseODE):
             {**defaults.as_float_dict, **fixed},
             state_values=settings.initial_state_values,
         )
+        if "swept_parameters" in updates:
+            updates = {
+                **updates,
+                "swept_parameters": index_map.parameter_names,
+            }
         derived = {}
         if index_map.state_names != settings.initial_states.names:
             derived["initial_states"] = SystemValues(

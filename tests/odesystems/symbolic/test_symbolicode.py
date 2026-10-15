@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 import sympy as sp
 from numpy.testing import assert_array_equal
@@ -9,7 +8,7 @@ from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_linear_operator_code,
 )
 from cubie.odesystems.symbolic.helper_registry import helper_source_hash
-from cubie.odesystems.symbolic.parsing.parser import parse_input
+from cubie.odesystems.symbolic.parsing.parser import parse_system
 from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
     create_ODE_system,
@@ -282,17 +281,17 @@ class TestSympyStringEquivalence:
 
         dxdt_string = "dx = -k * x"
 
-        result_sympy = parse_input(
+        result_sympy = parse_system(
             dxdt=dxdt_sympy,
             states=['x'],
             parameters=['k'],
-        )
+        ).specialise()
 
-        result_string = parse_input(
+        result_string = parse_system(
             dxdt=dxdt_string,
             states=['x'],
             parameters=['k'],
-        )
+        ).specialise()
 
         hash_sympy = result_sympy[4]
         hash_string = result_string[4]
@@ -336,18 +335,15 @@ class TestSymbolicODEHash:
 
     def test_symbolic_ode_hash_fallback(self, precision):
         """Verify __init__ correctly computes hash when fn_hash=None."""
-        from cubie.odesystems.symbolic.parsing.parser import parse_input
-
         dxdt = ["dx = -k * x", "dy = k * x"]
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
 
-        # Create via parse_input (provides fn_hash)
-        parsed_result = parse_input(
+        parsed_result = parse_system(
             dxdt=dxdt,
             states=list(states.keys()),
             parameters=parameters,
-        )
+        ).specialise()
         expected_hash = parsed_result[4]
 
         # Create via SymbolicODE.create (computes hash internally)
@@ -640,6 +636,35 @@ class TestSweptParameters:
         assert ode.indices.parameter_names == ["k"]
         assert ode.fixed_parameter_values == {"c": 0.5}
 
+    def test_creating_with_swept_parameters_matches_setting_them_later(
+        self, precision
+    ):
+        """Swept parameters given at creation build what setting them
+        afterwards builds."""
+        definition = dict(
+            dxdt=["dx = -k * x + c * b"],
+            states={"x": 1.0},
+            parameters={"k": 0.1, "c": 0.5, "b": 2.0},
+            precision=precision,
+        )
+        names = ["k", "c"]
+        created = create_ODE_system(
+            **definition, swept_parameters=iter(names)
+        )
+        later = create_ODE_system(**definition)
+        sweep(later, names)
+
+        assert created.swept_parameters == tuple(sorted(names))
+        assert later.swept_parameters == created.swept_parameters
+        assert created.indices.parameter_names == list(
+            created.swept_parameters
+        )
+        assert created.fn_hash == later.fn_hash
+        assert (
+            created.fixed_parameter_values == later.fixed_parameter_values
+        )
+        assert created.name == later.name
+
     def test_sweeping_an_unknown_name_raises(self, metadata_ode):
         """Sweeping an unknown parameter raises KeyError."""
         with pytest.raises(KeyError, match="nonexistent"):
@@ -762,32 +787,6 @@ class TestInfoGetters:
         names = [i["name"] for i in info]
         assert "x" in names
         assert "y" in names
-
-
-class TestSymbolicODEConstructorDefaults:
-    """Cover derivation of all_symbols and fn_hash in __init__."""
-
-    def test_derives_symbols_and_hash_when_omitted(self):
-        """A None all_symbols and fn_hash are derived from inputs."""
-        index_map, _, _, equations, _, _, *_ = parse_input(
-            dxdt=["dx = -k * x"],
-            states={"x": 1.0},
-            parameters={"k": 0.5},
-            observables=[],
-            strict=True,
-        )
-        ode = SymbolicODE(
-            equations,
-            np.float32,
-            index_map,
-            all_symbols=None,
-            fn_hash=None,
-            name=None,
-        )
-        assert "x" in ode.all_symbols
-        assert isinstance(ode.fn_hash, str)
-        # name defaults to the derived hash when omitted.
-        assert ode.name == ode.fn_hash
 
 
 class TestSymbolicODEUnitAccessors:

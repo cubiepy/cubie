@@ -3,15 +3,14 @@
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import attrs
-import sympy as sp
 
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.parsing.assemble import assemble_simplified
-from cubie.odesystems.symbolic.parsing.normalise import (
-    NormalisedSystem,
-    normalise_input,
+from cubie.odesystems.symbolic.parsing.normalise import NormalisedSystem
+from cubie.odesystems.symbolic.sym_utils import (
+    RESERVED_CODEGEN_PREFIX,
+    hash_system_definition,
 )
-from cubie.odesystems.symbolic.sym_utils import RESERVED_CODEGEN_PREFIX
 
 
 def _literal_rules(
@@ -77,89 +76,23 @@ class ParsedSystem:
                     f"start with '{RESERVED_CODEGEN_PREFIX}'."
                 )
 
-    @classmethod
-    def from_parsed_equations(
-        cls,
-        equations,
-        index_map,
-        user_functions: Optional[Dict[str, Callable]] = None,
-        user_function_derivatives: Optional[Dict[str, Callable]] = None,
-    ) -> "ParsedSystem":
-        """Build a checkpoint from pre-parsed equation products.
+    @property
+    def definition_hash(self) -> str:
+        """Return a hash of the equations and variable names.
 
-        Parameters
-        ----------
-        equations
-            The system's :class:`~.parser.ParsedEquations`.
-        index_map
-            The system's :class:`~..indexedbasemaps.IndexedBases`.
-        user_functions, user_function_derivatives
-            Equation callables and their analytic derivative helpers.
+        We hash the equations with every parameter left as a symbol and
+        leave out which parameters are swept and their values, so we
+        can name an unnamed system the same way whichever parameters
+        it sweeps.
         """
-
-        states = {
-            str(name): float(value)
-            for name, value in index_map.state_values.items()
-        }
-        parameters = {
-            str(name): float(value)
-            for name, value in index_map.parameter_values.items()
-        }
-        observables = list(index_map.observable_names)
-        driver_defaults = {
-            str(name): value
-            for name, value in index_map.drivers.default_values.items()
-        }
-        driver_names = list(driver_defaults)
-        known_symbol_map = {
-            name: sp.Symbol(name, real=True)
-            for name in list(parameters) + driver_names
-        }
-        unknown_names = set(states) | set(observables)
-        driver_derivatives = equations.driver_derivatives
-        # Treat the driver derivatives the reduced equations read as
-        # known symbols.
-        known_with_derivatives = {
-            **known_symbol_map,
-            **{
-                symbol.name: sp.Symbol(symbol.name, real=True)
-                for symbol in driver_derivatives
-            },
-        }
-        normalised = normalise_input(
-            list(equations.ordered),
-            unknown_names,
-            known_with_derivatives,
-            user_functions,
-            user_function_derivatives,
-            False,
-            set(states),
-        )
-        normalised.derivative_names.update(equations.derivative_names)
-        # Register lower orders first, so that registry.derivative
-        # finds each lower-order symbol already registered.
-        registry = normalised.registry
-        for symbol, (driver, order) in sorted(
-            driver_derivatives.items(), key=lambda item: item[1][1]
-        ):
-            lower = driver
-            for _ in range(order - 1):
-                lower = registry.derivative(lower)
-            registry.register(lower, symbol)
-        return cls(
-            normalised=normalised,
-            states=states,
-            observables=observables,
-            parameters=parameters,
-            driver_names=driver_names,
-            driver_dict=driver_defaults or None,
-            known_symbol_map=known_symbol_map,
-            user_functions=user_functions,
-            user_function_derivatives=user_function_derivatives,
-            state_units=index_map.states.units or None,
-            parameter_units=index_map.parameters.units or None,
-            observable_units=index_map.observables.units or None,
-            driver_units=index_map.drivers.units or None,
+        return hash_system_definition(
+            self.normalised.equations,
+            observable_labels=self.observables,
+            state_labels=sorted(self.states),
+            parameter_labels=sorted(self.parameters),
+            driver_labels=self.driver_names,
+            derivative_names=self.normalised.derivative_names,
+            function_aliases=self.normalised.rename,
         )
 
     def specialise(
@@ -168,12 +101,16 @@ class ParsedSystem:
         values: Optional[Dict[str, float]] = None,
         state_values: Optional[Dict[str, float]] = None,
     ):
-        """Assemble the system with ``swept`` as the array's rows.
+        """Assemble the equations for the swept parameters ``swept``.
+
+        Lay out the parameters array with one row per swept parameter,
+        sorted by name, so that the layout does not depend on the order
+        the caller lists the names in.
 
         Parameters
         ----------
         swept
-            Names read from the parameters array, in order. Every
+            Names read from the parameters array, in any order. Every
             other parameter is substituted as a number.
         values
             Values for the parameters. Defaults to the parsed values.
@@ -184,12 +121,22 @@ class ParsedSystem:
         -------
         tuple
             ``(index_map, all_symbols, funcs, parsed_equations,
-            fn_hash)``; ``index_map.parameters`` holds the swept
-            parameters and the derived mass matrix rides on
-            ``parsed_equations.mass_matrix``.
+            fn_hash)``. ``index_map.parameters`` holds the swept
+            parameters in row order, and
+            ``parsed_equations.mass_matrix`` holds the derived mass
+            matrix.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter of the system.
+        ValueError
+            If a swept name repeats.
         """
 
-        swept = tuple(swept)
+        swept = tuple(sorted(swept))
+        if len(set(swept)) != len(swept):
+            raise ValueError(f"Swept parameters {list(swept)} repeat a name.")
         values = {**self.parameters, **(values or {})}
         unknown = (set(swept) | set(values)) - set(self.parameters)
         if unknown:

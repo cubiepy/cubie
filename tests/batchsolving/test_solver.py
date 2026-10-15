@@ -3159,8 +3159,8 @@ PARAMETER_FORM_SWEEPS = {
     "dict": (0, 1),
     "full_array": None,
     "fixed_rows": (0, 1),
-    "swept_rows": (1, 0),
-    "device": (1, 0),
+    "swept_rows": (0, 1),
+    "device": (0, 1),
     "build_grid": (0, 1),
     "compile": (0, 1),
 }
