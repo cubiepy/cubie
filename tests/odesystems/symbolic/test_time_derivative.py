@@ -10,10 +10,10 @@ from cubie.odesystems.symbolic.codegen.time_derivative import (
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 
 
-def test_time_derivative_factory_structure(simple_equations, indexed_bases):
+def test_time_derivative_factory_structure(simple_equations, layout):
     """Generated factory should expose the expected CUDA signature."""
 
-    code = generate_time_derivative_fac_code(simple_equations, indexed_bases)
+    code = generate_time_derivative_fac_code(simple_equations, layout)
     assert "def time_derivative_rhs(" in code
     assert "driver_dt" in code
     assert "return time_derivative_rhs" in code

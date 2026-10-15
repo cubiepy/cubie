@@ -160,7 +160,7 @@ def test_adaptive_saves_land_on_schedule(solver, solver_settings):
         2.196480938416422,
         2.2375366568914954,
     ]
-    inits, params = solver.build_grid(
+    inits, params = solver.prepare_grid_arrays(
         parameters={**swept_defaults(solver.system, len(rhos)), "rho": rhos}
     )
     result = solver.solve(

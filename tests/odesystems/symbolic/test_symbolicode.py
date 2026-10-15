@@ -75,15 +75,9 @@ def test_create_ODE_system_strict(
         strict=True,
     )
     sys2 = simple_ode_strict
-    assert_array_equal(
-        sys1.parameters.values_array, sys2.parameters.values_array
-    )
-    assert_array_equal(
-        sys1.initial_values.values_array, sys2.initial_values.values_array
-    )
-    assert_array_equal(
-        sys1.observables.values_array, sys2.observables.values_array
-    )
+    assert sys1.parameters.defaults == sys2.parameters.defaults
+    assert sys1.initial_values.defaults == sys2.initial_values.defaults
+    assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
 
@@ -96,15 +90,9 @@ def test_create_ODE_system_nonstrict(
         name="simpletest_nonstrict",
     )
     sys2 = simple_ode_nonstrict
-    assert_array_equal(
-        sys1.parameters.values_array, sys2.parameters.values_array
-    )
-    assert_array_equal(
-        sys1.initial_values.values_array, sys2.initial_values.values_array
-    )
-    assert_array_equal(
-        sys1.observables.values_array, sys2.observables.values_array
-    )
+    assert sys1.parameters.defaults == sys2.parameters.defaults
+    assert sys1.initial_values.defaults == sys2.initial_values.defaults
+    assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
 
@@ -281,20 +269,24 @@ class TestSympyStringEquivalence:
 
         dxdt_string = "dx = -k * x"
 
-        result_sympy = parse_system(
+        parsed = parse_system(
             dxdt=dxdt_sympy,
             states=['x'],
             parameters=['k'],
-        ).specialise()
+        )
+        specialised = parsed.specialise()
+        result_sympy = specialised
 
-        result_string = parse_system(
+        parsed = parse_system(
             dxdt=dxdt_string,
             states=['x'],
             parameters=['k'],
-        ).specialise()
+        )
+        specialised = parsed.specialise()
+        result_string = specialised
 
-        hash_sympy = result_sympy[4]
-        hash_string = result_string[4]
+        hash_sympy = result_sympy.fn_hash
+        hash_string = result_string.fn_hash
 
         assert hash_sympy == hash_string
 
@@ -302,8 +294,8 @@ class TestSympyStringEquivalence:
         """Verify observables work identically in both pathways."""
         ode_sympy, ode_string = sympy_string_pair
 
-        assert len(ode_sympy.indices.observables.index_map) == 1
-        assert len(ode_string.indices.observables.index_map) == 1
+        assert len(ode_sympy.layout.observable_names) == 1
+        assert len(ode_string.layout.observable_names) == 1
 
 
 class TestSymbolicODEHash:
@@ -335,16 +327,21 @@ class TestSymbolicODEHash:
 
     def test_symbolic_ode_hash_fallback(self, precision):
         """Verify __init__ correctly computes hash when fn_hash=None."""
+        from cubie.odesystems.symbolic.parsing.parser import parse_system
+
         dxdt = ["dx = -k * x", "dy = k * x"]
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
 
-        parsed_result = parse_system(
+        # Create via parse_system (provides fn_hash)
+        parsed = parse_system(
             dxdt=dxdt,
             states=list(states.keys()),
             parameters=parameters,
-        ).specialise()
-        expected_hash = parsed_result[4]
+        )
+        specialised = parsed.specialise()
+        parsed_result = specialised
+        expected_hash = parsed_result.fn_hash
 
         # Create via SymbolicODE.create (computes hash internally)
         ode = SymbolicODE.create(
@@ -531,7 +528,7 @@ class TestCacheSkipsCodegen:
         first.gen_file.add_function(
             generate_linear_operator_code(
                 first.equations,
-                first.indices,
+                first.layout,
                 jvp_equations=first._get_jvp_exprs(),
             )
         )
@@ -544,7 +541,7 @@ class TestCacheSkipsCodegen:
         second.gen_file.add_function(
             generate_linear_operator_code(
                 second.equations,
-                second.indices,
+                second.layout,
                 jvp_equations=second._get_jvp_exprs(),
             )
         )
@@ -612,12 +609,12 @@ class TestSweptParameters:
             name="test_sweep_param",
         )
 
-        assert ode.indices.parameter_names == []
+        assert ode.layout.swept_names == ()
 
         sweep(ode, ["c"])
 
-        assert ode.indices.parameter_names == ["c"]
-        assert ode.parameters["c"] == precision(0.5)
+        assert ode.layout.swept_names == ("c",)
+        assert ode.parameters["c"].default == 0.5
 
     def test_fixing_a_parameter_folds_its_value(self, precision):
         """A fixed parameter leaves the parameters array."""
@@ -629,11 +626,11 @@ class TestSweptParameters:
             name="test_fix_param",
         )
         sweep(ode, ["c", "k"])
-        assert ode.indices.parameter_names == ["c", "k"]
+        assert ode.layout.swept_names == ("c", "k",)
 
         sweep(ode, ["k"])
 
-        assert ode.indices.parameter_names == ["k"]
+        assert ode.layout.swept_names == ("k",)
         assert ode.fixed_parameter_values == {"c": 0.5}
 
     def test_creating_with_swept_parameters_matches_setting_them_later(
@@ -656,9 +653,7 @@ class TestSweptParameters:
 
         assert created.swept_parameters == tuple(sorted(names))
         assert later.swept_parameters == created.swept_parameters
-        assert created.indices.parameter_names == list(
-            created.swept_parameters
-        )
+        assert created.layout.swept_names == created.swept_parameters
         assert created.fn_hash == later.fn_hash
         assert (
             created.fixed_parameter_values == later.fixed_parameter_values
@@ -722,7 +717,7 @@ class TestValueSetters:
         )
 
         ode.set_default_parameters({"k": 0.5})
-        assert ode.parameters["k"] == 0.5
+        assert ode.parameters["k"].default == 0.5
 
     def test_parameters_getter_is_sealed_against_bypass(self, precision):
         """In-place mutation through the public getter raises.
@@ -740,24 +735,22 @@ class TestValueSetters:
         _ = ode.dxdt_fn
         hash_before = ode.config_hash
 
-        with pytest.raises(ValueError):
-            ode.parameters.update_from_dict({"c": 2.0})
-        with pytest.raises(ValueError):
-            ode.parameters["c"] = 2.0
-        with pytest.raises(ValueError):
-            ode.parameters.values_array[0] = 2.0
-        with pytest.raises(TypeError):
-            ode.parameters.values_dict["c"] = 2.0
+        with pytest.raises(AttributeError):
+            ode.parameters["c"].default = 2.0
+        with pytest.raises(AttributeError):
+            ode.compiled_parameters["c"].value = 2.0
+        ode.parameters.defaults["c"] = 2.0
+        ode.fixed_parameter_values["c"] = 2.0
 
-        assert ode.parameters["c"] == precision(0.5)
+        assert ode.parameters["c"].default == 0.5
         assert ode.config_hash == hash_before
 
         ode.set_default_parameters({"c": 2.0})
-        assert ode.parameters["c"] == precision(2.0)
+        assert ode.parameters["c"].default == 2.0
         assert ode.config_hash != hash_before
 
     def test_set_initial_value(self, precision):
-        """Verify set_initial_value updates state correctly."""
+        """set_initial_values sets a state's default initial value."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x"],
             precision=precision,
@@ -766,8 +759,8 @@ class TestValueSetters:
             name="test_set_init",
         )
 
-        ode.set_initial_value("x", 2.0)
-        assert ode.initial_values["x"] == 2.0
+        ode.set_initial_values({"x": 2.0})
+        assert ode.initial_values["x"].default == 2.0
 
 
 class TestInfoGetters:
@@ -839,5 +832,7 @@ def test_list_units_follow_declared_names(dxdt, precision):
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}
 
     sweep(system, ["k"])
-    assert system.indices.parameters.units == {"k": "k_unit"}
+    assert system.parameters.subset(system.swept_parameters).units == {
+        "k": "k_unit"
+    }
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}

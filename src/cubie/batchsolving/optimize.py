@@ -507,7 +507,6 @@ def run_optimization(
     settling_time: float = 0.0,
     t0: float = 0.0,
     grid_type: str = "verbatim",
-    fix_constant_parameters: bool = False,
     apply: bool = True,
     verbose: bool = True,
     force: bool = False,
@@ -540,9 +539,6 @@ def run_optimization(
         Initial integration time.
     grid_type
         Grid strategy when dict inputs trigger grid construction.
-    fix_constant_parameters
-        Check whether any parameters are set to the same value across
-        all runs, and compile them into the code if they are.
     apply
         Apply the best launch's settings to ``parent`` when ``True``.
     verbose
@@ -599,11 +595,8 @@ def run_optimization(
         return OptimizeResult(
             launches=launches, best=None, applied_settings={}
         )
-    inits, params = parent.build_grid(
-        initial_values,
-        parameters,
-        grid_type=grid_type,
-        fix_constant_parameters=fix_constant_parameters,
+    inits, params = parent.prepare_grid_arrays(
+        initial_values, parameters, grid_type=grid_type
     )
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)

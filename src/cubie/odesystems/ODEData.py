@@ -11,64 +11,48 @@ Published Classes
     4
 
 :class:`ODEData`
-    Bundle of :class:`SystemValues` instances and derived sizes for CUDA
-    compilation.
+    A system's buffer layout, with derived sizes, as the compile
+    settings of a :class:`~cubie.odesystems.baseODE.BaseODE`.
 
     >>> from numpy import float32
-    >>> data = ODEData.from_BaseODE_initargs(
+    >>> from cubie.odesystems.layout import SystemLayout
+    >>> data = ODEData(
     ...     precision=float32,
-    ...     default_initial_values={"x": 0.0, "y": 1.0},
-    ...     default_parameters={"a": 0.5, "g": 9.81},
-    ...     default_observable_names={"v": 0.0},
+    ...     layout=SystemLayout(states=["x", "y"], parameters=["a"]),
     ... )
     >>> data.num_states
     2
 
 See Also
 --------
-:class:`~cubie.odesystems.SystemValues.SystemValues`
-    Keyed parameter container stored inside ``ODEData``.
+:class:`~cubie.odesystems.layout.SystemLayout`
+    The layout ``ODEData`` holds.
 :class:`~cubie.CUDAFactory.CUDAFactoryConfig`
     Parent class providing precision and hashing.
 :class:`~cubie.odesystems.baseODE.BaseODE`
     Abstract ODE factory that owns an ``ODEData`` as compile settings.
 """
 
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    Mapping,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Any, Dict, Tuple
 
 from attrs import (
     Factory,
     cmp_using as attrs_cmp_using,
     define,
-    evolve,
     field,
     frozen,
 )
 from attrs.validators import (
-    deep_iterable as attrsval_deep_iterable,
     in_ as attrsval_in,
     instance_of as attrsval_instance_of,
-    optional as attrsval_optional,
 )
 from numpy import array as np_array, float64 as np_float64
 
-
 from cubie._env import operation_ordering_default
 from cubie.CUDAFactory import CUDAFactoryConfig
-from cubie._utils import (
-    PrecisionDType,
-    mass_equal,
-)
-from cubie.odesystems.SystemValues import SystemValues
+from cubie._utils import mass_equal
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import ParameterSet, VariableSet
 
 
 ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})
@@ -89,43 +73,6 @@ def _mass_matrix_converter(value: Any) -> Any:
     array = np_array(value, dtype=np_float64)
     array.setflags(write=False)
     return array
-
-
-def _runtime_values_converter(value: Any) -> Any:
-    """Seal the structure of a runtime-valued container.
-
-    Values stay updatable in place: they are runtime data outside
-    configuration identity.
-    """
-    if value is None:
-        return None
-    return value.freeze(values_writable=True)
-
-
-def _parameters_converter(value: Any) -> Any:
-    """Seal the parameter container."""
-    if value is None:
-        return None
-    return value.freeze(values_writable=False)
-
-
-def _ordered_names(names: Iterable[str]) -> Tuple[str, ...]:
-    """Return ``names`` as a tuple of strings, rejecting repeats."""
-    ordered = tuple(str(name) for name in names)
-    if len(set(ordered)) != len(ordered):
-        raise ValueError(f"Swept parameters {list(ordered)} repeat a name.")
-    return ordered
-
-
-def _sorted_values(
-    values: Union[Mapping[str, float], Iterable[Tuple[str, float]]],
-) -> Tuple[Tuple[str, float], ...]:
-    """Return ``values`` as name-sorted ``(name, value)`` pairs."""
-    if isinstance(values, Mapping):
-        values = values.items()
-    return tuple(
-        sorted((str(name), float(value)) for name, value in values)
-    )
 
 
 @define
@@ -161,82 +108,38 @@ class SystemSizes:
 
 @frozen
 class ODEData(CUDAFactoryConfig):
-    """Bundle numerical values and metadata for an ODE system.
+    """Bundle the layout and metadata an ODE system compiles against.
+
+    We keep only fields that change the generated code here, so a
+    change to any of them rebuilds the system. We keep defaults on the
+    system instead: a state's default initial value never reaches the
+    build, and a parameter's default reaches it only as a fixed value in
+    the layout's parameters.
 
     Parameters
     ----------
-    parameters
-        Every parameter of the system with its default value.
-    initial_states
-        Initial state values for the ODE system.
-    observables
-        Observable variables to track during simulation.
+    layout
+        The variables in each device buffer and the parameters as the
+        current batch compiles them.
     precision
         Precision factory used for numerical calculations. Defaults to
         :class:`numpy.float32`.
-    num_drivers
-        Drivers-buffer length: drivers plus driver derivatives read.
-        Defaults to ``1``.
-    driver_derivatives
-        The driver index and order of each driver derivative the
-        equations read, in the order the derivatives follow the
-        drivers in the drivers buffer.
-    swept_parameters
-        Names of the parameters read from the parameters array.
-    fixed_parameters
-        Values compiled into the code for every other parameter.
+    operation_ordering
+        Generated-operation ordering policy.
 
     Notes
     -----
     This container holds only ODE-system state. Solver-helper request
     parameters (operator_beta, operator_gamma, preconditioner order,
-    stage tableaus)
-    belong to the requesting algorithm's compile settings and reach
-    the system as immutable
+    stage tableaus) belong to the requesting algorithm's compile
+    settings and reach the system as immutable
     :class:`~cubie.odesystems.solver_helpers.SolverHelperRequest`
     values, so the system's identity never depends on helper request
     order.
     """
 
-    parameters: Optional[SystemValues] = field(
-        converter=_parameters_converter,
-        validator=attrsval_optional(
-            attrsval_instance_of(
-                SystemValues,
-            ),
-        ),
-    )
-    initial_states: SystemValues = field(
-        converter=_runtime_values_converter,
-        validator=attrsval_optional(
-            attrsval_instance_of(
-                SystemValues,
-            ),
-        ),
-    )
-    observables: SystemValues = field(
-        converter=_runtime_values_converter,
-        validator=attrsval_optional(
-            attrsval_instance_of(
-                SystemValues,
-            ),
-        ),
-    )
-    num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
-    driver_derivatives: Tuple[Tuple[int, int], ...] = field(
-        default=(),
-        validator=attrsval_deep_iterable(
-            attrsval_deep_iterable(
-                attrsval_instance_of(int), attrsval_instance_of(tuple)
-            ),
-            attrsval_instance_of(tuple),
-        ),
-    )
-    swept_parameters: Tuple[str, ...] = field(
-        default=(), converter=_ordered_names
-    )
-    fixed_parameters: Tuple[Tuple[str, float], ...] = field(
-        default=(), converter=_sorted_values
+    layout: SystemLayout = field(
+        validator=attrsval_instance_of(SystemLayout)
     )
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
@@ -247,51 +150,36 @@ class ODEData(CUDAFactoryConfig):
         converter=_mass_matrix_converter,
         eq=attrs_cmp_using(eq=mass_equal),
     )
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
-        if self.parameters is None:
-            return
-        names = set(self.parameters.names)
-        swept = set(self.swept_parameters)
-        fixed = {name for name, _ in self.fixed_parameters}
-        if not swept <= names or fixed != names - swept:
-            raise ValueError(
-                f"Swept parameters {sorted(swept)} and fixed parameters "
-                f"{sorted(fixed)} must together name each parameter of "
-                f"this system once."
-            )
 
-    def update(
-        self, updates_dict: dict = None, **kwargs
-    ) -> Tuple["ODEData", Set[str], Set[str]]:
-        """Derive a replacement snapshot, propagating precision changes.
+    @property
+    def parameters(self) -> ParameterSet:
+        """Each parameter as the current batch compiles it."""
+        return self.layout.parameters
 
-        A changed ``precision`` re-materialises every embedded
-        :class:`SystemValues` container at the new precision on the
-        replacement snapshot, so packed value arrays always match the
-        configured precision.
-        """
-        replacement, recognized, changed = super().update(
-            updates_dict, **kwargs
-        )
-        if "precision" in changed:
-            precision = replacement.precision
-            reprecisioned = {}
-            for name in (
-                "parameters",
-                "initial_states",
-                "observables",
-            ):
-                container = getattr(replacement, name)
-                if container is not None:
-                    reprecisioned[name] = container.with_precision(precision)
-            replacement = evolve(replacement, **reprecisioned)
-        return replacement, recognized, changed
+    @property
+    def states(self) -> VariableSet:
+        """The names and units of the states, in array order."""
+        return self.layout.states
+
+    @property
+    def observables(self) -> VariableSet:
+        """The names and units of the observables, in array order."""
+        return self.layout.observables
+
+    @property
+    def num_drivers(self) -> int:
+        """Drivers-buffer length: drivers plus driver derivatives read."""
+        return self.layout.num_drivers
+
+    @property
+    def driver_derivatives(self) -> Tuple[Tuple[int, int], ...]:
+        """The driver index and order of each driver derivative read."""
+        return self.layout.driver_derivatives
 
     @property
     def num_states(self) -> int:
         """Number of state variables."""
-        return self.initial_states.n
+        return self.states.n
 
     @property
     def num_observables(self) -> int:
@@ -302,6 +190,11 @@ class ODEData(CUDAFactoryConfig):
     def num_parameters(self) -> int:
         """Number of parameters."""
         return self.parameters.n
+
+    @property
+    def swept_parameters(self) -> Tuple[str, ...]:
+        """Names of the parameters array's rows, in order."""
+        return self.parameters.swept
 
     @property
     def num_swept_parameters(self) -> int:
@@ -322,106 +215,9 @@ class ODEData(CUDAFactoryConfig):
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
         """Values compiled into the code, keyed by parameter name."""
-        return dict(self.fixed_parameters)
+        return self.parameters.fixed
 
     @property
     def mass(self) -> Any:
         """Return the cached solver mass matrix."""
         return self._mass
-
-    @property
-    def parameter_values(self) -> Dict[str, float]:
-        """Parameter values as plain floats keyed by name."""
-        return self.parameters.as_float_dict
-
-    @property
-    def initial_state_values(self) -> Dict[str, float]:
-        """Initial state values as plain floats keyed by name."""
-        return self.initial_states.as_float_dict
-
-    @classmethod
-    def from_BaseODE_initargs(
-        cls,
-        precision: PrecisionDType,
-        initial_values: Optional[Dict[str, float]] = None,
-        parameters: Optional[Dict[str, float]] = None,
-        observables: Optional[Dict[str, float]] = None,
-        default_initial_values: Optional[Dict[str, float]] = None,
-        default_parameters: Optional[Dict[str, float]] = None,
-        default_observable_names: Optional[Dict[str, float]] = None,
-        num_drivers: int = 1,
-        operation_ordering: str = operation_ordering_default(),
-        swept_parameters: Iterable[str] = (),
-        driver_derivatives: Tuple[Tuple[int, int], ...] = (),
-    ) -> "ODEData":
-        """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
-
-        Parameters
-        ----------
-        initial_values
-            Initial values for state variables.
-        parameters
-            Parameter values for the system.
-        observables
-            Auxiliary variables to track during simulation.
-        default_initial_values
-            Default initial values if ``initial_values`` omits entries.
-        default_parameters
-            Default parameter values if ``parameters`` omits entries.
-        default_observable_names
-            Default observable names if ``observables`` omits entries.
-        precision
-            Precision factory used for calculations.
-        num_drivers
-            Drivers-buffer length: drivers plus driver derivatives read.
-            Defaults to ``1``.
-        operation_ordering
-            Generated-operation ordering policy: stable ``"kahn"``,
-            fixed ``"greedy"`` or ``"dfs"``, or thresholded
-            ``"liveness_auto"`` selection.
-        swept_parameters
-            Names of the parameters read from the parameters array.
-            Every other parameter compiles in at its default.
-        driver_derivatives
-            The driver index and order of each driver derivative the
-            equations read, in the order the derivatives follow the
-            drivers in the drivers buffer.
-
-        Returns
-        -------
-        ODEData
-            Initialised data container for CUDA compilation.
-        """
-        init_values = SystemValues(
-            initial_values, precision, default_initial_values, name="States"
-        )
-        parameters = SystemValues(
-            parameters,
-            precision,
-            default_parameters,
-            name="Parameters",
-        )
-        observables = SystemValues(
-            observables,
-            precision,
-            default_observable_names,
-            name="Observables",
-        )
-
-        swept_parameters = tuple(swept_parameters)
-        fixed_parameters = {
-            name: value
-            for name, value in parameters.as_float_dict.items()
-            if name not in swept_parameters
-        }
-        return cls(
-            parameters=parameters,
-            initial_states=init_values,
-            observables=observables,
-            precision=precision,
-            num_drivers=num_drivers,
-            driver_derivatives=driver_derivatives,
-            operation_ordering=operation_ordering,
-            swept_parameters=swept_parameters,
-            fixed_parameters=fixed_parameters,
-        )

@@ -279,7 +279,7 @@ def build_driver_settings(
         precision=precision,
     )
 
-    driver_names = list(system.indices.driver_names)
+    driver_names = list(system.layout.driver_names)
     samples = {
         name: np.array(driver_matrix[:, idx], dtype=precision, copy=True)
         for idx, name in enumerate(driver_names)
@@ -831,12 +831,8 @@ def run_analysis() -> Dict[str, Dict[str, List[StepRecord]]]:
             # Use a single deterministic variant matching the test fixtures:
             # initial values and parameters come from the symbolic system
             print("  Running single deterministic variant (matches test_loop)")
-            initial_state = system.initial_values.values_array.astype(
-                precision, copy=True
-            )
-            parameters = system.parameters.values_array.astype(
-                precision, copy=True
-            )
+            initial_state = system.initial_values.defaults_array(precision)
+            parameters = system.parameters.defaults_array(precision)
             label = "run1"
             print("    initial_state:", initial_state)
 

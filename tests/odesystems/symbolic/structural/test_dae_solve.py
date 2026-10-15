@@ -605,7 +605,7 @@ def _transamp_consistent_derivatives():
 def _transamp_trajectory(solver, system, duration):
     inits = {
         name: np.array([float(value)])
-        for name, value in system.initial_values.values_dict.items()
+        for name, value in system.initial_values.defaults.items()
     }
     result = solver.solve(inits, swept_defaults(system), duration=duration)
     legend = {
@@ -788,9 +788,9 @@ def test_transistor_amplifier_init_and_reference(solver, system):
     )
     assert result.status_messages == {}
     assert np.isfinite(trajectory).all()
-    assert set(system.initial_values.values_dict) <= set(legend)
+    assert set(system.initial_values.defaults) <= set(legend)
     assert {"y1", "y4", "y7"} <= set(legend)
-    initial_values = system.initial_values.values_dict
+    initial_values = system.initial_values.defaults
     differential = dict(zip(initial_values, system.mass_diagonal_flags))
     assert not all(differential.values())
     consistent = {

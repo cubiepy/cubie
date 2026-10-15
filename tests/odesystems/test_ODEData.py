@@ -11,6 +11,11 @@ from cubie.odesystems.ODEData import (
     OPERATION_ORDERINGS,
     SystemSizes,
 )
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import Parameter, ParameterSet, VariableSet
+
+
+DECLARED = VariableSet.of(Parameter, {"a": 0.5, "b": 0.3, "g": 9.81})
 
 
 # ── SystemSizes ───────────────────────────────────────────────── #
@@ -64,26 +69,33 @@ def test_system_sizes_validates_int(field, bad_value):
 
 # ── ODEData construction ──────────────────────────────────────── #
 
+def _layout(parameters=None, drivers=()):
+    """Return a two-state layout compiling ``parameters``."""
+    return SystemLayout(
+        states=["x", "y"],
+        parameters=parameters or ParameterSet.build(DECLARED),
+        observables=["v", "w"],
+        drivers=drivers,
+    )
+
+
 def _make_odedata(
     precision=np.float32,
-    num_drivers=1,
+    drivers=("u",),
     operation_ordering="kahn",
 ):
-    """Helper to create ODEData via from_BaseODE_initargs."""
-    return ODEData.from_BaseODE_initargs(
+    """Helper to create ODEData from a layout."""
+    return ODEData(
         precision=precision,
-        default_initial_values={"x": 0.0, "y": 1.0},
-        default_parameters={"a": 0.5, "b": 0.3, "g": 9.81},
-        default_observable_names={"v": 0.0, "w": 0.0},
-        num_drivers=num_drivers,
+        layout=_layout(drivers=drivers),
         operation_ordering=operation_ordering,
     )
 
 
 def test_odedata_construction():
-    """ODEData stores SystemValues for each component."""
+    """ODEData reads each component from its layout."""
     data = _make_odedata()
-    assert data.initial_states.n == 2
+    assert data.states.n == 2
     assert data.parameters.n == 3
     assert data.observables.n == 2
 
@@ -121,32 +133,6 @@ def test_odedata_rejects_invalid_operation_ordering(operation_ordering):
         _make_odedata(operation_ordering=operation_ordering)
 
 
-# ── ODEData.update_precisions ─────────────────────────────────── #
-
-def test_update_precision_propagates_to_all_containers():
-    """A precision update re-materialises every SystemValues container."""
-    data = _make_odedata(precision=np.float32)
-    replacement, recognized, changed = data.update(
-        {"precision": np.float64}
-    )
-    assert "precision" in changed
-    assert replacement.parameters.precision == np.float64
-    assert replacement.initial_states.precision == np.float64
-    assert replacement.observables.precision == np.float64
-    assert replacement.parameters.values_array.dtype == np.float64
-    # Original snapshot untouched
-    assert data.parameters.precision == np.float32
-
-
-def test_update_precision_noop_without_key():
-    """Precision stays unchanged when the key is absent."""
-    data = _make_odedata(precision=np.float32)
-    replacement, _, changed = data.update({"unrelated": 42})
-    assert changed == set()
-    assert replacement is data
-    assert replacement.parameters.precision == np.float32
-
-
 # ── ODEData properties ────────────────────────────────────────── #
 
 @pytest.mark.parametrize(
@@ -159,14 +145,14 @@ def test_update_precision_noop_without_key():
     ],
 )
 def test_odedata_count_properties(prop, expected):
-    """Count properties delegate to the correct SystemValues.n."""
+    """Count properties delegate to the correct variable set."""
     data = _make_odedata()
     assert getattr(data, prop) == expected
 
 
 def test_odedata_sizes_returns_system_sizes():
     """sizes property returns SystemSizes with all counts."""
-    data = _make_odedata(num_drivers=3)
+    data = _make_odedata(drivers=("u", "w", "z"))
     sizes = data.sizes
     assert sizes.states == 2
     assert sizes.observables == 2
@@ -212,37 +198,6 @@ def test_mass_change_alters_values_hash():
     assert via_sympy.values_hash == via_array.values_hash
 
 
-# ── ODEData.from_BaseODE_initargs ─────────────────────────────── #
-
-def test_from_base_ode_initargs_handles_none_optional():
-    """Factory handles None for optional arguments gracefully."""
-    data = ODEData.from_BaseODE_initargs(
-        precision=np.float32,
-        default_initial_values={"x": 1.0},
-        default_parameters=None,
-        default_observable_names=None,
-        num_drivers=0,
-    )
-    assert data.num_states == 1
-    assert data.num_drivers == 0
-    assert data.parameters.n == 0
-    assert data.observables.n == 0
-
-
-def test_from_base_ode_initargs_overrides_defaults():
-    """User values override defaults in from_BaseODE_initargs."""
-    data = ODEData.from_BaseODE_initargs(
-        precision=np.float64,
-        initial_values={"x": 5.0},
-        default_initial_values={"x": 0.0, "y": 1.0},
-        default_parameters={"a": 0.5},
-    )
-    # User override for x should apply; y keeps default
-    assert data.num_states == 2
-    val = data.initial_states.values_dict["x"]
-    assert float(val) == pytest.approx(5.0)
-
-
 # ── Swept parameters ──────────────────────────────────────────── #
 
 def test_default_fixes_every_parameter():
@@ -254,41 +209,34 @@ def test_default_fixes_every_parameter():
     )
 
 
-def test_swept_names_keep_their_order():
-    """Swept names keep their order and the rest are compiled in."""
-    data, _, changed = _make_odedata().update(
-        swept_parameters=["b", "a"], fixed_parameters={"g": 9.81}
+def test_swept_names_follow_the_parameter_order():
+    """Swept names take the parameters' order; the rest compile in."""
+    data = _make_odedata()
+    data, _, changed = data.update(
+        layout=_layout(ParameterSet.build(DECLARED, ["b", "a"], {"g": 2.0}))
     )
-    assert changed == {"swept_parameters", "fixed_parameters"}
-    assert data.swept_parameters == ("b", "a")
-    assert data.fixed_parameter_values == pytest.approx({"g": 9.81})
+    assert changed == {"layout"}
+    assert data.swept_parameters == ("a", "b")
+    assert data.fixed_parameter_values == pytest.approx({"g": 2.0})
     assert data.sizes.swept_parameters == 2
 
 
-def test_swept_names_reject_repeats_and_unknowns():
-    """Swept and fixed names cover each known parameter once."""
-    data = _make_odedata()
-    with pytest.raises(ValueError, match="repeat"):
-        data.update(
-            swept_parameters=["a", "a"],
-            fixed_parameters={"b": 0.3, "g": 9.81},
-        )
-    with pytest.raises(ValueError, match="once"):
-        data.update(swept_parameters=["nope"])
-
-
 def test_compiled_in_values_participate_in_identity():
-    """Fixed values and swept names enter values_hash, defaults don't."""
+    """Changing the sweep or a fixed value changes values_hash, and
+    changing a swept parameter's default does not."""
     data = _make_odedata()
     swept = data.update(
-        swept_parameters=["a"], fixed_parameters={"b": 0.3, "g": 9.81}
+        layout=_layout(ParameterSet.build(DECLARED, ["a"]))
     )[0]
     refixed = data.update(
-        fixed_parameters={"a": 0.7, "b": 0.3, "g": 9.81}
+        layout=_layout(ParameterSet.build(DECLARED, (), {"a": 0.7}))
     )[0]
-    parameters = swept.parameters.copy()
-    parameters.update_from_dict({"a": 0.7})
-    new_default = swept.update(parameters=parameters)[0]
+    new_default, _, changed = swept.update(
+        layout=_layout(
+            ParameterSet.build(DECLARED.with_defaults({"a": 0.7}), ["a"])
+        )
+    )
     assert swept.values_hash != data.values_hash
     assert refixed.values_hash != data.values_hash
+    assert changed == set()
     assert new_default.values_hash == swept.values_hash

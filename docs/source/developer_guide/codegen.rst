@@ -18,7 +18,7 @@ Pipeline Overview
        → SymPy parse layer and CellML substitutions
        → engine IR (hash-consed expression nodes)
        → normalise/classify → structural simplification for DAEs
-       → IndexedBases (state/param/observable symbols)
+       → SystemLayout (variables in each device buffer)
        → JVPEquations (Jacobian-vector product expressions)
        → IR printer → code strings
        → ODEFile (written to generated/ directory)

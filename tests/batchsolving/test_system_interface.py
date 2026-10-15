@@ -10,7 +10,7 @@ from cubie.batchsolving.SystemInterface import SystemInterface
 # ── __init__ and from_system ─────────────────────────────── #
 
 def test_init_stores_system_values(system_interface, system):
-    """__init__ stores parameters, states, observables as SystemValues."""
+    """__init__ reads parameters, states and observables from the system."""
     assert system_interface.parameters is system.parameters
     assert system_interface.states is system.initial_values
     assert system_interface.observables is system.observables
@@ -88,7 +88,7 @@ def test_labels_none_returns_all_names(
     """Returns all names when indices is None."""
     result = getattr(system_interface, method)(None)
     expected = getattr(system, expected_attr).names
-    assert result == expected
+    assert result == list(expected)
 
 
 @pytest.mark.parametrize(

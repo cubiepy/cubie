@@ -23,7 +23,6 @@ from cubie.integrators.step_control import (
     filter_coefficients_to_gains,
 )
 from cubie.odesystems.symbolic import SymbolicODE
-from cubie.odesystems.symbolic.parsing.parser import parse_system
 from cubie.batchsolving.solver import Solver
 from cubie.outputhandling import OutputFunctions
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples
@@ -37,38 +36,29 @@ Array = NDArray[np.floating]
 @contextmanager
 def restoring_values(system):
     """Restore the system's parameters and initial values on exit."""
-    swept = system.swept_parameters
-    fixed = system.fixed_parameter_values
-    defaults = dict(system.compile_settings.parameter_values)
-    states = dict(system.compile_settings.initial_state_values)
+    parameters = system.parameters
+    specialisation = system.specialisation
+    states = system.states
     try:
         yield system
     finally:
-        system.set_default_parameters(defaults)
-        system.update(
-            swept_parameters=swept, fixed_parameters=tuple(fixed.items())
-        )
-        system.initial_values.update_from_dict(states, silent=True)
-        system.indices.states.update_values(states)
+        # Restore the defaults first, because setting defaults
+        # recompiles the current swept names and would replace the
+        # specialisation we restore.
+        system.set_default_parameters(parameters.defaults)
+        system.update(specialisation=specialisation)
+        system.set_initial_values(states.defaults)
 
 
 def sweep(system, names):
     """Sweep ``names`` on ``system`` and compile the other defaults in."""
-    defaults = system.compile_settings.parameter_values
-    fixed = tuple(
-        (name, value) for name, value in defaults.items()
-        if name not in names
-    )
-    system.update(swept_parameters=tuple(names), fixed_parameters=fixed)
+    system.set_swept_parameters(names)
 
 
 def swept_values(system):
     """Return the swept parameters' defaults in row order."""
-    defaults = system.parameters.values_dict
-    return np.array(
-        [defaults[name] for name in system.swept_parameters],
-        dtype=system.precision,
-    )
+    swept = system.parameters.subset(system.swept_parameters)
+    return swept.defaults_array(system.precision)
 
 
 def swept_defaults(system, runs=2):
@@ -77,21 +67,11 @@ def swept_defaults(system, runs=2):
     Pass this as a solve's parameters to run the system's own sweep at
     its default values.
     """
-    defaults = system.parameters.values_dict
+    defaults = system.parameters.defaults
     return {
         name: np.full(runs, defaults[name])
         for name in system.swept_parameters
     }
-
-
-def specialise_all_swept(**kwargs):
-    """Parse equations and specialise them, sweeping every parameter.
-
-    Take the arguments of ``parse_system`` and return the products of
-    ``ParsedSystem.specialise``.
-    """
-    parsed_system = parse_system(**kwargs)
-    return parsed_system.specialise(list(parsed_system.parameters))
 
 
 class MockMemoryManager(MemoryManager):
@@ -1408,7 +1388,6 @@ NON_SOLVER_SETTINGS = {
     "n_observables",
     "fix_singularities",
     "voltage_variable",
-    "parameter_input",
     "system_sweep",
 }
 

@@ -39,8 +39,8 @@ def test_time_driver_array_matches_function(
         time_function_driver_run,
         system=time_function_driver_system,
         initial_state=(
-            time_function_driver_system.initial_values.values_array.astype(
-                precision, copy=True
+            time_function_driver_system.initial_values.defaults_array(
+                precision
             )
         ),
         solver_config=solver_settings,
@@ -48,9 +48,7 @@ def test_time_driver_array_matches_function(
     driver_result = run_device_loop(
         single_integrator_run,
         system=system,
-        initial_state=system.initial_values.values_array.astype(
-            precision, copy=True
-        ),
+        initial_state=system.initial_values.defaults_array(precision),
         solver_config=solver_settings,
         driver_array=driver_array,
     )

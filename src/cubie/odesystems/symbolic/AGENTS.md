@@ -9,9 +9,8 @@ through `sympy.parse_expr` and SymPy input is accepted directly, but every expre
 converts to the hash-consed IR in `engine/` inside `parsing/normalise.py`, and all
 compute (structural simplification, differentiation, substitution, CSE,
 hashing, printing) runs on IR nodes. This top level holds the user-facing system class
-(`SymbolicODE`), the disk-backed source cache (`ODEFile`), the symbol-to-device-index maps
-(`IndexedBaseMap`/`IndexedBases`, SymPy-facing for GUIs and `SystemValues`), and shared
-utilities (hashing, the reserved codegen prefix). Equation parsing lives in `parsing/`,
+(`SymbolicODE`), the disk-backed source cache (`ODEFile`), and shared utilities (hashing,
+the reserved codegen prefix). Equation parsing lives in `parsing/`,
 and every parsed system runs through the structural simplification in `structural/`;
 the CUDA source emitters live in `codegen/`. `SymbolicODE` orchestrates both: parse via
 `parsing.parse_system`, specialise the result for the swept parameters, generate
@@ -26,11 +25,10 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`, `config_ha
 ## Key Files
 | File | Description |
 |------|-------------|
-| `__init__.py` | Star-imports `codegen`, `parsing`, `indexedbasemaps`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
+| `__init__.py` | Star-imports `codegen`, `parsing`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
 | `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, swept parameters, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
 | `helper_registry.py` | Concrete solver-helper roles: one `SolverHelperRole` subclass per role (`LinearOperator`, `NeumannPreconditioner`, `JacobiPreconditioner`, `LuSolve`, `LuPrepareBlocks`, `LuSmoothingSolve`, `Residual`, `InitResidual`, `InitLuSolve` (consistent-initialisation forms, PLAIN-only), `ApplyMass`, `EvaluateInvMassF`, `TimeDerivativeRHS`, internal `PrepareJac`), each declaring capabilities and implementing `generate`; Neumann also implements `validate`. Defines `helper_source_hash` and `helper_member_hash`. |
 | `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so switching between sets of swept parameters keeps each one's cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
-| `indexedbasemaps.py` | `IndexedBaseMap` (named scalar symbols → fixed-size `sympy.IndexedBase`, sorted by name unless `sort=False`, as for swept parameters) and `IndexedBases` (bundle of state/swept-parameter/observable/driver/dxdt maps). Provides `from_user_inputs`, units, ref/index/symbol maps. |
 | `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `RESERVED_CODEGEN_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
 
 ## Subdirectories
@@ -38,7 +36,7 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`, `config_ha
 |-----------|---------|
 | `engine/` | Hash-consed expression IR and its compute passes: SymPy conversion, differentiation, substitution, CSE, ordering, pruning, and the CUDA printer (see `engine/AGENTS.md`). |
 | `codegen/` | CUDA source emitters for dxdt, observables, Jacobian/JVP, linear operators, preconditioners, residuals, and time derivatives, all computing on the `engine/` IR (see `codegen/AGENTS.md`). |
-| `parsing/` | Converts string / SymPy / callable / CellML input into `ParsedEquations` + `IndexedBases`, plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end feeds every system through `structural/` (see `parsing/AGENTS.md`). |
+| `parsing/` | Converts string / SymPy / callable / CellML input into a `ParsedSystem` and specialises it into a `SpecialisedSystem` (`SystemLayout`, `ParsedEquations`, callables, hash), plus `JVPEquations` and auxiliary-caching heuristics; one normalised front end feeds every system through `structural/` (see `parsing/AGENTS.md`). |
 | `structural/` | Structural simplification and tearing (singular derivative-block removal, alias elimination, Pantelides index reduction, dummy derivatives, exact integer-linear SCC matching, Modia tearing); runs on every parsed system. Ported from ModelingToolkit.jl (c4177c335, a2b6dc56), StateSelection.jl (74df007e), BipartiteGraphs.jl (647b6a42), Graphs.jl (dffc7a64) and Modia.jl (via ModelingToolkit.jl); see `structural/AGENTS.md`. |
 
 ## get_solver_helper
@@ -100,15 +98,19 @@ and function aliases. Equations sort by LHS name, so string and SymPy input hit 
 - Generated files land under `cubie.cache_root.get_cache_root()` (default
   `<cwd>/generated`, read at `ODEFile` construction, relocatable with
   `set_cache_root()`).
-- `IndexedBaseMap.push`/`pop` rebuild the `sympy.IndexedBase` and reindex every entry;
-  re-read `ref_map` array references after the swept parameters change.
+- We build a new `SystemLayout` for every new sweep or fixed value and keep it in
+  `ODEData.layout`, so read `SymbolicODE.layout` again after an update rather than
+  holding an old one. Each change of batch specialises the system again.
+- Initial values live in one name-to-value dict on the system (`BaseODE._initial_values`),
+  covering states simplification has dropped; `system.states` is a view of the layout's
+  states with those values.
 - `parameters_gui`/`states_gui` import `cubie.gui` inside the method (Qt is optional).
 
 ## Dependencies
 ### Internal
 - `cubie.odesystems.baseODE` (`BaseODE`, `ODECache`); `cubie.odesystems.symbolic.codegen` (all
-  source emitters); `cubie.odesystems.symbolic.parsing` (`parse_system`, `IndexedBases`,
-  `ParsedEquations`, `JVPEquations`); `cubie.array_interpolator.ArrayInterpolator`
+  source emitters); `cubie.odesystems.symbolic.parsing` (`parse_system`,
+  `ParsedEquations`, `JVPEquations`); `cubie.odesystems.layout` (`SystemLayout`); `cubie.array_interpolator.ArrayInterpolator`
   (driver-array setup); `cubie._utils` (`PrecisionDType`), `cubie.time_logger.default_timelogger`,
   `cubie._cudasim_extensions`, `cubie.backend.jit`, `cubie.backend.intrinsics` (in the generated module header), `cubie.gui.*` (lazy, optional).
 ### External
