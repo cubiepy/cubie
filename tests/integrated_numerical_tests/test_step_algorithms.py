@@ -20,6 +20,7 @@ from tests.integrators.cpu_reference import (
     get_ref_stepper,
 )
 from tests._utils import (
+    swept_values,
     BICGSTAB_STEP_CASES,
     ALGORITHM_PARAM_SETS,
     LU_STEP_CASES,
@@ -84,7 +85,7 @@ def _execute_step_twice(
     )
     observables_fn = system.observables_fn
 
-    params = step_inputs["parameters"]
+    params = swept_values(system).astype(precision)
     state = np.asarray(step_inputs["state"], dtype=precision)
     driver_coefficients = step_inputs["driver_coefficients"]
 
