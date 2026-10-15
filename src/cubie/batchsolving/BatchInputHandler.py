@@ -72,24 +72,22 @@ Examples
 ...    parameters = {'p0': 2.0, 'p1': 1.5}
 ... )
 >>> handler = BatchInputHandler.from_system(system)
->>> varying_values, batch = handler.split_parameters(
-...     {"p0": [0.1, 0.2], "p1": 3.0}
-... )
->>> batch.swept, batch.fixed
-(('p0',), {'p1': 3.0})
->>> handler.interface.apply_batch(batch)
 >>> states = {"x": [1.0, 2.0], "y": [0.5, 1.5]}
->>> inits, params = handler(
-...     states=states, params=varying_values, kind="verbatim"
+>>> parameters = {"p0": [0.1, 0.2], "p1": 3.0}
+>>> inits, params, specialisation = handler(
+...     states, parameters, kind="verbatim"
 ... )
+>>> specialisation.layout.parameters.swept
+('p0',)
+>>> specialisation.layout.parameters.fixed
+{'p1': 3.0}
+>>> recognised = system.update(specialisation=specialisation)
 >>> print(inits)
 [[1.  2. ]
  [0.5 1.5]]
 >>> print(params)
 [[0.1 0.2]]
->>> inits, params = handler(
-...     states=states, params=varying_values, kind="combinatorial"
-... )
+>>> inits, params, _ = handler(states, parameters, kind="combinatorial")
 >>> print(inits.shape, params.shape)
 (2, 8) (1, 8)
 
