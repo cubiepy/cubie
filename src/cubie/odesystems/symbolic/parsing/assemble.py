@@ -3,9 +3,9 @@
 :func:`assemble_simplified` structurally simplifies a normalised
 system and packages the result as a :class:`SpecialisedSystem`: the
 buffer layout, the surviving states and observables, the
-``ParsedEquations`` and the source hash. The derived mass matrix for
-torn systems rides on ``ParsedEquations.mass_matrix``. Equations are
-engine IR pairs throughout.
+``ParsedEquations`` and the source hash. ``ParsedEquations.mass_matrix``
+holds the mass matrix of a torn system. Equations are engine IR pairs
+throughout.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -13,7 +13,9 @@ from warnings import warn
 
 import sympy as sp
 from attrs import field, frozen
+from numpy import array as np_array, float64 as np_float64
 
+from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.parsing.normalise import (
@@ -43,9 +45,23 @@ from cubie.odesystems.variables import ParameterSet, Variable, VariableSet
 from cubie._utils import devfunc_returns_nonfloat
 
 
+def _mass_matrix_converter(value: Any) -> Any:
+    """Return ``None`` or ``value`` as a read-only float64 array."""
+    if value is None:
+        return None
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    array = np_array(value, dtype=np_float64)
+    array.setflags(write=False)
+    return array
+
+
 @frozen
-class SpecialisedSystem:
-    """A parsed system specialised for one choice of swept parameters.
+class SpecialisedSystem(CUDADispatcherCache):
+    """A parsed system assembled for the parameters a batch compiles.
+
+    :class:`~cubie.odesystems.symbolic.specialiser.SystemSpecialiser`
+    builds one as its cache.
 
     Parameters
     ----------
@@ -60,17 +76,15 @@ class SpecialisedSystem:
         helpers.
     fn_hash
         Hash of every value the generated source embeds.
+    mass
+        The mass matrix as a float64 array, or ``None`` for an ODE.
     """
 
     layout: SystemLayout = field()
     equations: ParsedEquations = field()
     functions: Dict[str, Callable] = field(factory=dict)
     fn_hash: str = field(default="")
-
-    @property
-    def mass_matrix(self) -> Any:
-        """Return the derived mass matrix, or ``None`` for an ODE."""
-        return self.equations.mass_matrix
+    mass: Any = field(default=None, converter=_mass_matrix_converter)
 
 
 def _driver_derivatives(
@@ -201,8 +215,8 @@ def assemble_simplified(
 
     ``parameters`` says which parameters the parameters array holds;
     the others are already numbers in ``normalised``. We hold states,
-    observables and drivers in sorted name order. The derived mass
-    matrix rides on ``parsed_equations.mass_matrix``.
+    observables and drivers in sorted name order, and return the mass
+    matrix of a torn system as ``mass``.
     """
 
     priorities = {}
@@ -386,4 +400,5 @@ def assemble_simplified(
         equations=parsed_equations,
         functions=functions,
         fn_hash=fn_hash,
+        mass=mass,
     )

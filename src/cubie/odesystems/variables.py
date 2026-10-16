@@ -493,6 +493,76 @@ class ParameterSet(VariableSet):
             ),
         )
 
+    @staticmethod
+    def _resolve(
+        parameters: ValuedSet,
+        swept: Iterable[str],
+        values: Optional[Mapping[str, float]],
+    ) -> Tuple[Tuple[str, bool, Optional[float]], ...]:
+        """Return ``(name, swept, value)`` for every parameter, in order.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter.
+        ValueError
+            If a swept name repeats or also has a value.
+        """
+        swept = tuple(swept)
+        values = values or {}
+        if len(set(swept)) != len(swept):
+            raise ValueError(f"Swept parameters {list(swept)} repeat.")
+        unknown = [
+            name for name in (*swept, *values) if name not in parameters
+        ]
+        if unknown:
+            raise KeyError(
+                f"{sorted(unknown)} are not parameters of this system."
+            )
+        clashing = sorted(set(values) & set(swept))
+        if clashing:
+            raise ValueError(
+                f"{clashing} are swept, so they have no fixed value."
+            )
+        swept = set(swept)
+        return tuple(
+            (entry.name, True, None)
+            if entry.name in swept
+            else (
+                entry.name,
+                False,
+                float(values.get(entry.name, entry.default)),
+            )
+            for entry in parameters
+        )
+
+    @classmethod
+    def key_for(
+        cls,
+        parameters: ValuedSet,
+        swept: Iterable[str] = (),
+        values: Optional[Mapping[str, float]] = None,
+    ) -> tuple:
+        """Return the key :meth:`build` would give the same request.
+
+        Compare it with an existing set's ``_cubie_canonical_()`` to
+        find out whether the request compiles the same parameters,
+        without building the set.
+
+        Parameters
+        ----------
+        parameters, swept, values
+            As for :meth:`build`.
+
+        Raises
+        ------
+        KeyError
+            If a name is not a parameter.
+        ValueError
+            If a swept name repeats or also has a value.
+        """
+        return ("ParameterSet", cls._resolve(parameters, swept, values))
+
     @classmethod
     def build(
         cls,
@@ -526,33 +596,11 @@ class ParameterSet(VariableSet):
         ValueError
             If a swept name repeats or also has a value.
         """
-        swept = tuple(swept)
-        values = values or {}
-        if len(set(swept)) != len(swept):
-            raise ValueError(f"Swept parameters {list(swept)} repeat.")
-        unknown = [
-            name for name in (*swept, *values) if name not in parameters
-        ]
-        if unknown:
-            raise KeyError(
-                f"{sorted(unknown)} are not parameters of this system."
-            )
-        clashing = sorted(set(values) & set(swept))
-        if clashing:
-            raise ValueError(
-                f"{clashing} are swept, so they have no fixed value."
-            )
-        swept = set(swept)
+        resolved = cls._resolve(parameters, swept, values)
         return cls(
             [
-                CompiledParameter(entry.name, entry.unit, swept=True)
-                if entry.name in swept
-                else CompiledParameter(
-                    entry.name,
-                    entry.unit,
-                    value=values.get(entry.name, entry.default),
-                )
-                for entry in parameters
+                CompiledParameter(name, parameters[name].unit, is_swept, value)
+                for name, is_swept, value in resolved
             ]
         )
 

@@ -7,24 +7,28 @@ Published Classes
     system (``dxdt``, linear operator, preconditioner, etc.).
 
 :class:`BaseODE`
-    Abstract factory base for CUDA-backed ODE systems. Manages value
-    containers, precision selection, and cache invalidation.
+    Abstract factory base for CUDA-backed ODE systems. Owns the
+    declared defaults, the child factory that assembles the system for
+    the parameters a batch compiles, and the codegen settings.
 
     >>> from numpy import float32
-    >>> from cubie.odesystems.layout import SystemLayout
-    >>> from cubie.odesystems.variables import (
-    ...     Parameter, ParameterSet, VariableSet,
+    >>> from cubie.odesystems.symbolic.parsing import parse_system
+    >>> from cubie.odesystems.symbolic.specialiser import SystemSpecialiser
+    >>> from cubie.odesystems.variables import ParameterSet
+    >>> parsed = parse_system(
+    ...     dxdt=["dx = -k * x"], states={"x": 1.0}, parameters={"k": 1.0}
     ... )
     >>> # Subclass and override build() to use:
     >>> class MyODE(BaseODE):
     ...     def build(self):
     ...         pass  # compile dxdt here
-    >>> parameters = VariableSet.of(Parameter, {"k": 1.0})
     >>> ode = MyODE(
     ...     float32,
-    ...     parameters,
-    ...     SystemLayout(
-    ...         states=["x"], parameters=ParameterSet.build(parameters)
+    ...     parsed.declared_parameters,
+    ...     SystemSpecialiser(
+    ...         parsed,
+    ...         float32,
+    ...         ParameterSet.build(parsed.declared_parameters),
     ...     ),
     ...     initial_values={"x": 0.0},
     ... )
@@ -43,7 +47,6 @@ See Also
 """
 
 from abc import abstractmethod
-from collections import OrderedDict
 from copy import deepcopy
 from typing import (
     Any,
@@ -61,7 +64,7 @@ from attrs import define, field
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType
 from cubie._env import operation_ordering_default
-from cubie.odesystems.ODEData import ODEData
+from cubie.odesystems.ODEData import ODEData, SystemSizes
 from cubie.odesystems._mass_utils import mass_diagonal_flags
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -75,35 +78,6 @@ from cubie.odesystems.variables import (
     ValuedSet,
     VariableSet,
 )
-
-
-# Keep this many specialisations, and this many of each kind of
-# variable set built from them, on each system.
-SPECIALISATION_CACHE_SIZE = 8
-
-
-def _remember(cache: OrderedDict, key: Any, build: Callable) -> Any:
-    """Return ``cache[key]``, building and storing it when missing."""
-    if key in cache:
-        cache.move_to_end(key)
-        return cache[key]
-    value = build()
-    cache[key] = value
-    if len(cache) > SPECIALISATION_CACHE_SIZE:
-        cache.popitem(last=False)
-    return value
-
-
-def _request_key(
-    swept: Tuple[str, ...], fixed: Optional[Mapping[str, float]]
-) -> tuple:
-    """Return the memo key for a request to :meth:`BaseODE.specialise`."""
-    if not fixed:
-        return (swept, ())
-    values = sorted(
-        (str(name), float(value)) for name, value in fixed.items()
-    )
-    return (swept, tuple(values))
 
 
 @define
@@ -154,7 +128,7 @@ class BaseODE(CUDAFactory):
         self,
         precision: PrecisionDType,
         parameters: ValuedSet,
-        swept_parameters: Iterable[str] = (),
+        specialiser: CUDAFactory,
         initial_values: Optional[Mapping[str, float]] = None,
         operation_ordering: str = operation_ordering_default(),
         name: Optional[str] = None,
@@ -167,10 +141,12 @@ class BaseODE(CUDAFactory):
             Precision factory used for calculations.
         parameters
             The parameters with their defaults.
-        swept_parameters
-            Names of the parameters to sweep in the specialisation the
-            system compiles first. The system compiles every other
-            parameter in at its default.
+        specialiser
+            Child factory whose ``compiled_parameters`` setting says
+            which parameters the system sweeps and the value it compiles
+            in for every other one, and whose products are the
+            ``layout``, ``mass`` and equations of the system assembled
+            for them.
         initial_values
             Default initial values by state name. States left out start
             from ``0.0``.
@@ -185,21 +161,19 @@ class BaseODE(CUDAFactory):
         super().__init__()
         self._parameters = parameters
         self._initial_values = dict(initial_values or {})
-        self._requests = OrderedDict()
-        self._specialisations = OrderedDict()
-        self._swept_sets = OrderedDict()
-        self._state_sets = OrderedDict()
-        specialisation = self.specialise(swept_parameters)
-        self._specialisation = specialisation
+        self._specialiser = specialiser
         self.setup_compile_settings(
             ODEData(
                 precision=precision,
-                layout=specialisation.layout,
                 operation_ordering=operation_ordering,
-                mass=specialisation.mass_matrix,
             )
         )
         self.name = name
+
+    @property
+    def specialiser(self) -> CUDAFactory:
+        """The child factory that assembles the compiled parameters."""
+        return self._specialiser
 
     @property
     def mass(self) -> Any:
@@ -209,7 +183,7 @@ class BaseODE(CUDAFactory):
         produced in structural simplification.
         """
 
-        return self.compile_settings.mass
+        return self._specialiser.mass
 
     @property
     def mass_diagonal_flags(self) -> tuple:
@@ -248,76 +222,8 @@ class BaseODE(CUDAFactory):
             further solver helpers to this cache as needed.
         """
 
-    @abstractmethod
-    def _build_specialisation(self, parameters: ParameterSet) -> Any:
-        """Return the system specialised for ``parameters``.
-
-        Parameters
-        ----------
-        parameters
-            Every parameter, swept or fixed at the value to compile in.
-
-        Returns
-        -------
-        object
-            A specialisation with a ``layout`` (:class:`SystemLayout`)
-            and a ``mass_matrix`` (``None`` for an ODE).
-        """
-
-    def specialise(
-        self,
-        swept: Iterable[str] = (),
-        fixed: Optional[Mapping[str, float]] = None,
-    ) -> Any:
-        """Return the system specialised for a batch.
-
-        Parameters
-        ----------
-        swept
-            Names of the parameters to read from the parameters array,
-            in any order.
-        fixed
-            Values to compile in for some of the other parameters.
-            The system compiles every parameter that is neither swept
-            nor named here at its default.
-
-        Returns
-        -------
-        object
-            The specialisation. Return the same object for a repeated
-            request, and for a request that differs only by fixing a
-            parameter at its default.
-
-        Raises
-        ------
-        KeyError
-            If a name is not a parameter of the system.
-        ValueError
-            If a swept name repeats or also has a fixed value.
-        """
-        swept = tuple(swept)
-        request = _request_key(swept, fixed)
-        found = self._requests.get(request)
-        if found is not None:
-            self._requests.move_to_end(request)
-            return found
-        parameters = ParameterSet.build(self._parameters, swept, fixed)
-        # We key built specialisations on their compiled values, so
-        # two requests for the same values share one.
-        found = _remember(
-            self._specialisations,
-            parameters._cubie_canonical_(),
-            lambda: self._build_specialisation(parameters),
-        )
-        return _remember(self._requests, request, lambda: found)
-
-    @property
-    def specialisation(self) -> Any:
-        """The specialisation the system compiles."""
-        return self._specialisation
-
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Apply settings, compiling a new ``specialisation`` if given.
+        """Apply settings to this system and to its specialiser.
 
         Parameters
         ----------
@@ -331,40 +237,48 @@ class BaseODE(CUDAFactory):
         set[str]
             The recognised names.
         """
-        if "specialisation" not in updates:
-            return self.update_compile_settings(updates, silent=True)
-        specialisation = updates.pop("specialisation")
-        if specialisation is self._specialisation:
-            recognised = self.update_compile_settings(updates, silent=True)
-            return recognised | {"specialisation"}
-        derived = {
-            "layout": specialisation.layout,
-            "mass": specialisation.mass_matrix,
-        }
-        recognised = self.update_compile_settings(
-            {**updates, **derived}, silent=True
-        )
-        self._specialisation = specialisation
-        return (recognised - (set(derived) - set(updates))) | {
-            "specialisation"
-        }
+        recognised = self.update_compile_settings(updates, silent=True)
+        settings = self._specialiser.compile_settings
+        recognised |= self._specialiser.update(updates, silent=True)
+        # The generated code embeds the specialiser's products, so a
+        # change to its settings is a change to ours.
+        if self._specialiser.compile_settings is not settings:
+            self._invalidate_cache()
+        return recognised
 
-    def set_swept_parameters(self, names: Iterable[str]) -> None:
-        """Compile the system with ``names`` swept and the rest at defaults.
+    def set_swept_parameters(
+        self,
+        names: Iterable[str],
+        fixed: Optional[Mapping[str, float]] = None,
+    ) -> None:
+        """Compile the system with ``names`` swept.
 
         Parameters
         ----------
         names
             Names of the parameters to sweep, in any order.
+        fixed
+            Values to compile in for some of the other parameters. The
+            system compiles every parameter that is neither swept nor
+            named here at its default.
 
         Raises
         ------
         KeyError
             If a name is not a parameter of the system.
         ValueError
-            If a name repeats.
+            If a swept name repeats or also has a fixed value.
         """
-        self.update(specialisation=self.specialise(names))
+        # Compare keys before building the set, so a solve that asks
+        # for the parameters already compiled constructs nothing.
+        key = ParameterSet.key_for(self._parameters, names, fixed)
+        if key == self.compiled_parameters._cubie_canonical_():
+            return
+        self.update(
+            compiled_parameters=ParameterSet.build(
+                self._parameters, names, fixed
+            )
+        )
 
     def set_default_parameters(self, values: Mapping[str, float]) -> None:
         """Set parameter defaults.
@@ -383,11 +297,6 @@ class BaseODE(CUDAFactory):
             If a name is not a parameter of the system.
         """
         self._parameters = self._parameters.with_defaults(values)
-        # We keep the specialisations, which we key on their compiled
-        # values, and drop the requests, because a request that leaves
-        # a parameter at its default now means a different value.
-        self._requests.clear()
-        self._swept_sets.clear()
         self.set_swept_parameters(self.swept_parameters)
 
     def set_initial_values(self, values: Mapping[str, float]) -> None:
@@ -409,55 +318,16 @@ class BaseODE(CUDAFactory):
         self._initial_values.update(
             {name: float(value) for name, value in values.items()}
         )
-        self._state_sets.clear()
-
-    def swept_set_for(self, layout: SystemLayout) -> ValuedSet:
-        """Return a layout's swept parameters with their defaults.
-
-        Parameters
-        ----------
-        layout
-            The layout of a specialisation of this system.
-        """
-        swept = layout.swept_names
-        return _remember(
-            self._swept_sets,
-            swept,
-            lambda: self._parameters.subset(swept),
-        )
-
-    def states_for(self, layout: SystemLayout) -> ValuedSet:
-        """Return a layout's states with their default initial values.
-
-        Parameters
-        ----------
-        layout
-            The layout of a specialisation of this system.
-        """
-        return _remember(
-            self._state_sets,
-            layout,
-            lambda: ValuedSet(
-                [
-                    State(
-                        state.name,
-                        state.unit,
-                        self._initial_values.get(state.name, 0.0),
-                    )
-                    for state in layout.states
-                ]
-            ),
-        )
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
         """Names of the parameters array's rows, in order."""
-        return self.compile_settings.swept_parameters
+        return self._specialiser.swept_parameters
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
         """Values compiled into the code, keyed by parameter name."""
-        return self.compile_settings.fixed_parameter_values
+        return self._specialiser.fixed_parameter_values
 
     @property
     def parameters(self) -> ValuedSet:
@@ -467,12 +337,26 @@ class BaseODE(CUDAFactory):
     @property
     def compiled_parameters(self) -> ParameterSet:
         """Every parameter as the system compiles it."""
-        return self.compile_settings.parameters
+        return self._specialiser.compiled_parameters
+
+    @property
+    def swept_set(self) -> ValuedSet:
+        """The swept parameters with their defaults, in row order."""
+        return self._parameters.subset(self.swept_parameters)
 
     @property
     def states(self) -> ValuedSet:
         """Every state with its default initial value."""
-        return self.states_for(self.compile_settings.layout)
+        return ValuedSet(
+            [
+                State(
+                    state.name,
+                    state.unit,
+                    self._initial_values.get(state.name, 0.0),
+                )
+                for state in self.layout.states
+            ]
+        )
 
     @property
     def initial_values(self) -> ValuedSet:
@@ -482,32 +366,32 @@ class BaseODE(CUDAFactory):
     @property
     def layout(self) -> SystemLayout:
         """The variables in each device buffer, in buffer order."""
-        return self.compile_settings.layout
+        return self._specialiser.layout
 
     @property
     def observables(self) -> VariableSet:
         """The observables the system records."""
-        return self.compile_settings.observables
+        return self.layout.observables
 
     @property
     def num_states(self) -> int:
         """Number of state variables."""
-        return self.compile_settings.num_states
+        return self.layout.states.n
 
     @property
     def num_observables(self) -> int:
         """Number of observable variables."""
-        return self.compile_settings.num_observables
+        return self.layout.observables.n
 
     @property
     def num_parameters(self) -> int:
         """Number of parameters."""
-        return self.compile_settings.num_parameters
+        return self._parameters.n
 
     @property
     def num_drivers(self) -> int:
         """Length of the drivers buffer the device functions read."""
-        return self.compile_settings.num_drivers
+        return self.layout.num_drivers
 
     @property
     def driver_derivatives(self) -> Tuple[Tuple[int, int], ...]:
@@ -516,12 +400,12 @@ class BaseODE(CUDAFactory):
         The derivatives follow the drivers in the drivers buffer, in
         this order.
         """
-        return self.compile_settings.driver_derivatives
+        return self.layout.driver_derivatives
 
     @property
-    def sizes(self):
+    def sizes(self) -> SystemSizes:
         """System component sizes cached for solvers."""
-        return self.compile_settings.sizes
+        return SystemSizes.of_layout(self.layout)
 
     def __getstate__(self) -> dict:
         """Return the pickled state without the build cache."""

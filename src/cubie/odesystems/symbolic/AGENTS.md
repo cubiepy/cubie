@@ -13,7 +13,8 @@ hashing, printing) runs on IR nodes. This top level holds the user-facing system
 the reserved codegen prefix). Equation parsing lives in `parsing/`,
 and every parsed system runs through the structural simplification in `structural/`;
 the CUDA source emitters live in `codegen/`. `SymbolicODE` orchestrates both: parse via
-`parsing.parse_system`, specialise the result for the swept parameters, generate
+`parsing.parse_system`, assemble the result for the compiled parameters through the
+`SystemSpecialiser` child, generate
 `dxdt`/`observables`/solver-helper factories via `codegen`, write them to a per-system module on
 disk, and reload the compiled factories. As the sole concrete `BaseODE` subclass it is the main
 entry point for defining systems — users construct one via `create_ODE_system()` (string / SymPy
@@ -26,7 +27,8 @@ attrs conventions; `BaseODE` (parent, `../AGENTS.md`) for `ODECache`, `config_ha
 | File | Description |
 |------|-------------|
 | `__init__.py` | Star-imports `codegen`, `parsing`, `odefile`, `symbolicODE`, `sym_utils`; declares `__all__ = ["SymbolicODE", "create_ODE_system", "load_cellml_model"]`. |
-| `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, codegen caching, swept parameters, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. |
+| `symbolicODE.py` | `SymbolicODE(BaseODE)` plus `create_ODE_system()`. Owns parsing, the `SystemSpecialiser` child, codegen caching, units, optional Qt GUIs, and `get_solver_helper(request)` which resolves requests through `helper_registry`. `equations`, `user_functions` and `fn_hash` read the child's products. |
+| `specialiser.py` | `SystemSpecialiser(CUDAFactory)`, the child factory of `SymbolicODE`. Its `SpecialiserConfig` holds one compile setting, `compiled_parameters: ParameterSet`; `build()` is `ParsedSystem.assemble(compiled_parameters)` and returns the `SpecialisedSystem` (`layout`, `equations`, `functions`, `fn_hash`, `mass`), which the same-named properties read, assembling on demand. |
 | `helper_registry.py` | Concrete solver-helper roles: one `SolverHelperRole` subclass per role (`LinearOperator`, `NeumannPreconditioner`, `JacobiPreconditioner`, `LuSolve`, `LuPrepareBlocks`, `LuSmoothingSolve`, `Residual`, `InitResidual`, `InitLuSolve` (consistent-initialisation forms, PLAIN-only), `ApplyMass`, `EvaluateInvMassF`, `TimeDerivativeRHS`, internal `PrepareJac`), each declaring capabilities and implementing `generate`; Neumann also implements `validate`. Defines `helper_source_hash` and `helper_member_hash`. |
 | `odefile.py` | `ODEFile` disk cache. Writes generated factory source to `<cache root>/<name>/<name>_<hash10>.py` (root from `cubie.cache_root`; one file per source identity, so switching between sets of swept parameters keeps each one's cached source), hash-guards staleness, checks per-function caching, and imports factories via `importlib`. |
 | `sym_utils.py` | Shared helpers: `hash_system_definition` (SHA-256, order-independent, over the IR pairs' reprs), `RESERVED_CODEGEN_PREFIX`, plus SymPy `topological_sort`/`cse_and_stack`/`prune_unused_assignments` retained for the CPU reference tests (production code uses the IR equivalents in `engine/`). |
@@ -64,25 +66,26 @@ rejects series orders on stacked multi-stage operators. Variants reading `cached
 solve's `a_ij`) fold into the source as literals, keyed into the source hash through the
 role's `folded_args`; factories take `precision` (plus `order` for preconditioners).
 Mass-consuming helpers read
-`compile_settings.mass`, `None` or a 0/1 diagonal: a zero row selects the residual form,
+`system.mass`, `None` or a 0/1 diagonal: a zero row selects the residual form,
 an identity row the plain form.
 
 ## Swept and fixed parameters
-Fixed parameter values are substituted into the equations as IR literals at the start
-of code generation (`parsing/parsed_system.py`). Generated source never names a fixed
-parameter, and device functions capture no values. Swept parameters stay symbols and are
-read from the parameters array. `SymbolicODE(parsed_system, precision,
-swept_parameters=...)` specialises once, for the swept parameters it is given;
-`create_ODE_system`, `SymbolicODE.create` and `load_cellml_model` pass `swept_parameters`
-through. `ParsedSystem.specialise` sorts the swept names and lays out the parameters
-array in that order, whatever order the caller lists them in. We name an unnamed
-system from `ParsedSystem.definition_hash`, which leaves out the swept parameters and
-their values, so its generated-code and kernel-cache directories stay the same
-whichever parameters are swept. When the swept names or fixed values change,
-`SymbolicODE._update` rebuilds the equations from `SymbolicODE._parsed_system`:
-substitution, folding, structural simplification and tearing, which can change the state
-layout and mass matrix. All of it goes through one `update_compile_settings`. A live
-solver picks up a change made directly on its system at the next solve.
+`ParsedSystem.assemble` substitutes the fixed parameter values into the equations as IR
+literals before structural simplification (`parsing/parsed_system.py`). Generated source
+never names a fixed parameter, and device functions capture no values. Swept parameters
+stay symbols and are read from the parameters array, in the system's parameter order
+whatever order the caller lists them in. `SymbolicODE(parsed_system, precision,
+swept_parameters=...)` builds its `SystemSpecialiser` with the given names swept and
+every other parameter at its default; `create_ODE_system`, `SymbolicODE.create` and
+`load_cellml_model` pass `swept_parameters` through. We name an unnamed system from
+`ParsedSystem.definition_hash`, which leaves out the swept parameters and their values,
+so its generated-code and kernel-cache directories stay the same whichever parameters
+are swept. `system.set_swept_parameters(names, fixed)` updates the child's
+`compiled_parameters`, and the child assembles the system again on the next read of a
+product: substitution, folding, structural simplification and tearing, which can change
+the state layout and mass matrix. `SymbolicODE.build` then generates code for the new
+equations. A live solver picks up a change made directly on its system at the next
+solve.
 
 ## build() and system identity
 `build()` recomputes the system hash first and switches `self.gen_file` to a fresh
@@ -98,9 +101,8 @@ and function aliases. Equations sort by LHS name, so string and SymPy input hit 
 - Generated files land under `cubie.cache_root.get_cache_root()` (default
   `<cwd>/generated`, read at `ODEFile` construction, relocatable with
   `set_cache_root()`).
-- We build a new `SystemLayout` for every new sweep or fixed value and keep it in
-  `ODEData.layout`, so read `SymbolicODE.layout` again after an update rather than
-  holding an old one. Each change of batch specialises the system again.
+- Every new sweep or fixed value assembles a new `SystemLayout`, so read
+  `SymbolicODE.layout` again after an update rather than holding an old one.
 - Initial values live in one name-to-value dict on the system (`BaseODE._initial_values`),
   covering states simplification has dropped; `system.states` is a view of the layout's
   states with those values.

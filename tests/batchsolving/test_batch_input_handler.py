@@ -25,14 +25,11 @@ def _handle(
     handler, states=None, params=None, kind="combinatorial",
     fix_constant_parameters=False,
 ):
-    """Build a batch's arrays and compile its specialisation, as a
-    solve does."""
-    inits, built, specialisation = handler(
-        states, params, kind, fix_constant_parameters
-    )
-    handler.system.update(specialisation=specialisation)
-    parameters = specialisation.layout.parameters
-    return inits, built, parameters.swept, parameters.fixed
+    """Build a batch's arrays, which sets the system's sweep, and return
+    them with the swept names and fixed values."""
+    inits, built = handler(states, params, kind, fix_constant_parameters)
+    system = handler.system
+    return inits, built, system.swept_parameters, system.fixed_parameter_values
 
 
 def test_unique_cartesian_product_deduplicates(system):
@@ -244,7 +241,7 @@ def test_init_stores_attributes(system):
     """Reads parameters, states and precision from the system."""
     handler = BatchInputHandler(system)
     assert handler.parameters is system.parameters
-    assert handler.states is system.states
+    assert handler.states == system.states
     assert handler.precision == system.precision
 
 
@@ -464,7 +461,7 @@ def test_call_casts_to_precision(input_handler_mutable, system, precision):
 def _assert_cast_to_precision(system, precision):
     """Assert the handler returns C-contiguous arrays at *precision*."""
     handler = BatchInputHandler.from_system(system)
-    inits, params, _ = handler(None, None)
+    inits, params = handler(None, None)
     assert inits.dtype == precision
     assert params.dtype == precision
     assert inits.flags["C_CONTIGUOUS"]
@@ -1189,7 +1186,7 @@ def test_fix_constant_parameters_needs_a_row_per_parameter(
     _sweep_reversed(input_handler_mutable)
     params = np.ones((2, 3), dtype=system.precision)
     with pytest.raises(ValueError, match="a row for every parameter"):
-        input_handler_mutable.specialisation_for(params, True)
+        input_handler_mutable.set_swept_parameters(params, True)
 
 
 def test_fix_constant_parameters_keeps_run_count(
@@ -1244,24 +1241,23 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
         )
 
 
-def test_swept_height_array_runs_the_compiled_specialisation(
+def test_swept_height_array_keeps_the_compiled_parameters(
     input_handler_mutable, system
 ):
     """Keep the values a dict compiled in for a following swept-only
     array."""
+    system = input_handler_mutable.system
     names = list(system.parameters.names)
     _, _, _, dict_fixed = _handle(
         input_handler_mutable,
         params={names[0]: [1.0, 2.0], names[1]: 0.25},
         kind="verbatim",
     )
-    compiled = input_handler_mutable.system.specialisation
+    compiled = system.compiled_parameters
     params = np.ones((1, 4), dtype=system.precision)
-    _, result, specialisation = input_handler_mutable(
-        None, params, "verbatim"
-    )
-    assert specialisation is compiled
-    assert specialisation.layout.parameters.fixed == dict_fixed
+    _, result = input_handler_mutable(None, params, "verbatim")
+    assert system.compiled_parameters is compiled
+    assert system.fixed_parameter_values == dict_fixed
     assert dict_fixed[names[1]] == 0.25
     assert result is params
 
@@ -1270,14 +1266,15 @@ def test_split_into_rows_gives_each_entry_a_row(
     input_handler_mutable, system
 ):
     """A single value gets a row holding it for every run."""
+    system = input_handler_mutable.system
     names = list(system.parameters.names)
-    _, params, specialisation = input_handler_mutable(
+    _, params = input_handler_mutable(
         None,
         {names[0]: [1.0, 2.0, 3.0], names[1]: 0.25},
         "verbatim",
         single_values_as_rows=True,
     )
-    assert specialisation.layout.swept_names == (names[0], names[1])
+    assert system.swept_parameters == (names[0], names[1])
     assert_array_equal(
         params[1], np.full(3, 0.25, dtype=system.precision)
     )

@@ -8,28 +8,25 @@ primary entry point and is usually accessed through
 
 Notes
 -----
-:meth:`BatchInputHandler.split_parameters` reads a parameter input and
-returns the values that vary between runs and a
-:class:`~cubie.odesystems.variables.ParameterSet` saying which parameters
-the batch sweeps and the value it compiles in for every other parameter:
+:meth:`BatchInputHandler.set_swept_parameters` reads a parameter input,
+sets the system's swept parameters and fixed values to match it, and
+returns the values that vary between runs:
 
-- A dict input marks entries with several values as swept, and
-  entries with a single number as fixed. Parameters left out use their
+- A dict input sweeps the entries with several values and compiles in
+  the entries with a single number. Parameters left out keep their
   defaults.
-- An array the same height as the number of parameters currently set
-  swept sets the batch values for those parameters, and every other
-  parameter uses its default.
-- A full-height parameter array, with a row for every parameter, sets
-  every parameter to swept. With ``fix_constant_parameters``, the
-  handler scans it for parameters whose rows are all the same value,
-  and marks those fixed.
-- ``None``, an empty dict, or an empty 1D array uses the default
-  parameters for all runs.
+- An array with a row per parameter the system sweeps now keeps the
+  system as it is compiled and sets the batch values for those rows.
+- A full-height parameter array, with a row for every parameter, sweeps
+  every parameter. With ``fix_constant_parameters``, the handler
+  compiles in every row that holds one value.
+- ``None``, an empty dict, or an empty 1D array compiles every parameter
+  in at its default.
 
-Arrays of any other height raise. Apply the batch to the system before
-you build the arrays, because a fixed value can change which states the
-equations keep. ``BatchInputHandler.__call__`` builds the arrays from
-three arguments:
+Arrays of any other height raise. The handler sets the system's
+parameters before it builds the arrays, because a fixed value can change
+which states the equations keep. ``BatchInputHandler.__call__`` builds
+the arrays from three arguments:
 
 ``states``
     Mapping or array containing state values only. One-dimensional
@@ -74,20 +71,17 @@ Examples
 >>> handler = BatchInputHandler.from_system(system)
 >>> states = {"x": [1.0, 2.0], "y": [0.5, 1.5]}
 >>> parameters = {"p0": [0.1, 0.2], "p1": 3.0}
->>> inits, params, specialisation = handler(
-...     states, parameters, kind="verbatim"
-... )
->>> specialisation.layout.parameters.swept
+>>> inits, params = handler(states, parameters, kind="verbatim")
+>>> system.swept_parameters
 ('p0',)
->>> specialisation.layout.parameters.fixed
+>>> system.fixed_parameter_values
 {'p1': 3.0}
->>> recognised = system.update(specialisation=specialisation)
 >>> print(inits)
 [[1.  2. ]
  [0.5 1.5]]
 >>> print(params)
 [[0.1 0.2]]
->>> inits, params, _ = handler(states, parameters, kind="combinatorial")
+>>> inits, params = handler(states, parameters, kind="combinatorial")
 >>> print(inits.shape, params.shape)
 (2, 8) (1, 8)
 
@@ -147,7 +141,6 @@ from cubie._utils import is_device_array
 from cubie.memory.driver_memory import is_pinned_array
 from cubie.memory import default_memmgr
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.variables import ValuedSet
 
 if TYPE_CHECKING:
@@ -495,19 +488,21 @@ def _views_user_input(array: ndarray, user_input: object) -> bool:
 
 
 class BatchInputHandler:
-    """Turn solve inputs into a specialisation and its input arrays.
+    """Turn solve inputs into the system's sweep and its input arrays.
 
     Parameters
     ----------
     system
-        The system whose specialisations and defaults the handler reads.
+        The system whose sweep the handler sets and whose defaults it
+        reads.
     memory_manager
         Manager that allocates materialised input arrays.
 
     Attributes
     ----------
     system
-        The system whose specialisations and defaults the handler reads.
+        The system whose sweep the handler sets and whose defaults it
+        reads.
     precision
         Floating-point precision for returned arrays.
     memory_manager
@@ -537,7 +532,7 @@ class BatchInputHandler:
     @property
     def swept_set(self) -> ValuedSet:
         """The compiled system's swept parameters with their defaults."""
-        return self.system.swept_set_for(self.system.layout)
+        return self.system.swept_set
 
     @classmethod
     def from_system(
@@ -568,17 +563,17 @@ class BatchInputHandler:
         kind: str = "combinatorial",
         fix_constant_parameters: bool = False,
         single_values_as_rows: bool = False,
-    ) -> tuple[object, object, object]:
-        """Return the input arrays and the specialisation they run on.
+    ) -> tuple[object, object]:
+        """Set the system's sweep for ``parameters`` and return the arrays.
 
         Parameters
         ----------
         initial_values
             ``None``, a dict of state values, or a host or device
-            array with a row per state of the specialisation.
+            array with a row per state of the compiled system.
         parameters
             ``None``, a dict of parameter values, or a host or device
-            array; see :meth:`specialisation_for`.
+            array; see :meth:`set_swept_parameters`.
         kind
             Strategy for grid assembly. ``"combinatorial"`` expands
             all combinations while ``"verbatim"`` preserves pairings.
@@ -592,9 +587,8 @@ class BatchInputHandler:
         Returns
         -------
         tuple
-            ``(inits, params, specialisation)``: the (state, run) and
-            (swept parameter, run) arrays, and the specialisation to
-            compile before running them.
+            ``(inits, params)``: the (state, run) and (swept parameter,
+            run) arrays for the system as it is now compiled.
 
         Notes
         -----
@@ -610,21 +604,18 @@ class BatchInputHandler:
         device array's run count, and a multi-column input must match
         it exactly.
         """
-        specialisation, values = self.specialisation_for(
+        values = self.set_swept_parameters(
             parameters, fix_constant_parameters, single_values_as_rows
         )
-        inits, params = self._build_arrays(
-            initial_values, values, kind, specialisation.layout
-        )
-        return inits, params, specialisation
+        return self._build_arrays(initial_values, values, kind)
 
-    def specialisation_for(
+    def set_swept_parameters(
         self,
         parameters: Optional[Union[Dict, ArrayLike]] = None,
         fix_constant_parameters: bool = False,
         single_values_as_rows: bool = False,
-    ) -> tuple[object, object]:
-        """Return the specialisation a parameter input asks for.
+    ) -> object:
+        """Set the system's sweep to match a parameter input.
 
         Pass ``None``, an empty dict or an empty 1D array to compile
         every parameter in at its default. In a dict, give a parameter
@@ -632,8 +623,8 @@ class BatchInputHandler:
         an array a row per parameter to sweep every parameter, and pass
         ``fix_constant_parameters`` as well to compile in the rows that
         hold one value. Give any other array a row per parameter the
-        system sweeps now, and the handler returns the specialisation
-        the system compiles now.
+        system sweeps now, and the handler leaves the system as it is
+        compiled.
 
         Parameters
         ----------
@@ -647,10 +638,9 @@ class BatchInputHandler:
 
         Returns
         -------
-        tuple
-            ``(specialisation, values)``: the specialisation, and the
-            swept parameters' values as a dict or an array with a row
-            per swept parameter, or ``None`` when nothing is swept.
+        object
+            The swept parameters' values as a dict or an array with a
+            row per swept parameter, or ``None`` when nothing is swept.
 
         Raises
         ------
@@ -662,20 +652,18 @@ class BatchInputHandler:
         """
         system = self.system
         if parameters is None:
-            return system.specialise(), None
+            system.set_swept_parameters(())
+            return None
         if isinstance(parameters, dict):
-            return self._dict_specialisation(
-                parameters, single_values_as_rows
-            )
+            return self._dict_sweep(parameters, single_values_as_rows)
         if is_device_array(parameters):
             if len(parameters.shape) != 2:
                 raise ValueError(
                     f"Device-array params must be 2D in (variable, run) "
                     f"format, got a {len(parameters.shape)}D array."
                 )
-            return self._array_specialisation(parameters.shape[0]), (
-                parameters
-            )
+            self._array_sweep(parameters.shape[0])
+            return parameters
         array = (
             parameters
             if isinstance(parameters, ndarray)
@@ -687,15 +675,17 @@ class BatchInputHandler:
                 f"array."
             )
         if array.size == 0 and array.ndim < 2:
-            return system.specialise(), None
+            system.set_swept_parameters(())
+            return None
         if fix_constant_parameters:
-            return self._constant_rows_specialisation(array)
-        return self._array_specialisation(array.shape[0]), array
+            return self._constant_rows_sweep(array)
+        self._array_sweep(array.shape[0])
+        return array
 
-    def _dict_specialisation(
+    def _dict_sweep(
         self, parameters: Dict, single_values_as_rows: bool
-    ) -> tuple[object, Dict[str, ndarray]]:
-        """Return the specialisation and swept values a dict asks for."""
+    ) -> Optional[Dict[str, ndarray]]:
+        """Set the sweep a dict asks for and return its swept values."""
         names = self.parameters.names
         given = {
             names[self.parameters.get_indices(key)[0]]: np_atleast_1d(value)
@@ -711,28 +701,27 @@ class BatchInputHandler:
                 fixed[name] = float(value[0])
             else:
                 swept[name] = value
-        return self.system.specialise(tuple(swept), fixed), swept or None
+        self.system.set_swept_parameters(tuple(swept), fixed)
+        return swept or None
 
-    def _array_specialisation(self, n_rows: int) -> object:
-        """Return the specialisation for an array with ``n_rows`` rows."""
+    def _array_sweep(self, n_rows: int) -> None:
+        """Set the sweep for an array with ``n_rows`` rows."""
         system = self.system
-        current = system.specialisation
-        n_swept = len(current.layout.swept_names)
+        n_swept = len(system.swept_parameters)
         if n_rows == n_swept:
-            return current
+            return
         if n_rows == self.parameters.n:
-            return system.specialise(self.parameters.names)
+            system.set_swept_parameters(self.parameters.names)
+            return
         raise ValueError(
             f"The parameters array has {n_rows} rows. Give one row per "
             f"swept parameter ({n_swept}) or one per parameter "
             f"({self.parameters.n})."
         )
 
-    def _constant_rows_specialisation(
-        self, array: ndarray
-    ) -> tuple[object, ndarray]:
-        """Return a specialisation with an array's constant rows
-        compiled in, and the rows that vary."""
+    def _constant_rows_sweep(self, array: ndarray) -> ndarray:
+        """Compile in an array's constant rows and return the rows that
+        vary."""
         n_parameters = self.parameters.n
         if array.shape[0] != n_parameters:
             raise ValueError(
@@ -743,7 +732,8 @@ class BatchInputHandler:
         names = self.parameters.names
         grid = array[:, np_newaxis] if array.ndim == 1 else array
         if grid.shape[1] == 0:
-            return self.system.specialise(names), array
+            self.system.set_swept_parameters(names)
+            return array
         cast = grid.astype(self.system.precision)
         uniform = np_all(cast == cast[:, :1], axis=1)
         fixed = {
@@ -752,30 +742,28 @@ class BatchInputHandler:
         }
         keep = np_flatnonzero(~uniform)
         swept = tuple(names[row] for row in keep)
-        specialisation = self.system.specialise(swept, fixed)
+        self.system.set_swept_parameters(swept, fixed)
         if keep.size == len(names):
-            return specialisation, array
-        return specialisation, grid[keep]
+            return array
+        return grid[keep]
 
     def _build_arrays(
         self,
         states: Optional[Union[Dict, ArrayLike]],
         params: Optional[Union[Dict, ArrayLike]],
         kind: str,
-        layout: SystemLayout,
     ) -> tuple[object, object]:
-        """Return the input arrays for a specialisation's layout.
+        """Return the input arrays for the system as it is compiled.
 
         Parameters
         ----------
         states
             Initial-value input.
         params
-            The swept parameters' values from :meth:`specialisation_for`.
+            The swept parameters' values from
+            :meth:`set_swept_parameters`.
         kind
             Strategy for grid assembly.
-        layout
-            The layout to build the arrays for.
 
         Returns
         -------
@@ -783,8 +771,8 @@ class BatchInputHandler:
             The (state, run) and (swept parameter, run) arrays.
         """
         self.precision = self.system.precision
-        swept_set = self.system.swept_set_for(layout)
-        state_set = self.system.states_for(layout)
+        swept_set = self.system.swept_set
+        state_set = self.system.states
 
         device_result = self._process_device_inputs(
             states, params, swept_set, state_set

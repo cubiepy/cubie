@@ -12,7 +12,7 @@ from cubie.batchsolving.SystemInterface import SystemInterface
 def test_init_stores_system_values(system_interface, system):
     """__init__ reads parameters, states and observables from the system."""
     assert system_interface.parameters is system.parameters
-    assert system_interface.states is system.initial_values
+    assert system_interface.states == system.initial_values
     assert system_interface.observables is system.observables
 
 
@@ -20,7 +20,7 @@ def test_from_system_creates_interface(system):
     """from_system wraps system.parameters, initial_values, observables."""
     si = SystemInterface(system)
     assert si.parameters is system.parameters
-    assert si.states is system.initial_values
+    assert si.states == system.initial_values
     assert si.observables is system.observables
 
 

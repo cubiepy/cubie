@@ -680,13 +680,13 @@ class Solver:
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
 
-        inits, params, specialisation = self.input_handler(
+        inits, params = self.input_handler(
             initial_values,
             parameters,
             kind=grid_type,
             fix_constant_parameters=fix_constant_parameters,
         )
-        self._compile_specialisation(specialisation)
+        self.update()
         self.kernel.run(
             inits=inits,
             params=params,
@@ -747,10 +747,10 @@ class Solver:
             Options forwarded to :meth:`update`.
         """
         self.update(**kwargs)
-        specialisation, _ = self.input_handler.specialisation_for(
+        self.input_handler.set_swept_parameters(
             parameters, fix_constant_parameters
         )
-        self._compile_specialisation(specialisation)
+        self.update()
 
         if optimize_candidates:
             run_optimization(
@@ -809,13 +809,13 @@ class Solver:
         ... )
         >>> result = solver.solve(inits, params)  # Uses fast path
         """
-        inits, params, specialisation = self.input_handler(
+        inits, params = self.input_handler(
             initial_values,
             parameters,
             kind=grid_type,
             single_values_as_rows=True,
         )
-        self._compile_specialisation(specialisation)
+        self.update()
         return inits, params
 
     def set_swept_parameters(self, names: Sequence[str]) -> None:
@@ -840,19 +840,7 @@ class Solver:
         ValueError
             If a name repeats.
         """
-        self._compile_specialisation(self.system.specialise(names))
-
-    def _compile_specialisation(self, specialisation: Any) -> None:
-        """Compile the system as ``specialisation`` and update the kernel.
-
-        Parameters
-        ----------
-        specialisation
-            A specialisation of this solver's system.
-        """
-        if specialisation is self.system.specialisation:
-            return
-        self.system.update(specialisation=specialisation)
+        self.system.set_swept_parameters(names)
         self.update()
 
     def calibrate(
@@ -1387,7 +1375,7 @@ class Solver:
         return {
             row: format_time_domain_label(parameter.name, parameter.unit)
             for row, parameter in enumerate(
-                self.system.swept_set_for(self.system.layout)
+                self.system.swept_set
             )
         }
 

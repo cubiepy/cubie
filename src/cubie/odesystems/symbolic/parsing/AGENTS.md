@@ -5,8 +5,9 @@
 ## Purpose
 Front end of the symbolic codegen pipeline. Converts every supported input form —
 newline/iterable equation strings, raw SymPy equations, a Python callable, or a CellML file —
-into a `ParsedSystem`, then specialises it into a `SpecialisedSystem`: the buffer layout, a
-frozen `ParsedEquations` container, the callables and a system hash.
+into a `ParsedSystem`, which `ParsedSystem.assemble` turns into a `SpecialisedSystem` for
+one `ParameterSet`: the buffer layout, a frozen `ParsedEquations` container, the
+callables, a system hash and the mass matrix.
 All input converges on one normalised structural representation (`normalise.py`), folds its
 fixed parameter values in as literals, and assembles through `structural.structural_simplify`
 (`assemble.py`). `parse_system` is the single entry point used by `SymbolicODE.create`
@@ -30,16 +31,18 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 | `function_inspector.py` | AST analysis of a callable ODE. `inspect_ode_function` → `FunctionInspection`; `_OdeAstVisitor` collects state/parameter accesses, assignments (incl. annotated), calls, unrolls `for` (also inside if-branches), synthesises `IfExp` from if/elif/else, rejects unsupported constructs (`while`/`with`/`try`/`match`/nested `def`/comprehensions; branch bodies raise on statements other than assignments and nested `if`/`for`); `AstToSympyConverter` maps AST nodes to SymPy — resolves user-function calls before `KNOWN_FUNCTIONS` (inlining non-device callables), inlines dxdt-named locals, and (in `strict_names` mode) raises on unknown bare names, suggesting the container access when the name is declared. Extra args used only by bare name are `scalar_params` (SciPy `args=` convention), bound to the like-named declared symbol. |
 | `function_parser.py` | `parse_function_input` — bridges `FunctionInspection` to the parser's `(equation_map, funcs, new_params)` triple from the declared state, parameter, driver and observable names: builds the symbol map (container accesses search parameters → drivers, and we bind positional access to each in sorted name order; undeclared attribute/string accesses infer parameters in non-strict mode with `EquationWarning`), emits auxiliary/observable/dxdt equations, inlines `dx = expr; return [dx]` aliases. `infer_function_states` derives state names from dict-return keys or synthesises them for pure positional access when `states` is omitted. |
 
-## parse_system and specialise
+## parse_system and assemble
 `parse_system` returns the `ParsedSystem`, with every parameter left as a symbol
-(`parsed_system.py`). `SymbolicODE` specialises it for its swept parameters;
-`parse_system(...).specialise()` gives the system with every parameter fixed at its
-default. The `SpecialisedSystem` carries `layout`, `equations`,
-`functions` (every callable the generated code may call, by its called name, including
-derivative helpers) and `fn_hash`. The derived mass matrix is
-`equations.mass_matrix` (`None` for solved systems). Assembly runs inside `specialise` after the
-values are substituted, so structure can change with fixed values. Inferred parameters
-join `parsed_system.parameters`.
+(`parsed_system.py`). The `SystemSpecialiser` child of `SymbolicODE` calls
+`ParsedSystem.assemble(parameters)` for the batch's `ParameterSet`;
+`parse_system(...).specialise(swept, values)` builds that set from the declared defaults
+and assembles it, and with no arguments gives the system with every parameter fixed at
+its default. A `SpecialisedSystem` is a `CUDADispatcherCache` holding `layout`,
+`equations`, `functions` (every callable the generated code may call, by its called
+name, including derivative helpers), `fn_hash` and `mass` (a float64 array, `None` for
+solved systems). Structural simplification runs after the values are substituted, so
+structure can change with fixed values. Inferred parameters join
+`parsed_system.parameters`.
 `_detect_input_type` dispatches to `"string"`, `"sympy"` or `"function"`, and every
 pathway goes through `normalise_input`. `strict=False` (default) infers undeclared RHS
 symbols as parameters; `strict=True` requires every RHS symbol declared and refuses a

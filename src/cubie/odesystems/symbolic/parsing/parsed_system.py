@@ -137,8 +137,8 @@ class ParsedSystem:
         Returns
         -------
         SpecialisedSystem
-            The layout, equations, callables and source hash. The
-            derived mass matrix rides on ``equations.mass_matrix``.
+            The layout, equations, callables, source hash and mass
+            matrix.
 
         Raises
         ------

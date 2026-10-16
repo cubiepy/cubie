@@ -82,7 +82,7 @@ class LinearOperator(SolverHelperRole):
             system.equations,
             system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -124,7 +124,7 @@ class NeumannPreconditioner(SolverHelperRole):
     @classmethod
     def validate(cls, system, request):
         """Raise ``ValueError`` when the system carries a mass matrix."""
-        if system.compile_settings.mass is not None:
+        if system.mass is not None:
             raise ValueError(
                 "Neumann preconditioners assume an identity mass "
                 "matrix and cannot precondition a system with torn "
@@ -162,7 +162,7 @@ class JacobiPreconditioner(SolverHelperRole):
             system.equations,
             system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -231,7 +231,7 @@ class LuSolve(SolverHelperRole):
             system.equations,
             system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -276,7 +276,7 @@ class LuPrepareBlocks(SolverHelperRole):
             system.equations,
             system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -321,7 +321,7 @@ class LuSmoothingSolve(SolverHelperRole):
         code, _ = generate_lu_smoothing_solve_code(
             system.equations,
             system.layout,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -345,7 +345,7 @@ class Residual(SolverHelperRole):
             system.equations,
             system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -371,7 +371,7 @@ class InitResidual(SolverHelperRole):
         return generate_init_residual_code(
             system.equations,
             system.layout,
-            M=system.compile_settings.mass,
+            M=system.mass,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
         )
@@ -394,7 +394,7 @@ class InitLuSolve(SolverHelperRole):
             code, _ = generate_init_lu_solve_code(
                 system.equations,
                 system.layout,
-                M=system.compile_settings.mass,
+                M=system.mass,
                 func_name=func_name,
                 operation_ordering=system.operation_ordering,
             )
@@ -422,7 +422,7 @@ class ApplyMass(SolverHelperRole):
         return generate_apply_mass_code(
             system.equations,
             system.layout,
-            M=system.compile_settings.mass,
+            M=system.mass,
             func_name=func_name,
         )
 
@@ -438,7 +438,7 @@ class EvaluateInvMassF(SolverHelperRole):
         return generate_evaluate_inv_mass_f_code(
             system.equations,
             system.layout,
-            M=system.compile_settings.mass,
+            M=system.mass,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
         )

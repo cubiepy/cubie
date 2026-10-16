@@ -23,7 +23,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `BatchSolverKernel.py` | `BatchSolverKernel(CUDAFactory)` — the batch `@cuda.jit` kernel; maps each run to the `SingleIntegratorRun` device loop. Owns the `ArrayInterpolator` as a direct child factory (`driver_interpolator`, filled by the `drivers` setting; `update` refreshes the evaluator settings only when the interpolator's config hash changes; `run()` raises `ValueError` when the system declares drivers and none are given). `build_kernel()` attaches a `CUBIECache` built from the config's `cache` settings and `config_hash` to the dispatcher and keeps it for the flush-on-change path in `_invalidate_cache`. Defines `RunParams` (frozen: duration/warmup/t0/runs + chunk metadata) and `BatchSolverCache`; owns the `InputArrays`/`OutputArrays` managers and memory-manager registration. `compile()` records time parameters and compiles the kernel; `kernel_is_cached()` asks the disk cache instead. The constructor takes one flat dict (`BatchSolverKernel(system, **settings)`): the memory keys, its own config fields and everything the integrator's children take; the driver interpolator takes its keys from the same dict. `update` runs `memory_manager.update`, the interpolator, the integrator, then its own config with the integrator's `loop_fn` and compile flags. |
 | `BatchSolverConfig.py` | `BatchSolverConfig(CUDAFactoryConfig)` — holds `precision`, `loop_fn`, `compile_flags`, `coefficients_shape`, `max_registers`, `kernel_name`, `blocksize` and `auto_performance` (both `eq=False`), and the hash-excluded (`eq=False`) nested `cache: CacheSettings` (`cache_enabled`/`cache_mode`/`max_cache_entries`/`cache_dir`, loose keys in `ALL_CACHE_PARAMETERS`, all part of `ALL_KERNEL_PARAMETERS`); the field's converter accepts the `cache=` shorthand (bool, `"flush_on_change"`, or a directory) and loose keys evolve the nested object like `UnrollFlags`. `ActiveOutputs(_CubieConfigBase)` — booleans for which output arrays are produced, built via `ActiveOutputs.from_compile_flags(...)`. |
 | `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
-| `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's variable sets; resolves labels↔indices, sets the sweep with `set_swept_parameters(names)` and applies a batch's `ParameterSet` with `apply_batch`, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
+| `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's variable sets; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
 | `comparison.py` | `ComparisonRunner(solver, inits, params, duration, settling_time, t0)`: the candidate-timing runner `calibrate` and `optimize` share. Stages the batch on the device once, switches the solver itself between `Candidate`s through `Solver.update` (plus block size and residency) and times each with device-only solves. `compile(candidates)` returns the accepted candidates (a rejected one keeps its error, no time); `time(candidates)` runs the fixed protocol and returns `CandidateTiming`s; `warm()`, `size_batch(candidates, waves)` and `fit_batch(measured, target_ms, grow, shrink)` are the shared warm-up and batch sizing; `rank_timings` ranks by success tier then time; `close` restores the configuration at `open`. |
 | `calibration.py` | `Solver.calibrate` backend: `run_calibration` races `CandidateSpec`s (`algorithm` plus settings) in stages through a `ComparisonRunner` and returns a `CalibrationResult` (winner, ranking, per-candidate `CandidateResult`). Each stage's winner is the top of `rank_timings`; a configuration timed once is recalled by later stages. Sizes the batch at the given duration. |
 | `optimize.py` | `Solver.optimize` backend: `run_optimization` times the solver's `optimisation_candidates(force)` at `launch_candidates(kernel, runs=)` through a `ComparisonRunner` and applies the best `LaunchResult` through `apply_launch`. Ramps the duration toward `target_ms` before sizing the batch. |
@@ -39,23 +39,21 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ## Data flow
 `Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
-effective timing → `_apply_parameters`, where `input_handler.split_parameters` returns the
-batch's `ParameterSet` and `system_interface.apply_batch` applies it to the system →
-`update()` rebuilds the kernel for the re-specialised system → `_run`:
-`input_handler(...)` builds `(n_vars, n_runs)` `inits`/`params` →
+effective timing → `input_handler(initial_values, parameters, ...)`, which calls
+`system.set_swept_parameters(swept, fixed)` for the parameter input and then builds
+`(n_vars, n_runs)` `inits`/`params` against `system.layout` → `update()`, which sees the
+system's settings moved (`kernel.system_config_stale`) and rebuilds the kernel →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
 (which may split the batch into chunks) and launches per chunk. Results return through
 `OutputArrays` → `SolveResult.from_solver`.
 
-We apply the parameters before we build the arrays because a compiled-in value can
+The handler sets the sweep before it builds the arrays because a compiled-in value can
 change which states a DAE keeps, and the initial-values array needs one row per state of
-the system as compiled. `_apply_parameters` warns when the system is a DAE and the input
-compiles in a value that differs from the parameter's default. `compile` splits its
-parameters with `split_parameters` too, and `prepare_grid_arrays` with
-`split_parameters_into_rows`; both apply them through `_apply_parameters`. `calibrate` and
-`optimize` build their grid with `prepare_grid_arrays`, and `ComparisonRunner` times
-plain `solve` calls on the staged arrays.
+the system as compiled. `compile` calls `input_handler.set_swept_parameters` alone, and
+`prepare_grid_arrays` calls the handler with `single_values_as_rows`; both then call
+`update()`. `calibrate` and `optimize` build their grid with `prepare_grid_arrays`, and
+`ComparisonRunner` times plain `solve` calls on the staged arrays.
 
 ## Solver settings
 `__init__` and `update` flatten the settings groups, record `given`, update the system's
@@ -86,14 +84,16 @@ code at a fixed value.
 - With `fix_constant_parameters`, we compile in the rows of an array that hold one value.
 - `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.
 
-`Solver.prepare_grid_arrays` reads its input with `split_parameters_into_rows`, which marks
-every parameter a dict names as swept, so a parameter given a single number has a row
-with that number in every run. A user who wants a value compiled in sets it as the
+`Solver.prepare_grid_arrays` reads its input with `single_values_as_rows`, which sweeps
+every parameter a dict names, so a parameter given a single number has a row with that
+number in every run. A user who wants a value compiled in sets it as the
 parameter's default and leaves it out of the dict. `Solver.compile(parameters)` compiles
 the kernel that a solve with the same parameters would use.
 
 Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
-or a fixed value rebuilds the system and kernel.
+or a fixed value rebuilds the system and kernel; asking for the sweep and values already
+compiled changes nothing, and `BaseODE.set_swept_parameters` decides that by comparing
+keys without building a `ParameterSet`.
 
 ## Teardown and memory pressure
 `Solver.close()` waits for its last run stream, drains staging work and deregisters the

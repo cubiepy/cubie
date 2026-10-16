@@ -75,24 +75,24 @@ class TestSweptParameters:
         assert system.layout.swept_names == ("c0", "k")
 
     def test_fixed_values_are_compiled_in(self, tiny_system):
-        """Compile a specialisation's fixed values in without changing
-        the defaults."""
-        tiny_system.update(
-            specialisation=tiny_system.specialise(("k",), {"c0": 4.0})
-        )
+        """Compile the fixed values of a sweep in without changing the
+        defaults."""
+        tiny_system.set_swept_parameters(("k",), {"c0": 4.0})
         assert tiny_system.fixed_parameter_values == {"c0": 4.0}
         assert tiny_system.parameters.defaults["c0"] == 1.0
 
-    def test_the_compiled_specialisation_keeps_the_build(self, tiny_system):
-        """Keep the build when compiling the current specialisation."""
+    def test_the_compiled_sweep_keeps_the_build(self, tiny_system):
+        """Keep the build when asked for the sweep already compiled."""
         tiny_system.dxdt_fn
-        tiny_system.update(specialisation=tiny_system.specialise())
+        compiled = tiny_system.compiled_parameters
+        tiny_system.set_swept_parameters(())
         assert tiny_system.cache_valid is True
+        assert tiny_system.compiled_parameters is compiled
 
     def test_unknown_swept_name_raises(self, tiny_system):
         """Raise KeyError for a swept name the system does not have."""
         with pytest.raises(KeyError, match="not_a_key"):
-            tiny_system.specialise(("not_a_key",))
+            tiny_system.set_swept_parameters(("not_a_key",))
 
 
 class TestSetDefaultParameters:
@@ -116,9 +116,7 @@ class TestSetDefaultParameters:
 
     def test_new_defaults_drop_the_fixed_values(self, tiny_system):
         """Every fixed parameter compiles in at its default afterwards."""
-        tiny_system.update(
-            specialisation=tiny_system.specialise(("k",), {"c0": 4.0})
-        )
+        tiny_system.set_swept_parameters(("k",), {"c0": 4.0})
         tiny_system.set_default_parameters({"k": 3.0})
         assert tiny_system.fixed_parameter_values == {"c0": 1.0}
 
@@ -128,43 +126,44 @@ class TestSetDefaultParameters:
             tiny_system.set_default_parameters({"not_a_key": 1.0})
 
 
-class TestSpecialise:
-    """Cover the memoised specialisations and variable sets."""
+class TestCompiledParameters:
+    """Cover the compiled parameters and the sets built from them."""
 
-    def test_a_repeated_request_returns_the_same_specialisation(
+    def test_fixing_a_default_compiles_the_same_parameters(
         self, tiny_system
     ):
-        """Return the same object for the same request."""
-        specialisation = tiny_system.specialise(("k",), {"c0": 2.0})
-        assert tiny_system.specialise(("k",), {"c0": 2.0}) is specialisation
-
-    def test_fixing_a_default_returns_the_default_specialisation(
-        self, tiny_system
-    ):
-        """Return the default specialisation for a parameter fixed at
-        its default."""
-        specialisation = tiny_system.specialise(("k",))
-        assert tiny_system.specialise(("k",), {"c0": 1.0}) is specialisation
-
-    def test_specialising_leaves_the_compiled_system(self, tiny_system):
-        """Return a specialisation without compiling it."""
-        compiled = tiny_system.specialisation
+        """Fixing a parameter at its default changes nothing."""
+        tiny_system.set_swept_parameters(("k",))
         tiny_system.dxdt_fn
-        tiny_system.specialise(("k",), {"c0": 2.0})
-        assert tiny_system.specialisation is compiled
+        compiled = tiny_system.compiled_parameters
+        tiny_system.set_swept_parameters(("k",), {"c0": 1.0})
+        assert tiny_system.compiled_parameters is compiled
         assert tiny_system.cache_valid is True
 
-    def test_a_specialisation_outlives_a_new_default(self, tiny_system):
-        """Keep a specialisation keyed on its values through a default
-        change."""
-        specialisation = tiny_system.specialise(("k",), {"c0": 2.0})
-        tiny_system.set_default_parameters({"c0": 3.0})
-        assert tiny_system.specialise(("k",), {"c0": 2.0}) is specialisation
+    def test_the_sweep_reaches_the_config_hash(self, tiny_system):
+        """A new sweep or fixed value changes the system's identity."""
+        hash_default = tiny_system.config_hash
+        tiny_system.set_swept_parameters(("k",))
+        hash_swept = tiny_system.config_hash
+        tiny_system.set_swept_parameters(("k",), {"c0": 2.0})
+        assert hash_swept != hash_default
+        assert tiny_system.config_hash != hash_swept
 
-    def test_new_initial_values_give_a_new_state_set(self, tiny_system):
-        """The state set is reused until an initial value changes."""
-        states = tiny_system.states
-        assert tiny_system.states is states
+    def test_the_layout_assembles_without_compiling(self, tiny_system):
+        """Reading the layout of a new sweep compiles no device code."""
+        tiny_system.dxdt_fn
+        tiny_system.set_swept_parameters(("k",), {"c0": 2.0})
+        assert tiny_system.layout.swept_names == ("k",)
+        assert tiny_system.sizes.swept_parameters == 1
+        assert tiny_system.cache_valid is False
+
+    def test_the_swept_set_follows_the_sweep(self, tiny_system):
+        """The swept set holds the swept parameters with their defaults."""
+        tiny_system.set_swept_parameters(("c0", "k"))
+        assert tiny_system.swept_set.defaults == {"c0": 1.0, "k": 0.5}
+
+    def test_new_initial_values_reach_the_states(self, tiny_system):
+        """The states read the default initial values set on the system."""
         tiny_system.set_initial_values({"x": 4.0})
         assert tiny_system.states.defaults == {"x": 4.0}
 

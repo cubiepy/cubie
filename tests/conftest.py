@@ -1529,7 +1529,7 @@ def batch_input_arrays(
 
     # A copy takes the batch, leaving the session system as it is.
     handler = BatchInputHandler.from_system(system.copy())
-    inits, params, _ = handler(
+    inits, params = handler(
         states_dict, params_dict, kind=batch_settings["kind"]
     )
     return inits, params

@@ -258,7 +258,7 @@ class TestSymbolicODEIntegration:
             precision=np.float64,
             name="dae_test_alias",
         )
-        assert ode.compile_settings.mass is None
+        assert ode.mass is None
         state = np.array([2.0], dtype=np.float64)
         params = np.array([0.5], dtype=np.float64)
         drivers = np.zeros(1, dtype=np.float64)
@@ -274,7 +274,7 @@ class TestSymbolicODEIntegration:
         assert obs[0] == pytest.approx(4.0, abs=1e-13)
 
     def test_torn_dae_mass_matrix_reaches_system(self, torn_dae_system):
-        mass = torn_dae_system.compile_settings.mass
+        mass = torn_dae_system.mass
         assert mass is not None
         assert mass.shape == (2, 2)
         assert mass[0, 0] == 1.0 and mass[1, 1] == 0.0

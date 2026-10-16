@@ -37,16 +37,16 @@ Array = NDArray[np.floating]
 def restoring_values(system):
     """Restore the system's parameters and initial values on exit."""
     parameters = system.parameters
-    specialisation = system.specialisation
+    compiled = system.compiled_parameters
     states = system.states
     try:
         yield system
     finally:
         # Restore the defaults first, because setting defaults
         # recompiles the current swept names and would replace the
-        # specialisation we restore.
+        # compiled parameters we restore.
         system.set_default_parameters(parameters.defaults)
-        system.update(specialisation=specialisation)
+        system.update(compiled_parameters=compiled)
         system.set_initial_values(states.defaults)
 
 

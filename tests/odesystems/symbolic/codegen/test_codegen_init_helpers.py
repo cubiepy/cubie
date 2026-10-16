@@ -27,7 +27,7 @@ def _codegen_inputs(system):
     return (
         system.equations,
         system.layout,
-        system.compile_settings.mass,
+        system.mass,
     )
 
 
