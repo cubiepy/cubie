@@ -101,8 +101,8 @@ and function aliases. Equations sort by LHS name, so string and SymPy input hit 
 - Generated files land under `cubie.cache_root.get_cache_root()` (default
   `<cwd>/generated`, read at `ODEFile` construction, relocatable with
   `set_cache_root()`).
-- Every new sweep or fixed value assembles a new `SystemLayout`, so read
-  `SymbolicODE.layout` again after an update rather than holding an old one.
+- The specialiser assembles a new `SystemLayout` for every new sweep or fixed value, so
+  read `SymbolicODE.layout` again after an update rather than holding an old one.
 - Initial values live in one name-to-value dict on the system (`BaseODE._initial_values`),
   covering states simplification has dropped; `system.states` is a view of the layout's
   states with those values.

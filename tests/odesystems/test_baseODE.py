@@ -132,7 +132,8 @@ class TestCompiledParameters:
     def test_fixing_a_default_compiles_the_same_parameters(
         self, tiny_system
     ):
-        """Fixing a parameter at its default changes nothing."""
+        """Compile the same parameters when a parameter is fixed at its
+        default."""
         tiny_system.set_swept_parameters(("k",))
         tiny_system.dxdt_fn
         compiled = tiny_system.compiled_parameters
@@ -141,7 +142,7 @@ class TestCompiledParameters:
         assert tiny_system.cache_valid is True
 
     def test_the_sweep_reaches_the_config_hash(self, tiny_system):
-        """A new sweep or fixed value changes the system's identity."""
+        """Change config_hash for a new sweep or fixed value."""
         hash_default = tiny_system.config_hash
         tiny_system.set_swept_parameters(("k",))
         hash_swept = tiny_system.config_hash
@@ -150,7 +151,8 @@ class TestCompiledParameters:
         assert tiny_system.config_hash != hash_swept
 
     def test_the_layout_assembles_without_compiling(self, tiny_system):
-        """Reading the layout of a new sweep compiles no device code."""
+        """Assemble the layout of a new sweep without compiling device
+        code."""
         tiny_system.dxdt_fn
         tiny_system.set_swept_parameters(("k",), {"c0": 2.0})
         assert tiny_system.layout.swept_names == ("k",)
@@ -158,12 +160,13 @@ class TestCompiledParameters:
         assert tiny_system.cache_valid is False
 
     def test_the_swept_set_follows_the_sweep(self, tiny_system):
-        """The swept set holds the swept parameters with their defaults."""
+        """Return the swept parameters with their defaults as the swept
+        set."""
         tiny_system.set_swept_parameters(("c0", "k"))
         assert tiny_system.swept_set.defaults == {"c0": 1.0, "k": 0.5}
 
     def test_new_initial_values_reach_the_states(self, tiny_system):
-        """The states read the default initial values set on the system."""
+        """Read the initial values set on the system into the states."""
         tiny_system.set_initial_values({"x": 4.0})
         assert tiny_system.states.defaults == {"x": 4.0}
 

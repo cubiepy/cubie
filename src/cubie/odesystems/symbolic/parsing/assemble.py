@@ -3,9 +3,8 @@
 :func:`assemble_simplified` structurally simplifies a normalised
 system and packages the result as a :class:`SpecialisedSystem`: the
 buffer layout, the surviving states and observables, the
-``ParsedEquations`` and the source hash. ``ParsedEquations.mass_matrix``
-holds the mass matrix of a torn system. Equations are engine IR pairs
-throughout.
+``ParsedEquations``, the source hash and the mass matrix of a torn
+system. Equations are engine IR pairs throughout.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple

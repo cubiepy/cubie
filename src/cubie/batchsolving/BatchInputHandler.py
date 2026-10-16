@@ -12,16 +12,17 @@ Notes
 sets the system's swept parameters and fixed values to match it, and
 returns the values that vary between runs:
 
-- A dict input sweeps the entries with several values and compiles in
-  the entries with a single number. Parameters left out keep their
-  defaults.
-- An array with a row per parameter the system sweeps now keeps the
-  system as it is compiled and sets the batch values for those rows.
-- A full-height parameter array, with a row for every parameter, sweeps
-  every parameter. With ``fix_constant_parameters``, the handler
-  compiles in every row that holds one value.
-- ``None``, an empty dict, or an empty 1D array compiles every parameter
-  in at its default.
+- For a dict, the handler sweeps the entries with several values and
+  compiles in the entries with a single number. Parameters left out
+  keep their defaults.
+- For an array with a row per parameter the system sweeps now, the
+  handler keeps the system as it is compiled and takes the rows as the
+  batch values.
+- For an array with a row for every parameter, the handler sweeps every
+  parameter, or with ``fix_constant_parameters`` compiles in every row
+  that holds one value.
+- For ``None``, an empty dict, or an empty 1D array, the handler
+  compiles every parameter in at its default.
 
 Arrays of any other height raise. The handler sets the system's
 parameters before it builds the arrays, because a fixed value can change

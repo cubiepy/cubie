@@ -142,9 +142,8 @@ class BaseODE(CUDAFactory):
         parameters
             The parameters with their defaults.
         specialiser
-            Child factory whose ``compiled_parameters`` setting says
-            which parameters the system sweeps and the value it compiles
-            in for every other one, and whose products are the
+            Child factory holding the ``compiled_parameters`` setting,
+            every parameter swept or fixed at a value, and building the
             ``layout``, ``mass`` and equations of the system assembled
             for them.
         initial_values
@@ -240,8 +239,8 @@ class BaseODE(CUDAFactory):
         recognised = self.update_compile_settings(updates, silent=True)
         settings = self._specialiser.compile_settings
         recognised |= self._specialiser.update(updates, silent=True)
-        # The generated code embeds the specialiser's products, so a
-        # change to its settings is a change to ours.
+        # We generate code from the specialiser's products, so we
+        # rebuild when its settings change.
         if self._specialiser.compile_settings is not settings:
             self._invalidate_cache()
         return recognised

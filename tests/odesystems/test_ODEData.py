@@ -67,8 +67,8 @@ def test_system_sizes_validates_int(field, bad_value):
 
 
 def test_system_sizes_of_layout_counts_every_buffer():
-    """The sizes of a layout count its states, observables, swept rows,
-    drivers and driver derivatives."""
+    """Count a layout's states, observables, swept rows, drivers and
+    driver derivatives."""
     layout = SystemLayout(
         states=["x", "y"],
         parameters=ParameterSet.build(DECLARED, ["b", "a"]),
