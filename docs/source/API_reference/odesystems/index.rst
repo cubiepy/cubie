@@ -15,7 +15,8 @@ ODE systems
    symbolic_ode
    base_ode
    ode_data
-   system_values
+   variables
+   layout
    system_sizes
    ode_cache
 
@@ -46,7 +47,10 @@ Data containers and caches
 
 * :doc:`ODEData <ode_data>` – captures compile-time metadata such as precision and state
   sizes.
-* :doc:`SystemValues <system_values>` – named-value container for states, parameters and observables.
+* :doc:`Variables <variables>` – the states, parameters and observables a system declares,
+  and the sweep and fixed values of a batch.
+* :doc:`SystemLayout <layout>` – the variables in each device buffer and the parameters
+  as a batch compiles them.
 * :doc:`SystemSizes <system_sizes>` – records shape information for state and observable
   vectors.
 * :doc:`ODECache <ode_cache>` – caches compiled device functions and solver helpers.

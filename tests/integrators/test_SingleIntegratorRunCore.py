@@ -91,7 +91,11 @@ def test_fixed_value_change_replaces_the_step_device_functions(
     dxdt_fn = step.compile_settings.dxdt_fn
     residual_fn = step.solver.compile_settings.residual_fn
     step_fn = step.step_fn
-    system_restored.set_default_parameters({"c0": 0.75})
+    name, value = next(
+        (name, value)
+        for name, value in system_restored.fixed_parameter_values.items()
+    )
+    system_restored.set_default_parameters({name: 2.0 * value + 1.0})
     solver_mutable.update()
     assert step.compile_settings.dxdt_fn is not dxdt_fn
     assert step.solver.compile_settings.residual_fn is not residual_fn

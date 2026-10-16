@@ -52,7 +52,7 @@ def _read_slots(code):
 )
 def test_prepare_fills_every_compacted_slot(
     bare_nonlinear_equations,
-    bare_indexed_bases,
+    bare_layout,
     variant,
     tableau,
     mass,
@@ -62,7 +62,7 @@ def test_prepare_fills_every_compacted_slot(
     coefficients, nodes = tableau
     prepare_code, aux_count = generate_lu_prepare_blocks_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=variant,
         M=mass,
         stage_coefficients=coefficients,
@@ -71,7 +71,7 @@ def test_prepare_fills_every_compacted_slot(
     )
     solve_code, _ = generate_lu_solve_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=variant,
         M=mass,
         stage_coefficients=coefficients,
@@ -85,12 +85,12 @@ def test_prepare_fills_every_compacted_slot(
 
 
 def test_smoothing_reads_within_the_compacted_real_block(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """The smoothing solve reads only slots prepare fills."""
     prepare_code, aux_count = generate_lu_prepare_blocks_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.PREFACTORED_STACKED,
         stage_coefficients=RADAU_A,
         stage_nodes=RADAU_C,
@@ -98,7 +98,7 @@ def test_smoothing_reads_within_the_compacted_real_block(
     )
     smoothing_code, _ = generate_lu_smoothing_solve_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         stage_coefficients=RADAU_A,
         stage_nodes=RADAU_C,
         beta=2.0,
@@ -110,12 +110,12 @@ def test_smoothing_reads_within_the_compacted_real_block(
 
 
 def test_stacked_plan_prunes_zero_and_duplicate_slots(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """The block-transform aux shrinks below the dense layout."""
     _, aux_count = generate_lu_prepare_blocks_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.PREFACTORED_STACKED,
         stage_coefficients=RADAU_A,
         stage_nodes=RADAU_C,
@@ -125,12 +125,12 @@ def test_stacked_plan_prunes_zero_and_duplicate_slots(
 
 
 def test_prepare_stores_reciprocal_diagonals(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Diagonal factor slots hold reciprocals of the raw pivots."""
     prepare_code, _ = generate_lu_prepare_blocks_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.PREFACTORED,
         stage_coefficients=DIRK_A,
         stage_nodes=DIRK_C,

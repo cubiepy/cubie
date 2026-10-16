@@ -394,7 +394,7 @@ class BatchSolverKernel(CUDAFactory):
 
         self.output_arrays.update(self)
 
-        self._known_system_config = system.compile_settings
+        self._known_system_config = self._system_config()
 
     def _setup_memory_manager(
         self, settings: Dict[str, Any]
@@ -1270,7 +1270,7 @@ class BatchSolverKernel(CUDAFactory):
             },
             silent=True,
         )
-        self._known_system_config = self.system.compile_settings
+        self._known_system_config = self._system_config()
         return recognised
 
     def _auto_defaults(self, settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -1616,11 +1616,24 @@ class BatchSolverKernel(CUDAFactory):
 
         return self.single_integrator.system
 
+    def _system_config(self) -> tuple:
+        """Return the system's and its specialiser's settings snapshots."""
+        system = self.system
+        return (
+            system.compile_settings,
+            system.specialiser.compile_settings,
+        )
+
     @property
     def system_config_stale(self) -> bool:
         """``True`` when the system changed outside the update chain."""
 
-        return self.system.compile_settings is not self._known_system_config
+        return any(
+            current is not known
+            for current, known in zip(
+                self._system_config(), self._known_system_config
+            )
+        )
 
     @property
     def algorithm(self) -> str:

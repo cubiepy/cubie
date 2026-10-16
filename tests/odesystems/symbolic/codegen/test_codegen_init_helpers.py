@@ -26,8 +26,8 @@ def _codegen_inputs(system):
     """Return the generator inputs the helper registry passes."""
     return (
         system.equations,
-        system.indices,
-        system.compile_settings.mass,
+        system.layout,
+        system.mass,
     )
 
 
@@ -42,8 +42,8 @@ def _output_lines(code):
 
 def test_init_residual_pins_differential_rows(system):
     """Rows are ``u[i]`` (differential) and ``-f_i`` (algebraic)."""
-    equations, index_map, mass = _codegen_inputs(system)
-    code = generate_init_residual_code(equations, index_map, M=mass)
+    equations, layout, mass = _codegen_inputs(system)
+    code = generate_init_residual_code(equations, layout, M=mass)
     ast.parse(code)
     lines = _output_lines(code)
     assert lines["out[0]"] == "out[0] = u[0]"
@@ -52,8 +52,8 @@ def test_init_residual_pins_differential_rows(system):
 
 def test_init_residual_evaluates_at_base_plus_increment(system):
     """States evaluate at ``base_state + u`` with h and a_ij unused."""
-    equations, index_map, mass = _codegen_inputs(system)
-    code = generate_init_residual_code(equations, index_map, M=mass)
+    equations, layout, mass = _codegen_inputs(system)
+    code = generate_init_residual_code(equations, layout, M=mass)
     assert "base_state[" in code
     assert loaded_name_count(code, "_cubie_codegen_h") == 0
     assert loaded_name_count(code, "_cubie_codegen_a_ij") == 0
@@ -61,9 +61,9 @@ def test_init_residual_evaluates_at_base_plus_increment(system):
 
 def test_init_lu_solve_parses_and_reports_factor_length(system):
     """The LU factory parses and stamps a positive factor length."""
-    equations, index_map, mass = _codegen_inputs(system)
+    equations, layout, mass = _codegen_inputs(system)
     code, lu_nnz = generate_init_lu_solve_code(
-        equations, index_map, M=mass
+        equations, layout, M=mass
     )
     ast.parse(code)
     assert lu_nnz > 0
@@ -73,12 +73,12 @@ def test_init_lu_solve_parses_and_reports_factor_length(system):
 
 def test_init_lu_solve_drops_differential_jacobian_entries(system):
     """The differential row factorises as a bare identity row."""
-    equations, index_map, mass = _codegen_inputs(system)
+    equations, layout, mass = _codegen_inputs(system)
     _, init_nnz = generate_init_lu_solve_code(
-        equations, index_map, M=mass
+        equations, layout, M=mass
     )
     _, full_nnz = generate_lu_solve_code(
-        equations, index_map, M=mass
+        equations, layout, M=mass
     )
     assert init_nnz == 3
     assert full_nnz == 4

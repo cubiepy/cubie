@@ -17,8 +17,8 @@ abstracted through `qtpy` (PyQt6/PyQt5/PySide6/PySide2).
 
 ## SymbolicODE coupling
 - `ParametersEditor` reads `get_parameters_info` and sets edited values as defaults
-  through `set_default_parameters`. `StatesEditor` calls
-  `get_states_info`/`set_initial_value`.
+  through `set_default_parameters`. `StatesEditor` reads `get_states_info` and sets
+  edited values as defaults through `set_initial_values`.
   `SymbolicODE` is imported under `TYPE_CHECKING` only.
 - `PreParseEditor` takes and returns plain dicts; its `result_*` properties are valid
   only after OK, and `edit_pre_parse_dicts` returns its inputs unchanged on cancel.

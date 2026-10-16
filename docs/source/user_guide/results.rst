@@ -38,6 +38,14 @@ Key attributes:
 ``summaries_legend``
    Dictionary mapping row indices to summary labels.
 
+``parameter_legend``
+   Dictionary mapping each row of the solve's parameters array to the
+   swept parameter it held.
+
+``fixed_parameters``
+   The value the solve compiled in for every parameter it didn't
+   sweep.
+
 ``stream``
    The kernel's memory-manager stream the solve ran on — every
    launch and transfer for a solver uses this one stream.  Work
@@ -46,8 +54,10 @@ Key attributes:
 
 Convenience accessors:
 
-- ``result.as_numpy`` --- returns a dict of NumPy arrays.
-- ``result.as_pandas`` --- returns a dict of pandas DataFrames.
+- ``result.as_numpy`` --- returns a dict of NumPy arrays, with the
+  legends and the fixed parameter values.
+- ``result.as_pandas`` --- returns a dict of pandas DataFrames, with
+  the fixed parameter values as a Series.
 - ``result.as_numpy_per_summary`` --- splits summaries by metric type.
 
 Device-Resident Results
@@ -67,7 +77,8 @@ device-array handles::
 
 The result carries ``state``, ``observables``, ``state_summaries``,
 ``observable_summaries``, ``iteration_counters``, ``status_codes``,
-and ``stream``; inactive outputs are ``None``.  The result is a pure
+``stream``, ``parameter_legend`` and ``fixed_parameters``; inactive
+outputs are ``None``.  The result is a pure
 handle container — it performs no stream or memory operations
 itself.  Points to note:
 
@@ -78,8 +89,8 @@ itself.  Points to note:
   you want host results, a normal host solve is the better tool.
 - The handles are views of the solver's reusable output buffers: the
   next ``solve()`` on the same solver overwrites them.
-- Host-side post-processing (legends, NaN masking of failed runs) is
-  skipped.
+- Host-side post-processing (output legends, NaN masking of failed
+  runs) is skipped.
 - The batch must fit in a single chunk.  A run that chunks along the
   run axis raises ``ValueError`` — host arrays are the stitch target
   for chunked transfers.

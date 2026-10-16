@@ -332,9 +332,7 @@ class TestControllerEquivalence:
             step_controller.persistent_local_buffer_size,
             dtype=dtype,
         )
-        base_state = (
-            system.initial_values.values_array.astype(dtype)
-        )
+        base_state = system.initial_values.defaults_array(dtype)
         low_error = dtype(1e-5)
         high_error = dtype(5.0)
         sequence = _sequence_inputs(
@@ -466,9 +464,7 @@ class TestControllerEquivalence:
 
         dtype = precision
         n_states = system.sizes.states
-        prev_state = (
-            system.initial_values.values_array.astype(dtype)
-        )
+        prev_state = system.initial_values.defaults_array(dtype)
         new_state = prev_state + dtype(0.02)
         error_vec = np.full(n_states, dtype(10.0), dtype=dtype)
         local_mem = np.zeros(

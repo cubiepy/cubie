@@ -12,7 +12,8 @@ import uuid
 
 import sympy as sp
 
-from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.codegen import print_cuda
 from cubie.odesystems.symbolic.engine import call, sym
@@ -79,25 +80,20 @@ def test_generate_analytical_jvp_without_cse():
     the jacobian module's memoisation cache cannot serve a CSE'd
     result computed by another test.
     """
-    ib = IndexedBases.from_user_inputs(
-        states=["p", "q"],
-        parameters=["k"],
-        observables=[],
-        drivers=[],
-    )
-    p = ib.states.symbol_map["p"]
-    q = ib.states.symbol_map["q"]
-    k = ib.parameters.symbol_map["k"]
-    dp = ib.dxdt.symbol_map["dp"]
-    dq = ib.dxdt.symbol_map["dq"]
+    layout = SystemLayout(states=("p", "q"), parameters=("k",))
+    p = sp.Symbol("p", real=True)
+    q = sp.Symbol("q", real=True)
+    k = sp.Symbol("k", real=True)
+    dp = sp.Symbol("dp", real=True)
+    dq = sp.Symbol("dq", real=True)
     equations = ParsedEquations.from_equations(
-        [(dp, k * p * q), (dq, k * q * q)], ib
+        [(dp, k * p * q), (dq, k * q * q)], layout
     )
     jvp = generate_analytical_jvp(
         equations,
-        input_order=ib.states.index_map,
-        output_order=ib.dxdt.index_map,
-        observables=ib.observable_symbols,
+        input_order=buffer_maps(layout).state_order,
+        output_order=buffer_maps(layout).dxdt_order,
+        observables=buffer_maps(layout).observable_symbols,
         cse=False,
     )
     # Two outputs produce two jvp[...] assignments.
@@ -152,33 +148,33 @@ def test_print_cuda_nonfloat_derivative_prints_bare():
 # ── dxdt / observables / time-derivative non-CSE ────────────────── #
 
 def test_generate_dxdt_lines_without_cse(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """dxdt lines emit in topological order when CSE is disabled."""
     lines = generate_dxdt_lines(
-        bare_nonlinear_equations, index_map=bare_indexed_bases, cse=False
+        bare_nonlinear_equations, layout=bare_layout, cse=False
     )
     assert any("out[0]" in line for line in lines)
 
 
 def test_generate_observables_lines_without_cse(
-    single_observable_equations, single_observable_indexed_bases
+    single_observable_equations, single_observable_layout
 ):
     """Observable lines emit in topological order when CSE is disabled."""
     lines = generate_observables_lines(
         single_observable_equations,
-        single_observable_indexed_bases,
+        single_observable_layout,
         cse=False,
     )
     assert any("observables[0]" in line for line in lines)
 
 
 def test_generate_time_derivative_without_cse(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Time-derivative factory parses when CSE is disabled."""
     code = generate_time_derivative_fac_code(
-        bare_nonlinear_equations, bare_indexed_bases, cse=False
+        bare_nonlinear_equations, bare_layout, cse=False
     )
     ast.parse(code)
     assert "def time_derivative_rhs(" in code

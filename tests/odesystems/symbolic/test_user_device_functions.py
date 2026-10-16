@@ -144,7 +144,7 @@ def test_nonfloat_function_call_prints_bare(
         {"region", "region_"}
     )
     code = generate_dxdt_fac_code(
-        system.equations, system.indices, "dxdt_factory"
+        system.equations, system.layout, "dxdt_factory"
     )
     assert "precision(cubed(state[0]))" in code
     assert "+ region(state[0])" in code
