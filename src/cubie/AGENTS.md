@@ -88,9 +88,8 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   elementwise, the rest by inequality. `values_hash` covers only eq-participating
   fields, but a replaced `eq=False` callable still rebuilds the consumer.
   Snapshots are sealed: assignment raises, array fields are owned read-only copies,
-  and `SystemValues` containers freeze at the snapshot boundary (structure always;
-  values too for parameters). Updates modify a `copy()` and pass it through the
-  boundary. A subclass `update` documents only its additions.
+  and value objects such as the variable sets are frozen. Updates derive a new object
+  and pass it through the boundary. A subclass `update` documents only its additions.
 - **`config_hash` recurses into child `CUDAFactory` attributes** (direct attributes,
   alphabetical). Attribute names in `_excluded_child_factories` contribute nothing
   to identity (diagnostic services).

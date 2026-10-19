@@ -86,7 +86,7 @@ def test_integration_with_solve_ivp(basic_model):
     assert is_devfunc(basic_model.dxdt_fn)
     assert basic_model.num_states == 1
     # Verify initial values are accessible
-    assert basic_model.states.values_dict is not None
+    assert basic_model.states.defaults is not None
     results = solve_ivp(basic_model, [1.0])
     assert isinstance(results, SolveResult)
 
@@ -94,12 +94,12 @@ def test_integration_with_solve_ivp(basic_model):
 def test_initial_values_from_cellml(beeler_reuter_model):
     """Verify initial values from CellML model are preserved."""
     # Check that initial values were set using defaults dict
-    assert beeler_reuter_model.states.values_dict is not None
-    assert len(beeler_reuter_model.states.values_dict) == 8
+    assert beeler_reuter_model.states.defaults is not None
+    assert len(beeler_reuter_model.states.defaults) == 8
 
     # Initial values should be non-zero (from the model)
     assert any(
-        v != 0 for v in beeler_reuter_model.states.values_dict.values()
+        v != 0 for v in beeler_reuter_model.states.defaults.values()
     )
 
 
@@ -137,7 +137,7 @@ def test_cellml_uses_sympy_pathway(basic_model):
     assert basic_model.num_states == 1
     assert is_devfunc(basic_model.dxdt_fn)
 
-    initial_vals = basic_model.states.values_dict
+    initial_vals = basic_model.states.defaults
     assert len(initial_vals) > 0
 
 
@@ -174,7 +174,7 @@ def test_custom_units_for_symbolic_ode():
 
 def test_numeric_assignments_become_parameters(basic_model):
     """Variables with numeric assignments become fixed parameters."""
-    values = basic_model.parameters.values_dict
+    values = basic_model.parameters.defaults
     assert values["main_a"] == 0.5
     assert basic_model.fixed_parameter_values["main_a"] == 0.5
 
@@ -184,7 +184,7 @@ def test_swept_numeric_assignment_reads_parameters_array(basic_model):
     model = basic_model.copy()
     sweep(model, ["main_a"])
     assert model.layout.swept_names == ("main_a",)
-    assert model.parameters.values_dict["main_a"] == 0.5
+    assert model.parameters.defaults["main_a"] == 0.5
 
 
 def test_non_numeric_algebraic_equations_remain(beeler_reuter_model):
