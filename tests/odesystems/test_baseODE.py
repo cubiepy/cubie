@@ -62,7 +62,7 @@ class TestSweptParameters:
         )
         assert tiny_system.swept_parameters == ("c0", "k")
         assert tiny_system.sizes.swept_parameters == 2
-        assert tiny_system.indices.parameter_names == ["c0", "k"]
+        assert tiny_system.layout.swept_names == ("c0", "k")
 
     def test_fixed_values_are_compiled_in(self, tiny_system):
         """Fixed values are the values the system compiles in."""

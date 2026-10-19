@@ -10,6 +10,7 @@ from cubie.odesystems.symbolic.parsing.cellml import (
 from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
 from cubie._utils import is_devfunc
 from tests._utils import sweep
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
 def test_load_simple_cellml_model(basic_model):
@@ -32,9 +33,9 @@ def test_algebraic_equations_as_observables(beeler_reuter_model):
     ]
 
     # Keys are symbols, so we compare names
-    obs_map = beeler_reuter_model.indices.observables.index_map
+    obs_map = beeler_reuter_model.layout.observable_names
     assert len(obs_map) == 2
-    obs_symbol_names = [str(k) for k in obs_map.keys()]
+    obs_symbol_names = list(obs_map)
     for obs_name in observable_names:
         assert obs_name in obs_symbol_names
 
@@ -85,7 +86,7 @@ def test_integration_with_solve_ivp(basic_model):
     assert is_devfunc(basic_model.dxdt_fn)
     assert basic_model.num_states == 1
     # Verify initial values are accessible
-    assert basic_model.indices.states.defaults is not None
+    assert basic_model.states.values_dict is not None
     results = solve_ivp(basic_model, [1.0])
     assert isinstance(results, SolveResult)
 
@@ -93,12 +94,12 @@ def test_integration_with_solve_ivp(basic_model):
 def test_initial_values_from_cellml(beeler_reuter_model):
     """Verify initial values from CellML model are preserved."""
     # Check that initial values were set using defaults dict
-    assert beeler_reuter_model.indices.states.defaults is not None
-    assert len(beeler_reuter_model.indices.states.defaults) == 8
+    assert beeler_reuter_model.states.values_dict is not None
+    assert len(beeler_reuter_model.states.values_dict) == 8
 
     # Initial values should be non-zero (from the model)
     assert any(
-        v != 0 for v in beeler_reuter_model.indices.states.defaults.values()
+        v != 0 for v in beeler_reuter_model.states.values_dict.values()
     )
 
 
@@ -136,7 +137,7 @@ def test_cellml_uses_sympy_pathway(basic_model):
     assert basic_model.num_states == 1
     assert is_devfunc(basic_model.dxdt_fn)
 
-    initial_vals = basic_model.indices.states.default_values
+    initial_vals = basic_model.states.values_dict
     assert len(initial_vals) > 0
 
 
@@ -182,8 +183,8 @@ def test_swept_numeric_assignment_reads_parameters_array(basic_model):
     """A numeric assignment can be swept."""
     model = basic_model.copy()
     sweep(model, ["main_a"])
-    assert model.indices.parameter_names == ["main_a"]
-    assert model.indices.parameters.defaults["main_a"] == 0.5
+    assert model.layout.swept_names == ("main_a",)
+    assert model.parameters.values_dict["main_a"] == 0.5
 
 
 def test_non_numeric_algebraic_equations_remain(beeler_reuter_model):
@@ -257,8 +258,8 @@ def test_cache_used_on_reload(
     # Verify both ODEs are equivalent
     assert ode1.num_states == ode2.num_states
     assert ode1.fn_hash == ode2.fn_hash
-    assert len(ode1.indices.states.index_map) == len(
-        ode2.indices.states.index_map
+    assert len(buffer_maps(ode1.layout).state_order) == len(
+        buffer_maps(ode2.layout).state_order
     )
 
 
@@ -373,7 +374,7 @@ def test_underscore_component_names_load(cellml_fixtures_dir):
         fix_singularities=False,
     )
     assert model.num_states == 1
-    state_names = [str(s) for s in model.indices.states.index_map]
+    state_names = list(model.layout.state_names)
     assert state_names == ["_main_x"]
 
 
@@ -434,7 +435,7 @@ def test_cache_hit_reads_the_requested_swept_parameters(
     )
     assert unswept.swept_parameters == ()
     assert swept.swept_parameters == ("main_a",)
-    assert swept.indices.parameter_names == ["main_a"]
+    assert swept.layout.swept_names == ("main_a",)
 
 
 def test_parameter_layout_is_canonical(
