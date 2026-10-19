@@ -44,8 +44,8 @@ See Also
 --------
 :mod:`cubie.odesystems.symbolic.codegen`
     Code generation modules that consume these helpers.
-:class:`~cubie.odesystems.symbolic.indexedbasemaps.IndexedBases`
-    Symbol-to-array mapping used alongside these utilities.
+:class:`~cubie.odesystems.layout.SystemLayout`
+    The buffer layout used alongside these utilities.
 """
 
 from hashlib import sha256

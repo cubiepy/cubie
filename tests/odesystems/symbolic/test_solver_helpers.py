@@ -49,6 +49,7 @@ from tests._utils import (
     HODGKIN_HUXLEY_SYSTEM,
     LINEAR_SYSTEM,
 )
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
 def JVPEquations(exprs, **kwargs):
@@ -94,7 +95,7 @@ def _build_operator_factory(system, precision):
         )
         code = generate_linear_operator_code(
             system.equations,
-            system.indices,
+            system.layout,
             M=M,
             func_name=fname,
             beta=beta,
@@ -160,7 +161,7 @@ def prepare_jac_factory(cached_system, precision):
         fname = "prepare_jac_factory"
         code, aux_count = generate_prepare_jac_code(
             cached_system.equations,
-            cached_system.indices,
+            cached_system.layout,
             func_name=fname,
         )
         prep_fac, was_cached = cached_system.gen_file.import_function(
@@ -183,7 +184,7 @@ def cached_operator_factory(cached_system, precision):
         )
         code = generate_linear_operator_code(
             cached_system.equations,
-            cached_system.indices,
+            cached_system.layout,
             variant=HelperVariant.CACHED,
             M=M,
             func_name=fname,
@@ -202,9 +203,9 @@ def cached_operator_factory(cached_system, precision):
 def cached_operator_kernel(cached_system, precision):
     """Kernel applying cached operator to a vector."""
 
-    n_state = len(cached_system.indices.states.index_map)
-    n_params = len(cached_system.indices.parameters.index_map)
-    n_drivers = len(cached_system.indices.drivers.index_map)
+    n_state = len(buffer_maps(cached_system.layout).state_order)
+    n_params = len(cached_system.layout.swept_names)
+    n_drivers = len(buffer_maps(cached_system.layout).driver_order)
 
     def make_kernel(prepare, op, aux_count):
         aux_len = max(aux_count, 1)
@@ -736,7 +737,7 @@ def test_operator_apply_dense(
 def test_operator_apply_fixed_parameters_folded(operator_system):
     """Fixed parameters are literals in emitted source, never bindings."""
     code = generate_linear_operator_code(
-        operator_system.equations, operator_system.indices
+        operator_system.equations, operator_system.layout
     )
     assert "_cubie_codegen_const_" not in code
     assert "constants[" not in code
@@ -768,9 +769,9 @@ def test_cached_operator_apply_dense(
     op = cached_operator_factory(beta, gamma, M)
     kernel = cached_operator_kernel(prepare, op, aux_count)
 
-    state_len = len(cached_system.indices.states.index_map)
-    param_len = max(len(cached_system.indices.parameters.index_map), 1)
-    drv_len = max(len(cached_system.indices.drivers.index_map), 1)
+    state_len = len(buffer_maps(cached_system.layout).state_order)
+    param_len = max(len(cached_system.layout.swept_names), 1)
+    drv_len = max(len(buffer_maps(cached_system.layout).driver_order), 1)
 
     state_values = np.array([0.4, -0.6], dtype=precision)
     state_values = state_values[:state_len]
@@ -844,7 +845,7 @@ def neumann_factory(operator_system, precision):
         )
         code = generate_neumann_preconditioner_code(
             operator_system.equations,
-            operator_system.indices,
+            operator_system.layout,
             func_name=fname,
             beta=beta,
             gamma=gamma,
@@ -904,7 +905,7 @@ def neumann_cached_factory(cached_system, precision):
         )
         code = generate_neumann_preconditioner_code(
             cached_system.equations,
-            cached_system.indices,
+            cached_system.layout,
             variant=HelperVariant.CACHED,
             func_name=fname,
             beta=beta,
@@ -925,9 +926,9 @@ def neumann_cached_factory(cached_system, precision):
 def neumann_cached_kernel(cached_system, precision):
     """Apply cached Neumann preconditioner to a vector."""
 
-    n_state = len(cached_system.indices.states.index_map)
-    n_params = len(cached_system.indices.parameters.index_map)
-    n_drivers = len(cached_system.indices.drivers.index_map)
+    n_state = len(buffer_maps(cached_system.layout).state_order)
+    n_params = len(cached_system.layout.swept_names)
+    n_drivers = len(buffer_maps(cached_system.layout).driver_order)
 
     def make_kernel(prepare, pre, aux_count):
         aux_len = max(aux_count, 1)
@@ -1073,9 +1074,9 @@ def test_neumann_preconditioner_cached_expression(
     pre = neumann_cached_factory(beta, gamma, order)
     kernel = neumann_cached_kernel(prepare, pre, aux_count)
 
-    state_len = len(cached_system.indices.states.index_map)
-    param_len = max(len(cached_system.indices.parameters.index_map), 1)
-    drv_len = max(len(cached_system.indices.drivers.index_map), 1)
+    state_len = len(buffer_maps(cached_system.layout).state_order)
+    param_len = max(len(cached_system.layout.swept_names), 1)
+    drv_len = max(len(buffer_maps(cached_system.layout).driver_order), 1)
 
     state_values = np.array([0.4, -0.6], dtype=precision)
     state_values = state_values[:state_len]
@@ -1151,7 +1152,7 @@ def stage_residual_factory(operator_system, precision):
         )
         code = generate_residual_code(
             operator_system.equations,
-            operator_system.indices,
+            operator_system.layout,
             M=M,
             func_name=fname,
             beta=beta,
@@ -1255,7 +1256,7 @@ def test_solver_helper_preserves_colliding_parameters(
     residual = system.get_solver_helper(
         role="residual", operator_beta=1.0, operator_gamma=1.0
     ).device_function
-    assert system.parameters.values_array.dtype == np.dtype(precision)
+    assert system.precision == precision
     assert system.parameters.values_dict["beta"] == precision(2.5)
     assert system.parameters.values_dict["gamma"] == precision(0.75)
 
@@ -1497,7 +1498,7 @@ def jacobi_factory(cached_system, precision):
         )
         code = generate_jacobi_preconditioner_code(
             cached_system.equations,
-            cached_system.indices,
+            cached_system.layout,
             func_name=fname,
             M=M,
             beta=beta,
@@ -1622,7 +1623,7 @@ def jacobi_zero_diag_factory(operator_system, precision):
     fname = "jacobi_preconditioner_zero_diag"
     code = generate_jacobi_preconditioner_code(
         operator_system.equations,
-        operator_system.indices,
+        operator_system.layout,
         func_name=fname,
     )
     pre_fac, was_cached = operator_system.gen_file.import_function(
@@ -1713,7 +1714,7 @@ def n_stage_jacobi_factory(cached_system, precision):
         fname = f"n_stage_jacobi_factory_{tag}"
         code = generate_jacobi_preconditioner_code(
             cached_system.equations,
-            cached_system.indices,
+            cached_system.layout,
             variant=HelperVariant.STACKED_STAGES,
             stage_coefficients=stage_coefficients,
             stage_nodes=stage_nodes,
@@ -1946,7 +1947,7 @@ def jacobi_cached_factory(cached_system, precision):
         )
         code = generate_jacobi_preconditioner_code(
             cached_system.equations,
-            cached_system.indices,
+            cached_system.layout,
             variant=HelperVariant.CACHED,
             func_name=fname,
             beta=beta,
@@ -2189,9 +2190,9 @@ def system_operator_pair_kernel(system, precision):
     """Kernel comparing cached and at-state operators on ``system``."""
 
     parameter_values = swept_values(system).astype(precision)
-    n_state = len(system.indices.states.index_map)
-    n_params = len(system.indices.parameters.index_map)
-    n_drivers = len(system.indices.drivers.index_map)
+    n_state = len(buffer_maps(system.layout).state_order)
+    n_params = len(system.layout.swept_names)
+    n_drivers = len(buffer_maps(system.layout).driver_order)
 
     def make_kernel(prepare, cached_op, inline_op, aux_count):
         aux_len = max(aux_count, 1)
@@ -2246,9 +2247,9 @@ def system_cached_precond_kernel(system, precision):
     """Kernel applying prepare plus a cached preconditioner on ``system``."""
 
     parameter_values = swept_values(system).astype(precision)
-    n_state = len(system.indices.states.index_map)
-    n_params = len(system.indices.parameters.index_map)
-    n_drivers = len(system.indices.drivers.index_map)
+    n_state = len(buffer_maps(system.layout).state_order)
+    n_params = len(system.layout.swept_names)
+    n_drivers = len(buffer_maps(system.layout).driver_order)
 
     def make_kernel(prepare, pre, aux_count):
         aux_len = max(aux_count, 1)
@@ -2367,7 +2368,7 @@ def test_hh_cached_operator_matches_inline(
     system, system_operator_pair_kernel, precision, tolerance
 ):
     """Cached prepare+operator equals the at-state operator on HH."""
-    n = len(system.indices.states.index_map)
+    n = len(buffer_maps(system.layout).state_order)
 
     prepare_helper = system.get_solver_helper(
         role="prepare_jac",
@@ -2437,7 +2438,7 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     system, system_cached_precond_kernel, precision, tolerance
 ):
     """Cached Jacobi diagonals reading prepare-only nodes match HH."""
-    n = len(system.indices.states.index_map)
+    n = len(buffer_maps(system.layout).state_order)
 
     prepare_helper = system.get_solver_helper(
         role="prepare_jac",

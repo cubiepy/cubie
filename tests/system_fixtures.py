@@ -559,7 +559,7 @@ def build_status_staining_stiff_system(precision: np_dtype) -> BaseODE:
 # from: the interpolated twin is compared against the function twin,
 # so any other difference invalidates the comparison. The driver
 # symbol name is part of the shared contract, because driver settings
-# key off ``system.indices.driver_names``.
+# key off ``system.layout.driver_names``.
 TIME_DRIVER_STATES = {"x": 0.5}
 TIME_FUNCTION_DRIVER_EQUATIONS = ["dx = -x + sin(t)", "obs = x"]
 TIME_ARRAY_DRIVER_EQUATIONS = ["dx = -x + drive", "obs = x"]
