@@ -233,7 +233,7 @@ class ParametersEditor(QDialog):
                 f"{', '.join(invalid)}"
             )
             return
-        defaults = self._ode.parameters.values_dict
+        defaults = self._ode.parameters.defaults
         changed = {
             name: edit.value()
             for name, edit in self._value_edits.items()

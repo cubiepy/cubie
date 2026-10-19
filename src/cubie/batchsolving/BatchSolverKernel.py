@@ -394,7 +394,7 @@ class BatchSolverKernel(CUDAFactory):
 
         self.output_arrays.update(self)
 
-        self._known_system_config = system.compile_settings
+        self._known_system_config = system.config_hash
 
     def _setup_memory_manager(
         self, settings: Dict[str, Any]
@@ -1270,7 +1270,7 @@ class BatchSolverKernel(CUDAFactory):
             },
             silent=True,
         )
-        self._known_system_config = self.system.compile_settings
+        self._known_system_config = self.system.config_hash
         return recognised
 
     def _auto_defaults(self, settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -1620,7 +1620,7 @@ class BatchSolverKernel(CUDAFactory):
     def system_config_stale(self) -> bool:
         """``True`` when the system changed outside the update chain."""
 
-        return self.system.compile_settings is not self._known_system_config
+        return self.system.config_hash != self._known_system_config
 
     @property
     def algorithm(self) -> str:

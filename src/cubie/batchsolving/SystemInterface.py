@@ -1,10 +1,8 @@
 """Convenience interface for accessing system values.
 
-This module provides :class:`SystemInterface`, which wraps
-:class:`cubie.odesystems.SystemValues` instances for parameters, states, and
-observables. It exposes helper methods for converting between user-facing
-labels or indices and internal representations, and sets the swept
-parameters.
+This module provides :class:`SystemInterface`, which reads a system's
+parameter, state and observable sets. It converts between user-facing
+labels and indices.
 
 Published Classes
 -----------------
@@ -19,7 +17,7 @@ Published Classes
 
 See Also
 --------
-:class:`~cubie.odesystems.SystemValues.SystemValues`
+:class:`~cubie.odesystems.variables.VariableSet`
     Underlying keyed parameter container.
 :class:`~cubie.odesystems.baseODE.BaseODE`
     ODE system base class from which interfaces are created.
@@ -46,7 +44,7 @@ from numpy import (
     array as np_array,
 )
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.SystemValues import SystemValues
+from cubie.odesystems.variables import ValuedSet, VariableSet
 
 
 class SystemInterface:
@@ -68,12 +66,26 @@ class SystemInterface:
 
     def __init__(self, system: BaseODE):
         self._system = system
-        self._swept_values = None
 
     @property
-    def parameters(self) -> SystemValues:
-        """Parameter values, read live from the system."""
+    def parameters(self) -> ValuedSet:
+        """Parameters and their defaults, read live from the system."""
         return self._system.parameters
+
+    @property
+    def states(self) -> ValuedSet:
+        """States and their default initial values, read live."""
+        return self._system.initial_values
+
+    @property
+    def observables(self) -> VariableSet:
+        """Observables, read live from the system."""
+        return self._system.observables
+
+    @property
+    def precision(self) -> type:
+        """The system's precision."""
+        return self._system.precision
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
@@ -81,21 +93,9 @@ class SystemInterface:
         return self._system.swept_parameters
 
     @property
-    def swept_values(self) -> SystemValues:
-        """Default values of the swept parameters, in row order."""
-        settings = self._system.compile_settings
-        cached = self._swept_values
-        # Rebuild when the system's settings change.
-        if cached is None or cached[0] is not settings:
-            defaults = settings.parameters.values_dict
-            values = SystemValues(
-                {name: defaults[name] for name in settings.swept_parameters},
-                settings.precision,
-                name="Parameters",
-            )
-            cached = (settings, values)
-            self._swept_values = cached
-        return cached[1]
+    def swept_values(self) -> ValuedSet:
+        """The swept parameters with their defaults, in row order."""
+        return self._system.swept_set
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
@@ -115,50 +115,18 @@ class SystemInterface:
             Names of the parameters read from the parameters array, in
             any order.
         fixed_values
-            Values to compile in for the other parameters. Defaults to
-            their default values.
+            Values to compile in for some of the other parameters. This
+            method compiles every parameter not named here at its
+            default.
 
         Raises
         ------
         KeyError
             If a name is not a parameter of the system.
         ValueError
-            If a name repeats.
+            If a name repeats or also has a fixed value.
         """
-        names = tuple(names)
-        unknown = set(names) - set(self.parameters.names)
-        if unknown:
-            raise KeyError(
-                f"{sorted(unknown)} are not parameters of this system."
-            )
-        if fixed_values is None:
-            defaults = self.parameters.as_float_dict
-            fixed_values = {
-                name: value
-                for name, value in defaults.items()
-                if name not in names
-            }
-        current = self.swept_parameters
-        same_names = len(names) == len(current) and set(names) == set(
-            current
-        )
-        if same_names and dict(fixed_values) == self.fixed_parameter_values:
-            return
-        # Pairs, as update reads a dict value as a settings group.
-        self._system.update(
-            swept_parameters=names,
-            fixed_parameters=tuple(fixed_values.items()),
-        )
-
-    @property
-    def states(self) -> SystemValues:
-        """Initial state values, read live from the system."""
-        return self._system.initial_values
-
-    @property
-    def observables(self) -> SystemValues:
-        """Observable definitions, read live from the system."""
-        return self._system.observables
+        self._system.set_swept_parameters(names, fixed_values)
 
     def state_indices(
         self,
@@ -234,14 +202,14 @@ class SystemInterface:
         return self.parameters.get_indices(keys_or_indices, silent=silent)
 
     def get_labels(
-        self, values_object: SystemValues, indices: ndarray
+        self, values_object: VariableSet, indices: ndarray
     ) -> List[str]:
         """Return labels corresponding to the provided indices.
 
         Parameters
         ----------
         values_object
-            The SystemValues object to retrieve labels from.
+            The variable set to retrieve labels from.
         indices
             A 1D array of integer indices.
 
@@ -267,7 +235,7 @@ class SystemInterface:
             List of state labels corresponding to the provided indices.
         """
         if indices is None:
-            return self.states.names
+            return list(self.states.names)
         return self.get_labels(self.states, indices)
 
     def observable_labels(
@@ -287,7 +255,7 @@ class SystemInterface:
             List of observable labels corresponding to the provided indices.
         """
         if indices is None:
-            return self.observables.names
+            return list(self.observables.names)
         return self.get_labels(self.observables, indices)
 
     def parameter_labels(self, indices: Optional[ndarray] = None) -> List[str]:
@@ -305,7 +273,7 @@ class SystemInterface:
             List of parameter labels corresponding to the provided indices.
         """
         if indices is None:
-            return self.parameters.names
+            return list(self.parameters.names)
         return self.get_labels(self.parameters, indices)
 
     def resolve_variable_labels(
