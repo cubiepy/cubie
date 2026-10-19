@@ -179,7 +179,7 @@ def test_combine_grids_unknown_kind_raises():
 
 def test_extend_grid_tiled_defaults_empty_indices(system):
     """Returns tiled defaults when indices empty."""
-    defaults = system.parameters.values_array
+    defaults = system.parameters.defaults_array(system.precision)
     grid = np.array([[1, 2, 3]])  # placeholder, indices empty
     indices = np.array([], dtype=int)
     result = extend_grid_to_array(grid, indices, defaults)
@@ -190,7 +190,7 @@ def test_extend_grid_tiled_defaults_empty_indices(system):
 
 def test_extend_grid_1d_defaults(system):
     """Returns single-column defaults when grid is 1D."""
-    defaults = system.parameters.values_array
+    defaults = system.parameters.defaults_array(system.precision)
     grid = np.array([99.0])
     indices = np.array([0])
     result = extend_grid_to_array(grid, indices, defaults)
@@ -200,7 +200,7 @@ def test_extend_grid_1d_defaults(system):
 
 def test_extend_grid_shape_mismatch_raises(system):
     """Raises ValueError when grid rows != indices length."""
-    defaults = system.parameters.values_array
+    defaults = system.parameters.defaults_array(system.precision)
     grid = np.array([[1, 2], [3, 4], [5, 6]])  # 3 rows
     indices = np.array([0, 1])  # 2 indices
     with pytest.raises(ValueError, match="Grid shape does not match"):
@@ -209,7 +209,7 @@ def test_extend_grid_shape_mismatch_raises(system):
 
 def test_extend_grid_all_swept(system):
     """Returns grid directly when all indices swept."""
-    defaults = system.parameters.values_array
+    defaults = system.parameters.defaults_array(system.precision)
     n = defaults.shape[0]
     grid = np.arange(n * 3, dtype=float).reshape(n, 3)
     indices = np.arange(n)
@@ -219,7 +219,7 @@ def test_extend_grid_all_swept(system):
 
 def test_extend_grid_all_swept_permuted(system):
     """Scatters rows to their variable indices when all swept."""
-    defaults = system.parameters.values_array
+    defaults = system.parameters.defaults_array(system.precision)
     n = defaults.shape[0]
     grid = np.arange(n * 3, dtype=float).reshape(n, 3)
     indices = np.roll(np.arange(n), 1)
@@ -230,7 +230,7 @@ def test_extend_grid_all_swept_permuted(system):
 
 def test_extend_grid_partial_sweep(system):
     """Creates default array and overwrites swept indices."""
-    defaults = system.parameters.values_array
+    defaults = system.parameters.defaults_array(system.precision)
     grid = np.array([[10, 20, 30]])  # sweep index 0 only
     indices = np.array([0])
     result = extend_grid_to_array(grid, indices, defaults)
@@ -241,12 +241,12 @@ def test_extend_grid_partial_sweep(system):
 
 
 def test_init_stores_attributes(system):
-    """Stores parameters, states, precision from interface."""
+    """Reads parameters, states and precision from the interface."""
     interface = SystemInterface(system)
     handler = BatchInputHandler(interface)
     assert handler.parameters is interface.parameters
-    assert handler.states is interface.states
-    assert handler.precision == interface.parameters.precision
+    assert handler.states == interface.states
+    assert handler.precision == interface.precision
 
 
 def test_from_system_creates_handler(system):
@@ -551,7 +551,7 @@ def test_process_none_returns_defaults(input_handler, system):
         input_handler, None, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (system.sizes.states, 1)
-    assert_allclose(result[:, 0], system.initial_values.values_array)
+    assert_allclose(result[:, 0], system.initial_values.defaults_array(system.precision))
 
 
 def test_process_dict_combinatorial(input_handler, system):
@@ -652,7 +652,7 @@ def test_fill_defaults(input_handler, system):
     result = input_handler._fill_defaults(system.parameters, 5, set())
     assert result.shape == (system.num_parameters, 5)
     for col in range(5):
-        assert_array_equal(result[:, col], system.parameters.values_array)
+        assert_array_equal(result[:, col], system.parameters.defaults_array(system.precision))
 
 
 def test_fast_return_right_sized_matching(input_handler, system, precision):
@@ -756,9 +756,9 @@ def test_call_none_returns_defaults(input_handler_mutable, system):
     )
     assert inits.shape[1] == 1
     assert params.shape == (0, 1)
-    assert_allclose(inits[:, 0], system.initial_values.values_array)
+    assert_allclose(inits[:, 0], system.initial_values.defaults_array(system.precision))
     assert swept == ()
-    assert fixed == system.compile_settings.parameter_values
+    assert fixed == system.parameters.defaults
 
 
 def test_call_verbatim_mismatch_raises(input_handler_mutable, system):
@@ -814,7 +814,7 @@ def test_call_single_param_sweep(input_handler_mutable, system):
     assert params.shape == (1, 50)
     assert_allclose(params[0, :], values, rtol=1e-6)
     assert swept == (param_names[0],)
-    defaults = system.compile_settings.parameter_values
+    defaults = system.parameters.defaults
     assert fixed == {
         name: value
         for name, value in defaults.items()
@@ -1221,7 +1221,7 @@ def test_swept_height_array_keeps_the_compiled_parameters(
     names = list(system.parameters.names)
     fixed = {
         name: value
-        for name, value in system.parameters.as_float_dict.items()
+        for name, value in system.parameters.defaults.items()
         if name != names[0]
     }
     fixed[names[1]] = 0.25
@@ -1261,7 +1261,7 @@ def test_empty_params_sweep_nothing(input_handler_mutable, system, empty):
         input_handler_mutable, params=empty, kind="verbatim"
     )
     assert swept == ()
-    assert fixed == system.compile_settings.parameter_values
+    assert fixed == system.parameters.defaults
     assert params.shape == (0, 1)
 
 

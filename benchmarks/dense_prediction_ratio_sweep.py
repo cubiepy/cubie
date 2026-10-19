@@ -648,7 +648,7 @@ def main():
             # Nothing is swept, so the device functions read no params.
             params = np.zeros(1, dtype=precision)
             state = np.asarray(
-                system.initial_values.values_array, dtype=precision
+                system.initial_values.defaults_array(system.precision), dtype=precision
             ).copy()
             systems[probe_name] = (system, params, state, probe)
         for kind, name, tableau in targets:

@@ -831,10 +831,10 @@ def run_analysis() -> Dict[str, Dict[str, List[StepRecord]]]:
             # Use a single deterministic variant matching the test fixtures:
             # initial values and parameters come from the symbolic system
             print("  Running single deterministic variant (matches test_loop)")
-            initial_state = system.initial_values.values_array.astype(
+            initial_state = system.initial_values.defaults_array(
                 precision, copy=True
             )
-            parameters = system.parameters.values_array.astype(
+            parameters = system.parameters.defaults_array(
                 precision, copy=True
             )
             label = "run1"
