@@ -778,6 +778,8 @@ def test_device_results_match_host(
     assert is_device_array(device.state)
     assert is_device_array(device.status_codes)
     assert device.stream is solver.kernel.stream
+    assert device.parameter_legend == host.parameter_legend
+    assert device.fixed_parameters == host.fixed_parameters
 
     # The documented host-read pattern: synchronize the solve's
     # stream, then copy the handles.
@@ -3225,6 +3227,15 @@ def test_dict_parameters_solve_the_batch(
         for label in solver_mutable.parameter_legend.values()
     ]
     assert legend_names == list(solver_mutable.swept_parameters)
+    assert result.parameter_legend == solver_mutable.parameter_legend
+    assert result.fixed_parameters == solver_mutable.fixed_parameter_values
+    exported = result.as_numpy
+    assert exported["parameter_legend"] == result.parameter_legend
+    assert exported["fixed_parameters"] == result.fixed_parameters
+    assert (
+        result.as_pandas["fixed_parameters"].to_dict()
+        == result.fixed_parameters
+    )
 
 
 @pytest.mark.parametrize("on_device", [False, True], ids=["host", "device"])
