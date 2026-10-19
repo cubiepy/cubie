@@ -43,9 +43,9 @@ def restoring_values(system):
     try:
         yield system
     finally:
-        # Restore the defaults first, because set_default_parameters
-        # recompiles the current swept names; then restore the compiled
-        # parameters.
+        # Restore the defaults first: set_default_parameters
+        # recompiles the current swept names, so we restore the
+        # compiled parameters after it.
         system.set_default_parameters(parameters.defaults)
         system.update(compiled_parameters=compiled)
         system.set_initial_values(states.defaults)
@@ -1399,7 +1399,6 @@ NON_SOLVER_SETTINGS = {
     "n_observables",
     "fix_singularities",
     "voltage_variable",
-    "parameter_input",
     "system_sweep",
 }
 

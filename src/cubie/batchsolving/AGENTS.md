@@ -39,13 +39,23 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ## Data flow
 `Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
-effective timing → `input_handler.split_parameters` picks the swept parameters →
-`set_swept_parameters` sets them on the system → `input_handler(...)` builds
-`(n_vars, n_runs)` `inits`/`params` →
+effective timing → `input_handler(initial_values, parameters, ...)`, which calls
+`system.set_swept_parameters(swept, fixed)` for the parameter input and then builds
+`(n_vars, n_runs)` `inits`/`params` against `system.layout` → `update()`, which sees the
+system's settings moved (`kernel.system_config_stale`) and rebuilds the kernel →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
 (which may split the batch into chunks) and launches per chunk. Results return through
 `OutputArrays` → `SolveResult.from_solver`.
+
+The handler sets the swept parameters before it builds the arrays because a compiled-in
+value can change which states a DAE keeps, and the initial-values array needs one row per
+state of the system as compiled. `system.set_swept_parameters` is the handler's one call
+into the system; it reads the declared parameters and the current swept names before it
+and the layout after it. `compile` calls `input_handler.set_swept_parameters` alone, and
+`prepare_grid_arrays` calls the handler without `fix_constant_parameters`; both then call
+`update()`. `calibrate` and `optimize` build their grid with `prepare_grid_arrays`, and
+`ComparisonRunner` times plain `solve` calls on the staged arrays.
 
 ## Solver settings
 `__init__` and `update` flatten the settings groups, record `given`, update the system's
@@ -60,21 +70,33 @@ logger. `settings_dict()` is the given record plus the logger's level; `copy()` 
 from it on a copied system. Child `update` calls are `silent=True`. New result
 accessors go on `kernel` with a `Solver` property.
 
-A system changed outside the Solver is `kernel.system_config_stale`; the next `update`
+A system changed outside the Solver is `kernel.system_config_stale`, which compares the
+system's `config_hash` with the one the kernel last built against; the next `update`
 pushes the whole effective record so every child re-reads its products.
 
 ## Swept and fixed parameters
-The parameters array has one row per swept parameter. Every other parameter is compiled
-into the code at a fixed value.
-- Dict: entries with several values are swept, in the system's parameter order. Entries
-  with one value are fixed at it, and parameters left out are fixed at their defaults.
-- Array with a row per parameter: every row is swept.
-- Array with a row per swept parameter: the swept and fixed parameters stay as they are.
-- `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
-- `None` or `{}`: every parameter is fixed at its default.
+The parameters array has one row per swept parameter, in parameter-name order;
+`SystemInterface.parameter_legend` labels the rows and `Solver.parameter_legend` passes
+it through. Every other parameter is compiled into the code at a fixed value.
+- A dict sweeps every entry it names, with one value or several, and parameters left
+  out use their defaults.
+- An array with a row per parameter sweeps every parameter.
+- An array with a row per swept parameter sweeps those parameters and keeps the values
+  the system compiled in.
+- With `fix_constant_parameters`, we compile in every dict entry and every row of a
+  full-height array that holds one value.
+- `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.
+
+`Solver.prepare_grid_arrays` gives every parameter a dict names a row, so a parameter
+given a single number has a row with that number in every run. A user who wants a value
+compiled in sets it as the parameter's default and leaves it out of the dict.
+`Solver.compile(parameters, fix_constant_parameters)` compiles the kernel that a solve
+with the same inputs would use.
 
 Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
-or a fixed value rebuilds the system and kernel.
+or a fixed value rebuilds the system and kernel; asking for the swept names and values
+already compiled changes nothing, and `BaseODE.set_swept_parameters` decides that by comparing
+keys without building a `ParameterSet`.
 
 ## Teardown and memory pressure
 `Solver.close()` waits for its last run stream, drains staging work and deregisters the
@@ -89,7 +111,7 @@ staged through the pinned pool; results keep the disk backing until close, and
 ## Grids and variable selection
 `BatchInputHandler` builds `(variable, run)` arrays with the module-level grid builders:
 `combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). `solve_ivp`
-defaults to `"combinatorial"`, `Solver.solve`/`Solver.build_grid` to `"verbatim"`.
+defaults to `"combinatorial"`, `Solver.solve`/`Solver.prepare_grid_arrays` to `"verbatim"`.
 
 For states and observables, `None` = all, `[]` = none, labels plus index kwargs = union.
 `SystemInterface.merge_variable_labels_and_idxs` pops `save_variables`/
@@ -169,7 +191,7 @@ a swept or fixed parameter can change which driver derivatives the reduced equat
   `cubie.memory` (`default_memmgr`, `MemoryManager`, `ArrayRequest`/`ArrayResponse`,
   `chunk_buffer_pool`) + `cubie.buffer_registry`; `cubie.outputhandling` (`OutputCompileFlags`,
   `output_sizes`, `summary_metrics`); `cubie.odesystems` (`BaseODE`, `SymbolicODE`,
-  `ValuedSet`); `cubie.cubie_cache` (`CUBIECache`); `cubie._cudasim_extensions` (`cuda`);
+  `ParameterSet`, `VariableSet`); `cubie.cubie_cache` (`CUBIECache`); `cubie._cudasim_extensions` (`cuda`);
   `cubie.backend`; `cubie._utils`.
 ### External
 - numba-cuda-mlir; `numpy`; `attrs`; optional `pandas` (lazy in `as_pandas`).

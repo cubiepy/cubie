@@ -397,3 +397,44 @@ class TestLiveSolverRespecialisation:
         assert np.array_equal(
             live.time_domain_array, fresh.time_domain_array
         )
+
+    @pytest.mark.parametrize(
+        "solver_settings_override",
+        [SCALED_CS_LIVE_SETTINGS],
+        indirect=True,
+    )
+    def test_solve_value_that_restructures_runs_the_kept_states(
+        self, solver_mutable, system_restored
+    ):
+        """A solve whose fixed value changes the states builds its
+        initial values for the states the equations keep."""
+        assert system_restored.mass is not None
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = solver_mutable.solve(
+                parameters={"Cs": 2e-2},
+                duration=0.01,
+                fix_constant_parameters=True,
+            )
+        assert result.time_domain_array.shape[1] == 3
+        assert np.isfinite(result.time_domain_array).all()
+
+    @pytest.mark.parametrize(
+        "solver_settings_override",
+        [SCALED_CS_LIVE_SETTINGS],
+        indirect=True,
+    )
+    def test_grid_after_a_restructuring_default_has_the_kept_states(
+        self, solver_mutable, system_restored
+    ):
+        """A grid built after a default that changes the states has a
+        row per state the equations keep."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            system_restored.set_default_parameters({"Cs": 2e-2})
+            inits, params = solver_mutable.prepare_grid_arrays()
+        assert inits.shape[0] == len(system_restored.initial_values.names)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            result = solver_mutable.solve(inits, params, duration=0.01)
+        assert result.time_domain_array.shape[1] == 3

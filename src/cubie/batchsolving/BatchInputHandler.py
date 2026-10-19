@@ -8,22 +8,26 @@ primary entry point and is usually accessed through
 
 Notes
 -----
-:meth:`BatchInputHandler.split_parameters` reads a parameter input and
-returns the values to sweep, the swept parameter names and the values to
-compile in for every other parameter:
+:meth:`BatchInputHandler.set_swept_parameters` reads a parameter input,
+sets the system's swept parameters and fixed values to match it, and
+returns the values that vary between runs:
 
-- A dict sweeps entries with several values and fixes entries with one
-  value. Parameters left out are fixed at their defaults.
-- An array with a row per parameter sweeps every row.
-- An array with a row per swept parameter keeps the current swept and
-  fixed parameters.
-- With ``fix_constant_parameters``, an array's rows that hold one value
-  are fixed instead of swept.
-- ``None`` fixes every parameter at its default.
+- For a dict, the handler sweeps every entry, and parameters left out
+  keep their defaults.
+- For an array with a row per parameter the system sweeps now, the
+  handler keeps the system as it is compiled and takes the rows as the
+  batch values.
+- For an array with a row for every parameter, the handler sweeps every
+  parameter.
+- With ``fix_constant_parameters``, the handler compiles in every dict
+  entry and every row of a full-height array that holds one value.
+- For ``None``, an empty dict, or an empty 1D array, the handler
+  compiles every parameter in at its default.
 
-Arrays of any other height raise. Once the swept names are set on the
-system, ``BatchInputHandler.__call__`` builds the arrays from three
-arguments:
+Arrays of any other height raise. The handler sets the system's
+parameters before it builds the arrays, because a fixed value can change
+which states the equations keep. ``BatchInputHandler.__call__`` builds
+the arrays from three arguments:
 
 ``states``
     Mapping or array containing state values only. One-dimensional
@@ -66,22 +70,19 @@ Examples
 ...    parameters = {'p0': 2.0, 'p1': 1.5}
 ... )
 >>> handler = BatchInputHandler.from_system(system)
->>> sweep, swept, fixed = handler.split_parameters(
-...     {"p0": [0.1, 0.2], "p1": 3.0}
-... )
->>> swept, fixed
-(('p0',), {'p1': 3.0})
->>> handler.interface.set_swept_parameters(swept, fixed)
 >>> states = {"x": [1.0, 2.0], "y": [0.5, 1.5]}
->>> inits, params = handler(states=states, params=sweep, kind="verbatim")
+>>> parameters = {"p0": [0.1, 0.2], "p1": 3.0}
+>>> inits, params = handler(states, parameters, kind="verbatim")
+>>> system.swept_parameters
+('p0',)
+>>> system.fixed_parameter_values
+{'p1': 3.0}
 >>> print(inits)
 [[1.  2. ]
  [0.5 1.5]]
 >>> print(params)
 [[0.1 0.2]]
->>> inits, params = handler(
-...     states=states, params=sweep, kind="combinatorial"
-... )
+>>> inits, params = handler(states, parameters, kind="combinatorial")
 >>> print(inits.shape, params.shape)
 (2, 8) (1, 8)
 
@@ -139,7 +140,6 @@ from numpy.typing import ArrayLike
 
 from cubie._utils import is_device_array
 from cubie.memory.driver_memory import is_pinned_array
-from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory import default_memmgr
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.variables import ValuedSet
@@ -198,7 +198,7 @@ def combinatorial_grid(
         scalars or iterables describing sweep values. Value arrays may differ
         in length.
     values_instance
-        :class:`ValuedSet` instance used to resolve indices for the
+        variable set used to resolve indices for the
         provided keys.
     silent
         When ``True`` suppresses warnings about unrecognised keys.
@@ -249,7 +249,7 @@ def verbatim_grid(
         Dictionary keyed by parameter names or indices whose values are
         scalars or iterables describing sweep values.
     values_instance
-        :class:`ValuedSet` instance used to resolve indices for the
+        variable set used to resolve indices for the
         provided keys.
     silent
         When ``True`` suppresses warnings about unrecognised keys.
@@ -263,6 +263,7 @@ def verbatim_grid(
     Notes
     -----
     All value arrays must share the same length so rows stay aligned.
+    We repeat an entry with a single value across every run.
 
     Examples
     --------
@@ -280,16 +281,25 @@ def verbatim_grid(
     lengths = sorted(
         {np_asarray(value).size for value in cleaned_request.values()}
     )
-    if len(lengths) > 1:
+    multi = [length for length in lengths if length > 1]
+    if len(multi) > 1:
         raise ValueError(
             f"For 'verbatim', each entry needs the same number of "
             f"values, but got lengths {lengths}."
         )
+    n_runs = multi[0] if multi else 1
     indices = values_instance.get_indices(
         list(cleaned_request.keys()), silent=silent
     )
     # Build in (variable, run) format: rows are swept variables, columns runs
-    combos = np_asarray([item for item in cleaned_request.values()])
+    combos = np_asarray(
+        [
+            np_repeat(np_asarray(item).ravel(), n_runs)
+            if np_asarray(item).size == 1
+            else np_asarray(item)
+            for item in cleaned_request.values()
+        ]
+    )
     return indices, combos
 
 
@@ -307,7 +317,7 @@ def generate_grid(
         Dictionary keyed by parameter names or indices whose values are
         scalars or iterables describing sweep values.
     values_instance
-        :class:`ValuedSet` instance used to resolve indices for the
+        variable set used to resolve indices for the
         provided keys.
     kind
         Strategy used to assemble the grid. ``"combinatorial"`` expands all
@@ -479,25 +489,22 @@ def _views_user_input(array: ndarray, user_input: object) -> bool:
 
 
 class BatchInputHandler:
-    """Process and validate solver inputs for batch runs.
-
-    The handler converts dictionaries or arrays into solver-ready
-    two-dimensional arrays, classifies input types for optimal
-    processing paths, and validates array shapes and dtypes.
+    """Build a batch's input arrays and set the system's swept parameters
+    to match them.
 
     Parameters
     ----------
-    interface
-        System interface containing parameter and state metadata.
+    system
+        The system the handler sets the swept parameters of and reads
+        the defaults from.
     memory_manager
         Manager that allocates materialised input arrays.
 
     Attributes
     ----------
-    parameters
-        Parameter metadata, read live from ``interface``.
-    states
-        State metadata, read live from ``interface``.
+    system
+        The system the handler sets the swept parameters of and reads
+        the defaults from.
     precision
         Floating-point precision for returned arrays.
     memory_manager
@@ -506,28 +513,13 @@ class BatchInputHandler:
 
     def __init__(
         self,
-        interface: SystemInterface,
+        system: BaseODE,
         memory_manager: "MemoryManager" = default_memmgr,
     ):
-        """Initialise the handler with a system interface."""
-        self.interface = interface
-        self.precision = interface.precision
+        """Initialise the handler for ``system``."""
+        self.system = system
+        self.precision = system.precision
         self.memory_manager = memory_manager
-
-    @property
-    def parameters(self) -> ValuedSet:
-        """Parameter metadata, read live from the interface."""
-        return self.interface.parameters
-
-    @property
-    def states(self) -> ValuedSet:
-        """State metadata, read live from the interface."""
-        return self.interface.states
-
-    @property
-    def swept_values(self) -> ValuedSet:
-        """Swept parameter defaults, read live from the interface."""
-        return self.interface.swept_values
 
     @classmethod
     def from_system(
@@ -535,7 +527,7 @@ class BatchInputHandler:
         system: BaseODE,
         memory_manager: "MemoryManager" = default_memmgr,
     ) -> "BatchInputHandler":
-        """Create a handler from a system model.
+        """Create a handler for ``system``.
 
         Parameters
         ----------
@@ -549,201 +541,246 @@ class BatchInputHandler:
         BatchInputHandler
             Handler configured for ``system``.
         """
-        interface = SystemInterface(system)
-        return cls(interface, memory_manager=memory_manager)
+        return cls(system, memory_manager=memory_manager)
 
     def __call__(
         self,
-        states: Optional[Union[Dict, ArrayLike]] = None,
-        params: Optional[Union[Dict, ArrayLike]] = None,
+        initial_values: Optional[Union[Dict, ArrayLike]] = None,
+        parameters: Optional[Union[Dict, ArrayLike]] = None,
         kind: str = "combinatorial",
-    ) -> tuple[ndarray, ndarray]:
-        """Process user input to generate state and parameter arrays.
+        fix_constant_parameters: bool = False,
+    ) -> tuple[object, object]:
+        """Set the system's swept parameters to match ``parameters`` and
+        return the input arrays.
 
         Parameters
         ----------
-        states
-            Optional dictionary or array describing initial state sweeps.
-        params
-            Values for the swept parameters, from :meth:`split_parameters`.
+        initial_values
+            ``None``, a dict of state values, or a host or device
+            array with a row per state of the compiled system.
+        parameters
+            ``None``, a dict of parameter values, or a host or device
+            array; see :meth:`set_swept_parameters`.
         kind
             Strategy for grid assembly. ``"combinatorial"`` expands
             all combinations while ``"verbatim"`` preserves pairings.
-
-        Returns
-        -------
-        tuple[ndarray, ndarray]
-            Initial state and parameter arrays aligned for batch execution.
-
-        Notes
-        -----
-        Passing ``states`` and ``params`` as arrays treats each as a
-        complete grid. ``kind="combinatorial"`` computes the Cartesian
-        product of both grids. When arrays already describe paired runs,
-        set ``kind`` to ``"verbatim"`` to keep them aligned.
-
-        Device arrays are treated as prebuilt (variable, run) grids
-        and returned with no processing; they must already match the
-        system precision and variable count. A host-side counterpart
-        is paired verbatim: ``None`` or a single-column input is
-        broadcast to the device array's run count, and a multi-column
-        input must match it exactly.
-
-        Drivers never pass through the handler: driver samples flow
-        through ``ArrayInterpolator`` (host coefficients), and a
-        coefficient array handed to ``BatchSolverKernel.run`` directly
-        is validated against the compiled layout by
-        ``InputArrays._attach_device_inputs``.
-        """
-        # Update precision from current system state
-        self.precision = self.interface.precision
-
-        device_result = self._process_device_inputs(states, params)
-        if device_result is not None:
-            return device_result
-
-        fast_result = self._fast_return_arrays(states, params, kind)
-        if fast_result is not None:
-            return fast_result
-
-        # Plan compactly so assembly writes into the final backing.
-        backed = set()
-        states_plan = self._plan_single_input(states, self.states, kind)
-        params_plan = self._plan_single_input(
-            params, self.swept_values, kind
-        )
-        states_array, params_array = self._fill_aligned(
-            states_plan, params_plan, kind, backed
-        )
-
-        # Cast to system precision
-        return self._cast_to_precision(
-            states_array, params_array, states, params, backed
-        )
-
-    def split_parameters(
-        self,
-        params: Optional[Union[Dict, ArrayLike]] = None,
-        fix_constant_parameters: bool = False,
-    ) -> tuple[object, Tuple[str, ...], Dict[str, float]]:
-        """Split a parameter input into swept values and fixed values.
-
-        A dict sweeps entries with several values and fixes entries
-        with one value. Parameters left out are fixed at their
-        defaults. An array with a row per parameter sweeps every row.
-        An array with a row per swept parameter keeps the current
-        swept and fixed parameters. With ``fix_constant_parameters``,
-        a host array's rows that hold one value are fixed instead.
-        ``None`` fixes every parameter at its default.
-
-        Parameters
-        ----------
-        params
-            A dict, a host or device array, or ``None``.
         fix_constant_parameters
-            Compile in the rows of a host parameter array that hold one
-            value.
+            Compile in every dict entry and every row of a full-height
+            parameter array that holds one value.
 
         Returns
         -------
         tuple
-            ``(sweep, swept, fixed)``: the swept values for
-            :meth:`__call__`, their names in row order, and every other
-            parameter's value.
+            ``(inits, params)``: the (state, run) and (swept parameter,
+            run) arrays for the system as it is now compiled.
+
+        Notes
+        -----
+        Pass both inputs as arrays to give each as a complete grid.
+        With ``kind="combinatorial"`` the handler takes the Cartesian
+        product of both grids. Set ``kind`` to ``"verbatim"`` when you
+        have already paired the runs in your arrays.
+
+        Device arrays are used as prebuilt (variable, run) grids with
+        no processing; they must already match the system precision
+        and variable count. A host-side counterpart is paired
+        verbatim: ``None`` or a single-column input is broadcast to the
+        device array's run count, and a multi-column input must match
+        it exactly.
+        """
+        values = self.set_swept_parameters(
+            parameters, fix_constant_parameters
+        )
+        return self._build_arrays(initial_values, values, kind)
+
+    def set_swept_parameters(
+        self,
+        parameters: Optional[Union[Dict, ArrayLike]] = None,
+        fix_constant_parameters: bool = False,
+    ) -> object:
+        """Set the system's swept parameters to match a parameter input.
+
+        Pass ``None``, an empty dict or an empty 1D array to compile
+        every parameter in at its default. Name a parameter in a dict
+        to sweep it, with one value or several. Give an array a row per
+        parameter to sweep every parameter. Pass
+        ``fix_constant_parameters`` with either to compile in each
+        entry or row that holds one value. Give any other array a row
+        per parameter the system sweeps now, and the handler leaves the
+        system as it is compiled.
+
+        Parameters
+        ----------
+        parameters
+            A dict, a host or device array, or ``None``.
+        fix_constant_parameters
+            Compile in every dict entry and every row of a full-height
+            host array that holds one value.
+
+        Returns
+        -------
+        object
+            The swept parameters' values as a dict or an array with a
+            row per swept parameter, or ``None`` when nothing is swept.
 
         Raises
         ------
         ValueError
-            If an array's row count matches neither the swept names nor
-            the system's parameters, or it has more than two
-            dimensions.
+            If an array's row count matches neither the swept
+            parameters nor every parameter, or it has more than two
+            dimensions, or ``fix_constant_parameters`` is given an
+            array without a row per parameter.
         """
-        given = {}
-        if isinstance(params, dict):
-            names = self.parameters.names
-            sweep = {}
-            for key, value in params.items():
-                value = np_atleast_1d(value)
-                name = names[self.parameters.get_indices(key)[0]]
-                if value.size == 1:
-                    given[name] = float(value[0])
-                elif value.size > 1:
-                    sweep[name] = value
-            swept = tuple(name for name in names if name in sweep)
-            sweep = {name: sweep[name] for name in swept}
-        elif params is None:
-            sweep, swept = None, ()
-        elif is_device_array(params):
-            if len(params.shape) != 2:
+        system = self.system
+        if parameters is None:
+            system.set_swept_parameters(())
+            return None
+        if isinstance(parameters, dict):
+            return self._dict_sweep(parameters, fix_constant_parameters)
+        if is_device_array(parameters):
+            if len(parameters.shape) != 2:
                 raise ValueError(
                     f"Device-array params must be 2D in (variable, run) "
-                    f"format, got a {len(params.shape)}D array."
+                    f"format, got a {len(parameters.shape)}D array."
                 )
-            sweep, swept = params, self._array_names(params.shape[0])
-            given = self._current_fixed(swept)
-        else:
-            sweep, swept, given = self._split_array(
-                params, fix_constant_parameters
-            )
-        defaults = self.parameters.defaults
-        fixed = {
-            name: given.get(name, value)
-            for name, value in defaults.items()
-            if name not in swept
-        }
-        return sweep, swept, fixed
-
-    def _split_array(
-        self,
-        params: ArrayLike,
-        fix_constant_parameters: bool,
-    ) -> tuple[Optional[ndarray], Tuple[str, ...], Dict[str, float]]:
-        """Return a host array's swept rows, their names and fixed values."""
-        arr = params if isinstance(params, ndarray) else np_asarray(params)
-        if arr.ndim > 2:
+            self._array_sweep(parameters.shape[0])
+            return parameters
+        array = (
+            parameters
+            if isinstance(parameters, ndarray)
+            else np_asarray(parameters)
+        )
+        if array.ndim > 2:
             raise ValueError(
-                f"Input must be a 1D or 2D array, but got a {arr.ndim}D "
+                f"Input must be a 1D or 2D array, but got a {array.ndim}D "
                 f"array."
             )
-        if arr.size == 0 and arr.ndim < 2:
-            return None, (), {}
-        names = self._array_names(arr.shape[0])
-        given = self._current_fixed(names)
-        grid = arr[:, np_newaxis] if arr.ndim == 1 else arr
-        if not fix_constant_parameters or grid.shape[1] == 0:
-            return arr, names, given
+        if array.size == 0 and array.ndim < 2:
+            system.set_swept_parameters(())
+            return None
+        if fix_constant_parameters:
+            return self._constant_rows_sweep(array)
+        self._array_sweep(array.shape[0])
+        return array
 
-        cast = grid.astype(self.precision)
-        uniform = np_all(cast == cast[:, :1], axis=1)
-        given.update(
-            {
-                names[row]: float(grid[row, 0])
-                for row in np_flatnonzero(uniform)
-            }
-        )
-        keep = np_flatnonzero(~uniform)
-        swept = tuple(names[row] for row in keep)
-        if keep.size == len(names):
-            return arr, swept, given
-        return grid[keep], swept, given
+    def _dict_sweep(
+        self, parameters: Dict, fix_constant_parameters: bool
+    ) -> Optional[Dict[str, ndarray]]:
+        """Set the swept parameters a dict names and return the values
+        that vary between runs."""
+        declared = self.system.parameters
+        names = declared.names
+        given = {
+            names[declared.get_indices(key)[0]]: np_atleast_1d(value)
+            for key, value in parameters.items()
+        }
+        swept = {}
+        fixed = {}
+        for name in names:
+            value = given.get(name)
+            if value is None or value.size == 0:
+                continue
+            if fix_constant_parameters and np_all(value == value.flat[0]):
+                fixed[name] = float(value.flat[0])
+            else:
+                swept[name] = value
+        self.system.set_swept_parameters(tuple(swept), fixed)
+        return swept or None
 
-    def _current_fixed(self, names: Tuple[str, ...]) -> Dict[str, float]:
-        """Return the compiled-in values when ``names`` are the swept names."""
-        if names == self.interface.swept_parameters:
-            return self.interface.fixed_parameter_values
-        return {}
-
-    def _array_names(self, n_rows: int) -> Tuple[str, ...]:
-        """Return the parameter names of an array's rows."""
-        current = self.interface.swept_parameters
-        if n_rows == len(current):
-            return current
-        if n_rows == self.parameters.n:
-            return tuple(self.parameters.names)
+    def _array_sweep(self, n_rows: int) -> None:
+        """Set the swept parameters for an array with ``n_rows`` rows."""
+        system = self.system
+        n_swept = len(system.swept_parameters)
+        n_parameters = system.parameters.n
+        if n_rows == n_swept:
+            return
+        if n_rows == n_parameters:
+            system.set_swept_parameters(system.parameters.names)
+            return
         raise ValueError(
             f"The parameters array has {n_rows} rows. Give one row per "
-            f"swept parameter ({len(current)}) or one per parameter "
-            f"({self.parameters.n})."
+            f"swept parameter ({n_swept}) or one per parameter "
+            f"({n_parameters})."
+        )
+
+    def _constant_rows_sweep(self, array: ndarray) -> ndarray:
+        """Compile in an array's constant rows and return the rows that
+        vary."""
+        n_parameters = self.system.parameters.n
+        if array.shape[0] != n_parameters:
+            raise ValueError(
+                f"fix_constant_parameters needs a parameters array with "
+                f"a row for every parameter ({n_parameters}), but the "
+                f"array has {array.shape[0]} rows."
+            )
+        names = self.system.parameters.names
+        grid = array[:, np_newaxis] if array.ndim == 1 else array
+        if grid.shape[1] == 0:
+            self.system.set_swept_parameters(names)
+            return array
+        cast = grid.astype(self.system.precision)
+        uniform = np_all(cast == cast[:, :1], axis=1)
+        fixed = {
+            names[row]: float(grid[row, 0])
+            for row in np_flatnonzero(uniform)
+        }
+        keep = np_flatnonzero(~uniform)
+        swept = tuple(names[row] for row in keep)
+        self.system.set_swept_parameters(swept, fixed)
+        if keep.size == len(names):
+            return array
+        return grid[keep]
+
+    def _build_arrays(
+        self,
+        states: Optional[Union[Dict, ArrayLike]],
+        params: Optional[Union[Dict, ArrayLike]],
+        kind: str,
+    ) -> tuple[object, object]:
+        """Return the input arrays for the system as it is compiled.
+
+        Parameters
+        ----------
+        states
+            Initial-value input.
+        params
+            The swept parameters' values from
+            :meth:`set_swept_parameters`.
+        kind
+            Strategy for grid assembly.
+
+        Returns
+        -------
+        tuple
+            The (state, run) and (swept parameter, run) arrays.
+        """
+        self.precision = self.system.precision
+        swept_set = self.system.swept_set
+        state_set = self.system.states
+
+        device_result = self._process_device_inputs(
+            states, params, swept_set, state_set
+        )
+        if device_result is not None:
+            return device_result
+
+        fast_result = self._fast_return_arrays(
+            states, params, kind, swept_set, state_set
+        )
+        if fast_result is not None:
+            return fast_result
+
+        # Work out each input's run count before building any grid, so
+        # we allocate the destination once at the combined size and
+        # write both grids straight into it.
+        backed = set()
+        states_plan = self._plan_single_input(states, state_set, kind)
+        params_plan = self._plan_single_input(params, swept_set, kind)
+        states_array, params_array = self._fill_aligned(
+            states_plan, params_plan, kind, backed, swept_set, state_set
+        )
+        return self._cast_to_precision(
+            states_array, params_array, states, params, backed
         )
 
     def _validate_device_array(
@@ -795,6 +832,8 @@ class BatchInputHandler:
         self,
         states: Optional[Union[ArrayLike, Dict]],
         params: Optional[Union[ArrayLike, Dict]],
+        swept_set: ValuedSet,
+        state_set: ValuedSet,
     ) -> Optional[tuple]:
         """Pass device arrays through, pairing any host counterpart.
 
@@ -804,6 +843,10 @@ class BatchInputHandler:
             Initial-state input, possibly a device array.
         params
             Swept parameter values, possibly a device array.
+        swept_set
+            The swept parameters with their defaults.
+        state_set
+            The states with their default initial values.
 
         Returns
         -------
@@ -833,11 +876,9 @@ class BatchInputHandler:
             return None
 
         if states_is_device:
-            self._validate_device_array(states, self.states, "states")
+            self._validate_device_array(states, state_set, "states")
         if params_is_device:
-            self._validate_device_array(
-                params, self.swept_values, "params"
-            )
+            self._validate_device_array(params, swept_set, "params")
 
         if states_is_device and params_is_device:
             if states.shape[1] != params.shape[1]:
@@ -852,12 +893,12 @@ class BatchInputHandler:
         if states_is_device:
             device_arr = states
             other = params
-            other_values = self.swept_values
+            other_values = swept_set
             other_label = "params"
         else:
             device_arr = params
             other = states
-            other_values = self.states
+            other_values = state_set
             other_label = "states"
         n_runs = device_arr.shape[1]
 
@@ -867,7 +908,7 @@ class BatchInputHandler:
                     f"Dict {other_label} cannot be combined with a "
                     f"device array; build the host side into a "
                     f"(variable, run) array first, e.g. with "
-                    f"Solver.build_grid."
+                    f"Solver.prepare_grid_arrays."
                 )
             other = None
 
@@ -971,7 +1012,7 @@ class BatchInputHandler:
             Input as None (use defaults), dict (expand to grid),
             or array-like (sanitize).
         values_object
-            ValuedSet instance for this category (params or states).
+            Variable set for this category (params or states).
         kind
             Grid type: "combinatorial" or "verbatim".
 
@@ -991,7 +1032,7 @@ class BatchInputHandler:
             values_object has no variables, or a dict grid's row
             count does not match its indices.
         """
-        # The set is empty when the system has no variables of this type.
+        # Handle an empty set (the system has no variables of this type)
         if values_object.empty:
             if input_data is not None:
                 # Check if input is truly empty or has actual data
@@ -1029,7 +1070,8 @@ class BatchInputHandler:
             if indices.size == 0:
                 n_runs = grid.shape[1] if grid.ndim > 1 else 1
                 return {"mode": "defaults", "n_runs": n_runs}
-            # A 1D grid carries no swept columns: defaults, one run.
+            # A 1D grid has no swept columns, so use the defaults for
+            # one run.
             if grid.ndim == 1:
                 return {"mode": "defaults", "n_runs": 1}
             if grid.shape[0] != indices.shape[0]:
@@ -1064,6 +1106,8 @@ class BatchInputHandler:
         params_plan: dict,
         kind: str,
         backed: set,
+        swept_set: ValuedSet,
+        state_set: ValuedSet,
     ) -> tuple[ndarray, ndarray]:
         """Materialise both categories at their aligned run count.
 
@@ -1082,6 +1126,10 @@ class BatchInputHandler:
             Grid type: "combinatorial" or "verbatim".
         backed
             Identity set of destination arrays this call allocated.
+        swept_set
+            The swept parameters with their defaults.
+        state_set
+            The states with their default initial values.
 
         Returns
         -------
@@ -1098,11 +1146,11 @@ class BatchInputHandler:
         n_params = params_plan["n_runs"]
         if kind == "combinatorial":
             states_array = self._fill_category(
-                states_plan, self.states, backed,
+                states_plan, state_set, backed,
                 repeats=n_params, tiles=1,
             )
             params_array = self._fill_category(
-                params_plan, self.swept_values, backed,
+                params_plan, swept_set, backed,
                 repeats=1, tiles=n_states,
             )
             return states_array, params_array
@@ -1124,14 +1172,14 @@ class BatchInputHandler:
                 states_array = states_plan["array"]
             else:
                 states_array = self._fill_category(
-                    states_plan, self.states, backed,
+                    states_plan, state_set, backed,
                     repeats=states_reps, tiles=1,
                 )
             if params_plan["mode"] == "array" and params_reps == 1:
                 params_array = params_plan["array"]
             else:
                 params_array = self._fill_category(
-                    params_plan, self.swept_values, backed,
+                    params_plan, swept_set, backed,
                     repeats=params_reps, tiles=1,
                 )
             return states_array, params_array
@@ -1155,7 +1203,7 @@ class BatchInputHandler:
         plan
             Plan from :meth:`_plan_single_input`.
         values_object
-            ValuedSet instance for this category.
+            Variable set for this category.
         backed
             Identity set recording destination arrays this call
             allocated.
@@ -1288,7 +1336,7 @@ class BatchInputHandler:
         arr
             Input to check.
         values_object
-            ValuedSet instance for dimension comparison.
+            Variable set for dimension comparison.
 
         Returns
         -------
@@ -1357,7 +1405,7 @@ class BatchInputHandler:
         Parameters
         ----------
         values_object
-            ValuedSet instance containing default values.
+            Variable set holding the default values.
         n_runs
             Number of run columns to create.
         backed
@@ -1381,9 +1429,11 @@ class BatchInputHandler:
         states: Optional[Union[ArrayLike, Dict]],
         params: Optional[Union[ArrayLike, Dict]],
         kind: str,
+        swept_set: ValuedSet,
+        state_set: ValuedSet,
     ) -> Optional[Tuple[ndarray, ndarray]]:
         """Attempt fast returns for pre-sized host array inputs."""
-        params_values = self.swept_values
+        params_values = swept_set
         states_input = states
         params_input = params
         states_runs = self._get_run_count(states)
@@ -1391,7 +1441,7 @@ class BatchInputHandler:
         if not (params_values.empty and params is None):
             params_runs = self._get_run_count(params)
 
-        states_ok = self._is_right_sized_array(states, self.states)
+        states_ok = self._is_right_sized_array(states, state_set)
         params_ok = self._is_right_sized_array(params, params_values)
 
         if params_values.empty and params is None:
@@ -1447,7 +1497,7 @@ class BatchInputHandler:
             n_runs = params_runs if params_runs is not None else 1
             column = None
             if states is not None:
-                column = self._sanitise_arraylike(states, self.states)
+                column = self._sanitise_arraylike(states, state_set)
             if kind == "combinatorial":
                 # Mirror branch: the params grid cycles whole.
                 total = n_runs * n_runs
@@ -1463,7 +1513,7 @@ class BatchInputHandler:
                 params_array = params
             if column is None:
                 states_array = self._fill_defaults(
-                    self.states, total, backed
+                    state_set, total, backed
                 )
             else:
                 states_array = self._final_array(

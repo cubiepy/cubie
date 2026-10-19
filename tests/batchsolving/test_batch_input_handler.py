@@ -18,7 +18,6 @@ from cubie.batchsolving.BatchInputHandler import (
     unique_cartesian_product,
     verbatim_grid,
 )
-from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.driver_memory import is_pinned_array
 
 
@@ -26,13 +25,11 @@ def _handle(
     handler, states=None, params=None, kind="combinatorial",
     fix_constant_parameters=False,
 ):
-    """Split the parameters, set the sweep and build the arrays."""
-    values, swept, fixed = handler.split_parameters(
-        params, fix_constant_parameters
-    )
-    handler.interface.set_swept_parameters(swept, fixed)
-    inits, built = handler(states, values, kind)
-    return inits, built, swept, fixed
+    """Build a batch's arrays, which sets the system's sweep, and return
+    them with the swept names and fixed values."""
+    inits, built = handler(states, params, kind, fix_constant_parameters)
+    system = handler.system
+    return inits, built, system.swept_parameters, system.fixed_parameter_values
 
 
 def test_unique_cartesian_product_deduplicates(system):
@@ -241,19 +238,17 @@ def test_extend_grid_partial_sweep(system):
 
 
 def test_init_stores_attributes(system):
-    """Reads parameters, states and precision from the interface."""
-    interface = SystemInterface(system)
-    handler = BatchInputHandler(interface)
-    assert handler.parameters is interface.parameters
-    assert handler.states == interface.states
-    assert handler.precision == interface.precision
+    """Reads parameters, states and precision from the system."""
+    handler = BatchInputHandler(system)
+    assert handler.system is system
+    assert handler.precision == system.precision
 
 
 def test_from_system_creates_handler(system):
-    """Creates handler via SystemInterface.from_system."""
+    """Creates a handler for a system."""
     handler = BatchInputHandler.from_system(system)
-    assert handler.parameters.n == system.num_parameters
-    assert handler.states.n == system.sizes.states
+    assert handler.system.parameters.n == system.num_parameters
+    assert handler.system.states.n == system.sizes.states
 
 
 def test_call_updates_precision(input_handler_mutable, system):
@@ -409,7 +404,8 @@ def test_call_processes_inputs(input_handler_mutable, system):
 
 
 def test_call_dict_order_independent(input_handler_mutable, system):
-    """Full dicts map by key name regardless of insertion order."""
+    """Full dicts map by key name regardless of insertion order, and
+    fix_constant_parameters compiles in every single value."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
     states = {
@@ -425,16 +421,19 @@ def test_call_dict_order_independent(input_handler_mutable, system):
         name: params[name] for name in reversed(param_names)
     }
     inits, _, swept, fixed = _handle(
-        input_handler_mutable, states, params, "verbatim"
+        input_handler_mutable, states, params, "verbatim",
+        fix_constant_parameters=True,
     )
     inits_s, _, swept_s, fixed_s = _handle(
         input_handler_mutable,
-        shuffled_states, shuffled_params, "verbatim"
+        shuffled_states, shuffled_params, "verbatim",
+        fix_constant_parameters=True,
     )
     assert_array_equal(inits_s, inits)
     assert (swept_s, fixed_s) == (swept, fixed)
     expected_inits = np.arange(1.0, len(state_names) + 1.0)
     assert_array_equal(inits[:, 0], expected_inits)
+    assert swept == ()
     assert fixed == {name: value[0] for name, value in params.items()}
 
 
@@ -465,7 +464,7 @@ def test_call_casts_to_precision(input_handler_mutable, system, precision):
 def _assert_cast_to_precision(system, precision):
     """Assert the handler returns C-contiguous arrays at *precision*."""
     handler = BatchInputHandler.from_system(system)
-    inits, params = handler(states=None, params=None)
+    inits, params = handler(None, None)
     assert inits.dtype == precision
     assert params.dtype == precision
     assert inits.flags["C_CONTIGUOUS"]
@@ -551,7 +550,9 @@ def test_process_none_returns_defaults(input_handler, system):
         input_handler, None, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (system.sizes.states, 1)
-    assert_allclose(result[:, 0], system.initial_values.defaults_array(system.precision))
+    assert_allclose(
+        result[:, 0], system.initial_values.defaults_array(system.precision)
+    )
 
 
 def test_process_dict_combinatorial(input_handler, system):
@@ -652,7 +653,9 @@ def test_fill_defaults(input_handler, system):
     result = input_handler._fill_defaults(system.parameters, 5, set())
     assert result.shape == (system.num_parameters, 5)
     for col in range(5):
-        assert_array_equal(result[:, col], system.parameters.defaults_array(system.precision))
+        assert_array_equal(
+            result[:, col], system.parameters.defaults_array(system.precision)
+        )
 
 
 def test_fast_return_right_sized_matching(input_handler, system, precision):
@@ -662,7 +665,11 @@ def test_fast_return_right_sized_matching(input_handler, system, precision):
     states = np.ones((n_s, 3), dtype=precision)
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, params, "verbatim"
+        states,
+        params,
+        "verbatim",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape == (n_s, 3)
@@ -674,7 +681,9 @@ def test_fast_return_none_when_no_path(input_handler, system):
     state_names = list(system.initial_values.names)
     # Dict input => no fast path
     result = input_handler._fast_return_arrays(
-        {state_names[0]: [1, 2]}, {}, "combinatorial"
+        {state_names[0]: [1, 2]}, {}, "combinatorial",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is None
 
@@ -684,7 +693,7 @@ def test_fast_return_states_ok_params_small(input_handler, system, precision):
     n_s = system.sizes.states
     states = np.ones((n_s, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, None, "verbatim"
+        states, None, "verbatim", input_handler.system.swept_set, input_handler.system.states
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -695,7 +704,7 @@ def test_fast_return_params_ok_states_small(input_handler, system, precision):
     n_p = system.sizes.swept_parameters
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        None, params, "verbatim"
+        None, params, "verbatim", input_handler.system.swept_set, input_handler.system.states
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -740,7 +749,9 @@ def test_fill_aligned_combinatorial(input_handler):
     states_plan = {"mode": "array", "n_runs": 2, "array": s}
     params_plan = {"mode": "array", "n_runs": 3, "array": p}
     rs, rp = input_handler._fill_aligned(
-        states_plan, params_plan, "combinatorial", set()
+        states_plan, params_plan, "combinatorial", set(),
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert rs.shape[1] == 6
     assert rp.shape[1] == 6
@@ -756,7 +767,9 @@ def test_call_none_returns_defaults(input_handler_mutable, system):
     )
     assert inits.shape[1] == 1
     assert params.shape == (0, 1)
-    assert_allclose(inits[:, 0], system.initial_values.defaults_array(system.precision))
+    assert_allclose(
+        inits[:, 0], system.initial_values.defaults_array(system.precision)
+    )
     assert swept == ()
     assert fixed == system.parameters.defaults
 
@@ -845,11 +858,9 @@ def test_call_positional_args(input_handler_mutable, system):
 def test_process_empty_values_none_input(system):
     """Returns empty (0,1) array when values_object empty and input None."""
     handler = BatchInputHandler.from_system(system)
-    # Create a mock empty variable set scenario through the handler
-    # The system has parameters, so we test via the actual code path
-    # by checking what happens when values_object.empty is True
-    # This is tested indirectly when system has no params
-    # For coverage: test the method directly with the actual values
+    # The empty-set case needs a system with no parameters, which the
+    # no_param_system tests below cover. Here we check the non-empty
+    # set's path.
     result = assemble_single_category(
         handler, None, system.initial_values, kind="combinatorial"
     )
@@ -860,9 +871,8 @@ def test_process_empty_values_none_input(system):
 def test_process_empty_values_nonempty_raises(system):
     """Raises ValueError when values_object empty but non-empty input."""
     handler = BatchInputHandler.from_system(system)
-    # We cannot easily create an empty variable set without a special system
-    # This is tested via the error path in _plan_single_input
-    # We verify the TypeError path instead for coverage
+    # The no_param_system tests below cover the empty set's error, so
+    # we check the TypeError path here.
     with pytest.raises(TypeError):
         handler._plan_single_input(
             42, system.initial_values, kind="combinatorial"
@@ -894,7 +904,7 @@ def test_process_empty_values_object_empty_input_returns_zero_rows(
     (0, 1) array instead of raising."""
     handler = BatchInputHandler.from_system(no_param_system)
     result = assemble_single_category(
-        handler, empty_params, handler.parameters, kind="combinatorial"
+        handler, empty_params, handler.system.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -905,7 +915,7 @@ def test_process_empty_values_object_none_input_returns_zero_rows(
     """None input against an empty variable set also returns (0, 1)."""
     handler = BatchInputHandler.from_system(no_param_system)
     result = assemble_single_category(
-        handler, None, handler.parameters, kind="combinatorial"
+        handler, None, handler.system.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -922,7 +932,7 @@ def test_process_empty_values_object_nonempty_input_raises(
     handler = BatchInputHandler.from_system(no_param_system)
     with pytest.raises(ValueError, match="no settable variables"):
         handler._plan_single_input(
-            nonempty_params, handler.parameters, kind="combinatorial"
+            nonempty_params, handler.system.parameters, kind="combinatorial"
         )
 
 
@@ -942,7 +952,7 @@ def test_is_right_sized_empty_values_none_arr(no_param_system):
     """None is right-sized when values_object is empty."""
     handler = BatchInputHandler.from_system(no_param_system)
     assert (
-        handler._is_right_sized_array(None, handler.parameters) is True
+        handler._is_right_sized_array(None, handler.system.parameters) is True
     )
 
 
@@ -951,7 +961,7 @@ def test_is_right_sized_empty_values_zero_row_2d_array(no_param_system):
     handler = BatchInputHandler.from_system(no_param_system)
     arr = np.empty((0, 3))
     assert (
-        handler._is_right_sized_array(arr, handler.parameters) is True
+        handler._is_right_sized_array(arr, handler.system.parameters) is True
     )
 
 
@@ -960,11 +970,11 @@ def test_is_right_sized_empty_values_other_input_false(no_param_system):
     values_object."""
     handler = BatchInputHandler.from_system(no_param_system)
     assert (
-        handler._is_right_sized_array([1.0], handler.parameters) is False
+        handler._is_right_sized_array([1.0], handler.system.parameters) is False
     )
     assert (
         handler._is_right_sized_array(
-            np.ones((1, 2)), handler.parameters
+            np.ones((1, 2)), handler.system.parameters
         )
         is False
     )
@@ -991,9 +1001,11 @@ def test_fast_return_empty_params_none_marks_params_ok(no_param_system):
     """When parameters are empty and params is None, params_ok is
     forced True and an empty (0, n_runs) params array is synthesised."""
     handler = BatchInputHandler.from_system(no_param_system)
-    n_s = handler.states.n
+    n_s = handler.system.states.n
     states = np.ones((n_s, 4), dtype=handler.precision)
-    result = handler._fast_return_arrays(states, None, "verbatim")
+    result = handler._fast_return_arrays(
+        states, None, "verbatim", handler.system.swept_set, handler.system.states
+    )
     assert result is not None
     assert result[1].shape == (0, 4)
 
@@ -1008,7 +1020,11 @@ def test_fast_return_states_ok_params_provided_1d_broadcasts(
     states = np.ones((n_s, 3), dtype=precision)
     params = np.arange(n_p, dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, params, "verbatim"
+        states,
+        params,
+        "verbatim",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape[1] == 3
@@ -1025,7 +1041,11 @@ def test_fast_return_params_ok_states_provided_1d_broadcasts(
     params = np.ones((n_p, 3), dtype=precision)
     states = np.arange(n_s, dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, params, "verbatim"
+        states,
+        params,
+        "verbatim",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape[1] == 3
@@ -1099,19 +1119,39 @@ def test_call_dict_inputs_return_pinned_grids(input_handler_mutable, system):
 
 # ── Swept and fixed parameters ────────────────────────────────── #
 
-def test_dict_sweeps_multiple_values_and_fixes_single_values(
-    input_handler_mutable, system
-):
-    """Several values sweep a parameter and one value fixes it."""
+def test_dict_sweeps_every_entry(input_handler_mutable, system):
+    """Every dict entry gets a row, a single value repeated."""
     names = list(system.parameters.names)
     _, params, swept, fixed = _handle(
         input_handler_mutable,
         params={names[0]: [1.0, 2.0, 3.0], names[1]: 4.0},
         kind="verbatim",
     )
+    assert swept == (names[0], names[1])
+    assert_array_equal(params, [[1.0, 2.0, 3.0], [4.0, 4.0, 4.0]])
+    assert names[1] not in fixed
+
+
+def test_fix_constant_parameters_compiles_in_constant_dict_entries(
+    input_handler_mutable, system
+):
+    """With fix_constant_parameters, a dict entry that holds one value
+    compiles in, whether given as a number or as equal values."""
+    names = list(system.parameters.names)
+    _, params, swept, fixed = _handle(
+        input_handler_mutable,
+        params={
+            names[0]: [1.0, 2.0, 3.0],
+            names[1]: 4.0,
+            names[2]: [5.0, 5.0, 5.0],
+        },
+        kind="verbatim",
+        fix_constant_parameters=True,
+    )
     assert swept == (names[0],)
     assert_array_equal(params, [[1.0, 2.0, 3.0]])
     assert fixed[names[1]] == 4.0
+    assert fixed[names[2]] == 5.0
 
 
 def test_fixed_parameters_keep_the_state_run_count(
@@ -1125,6 +1165,7 @@ def test_fixed_parameters_keep_the_state_run_count(
         states={state: [0.5, 1.0, 1.5]},
         params={names[0]: 2.0},
         kind="verbatim",
+        fix_constant_parameters=True,
     )
     assert params.shape == (0, 3)
     assert inits.shape[1] == 3
@@ -1160,6 +1201,16 @@ def test_fix_constant_parameters_fixes_uniform_rows(
     assert swept == (names[0],)
     assert fixed == {name: 7.0 for name in names[1:]}
     assert_array_equal(result, [[1.0, 2.0, 3.0]])
+
+
+def test_fix_constant_parameters_needs_a_row_per_parameter(
+    input_handler_mutable, system
+):
+    """fix_constant_parameters raises on a swept-parameters array."""
+    _sweep_reversed(input_handler_mutable)
+    params = np.ones((2, 3), dtype=system.precision)
+    with pytest.raises(ValueError, match="a row for every parameter"):
+        input_handler_mutable.set_swept_parameters(params, True)
 
 
 def test_fix_constant_parameters_keeps_run_count(
@@ -1217,22 +1268,49 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
 def test_swept_height_array_keeps_the_compiled_parameters(
     input_handler_mutable, system
 ):
-    """A row per swept parameter keeps the swept and fixed parameters."""
+    """Keep the values a dict compiled in for a following swept-only
+    array."""
+    system = input_handler_mutable.system
     names = list(system.parameters.names)
-    fixed = {
-        name: value
-        for name, value in system.parameters.defaults.items()
-        if name != names[0]
-    }
-    fixed[names[1]] = 0.25
-    input_handler_mutable.interface.set_swept_parameters(names[:1], fixed)
-    params = np.ones((1, 4), dtype=system.precision)
-    _, result, swept, result_fixed = _handle(
-        input_handler_mutable, params=params, kind="verbatim"
+    _, _, _, dict_fixed = _handle(
+        input_handler_mutable,
+        params={names[0]: [1.0, 2.0], names[1]: 0.25},
+        kind="verbatim",
+        fix_constant_parameters=True,
     )
-    assert swept == (names[0],)
-    assert result_fixed == fixed
+    compiled = system.compiled_parameters
+    params = np.ones((1, 4), dtype=system.precision)
+    _, result = input_handler_mutable(None, params, "verbatim")
+    assert system.compiled_parameters is compiled
+    assert system.fixed_parameter_values == dict_fixed
+    assert dict_fixed[names[1]] == 0.25
     assert result is params
+
+
+def test_split_into_rows_gives_each_entry_a_row(
+    input_handler_mutable, system
+):
+    """A single value gets a row holding it for every run."""
+    system = input_handler_mutable.system
+    names = list(system.parameters.names)
+    _, params = input_handler_mutable(
+        None,
+        {names[0]: [1.0, 2.0, 3.0], names[1]: 0.25},
+        "verbatim",
+    )
+    assert system.swept_parameters == (names[0], names[1])
+    assert_array_equal(
+        params[1], np.full(3, 0.25, dtype=system.precision)
+    )
+
+
+def test_verbatim_repeats_single_values(system):
+    """A verbatim entry with one value repeats across every run."""
+    names = list(system.parameters.names)
+    _, grid = verbatim_grid(
+        {names[0]: [1.0, 2.0, 3.0], names[1]: [0.5]}, system.parameters
+    )
+    assert_array_equal(grid[1], np.full(3, 0.5))
 
 
 def test_ragged_verbatim_entries_raise(input_handler_mutable, system):
@@ -1248,8 +1326,8 @@ def test_ragged_verbatim_entries_raise(input_handler_mutable, system):
 
 def _sweep_reversed(handler):
     """Sweep the first two parameters, second first."""
-    names = list(handler.parameters.names)
-    handler.interface.set_swept_parameters([names[1], names[0]])
+    names = list(handler.system.parameters.names)
+    handler.system.set_swept_parameters([names[1], names[0]])
     return names
 
 
