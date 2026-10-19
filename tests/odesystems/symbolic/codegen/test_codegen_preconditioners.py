@@ -31,12 +31,12 @@ from tests.odesystems.symbolic.codegen._source_checks import (
 # ── cached Neumann preconditioner ───────────────────────────────── #
 
 def test_neumann_cached_reads_cache_buffer(
-    cacheable_equations, bare_indexed_bases
+    cacheable_equations, bare_layout
 ):
     """Cached Neumann body indexes the ``cached_aux`` buffer."""
     code = generate_neumann_preconditioner_code(
         cacheable_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.CACHED,
     )
     ast.parse(code)
@@ -45,11 +45,11 @@ def test_neumann_cached_reads_cache_buffer(
 
 
 def test_neumann_beta_one_ends_at_the_horner_loop(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """With ``beta == 1`` the Horner loop is the last statement."""
     code = generate_neumann_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases
+        bare_nonlinear_equations, bare_layout
     )
     ast.parse(code)
     assert (
@@ -59,11 +59,11 @@ def test_neumann_beta_one_ends_at_the_horner_loop(
 
 
 def test_neumann_beta_normalisation_survives_scaled_beta(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """A non-unit ``beta`` keeps the closing normalisation loop."""
     code = generate_neumann_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases, beta=2.0
+        bare_nonlinear_equations, bare_layout, beta=2.0
     )
     ast.parse(code)
     assert "_cubie_codegen_beta_inv = precision(0.5)" in code
@@ -74,11 +74,11 @@ def test_neumann_beta_normalisation_survives_scaled_beta(
 
 
 def test_neumann_jacobian_entries_hoist_above_the_order_loop(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Accumulator-free JVP work runs once, above the series loop."""
     code = generate_neumann_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases, a_ij=0.435866
+        bare_nonlinear_equations, bare_layout, a_ij=0.435866
     )
     ast.parse(code)
     loop_at = code.index("for _ in unroll_if(")
@@ -87,11 +87,11 @@ def test_neumann_jacobian_entries_hoist_above_the_order_loop(
 
 
 def test_jacobi_series_jacobian_entries_hoist_above_the_order_loop(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Accumulator-free JVP work runs once, above the series loop."""
     code = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases, a_ij=0.435866
+        bare_nonlinear_equations, bare_layout, a_ij=0.435866
     )
     ast.parse(code)
     loop_at = code.index("for _ in unroll_if(")
@@ -100,12 +100,12 @@ def test_jacobi_series_jacobian_entries_hoist_above_the_order_loop(
 
 
 def test_neumann_empty_jvp_emits_pass_body(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """An empty JVP assignment set yields a ``pass`` Horner body."""
     code = generate_neumann_preconditioner_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         jvp_equations=JVPEquations([]),
     )
     ast.parse(code)
@@ -126,15 +126,15 @@ def test_neumann_empty_jvp_emits_pass_body(
     ids=["plain", "cached"],
 )
 def test_preconditioner_bakes_stage_diagonal(
-    cacheable_equations, bare_indexed_bases, generate, variant
+    cacheable_equations, bare_layout, generate, variant
 ):
     """A baked ``a_ij`` folds into the preconditioner as a literal."""
     runtime = generate(
-        cacheable_equations, bare_indexed_bases, variant=variant
+        cacheable_equations, bare_layout, variant=variant
     )
     baked = generate(
         cacheable_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=variant,
         a_ij=0.435866,
     )
@@ -149,7 +149,7 @@ def test_preconditioner_bakes_stage_diagonal(
 
 def test_n_stage_preconditioners_isolate_user_constants(
     solver_scaling_collision_equations,
-    solver_scaling_collision_indexed_bases,
+    solver_scaling_collision_layout,
 ):
     """FIRK preconditioners preserve solver beta/gamma values."""
     # Neumann folds 1/beta and gamma/beta; Jacobi folds beta, gamma.
@@ -166,7 +166,7 @@ def test_n_stage_preconditioners_isolate_user_constants(
     for generate, expected_literals in cases:
         code = generate(
             solver_scaling_collision_equations,
-            solver_scaling_collision_indexed_bases,
+            solver_scaling_collision_layout,
             variant=HelperVariant.STACKED_STAGES,
             stage_coefficients=[[1.0]],
             stage_nodes=[1.0],
@@ -183,14 +183,14 @@ def test_n_stage_preconditioners_isolate_user_constants(
 
 def test_n_stage_neumann_skips_zero_stage_coupling(
     bare_nonlinear_equations,
-    bare_indexed_bases,
+    bare_layout,
     lower_triangular_stage_coefficients,
 ):
     """Lower-triangular tableau parses with skipped zero coefficients."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_neumann_preconditioner_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -202,14 +202,14 @@ def test_n_stage_neumann_skips_zero_stage_coupling(
 
 def test_n_stage_neumann_without_cse(
     bare_nonlinear_equations,
-    bare_indexed_bases,
+    bare_layout,
     lower_triangular_stage_coefficients,
 ):
     """Topological-sort emission (``cse=False``) still parses."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_neumann_preconditioner_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -222,14 +222,14 @@ def test_n_stage_neumann_without_cse(
 
 def test_n_stage_jacobi_source_structure(
     observable_driver_equations,
-    observable_driver_indexed_bases,
+    observable_driver_layout,
     lower_triangular_stage_coefficients,
 ):
     """FIRK Jacobi preconditioner emits guarded per-stage diagonals."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_jacobi_preconditioner_code(
         observable_driver_equations,
-        observable_driver_indexed_bases,
+        observable_driver_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -242,7 +242,7 @@ def test_n_stage_jacobi_source_structure(
 
 def test_n_stage_jacobi_without_drivers_or_observables(
     chained_aux_equations,
-    bare_indexed_bases,
+    bare_layout,
     lower_triangular_stage_coefficients,
 ):
     """FIRK Jacobi handles a plain multi-auxiliary system.
@@ -253,7 +253,7 @@ def test_n_stage_jacobi_without_drivers_or_observables(
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_jacobi_preconditioner_code(
         chained_aux_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -264,14 +264,14 @@ def test_n_stage_jacobi_without_drivers_or_observables(
 
 def test_n_stage_jacobi_without_cse(
     observable_driver_equations,
-    observable_driver_indexed_bases,
+    observable_driver_layout,
     lower_triangular_stage_coefficients,
 ):
     """FIRK Jacobi preconditioner parses under topological sort."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_jacobi_preconditioner_code(
         observable_driver_equations,
-        observable_driver_indexed_bases,
+        observable_driver_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -283,14 +283,14 @@ def test_n_stage_jacobi_without_cse(
 
 def test_n_stage_jacobi_zero_mass_row_drops_beta(
     observable_driver_equations,
-    observable_driver_indexed_bases,
+    observable_driver_layout,
     lower_triangular_stage_coefficients,
 ):
     """A zero mass row leaves the pure Jacobian-diagonal term."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     identity = generate_jacobi_preconditioner_code(
         observable_driver_equations,
-        observable_driver_indexed_bases,
+        observable_driver_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -298,7 +298,7 @@ def test_n_stage_jacobi_zero_mass_row_drops_beta(
     )
     torn = generate_jacobi_preconditioner_code(
         observable_driver_equations,
-        observable_driver_indexed_bases,
+        observable_driver_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -316,26 +316,26 @@ def test_n_stage_jacobi_zero_mass_row_drops_beta(
 # ── single-system and cached Jacobi preconditioners ─────────────── #
 
 def test_jacobi_single_without_cse(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Single-system Jacobi body parses under topological sort."""
     code = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases, cse=False
+        bare_nonlinear_equations, bare_layout, cse=False
     )
     ast.parse(code)
     assert "inv_diag_" in code
 
 
 def test_jacobi_single_zero_mass_row_drops_beta(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """A zero mass row leaves the pure Jacobian-diagonal term."""
     identity = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases, beta=2.0
+        bare_nonlinear_equations, bare_layout, beta=2.0
     )
     torn = generate_jacobi_preconditioner_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         M=[[1, 0], [0, 0]],
         beta=2.0,
     )
@@ -347,30 +347,30 @@ def test_jacobi_single_zero_mass_row_drops_beta(
 
 
 def test_jacobi_rejects_general_mass_matrix(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Anything but a 0/1 diagonal is rejected at generation."""
     with pytest.raises(ValueError, match="0/1 diagonal"):
         generate_jacobi_preconditioner_code(
             bare_nonlinear_equations,
-            bare_indexed_bases,
+            bare_layout,
             M=[[2, 0], [0, 1]],
         )
     with pytest.raises(ValueError, match="0/1 diagonal"):
         generate_jacobi_preconditioner_code(
             bare_nonlinear_equations,
-            bare_indexed_bases,
+            bare_layout,
             M=[[1.0, 0.5], [0.0, 1.0]],
         )
 
 
 def test_jacobi_cached_partitions_auxiliaries(
-    cacheable_equations, bare_indexed_bases
+    cacheable_equations, bare_layout
 ):
     """Cached Jacobi generator runs the cached-partition branch."""
     code = generate_jacobi_preconditioner_code(
         cacheable_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.CACHED,
     )
     ast.parse(code)
@@ -378,12 +378,12 @@ def test_jacobi_cached_partitions_auxiliaries(
 
 
 def test_jacobi_cached_without_cse(
-    cacheable_equations, bare_indexed_bases
+    cacheable_equations, bare_layout
 ):
     """Cached Jacobi generator parses under topological sort."""
     code = generate_jacobi_preconditioner_code(
         cacheable_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.CACHED,
         cse=False,
     )
@@ -392,10 +392,10 @@ def test_jacobi_cached_without_cse(
 
 
 _CACHED_SOURCE_SYSTEMS = [
-    ("cacheable_equations", "bare_indexed_bases"),
+    ("cacheable_equations", "bare_layout"),
     (
         "cacheable_observable_equations",
-        "observable_driver_indexed_bases",
+        "observable_driver_layout",
     ),
 ]
 
@@ -441,11 +441,11 @@ def test_cached_neumann_defines_every_referenced_auxiliary(
 # ── Jacobi series (order > 0) ───────────────────────────────────── #
 
 def test_jacobi_emits_both_order_branches(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """One source carries both bodies; the bound order picks one."""
     code = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases
+        bare_nonlinear_equations, bare_layout
     )
     ast.parse(code)
     assert code.count("def preconditioner(") == 2
@@ -454,11 +454,11 @@ def test_jacobi_emits_both_order_branches(
 
 
 def test_jacobi_series_multiplies_by_the_guarded_reciprocal(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Series terms reuse the guarded diagonal's named reciprocal."""
     code = generate_jacobi_preconditioner_code(
-        bare_nonlinear_equations, bare_indexed_bases, gamma=3.0
+        bare_nonlinear_equations, bare_layout, gamma=3.0
     )
     update = (
         "out[0] = out[0] + (v[0] + _cubie_codegen_h_eff * jvp[0]"
@@ -473,12 +473,12 @@ def test_jacobi_series_multiplies_by_the_guarded_reciprocal(
 
 
 def test_jacobi_series_drops_beta_on_algebraic_rows(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """A zero mass row removes nothing but ``beta`` from the update."""
     code = generate_jacobi_preconditioner_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         M=[[1, 0], [0, 0]],
     )
     ast.parse(code)
@@ -490,14 +490,14 @@ def test_jacobi_series_drops_beta_on_algebraic_rows(
 
 def test_n_stage_jacobi_series_scales_without_a_ij(
     observable_driver_equations,
-    observable_driver_indexed_bases,
+    observable_driver_layout,
     lower_triangular_stage_coefficients,
 ):
     """FIRK series terms carry ``a_ij`` inside the stage JVP."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_jacobi_preconditioner_code(
         observable_driver_equations,
-        observable_driver_indexed_bases,
+        observable_driver_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -517,12 +517,12 @@ def test_n_stage_jacobi_series_scales_without_a_ij(
 
 
 def test_jacobi_identical_diagonals_share_one_guard(
-    identical_diagonal_equations, bare_indexed_bases
+    identical_diagonal_equations, bare_layout
 ):
     """Rows with one Jacobian diagonal share a single guard."""
     code = generate_jacobi_preconditioner_code(
         identical_diagonal_equations,
-        bare_indexed_bases,
+        bare_layout,
         a_ij=0.435866,
     )
     ast.parse(code)
@@ -559,12 +559,12 @@ def _assigned_and_used_diagonals(code):
     ids=["single", "cached", "stacked"],
 )
 def test_jacobi_series_defines_every_reciprocal_it_multiplies_by(
-    variant, stage_kwargs, mass, zero_diagonal_equations, bare_indexed_bases
+    variant, stage_kwargs, mass, zero_diagonal_equations, bare_layout
 ):
     """Every reciprocal the series loop multiplies by is assigned."""
     code = generate_jacobi_preconditioner_code(
         zero_diagonal_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=variant,
         M=mass,
         **stage_kwargs,
