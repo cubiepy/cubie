@@ -263,7 +263,7 @@ def test_erk_stage_times_the_specs_on_the_solver(
 ):
     """Specs are timed in order and recalled; a rejected spec drops."""
     solver = solver_mutable
-    inits, params = solver.build_grid(
+    inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
     given = dict(solver.given.as_kwargs())

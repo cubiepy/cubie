@@ -131,7 +131,7 @@ def build_fabbri_system():
 
 def lorenz_grid(solver, n_runs: int):
     """Return the ab-gate rho sweep for ``n_runs`` trajectories."""
-    return solver.build_grid(
+    return solver.prepare_grid_arrays(
         initial_values={"x": 1.0, "y": 0.0, "z": 0.0},
         parameters={"rho": np.linspace(0.0, 21.0, n_runs)},
     )
@@ -139,7 +139,7 @@ def lorenz_grid(solver, n_runs: int):
 
 def lorenz96_grid(solver, n_runs: int):
     """Return the GPUODEBenchmarks F sweep for ``n_runs``."""
-    return solver.build_grid(
+    return solver.prepare_grid_arrays(
         parameters={"F": np.linspace(0.0, 16.0, n_runs)},
     )
 
@@ -151,12 +151,15 @@ def fabbri_grid(solver, n_runs: int):
         np.linspace(0.0, 2e-8, side),
         np.linspace(0.0, 1.0, side),
     )
+    # Set ANS to 1 as its default so that we compile it in.
+    solver.system.set_default_parameters(
+        {"Rate_modulation_experiments_ANS": 1.0}
+    )
     parameters = {
         FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
         FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
-        "Rate_modulation_experiments_ANS": 1.0,
     }
-    return solver.build_grid(parameters=parameters)
+    return solver.prepare_grid_arrays(parameters=parameters)
 
 
 # Tolerances/durations follow ab_gate (lorenz), GPUODEBenchmarks
