@@ -53,6 +53,7 @@ from enum import Enum
 from functools import cache
 from typing import (
     Any,
+    Callable,
     Dict,
     Optional,
     Set,
@@ -799,6 +800,7 @@ class CUDAFactory(ABC):
         self._compile_settings = None
         self._cache_valid = True
         self._cache = None
+        self._derived_values = {}
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -1064,6 +1066,44 @@ class CUDAFactory(ABC):
             for fld in fields(type(cache))
         }
 
+    def _derived(
+        self,
+        name: str,
+        inputs: Tuple[Any, ...],
+        compute: Callable[[], Any],
+    ) -> Any:
+        """Return ``compute()``, reusing the last result for equal inputs.
+
+        Use this for a value computed from settings snapshots, build
+        products or runtime defaults that callers read more than once
+        between changes.
+
+        Parameters
+        ----------
+        name
+            Name of the derived value, unique within the factory.
+        inputs
+            The immutable objects the value is computed from. Pass
+            objects that are replaced, never modified, when they change,
+            and whose equality never compares arrays: a settings
+            snapshot's ``values_hash`` rather than the snapshot itself.
+            Comparing inputs that are the same objects as last time costs
+            one identity check each.
+        compute
+            Function returning the value from the current inputs.
+
+        Returns
+        -------
+        Any
+            The value for ``inputs``.
+        """
+        stored = self._derived_values.get(name)
+        if stored is not None and stored[0] == inputs:
+            return stored[1]
+        value = compute()
+        self._derived_values[name] = (inputs, value)
+        return value
+
     @property
     def config_hash(self):
         """Returns the hash of the current compile settings of the factory.
@@ -1075,11 +1115,17 @@ class CUDAFactory(ABC):
             child_factory.config_hash
             for child_factory in self._iter_child_factories()
         )
-        if child_hashes:
-            return canonical_digest(
-                ("cubie-config-hash", own_hash, child_hashes)
-            )
-        return own_hash
+
+        def combine():
+            if child_hashes:
+                return canonical_digest(
+                    ("cubie-config-hash", own_hash, child_hashes)
+                )
+            return own_hash
+
+        return self._derived(
+            "config_hash", (own_hash, child_hashes), combine
+        )
 
     _excluded_child_factories: frozenset = frozenset()
     """Attribute names excluded from child-factory discovery.

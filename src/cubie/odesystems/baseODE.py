@@ -78,6 +78,22 @@ from cubie.odesystems.variables import (
 )
 
 
+def _states_with_defaults(
+    layout: SystemLayout, initial_values: ValuedSet
+) -> ValuedSet:
+    """Return the layout's states with their default initial values.
+
+    A state with no initial value starts from ``0.0``.
+    """
+    defaults = initial_values.defaults
+    return ValuedSet(
+        [
+            State(state.name, state.unit, defaults.get(state.name, 0.0))
+            for state in layout.states
+        ]
+    )
+
+
 @define
 class ODECache(CUDADispatcherCache):
     """Cache the compiled base outputs and helper products of an ODE build.
@@ -117,9 +133,9 @@ class BaseODE(CUDAFactory):
     operator or preconditioner are generated only by subclasses like
     :class:`SymbolicODE`.
 
-    We keep the parameters' defaults and the states' initial values
-    outside the compile settings, so changing one rebuilds nothing
-    unless it changes a value we compile into the code.
+    ``BaseODE`` keeps parameter defaults and initial values outside its
+    compile settings, so it rebuilds only when a new default changes a
+    value compiled into the code.
     """
 
     def __init__(
@@ -157,7 +173,7 @@ class BaseODE(CUDAFactory):
         """
         super().__init__()
         self._parameters = parameters
-        self._initial_values = dict(initial_values or {})
+        self._initial_values = VariableSet.of(State, initial_values or {})
         self._specialiser = specialiser
         self.setup_compile_settings(
             ODEData(
@@ -272,6 +288,7 @@ class BaseODE(CUDAFactory):
         ValueError
             If a swept name repeats or also has a fixed value.
         """
+        names = tuple(names)
         # Compare keys before building the set, so a solve that asks
         # for the parameters already compiled constructs nothing.
         key = ParameterSet.key_for(self._parameters, names, fixed)
@@ -318,8 +335,10 @@ class BaseODE(CUDAFactory):
         unknown = sorted(set(values) - set(self.states.names))
         if unknown:
             raise KeyError(f"{unknown} are not states of this system.")
-        self._initial_values.update(
-            {name: float(value) for name, value in values.items()}
+        # Replace the set rather than changing it, because the states
+        # derived from it are reused while it stays the same object.
+        self._initial_values = VariableSet.of(
+            State, {**self._initial_values.defaults, **values}
         )
 
     @property
@@ -345,20 +364,23 @@ class BaseODE(CUDAFactory):
     @property
     def swept_set(self) -> ValuedSet:
         """The swept parameters with their defaults, in row order."""
-        return self._parameters.subset(self.swept_parameters)
+        compiled = self.compiled_parameters
+        parameters = self._parameters
+        return self._derived(
+            "swept_set",
+            (compiled, parameters),
+            lambda: parameters.subset(compiled.swept),
+        )
 
     @property
     def states(self) -> ValuedSet:
         """Every state with its default initial value."""
-        return ValuedSet(
-            [
-                State(
-                    state.name,
-                    state.unit,
-                    self._initial_values.get(state.name, 0.0),
-                )
-                for state in self.layout.states
-            ]
+        layout = self.layout
+        initial_values = self._initial_values
+        return self._derived(
+            "states",
+            (layout, initial_values),
+            lambda: _states_with_defaults(layout, initial_values),
         )
 
     @property
@@ -408,7 +430,10 @@ class BaseODE(CUDAFactory):
     @property
     def sizes(self) -> SystemSizes:
         """System component sizes cached for solvers."""
-        return SystemSizes.of_layout(self.layout)
+        layout = self.layout
+        return self._derived(
+            "sizes", (layout,), lambda: SystemSizes.of_layout(layout)
+        )
 
     def __getstate__(self) -> dict:
         """Return the pickled state without the build cache."""

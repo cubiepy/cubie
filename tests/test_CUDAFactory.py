@@ -888,6 +888,36 @@ def test_config_hash_stable_across_equal_states():
     assert f1.config_hash == f2.config_hash
 
 
+def test_config_hash_follows_a_child_settings_change():
+    """A child's new settings change its parent's config hash."""
+    child = _SettingsFactory(value=7)
+    parent = _ParentFactory(child, value=3)
+    before = parent.config_hash
+    child.update_compile_settings(value=8)
+    assert parent.config_hash != before
+    child.update_compile_settings(value=7)
+    assert parent.config_hash == before
+
+
+# ── CUDAFactory._derived ──────────────────────────────────── #
+
+
+def test_derived_value_is_reused_until_its_inputs_change():
+    """Return the stored value for equal inputs, and recompute it for
+    new ones."""
+    factory = _make_factory()
+    computed = []
+
+    def compute():
+        computed.append(object())
+        return computed[-1]
+
+    first = factory._derived("value", (1, "a"), compute)
+    assert factory._derived("value", (1, "a"), compute) is first
+    assert factory._derived("value", (2, "a"), compute) is not first
+    assert len(computed) == 2
+
+
 # ── CUDAFactory._iter_child_factories ──────────────────────── #
 
 
