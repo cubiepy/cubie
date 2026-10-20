@@ -168,6 +168,14 @@ class TestCompiledParameters:
         assert tiny_system.sizes.swept_parameters == 1
         assert tiny_system.cache_valid is False
 
+    def test_sizes_are_a_product_of_the_specialiser(self, tiny_system):
+        """Return the same sizes until the sweep changes."""
+        first = tiny_system.sizes
+        assert tiny_system.sizes is first
+        tiny_system.set_swept_parameters(("k",))
+        assert tiny_system.sizes is not first
+        assert tiny_system.sizes.swept_parameters == 1
+
     def test_the_swept_set_follows_the_sweep(self, tiny_system):
         """Return the swept parameters with their defaults as the swept
         set."""

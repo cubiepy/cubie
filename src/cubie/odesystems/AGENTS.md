@@ -69,9 +69,10 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
   name, unit, sweep and compiled value. The set holds no defaults, so a swept
   parameter's default never changes `config_hash`.
 - The sets and records are frozen, hold no dicts, and are precision-free:
-  `defaults_array(precision)` builds an array at the point of use. `BaseODE.states`,
-  `swept_set` and `sizes` come from `CUDAFactory._derived`, so they are rebuilt only when
-  the layout, the compiled parameters or the defaults are replaced. `set_initial_values`
+  `defaults_array(precision)` builds an array at the point of use. `BaseODE.states` and
+  `swept_set` come from `CUDAFactory._derived`, so they are rebuilt only when the layout,
+  the compiled parameters or the defaults are replaced. `BaseODE.sizes` is the
+  specialiser product `sizes`. `set_initial_values`
   and `set_default_parameters` replace the declared sets rather than changing them.
 - The mass matrix is the specialiser product `mass` (`BaseODE.mass`), a float64 array or
   `None`; codegen reads it as boolean diagonal flags. Explicit algorithms and Neumann

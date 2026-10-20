@@ -37,7 +37,7 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 `ParsedSystem.assemble(parameters)` for the batch's `ParameterSet`.
 `ParsedSystem.specialise(swept, values)` builds that set from the declared defaults and
 assembles it, and with no arguments gives the system with every parameter fixed at its
-default. A `SpecialisedSystem` is a `CUDADispatcherCache` holding `layout`,
+default. A `SpecialisedSystem` is a `CUDADispatcherCache` holding `layout`, `sizes` (its `SystemSizes`),
 `equations`, `functions` (every callable the generated code may call, by its called
 name, including derivative helpers), `fn_hash` and `mass` (a float64 array, `None` for
 solved systems). Structural simplification runs after the values are substituted, so

@@ -11,12 +11,13 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from warnings import warn
 
 import sympy as sp
-from attrs import field, frozen
+from attrs import Factory, field, frozen
 from numpy import array as np_array, float64 as np_float64
 
 from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.ODEData import SystemSizes
 from cubie.odesystems.symbolic.parsing.normalise import (
     NormalisedSystem,
 )
@@ -74,6 +75,11 @@ class SpecialisedSystem(CUDADispatcherCache):
         Hash of every value the generated source embeds.
     mass
         The mass matrix as a float64 array, or ``None`` for an ODE.
+
+    Attributes
+    ----------
+    sizes
+        The length of each buffer in ``layout``.
     """
 
     layout: SystemLayout = field()
@@ -81,6 +87,13 @@ class SpecialisedSystem(CUDADispatcherCache):
     functions: Dict[str, Callable] = field(factory=dict)
     fn_hash: str = field(default="")
     mass: Any = field(default=None, converter=_mass_matrix_converter)
+    sizes: SystemSizes = field(
+        init=False,
+        default=Factory(
+            lambda system: SystemSizes.of_layout(system.layout),
+            takes_self=True,
+        ),
+    )
 
 
 def _driver_derivatives(

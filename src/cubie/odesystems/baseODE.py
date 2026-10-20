@@ -430,10 +430,7 @@ class BaseODE(CUDAFactory):
     @property
     def sizes(self) -> SystemSizes:
         """System component sizes cached for solvers."""
-        layout = self.layout
-        return self._derived(
-            "sizes", (layout,), lambda: SystemSizes.of_layout(layout)
-        )
+        return self._specialiser.sizes
 
     def __getstate__(self) -> dict:
         """Return the pickled state without the build cache."""
