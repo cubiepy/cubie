@@ -27,7 +27,7 @@ See Also
     Abstract ODE factory that owns an ``ODEData`` as compile settings.
 """
 
-from attrs import Factory, define, field, frozen
+from attrs import Factory, field, frozen
 from attrs.validators import (
     in_ as attrsval_in,
     instance_of as attrsval_instance_of,
@@ -42,7 +42,7 @@ ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})
 OPERATION_ORDERINGS = ("kahn", "greedy", "dfs", "liveness_auto")
 
 
-@define
+@frozen
 class SystemSizes:
     """Store counts for each component category in an ODE system.
 

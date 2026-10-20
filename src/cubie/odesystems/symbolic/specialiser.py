@@ -40,6 +40,7 @@ from attrs.validators import instance_of as attrsval_instance_of
 
 from cubie.CUDAFactory import CUDAFactory, _CubieConfigBase
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.ODEData import SystemSizes
 from cubie.odesystems.symbolic.parsing.assemble import SpecialisedSystem
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.variables import ParameterSet
@@ -128,6 +129,11 @@ class SystemSpecialiser(CUDAFactory):
     def fn_hash(self) -> str:
         """Hash of every value the generated source embeds."""
         return self.get_cached_output("fn_hash")
+
+    @property
+    def sizes(self) -> SystemSizes:
+        """The length of each buffer in the layout."""
+        return self.get_cached_output("sizes")
 
     @property
     def mass(self) -> Any:
