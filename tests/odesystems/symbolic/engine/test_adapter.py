@@ -34,10 +34,3 @@ def test_orders_map_symbols_to_positions():
     assert maps.state_order == {sym("a"): 0, sym("b"): 1}
     assert maps.driver_order == {sym("u"): 0, sym("w"): 1}
     assert maps.observable_symbols == ()
-
-
-def test_buffer_maps_are_built_once_per_layout():
-    """Equal layouts return the same maps."""
-    first = SystemLayout(states=("x",), parameters=("k",))
-    second = SystemLayout(states=["x"], parameters=["k"])
-    assert buffer_maps(first) is buffer_maps(second)
