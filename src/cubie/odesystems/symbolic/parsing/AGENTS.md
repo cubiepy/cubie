@@ -33,9 +33,10 @@ loading (`load_cellml_model`) and the Jacobian-vector-product structures (`JVPEq
 
 ## parse_system and assemble
 `parse_system` returns the `ParsedSystem`, with every parameter left as a symbol
-(`parsed_system.py`). `SymbolicODE` calls `ParsedSystem.specialise(swept, values)`,
-which returns a `SpecialisedSystem`: the layout, equations, callables, source hash and
-mass matrix. Structural simplification runs after the values are substituted, so
+(`parsed_system.py`). The `SystemSpecialiser` child of `SymbolicODE` calls
+`ParsedSystem.assemble(parameters)` for the batch's `ParameterSet`, which returns a
+`SpecialisedSystem`: the layout, equations, callables, source hash and mass matrix.
+Structural simplification runs after the values are substituted, so
 structure can change with fixed values. Inferred parameters join
 `parsed_system.parameters`.
 `_detect_input_type` dispatches to `"string"`, `"sympy"` or `"function"`, and every

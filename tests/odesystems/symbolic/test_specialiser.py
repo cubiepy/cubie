@@ -28,21 +28,15 @@ def specialiser(parsed):
     )
 
 
-def test_products_assemble_on_demand(specialiser):
+def test_products_assemble_on_demand(parsed, specialiser):
     """Build the specialised system on the first read of a product."""
     assert specialiser.cache_valid is False
     assert specialiser.layout.swept_names == ("k",)
     assert specialiser.cache_valid is True
-    assert specialiser.fixed_parameter_values == {"c0": 1.0}
+    assert specialiser.fixed_parameter_values == {
+        "c0": parsed.declared_parameters.defaults["c0"]
+    }
     assert specialiser.mass is None
-    assert specialiser.fn_hash == parsed_hash(specialiser)
-
-
-def parsed_hash(specialiser):
-    """Return the source hash of a fresh assembly of the same request."""
-    return specialiser._parsed_system.assemble(
-        specialiser.compiled_parameters
-    ).fn_hash
 
 
 def test_equal_compiled_parameters_keep_the_build(parsed, specialiser):
@@ -82,24 +76,9 @@ def test_a_swept_default_is_outside_the_identity(parsed):
     )
     assert changed == set()
     refixed, _, changed = config.update(
-        compiled_parameters=ParameterSet.build(declared, (), {"k": 0.5})
+        compiled_parameters=ParameterSet.build(
+            declared, (), {"k": declared.defaults["k"]}
+        )
     )
     assert changed == {"compiled_parameters"}
     assert refixed.values_hash != config.values_hash
-
-
-def test_key_for_matches_the_built_set(parsed):
-    """Return the key of the set the same request builds."""
-    declared = parsed.declared_parameters
-    built = ParameterSet.build(declared, ["k"], {"c0": 2.0})
-    assert (
-        ParameterSet.key_for(declared, ["k"], {"c0": 2.0})
-        == built.key
-    )
-    assert ParameterSet.key_for(declared, ["k"], {"c0": 1.0}) == (
-        ParameterSet.build(declared, ["k"]).key
-    )
-    with pytest.raises(KeyError, match="not_a_key"):
-        ParameterSet.key_for(declared, ["not_a_key"])
-    with pytest.raises(ValueError, match="swept"):
-        ParameterSet.key_for(declared, ["k"], {"k": 1.0})

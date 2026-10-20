@@ -63,6 +63,7 @@ from cubie.odesystems.symbolic.parsing import (
     parse_system,
 )
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.specialiser import SystemSpecialiser
 from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.variables import ParameterSet
@@ -76,7 +77,6 @@ from cubie._serialize import canonical_digest
 from cubie._env import operation_ordering_default
 from cubie._utils import PrecisionDType, is_devfunc
 from cubie.time_logger import default_timelogger
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
 def _operation_source_hash(fn_hash: str, operation_ordering: str) -> str:
@@ -283,8 +283,6 @@ class SymbolicODE(BaseODE):
                 self.compile_settings.operation_ordering,
             ),
         )
-        self._jvp_exprs: Optional[JVPEquations] = None
-        self._jvp_exprs_key = None
 
     @property
     def equations(self):
@@ -456,24 +454,27 @@ class SymbolicODE(BaseODE):
     def _get_jvp_exprs(self) -> JVPEquations:
         """Return Jacobian-vector assignments for the current system.
 
-        The cache keys on the system hash and ordering policy, so a
-        re-specialisation or ordering change recomputes on next use.
+        Return the same assignments until the system is specialised
+        again or its ordering policy changes.
         """
+        equations = self.equations
+        layout = self.layout
+        ordering = self.compile_settings.operation_ordering
 
-        key = (self.fn_hash, self.compile_settings.operation_ordering)
-        if self._jvp_exprs is None or self._jvp_exprs_key != key:
-            self._jvp_exprs = generate_analytical_jvp(
-                self.equations,
-                input_order=buffer_maps(self.layout).state_order,
-                output_order=buffer_maps(self.layout).dxdt_order,
-                observables=buffer_maps(self.layout).observable_symbols,
+        def generate():
+            maps = buffer_maps(layout)
+            return generate_analytical_jvp(
+                equations,
+                input_order=maps.state_order,
+                output_order=maps.dxdt_order,
+                observables=maps.observable_symbols,
                 cse=True,
-                operation_ordering=(
-                    self.compile_settings.operation_ordering
-                ),
+                operation_ordering=ordering,
             )
-            self._jvp_exprs_key = key
-        return self._jvp_exprs
+
+        return self._derived(
+            "jvp_exprs", (equations, layout, ordering), generate
+        )
 
     def _device_function_injections(self) -> dict[str, Callable]:
         """Collect device callables the generated module must resolve.

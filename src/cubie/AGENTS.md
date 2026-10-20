@@ -75,6 +75,13 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
      `update_compile_settings` invalidates it only when a setting changed.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`), keyed by
      `fn_hash`: one generated source file per source identity.
+- **Derived values:** compute a value derived from settings snapshots, build products
+  or runtime defaults through `CUDAFactory._derived(name, inputs, compute)`, which
+  recomputes it only when `inputs` change. Pass immutable objects that are replaced on
+  change (a snapshot's `values_hash`, build products, frozen variable sets) as `inputs`,
+  never an object whose equality compares arrays. `config_hash`,
+  `BaseODE.states` and `BaseODE.sizes` use it. Add no other in-memory cache: no
+  `functools` caches, module-level dicts or hand-written key/value attributes.
 - **`update` / `update_compile_settings` contract:** keys are the non-underscored
   field names; an unrecognised key raises `KeyError` unless `silent=True`; returns a
   **`set`** of recognised labels. `CUDAFactory.update` merges `updates_dict` and
