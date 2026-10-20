@@ -129,7 +129,8 @@ class CompiledParameter(Variable):
     Parameters
     ----------
     swept
-        Whether runs read the parameter from the parameters array.
+        ``True`` to read the parameter from the parameters array in
+        each run.
     value
         The value compiled in, or ``None`` for a swept parameter.
 
@@ -488,8 +489,8 @@ class ParameterSet(VariableSet):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        # Every solve compares a request with this tuple, so we build it
-        # once.
+        # We compare each solve's request with this tuple, so we build
+        # it once.
         object.__setattr__(
             self,
             "key",
