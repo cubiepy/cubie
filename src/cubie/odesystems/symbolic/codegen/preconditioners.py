@@ -56,6 +56,7 @@ from cubie.odesystems.symbolic.parsing import (
     ParsedEquations,
 )
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.codegen._matrix_utils import (
     mass_diagonal_flags,
 )
@@ -65,7 +66,6 @@ from cubie.odesystems.symbolic.codegen._stage_utils import (
     prepare_stage_data,
 )
 from cubie.time_logger import default_timelogger
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -828,10 +828,11 @@ def _build_jacobi_body(
             return jvp_equations.jacobian_entry(comp_idx, comp_idx)
 
     else:
+        maps = buffer_maps(layout)
         jac = generate_jacobian(
             equations,
-            input_order=buffer_maps(layout).state_order,
-            output_order=buffer_maps(layout).dxdt_order,
+            input_order=maps.state_order,
+            output_order=maps.dxdt_order,
             operation_ordering=operation_ordering,
         )
         # dx/observable outputs become locals; states evaluate at
@@ -906,10 +907,11 @@ def _build_n_stage_jacobi_lines(
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
 
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=buffer_maps(layout).state_order,
-        output_order=buffer_maps(layout).dxdt_order,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
 

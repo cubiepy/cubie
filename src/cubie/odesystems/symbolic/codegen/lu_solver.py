@@ -68,6 +68,7 @@ from cubie.odesystems.symbolic.parsing import (
     ParsedEquations,
 )
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.codegen._matrix_utils import (
     block_eigenstructure,
     mass_diagonal_flags,
@@ -78,7 +79,6 @@ from cubie.odesystems.symbolic.codegen._stage_utils import (
 )
 from cubie._env import operation_ordering_default
 from cubie.time_logger import default_timelogger
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 for _variant in HelperVariant:
     default_timelogger.register_event(
@@ -1441,10 +1441,11 @@ def generate_lu_solve_code(
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=buffer_maps(layout).state_order,
-        output_order=buffer_maps(layout).dxdt_order,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     if variant.takes_stage_data:
@@ -1590,10 +1591,11 @@ def generate_init_lu_solve_code(
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=buffer_maps(layout).state_order,
-        output_order=buffer_maps(layout).dxdt_order,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     entry_exprs, prefix_assigns = _inline_entry_exprs(
@@ -1670,10 +1672,11 @@ def generate_lu_prepare_blocks_code(
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=buffer_maps(layout).state_order,
-        output_order=buffer_maps(layout).dxdt_order,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     row_perm, col_perm, lu_pattern, slots, nnz, _ = (
@@ -1956,10 +1959,11 @@ def generate_lu_smoothing_solve_code(
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=buffer_maps(layout).state_order,
-        output_order=buffer_maps(layout).dxdt_order,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     row_perm, col_perm, lu_pattern, slots, nnz, _ = (

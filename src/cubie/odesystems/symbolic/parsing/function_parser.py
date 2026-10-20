@@ -20,13 +20,13 @@ import warnings
 
 import sympy as sp
 
-from .function_inspector import (
+from cubie.odesystems.symbolic.parsing.function_inspector import (
     AstToSympyConverter,
     FunctionInspection,
     _resolve_func_name,
     inspect_ode_function,
 )
-from .parse_primitives import (
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     KNOWN_FUNCTIONS,
     TIME_SYMBOL,
@@ -60,14 +60,16 @@ def parse_function_input(
     func
         Python function defining the ODE right-hand side.
     declared_states
-        State names in written order, which positional access and
-        list returns bind to.
+        State names in written order. ``y[i]`` reads the i-th name, and
+        the i-th entry of a list return is its derivative.
     parameters
-        Declared parameter names. We bind positional container access
-        to them in sorted order.
+        Declared parameter names, in written order.
     drivers
-        Declared driver names. We bind positional container access past
-        the parameters to them in sorted order.
+        Declared driver names, in written order. When ``func`` takes
+        two or more containers after the state, ``d[i]`` on the last
+        of them reads the i-th driver and ``p[i]`` on any other reads
+        the i-th parameter. With one container, ``p[i]`` reads the
+        parameters and then the drivers.
     observables
         Observable variable names to extract from local assignments.
     user_functions
@@ -92,8 +94,8 @@ def parse_function_input(
 
     inspection = inspect_ode_function(func)
     state_order = [str(name) for name in declared_states]
-    parameters = sorted(str(name) for name in parameters)
-    drivers = sorted(str(name) for name in drivers)
+    parameters = [str(name) for name in parameters]
+    drivers = [str(name) for name in drivers]
     symbol_map, new_params = _build_symbol_map(
         inspection,
         parameters,
@@ -371,7 +373,7 @@ def _build_symbol_map(
     inspection
         Result of AST analysis.
     parameters, drivers
-        Declared parameter and driver names, in sorted order.
+        Declared parameter and driver names, in written order.
     observables
         Declared observable names.
     strict
@@ -434,25 +436,37 @@ def _build_symbol_map(
                     f"{state_names}"
                 )
 
-    # Parameter/driver accesses on generic container args
+    # Parameter/driver accesses on generic container args. A name
+    # reaches a parameter or a driver through any container. An index
+    # on the last of two or more containers counts through the
+    # drivers, an index on any other container through the
+    # parameters, and an index on a lone container through the
+    # parameters and then the drivers.
     inferred_params: "OrderedDict[str, sp.Symbol]" = OrderedDict()
-    searched_names = (parameters, drivers)
+    scalar_set = set(inspection.scalar_params)
+    containers = [
+        arg for arg in inspection.parameter_args if arg not in scalar_set
+    ]
+    driver_base = containers[-1] if len(containers) > 1 and drivers else None
     for acc in inspection.parameter_accesses:
         key = acc["key"]
         ptype = acc["pattern_type"]
         base = acc["base"]
         if ptype not in ("int", "string", "attribute"):
             continue
-        # Search parameters, then drivers
         target_sym = None
-        for names in searched_names:
-            if ptype == "int":
-                if 0 <= key < len(names):
-                    target_sym = _symbol(names[key])
-                    break
-            elif key in names:
-                target_sym = _symbol(key)
-                break
+        if ptype == "int":
+            if base == driver_base:
+                positional, positional_kind = drivers, "drivers"
+            elif driver_base is None:
+                positional = [*parameters, *drivers]
+                positional_kind = "parameters and drivers"
+            else:
+                positional, positional_kind = parameters, "parameters"
+            if 0 <= key < len(positional):
+                target_sym = _symbol(positional[key])
+        elif key in parameters or key in drivers:
+            target_sym = _symbol(key)
 
         if ptype == "int":
             lookup = f"{base}[{key}]"
@@ -465,8 +479,7 @@ def _build_symbol_map(
             if ptype == "int":
                 raise ValueError(
                     f"Container access '{lookup}' is out of range for "
-                    f"the declared parameters ({parameters}) and "
-                    f"drivers ({drivers})."
+                    f"the declared {positional_kind} ({positional})."
                 )
             if key in state_set:
                 raise ValueError(
@@ -507,10 +520,8 @@ def _build_symbol_map(
     # declared as parameters or drivers).
     for arg_name in inspection.scalar_params:
         target_sym = None
-        for names in searched_names:
-            if arg_name in names:
-                target_sym = _symbol(arg_name)
-                break
+        if arg_name in parameters or arg_name in drivers:
+            target_sym = _symbol(arg_name)
         if target_sym is None:
             if arg_name in state_set:
                 raise ValueError(

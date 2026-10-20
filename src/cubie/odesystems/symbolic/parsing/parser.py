@@ -16,17 +16,17 @@ from typing import (
 
 import sympy as sp
 
-from ..engine import expr as ir_expr
-from ..engine.from_sympy import (
+from cubie.odesystems.symbolic.engine import expr as ir_expr
+from cubie.odesystems.symbolic.engine.from_sympy import (
     convert_assignments,
     derivative_name_map,
 )
-from .function_parser import (
+from cubie.odesystems.symbolic.parsing.function_parser import (
     infer_function_states,
     parse_function_input,
 )
-from .normalise import normalise_input
-from .parsed_system import ParsedSystem
+from cubie.odesystems.symbolic.parsing.normalise import normalise_input
+from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 
 def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
     """Detect whether dxdt contains strings, SymPy expressions, or a callable.
@@ -347,11 +347,12 @@ def _parse_function_path(
     drivers = _driver_names(drivers)
     declared_states = [str(name) for name in states]
     states_dict = dict(sorted(_defaults(states).items()))
-    parameters_dict = dict(sorted(_defaults(parameters).items()))
+    declared_parameters = _defaults(parameters)
+    parameters_dict = dict(sorted(declared_parameters.items()))
 
     equation_map, funcs, new_params = parse_function_input(
         func=dxdt,
-        parameters=list(parameters_dict),
+        parameters=list(declared_parameters),
         drivers=drivers,
         observables=observables,
         user_functions=user_functions,
