@@ -104,8 +104,7 @@ and function aliases. Equations sort by LHS name, so string and SymPy input hit 
   `<cwd>/generated`, read at `ODEFile` construction, relocatable with
   `set_cache_root()`).
 - Specialising builds a new `SystemLayout`, so read `SymbolicODE.layout` again after an
-  update rather than holding an old one; `engine.adapter.buffer_maps` caches the IR
-  positions and array references per layout.
+  update rather than holding an old one.
 - `parameters_gui`/`states_gui` import `cubie.gui` inside the method (Qt is optional).
 
 ## Dependencies

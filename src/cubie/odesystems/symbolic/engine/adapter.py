@@ -1,6 +1,5 @@
 """Build the IR data used by source generators."""
 
-from functools import lru_cache
 from types import MappingProxyType
 from typing import Dict, List, Mapping, Tuple
 
@@ -51,11 +50,8 @@ def _order(names: Tuple[str, ...]) -> Mapping[ir.Sym, int]:
     )
 
 
-@lru_cache(maxsize=64)
 def buffer_maps(layout: SystemLayout) -> BufferMaps:
     """Return the positions and array elements of ``layout``.
-
-    Return the same object for equal layouts.
 
     Parameters
     ----------
