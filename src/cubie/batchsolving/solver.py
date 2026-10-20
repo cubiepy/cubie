@@ -51,6 +51,7 @@ from numpy import asarray, ndarray
 
 from cubie.outputhandling.output_config import OutputCompileFlags
 from cubie._utils import PrecisionDType
+from cubie.CUDAFactory import DerivedValues
 from cubie.result_codes import decode_status_codes
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 from cubie.batchsolving.BatchInputHandler import BatchInputHandler
@@ -347,7 +348,7 @@ def solve_ivp(
     return results
 
 
-class Solver:
+class Solver(DerivedValues):
     """User-facing interface for solving batches of ODE systems.
 
     Parameters
@@ -470,8 +471,6 @@ class Solver:
         self.input_handler = BatchInputHandler(
             system, memory_manager=self.kernel.memory_manager
         )
-        self._solve_info_cache = None
-        self._solve_info_key = None
 
     def close(self, shutdown_timeout: Optional[float] = None) -> None:
         """Release GPU resources after pending transfers finish.
@@ -1126,7 +1125,6 @@ class Solver:
 
         self.effective = effective
         self.kernel.update(effective.as_kwargs(), silent=True)
-        self._solve_info_key = None
         return recognised
 
     def update_memory_settings(
@@ -1570,11 +1568,13 @@ class Solver:
 
     @property
     def solve_info(self) -> SolveSpec:
-        """SolveSpec for the current settings, cached until they change."""
-        key = (self.duration, self.warmup, self.t0)
-        if self._solve_info_key == key:
-            return self._solve_info_cache
-        spec = SolveSpec(
+        """SolveSpec for the current settings."""
+        inputs = (self.effective, self.duration, self.warmup, self.t0)
+        return self._derived("solve_info", inputs, self._solve_spec)
+
+    def _solve_spec(self) -> SolveSpec:
+        """Return a SolveSpec built from the current settings."""
+        return SolveSpec(
             dt=self.dt,
             dt_min=self.dt_min,
             dt_max=self.dt_max,
@@ -1594,6 +1594,3 @@ class Solver:
             output_types=self.output_types,
             precision=self.precision,
         )
-        self._solve_info_cache = spec
-        self._solve_info_key = key
-        return spec

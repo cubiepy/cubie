@@ -918,6 +918,16 @@ def test_derived_value_is_reused_until_its_inputs_change():
     assert len(computed) == 2
 
 
+def test_derived_inputs_match_numbers_by_value_and_objects_by_identity():
+    """Reuse the value for an equal number, and recompute it for an equal
+    object that is not the same object."""
+    factory = _make_factory()
+    items = [1]
+    first = factory._derived("value", (1.5, items), object)
+    assert factory._derived("value", (float("1.5"), items), object) is first
+    assert factory._derived("value", (1.5, [1]), object) is not first
+
+
 # ── CUDAFactory._iter_child_factories ──────────────────────── #
 
 
