@@ -43,13 +43,19 @@ def test_valued_kinds_build_valued_sets():
 
 
 def test_valued_set_rejects_valueless_variables():
-    """A valued set holds only records that carry a default."""
+    """Building a ValuedSet from a Variable raises TypeError."""
     with pytest.raises(TypeError, match="no default"):
         ValuedSet([Variable("v")])
 
 
+def test_parameter_set_rejects_uncompiled_parameters():
+    """Building a ParameterSet from a Parameter raises TypeError."""
+    with pytest.raises(TypeError, match="not compiled parameters"):
+        ParameterSet([Parameter("a")])
+
+
 def test_subset_keeps_the_class():
-    """A subset of a valued set still carries the defaults."""
+    """A subset has the class of the set it came from."""
     assert STATES.subset(["y"]).defaults == {"y": 2.0}
     batch = ParameterSet.build(PARAMETERS, ["a"])
     assert isinstance(batch.subset(["a"]), ParameterSet)
@@ -117,17 +123,6 @@ def test_with_defaults_returns_a_changed_copy():
         STATES.with_defaults({"z": 1.0})
 
 
-def test_identity_is_the_names():
-    """Changing a name changes a set's identity, and changing a default
-    does not."""
-    assert canonical_digest(STATES) == canonical_digest(
-        STATES.with_defaults({"x": 9.0})
-    )
-    assert canonical_digest(STATES) != canonical_digest(
-        VariableSet.of(State, {"x": 1.0, "z": 2.0})
-    )
-
-
 # ── subset and without_values ────────────────────────────────────── #
 
 def test_subset_keeps_the_set_order():
@@ -183,9 +178,19 @@ def test_reading_fixed_cannot_change_the_set():
 
 
 def test_batches_compiling_the_same_values_compare_equal():
-    """A batch value equal to the default builds the same set."""
-    assert ParameterSet.build(PARAMETERS, (), {"a": 1.0}) == (
-        ParameterSet.build(PARAMETERS)
+    """A batch value equal to the default builds an equal set that
+    hashes alike."""
+    given = ParameterSet.build(PARAMETERS, (), {"a": 1.0})
+    default = ParameterSet.build(PARAMETERS)
+    assert given == default
+    assert hash(given) == hash(default)
+
+
+def test_key_for_matches_the_built_key():
+    """``key_for`` gives the key of the set ``build`` returns."""
+    request = (PARAMETERS, ["c"], {"a": 4.0})
+    assert ParameterSet.key_for(*request) == (
+        ParameterSet.build(*request).key
     )
 
 

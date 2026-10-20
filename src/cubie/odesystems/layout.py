@@ -35,11 +35,7 @@ from cubie.odesystems.variables import (
 
 
 def _variables(values: Union[VariableSet, Iterable[str]]) -> VariableSet:
-    """Return ``values`` as a set of valueless variables.
-
-    We keep only names and units, because the layout fixes where each
-    variable sits and never what value it holds.
-    """
+    """Return the names and units of ``values`` as a set, with no values."""
     if isinstance(values, VariableSet):
         return values.without_values()
     return VariableSet.of(Variable, list(values))
@@ -56,15 +52,13 @@ def _parameters(
     )
 
 
-@frozen(hash=False)
+@frozen(cache_hash=True)
 class SystemLayout:
     """The variables in each device buffer, in buffer order.
 
-    We build a layout each time we specialise a system, because
-    structural simplification decides which states survive. We generate
-    code that reads each variable from its buffer at its position here,
-    and we fill the parameters array with one row per swept parameter,
-    in the order of :attr:`parameters`.
+    Hold the position of each variable in each device buffer of one
+    specialised system. Pass a parameters array with one row per swept
+    parameter, in the order of :attr:`parameters`.
 
     Parameters
     ----------
@@ -72,15 +66,15 @@ class SystemLayout:
         The states, in the order of the state buffer.
     parameters
         Every parameter as the batch compiles it, in the system's
-        parameter order. We take bare names as swept parameters.
+        parameter order. Pass bare names to sweep every parameter.
     observables
         The observables, in the order of the observables buffer.
     drivers
         The drivers, in the order of the drivers buffer.
     driver_derivatives
         The driver index and order of each driver derivative the
-        equations read. We place them after the drivers in the drivers
-        buffer, in this order.
+        equations read, in drivers-buffer order. The layout places
+        them after the drivers.
     """
 
     states: VariableSet = field(default=(), converter=_variables)
@@ -97,29 +91,6 @@ class SystemLayout:
             attrsval_instance_of(tuple),
         ),
     )
-    _key: tuple = field(init=False, eq=False, repr=False)
-
-    def __attrs_post_init__(self) -> None:
-        # We hash a layout on every solve, so we build its key once.
-        object.__setattr__(
-            self,
-            "_key",
-            (
-                "SystemLayout",
-                self.states.names,
-                self.parameters._cubie_canonical_(),
-                self.observables.names,
-                self.drivers.names,
-                self.driver_derivatives,
-            ),
-        )
-
-    def _cubie_canonical_(self) -> tuple:
-        """Return the buffer names, compiled parameters and slots."""
-        return self._key
-
-    def __hash__(self) -> int:
-        return hash(self._key)
 
     @property
     def state_names(self) -> Tuple[str, ...]:
@@ -148,6 +119,5 @@ class SystemLayout:
 
     @property
     def num_drivers(self) -> int:
-        """Length of the drivers buffer, which holds both drivers and
-        their derivatives."""
+        """Length of the drivers buffer: drivers plus derivatives."""
         return self.drivers.n + len(self.driver_derivatives)

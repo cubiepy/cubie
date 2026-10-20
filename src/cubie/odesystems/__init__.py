@@ -5,9 +5,9 @@ builds symbolic system definitions into :class:`SymbolicODE` instances
 that inherit from :class:`BaseODE` and compile CUDA device functions
 through :class:`cubie.CUDAFactory`. Data containers such as
 :class:`ODEData` and :class:`SystemValues` describe metadata consumed by
-integrator factories. :mod:`cubie.odesystems.variables` holds the
+integrator factories. See :mod:`cubie.odesystems.variables` for the
 states, parameters and observables a system declares, and
-:class:`SystemLayout` records which variable sits where in each device
+:class:`SystemLayout` for the position of each variable in each device
 buffer.
 
 Subpackages

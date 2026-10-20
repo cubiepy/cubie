@@ -30,8 +30,8 @@ Published Classes
     A parameter as a batch compiles it: swept, or fixed at a value.
 
 :class:`ParameterSet`
-    A :class:`VariableSet` of compiled parameters, which says what a
-    batch sweeps and the value it compiles in for every other parameter.
+    A :class:`VariableSet` of compiled parameters: the parameters a
+    batch sweeps, and the value compiled in for every other parameter.
 
     >>> parameters = VariableSet.of(Parameter, {"a": 1.0, "b": 2.0})
     >>> batch = ParameterSet.build(parameters, ["b"], {"a": 3.0})
@@ -123,9 +123,8 @@ def _optional_float(value: Optional[float]) -> Optional[float]:
 class CompiledParameter(Variable):
     """A parameter as a batch compiles it.
 
-    We give a swept parameter no value, because each run reads it from
-    the parameters array. We give every other parameter the value we
-    compile into the code.
+    Give a swept parameter no value, and give a fixed parameter the
+    value to compile into the code.
 
     Parameters
     ----------
@@ -159,7 +158,7 @@ def _unique_entries(instance: Any, attribute: Any, entries: tuple) -> None:
         raise ValueError(f"Variables {repeated} are declared more than once.")
 
 
-@frozen(hash=False)
+@frozen(cache_hash=True)
 class VariableSet:
     """An ordered, immutable set of variables.
 
@@ -225,10 +224,6 @@ class VariableSet:
             return VariableSet(entries)
         return ValuedSet(entries)
 
-    def _cubie_canonical_(self) -> tuple:
-        """Return the names, which fix every array layout."""
-        return ("VariableSet", self.names)
-
     def __len__(self) -> int:
         return len(self.entries)
 
@@ -288,11 +283,7 @@ class VariableSet:
         )
 
     def without_values(self) -> "VariableSet":
-        """Return the names and units of this set, with no defaults.
-
-        We compile a system against this view, so changing a default
-        does not change the build.
-        """
+        """Return the names and units of this set, with no defaults."""
         return VariableSet(
             [Variable(entry.name, entry.unit) for entry in self.entries]
         )
@@ -363,8 +354,8 @@ class VariableSet:
                     {type(item).__name__ for item in keys_or_indices}
                 )
                 raise TypeError(
-                    f"Give a list of names or a list of indices, not a "
-                    f"mixture of {kinds}."
+                    f"Give a list of str names or a list of int indices; "
+                    f"this list holds {kinds}."
                 )
         elif isinstance(keys_or_indices, str):
             indices = np_asarray(
@@ -394,7 +385,7 @@ class VariableSet:
 
 
 def _valued_entries(instance: Any, attribute: Any, entries: tuple) -> None:
-    """Reject entries that carry no default."""
+    """Raise TypeError if an entry is not a State or Parameter."""
     valueless = [
         entry.name
         for entry in entries
@@ -407,7 +398,23 @@ def _valued_entries(instance: Any, attribute: Any, entries: tuple) -> None:
         )
 
 
-@frozen(hash=False)
+def _compiled_entries(
+    instance: Any, attribute: Any, entries: tuple
+) -> None:
+    """Raise TypeError if an entry is not a CompiledParameter."""
+    uncompiled = [
+        entry.name
+        for entry in entries
+        if not isinstance(entry, CompiledParameter)
+    ]
+    if uncompiled:
+        raise TypeError(
+            f"Variables {uncompiled} are not compiled parameters; a "
+            f"ParameterSet holds CompiledParameter records."
+        )
+
+
+@frozen(cache_hash=True)
 class ValuedSet(VariableSet):
     """A set of states or parameters, with their defaults.
 
@@ -460,14 +467,13 @@ class ValuedSet(VariableSet):
         return evolve(self, entries=entries)
 
 
-@frozen(hash=False)
+@frozen(cache_hash=True)
 class ParameterSet(VariableSet):
     """The parameters as a batch compiles them.
 
-    We hold one :class:`CompiledParameter` per parameter, in the
-    system's parameter order, and fill the parameters array with one row
-    per swept parameter in that same order. We keep no defaults here, so
-    a default reaches the build only as the value of a fixed parameter.
+    Hold one :class:`CompiledParameter` per parameter, in the system's
+    parameter order, and no defaults. Pass parameter arrays with one row
+    per swept parameter, in that order.
 
     Parameters
     ----------
@@ -475,21 +481,21 @@ class ParameterSet(VariableSet):
         One :class:`CompiledParameter` per parameter, in system order.
     """
 
-    _key: tuple = field(init=False, eq=False, repr=False)
+    entries: Tuple[Variable, ...] = field(
+        converter=tuple, validator=[_unique_entries, _compiled_entries]
+    )
+    key: tuple = field(init=False, eq=False, repr=False)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        # We key specialisations and compile settings on this tuple on
-        # every solve, so we build it once.
+        # Every solve compares a request with this tuple, so we build it
+        # once.
         object.__setattr__(
             self,
-            "_key",
-            (
-                "ParameterSet",
-                tuple(
-                    (entry.name, entry.swept, entry.value)
-                    for entry in self.entries
-                ),
+            "key",
+            tuple(
+                (entry.name, entry.swept, entry.value)
+                for entry in self.entries
             ),
         )
 
@@ -543,11 +549,11 @@ class ParameterSet(VariableSet):
         swept: Iterable[str] = (),
         values: Optional[Mapping[str, float]] = None,
     ) -> tuple:
-        """Return the key :meth:`build` would give the same request.
+        """Return the :attr:`key` :meth:`build` would give the request.
 
-        Compare it with an existing set's ``_cubie_canonical_()`` to
-        find out whether the request compiles the same parameters,
-        without building the set.
+        Compare it with an existing set's :attr:`key` to find out
+        whether the request compiles the same parameters, without
+        building the set.
 
         Parameters
         ----------
@@ -561,7 +567,7 @@ class ParameterSet(VariableSet):
         ValueError
             If a swept name repeats or also has a value.
         """
-        return ("ParameterSet", cls._resolve(parameters, swept, values))
+        return cls._resolve(parameters, swept, values)
 
     @classmethod
     def build(
@@ -577,12 +583,13 @@ class ParameterSet(VariableSet):
         parameters
             The declared parameters with their defaults.
         swept
-            Names of the parameters to sweep, in any order. The rows of
-            the parameters array follow the system's order.
+            Names of the parameters to sweep, in any order. Pass
+            parameter arrays with one row per swept parameter, in the
+            system's parameter order.
         values
             Values to compile in for some of the other parameters.
-            Every parameter neither swept nor named here compiles in at
-            its default.
+            ``build`` compiles every parameter neither swept nor named
+            here at its default.
 
         Returns
         -------
@@ -603,10 +610,6 @@ class ParameterSet(VariableSet):
                 for name, is_swept, value in resolved
             ]
         )
-
-    def _cubie_canonical_(self) -> tuple:
-        """Return the names, the sweep and every compiled-in value."""
-        return self._key
 
     @property
     def swept(self) -> Tuple[str, ...]:
