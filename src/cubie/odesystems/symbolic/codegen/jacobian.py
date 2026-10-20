@@ -43,6 +43,7 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
     check_derivative_orders,
 )
 
+
 def _ir_order(order: Dict) -> Dict[ir.Sym, int]:
     """Convert a SymPy ``symbol -> position`` map to IR symbols."""
     converted = {}
