@@ -39,8 +39,11 @@ from cubie.odesystems.symbolic.parsing import (
 from cubie.odesystems.layout import SystemLayout
 from cubie.time_logger import default_timelogger
 
-from ._stage_utils import build_stage_metadata, prepare_stage_data
-from ._matrix_utils import mass_diagonal_flags
+from cubie.odesystems.symbolic.codegen._stage_utils import (
+    build_stage_metadata,
+    prepare_stage_data,
+)
+from cubie.odesystems.symbolic.codegen._matrix_utils import mass_diagonal_flags
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code

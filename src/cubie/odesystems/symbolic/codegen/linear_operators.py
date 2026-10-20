@@ -45,12 +45,17 @@ from cubie.odesystems.symbolic.parsing import (
     ParsedEquations,
 )
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.time_logger import default_timelogger
 
-from ._matrix_utils import mass_diagonal_flags
-from ._stage_utils import build_stage_metadata, prepare_stage_data
-from .nonlinear_residuals import build_stage_substitutions
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
+from cubie.odesystems.symbolic.codegen._matrix_utils import mass_diagonal_flags
+from cubie.odesystems.symbolic.codegen._stage_utils import (
+    build_stage_metadata,
+    prepare_stage_data,
+)
+from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
+    build_stage_substitutions,
+)
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -282,11 +287,12 @@ def _resolve_jvp(
     """Return the JVP equations, generating them when not supplied."""
     if jvp_equations is not None:
         return jvp_equations
+    maps = buffer_maps(layout)
     return generate_analytical_jvp(
         equations,
-        input_order=buffer_maps(layout).state_order,
-        output_order=buffer_maps(layout).dxdt_order,
-        observables=buffer_maps(layout).observable_symbols,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
+        observables=maps.observable_symbols,
         cse=cse,
         operation_ordering=operation_ordering,
     )

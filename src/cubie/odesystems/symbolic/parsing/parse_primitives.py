@@ -7,7 +7,6 @@ parse constants, and the shared user-function helpers.
 
 import re
 from typing import (
-    TYPE_CHECKING,
     Callable,
     Dict,
     Iterable,
@@ -21,12 +20,10 @@ import sympy as sp
 from sympy.core.function import AppliedUndef
 from sympy.parsing.sympy_parser import T
 
-from ..engine import expr as ir_expr
+from cubie.odesystems.symbolic.engine import expr as ir_expr
 from cubie._utils import is_devfunc
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.engine.adapter import buffer_maps
-
-if TYPE_CHECKING:
-    from ..layout import SystemLayout
 
 __all__ = [
     "EquationWarning",
@@ -222,7 +219,7 @@ class ParsedEquations:
     def from_equations(
         cls,
         equations: Iterable[Tuple[ir_expr.Expr, ir_expr.Expr]],
-        layout: "SystemLayout",
+        layout: SystemLayout,
         derivative_names: Optional[Dict[str, str]] = None,
         function_aliases: Optional[Dict[str, str]] = None,
         nonfloat_functions: Optional[Iterable[str]] = None,
@@ -231,11 +228,7 @@ class ParsedEquations:
             Dict[ir_expr.Sym, Tuple[ir_expr.Sym, int]]
         ] = None,
     ) -> "ParsedEquations":
-        """Partition equations according to their assigned symbols.
-
-        We sort each equation by the name it assigns: a derivative in
-        ``layout``, an observable in ``layout``, or an auxiliary.
-        """
+        """Partition equations according to their assigned symbols."""
 
         if isinstance(equations, dict):
             items = list(equations.items())

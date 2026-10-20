@@ -59,9 +59,6 @@ def _mass_matrix_converter(value: Any) -> Any:
 class SpecialisedSystem(CUDADispatcherCache):
     """A parsed system assembled for the parameters a batch compiles.
 
-    :class:`~cubie.odesystems.symbolic.specialiser.SystemSpecialiser`
-    builds one as its cache.
-
     Parameters
     ----------
     layout
@@ -212,10 +209,10 @@ def assemble_simplified(
 ) -> SpecialisedSystem:
     """Structurally simplify a normalised system and package it.
 
-    ``parameters`` says which parameters the parameters array holds;
-    the others are already numbers in ``normalised``. We hold states,
-    observables and drivers in sorted name order, and return the mass
-    matrix of a torn system as ``mass``.
+    Pass the compiled parameter set whose fixed values ``normalised``
+    already holds as numbers. Return the states, observables and
+    drivers in sorted name order, and the mass matrix of a torn system
+    as ``mass``.
     """
 
     priorities = {}

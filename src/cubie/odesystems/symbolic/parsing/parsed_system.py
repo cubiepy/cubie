@@ -127,9 +127,10 @@ class ParsedSystem:
         Parameters
         ----------
         swept
-            Names read from the parameters array, in any order. We
-            order the rows as the system orders its parameters, and
-            substitute every other parameter as a number.
+            Names of the parameters to read from the parameters array,
+            in any order. Pass parameter arrays with one row per swept
+            parameter, in the system's parameter order. ``specialise``
+            substitutes every other parameter as a number.
         values
             Values for some of the other parameters. The rest take
             their parsed defaults.

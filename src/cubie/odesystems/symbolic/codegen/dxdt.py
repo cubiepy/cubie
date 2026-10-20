@@ -23,8 +23,6 @@ See Also
     Disk cache that stores and imports the generated code.
 """
 
-from typing import Optional
-
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
@@ -40,7 +38,9 @@ from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.layout import SystemLayout
 from cubie.time_logger import default_timelogger
 
-from ._matrix_utils import mass_matrix_is_identity
+from cubie.odesystems.symbolic.codegen._matrix_utils import (
+    mass_matrix_is_identity,
+)
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -100,7 +100,7 @@ OBSERVABLES_TEMPLATE = (
 
 def generate_dxdt_lines(
     equations: ParsedEquations,
-    layout: Optional[SystemLayout] = None,
+    layout: SystemLayout,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> list[str]:
@@ -231,7 +231,7 @@ def generate_observables_lines(
 
 def generate_dxdt_fac_code(
     equations: ParsedEquations,
-    layout: Optional[SystemLayout] = None,
+    layout: SystemLayout,
     func_name: str = "dxdt_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
@@ -306,7 +306,7 @@ INV_MASS_F_TEMPLATE = (
 
 def generate_evaluate_inv_mass_f_code(
     equations: ParsedEquations,
-    layout: Optional[SystemLayout] = None,
+    layout: SystemLayout,
     M=None,
     func_name: str = "evaluate_inv_mass_f_factory",
     cse: bool = True,

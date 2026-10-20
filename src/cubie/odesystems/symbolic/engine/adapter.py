@@ -24,7 +24,7 @@ DXDT_BUFFER = "out"
 
 @attrs.frozen(eq=False)
 class BufferMaps:
-    """The positions and array elements we read in generated code.
+    """Hold the buffer position and array element of each variable.
 
     Parameters
     ----------
@@ -34,7 +34,7 @@ class BufferMaps:
     observable_symbols
         Observable symbols, in buffer order.
     arrayrefs
-        The array element we read for each name.
+        The array element of each variable, by name.
     """
 
     state_order: Mapping[ir.Sym, int]
@@ -55,8 +55,7 @@ def _order(names: Tuple[str, ...]) -> Mapping[ir.Sym, int]:
 def buffer_maps(layout: SystemLayout) -> BufferMaps:
     """Return the positions and array elements of ``layout``.
 
-    We build them once for each layout, because every generator reads
-    them and a layout never changes.
+    Return the same object for equal layouts.
 
     Parameters
     ----------
