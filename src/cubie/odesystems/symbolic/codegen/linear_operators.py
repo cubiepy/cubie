@@ -38,6 +38,7 @@ from cubie.odesystems.symbolic.engine.printer import (
 )
 from cubie.odesystems.symbolic.codegen.jacobian import (
     generate_analytical_jvp,
+    generate_jacobian,
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie._env import operation_ordering_default
@@ -297,6 +298,23 @@ def _resolve_jvp(
         operation_ordering=operation_ordering,
     )
 
+
+def _resolve_jacobian(
+    equations: ParsedEquations,
+    layout: SystemLayout,
+    jacobian: Optional[List[List[ir.Expr]]],
+    operation_ordering: str = operation_ordering_default(),
+) -> List[List[ir.Expr]]:
+    """Return the Jacobian, generating it when not supplied."""
+    if jacobian is not None:
+        return jacobian
+    maps = buffer_maps(layout)
+    return generate_jacobian(
+        equations,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
+        operation_ordering=operation_ordering,
+    )
 
 def generate_linear_operator_code(
     equations: ParsedEquations,

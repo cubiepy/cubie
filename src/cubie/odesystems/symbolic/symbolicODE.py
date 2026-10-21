@@ -43,6 +43,7 @@ from typing import (
     Any,
     Callable,
     Iterable,
+    List,
     Optional,
     Union,
 )
@@ -52,7 +53,10 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
     generate_observables_fac_code,
 )
-from cubie.odesystems.symbolic.codegen.jacobian import generate_analytical_jvp
+from cubie.odesystems.symbolic.codegen.jacobian import (
+    generate_analytical_jvp,
+    generate_jacobian,
+)
 from cubie.odesystems.symbolic.helper_registry import (
     helper_member_hash,
     helper_source_hash,
@@ -450,6 +454,29 @@ class SymbolicODE(BaseODE):
     def driver_units(self) -> dict[str, str]:
         """Return units for drivers."""
         return self.layout.drivers.units
+
+    def _get_jacobian(self) -> List[List[Any]]:
+        """Return the Jacobian of the current system as IR rows.
+
+        Return the same rows until the system is specialised again or
+        its ordering policy changes.
+        """
+        equations = self.equations
+        layout = self.layout
+        ordering = self.compile_settings.operation_ordering
+
+        def generate():
+            maps = buffer_maps(layout)
+            return generate_jacobian(
+                equations,
+                input_order=maps.state_order,
+                output_order=maps.dxdt_order,
+                operation_ordering=ordering,
+            )
+
+        return self._derived(
+            "jacobian", (equations, layout, ordering), generate
+        )
 
     def _get_jvp_exprs(self) -> JVPEquations:
         """Return Jacobian-vector assignments for the current system.

@@ -1,10 +1,9 @@
 """Source-level tests for the remaining codegen branches.
 
-Covers non-CSE JVP emission, the
-CUDA printer's function-dispatch branches, the ``dxdt``/observables/
-time-derivative non-CSE paths, and ``ODEFile.import_function``
-re-initialising a stale cache file. Equation-set fixtures live in the
-local conftest.
+Covers non-CSE JVP emission, the CUDA printer's function-dispatch
+branches, the ``dxdt``/observables/time-derivative non-CSE paths, and
+``ODEFile.import_function`` re-initialising a stale cache file.
+Equation-set fixtures live in the local conftest.
 """
 
 import ast

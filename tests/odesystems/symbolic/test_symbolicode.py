@@ -827,3 +827,14 @@ def test_list_units_follow_declared_names(dxdt, precision):
         "k": "k_unit"
     }
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}
+
+
+def test_jacobian_is_reused_until_the_system_is_specialised_again(
+    system_restored,
+):
+    """Return the same Jacobian until the swept parameters change."""
+    system = system_restored
+    first = system._get_jacobian()
+    assert system._get_jacobian() is first
+    system.set_swept_parameters(system.parameters.names[:1])
+    assert system._get_jacobian() is not first

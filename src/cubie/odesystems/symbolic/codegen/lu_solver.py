@@ -52,10 +52,8 @@ from cubie.odesystems.symbolic.engine.assignments import (
 from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
-from cubie.odesystems.symbolic.codegen.jacobian import (
-    generate_jacobian,
-)
 from cubie.odesystems.symbolic.codegen.linear_operators import (
+    _resolve_jacobian,
     _resolve_jvp,
     _state_increment_subs,
     hoisted_scale,
@@ -68,7 +66,6 @@ from cubie.odesystems.symbolic.parsing import (
     ParsedEquations,
 )
 from cubie.odesystems.layout import SystemLayout
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.codegen._matrix_utils import (
     block_eigenstructure,
     mass_diagonal_flags,
@@ -1390,6 +1387,7 @@ def generate_lu_solve_code(
     beta: float = 1.0,
     gamma: float = 1.0,
     a_ij: Optional[float] = None,
+    jacobian: Optional[List[List[ir.Expr]]] = None,
 ) -> Tuple[str, int]:
     """Generate the direct LU solve factory for one variant.
 
@@ -1431,6 +1429,9 @@ def generate_lu_solve_code(
     a_ij
         Stage diagonal folded in as a numeric literal; ``None``
         keeps the runtime ``a_ij`` argument live.
+    jacobian
+        Prebuilt Jacobian of ``equations`` as IR rows; generated from
+        ``equations`` when omitted.
 
     Returns ``(factory source, factor length)``; substitution-only
     variants report length zero.
@@ -1441,12 +1442,8 @@ def generate_lu_solve_code(
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
-    maps = buffer_maps(layout)
-    jac = generate_jacobian(
-        equations,
-        input_order=maps.state_order,
-        output_order=maps.dxdt_order,
-        operation_ordering=operation_ordering,
+    jac = _resolve_jacobian(
+        equations, layout, jacobian, operation_ordering
     )
     if variant.takes_stage_data:
         coeff_matrix, node_values, stage_count = prepare_stage_data(
@@ -1559,6 +1556,7 @@ def generate_init_lu_solve_code(
     func_name: str = "init_lu_solve_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
+    jacobian: Optional[List[List[ir.Expr]]] = None,
 ) -> Tuple[str, int]:
     """Generate the consistent-initialisation direct LU solve.
 
@@ -1580,6 +1578,9 @@ def generate_init_lu_solve_code(
         Whether to apply common-subexpression elimination.
     operation_ordering
         Statement-ordering policy for the emitted body.
+    jacobian
+        Prebuilt Jacobian of ``equations`` as IR rows; generated from
+        ``equations`` when omitted.
 
     Returns
     -------
@@ -1591,12 +1592,8 @@ def generate_init_lu_solve_code(
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
-    maps = buffer_maps(layout)
-    jac = generate_jacobian(
-        equations,
-        input_order=maps.state_order,
-        output_order=maps.dxdt_order,
-        operation_ordering=operation_ordering,
+    jac = _resolve_jacobian(
+        equations, layout, jacobian, operation_ordering
     )
     entry_exprs, prefix_assigns = _inline_entry_exprs(
         sysir,
@@ -1648,6 +1645,7 @@ def generate_lu_prepare_blocks_code(
     operation_ordering: str = operation_ordering_default(),
     beta: float = 1.0,
     gamma: float = 1.0,
+    jacobian: Optional[List[List[ir.Expr]]] = None,
 ) -> Tuple[str, int]:
     """Generate the step-start LU block factorisation factory.
 
@@ -1659,6 +1657,9 @@ def generate_lu_prepare_blocks_code(
     then one complex block per conjugate pair with interleaved
     re/im entries. ``beta`` and ``gamma`` fold in as numeric
     literals.
+    jacobian
+        Prebuilt Jacobian of ``equations`` as IR rows; generated from
+        ``equations`` when omitted.
 
     Returns
     -------
@@ -1672,12 +1673,8 @@ def generate_lu_prepare_blocks_code(
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
-    maps = buffer_maps(layout)
-    jac = generate_jacobian(
-        equations,
-        input_order=maps.state_order,
-        output_order=maps.dxdt_order,
-        operation_ordering=operation_ordering,
+    jac = _resolve_jacobian(
+        equations, layout, jacobian, operation_ordering
     )
     row_perm, col_perm, lu_pattern, slots, nnz, _ = (
         _system_pattern_structure(sysir, jac, mass_diag)
@@ -1944,6 +1941,7 @@ def generate_lu_smoothing_solve_code(
     operation_ordering: str = operation_ordering_default(),
     beta: float = 1.0,
     gamma: float = 1.0,
+    jacobian: Optional[List[List[ir.Expr]]] = None,
 ) -> Tuple[str, int]:
     """Generate the smoothing solve sharing the real eigen block.
 
@@ -1952,19 +1950,17 @@ def generate_lu_smoothing_solve_code(
     ``lambda_real/(gamma*h)`` and substituting against the real
     block factor ``lu_prepare_blocks`` stored first in
     ``cached_aux``. ``beta`` and ``gamma`` fold in as numeric
-    literals.
+    literals. Pass ``jacobian`` to reuse a Jacobian of
+    ``equations`` already built; the function builds one when it is
+    omitted.
     """
     default_timelogger.start_event("codegen_lu_smoothing_solve")
 
     sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
-    maps = buffer_maps(layout)
-    jac = generate_jacobian(
-        equations,
-        input_order=maps.state_order,
-        output_order=maps.dxdt_order,
-        operation_ordering=operation_ordering,
+    jac = _resolve_jacobian(
+        equations, layout, jacobian, operation_ordering
     )
     row_perm, col_perm, lu_pattern, slots, nnz, _ = (
         _system_pattern_structure(sysir, jac, mass_diag)

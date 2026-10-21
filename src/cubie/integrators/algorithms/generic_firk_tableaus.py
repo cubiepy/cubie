@@ -48,9 +48,10 @@ See Also
 """
 
 from fractions import Fraction
+from functools import cache
 from typing import Dict, Optional, Tuple
 
-from attrs import field, frozen
+from attrs import frozen
 from numpy import (
     array as np_array,
     asarray as np_asarray,
@@ -73,6 +74,7 @@ class FIRKTableau(ButcherTableau):
         self._validate_weight_sums()
 
 
+@cache
 def _sole_real_eigenvalue(
     a: Tuple[Tuple[float, ...], ...],
 ) -> Optional[float]:
@@ -94,18 +96,10 @@ def _sole_real_eigenvalue(
 class RadauIIATableau(FIRKTableau):
     """Radau IIA collocation tableau with a smoothed error estimate."""
 
-    _sole_real: Optional[float] = field(init=False, eq=False, repr=False)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        # Every step config reads the eigenvalue, and the exact solve
-        # takes milliseconds, so we solve it once per tableau.
-        object.__setattr__(self, "_sole_real", _sole_real_eigenvalue(self.a))
-
     @property
     def supports_smoothed_error(self) -> bool:
         """Return whether ``a`` has exactly one real eigenvalue."""
-        return self._sole_real is not None
+        return _sole_real_eigenvalue(self.a) is not None
 
     @property
     def smoothed_embedded_order(self) -> int:
@@ -115,7 +109,8 @@ class RadauIIATableau(FIRKTableau):
     @property
     def smoothing_gamma(self) -> float:
         """Return the sole real eigenvalue of ``a``, else zero."""
-        return 0.0 if self._sole_real is None else self._sole_real
+        gamma = _sole_real_eigenvalue(self.a)
+        return 0.0 if gamma is None else gamma
 
     def smoothed_error_weights(
         self,

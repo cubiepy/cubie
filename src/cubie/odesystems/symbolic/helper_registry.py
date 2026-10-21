@@ -158,6 +158,14 @@ class JacobiPreconditioner(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
+        # The cached variants read the Jacobian entries from the JVP
+        # graph, so only the others need the system's Jacobian.
+        jacobian = None
+        if request.variant not in (
+            HelperVariant.CACHED,
+            HelperVariant.CACHED_STACKED,
+        ):
+            jacobian = system._get_jacobian()
         return generate_jacobi_preconditioner_code(
             system.equations,
             system.layout,
@@ -168,6 +176,7 @@ class JacobiPreconditioner(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            jacobian=jacobian,
             beta=request.operator_beta,
             gamma=request.operator_gamma,
             a_ij=request.a_ij,
@@ -237,6 +246,7 @@ class LuSolve(SolverHelperRole):
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,
+            jacobian=system._get_jacobian(),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
             a_ij=request.a_ij,
@@ -281,6 +291,7 @@ class LuPrepareBlocks(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            jacobian=system._get_jacobian(),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
         )
@@ -326,6 +337,7 @@ class LuSmoothingSolve(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            jacobian=system._get_jacobian(),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
         )
@@ -397,6 +409,7 @@ class InitLuSolve(SolverHelperRole):
                 M=system.mass,
                 func_name=func_name,
                 operation_ordering=system.operation_ordering,
+                jacobian=system._get_jacobian(),
             )
         except ValueError as error:
             if "structurally singular" not in str(error):
