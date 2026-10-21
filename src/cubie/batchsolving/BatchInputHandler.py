@@ -15,8 +15,8 @@ returns the values that vary between runs:
 - For a dict, the handler sweeps every entry, and parameters left out
   keep their defaults.
 - For an array with a row per parameter the system sweeps now, the
-  handler keeps the system as it is compiled and takes the rows as the
-  batch values.
+  handler keeps those parameters swept, compiles every other parameter
+  in at its default and takes the rows as the batch values.
 - For an array with a row for every parameter, the handler sweeps every
   parameter.
 - With ``fix_constant_parameters``, the handler compiles in every dict
@@ -72,7 +72,9 @@ Examples
 >>> handler = BatchInputHandler.from_system(system)
 >>> states = {"x": [1.0, 2.0], "y": [0.5, 1.5]}
 >>> parameters = {"p0": [0.1, 0.2], "p1": 3.0}
->>> inits, params = handler(states, parameters, kind="verbatim")
+>>> inits, params = handler(
+...     states, parameters, kind="verbatim", fix_constant_parameters=True
+... )
 >>> system.swept_parameters
 ('p0',)
 >>> system.fixed_parameter_values
@@ -82,7 +84,10 @@ Examples
  [0.5 1.5]]
 >>> print(params)
 [[0.1 0.2]]
->>> inits, params = handler(states, parameters, kind="combinatorial")
+>>> inits, params = handler(
+...     states, parameters, kind="combinatorial",
+...     fix_constant_parameters=True,
+... )
 >>> print(inits.shape, params.shape)
 (2, 8) (1, 8)
 
@@ -263,7 +268,8 @@ def verbatim_grid(
     Notes
     -----
     All value arrays must share the same length so rows stay aligned.
-    We repeat an entry with a single value across every run.
+    ``verbatim_grid`` repeats an entry with a single value across every
+    run.
 
     Examples
     --------
@@ -606,8 +612,9 @@ class BatchInputHandler:
         parameter to sweep every parameter. Pass
         ``fix_constant_parameters`` with either to compile in each
         entry or row that holds one value. Give any other array a row
-        per parameter the system sweeps now, and the handler leaves the
-        system as it is compiled.
+        per parameter the system sweeps now; the handler keeps those
+        parameters swept and compiles every other parameter in at its
+        default.
 
         Parameters
         ----------
@@ -688,11 +695,16 @@ class BatchInputHandler:
         return swept or None
 
     def _array_sweep(self, n_rows: int) -> None:
-        """Set the swept parameters for an array with ``n_rows`` rows."""
+        """Set the swept parameters for an array with ``n_rows`` rows.
+
+        An array with a row per swept parameter names no other
+        parameter, so compile every other parameter in at its default.
+        """
         system = self.system
         n_swept = len(system.swept_parameters)
         n_parameters = system.parameters.n
         if n_rows == n_swept:
+            system.set_swept_parameters(system.swept_parameters)
             return
         if n_rows == n_parameters:
             system.set_swept_parameters(system.parameters.names)

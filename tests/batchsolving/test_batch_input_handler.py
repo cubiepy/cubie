@@ -463,7 +463,9 @@ def test_call_casts_to_precision(input_handler_mutable, system, precision):
 
 def _assert_cast_to_precision(system, precision):
     """Assert the handler returns C-contiguous arrays at *precision*."""
-    handler = BatchInputHandler.from_system(system)
+    # A copy takes the default parameters, leaving the session system's
+    # sweep as it is.
+    handler = BatchInputHandler.from_system(system.copy())
     inits, params = handler(None, None)
     assert inits.dtype == precision
     assert params.dtype == precision
@@ -1265,25 +1267,26 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
         )
 
 
-def test_swept_height_array_keeps_the_compiled_parameters(
+def test_swept_height_array_compiles_the_others_at_their_defaults(
     input_handler_mutable, system
 ):
-    """Keep the values a dict compiled in for a following swept-only
-    array."""
+    """Compile every parameter a swept-only array leaves out at its
+    default, whatever an earlier dict fixed."""
     system = input_handler_mutable.system
     names = list(system.parameters.names)
-    _, _, _, dict_fixed = _handle(
+    defaults = system.parameters.defaults
+    _handle(
         input_handler_mutable,
-        params={names[0]: [1.0, 2.0], names[1]: 0.25},
+        params={names[0]: [1.0, 2.0], names[1]: defaults[names[1]] + 1.0},
         kind="verbatim",
         fix_constant_parameters=True,
     )
-    compiled = system.compiled_parameters
     params = np.ones((1, 4), dtype=system.precision)
     _, result = input_handler_mutable(None, params, "verbatim")
-    assert system.compiled_parameters is compiled
-    assert system.fixed_parameter_values == dict_fixed
-    assert dict_fixed[names[1]] == 0.25
+    assert system.swept_parameters == (names[0],)
+    assert system.fixed_parameter_values == {
+        name: value for name, value in defaults.items() if name != names[0]
+    }
     assert result is params
 
 

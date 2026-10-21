@@ -409,14 +409,15 @@ class TestLiveSolverRespecialisation:
         """A solve whose fixed value changes the states builds its
         initial values for the states the equations keep."""
         assert system_restored.mass is not None
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = solver_mutable.solve(
-                parameters={"Cs": 2e-2},
-                duration=0.01,
-                fix_constant_parameters=True,
-            )
-        assert result.time_domain_array.shape[1] == 3
+        result = solver_mutable.solve(
+            parameters={"Cs": 2e-2},
+            duration=0.01,
+            fix_constant_parameters=True,
+        )
+        assert system_restored.mass is None
+        assert (
+            result.time_domain_array.shape[1] == system_restored.num_states
+        )
         assert np.isfinite(result.time_domain_array).all()
 
     @pytest.mark.parametrize(
@@ -429,12 +430,11 @@ class TestLiveSolverRespecialisation:
     ):
         """A grid built after a default that changes the states has a
         row per state the equations keep."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            system_restored.set_default_parameters({"Cs": 2e-2})
-            inits, params = solver_mutable.prepare_grid_arrays()
-        assert inits.shape[0] == len(system_restored.initial_values.names)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = solver_mutable.solve(inits, params, duration=0.01)
-        assert result.time_domain_array.shape[1] == 3
+        system_restored.set_default_parameters({"Cs": 2e-2})
+        inits, params = solver_mutable.prepare_grid_arrays()
+        assert system_restored.mass is None
+        assert inits.shape[0] == system_restored.num_states
+        result = solver_mutable.solve(inits, params, duration=0.01)
+        assert (
+            result.time_domain_array.shape[1] == system_restored.num_states
+        )

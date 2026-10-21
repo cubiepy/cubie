@@ -77,12 +77,14 @@ pushes the whole effective record so every child re-reads its products.
 ## Swept and fixed parameters
 The parameters array has one row per swept parameter, in parameter-name order;
 `SystemInterface.parameter_legend` labels the rows and `Solver.parameter_legend` passes
-it through. Every other parameter is compiled into the code at a fixed value.
+it through. Every other parameter is compiled into the code at a fixed value. Each solve
+compiles the fixed values its input gives merged over the defaults, and nothing an
+earlier call compiled in survives it.
 - A dict sweeps every entry it names, with one value or several, and parameters left
   out use their defaults.
 - An array with a row per parameter sweeps every parameter.
-- An array with a row per swept parameter sweeps those parameters and keeps the values
-  the system compiled in.
+- An array with a row per swept parameter sweeps those parameters, and every other
+  parameter uses its default.
 - With `fix_constant_parameters`, we compile in every dict entry and every row of a
   full-height array that holds one value.
 - `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.

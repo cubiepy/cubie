@@ -137,12 +137,12 @@ def _system_from_equations(
         equation strings.
     y0
         Initial-value input. A dict supplies state names and default
-        initial values. With an array or ``None`` we infer the states
-        from the equations.
+        initial values. With an array or ``None``, the function infers
+        the states from the equations.
     parameters
         Parameter input. A dict supplies parameter names and default
-        values (the first value of each entry). Arrays are rejected
-        because they carry no names to declare.
+        values (the first value of each entry). The function rejects
+        arrays, because they hold no names to declare.
     drivers
         The sampled drivers; their names declare the system's drivers.
     precision
@@ -815,12 +815,11 @@ class Solver:
     def set_swept_parameters(self, names: Sequence[str]) -> None:
         """Set which parameters will change over the runs of a batch.
 
-        You only need to use this method if you will provide an array to
-        solve() that contains varying parameters only - if you're
-        providing a full-height parameter array or a dict, this is
-        handled internally. Parameter names can appear in any order, the
-        array you provide to solve must have rows in parameter name
-        order.
+        Call this before you pass :meth:`solve` an array that holds only
+        the varying parameters; a dict or a full-height array sets the
+        swept parameters itself. Give the names in any order, and give
+        the array its rows in parameter-name order. The solver compiles
+        every other parameter in at its default.
 
         Parameters
         ----------

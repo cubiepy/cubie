@@ -380,6 +380,28 @@ def system(request, solver_settings_override, precision):
     return system
 
 
+@pytest.fixture(autouse=True)
+def session_system_unchanged(request):
+    """Fail a test that leaves the session system compiling other
+    parameters.
+
+    Tests share the session system across an xdist worker, so a sweep
+    one test leaves behind breaks whichever test runs next. We tear
+    this fixture down last, after ``system_restored`` and the mutable
+    fixtures have restored the system.
+    """
+    if "system" not in request.fixturenames:
+        yield
+        return
+    system = request.getfixturevalue("system")
+    compiled = system.compiled_parameters
+    yield
+    assert system.compiled_parameters == compiled, (
+        f"{request.node.nodeid} left the session system compiling "
+        f"{system.compiled_parameters.key} instead of {compiled.key}."
+    )
+
+
 @pytest.fixture(scope="function")
 def system_restored(system):
     """Yield the chain system and restore its parameters and states.
@@ -1069,10 +1091,10 @@ def solverkernel(system, effective_settings):
 @pytest.fixture(scope="function")
 def solverkernel_mutable(system, effective_settings):
     """Function-scoped composite fixture for BatchSolverKernel."""
-    snapshot = system.compile_settings
+    snapshot = _system_snapshot(system)
     kernel = BatchSolverKernel(system, **effective_settings)
     yield kernel
-    _restore_system_flags(system, snapshot)
+    _restore_system(system, snapshot)
 
 
 @pytest.fixture(scope="session")
@@ -1085,12 +1107,19 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
     )
 
 
-def _restore_system_flags(system, snapshot):
-    """Restore the session system's jit and unroll flags."""
+def _system_snapshot(system):
+    """Return the session system's settings and compiled parameters."""
+    return system.compile_settings, system.compiled_parameters
+
+
+def _restore_system(system, snapshot):
+    """Restore the session system's flags and compiled parameters."""
+    settings, compiled = snapshot
     system.update_compile_settings(
-        {"jit_flags": snapshot.jit_flags, "unroll": snapshot.unroll},
+        {"jit_flags": settings.jit_flags, "unroll": settings.unroll},
         silent=True,
     )
+    system.update(compiled_parameters=compiled)
 
 
 @pytest.fixture(scope="function")
@@ -1100,14 +1129,14 @@ def solver_mutable(
     driver_settings,
     thread_mem_manager,
 ):
-    snapshot = system.compile_settings
+    snapshot = _system_snapshot(system)
     yield _build_solver_instance(
         system=system,
         solver_settings=solver_settings,
         driver_settings=driver_settings,
         memory_manager=thread_mem_manager,
     )
-    _restore_system_flags(system, snapshot)
+    _restore_system(system, snapshot)
 
 
 @pytest.fixture(scope="session")
@@ -1201,14 +1230,14 @@ def single_integrator_run_mutable(system, driver_array, effective_settings):
     as these are the two fundamental base CUDAFactory fixtures. All other
     dependencies are settings fixtures.
     """
-    snapshot = system.compile_settings
+    snapshot = _system_snapshot(system)
     yield SingleIntegratorRun(
         system,
         drivers_fn=_get_evaluate_driver_at_t(driver_array),
         driver_derivative_fn=_get_driver_del_t(driver_array),
         **effective_settings,
     )
-    _restore_system_flags(system, snapshot)
+    _restore_system(system, snapshot)
 
 
 @pytest.fixture(scope="session")
