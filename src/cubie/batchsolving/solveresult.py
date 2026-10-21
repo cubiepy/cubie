@@ -266,8 +266,10 @@ class SolveResult:
     summaries_legend
         Mapping from summary indices to labels.
     parameter_legend
-        Mapping from parameter array indices to parameter names.
-    fixed_parameters
+        Mapping from parameter array indices to labels: each swept
+        parameter's name, with its unit in brackets unless it is
+        dimensionless.
+    fixed_parameter_values
         Values for each fixed parameter used in the solve.
     solve_settings
         Solver run configuration snapshot.
@@ -329,7 +331,7 @@ class SolveResult:
         default=attrsFactory(dict),
         validator=attrsval_instance_of(dict),
     )
-    fixed_parameters: dict[str, float] = field(
+    fixed_parameter_values: dict[str, float] = field(
         default=attrsFactory(dict),
         validator=attrsval_instance_of(dict),
     )
@@ -406,7 +408,7 @@ class SolveResult:
             time_domain_legend=cls.time_domain_legend_from_solver(solver),
             summaries_legend=cls.summary_legend_from_solver(solver),
             parameter_legend=solver.parameter_legend,
-            fixed_parameters=solver.fixed_parameter_values,
+            fixed_parameter_values=solver.fixed_parameter_values,
             solve_settings=solver.solve_info,
             stream=solver.kernel.stream,
             singlevar_summary_legend=solver.summary_legend_per_variable,
@@ -615,8 +617,8 @@ class SolveResult:
         -------
         dict
             ``time_domain`` and ``summaries`` DataFrames, and a
-            ``fixed_parameters`` Series of the values for each fixed
-            parameter used in the solve.
+            ``fixed_parameter_values`` Series of the values for each
+            fixed parameter used in the solve.
 
         Raises
         ------
@@ -704,8 +706,8 @@ class SolveResult:
         return {
             "time_domain": time_domain_df,
             "summaries": summaries_df,
-            "fixed_parameters": pd.Series(
-                self.fixed_parameters, dtype=float
+            "fixed_parameter_values": pd.Series(
+                self.fixed_parameter_values, dtype=float
             ),
         }
 
@@ -719,7 +721,8 @@ class SolveResult:
         dict[str, Optional[NDArray]]
             Dictionary containing copies of time, time_domain_array,
             summaries_array, time_domain_legend, summaries_legend,
-            parameter_legend, fixed_parameters and iteration_counters.
+            parameter_legend, fixed_parameter_values and
+            iteration_counters.
         """
         counters = self.iteration_counters
         return {
@@ -737,7 +740,7 @@ class SolveResult:
             "time_domain_legend": self.time_domain_legend.copy(),
             "summaries_legend": self.summaries_legend.copy(),
             "parameter_legend": self.parameter_legend.copy(),
-            "fixed_parameters": self.fixed_parameters.copy(),
+            "fixed_parameter_values": self.fixed_parameter_values.copy(),
             "iteration_counters": (
                 np_array(counters, copy=True, subok=False)
                 if counters is not None
@@ -918,8 +921,10 @@ class DeviceSolveResult:
     stream
         The kernel's memory-manager stream the solve ran on.
     parameter_legend
-        Mapping from parameter array indices to parameter names.
-    fixed_parameters
+        Mapping from parameter array indices to labels: each swept
+        parameter's name, with its unit in brackets unless it is
+        dimensionless.
+    fixed_parameter_values
         Values for each fixed parameter used in the solve.
     """
 
@@ -974,7 +979,7 @@ class DeviceSolveResult:
         default=attrsFactory(dict),
         validator=attrsval_instance_of(dict),
     )
-    fixed_parameters: dict[str, float] = field(
+    fixed_parameter_values: dict[str, float] = field(
         default=attrsFactory(dict),
         validator=attrsval_instance_of(dict),
     )
@@ -1007,7 +1012,7 @@ class DeviceSolveResult:
             stride_order=kernel.output_arrays.host.state.stride_order,
             save_time=bool(solver.save_time),
             parameter_legend=solver.parameter_legend,
-            fixed_parameters=solver.fixed_parameter_values,
+            fixed_parameter_values=solver.fixed_parameter_values,
         )
 
     @property

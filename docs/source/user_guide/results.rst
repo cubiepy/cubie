@@ -39,9 +39,11 @@ Key attributes:
    Dictionary mapping row indices to summary labels.
 
 ``parameter_legend``
-   Dictionary mapping parameter array indices to parameter names.
+   Dictionary mapping parameter array indices to labels: each swept
+   parameter's name, with its unit in brackets unless it is
+   dimensionless.
 
-``fixed_parameters``
+``fixed_parameter_values``
    Values for each fixed parameter used in the solve.
 
 ``stream``
@@ -73,8 +75,8 @@ device-array handles::
 
 The result carries ``state``, ``observables``, ``state_summaries``,
 ``observable_summaries``, ``iteration_counters``, ``status_codes``,
-``stream``, ``parameter_legend`` and ``fixed_parameters``; inactive
-outputs are ``None``.  The result is a pure
+``stream``, ``parameter_legend`` and ``fixed_parameter_values``;
+inactive outputs are ``None``.  The result is a pure
 handle container — it performs no stream or memory operations
 itself.  Points to note:
 

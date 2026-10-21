@@ -143,7 +143,8 @@ parameters array can either have one row for every parameter in your
 system (a full-height parameter array), or one row per parameter that
 will vary across a batch only. In
 both cases, rows should be ordered by parameter names.
-``solver.parameter_legend`` lists the parameter name of each row. To pass
+``solver.parameter_legend`` labels each row with its parameter's name,
+and its unit in brackets unless it is dimensionless. To pass
 just the varying parameters, you will need to tell the system which
 parameters to expect. To do this, call ``solver.set_swept_parameters``
 with a set of the parameter names you want to vary, or pass the same set
