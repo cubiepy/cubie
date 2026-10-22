@@ -1137,6 +1137,38 @@ def test_dict_sweeps_multiple_values_and_fixes_single_values(
     assert fixed[names[1]] == 4.0
 
 
+def test_dict_sweeps_every_entry(input_handler_mutable, system):
+    names = list(system.parameters.names)
+    _, params, swept, fixed = _handle(
+        input_handler_mutable,
+        params={names[0]: [1.0, 2.0, 3.0], names[1]: 4.0},
+        kind="verbatim",
+    )
+    assert swept == (names[0], names[1])
+    assert_array_equal(params, [[1.0, 2.0, 3.0], [4.0, 4.0, 4.0]])
+    assert names[1] not in fixed
+
+
+def test_fix_constant_parameters_compiles_in_constant_dict_entries(
+    input_handler_mutable, system
+):
+    names = list(system.parameters.names)
+    _, params, swept, fixed = _handle(
+        input_handler_mutable,
+        params={
+            names[0]: [1.0, 2.0, 3.0],
+            names[1]: 4.0,
+            names[2]: [5.0, 5.0, 5.0],
+        },
+        kind="verbatim",
+        fix_constant_parameters=True,
+    )
+    assert swept == (names[0],)
+    assert_array_equal(params, [[1.0, 2.0, 3.0]])
+    assert fixed[names[1]] == 4.0
+    assert fixed[names[2]] == 5.0
+
+
 def test_fixed_parameters_keep_the_state_run_count(
     input_handler_mutable, system
 ):
@@ -1183,6 +1215,23 @@ def test_fix_constant_parameters_fixes_uniform_rows(
     assert swept == (names[0],)
     assert fixed == {name: 7.0 for name in names[1:]}
     assert_array_equal(result, [[1.0, 2.0, 3.0]])
+
+
+def test_fix_constant_parameters_reads_past_the_first_values(
+    input_handler_mutable, system
+):
+    names = list(system.parameters.names)
+    params = np.full(
+        (system.num_parameters, 200), 7.0, dtype=system.precision
+    )
+    params[0, -1] = 8.0
+    _, result, swept, fixed = _handle(
+        input_handler_mutable,
+        params=params, kind="verbatim", fix_constant_parameters=True
+    )
+    assert swept == (names[0],)
+    assert fixed == {name: 7.0 for name in names[1:]}
+    assert_array_equal(result, params[:1])
 
 
 def test_fix_constant_parameters_keeps_run_count(
@@ -1256,6 +1305,52 @@ def test_swept_height_array_keeps_the_compiled_parameters(
     assert swept == (names[0],)
     assert result_fixed == fixed
     assert result is params
+
+
+def test_swept_height_array_compiles_the_others_at_their_defaults(
+    input_handler_mutable, system
+):
+    system = input_handler_mutable.system
+    names = list(system.parameters.names)
+    defaults = system.parameters.defaults
+    _handle(
+        input_handler_mutable,
+        params={names[0]: [1.0, 2.0], names[1]: defaults[names[1]] + 1.0},
+        kind="verbatim",
+        fix_constant_parameters=True,
+    )
+    params = np.ones((1, 4), dtype=system.precision)
+    _, result = input_handler_mutable(None, params, "verbatim")
+    assert system.swept_parameters == (names[0],)
+    assert system.fixed_parameter_values == {
+        name: value for name, value in defaults.items() if name != names[0]
+    }
+    assert result is params
+
+
+def test_split_into_rows_gives_each_entry_a_row(
+    input_handler_mutable, system
+):
+    system = input_handler_mutable.system
+    names = list(system.parameters.names)
+    _, params = input_handler_mutable(
+        None,
+        {names[0]: [1.0, 2.0, 3.0], names[1]: 0.25},
+        "verbatim",
+        fix_constant_parameters=False,
+    )
+    assert system.swept_parameters == (names[0], names[1])
+    assert_array_equal(
+        params[1], np.full(3, 0.25, dtype=system.precision)
+    )
+
+
+def test_verbatim_repeats_single_values(system):
+    names = list(system.parameters.names)
+    _, grid = verbatim_grid(
+        {names[0]: [1.0, 2.0, 3.0], names[1]: [0.5]}, system.parameters
+    )
+    assert_array_equal(grid[1], np.full(3, 0.5))
 
 
 def test_ragged_verbatim_entries_raise(input_handler_mutable, system):

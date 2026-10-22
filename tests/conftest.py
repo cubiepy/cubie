@@ -380,6 +380,21 @@ def system(request, solver_settings_override, precision):
     return system
 
 
+@pytest.fixture(autouse=True)
+def session_system_unchanged(request):
+
+    if "system" not in request.fixturenames:
+        yield
+        return
+    system = request.getfixturevalue("system")
+    compiled = system.compiled_parameters
+    yield
+    assert system.compiled_parameters == compiled, (
+        f"{request.node.nodeid} left the session system compiling "
+        f"{system.compiled_parameters.key} instead of {compiled.key}."
+    )
+
+
 @pytest.fixture(scope="function")
 def system_restored(system):
     """Yield the chain system and restore its parameters and states.
@@ -1130,6 +1145,10 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
         driver_settings=driver_settings,
         memory_manager=thread_mem_manager,
     )
+
+
+def _system_snapshot(system):
+    return system.compile_settings, system.compiled_parameters
 
 
 def _restore_system(system, snapshot):

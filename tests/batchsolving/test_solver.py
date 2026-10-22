@@ -3255,6 +3255,185 @@ def test_prepared_parameters_solve_without_a_change(parameter_solve, solver):
         assert solver.kernel.kernel is parameter_solve["kernel_before"]
 
 
+def _batch_as_dict(system, parameter_batch):
+    names = list(system.parameters.names)
+    return {
+        names[0]: parameter_batch[0],
+        names[1]: parameter_batch[1],
+        names[2]: float(parameter_batch[2, 0]),
+    }
+
+
+def _assert_solved_batch(
+    result, solver, system, defaults, swept, reference, output_functions,
+    tolerance,
+):
+    for run, expected in enumerate(reference):
+        device_state, _ = extract_state_and_time(
+            result.state[:, :, run], output_functions
+        )
+        reference_state, _ = extract_state_and_time(
+            expected["state"], output_functions
+        )
+        np.testing.assert_allclose(
+            device_state,
+            reference_state,
+            rtol=tolerance.rel_tight,
+            atol=tolerance.abs_tight,
+        )
+    assert solver.swept_parameters == swept
+    assert system.parameters.defaults == defaults
+    assert not solver.kernel.system_config_stale
+
+
+def test_dict_parameters_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.parameters.defaults)
+    result = solver_mutable.solve(
+        parameters=_batch_as_dict(system, parameter_batch),
+        duration=solver_settings["duration"],
+        fix_constant_parameters=False,
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:3]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+    legend_names = [
+        label.split(" [")[0]
+        for label in solver_mutable.parameter_legend.values()
+    ]
+    assert legend_names == list(solver_mutable.swept_parameters)
+
+
+def test_fixed_constant_dict_entries_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.parameters.defaults)
+    result = solver_mutable.solve(
+        parameters=_batch_as_dict(system, parameter_batch),
+        duration=solver_settings["duration"],
+        fix_constant_parameters=True,
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:2]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+    assert solver_mutable.fixed_parameter_values[names[2]] == (
+        pytest.approx(float(parameter_batch[2, 0]))
+    )
+
+
+def test_full_array_parameters_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    system = system_restored
+    defaults = dict(system.parameters.defaults)
+    result = solver_mutable.solve(
+        parameters=parameter_batch,
+        duration=solver_settings["duration"],
+        fix_constant_parameters=False,
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults,
+        tuple(system.parameters.names), parameter_batch_reference,
+        output_functions, tolerance,
+    )
+
+
+def test_fixed_constant_rows_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.parameters.defaults)
+    result = solver_mutable.solve(
+        parameters=parameter_batch,
+        duration=solver_settings["duration"],
+        fix_constant_parameters=True,
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:2]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+    assert solver_mutable.fixed_parameter_values[names[2]] == (
+        pytest.approx(float(parameter_batch[2, 0]))
+    )
+
+
+@pytest.mark.parametrize("on_device", [False, True], ids=["host", "device"])
+def test_swept_rows_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance, on_device,
+):
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.parameters.defaults)
+    solver_mutable.set_swept_parameters([names[2], names[1], names[0]])
+    params = parameter_batch[:3]
+    if on_device:
+        params = cuda.to_device(params)
+    result = solver_mutable.solve(
+        parameters=params, duration=solver_settings["duration"]
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:3]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+
+
+def test_prepared_grid_arrays_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.parameters.defaults)
+    inits, params = solver_mutable.prepare_grid_arrays(
+        None, _batch_as_dict(system, parameter_batch)
+    )
+    assert params.shape[0] == 3
+    result = solver_mutable.solve(
+        inits, params, duration=solver_settings["duration"]
+    )
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:3]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+
+
+def test_compiled_parameters_solve_the_batch(
+    solver_mutable, system_restored, solver_settings, parameter_batch,
+    parameter_batch_reference, output_functions, tolerance,
+):
+    system = system_restored
+    names = list(system.parameters.names)
+    defaults = dict(system.parameters.defaults)
+    parameters = _batch_as_dict(system, parameter_batch)
+    solver_mutable.compile(
+        parameters=parameters, fix_constant_parameters=False
+    )
+    kernel = solver_mutable.kernel.kernel
+    result = solver_mutable.solve(
+        parameters=parameters,
+        duration=solver_settings["duration"],
+        fix_constant_parameters=False,
+    )
+    assert solver_mutable.kernel.kernel is kernel
+    _assert_solved_batch(
+        result, solver_mutable, system, defaults, tuple(names[:3]),
+        parameter_batch_reference, output_functions, tolerance,
+    )
+
+
 def test_parameter_changes_between_solves(
     solver, system_restored, simple_parameters, solver_settings
 ):
