@@ -651,6 +651,7 @@ def run_calibration(
     waves: int = 5,
     target_ms: float = 20.0,
     max_parallel: int = 4,
+    fix_constant_parameters: bool = True,
 ) -> CalibrationResult:
     """Race solver configurations for a solver and pick the fastest.
 
@@ -691,6 +692,10 @@ def run_calibration(
         Kernel milliseconds per timed solve the batch is sized for.
     max_parallel
         Maximum compilations to run in parallel.
+    fix_constant_parameters
+        Compile in every dict entry and every row of a full-height
+        parameter array that holds one value, as :meth:`Solver.solve`
+        does.
 
     Returns
     -------
@@ -716,9 +721,13 @@ def run_calibration(
             "driver samples that solves will use."
         )
 
-    inits, params = parent.prepare_grid_arrays(
-        initial_values, parameters, grid_type=grid_type
+    inits, params = parent.input_handler(
+        initial_values,
+        parameters,
+        kind=grid_type,
+        fix_constant_parameters=fix_constant_parameters,
     )
+    parent.update()
     if drivers is not None:
         parent.update(drivers=drivers)
     features = _system_features(

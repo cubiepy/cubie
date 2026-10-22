@@ -867,6 +867,7 @@ class Solver:
         waves: int = 5,
         target_ms: float = 20.0,
         max_parallel: int = 4,
+        fix_constant_parameters: bool = True,
     ) -> CalibrationResult:
         """Race solver configurations and pick the fastest.
 
@@ -889,15 +890,7 @@ class Solver:
             format. ``None`` starts every run from the system's
             default initial values.
         parameters
-            Parameter values for each run, as a dict mapping parameter
-            names to values, or as an array. Every parameter you name
-            in a dict gets a row, whether you give it one value or
-            several, and every parameter you leave out uses its default
-            value. An array has either one row per parameter in the
-            system, or one row per swept parameter in parameter name
-            order, in which case every other parameter uses its default
-            value. None, an empty dict, or an empty 1D array uses the
-            default parameters for all runs.
+            Parameter values for each run, as in :meth:`solve`.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -927,6 +920,11 @@ class Solver:
             for. Default ``20.0``.
         max_parallel
             Maximum compilations to run in parallel.
+        fix_constant_parameters
+            Compile in every dict entry and every row of a full-height
+            parameter array that holds one value, as :meth:`solve`
+            does, so the candidates race the kernel your solves use.
+            Default ``True``.
 
         Returns
         -------
@@ -956,6 +954,7 @@ class Solver:
             waves=waves,
             target_ms=target_ms,
             max_parallel=max_parallel,
+            fix_constant_parameters=fix_constant_parameters,
         )
 
     def optimize(
@@ -974,6 +973,7 @@ class Solver:
         waves: int = 5,
         target_ms: float = 20.0,
         max_parallel: int = 4,
+        fix_constant_parameters: bool = True,
     ) -> OptimizeResult:
         """Time placement, unrolling and launch options; keep the fastest.
 
@@ -987,15 +987,7 @@ class Solver:
             ``None`` starts every run from the system's default initial
             values.
         parameters
-            Parameter values for each run, as a dict mapping parameter
-            names to values, or as an array. Every parameter you name
-            in a dict gets a row, whether you give it one value or
-            several, and every parameter you leave out uses its default
-            value. An array has either one row per parameter in the
-            system, or one row per swept parameter in parameter name
-            order, in which case every other parameter uses its default
-            value. None, an empty dict, or an empty 1D array uses the
-            default parameters for all runs.
+            Parameter values for each run, as in :meth:`solve`.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -1025,6 +1017,11 @@ class Solver:
             Default ``20.0``.
         max_parallel
             Maximum compilations to run in parallel.
+        fix_constant_parameters
+            Compile in every dict entry and every row of a full-height
+            parameter array that holds one value, as :meth:`solve`
+            does, so the candidates race the kernel your solves use.
+            Default ``True``.
 
         Returns
         -------
@@ -1052,6 +1049,7 @@ class Solver:
             waves=waves,
             target_ms=target_ms,
             max_parallel=max_parallel,
+            fix_constant_parameters=fix_constant_parameters,
         )
 
     def update(
