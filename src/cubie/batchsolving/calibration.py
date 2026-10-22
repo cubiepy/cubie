@@ -679,9 +679,6 @@ def run_calibration(
     grid_type
         Strategy for constructing the integration grid from inputs.
         Only used when dict inputs trigger grid construction.
-    fix_constant_parameters
-        Check whether any parameters are set to the same value across
-        all runs, and compile them into the code if they are.
     apply
         Apply the winner's configuration to ``parent`` when ``True``.
     verbose
@@ -695,6 +692,10 @@ def run_calibration(
         Kernel milliseconds per timed solve the batch is sized for.
     max_parallel
         Maximum compilations to run in parallel.
+    fix_constant_parameters
+        Compile in every dict entry and every row of a full-height
+        parameter array that holds one value, as :meth:`Solver.solve`
+        does.
 
     Returns
     -------

@@ -25,6 +25,8 @@ def _handle(
     handler, states=None, params=None, kind="combinatorial",
     fix_constant_parameters=False,
 ):
+    """Build a batch's arrays, which sets the system's sweep, and return
+    them with the swept names and fixed values."""
     inits, built = handler(states, params, kind, fix_constant_parameters)
     system = handler.system
     return inits, built, system.swept_parameters, system.fixed_parameter_values
@@ -236,13 +238,14 @@ def test_extend_grid_partial_sweep(system):
 
 
 def test_init_stores_attributes(system):
+    """Reads parameters, states and precision from the system."""
     handler = BatchInputHandler(system)
     assert handler.system is system
     assert handler.precision == system.precision
 
 
 def test_from_system_creates_handler(system):
-    """Creates handler via SystemInterface.from_system."""
+    """Creates a handler for a system."""
     handler = BatchInputHandler.from_system(system)
     assert handler.system.parameters.n == system.num_parameters
     assert handler.system.states.n == system.sizes.states
@@ -401,7 +404,8 @@ def test_call_processes_inputs(input_handler_mutable, system):
 
 
 def test_call_dict_order_independent(input_handler_mutable, system):
-    """Full dicts map by key name regardless of insertion order."""
+    """Full dicts map by key name regardless of insertion order, and
+    fix_constant_parameters compiles in every single value."""
     state_names = list(system.initial_values.names)
     param_names = list(system.parameters.names)
     states = {
@@ -459,6 +463,8 @@ def test_call_casts_to_precision(input_handler_mutable, system, precision):
 
 def _assert_cast_to_precision(system, precision):
     """Assert the handler returns C-contiguous arrays at *precision*."""
+    # A copy takes the default parameters, leaving the session system's
+    # sweep as it is.
     handler = BatchInputHandler.from_system(system.copy())
     inits, params = handler(None, None)
     assert inits.dtype == precision
@@ -854,11 +860,9 @@ def test_call_positional_args(input_handler_mutable, system):
 def test_process_empty_values_none_input(system):
     """Returns empty (0,1) array when values_object empty and input None."""
     handler = BatchInputHandler.from_system(system)
-    # Create a mock empty variable set scenario through the handler
-    # The system has parameters, so we test via the actual code path
-    # by checking what happens when values_object.empty is True
-    # This is tested indirectly when system has no params
-    # For coverage: test the method directly with the actual values
+    # The empty-set case needs a system with no parameters, which the
+    # no_param_system tests below cover. Here we check the non-empty
+    # set's path.
     result = assemble_single_category(
         handler, None, system.initial_values, kind="combinatorial"
     )
@@ -869,9 +873,8 @@ def test_process_empty_values_none_input(system):
 def test_process_empty_values_nonempty_raises(system):
     """Raises ValueError when values_object empty but non-empty input."""
     handler = BatchInputHandler.from_system(system)
-    # We cannot easily create an empty variable set without a special system
-    # This is tested via the error path in _plan_single_input
-    # We verify the TypeError path instead for coverage
+    # The no_param_system tests below cover the empty set's error, so
+    # we check the TypeError path here.
     with pytest.raises(TypeError):
         handler._plan_single_input(
             42, system.initial_values, kind="combinatorial"
@@ -1119,6 +1122,7 @@ def test_call_dict_inputs_return_pinned_grids(input_handler_mutable, system):
 # ── Swept and fixed parameters ────────────────────────────────── #
 
 def test_dict_sweeps_every_entry(input_handler_mutable, system):
+    """Every dict entry gets a row, a single value repeated."""
     names = list(system.parameters.names)
     _, params, swept, fixed = _handle(
         input_handler_mutable,
@@ -1133,6 +1137,8 @@ def test_dict_sweeps_every_entry(input_handler_mutable, system):
 def test_fix_constant_parameters_compiles_in_constant_dict_entries(
     input_handler_mutable, system
 ):
+    """With fix_constant_parameters, a dict entry that holds one value
+    compiles in, whether given as a number or as equal values."""
     names = list(system.parameters.names)
     _, params, swept, fixed = _handle(
         input_handler_mutable,
@@ -1202,6 +1208,7 @@ def test_fix_constant_parameters_fixes_uniform_rows(
 def test_fix_constant_parameters_reads_past_the_first_values(
     input_handler_mutable, system
 ):
+    """A row that varies only after its first hundred values is swept."""
     names = list(system.parameters.names)
     params = np.full(
         (system.num_parameters, 200), 7.0, dtype=system.precision
@@ -1271,6 +1278,8 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
 def test_swept_height_array_compiles_the_others_at_their_defaults(
     input_handler_mutable, system
 ):
+    """Compile every parameter a swept-only array leaves out at its
+    default, whatever an earlier dict fixed."""
     system = input_handler_mutable.system
     names = list(system.parameters.names)
     defaults = system.parameters.defaults
@@ -1292,6 +1301,8 @@ def test_swept_height_array_compiles_the_others_at_their_defaults(
 def test_split_into_rows_gives_each_entry_a_row(
     input_handler_mutable, system
 ):
+    """Without fix_constant_parameters, a single value gets a row
+    holding it for every run."""
     system = input_handler_mutable.system
     names = list(system.parameters.names)
     _, params = input_handler_mutable(
@@ -1307,6 +1318,7 @@ def test_split_into_rows_gives_each_entry_a_row(
 
 
 def test_verbatim_repeats_single_values(system):
+    """A verbatim entry with one value repeats across every run."""
     names = list(system.parameters.names)
     _, grid = verbatim_grid(
         {names[0]: [1.0, 2.0, 3.0], names[1]: [0.5]}, system.parameters

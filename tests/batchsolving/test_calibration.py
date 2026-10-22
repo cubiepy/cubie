@@ -262,7 +262,8 @@ def test_erk_stage_times_the_specs_on_the_solver(
     solver_mutable, simple_initial_values, simple_parameters,
     parameter_batch, driver_settings,
 ):
-    """Specs are timed in order and recalled; a rejected spec drops."""
+    """Specs are timed in order and recalled; a rejected spec drops; the
+    timed solves keep the parameters the input compiled in."""
     solver = solver_mutable
     names = list(solver.system.parameters.names)
     parameters = {**simple_parameters, names[2]: float(parameter_batch[2, 0])}

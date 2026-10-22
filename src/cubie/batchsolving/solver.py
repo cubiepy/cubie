@@ -137,11 +137,12 @@ def _system_from_equations(
         equation strings.
     y0
         Initial-value input. A dict supplies state names and default
-        initial values; an array defers state naming to inference.
+        initial values. With an array or ``None``, the function infers
+        the states from the equations.
     parameters
         Parameter input. A dict supplies parameter names and default
-        values (the first value of each entry). Arrays are rejected
-        because they carry no names to declare.
+        values (the first value of each entry). The function rejects
+        arrays, because they hold no names to declare.
     drivers
         The sampled drivers; their names declare the system's drivers.
     precision
@@ -221,10 +222,22 @@ def solve_ivp(
         ``create_ODE_system`` and reuse a :class:`Solver` instead.
     y0
         Initial state values for each run as arrays or dictionaries mapping
-        labels to arrays.
+        labels to arrays. ``None`` starts every run from the system's
+        default initial values. If you've provided raw equations and
+        given either no ``y0`` or ``y0`` as an array, the state symbols
+        will be inferred from the equations (any symbol with a ``d``
+        prefix to indicate a derivative).
     parameters
-        Parameter values for each run as arrays or dictionaries mapping labels
-        to arrays.
+        Parameter values for each run, as a dict mapping parameter
+        names to values, or as an array. The solver uses the default
+        value of every parameter you leave out of a dict. Give an array
+        either one row per parameter in the system, or one row per
+        swept parameter in parameter name order, in which case the
+        solver uses the default value of every other parameter. The
+        solver compiles into the code every dict entry and every row of
+        a full-height array that holds one value; see
+        ``fix_constant_parameters``. Pass None, an empty dict, or an
+        empty 1D array to use the default parameters for all runs.
     drivers
         The :class:`~cubie.array_interpolator.DriverSamples` to
         interpolate during integration.
@@ -261,9 +274,14 @@ def solve_ivp(
         codes are automatically set to NaN, protecting users from analyzing
         invalid data. When ``False``, all trajectories are returned with
         original values.
-    fix_constant_parameters : bool, default=False
-        Check whether any parameters are set to the same value across
-        all runs, and compile them into the code if they are.
+    fix_constant_parameters : bool, default=True
+        Compile into the code every parameter whose value does not
+        change over the batch: a dict entry with one value, or a row of
+        a full-height parameter array that holds one value. The code
+        runs faster than it does reading those parameters from the
+        array. Pass ``False`` to give each of them a row instead, for
+        example when the parameters that hold one value change from one
+        solve to the next and you want to avoid a recompile.
     **kwargs
         Additional keyword arguments passed to :class:`Solver`. Any
         system parameters passed as kwargs are rejected, as they should
@@ -574,14 +592,20 @@ class Solver:
             construction, or pre-built arrays in (n_states, n_runs)
             format for fast-path execution. Device arrays (CuPy or
             Numba) are used in place with no host-to-device transfer;
-            they must already match the system precision.
+            they must already match the system precision. ``None``
+            starts every run from the system's default initial values.
         parameters
-            Parameter values for each run. Accepts dictionaries
-            mapping parameter names to values, or pre-built arrays
-            in (n_params, n_runs) format. ``n_params`` is either the
-            number of parameters you've set as swept with
-            :meth:`set_swept_parameters`, or the system's full number
-            of parameters.
+            Parameter values for each run, as a dict mapping parameter
+            names to values, or as an array. The solver uses the
+            default value of every parameter you leave out of a dict.
+            Give an array either one row per parameter in the system,
+            or one row per swept parameter in parameter name order, in
+            which case the solver uses the default value of every other
+            parameter. The solver compiles into the code every dict
+            entry and every row of a full-height array that holds one
+            value; see ``fix_constant_parameters``. Pass None, an empty
+            dict, or an empty 1D array to use the default parameters
+            for all runs.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -608,9 +632,15 @@ class Solver:
             solver's device output buffers plus the CUDA stream the
             solve ran on; see Notes. Default ``False``.
         fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
-            Default ``False``.
+            Compile into the code every parameter whose value does not
+            change over the batch: a dict entry with one value, or a
+            row of a full-height parameter array that holds one value.
+            The code runs faster than it does reading those parameters
+            from the array.
+            Default ``True``. Pass ``False`` to give each of them a row
+            instead, for example when the parameters that hold one
+            value change from one solve to the next and you want to
+            avoid a recompile.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
             Arguments" in the docs for possibilities. Any system
@@ -710,12 +740,18 @@ class Solver:
         Parameters
         ----------
         parameters
-            Parameter values as in :meth:`solve`. ``None`` compiles for
-            the current :attr:`swept_parameters` and
-            :attr:`fixed_parameter_values`.
+            Parameter values as in :meth:`solve`. Compile the kernel
+            that a solve with the same parameters would use.
         fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
+            Compile into the code every parameter whose value does not
+            change over the batch: a dict entry with one value, or a
+            row of a full-height parameter array that holds one value.
+            The code runs faster than it does reading those parameters
+            from the array.
+            Default ``True``. Pass ``False`` to give each of them a row
+            instead, for example when the parameters that hold one
+            value change from one solve to the next and you want to
+            avoid a recompile.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
@@ -758,28 +794,27 @@ class Solver:
             Initial state values as dictionaries mapping state names
             to value sequences, or arrays in (n_states, n_runs) format.
         parameters
-            Parameter values as dictionaries mapping parameter names
-            to value sequences, or arrays in (n_params, n_runs) format.
+            Parameter values for each run, as a dict mapping parameter
+            names to values, or as an array. Every parameter you name
+            gets a row, and a parameter given a single number gets a
+            row with that number in every run. Every parameter you
+            leave out uses its default value, so set a value as the
+            default to compile it in.
         grid_type
             Strategy for constructing the grid. ``"combinatorial"``
             produces all combinations while ``"verbatim"`` preserves
             column-wise pairings. Default is ``"verbatim"``.
-        fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
 
         Returns
         -------
         Tuple[ndarray, ndarray]
-            Tuple of (initial_values, parameters) arrays in
-            (n_vars, n_runs) format with system precision dtype. The
-            parameter rows are :attr:`swept_parameters`.
-            These arrays can be passed directly to :meth:`solve`
-            for fast-path execution.
+            The (n_states, n_runs) initial values and the (n_given,
+            n_runs) parameter values, one row per parameter given, in
+            parameter name order.
 
         Examples
         --------
-        >>> inits, params = solver.build_grid(
+        >>> inits, params = solver.prepare_grid_arrays(
         ...     {"x": [1, 2, 3]}, {"p": [0.1, 0.2]}, grid_type="combinatorial"
         ... )
         >>> result = solver.solve(inits, params)  # Uses fast path
@@ -794,17 +829,18 @@ class Solver:
         return inits, params
 
     def set_swept_parameters(self, names: Sequence[str]) -> None:
+        """Set which parameters will change over the runs of a batch.
 
-        Pass a parameters array with one row per name, in name order.
-        Every other parameter is compiled in.
+        Call this before you pass :meth:`solve` an array that holds only
+        the varying parameters; a dict or a full-height array sets the
+        swept parameters itself. Give the names in any order, and give
+        the array its rows in parameter-name order. The solver compiles
+        every other parameter in at its default.
 
         Parameters
         ----------
         names
-            Parameter names, in any order.
-        fixed_values
-            Values to compile in for the other parameters. Defaults to
-            their default values.
+            Names of the parameters that vary over the runs of a batch.
 
         Raises
         ------
@@ -851,11 +887,10 @@ class Solver:
             sets to test the solver at full capacity. Accepts
             dictionaries mapping state names to values for grid
             construction, or pre-built arrays in (n_states, n_runs)
-            format.
+            format. ``None`` starts every run from the system's
+            default initial values.
         parameters
-            Parameter values for each run. Accepts dictionaries
-            mapping parameter names to values, or pre-built arrays
-            in (n_params, n_runs) format.
+            Parameter values for each run, as in :meth:`solve`.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -869,9 +904,6 @@ class Solver:
             Strategy for constructing the integration grid from
             inputs. Only used when dict inputs trigger grid
             construction.
-        fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
         apply
             Apply the winner's configuration to this solver when
             ``True`` (default). Pass ``False`` to only report.
@@ -888,6 +920,11 @@ class Solver:
             for. Default ``20.0``.
         max_parallel
             Maximum compilations to run in parallel.
+        fix_constant_parameters
+            Compile in every dict entry and every row of a full-height
+            parameter array that holds one value, as :meth:`solve`
+            does, so the candidates race the kernel your solves use.
+            Default ``True``.
 
         Returns
         -------
@@ -947,8 +984,10 @@ class Solver:
         ----------
         initial_values
             Dict of state names to values, or an (n_states, n_runs) array.
+            ``None`` starts every run from the system's default initial
+            values.
         parameters
-            Dict of parameter names to values, or an (n_params, n_runs) array.
+            Parameter values for each run, as in :meth:`solve`.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -960,9 +999,6 @@ class Solver:
             Initial integration time. Default ``0.0``.
         grid_type
             Grid strategy when dict inputs build a grid.
-        fix_constant_parameters
-            Check whether any parameters are set to the same value across
-            all runs, and compile them into the code if they are.
         apply
             Apply the fastest settings to this solver. Default ``True``.
         verbose
@@ -981,6 +1017,11 @@ class Solver:
             Default ``20.0``.
         max_parallel
             Maximum compilations to run in parallel.
+        fix_constant_parameters
+            Compile in every dict entry and every row of a full-height
+            parameter array that holds one value, as :meth:`solve`
+            does, so the candidates race the kernel your solves use.
+            Default ``True``.
 
         Returns
         -------
@@ -1331,6 +1372,7 @@ class Solver:
 
     @property
     def parameter_legend(self) -> Dict[int, str]:
+        """Label of each row of the parameters array."""
         return self.system_interface.parameter_legend
 
     @property

@@ -1364,7 +1364,7 @@ def test_solve_ivp_accepts_callable():
 
 
 def test_solve_ivp_accepts_equation_strings():
-    """solve_ivp builds the system from equation strings."""
+    """solve_ivp builds the system from equation strings alone."""
     result = solve_ivp(
         ["dx = v", "dv = mu"],
         parameters={"mu": [1.5]},
@@ -1609,14 +1609,14 @@ def test_time_precision_with_float64_states(solver_mutable):
 
 
 # ============================================================================
-# build_grid() Tests
+# prepare_grid_arrays() Tests
 # ============================================================================
 
 
 def test_prepare_grid_arrays_returns_correct_shape(
     solver, simple_initial_values, simple_parameters
 ):
-    """Test that build_grid returns arrays with correct shapes."""
+    """Test that prepare_grid_arrays returns arrays with correct shapes."""
     inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="verbatim"
     )
@@ -1634,7 +1634,7 @@ def test_prepare_grid_arrays_returns_correct_shape(
 def test_prepare_grid_arrays_combinatorial(
     solver, simple_initial_values, simple_parameters
 ):
-    """Test that build_grid with combinatorial creates product grid."""
+    """Test that a combinatorial prepare_grid_arrays builds a product."""
     inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
@@ -1650,7 +1650,7 @@ def test_prepare_grid_arrays_combinatorial(
 def test_prepare_grid_arrays_precision(
     solver, simple_initial_values, simple_parameters
 ):
-    """Test that build_grid returns arrays with correct precision."""
+    """Test that prepare_grid_arrays returns arrays with correct precision."""
     inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters
     )
@@ -3158,6 +3158,7 @@ def test_auto_blocksize_of_shared_kernel_maximises_threads(
 # ============================================================================
 
 def _batch_as_dict(system, parameter_batch):
+    """Return parameter_batch as a dict, its third entry a single value."""
     names = list(system.parameters.names)
     return {
         names[0]: parameter_batch[0],
@@ -3170,6 +3171,11 @@ def _assert_solved_batch(
     result, solver, system, defaults, swept, reference, output_functions,
     tolerance,
 ):
+    """Check a solve of parameter_batch against the CPU reference.
+
+    Also check that the solve swept ``swept``, changed no defaults and
+    left the kernel up to date.
+    """
     for run, expected in enumerate(reference):
         device_state, _ = extract_state_and_time(
             result.state[:, :, run], output_functions
@@ -3192,6 +3198,8 @@ def test_dict_parameters_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
+    """Without fix_constant_parameters, a dict sweeps every entry it
+    names, a single value included."""
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)
@@ -3215,6 +3223,7 @@ def test_fixed_constant_dict_entries_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
+    """fix_constant_parameters compiles in a dict's single value."""
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)
@@ -3236,6 +3245,8 @@ def test_full_array_parameters_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
+    """Without fix_constant_parameters, an array with a row per
+    parameter sweeps every parameter."""
     system = system_restored
     defaults = dict(system.parameters.defaults)
     result = solver_mutable.solve(
@@ -3254,6 +3265,7 @@ def test_fixed_constant_rows_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
+    """fix_constant_parameters compiles in the rows that hold one value."""
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)
@@ -3276,6 +3288,8 @@ def test_swept_rows_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance, on_device,
 ):
+    """An array with a row per swept parameter reads its rows in name
+    order, whatever order the names were set in."""
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)
@@ -3296,6 +3310,7 @@ def test_prepared_grid_arrays_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
+    """prepare_grid_arrays gives every given parameter a row."""
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)
@@ -3316,6 +3331,7 @@ def test_compiled_parameters_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
+    """compile builds the kernel a solve with the same parameters uses."""
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)

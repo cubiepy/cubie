@@ -206,7 +206,6 @@ def test_runner_isolates_candidates_and_restores_the_solver(
     assert loop.compile_settings.observables_location == observables_location
     assert solver.dt == given["dt"]
     assert solver.kernel.resident_blocks == 3
-    # A grid with no variables stages as None, the host-path default.
     runner = ComparisonRunner(
         solver, inits, params[:0], 0.1, 0.0, 0.0, max_parallel=1
     )

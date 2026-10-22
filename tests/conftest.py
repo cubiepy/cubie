@@ -382,7 +382,14 @@ def system(request, solver_settings_override, precision):
 
 @pytest.fixture(autouse=True)
 def session_system_unchanged(request):
+    """Fail a test that leaves the session system compiling other
+    parameters.
 
+    Tests share the session system across an xdist worker, so a sweep
+    one test leaves behind breaks whichever test runs next. We tear
+    this fixture down last, after ``system_restored`` and the mutable
+    fixtures have restored the system.
+    """
     if "system" not in request.fixturenames:
         yield
         return
@@ -1101,10 +1108,12 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
 
 
 def _system_snapshot(system):
+    """Return the session system's settings and compiled parameters."""
     return system.compile_settings, system.compiled_parameters
 
 
 def _restore_system(system, snapshot):
+    """Restore the session system's flags and compiled parameters."""
     settings, compiled = snapshot
     system.update_compile_settings(
         {"jit_flags": settings.jit_flags, "unroll": settings.unroll},
@@ -1547,7 +1556,7 @@ def batch_input_arrays(
         k: v for k, v in batch_request.items() if k in param_names
     }
 
-    # A copy takes the sweep, leaving the session system as it is.
+    # A copy takes the batch, leaving the session system as it is.
     handler = BatchInputHandler.from_system(system.copy())
     inits, params = handler(
         states_dict, params_dict, kind=batch_settings["kind"]

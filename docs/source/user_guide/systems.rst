@@ -184,9 +184,7 @@ Cubie ODE System Glossary
 - *Parameters*: Input variables that are not solved for. These set the behaviour
   of the system, and in Cubie, they are one of the two inputs that can be
   "batched", i.e. we can solve many IVPs with different parameter sets
-  simultaneously. A parameter that holds one value across a batch is
-  compiled into the code as a number. Changing which parameters you
-  sweep, or the value of one you don't, recompiles the solver.
+  simultaneously.
 - *Observables*: Also called auxiliary variables. These variables that are not
   solved for, but are derived from the state inputs and parameters. These
   typically pop up on the way to the \(\frac{dx}{dt}\) equations, and might

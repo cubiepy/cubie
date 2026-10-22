@@ -353,7 +353,8 @@ def load_grid(solver, n_runs, grid_cache):
     # Only rho is swept. Sigma and beta compile in.
     solver.set_swept_parameters(["rho"])
     if gfile is not None and os.path.exists(gfile):
-        # Cached grids come back pinned, as build_grid returns them.
+        # Cached grids come back pinned, as prepare_grid_arrays
+        # returns them.
         with np.load(gfile) as grid:
             return tuple(
                 pinned_copy(grid[name]) for name in ("inits", "params")

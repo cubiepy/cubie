@@ -44,8 +44,8 @@ up your solves:
 
 Fixed parameters
 ----------------
-Every parameter that holds one value across a batch is compiled into the
-code as a number. It takes no memory traffic and leaves more room to run
+Every parameter whose value doesn't change across a batch is compiled
+into the code as a number. It takes no memory traffic and leaves more room to run
 more runs at once. :ref:`parameter-inputs` describes how Cubie decides
 which parameters those are.
 

@@ -83,7 +83,10 @@ class SystemInterface:
 
     @property
     def parameter_legend(self) -> Dict[int, str]:
+        """Return the label of each row of the parameters array.
 
+        Each label is the swept parameter's name, with its unit in
+        brackets unless it is dimensionless.
         """
         return {
             row: format_time_domain_label(parameter.name, parameter.unit)

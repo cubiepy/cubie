@@ -540,9 +540,6 @@ def run_optimization(
         Initial integration time.
     grid_type
         Grid strategy when dict inputs trigger grid construction.
-    fix_constant_parameters
-        Check whether any parameters are set to the same value across
-        all runs, and compile them into the code if they are.
     apply
         Apply the best launch's settings to ``parent`` when ``True``.
     verbose
@@ -564,6 +561,10 @@ def run_optimization(
         Maximum compilations to run in parallel.
     compile_only
         Compile the kernels but do not run them.
+    fix_constant_parameters
+        Compile in every dict entry and every row of a full-height
+        parameter array that holds one value, as :meth:`Solver.solve`
+        does.
 
     Returns
     -------

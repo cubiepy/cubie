@@ -406,6 +406,8 @@ class TestLiveSolverRespecialisation:
     def test_solve_value_that_restructures_runs_the_kept_states(
         self, solver_mutable, system_restored
     ):
+        """A solve whose fixed value changes the states builds its
+        initial values for the states the equations keep."""
         assert system_restored.mass is not None
         result = solver_mutable.solve(
             parameters={"Cs": 2e-2},
@@ -426,6 +428,8 @@ class TestLiveSolverRespecialisation:
     def test_grid_after_a_restructuring_default_has_the_kept_states(
         self, solver_mutable, system_restored
     ):
+        """A grid built after a default that changes the states has a
+        row per state the equations keep."""
         system_restored.set_default_parameters({"Cs": 2e-2})
         inits, params = solver_mutable.prepare_grid_arrays()
         assert system_restored.mass is None

@@ -765,8 +765,8 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP,
 
 
 def _build_arm(arm, system, system_name, algo_name, duration, params):
-    """Build and compile an arm's solver on its own copy of the system."""
-    # Each arm builds on its own system copy.
+    """Build an arm's solver on its own copy of the system, and compile
+    it for ``params``."""
     solver = build_solver(
         deepcopy(system), system_name, algo_name, arm.spec, duration
     )

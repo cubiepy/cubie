@@ -506,7 +506,7 @@ class ComparisonRunner:
 
     @staticmethod
     def _stage(grid: ndarray) -> Any:
-        """Upload ``grid``; a grid with no variables is passed as None."""
+        """Upload ``grid``; keep a grid with no variables on the host."""
         if grid.shape[0] == 0:
             return grid
         return cuda.to_device(grid)
@@ -575,6 +575,10 @@ class ComparisonRunner:
         """Solve the staged batch once; return its kernel milliseconds."""
         solver = self._solver
         check_duration(solver.effective, self.duration, solver.precision)
+        # Launch the kernel directly on the staged arrays, so each timed
+        # solve keeps the parameters the caller's input compiled in. The
+        # arrays have a row per swept parameter only, and the input
+        # handler compiles every other parameter at its default.
         kernel = solver.kernel
         kernel.run(
             inits=self._inits,
