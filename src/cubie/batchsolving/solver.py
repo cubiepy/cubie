@@ -203,7 +203,7 @@ def solve_ivp(
     grid_type: str = "combinatorial",
     time_logging_level: Optional[str] = None,
     nan_error_trajectories: bool = True,
-    fix_constant_parameters: bool = False,
+    fix_constant_parameters: bool = True,
     **kwargs: Any,
 ) -> SolveResult:
     """Solve a batch initial value problem.
@@ -229,14 +229,15 @@ def solve_ivp(
         prefix to indicate a derivative).
     parameters
         Parameter values for each run, as a dict mapping parameter
-        names to values, or as an array. Every parameter you name in a
-        dict gets a row, whether you give it one value or several, and
-        every parameter you leave out uses its default value. An array
-        has either one row per parameter in the system, or one row per
-        swept parameter in parameter name order, in which case every
-        other parameter uses its default value. None, an empty dict,
-        or an empty 1D array uses the default parameters for all
-        runs.
+        names to values, or as an array. The solver uses the default
+        value of every parameter you leave out of a dict. Give an array
+        either one row per parameter in the system, or one row per
+        swept parameter in parameter name order, in which case the
+        solver uses the default value of every other parameter. The
+        solver compiles into the code every dict entry and every row of
+        a full-height array that holds one value; see
+        ``fix_constant_parameters``. Pass None, an empty dict, or an
+        empty 1D array to use the default parameters for all runs.
     drivers
         The :class:`~cubie.array_interpolator.DriverSamples` to
         interpolate during integration.
@@ -273,12 +274,14 @@ def solve_ivp(
         codes are automatically set to NaN, protecting users from analyzing
         invalid data. When ``False``, all trajectories are returned with
         original values.
-    fix_constant_parameters : bool, default=False
+    fix_constant_parameters : bool, default=True
         Compile into the code every parameter whose value does not
         change over the batch: a dict entry with one value, or a row of
         a full-height parameter array that holds one value. The code
         runs faster than it does reading those parameters from the
-        array.
+        array. Pass ``False`` to give each of them a row instead, for
+        example when the parameters that hold one value change from one
+        solve to the next and you want to avoid a recompile.
     **kwargs
         Additional keyword arguments passed to :class:`Solver`. Any
         system parameters passed as kwargs are rejected, as they should
@@ -576,7 +579,7 @@ class Solver:
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
-        fix_constant_parameters: bool = False,
+        fix_constant_parameters: bool = True,
         **kwargs: Any,
     ) -> Union[SolveResult, DeviceSolveResult]:
         """Solve a batch initial value problem.
@@ -593,14 +596,16 @@ class Solver:
             starts every run from the system's default initial values.
         parameters
             Parameter values for each run, as a dict mapping parameter
-            names to values, or as an array. Every parameter you name
-            in a dict gets a row, whether you give it one value or
-            several, and every parameter you leave out uses its default
-            value. An array has either one row per parameter in the
-            system, or one row per swept parameter in parameter name
-            order, in which case every other parameter uses its default
-            value. None, an empty dict, or an empty 1D array uses the
-            default parameters for all runs.
+            names to values, or as an array. The solver uses the
+            default value of every parameter you leave out of a dict.
+            Give an array either one row per parameter in the system,
+            or one row per swept parameter in parameter name order, in
+            which case the solver uses the default value of every other
+            parameter. The solver compiles into the code every dict
+            entry and every row of a full-height array that holds one
+            value; see ``fix_constant_parameters``. Pass None, an empty
+            dict, or an empty 1D array to use the default parameters
+            for all runs.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -632,6 +637,10 @@ class Solver:
             row of a full-height parameter array that holds one value.
             The code runs faster than it does reading those parameters
             from the array.
+            Default ``True``. Pass ``False`` to give each of them a row
+            instead, for example when the parameters that hold one
+            value change from one solve to the next and you want to
+            avoid a recompile.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
             Arguments" in the docs for possibilities. Any system
@@ -721,7 +730,7 @@ class Solver:
         parameters: Union[
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
-        fix_constant_parameters: bool = False,
+        fix_constant_parameters: bool = True,
         optimize_candidates: bool = False,
         max_parallel: int = 4,
         **kwargs: Any,
@@ -739,6 +748,10 @@ class Solver:
             row of a full-height parameter array that holds one value.
             The code runs faster than it does reading those parameters
             from the array.
+            Default ``True``. Pass ``False`` to give each of them a row
+            instead, for example when the parameters that hold one
+            value change from one solve to the next and you want to
+            avoid a recompile.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
@@ -807,7 +820,10 @@ class Solver:
         >>> result = solver.solve(inits, params)  # Uses fast path
         """
         inits, params = self.input_handler(
-            initial_values, parameters, kind=grid_type
+            initial_values,
+            parameters,
+            kind=grid_type,
+            fix_constant_parameters=False,
         )
         self.update()
         return inits, params

@@ -1205,14 +1205,22 @@ def test_fix_constant_parameters_fixes_uniform_rows(
     assert_array_equal(result, [[1.0, 2.0, 3.0]])
 
 
-def test_fix_constant_parameters_needs_a_row_per_parameter(
+def test_fix_constant_parameters_reads_past_the_first_values(
     input_handler_mutable, system
 ):
-    """fix_constant_parameters raises on a swept-parameters array."""
-    _sweep_reversed(input_handler_mutable)
-    params = np.ones((2, 3), dtype=system.precision)
-    with pytest.raises(ValueError, match="a row for every parameter"):
-        input_handler_mutable.set_swept_parameters(params, True)
+    """A row that varies only after its first hundred values is swept."""
+    names = list(system.parameters.names)
+    params = np.full(
+        (system.num_parameters, 200), 7.0, dtype=system.precision
+    )
+    params[0, -1] = 8.0
+    _, result, swept, fixed = _handle(
+        input_handler_mutable,
+        params=params, kind="verbatim", fix_constant_parameters=True
+    )
+    assert swept == (names[0],)
+    assert fixed == {name: 7.0 for name in names[1:]}
+    assert_array_equal(result, params[:1])
 
 
 def test_fix_constant_parameters_keeps_run_count(
@@ -1293,13 +1301,15 @@ def test_swept_height_array_compiles_the_others_at_their_defaults(
 def test_split_into_rows_gives_each_entry_a_row(
     input_handler_mutable, system
 ):
-    """A single value gets a row holding it for every run."""
+    """Without fix_constant_parameters, a single value gets a row
+    holding it for every run."""
     system = input_handler_mutable.system
     names = list(system.parameters.names)
     _, params = input_handler_mutable(
         None,
         {names[0]: [1.0, 2.0, 3.0], names[1]: 0.25},
         "verbatim",
+        fix_constant_parameters=False,
     )
     assert system.swept_parameters == (names[0], names[1])
     assert_array_equal(

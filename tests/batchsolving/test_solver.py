@@ -3198,13 +3198,15 @@ def test_dict_parameters_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
-    """A dict sweeps every entry it names, a single value included."""
+    """Without fix_constant_parameters, a dict sweeps every entry it
+    names, a single value included."""
     system = system_restored
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)
     result = solver_mutable.solve(
         parameters=_batch_as_dict(system, parameter_batch),
         duration=solver_settings["duration"],
+        fix_constant_parameters=False,
     )
     _assert_solved_batch(
         result, solver_mutable, system, defaults, tuple(names[:3]),
@@ -3243,11 +3245,14 @@ def test_full_array_parameters_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
     parameter_batch_reference, output_functions, tolerance,
 ):
-    """An array with a row per parameter sweeps every parameter."""
+    """Without fix_constant_parameters, an array with a row per
+    parameter sweeps every parameter."""
     system = system_restored
     defaults = dict(system.parameters.defaults)
     result = solver_mutable.solve(
-        parameters=parameter_batch, duration=solver_settings["duration"]
+        parameters=parameter_batch,
+        duration=solver_settings["duration"],
+        fix_constant_parameters=False,
     )
     _assert_solved_batch(
         result, solver_mutable, system, defaults,
@@ -3331,10 +3336,14 @@ def test_compiled_parameters_solve_the_batch(
     names = list(system.parameters.names)
     defaults = dict(system.parameters.defaults)
     parameters = _batch_as_dict(system, parameter_batch)
-    solver_mutable.compile(parameters=parameters)
+    solver_mutable.compile(
+        parameters=parameters, fix_constant_parameters=False
+    )
     kernel = solver_mutable.kernel.kernel
     result = solver_mutable.solve(
-        parameters=parameters, duration=solver_settings["duration"]
+        parameters=parameters,
+        duration=solver_settings["duration"],
+        fix_constant_parameters=False,
     )
     assert solver_mutable.kernel.kernel is kernel
     _assert_solved_batch(

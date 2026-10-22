@@ -53,8 +53,8 @@ value can change which states a DAE keeps, and the initial-values array needs on
 state of the system as compiled. `system.set_swept_parameters` is the handler's one call
 into the system; it reads the declared parameters and the current swept names before it
 and the layout after it. `compile` calls `input_handler.set_swept_parameters` alone, and
-`prepare_grid_arrays` calls the handler without `fix_constant_parameters`; both then call
-`update()`. `calibrate` and `optimize` build their grid with `prepare_grid_arrays`, and
+`prepare_grid_arrays` calls the handler with `fix_constant_parameters=False`; both then
+call `update()`. `calibrate` and `optimize` build their grid with `prepare_grid_arrays`, and
 `ComparisonRunner` times plain `solve` calls on the staged arrays.
 
 ## Solver settings
@@ -80,14 +80,17 @@ The parameters array has one row per swept parameter, in parameter-name order;
 it through. Every other parameter is compiled into the code at a fixed value. Each solve
 compiles the fixed values its input gives merged over the defaults, and nothing an
 earlier call compiled in survives it.
-- A dict sweeps every entry it names, with one value or several, and parameters left
-  out use their defaults.
-- An array with a row per parameter sweeps every parameter.
-- An array with a row per swept parameter sweeps those parameters, and every other
-  parameter uses its default.
-- With `fix_constant_parameters`, we compile in every dict entry and every row of a
-  full-height array that holds one value.
-- `None`, an empty dict, or an empty 1D array uses the default parameters for all runs.
+- For a dict, we compile in every entry that holds one value and sweep the others.
+  Parameters left out of the dict compile at their defaults.
+- For an array with a row per parameter, we compile in every row that holds one value
+  and sweep the others. We compare each row with its first value and stop reading a row
+  at the first value that differs.
+- For an array with a row per swept parameter, we sweep those parameters and compile
+  every other parameter at its default. We never scan these arrays.
+- With `fix_constant_parameters=False`, we sweep every dict entry and every row of a
+  full-height array.
+- For `None`, an empty dict, or an empty 1D array, we compile every parameter at its
+  default.
 
 `Solver.prepare_grid_arrays` gives every parameter a dict names a row, so a parameter
 given a single number has a row with that number in every run. A user who wants a value

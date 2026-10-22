@@ -12,21 +12,21 @@ Notes
 sets the system's swept parameters and fixed values to match it, and
 returns the values that vary between runs:
 
-- For a dict, the handler sweeps every entry, and parameters left out
-  keep their defaults.
+- For a dict, the handler compiles in every entry that holds one value
+  and sweeps the others. Parameters left out keep their defaults.
+- For an array with a row for every parameter, the handler compiles in
+  every row that holds one value and sweeps the others.
 - For an array with a row per parameter the system sweeps now, the
   handler keeps those parameters swept, compiles every other parameter
   in at its default and takes the rows as the batch values.
-- For an array with a row for every parameter, the handler sweeps every
-  parameter.
-- With ``fix_constant_parameters``, the handler compiles in every dict
-  entry and every row of a full-height array that holds one value.
+- With ``fix_constant_parameters=False``, the handler sweeps every dict
+  entry and every row of a full-height array.
 - For ``None``, an empty dict, or an empty 1D array, the handler
   compiles every parameter in at its default.
 
-Arrays of any other height raise. The handler sets the system's
-parameters before it builds the arrays, because a fixed value can change
-which states the equations keep. ``BatchInputHandler.__call__`` builds
+The handler raises ``ValueError`` for an array of any other height. It
+sets the system's parameters before it builds the arrays, because a
+fixed value can change which states the equations keep. ``BatchInputHandler.__call__`` builds
 the arrays from three arguments:
 
 ``states``
@@ -72,9 +72,7 @@ Examples
 >>> handler = BatchInputHandler.from_system(system)
 >>> states = {"x": [1.0, 2.0], "y": [0.5, 1.5]}
 >>> parameters = {"p0": [0.1, 0.2], "p1": 3.0}
->>> inits, params = handler(
-...     states, parameters, kind="verbatim", fix_constant_parameters=True
-... )
+>>> inits, params = handler(states, parameters, kind="verbatim")
 >>> system.swept_parameters
 ('p0',)
 >>> system.fixed_parameter_values
@@ -84,10 +82,7 @@ Examples
  [0.5 1.5]]
 >>> print(params)
 [[0.1 0.2]]
->>> inits, params = handler(
-...     states, parameters, kind="combinatorial",
-...     fix_constant_parameters=True,
-... )
+>>> inits, params = handler(states, parameters, kind="combinatorial")
 >>> print(inits.shape, params.shape)
 (2, 8) (1, 8)
 
@@ -138,7 +133,6 @@ from numpy import (
     empty as np_empty,
     atleast_1d as np_atleast_1d,
     all as np_all,
-    flatnonzero as np_flatnonzero,
 )
 
 from numpy.typing import ArrayLike
@@ -494,6 +488,21 @@ def _views_user_input(array: ndarray, user_input: object) -> bool:
     return False
 
 
+def _row_is_constant(
+    row: ndarray, head: int = 64, block: int = 65536
+) -> bool:
+    """Return whether every value in ``row`` equals its first value."""
+    # Most varying rows differ within the first few values, so check
+    # those before reading the rest of the row in cache-sized blocks.
+    first = row[0]
+    if not np_all(row[:head] == first):
+        return False
+    for start in range(head, row.size, block):
+        if not np_all(row[start:start + block] == first):
+            return False
+    return True
+
+
 class BatchInputHandler:
     """Build a batch's input arrays and set the system's swept parameters
     to match them.
@@ -554,7 +563,7 @@ class BatchInputHandler:
         initial_values: Optional[Union[Dict, ArrayLike]] = None,
         parameters: Optional[Union[Dict, ArrayLike]] = None,
         kind: str = "combinatorial",
-        fix_constant_parameters: bool = False,
+        fix_constant_parameters: bool = True,
     ) -> tuple[object, object]:
         """Set the system's swept parameters to match ``parameters`` and
         return the input arrays.
@@ -572,7 +581,8 @@ class BatchInputHandler:
             all combinations while ``"verbatim"`` preserves pairings.
         fix_constant_parameters
             Compile in every dict entry and every row of a full-height
-            parameter array that holds one value.
+            parameter array that holds one value. Pass ``False`` to
+            sweep them instead.
 
         Returns
         -------
@@ -602,19 +612,18 @@ class BatchInputHandler:
     def set_swept_parameters(
         self,
         parameters: Optional[Union[Dict, ArrayLike]] = None,
-        fix_constant_parameters: bool = False,
+        fix_constant_parameters: bool = True,
     ) -> object:
         """Set the system's swept parameters to match a parameter input.
 
         Pass ``None``, an empty dict or an empty 1D array to compile
-        every parameter in at its default. Name a parameter in a dict
-        to sweep it, with one value or several. Give an array a row per
-        parameter to sweep every parameter. Pass
-        ``fix_constant_parameters`` with either to compile in each
-        entry or row that holds one value. Give any other array a row
-        per parameter the system sweeps now; the handler keeps those
-        parameters swept and compiles every other parameter in at its
-        default.
+        every parameter in at its default. Name parameters in a dict,
+        or give an array a row for every parameter. The handler
+        compiles in each dict entry or row that holds one value and
+        sweeps the others; pass ``fix_constant_parameters=False`` to
+        sweep them all. Give any other array a row per parameter the
+        system sweeps now; the handler keeps those parameters swept and
+        compiles every other parameter in at its default.
 
         Parameters
         ----------
@@ -622,7 +631,8 @@ class BatchInputHandler:
             A dict, a host or device array, or ``None``.
         fix_constant_parameters
             Compile in every dict entry and every row of a full-height
-            host array that holds one value.
+            host array that holds one value. Pass ``False`` to sweep
+            them instead.
 
         Returns
         -------
@@ -635,8 +645,7 @@ class BatchInputHandler:
         ValueError
             If an array's row count matches neither the swept
             parameters nor every parameter, or it has more than two
-            dimensions, or ``fix_constant_parameters`` is given an
-            array without a row per parameter.
+            dimensions.
         """
         system = self.system
         if parameters is None:
@@ -665,7 +674,10 @@ class BatchInputHandler:
         if array.size == 0 and array.ndim < 2:
             system.set_swept_parameters(())
             return None
-        if fix_constant_parameters:
+        if (
+            fix_constant_parameters
+            and array.shape[0] == system.parameters.n
+        ):
             return self._constant_rows_sweep(array)
         self._array_sweep(array.shape[0])
         return array
@@ -716,32 +728,30 @@ class BatchInputHandler:
         )
 
     def _constant_rows_sweep(self, array: ndarray) -> ndarray:
-        """Compile in an array's constant rows and return the rows that
-        vary."""
-        n_parameters = self.system.parameters.n
-        if array.shape[0] != n_parameters:
-            raise ValueError(
-                f"fix_constant_parameters needs a parameters array with "
-                f"a row for every parameter ({n_parameters}), but the "
-                f"array has {array.shape[0]} rows."
-            )
+        """Compile in a full-height array's constant rows and return the
+        rows that vary."""
         names = self.system.parameters.names
         grid = array[:, np_newaxis] if array.ndim == 1 else array
-        if grid.shape[1] == 0:
+        n_runs = grid.shape[1]
+        if n_runs == 0:
             self.system.set_swept_parameters(names)
             return array
-        cast = grid.astype(self.system.precision)
-        uniform = np_all(cast == cast[:, :1], axis=1)
-        fixed = {
-            names[row]: float(grid[row, 0])
-            for row in np_flatnonzero(uniform)
-        }
-        keep = np_flatnonzero(~uniform)
-        swept = tuple(names[row] for row in keep)
-        self.system.set_swept_parameters(swept, fixed)
-        if keep.size == len(names):
+        constant = [
+            row for row in range(len(names)) if _row_is_constant(grid[row])
+        ]
+        fixed = {names[row]: float(grid[row, 0]) for row in constant}
+        keep = [row for row in range(len(names)) if names[row] not in fixed]
+        self.system.set_swept_parameters(
+            tuple(names[row] for row in keep), fixed
+        )
+        if len(keep) == len(names):
             return array
-        return grid[keep]
+        # Copy row by row so the cast to precision happens in the copy
+        # and no full-size temporary in the caller's dtype is made.
+        out = self._final_array(len(keep), n_runs, set())
+        for index, row in enumerate(keep):
+            out[index] = grid[row]
+        return out
 
     def _build_arrays(
         self,

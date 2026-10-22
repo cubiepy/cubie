@@ -65,7 +65,8 @@ def swept_values(system):
 def swept_defaults(system, runs=2):
     """Return each swept parameter's default, repeated for ``runs`` runs.
 
-    Pass this as a solve's parameters to run the system's own sweep at
+    Pass this as a solve's parameters, with
+    ``fix_constant_parameters=False``, to run the system's own sweep at
     its default values.
     """
     defaults = system.parameters.defaults
