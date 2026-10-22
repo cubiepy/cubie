@@ -227,6 +227,18 @@ class TestStructuralRespecialisation:
             system.initial_values.defaults["U3"]
         ) == pytest.approx(0.75)
 
+    def test_dropped_state_keeps_its_initial_value(self, system_restored):
+        system = system_restored
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            system.set_default_parameters({"Cs": 2e-2})
+            system.set_initial_values({"U3": 0.75})
+            system.set_default_parameters({"Cs": 0.0})
+            algebraic_states = system.initial_values.n
+            system.set_default_parameters({"Cs": 2e-2})
+        assert algebraic_states == 2
+        assert system.initial_values.defaults["U3"] == 0.75
+
 
 class TestStructuralSortKey:
     """Folded literals keep the structural sort key finite."""

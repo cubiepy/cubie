@@ -64,6 +64,21 @@ class TestSweptParameters:
         assert tiny_system.sizes.swept_parameters == 2
         assert tiny_system.layout.swept_names == ("c0", "k")
 
+    def test_an_iterator_of_names_sets_the_sweep(self, tiny_system):
+        tiny_system.set_swept_parameters(iter(["k"]))
+        assert tiny_system.swept_parameters == ("k",)
+
+    def test_a_sweep_given_at_creation_reads_rows_in_system_order(self):
+        system = create_ODE_system(
+            dxdt=["dx = -k * x + c0"],
+            states={"x": 1.0},
+            parameters={"k": 0.5, "c0": 1.0},
+            precision=np.float32,
+            swept_parameters=("k", "c0"),
+        )
+        assert system.swept_parameters == ("c0", "k")
+        assert system.layout.swept_names == ("c0", "k")
+
     def test_fixed_values_are_compiled_in(self, tiny_system):
         """Fixed values are the values the system compiles in."""
         tiny_system.update(
@@ -104,11 +119,83 @@ class TestSetDefaultParameters:
         tiny_system.set_default_parameters({"k": 3.0})
         assert tiny_system.swept_parameters == ("k",)
         assert tiny_system.parameters.values_dict["k"] == 3.0
+        assert tiny_system.cache_valid is True
+
+    def test_new_defaults_drop_the_fixed_values(self, tiny_system):
+        tiny_system.set_swept_parameters(("k",), {"c0": 4.0})
+        tiny_system.set_default_parameters({"k": 3.0})
+        assert tiny_system.fixed_parameter_values == {
+            "c0": tiny_system.parameters.defaults["c0"]
+        }
 
     def test_unknown_name_raises(self, tiny_system):
         """A name outside the system's parameters raises KeyError."""
         with pytest.raises(KeyError, match="not_a_key"):
             tiny_system.set_default_parameters({"not_a_key": 1.0})
+
+
+class TestCompiledParameters:
+    def test_fixing_a_default_compiles_the_same_parameters(
+        self, tiny_system
+    ):
+        tiny_system.set_swept_parameters(("k",))
+        tiny_system.dxdt_fn
+        compiled = tiny_system.compiled_parameters
+        tiny_system.set_swept_parameters(("k",), {"c0": 1.0})
+        assert tiny_system.compiled_parameters is compiled
+        assert tiny_system.cache_valid is True
+
+    def test_the_sweep_reaches_the_config_hash(self, tiny_system):
+        hash_default = tiny_system.config_hash
+        tiny_system.set_swept_parameters(("k",))
+        hash_swept = tiny_system.config_hash
+        tiny_system.set_swept_parameters(("k",), {"c0": 2.0})
+        assert hash_swept != hash_default
+        assert tiny_system.config_hash != hash_swept
+
+    def test_the_layout_assembles_without_compiling(self, tiny_system):
+        tiny_system.dxdt_fn
+        tiny_system.set_swept_parameters(("k",), {"c0": 2.0})
+        assert tiny_system.layout.swept_names == ("k",)
+        assert tiny_system.sizes.swept_parameters == 1
+        assert tiny_system.cache_valid is False
+
+    def test_sizes_are_a_product_of_the_specialiser(self, tiny_system):
+        first = tiny_system.sizes
+        assert tiny_system.sizes is first
+        tiny_system.set_swept_parameters(("k",))
+        assert tiny_system.sizes is not first
+        assert tiny_system.sizes.swept_parameters == 1
+
+    def test_the_swept_set_follows_the_sweep(self, tiny_system):
+        tiny_system.set_swept_parameters(("c0", "k"))
+        defaults = tiny_system.parameters.defaults
+        assert tiny_system.swept_set.defaults == {
+            name: defaults[name] for name in ("c0", "k")
+        }
+
+
+class TestSetInitialValues:
+    def test_new_initial_values_keep_the_build(self, tiny_system):
+        tiny_system.dxdt_fn
+        hash_before = tiny_system.config_hash
+        tiny_system.set_initial_values({"x": 4.0})
+        assert tiny_system.states.defaults == {"x": 4.0}
+        assert tiny_system.cache_valid is True
+        assert tiny_system.config_hash == hash_before
+
+    def test_states_are_reused_until_the_initial_values_change(
+        self, tiny_system
+    ):
+        first = tiny_system.states
+        assert tiny_system.states is first
+        tiny_system.set_initial_values({"x": 4.0})
+        assert tiny_system.states is not first
+        assert tiny_system.states.defaults == {"x": 4.0}
+
+    def test_unknown_name_raises(self, tiny_system):
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_initial_values({"not_a_key": 1.0})
 
 
 class TestGetSolverHelper:

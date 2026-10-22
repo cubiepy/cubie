@@ -292,3 +292,114 @@ def test_compiled_in_values_participate_in_identity():
     assert swept.values_hash != data.values_hash
     assert refixed.values_hash != data.values_hash
     assert new_default.values_hash == swept.values_hash
+
+
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import Parameter, ParameterSet, VariableSet
+
+
+DECLARED = VariableSet.of(Parameter, {"a": 0.5, "b": 0.3, "g": 9.81})
+
+
+
+def test_system_sizes_construction():
+    sizes = SystemSizes(
+        states=3,
+        observables=2,
+        swept_parameters=4,
+        drivers=1,
+        driver_derivatives=0,
+    )
+    assert sizes.states == 3
+    assert sizes.observables == 2
+    assert sizes.swept_parameters == 4
+    assert sizes.drivers == 1
+    assert sizes.driver_derivatives == 0
+
+
+@pytest.mark.parametrize(
+    "field, bad_value",
+    [
+        ("states", 1.5),
+        ("observables", "x"),
+        ("swept_parameters", None),
+        ("drivers", 2.0),
+        ("driver_derivatives", 1.5),
+    ],
+    ids=[
+        "states",
+        "observables",
+        "swept_parameters",
+        "drivers",
+        "driver_derivatives",
+    ],
+)
+def test_system_sizes_validates_int(field, bad_value):
+    kwargs = dict(
+        states=1,
+        observables=1,
+        swept_parameters=1,
+        drivers=1,
+        driver_derivatives=0,
+    )
+    kwargs[field] = bad_value
+    with pytest.raises(TypeError):
+        SystemSizes(**kwargs)
+
+
+def test_system_sizes_of_layout_counts_every_buffer():
+    layout = SystemLayout(
+        states=["x", "y"],
+        parameters=ParameterSet.build(DECLARED, ["b", "a"]),
+        observables=["v", "w", "z"],
+        drivers=["u"],
+        driver_derivatives=((0, 1),),
+    )
+    sizes = SystemSizes.of_layout(layout)
+    assert sizes.states == 2
+    assert sizes.observables == 3
+    assert sizes.swept_parameters == 2
+    assert sizes.drivers == 2
+    assert sizes.driver_derivatives == 1
+
+
+
+def _make_odedata(precision=np.float32, operation_ordering="kahn"):
+    return ODEData(
+        precision=precision, operation_ordering=operation_ordering
+    )
+
+
+def test_operation_ordering_public_values_are_exact():
+    assert OPERATION_ORDERINGS == (
+        "kahn",
+        "greedy",
+        "dfs",
+        "liveness_auto",
+    )
+
+
+@pytest.mark.parametrize(
+    "operation_ordering",
+    ["greedy", "dfs", "liveness_auto"],
+)
+def test_odedata_operation_ordering_participates_in_identity(
+    operation_ordering,
+):
+    kahn = _make_odedata(operation_ordering="kahn")
+    alternative = _make_odedata(operation_ordering=operation_ordering)
+    assert alternative.operation_ordering == operation_ordering
+    assert alternative.values_hash != kahn.values_hash
+
+
+@pytest.mark.parametrize("operation_ordering", ["liveness", "bogus"])
+def test_odedata_rejects_invalid_operation_ordering(operation_ordering):
+    with pytest.raises(ValueError, match="operation_ordering"):
+        _make_odedata(operation_ordering=operation_ordering)
+
+
+def test_odedata_precision_participates_in_identity():
+    assert (
+        _make_odedata(precision=np.float32).values_hash
+        != _make_odedata(precision=np.float64).values_hash
+    )
