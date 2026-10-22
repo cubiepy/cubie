@@ -182,7 +182,6 @@ def grid_fabbri(solver, n_runs):
         parameters={
             FABBRI_PARAMETERS[0]: ach.ravel()[index],
             FABBRI_PARAMETERS[1]: iso.ravel()[index],
-            **FABBRI_FIXED,
         }
     )
 
@@ -539,7 +538,8 @@ def _compile_worker(payload):
             system, system_name, algo_name, spec, duration
         )
         set_arm_parameters(solver, system_name)
-        solver.compile()
+        _, params = SYSTEMS[system_name]["grid"](solver, n_runs)
+        solver.compile(parameters=params)
         return (
             system_name, algo_name, label, solver.kernel.config_hash,
             time.perf_counter() - started, None,
@@ -764,7 +764,7 @@ def time_arms(arms, d_inits, d_params, duration, log, cap=CAP,
 # --- per-configuration driver -------------------------------------------
 
 
-def _build_arm(arm, system, system_name, algo_name, duration):
+def _build_arm(arm, system, system_name, algo_name, duration, params):
     """Build and compile an arm's solver on its own copy of the system."""
     # Each arm builds on its own system copy.
     solver = build_solver(
@@ -772,7 +772,7 @@ def _build_arm(arm, system, system_name, algo_name, duration):
     )
     arm.solver = solver
     set_arm_parameters(solver, system_name)
-    solver.compile()
+    solver.compile(parameters=params)
     solver.kernel.launch_geometry(REFERENCE_BLOCKSIZE)
     return solver
 
@@ -835,7 +835,9 @@ def run_config(
                 )
                 inits, params = SYSTEMS[system_name]["grid"](probe, n_runs)
                 probe.close()
-            _build_arm(arm, system, system_name, algo_name, duration)
+            _build_arm(
+                arm, system, system_name, algo_name, duration, params
+            )
             _arm_facts(arm, blocksizes, started)
             if arm.cubin_sha in seen:
                 arm.alias_of = seen[arm.cubin_sha]
@@ -872,7 +874,9 @@ def run_config(
         alive = []
         for arm in block:
             try:
-                _build_arm(arm, system, system_name, algo_name, duration)
+                _build_arm(
+                    arm, system, system_name, algo_name, duration, params
+                )
                 arm.blocks.append(index)
                 alive.append(arm)
             except Exception as exc:  # noqa: BLE001

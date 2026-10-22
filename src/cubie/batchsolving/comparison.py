@@ -507,7 +507,7 @@ class ComparisonRunner:
     def _stage(grid: ndarray) -> Any:
         """Upload ``grid``; a grid with no variables is passed as None."""
         if grid.shape[0] == 0:
-            return None
+            return grid
         return cuda.to_device(grid)
 
     def compile(self, candidates: Sequence[Candidate]) -> List[Candidate]:
@@ -573,16 +573,17 @@ class ComparisonRunner:
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""
         solver = self._solver
-        solver.solve(
-            self._inits,
-            self._params,
-            duration=self.duration,
-            settling_time=self.settling,
-            t0=self._t0,
-            blocksize=blocksize,
-            on_device=True,
-        )
+        check_duration(solver.effective, self.duration, solver.precision)
         kernel = solver.kernel
+        kernel.run(
+            inits=self._inits,
+            params=self._params,
+            duration=self.duration,
+            blocksize=blocksize,
+            warmup=self.settling,
+            t0=self._t0,
+            transfer_outputs=False,
+        )
         kernel.synchronize()
         return float(
             sum(

@@ -645,13 +645,13 @@ def run_calibration(
     settling_time: float = 0.0,
     t0: float = 0.0,
     grid_type: str = "verbatim",
-    fix_constant_parameters: bool = False,
     apply: bool = True,
     verbose: bool = True,
     auto_size: bool = True,
     waves: int = 5,
     target_ms: float = 20.0,
     max_parallel: int = 4,
+    fix_constant_parameters: bool = True,
 ) -> CalibrationResult:
     """Race solver configurations for a solver and pick the fastest.
 
@@ -720,12 +720,13 @@ def run_calibration(
             "driver samples that solves will use."
         )
 
-    inits, params = parent.build_grid(
+    inits, params = parent.input_handler(
         initial_values,
         parameters,
-        grid_type=grid_type,
+        kind=grid_type,
         fix_constant_parameters=fix_constant_parameters,
     )
+    parent.update()
     if drivers is not None:
         parent.update(drivers=drivers)
     features = _system_features(

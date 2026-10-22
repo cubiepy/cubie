@@ -151,10 +151,12 @@ def fabbri_grid(solver, n_runs: int):
         np.linspace(0.0, 2e-8, side),
         np.linspace(0.0, 1.0, side),
     )
+    solver.system.set_default_parameters(
+        {"Rate_modulation_experiments_ANS": 1.0}
+    )
     parameters = {
         FABBRI_PARAMETERS[0]: ach.ravel()[:n_runs],
         FABBRI_PARAMETERS[1]: iso.ravel()[:n_runs],
-        "Rate_modulation_experiments_ANS": 1.0,
     }
     return solver.build_grid(parameters=parameters)
 

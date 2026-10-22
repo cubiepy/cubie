@@ -190,7 +190,7 @@ def _system_from_equations(
 
 def solve_ivp(
     system: Union[BaseODE, str, Callable, Iterable[str]],
-    y0: Union[ndarray, Dict[str, ndarray]],
+    y0: Optional[Union[ndarray, Dict[str, ndarray]]] = None,
     parameters: Optional[Union[ndarray, Dict[str, ndarray]]] = None,
     drivers: Optional[DriverSamples] = None,
     method: str = "euler",
@@ -202,7 +202,7 @@ def solve_ivp(
     grid_type: str = "combinatorial",
     time_logging_level: Optional[str] = None,
     nan_error_trajectories: bool = True,
-    fix_constant_parameters: bool = False,
+    fix_constant_parameters: bool = True,
     **kwargs: Any,
 ) -> SolveResult:
     """Solve a batch initial value problem.
@@ -449,8 +449,7 @@ class Solver:
         self.kernel = BatchSolverKernel(system, **self.effective.as_kwargs())
         self._finalizer = finalize(self, _finalize_solver, self.kernel)
         self.input_handler = BatchInputHandler(
-            self.system_interface,
-            memory_manager=self.kernel.memory_manager,
+            system, memory_manager=self.kernel.memory_manager
         )
         self._solve_info_cache = None
         self._solve_info_key = None
@@ -548,8 +547,12 @@ class Solver:
 
     def solve(
         self,
-        initial_values: Union[ndarray, Dict[str, Union[float, ndarray]]],
-        parameters: Union[ndarray, Dict[str, Union[float, ndarray]]],
+        initial_values: Union[
+            None, ndarray, Dict[str, Union[float, ndarray]]
+        ] = None,
+        parameters: Union[
+            None, ndarray, Dict[str, Union[float, ndarray]]
+        ] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
@@ -558,7 +561,7 @@ class Solver:
         grid_type: str = "verbatim",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
-        fix_constant_parameters: bool = False,
+        fix_constant_parameters: bool = True,
         **kwargs: Any,
     ) -> Union[SolveResult, DeviceSolveResult]:
         """Solve a batch initial value problem.
@@ -655,14 +658,13 @@ class Solver:
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
 
-        sweep, swept, fixed = self.input_handler.split_parameters(
-            parameters, fix_constant_parameters
-        )
-        self.set_swept_parameters(swept, fixed)
         inits, params = self.input_handler(
-            states=initial_values, params=sweep, kind=grid_type
+            initial_values,
+            parameters,
+            kind=grid_type,
+            fix_constant_parameters=fix_constant_parameters,
         )
-
+        self.update()
         self.kernel.run(
             inits=inits,
             params=params,
@@ -698,7 +700,7 @@ class Solver:
         parameters: Union[
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
-        fix_constant_parameters: bool = False,
+        fix_constant_parameters: bool = True,
         optimize_candidates: bool = False,
         max_parallel: int = 4,
         **kwargs: Any,
@@ -722,11 +724,10 @@ class Solver:
             Options forwarded to :meth:`update`.
         """
         self.update(**kwargs)
-        if parameters is not None:
-            _, swept, fixed = self.input_handler.split_parameters(
+        self.input_handler.set_swept_parameters(
                 parameters, fix_constant_parameters
             )
-            self.set_swept_parameters(swept, fixed)
+        self.update()
 
         if optimize_candidates:
             run_optimization(
@@ -742,13 +743,12 @@ class Solver:
     def build_grid(
         self,
         initial_values: Union[
-            ndarray, Dict[str, Union[float, ndarray]]
+            None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
         parameters: Union[
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
         grid_type: str = "verbatim",
-        fix_constant_parameters: bool = False,
     ) -> Tuple[ndarray, ndarray]:
         """Build state and parameter arrays to pass to :meth:`solve`.
 
@@ -784,20 +784,16 @@ class Solver:
         ... )
         >>> result = solver.solve(inits, params)  # Uses fast path
         """
-        sweep, swept, fixed = self.input_handler.split_parameters(
-            parameters, fix_constant_parameters
+        inits, params = self.input_handler(
+            initial_values,
+            parameters,
+            kind=grid_type,
+            fix_constant_parameters=False,
         )
-        self.set_swept_parameters(swept, fixed)
-        return self.input_handler(
-            states=initial_values, params=sweep, kind=grid_type
-        )
+        self.update()
+        return inits, params
 
-    def set_swept_parameters(
-        self,
-        names: Sequence[str],
-        fixed_values: Optional[Dict[str, float]] = None,
-    ) -> None:
-        """Set the parameters an array input gives values for.
+    def set_swept_parameters(self, names: Sequence[str]) -> None:
 
         Pass a parameters array with one row per name, in name order.
         Every other parameter is compiled in.
@@ -817,25 +813,25 @@ class Solver:
         ValueError
             If a name repeats.
         """
-        self.system_interface.set_swept_parameters(names, fixed_values)
+        self.system.set_swept_parameters(names)
         self.update()
 
     def calibrate(
         self,
-        initial_values: Union[ndarray, Dict[str, Any]],
-        parameters: Union[ndarray, Dict[str, Any]],
+        initial_values: Union[None, ndarray, Dict[str, Any]] = None,
+        parameters: Union[None, ndarray, Dict[str, Any]] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         auto_size: bool = True,
         waves: int = 5,
         target_ms: float = 20.0,
         max_parallel: int = 4,
+        fix_constant_parameters: bool = True,
     ) -> CalibrationResult:
         """Race solver configurations and pick the fastest.
 
@@ -926,14 +922,13 @@ class Solver:
 
     def optimize(
         self,
-        initial_values: Union[ndarray, Dict[str, Any]],
-        parameters: Union[ndarray, Dict[str, Any]],
+        initial_values: Union[None, ndarray, Dict[str, Any]] = None,
+        parameters: Union[None, ndarray, Dict[str, Any]] = None,
         drivers: Optional[DriverSamples] = None,
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
         grid_type: str = "verbatim",
-        fix_constant_parameters: bool = False,
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
@@ -941,6 +936,7 @@ class Solver:
         waves: int = 5,
         target_ms: float = 20.0,
         max_parallel: int = 4,
+        fix_constant_parameters: bool = True,
     ) -> OptimizeResult:
         """Time placement, unrolling and launch options; keep the fastest.
 
@@ -1332,6 +1328,10 @@ class Solver:
     def parameters(self):
         """Expose parameter array used in the last run."""
         return self.kernel.parameters
+
+    @property
+    def parameter_legend(self) -> Dict[int, str]:
+        return self.system_interface.parameter_legend
 
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
