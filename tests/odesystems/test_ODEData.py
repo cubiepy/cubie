@@ -67,6 +67,8 @@ def test_system_sizes_validates_int(field, bad_value):
 
 
 def test_system_sizes_of_layout_counts_every_buffer():
+    """Count a layout's states, observables, swept rows, drivers and
+    driver derivatives."""
     layout = SystemLayout(
         states=["x", "y"],
         parameters=ParameterSet.build(DECLARED, ["b", "a"]),
@@ -80,7 +82,12 @@ def test_system_sizes_of_layout_counts_every_buffer():
     assert sizes.swept_parameters == 2
     assert sizes.drivers == 2
     assert sizes.driver_derivatives == 1
+
+
+# ── ODEData ───────────────────────────────────────────────────── #
+
 def _make_odedata(precision=np.float32, operation_ordering="kahn"):
+    """Return compile settings for ``operation_ordering``."""
     return ODEData(
         precision=precision, operation_ordering=operation_ordering
     )
@@ -118,6 +125,7 @@ def test_odedata_rejects_invalid_operation_ordering(operation_ordering):
 
 
 def test_odedata_precision_participates_in_identity():
+    """A precision change moves values_hash."""
     assert (
         _make_odedata(precision=np.float32).values_hash
         != _make_odedata(precision=np.float64).values_hash

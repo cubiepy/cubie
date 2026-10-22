@@ -75,6 +75,11 @@ class SpecialisedSystem(CUDADispatcherCache):
         Hash of every value the generated source embeds.
     mass
         The mass matrix as a float64 array, or ``None`` for an ODE.
+
+    Attributes
+    ----------
+    sizes
+        The length of each buffer in ``layout``.
     """
 
     layout: SystemLayout = field()

@@ -3,12 +3,10 @@
 The :func:`create_ODE_system` helper is the primary entry point. It
 builds symbolic system definitions into :class:`SymbolicODE` instances
 that inherit from :class:`BaseODE` and compile CUDA device functions
-through :class:`cubie.CUDAFactory`. Data containers such as
-:class:`ODEData` and :class:`SystemValues` describe metadata consumed by
-integrator factories. See :mod:`cubie.odesystems.variables` for the
-states, parameters and observables a system declares, and
+through :class:`cubie.CUDAFactory`. See :mod:`cubie.odesystems.variables`
+for the states, parameters and observables a system declares,
 :class:`SystemLayout` for the position of each variable in each device
-buffer.
+buffer, and :class:`ODEData` for what a system compiles against.
 
 Subpackages
 -----------

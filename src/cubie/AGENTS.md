@@ -75,6 +75,15 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
      `update_compile_settings` invalidates it only when a setting changed.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`), keyed by
      `fn_hash`: one generated source file per source identity.
+- **Derived values:** compute a value derived from settings snapshots, build products
+  or runtime defaults through `CUDAFactory._derived(name, inputs, compute)`, which
+  recomputes it only when `inputs` change. Pass immutable objects that are replaced on
+  change (a snapshot's `values_hash`, build products, frozen variable sets) as `inputs`,
+  never an object whose equality compares arrays. `config_hash` and `BaseODE.states`
+  use it. A value that depends only on compile settings is a build product instead.
+  Add no other in-memory cache: no `functools` caches, module-level dicts or
+  hand-written key/value attributes. A function of a class or of the toolchain, which
+  cannot change while the process runs, may use `functools.cache`.
 - **`update` / `update_compile_settings` contract:** keys are the non-underscored
   field names; an unrecognised key raises `KeyError` unless `silent=True`; returns a
   **`set`** of recognised labels. `CUDAFactory.update` merges `updates_dict` and
@@ -88,9 +97,8 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   elementwise, the rest by inequality. `values_hash` covers only eq-participating
   fields, but a replaced `eq=False` callable still rebuilds the consumer.
   Snapshots are sealed: assignment raises, array fields are owned read-only copies,
-  and `SystemValues` containers freeze at the snapshot boundary (structure always;
-  values too for parameters). Updates modify a `copy()` and pass it through the
-  boundary. A subclass `update` documents only its additions.
+  and value objects such as the variable sets are frozen. Updates derive a new object
+  and pass it through the boundary. A subclass `update` documents only its additions.
 - **`config_hash` recurses into child `CUDAFactory` attributes** (direct attributes,
   alphabetical). Attribute names in `_excluded_child_factories` contribute nothing
   to identity (diagnostic services).

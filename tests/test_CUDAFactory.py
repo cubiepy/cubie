@@ -889,6 +889,7 @@ def test_config_hash_stable_across_equal_states():
 
 
 def test_config_hash_follows_a_child_settings_change():
+    """A child's new settings change its parent's config hash."""
     child = _SettingsFactory(value=7)
     parent = _ParentFactory(child, value=3)
     before = parent.config_hash
@@ -898,7 +899,12 @@ def test_config_hash_follows_a_child_settings_change():
     assert parent.config_hash == before
 
 
+# ── CUDAFactory._derived ──────────────────────────────────── #
+
+
 def test_derived_value_is_reused_until_its_inputs_change():
+    """Return the stored value for equal inputs, and recompute it for
+    new ones."""
     factory = _make_factory()
     computed = []
 

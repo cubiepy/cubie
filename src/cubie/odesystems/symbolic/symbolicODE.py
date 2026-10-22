@@ -204,8 +204,8 @@ class SymbolicODE(BaseODE):
     """Symbolic representation of an ODE system.
 
     The system holds a :class:`ParsedSystem`, with every parameter
-    left as a symbol, and the equations specialised from it for the
-    current swept parameters.
+    left as a symbol, and a :class:`SystemSpecialiser` child that
+    assembles it for the parameters the current batch compiles.
 
     Parameters
     ----------
@@ -271,6 +271,10 @@ class SymbolicODE(BaseODE):
         specialiser = SystemSpecialiser(
             parsed_system, ParameterSet.build(declared, swept_parameters or ())
         )
+        # We keep every initial value we are given, including values
+        # for states that we remove in structural simplification.
+        # When we compile a specialisation that keeps such a state, we
+        # start it from the value the user set.
         super().__init__(
             precision,
             declared,
@@ -289,14 +293,17 @@ class SymbolicODE(BaseODE):
 
     @property
     def equations(self):
+        """The equations with every fixed value folded in."""
         return self._specialiser.equations
 
     @property
     def user_functions(self) -> dict[str, Callable]:
+        """Every callable the generated code may call, by name."""
         return self._specialiser.functions
 
     @property
     def fn_hash(self) -> str:
+        """Hash of every value the generated source embeds."""
         return self._specialiser.fn_hash
 
     @classmethod
@@ -454,8 +461,8 @@ class SymbolicODE(BaseODE):
     def _get_jvp_exprs(self) -> JVPEquations:
         """Return Jacobian-vector assignments for the current system.
 
-        The cache keys on the system hash and ordering policy, so a
-        re-specialisation or ordering change recomputes on next use.
+        Return the same assignments until the system is specialised
+        again or its ordering policy changes.
         """
         equations = self.equations
         layout = self.layout
@@ -493,9 +500,9 @@ class SymbolicODE(BaseODE):
         injections = {
             name: func for name, func in functions.items() if is_devfunc(func)
         }
-        # The string parser renames user functions (trailing
-        # underscore), and generated source prints the renamed symbol,
-        # so each device callable is injected under its alias too.
+        # The string parser renames user functions with a trailing
+        # underscore and the generated source calls the renamed symbol,
+        # so inject each device callable under its alias as well.
         for alias, original in self.equations.function_aliases.items():
             func = functions.get(original)
             if func is not None and is_devfunc(func):
@@ -682,7 +689,7 @@ class SymbolicODE(BaseODE):
 
         Notes
         -----
-        Mass-consuming helpers read ``compile_settings.mass``. A
+        Mass-consuming helpers read :attr:`mass`. A
         repeated request returns the same member; bindings sharing
         source reuse one generated factory.
         """

@@ -523,9 +523,9 @@ class _CubieConfigBase(FrozenSettings):
     Memoizing the hash is only sound because nested values seal at
     the snapshot boundary: converters on array-valued fields store
     owned read-only copies (never aliases of caller arrays), and
-    container values such as ``SystemValues`` freeze in place when a
-    snapshot takes them. A converter that stores a mutable alias
-    would silently break this contract — copy and seal instead.
+    value objects such as the variable sets are frozen. A converter
+    that stores a mutable alias would silently break this contract —
+    copy and seal instead.
     """
 
     _values_hash_memo: Optional[str] = field(
@@ -1072,6 +1072,31 @@ class CUDAFactory(ABC):
         inputs: Tuple[Any, ...],
         compute: Callable[[], Any],
     ) -> Any:
+        """Return ``compute()``, reusing the last result for equal inputs.
+
+        Use this for a value computed from settings snapshots, build
+        products or runtime defaults that callers read more than once
+        between changes.
+
+        Parameters
+        ----------
+        name
+            Name of the derived value, unique within the factory.
+        inputs
+            The immutable objects the value is computed from. Pass
+            objects that are replaced, never modified, when they change,
+            and whose equality never compares arrays: a settings
+            snapshot's ``values_hash`` rather than the snapshot itself.
+            Comparing inputs that are the same objects as last time costs
+            one identity check each.
+        compute
+            Function returning the value from the current inputs.
+
+        Returns
+        -------
+        Any
+            The value for ``inputs``.
+        """
         stored = self._derived_values.get(name)
         if stored is not None and stored[0] == inputs:
             return stored[1]

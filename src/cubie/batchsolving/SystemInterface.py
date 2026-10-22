@@ -1,10 +1,8 @@
 """Convenience interface for accessing system values.
 
-This module provides :class:`SystemInterface`, which wraps
-:class:`cubie.odesystems.SystemValues` instances for parameters, states, and
-observables. It exposes helper methods for converting between user-facing
-labels or indices and internal representations, and sets the swept
-parameters.
+This module provides :class:`SystemInterface`, which reads a system's
+parameter, state and observable sets. It converts between user-facing
+labels and indices.
 
 Published Classes
 -----------------
@@ -19,7 +17,7 @@ Published Classes
 
 See Also
 --------
-:class:`~cubie.odesystems.SystemValues.SystemValues`
+:class:`~cubie.odesystems.variables.VariableSet`
     Underlying keyed parameter container.
 :class:`~cubie.odesystems.baseODE.BaseODE`
     ODE system base class from which interfaces are created.
@@ -71,19 +69,22 @@ class SystemInterface:
 
     @property
     def parameters(self) -> ValuedSet:
-        """Parameter values, read live from the system."""
+        """Parameters and their defaults, read live from the system."""
         return self._system.parameters
 
     @property
     def states(self) -> ValuedSet:
+        """States and their default initial values, read live."""
         return self._system.initial_values
 
     @property
     def observables(self) -> VariableSet:
+        """Observables, read live from the system."""
         return self._system.observables
 
     @property
     def precision(self) -> type:
+        """The system's precision."""
         return self._system.precision
 
     @property
@@ -93,6 +94,7 @@ class SystemInterface:
 
     @property
     def swept_values(self) -> ValuedSet:
+        """The swept parameters with their defaults, in row order."""
         return self._system.swept_set
 
     @property
@@ -113,15 +115,16 @@ class SystemInterface:
             Names of the parameters read from the parameters array, in
             any order.
         fixed_values
-            Values to compile in for the other parameters. Defaults to
-            their default values.
+            Values to compile in for some of the other parameters. This
+            method compiles every parameter not named here at its
+            default.
 
         Raises
         ------
         KeyError
             If a name is not a parameter of the system.
         ValueError
-            If a name repeats.
+            If a name repeats or also has a fixed value.
         """
         self._system.set_swept_parameters(names, fixed_values)
 
@@ -206,7 +209,7 @@ class SystemInterface:
         Parameters
         ----------
         values_object
-            The SystemValues object to retrieve labels from.
+            The variable set to retrieve labels from.
         indices
             A 1D array of integer indices.
 

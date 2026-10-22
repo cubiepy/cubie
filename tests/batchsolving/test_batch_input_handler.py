@@ -241,7 +241,7 @@ def test_extend_grid_partial_sweep(system):
 
 
 def test_init_stores_attributes(system):
-    """Stores parameters, states, precision from interface."""
+    """Reads parameters, states and precision from the interface."""
     interface = SystemInterface(system)
     handler = BatchInputHandler(interface)
     assert handler.parameters is interface.parameters
@@ -845,7 +845,7 @@ def test_call_positional_args(input_handler_mutable, system):
 def test_process_empty_values_none_input(system):
     """Returns empty (0,1) array when values_object empty and input None."""
     handler = BatchInputHandler.from_system(system)
-    # Create a mock empty SystemValues-like scenario through the handler
+    # Create a mock empty variable set scenario through the handler
     # The system has parameters, so we test via the actual code path
     # by checking what happens when values_object.empty is True
     # This is tested indirectly when system has no params
@@ -860,7 +860,7 @@ def test_process_empty_values_none_input(system):
 def test_process_empty_values_nonempty_raises(system):
     """Raises ValueError when values_object empty but non-empty input."""
     handler = BatchInputHandler.from_system(system)
-    # We cannot easily create an empty SystemValues without a special system
+    # We cannot easily create an empty variable set without a special system
     # This is tested via the error path in _plan_single_input
     # We verify the TypeError path instead for coverage
     with pytest.raises(TypeError):
@@ -871,7 +871,7 @@ def test_process_empty_values_nonempty_raises(system):
 
 @pytest.fixture(scope="module")
 def no_param_system(precision):
-    """System with no declared parameters (empty SystemValues)."""
+    """System with no declared parameters (an empty parameter set)."""
     from cubie import create_ODE_system
 
     return create_ODE_system(
@@ -890,7 +890,7 @@ def no_param_system(precision):
 def test_process_empty_values_object_empty_input_returns_zero_rows(
     no_param_system, empty_params
 ):
-    """Empty (non-None) input against an empty SystemValues returns a
+    """Empty (non-None) input against an empty variable set returns a
     (0, 1) array instead of raising."""
     handler = BatchInputHandler.from_system(no_param_system)
     result = assemble_single_category(
@@ -902,7 +902,7 @@ def test_process_empty_values_object_empty_input_returns_zero_rows(
 def test_process_empty_values_object_none_input_returns_zero_rows(
     no_param_system,
 ):
-    """None input against an empty SystemValues also returns (0, 1)."""
+    """None input against an empty variable set also returns (0, 1)."""
     handler = BatchInputHandler.from_system(no_param_system)
     result = assemble_single_category(
         handler, None, handler.parameters, kind="combinatorial"
@@ -918,7 +918,7 @@ def test_process_empty_values_object_none_input_returns_zero_rows(
 def test_process_empty_values_object_nonempty_input_raises(
     no_param_system, nonempty_params
 ):
-    """Non-empty input against an empty SystemValues raises ValueError."""
+    """Non-empty input against an empty variable set raises ValueError."""
     handler = BatchInputHandler.from_system(no_param_system)
     with pytest.raises(ValueError, match="no settable variables"):
         handler._plan_single_input(
@@ -927,7 +927,7 @@ def test_process_empty_values_object_nonempty_input_raises(
 
 
 def test_call_with_no_param_system_processes_empty_params(no_param_system):
-    """__call__ falls through to the empty-SystemValues path for params
+    """__call__ falls through to the empty-set path for params
     when a non-None, non-array params value is supplied."""
     handler = BatchInputHandler.from_system(no_param_system)
     inits, params, _, _ = _handle(

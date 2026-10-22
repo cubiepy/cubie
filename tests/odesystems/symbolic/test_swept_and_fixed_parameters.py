@@ -228,6 +228,7 @@ class TestStructuralRespecialisation:
         ) == pytest.approx(0.75)
 
     def test_dropped_state_keeps_its_initial_value(self, system_restored):
+        """A state simplification drops and restores keeps its value."""
         system = system_restored
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")

@@ -11,23 +11,16 @@ Published Classes
     4
 
 :class:`ODEData`
-    Bundle of :class:`SystemValues` instances and derived sizes for CUDA
-    compilation.
+    The compile settings of a :class:`~cubie.odesystems.baseODE.BaseODE`
+    that are not the parameters a batch compiles.
 
     >>> from numpy import float32
-    >>> data = ODEData.from_BaseODE_initargs(
-    ...     precision=float32,
-    ...     default_initial_values={"x": 0.0, "y": 1.0},
-    ...     default_parameters={"a": 0.5, "g": 9.81},
-    ...     default_observable_names={"v": 0.0},
-    ... )
-    >>> data.num_states
-    2
+    >>> data = ODEData(precision=float32, operation_ordering="kahn")
+    >>> data.operation_ordering
+    'kahn'
 
 See Also
 --------
-:class:`~cubie.odesystems.SystemValues.SystemValues`
-    Keyed parameter container stored inside ``ODEData``.
 :class:`~cubie.CUDAFactory.CUDAFactoryConfig`
     Parent class providing precision and hashing.
 :class:`~cubie.odesystems.baseODE.BaseODE`
@@ -81,6 +74,7 @@ class SystemSizes:
 
     @classmethod
     def of_layout(cls, layout: SystemLayout) -> "SystemSizes":
+        """Return the sizes of every buffer in ``layout``."""
         return cls(
             states=layout.states.n,
             observables=layout.observables.n,
@@ -92,38 +86,20 @@ class SystemSizes:
 
 @frozen
 class ODEData(CUDAFactoryConfig):
-    """Bundle numerical values and metadata for an ODE system.
+    """Bundle the settings an ODE system generates code with.
 
     Parameters
     ----------
-    parameters
-        Every parameter of the system with its default value.
-    initial_states
-        Initial state values for the ODE system.
-    observables
-        Observable variables to track during simulation.
     precision
-        Precision factory used for numerical calculations. Defaults to
-        :class:`numpy.float32`.
-    num_drivers
-        Drivers-buffer length: drivers plus driver derivatives read.
-        Defaults to ``1``.
-    driver_derivatives
-        The driver index and order of each driver derivative the
-        equations read, in the order the derivatives follow the
-        drivers in the drivers buffer.
-    swept_parameters
-        Names of the parameters read from the parameters array.
-    fixed_parameters
-        Values compiled into the code for every other parameter.
+        Precision factory used for numerical calculations.
+    operation_ordering
+        Generated-operation ordering policy.
 
     Notes
     -----
-    This container holds only ODE-system state. Solver-helper request
-    parameters (operator_beta, operator_gamma, preconditioner order,
-    stage tableaus)
-    belong to the requesting algorithm's compile settings and reach
-    the system as immutable
+    Solver-helper request parameters (operator_beta, operator_gamma,
+    preconditioner order, stage tableaus) belong to the requesting
+    algorithm's compile settings and reach the system as immutable
     :class:`~cubie.odesystems.solver_helpers.SolverHelperRequest`
     values, so the system's identity never depends on helper request
     order.

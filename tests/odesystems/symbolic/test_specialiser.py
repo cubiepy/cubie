@@ -1,3 +1,5 @@
+"""Tests for cubie.odesystems.symbolic.specialiser."""
+
 import pytest
 
 from cubie.odesystems.symbolic.parsing import parse_system
@@ -10,6 +12,7 @@ from cubie.odesystems.variables import ParameterSet
 
 @pytest.fixture
 def parsed():
+    """Return a parsed two-parameter system."""
     return parse_system(
         dxdt=["dx = -k * x + c0"],
         states={"x": 1.0},
@@ -19,12 +22,14 @@ def parsed():
 
 @pytest.fixture
 def specialiser(parsed):
+    """Return a specialiser sweeping ``k``."""
     return SystemSpecialiser(
         parsed, ParameterSet.build(parsed.declared_parameters, ["k"])
     )
 
 
 def test_products_assemble_on_demand(parsed, specialiser):
+    """Build the specialised system on the first read of a product."""
     assert specialiser.cache_valid is False
     assert specialiser.layout.swept_names == ("k",)
     assert specialiser.cache_valid is True
@@ -35,6 +40,7 @@ def test_products_assemble_on_demand(parsed, specialiser):
 
 
 def test_equal_compiled_parameters_keep_the_build(parsed, specialiser):
+    """Keep the build when the new set equals the compiled one."""
     specialiser.layout
     same = ParameterSet.build(parsed.declared_parameters, ["k"], {"c0": 1.0})
     recognised = specialiser.update(compiled_parameters=same)
@@ -43,6 +49,7 @@ def test_equal_compiled_parameters_keep_the_build(parsed, specialiser):
 
 
 def test_new_compiled_parameters_invalidate_the_build(parsed, specialiser):
+    """Invalidate the assembled system for a new sweep or fixed value."""
     hash_before = specialiser.config_hash
     layout_before = specialiser.layout
     specialiser.update(
@@ -57,6 +64,7 @@ def test_new_compiled_parameters_invalidate_the_build(parsed, specialiser):
 
 
 def test_a_swept_default_is_outside_the_identity(parsed):
+    """Keep the settings equal when a swept parameter's default changes."""
     declared = parsed.declared_parameters
     config = SpecialiserConfig(
         compiled_parameters=ParameterSet.build(declared, ["k"])

@@ -750,7 +750,7 @@ class TestValueSetters:
         assert ode.config_hash != hash_before
 
     def test_set_initial_value(self, precision):
-        """Verify set_initial_value updates state correctly."""
+        """set_initial_values sets a state's default initial value."""
         ode = SymbolicODE.create(
             dxdt=["dx = -k * x"],
             precision=precision,
