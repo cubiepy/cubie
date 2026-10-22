@@ -36,18 +36,15 @@ Array = NDArray[np.floating]
 @contextmanager
 def restoring_values(system):
     """Restore the system's parameters and initial values on exit."""
-    swept = system.swept_parameters
-    fixed = system.fixed_parameter_values
-    defaults = dict(system.compile_settings.parameter_values)
-    states = dict(system.compile_settings.initial_state_values)
+    parameters = system.parameters
+    compiled = system.compiled_parameters
+    states = system.states
     try:
         yield system
     finally:
-        system.set_default_parameters(defaults)
-        system.update(
-            swept_parameters=swept, fixed_parameters=tuple(fixed.items())
-        )
-        system.initial_values.update_from_dict(states, silent=True)
+        system.set_default_parameters(parameters.defaults)
+        system.update(compiled_parameters=compiled)
+        system.set_initial_values(states.defaults)
 
 
 def sweep(system, names):

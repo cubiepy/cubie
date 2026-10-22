@@ -146,7 +146,7 @@ class TestRespecialisation:
         assert system.fn_hash != first_hash
         second = _dxdt_source(system)
         assert "precision(5.0)" in second
-        assert float(system.parameters["amp"]) == 4.0
+        assert system.parameters["amp"].default == 4.0
 
     def test_unchanged_value_keeps_hash(self, system_restored):
         system = system_restored

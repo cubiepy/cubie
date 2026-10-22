@@ -245,7 +245,7 @@ def test_init_stores_attributes(system):
     interface = SystemInterface(system)
     handler = BatchInputHandler(interface)
     assert handler.parameters is interface.parameters
-    assert handler.states is interface.states
+    assert handler.states == interface.states
     assert handler.precision == interface.precision
 
 

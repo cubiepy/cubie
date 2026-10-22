@@ -24,13 +24,14 @@ def tiny_system():
 def test_copy_is_an_independent_unbuilt_system(tiny_system):
     """A copy hashes the same, owns its values and holds no build."""
     tiny_system.dxdt_fn
+    defaults = tiny_system.parameters.defaults
     twin = tiny_system.copy()
     assert twin is not tiny_system
     assert twin.config_hash == tiny_system.config_hash
     assert twin.cache_valid is False
     assert tiny_system.cache_valid is True
     twin.set_default_parameters({"c0": 3.0})
-    assert tiny_system.parameters.values_dict["c0"] == 1.0
+    assert tiny_system.parameters.defaults == defaults
     assert twin.parameters.defaults["c0"] == 3.0
 
 
@@ -57,9 +58,7 @@ class TestSweptParameters:
 
     def test_swept_names_set_the_parameters_array_rows(self, tiny_system):
         """Swept names become the parameters array rows, in order."""
-        tiny_system.update(
-            swept_parameters=("c0", "k"), fixed_parameters=()
-        )
+        tiny_system.set_swept_parameters(("k", "c0"))
         assert tiny_system.swept_parameters == ("c0", "k")
         assert tiny_system.sizes.swept_parameters == 2
         assert tiny_system.layout.swept_names == ("c0", "k")
@@ -80,26 +79,21 @@ class TestSweptParameters:
         assert system.layout.swept_names == ("c0", "k")
 
     def test_fixed_values_are_compiled_in(self, tiny_system):
-        """Fixed values are the values the system compiles in."""
-        tiny_system.update(
-            swept_parameters=("k",), fixed_parameters=(("c0", 4.0),)
-        )
+        defaults = tiny_system.parameters.defaults
+        tiny_system.set_swept_parameters(("k",), {"c0": 4.0})
         assert tiny_system.fixed_parameter_values == {"c0": 4.0}
-        assert tiny_system.parameters.values_dict["c0"] == 1.0
+        assert tiny_system.parameters.defaults == defaults
 
-    def test_unchanged_parameters_keep_the_build(self, tiny_system):
-        """Repeating the swept and fixed parameters keeps the build."""
+    def test_the_compiled_sweep_keeps_the_build(self, tiny_system):
         tiny_system.dxdt_fn
-        fixed = tuple(tiny_system.fixed_parameter_values.items())
-        tiny_system.update(swept_parameters=(), fixed_parameters=fixed)
+        compiled = tiny_system.compiled_parameters
+        tiny_system.set_swept_parameters(())
         assert tiny_system.cache_valid is True
+        assert tiny_system.compiled_parameters is compiled
 
-    def test_every_parameter_needs_one_role(self, tiny_system):
-        """Swept and fixed names must cover each parameter once."""
-        with pytest.raises(ValueError, match="once"):
-            tiny_system.update(
-                swept_parameters=("k",), fixed_parameters=()
-            )
+    def test_unknown_swept_name_raises(self, tiny_system):
+        with pytest.raises(KeyError, match="not_a_key"):
+            tiny_system.set_swept_parameters(("not_a_key",))
 
 
 class TestSetDefaultParameters:
@@ -111,14 +105,12 @@ class TestSetDefaultParameters:
         assert tiny_system.parameters.defaults["c0"] == 7.0
         assert tiny_system.fixed_parameter_values["c0"] == 7.0
 
-    def test_swept_parameter_stays_swept(self, tiny_system):
-        """A swept parameter's new default leaves it swept."""
-        tiny_system.update(
-            swept_parameters=("k",), fixed_parameters=(("c0", 1.0),)
-        )
+    def test_swept_parameter_keeps_the_build(self, tiny_system):
+        tiny_system.set_swept_parameters(("k",))
+        tiny_system.dxdt_fn
         tiny_system.set_default_parameters({"k": 3.0})
         assert tiny_system.swept_parameters == ("k",)
-        assert tiny_system.parameters.values_dict["k"] == 3.0
+        assert tiny_system.parameters.defaults["k"] == 3.0
         assert tiny_system.cache_valid is True
 
     def test_new_defaults_drop_the_fixed_values(self, tiny_system):

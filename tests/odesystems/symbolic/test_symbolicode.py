@@ -614,7 +614,7 @@ class TestSweptParameters:
         sweep(ode, ["c"])
 
         assert ode.layout.swept_names == ("c",)
-        assert ode.parameters["c"] == precision(0.5)
+        assert ode.parameters["c"].default == 0.5
 
     def test_fixing_a_parameter_folds_its_value(self, precision):
         """A fixed parameter leaves the parameters array."""
@@ -717,7 +717,7 @@ class TestValueSetters:
         )
 
         ode.set_default_parameters({"k": 0.5})
-        assert ode.parameters["k"] == precision(0.5)
+        assert ode.parameters["k"].default == 0.5
 
     def test_parameters_getter_is_sealed_against_bypass(self, precision):
         """In-place mutation through the public getter raises.
@@ -735,20 +735,18 @@ class TestValueSetters:
         _ = ode.dxdt_fn
         hash_before = ode.config_hash
 
-        with pytest.raises(ValueError):
-            ode.parameters.update_from_dict({"c": 2.0})
-        with pytest.raises(ValueError):
-            ode.parameters["c"] = 2.0
-        with pytest.raises(ValueError):
-            ode.parameters.values_array[0] = 2.0
-        with pytest.raises(TypeError):
-            ode.parameters.values_dict["c"] = 2.0
+        with pytest.raises(AttributeError):
+            ode.parameters["c"].default = 2.0
+        with pytest.raises(AttributeError):
+            ode.compiled_parameters["c"].value = 2.0
+        ode.parameters.defaults["c"] = 2.0
+        ode.fixed_parameter_values["c"] = 2.0
 
-        assert ode.parameters["c"] == precision(0.5)
+        assert ode.parameters["c"].default == 0.5
         assert ode.config_hash == hash_before
 
         ode.set_default_parameters({"c": 2.0})
-        assert ode.parameters["c"] == precision(2.0)
+        assert ode.parameters["c"].default == 2.0
         assert ode.config_hash != hash_before
 
     def test_set_initial_value(self, precision):
@@ -762,7 +760,7 @@ class TestValueSetters:
         )
 
         ode.set_initial_values({"x": 2.0})
-        assert ode.initial_values["x"] == 2.0
+        assert ode.initial_values["x"].default == 2.0
 
 
 class TestInfoGetters:
