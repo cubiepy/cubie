@@ -43,16 +43,16 @@ from typing import (
     Iterable,
     Mapping,
     Optional,
+    Set,
     Tuple,
 )
 
 from attrs import define, field
-from numpy import float32
 
 from cubie.CUDAFactory import CUDAFactory, CUDADispatcherCache
 from cubie._utils import PrecisionDType
 from cubie._env import operation_ordering_default
-from cubie.odesystems.ODEData import ODEData
+from cubie.odesystems.ODEData import ODEData, SystemSizes
 from cubie.odesystems._mass_utils import mass_diagonal_flags
 from cubie.odesystems.solver_helpers import (
     HelperResult,
@@ -293,7 +293,7 @@ class BaseODE(CUDAFactory):
         return self._specialiser.fixed_parameter_values
 
     @property
-    def parameters(self) -> "SystemValues":
+    def parameters(self) -> ValuedSet:
         """Every parameter with its default value."""
         return self._parameters
 
@@ -364,7 +364,7 @@ class BaseODE(CUDAFactory):
         return self.layout.driver_derivatives
 
     @property
-    def sizes(self):
+    def sizes(self) -> SystemSizes:
         """System component sizes cached for solvers."""
         return self._specialiser.sizes
 

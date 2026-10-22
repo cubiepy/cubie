@@ -11,12 +11,13 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from warnings import warn
 
 import sympy as sp
-from attrs import field, frozen
+from attrs import Factory, field, frozen
 from numpy import array as np_array, float64 as np_float64
 
 from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.ODEData import SystemSizes
 from cubie.odesystems.symbolic.parsing.normalise import (
     NormalisedSystem,
 )

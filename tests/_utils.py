@@ -52,21 +52,13 @@ def restoring_values(system):
 
 def sweep(system, names):
     """Sweep ``names`` on ``system`` and compile the other defaults in."""
-    defaults = system.compile_settings.parameter_values
-    fixed = tuple(
-        (name, value) for name, value in defaults.items()
-        if name not in names
-    )
-    system.update(swept_parameters=tuple(names), fixed_parameters=fixed)
+    system.set_swept_parameters(names)
 
 
 def swept_values(system):
     """Return the swept parameters' defaults in row order."""
-    defaults = system.parameters.values_dict
-    return np.array(
-        [defaults[name] for name in system.swept_parameters],
-        dtype=system.precision,
-    )
+    swept = system.parameters.subset(system.swept_parameters)
+    return swept.defaults_array(system.precision)
 
 
 def swept_defaults(system, runs=2):
@@ -75,7 +67,7 @@ def swept_defaults(system, runs=2):
     Pass this as a solve's parameters to run the system's own sweep at
     its default values.
     """
-    defaults = system.parameters.values_dict
+    defaults = system.parameters.defaults
     return {
         name: np.full(runs, defaults[name])
         for name in system.swept_parameters

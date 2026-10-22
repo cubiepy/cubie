@@ -46,7 +46,7 @@ from numpy import (
     array as np_array,
 )
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.SystemValues import SystemValues
+from cubie.odesystems.variables import ValuedSet, VariableSet
 
 
 class SystemInterface:
@@ -70,7 +70,7 @@ class SystemInterface:
         self._system = system
 
     @property
-    def parameters(self) -> SystemValues:
+    def parameters(self) -> ValuedSet:
         """Parameter values, read live from the system."""
         return self._system.parameters
 
@@ -92,7 +92,7 @@ class SystemInterface:
         return self._system.swept_parameters
 
     @property
-    def swept_values(self) -> SystemValues:
+    def swept_values(self) -> ValuedSet:
         return self._system.swept_set
 
     @property

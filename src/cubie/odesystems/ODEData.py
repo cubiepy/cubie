@@ -34,41 +34,15 @@ See Also
     Abstract ODE factory that owns an ``ODEData`` as compile settings.
 """
 
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    Mapping,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
-
-from attrs import (
-    Factory,
-    cmp_using as attrs_cmp_using,
-    define,
-    evolve,
-    field,
-    frozen,
-)
+from attrs import Factory, field, frozen
 from attrs.validators import (
-    deep_iterable as attrsval_deep_iterable,
     in_ as attrsval_in,
     instance_of as attrsval_instance_of,
-    optional as attrsval_optional,
 )
-from numpy import array as np_array, float64 as np_float64
-
 
 from cubie._env import operation_ordering_default
 from cubie.CUDAFactory import CUDAFactoryConfig
-from cubie._utils import (
-    PrecisionDType,
-    mass_equal,
-)
-from cubie.odesystems.SystemValues import SystemValues
+from cubie.odesystems.layout import SystemLayout
 
 
 ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})

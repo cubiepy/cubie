@@ -196,13 +196,13 @@ class TestStructuralRespecialisation:
         self, system_restored
     ):
         system = system_restored
-        zero_states = list(system.initial_values.values_dict)
+        zero_states = list(system.initial_values.defaults)
         assert system.mass is not None
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             system.set_default_parameters({"Cs": 2e-2})
         assert system.mass is None
-        new_states = list(system.initial_values.values_dict)
+        new_states = list(system.initial_values.defaults)
         assert set(new_states) == {"U3", "I1", "I3"}
         assert new_states != zero_states
         source = _dxdt_source(system)
@@ -221,10 +221,10 @@ class TestStructuralRespecialisation:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             system.set_default_parameters({"Cs": 2e-2})
-            system.set_initial_value("U3", 0.75)
+            system.set_initial_values({"U3": 0.75})
             system.set_default_parameters({"Cs": 4e-2})
         assert float(
-            system.initial_values.values_dict["U3"]
+            system.initial_values.defaults["U3"]
         ) == pytest.approx(0.75)
 
 
@@ -353,7 +353,7 @@ class TestLiveSolverRespecialisation:
         y0 = {
             name: np.array([float(value)])
             for name, value in (
-                system.initial_values.values_dict.items()
+                system.initial_values.defaults.items()
             )
         }
         algebraic = solver_mutable.solve(y0, {}, duration=0.01)
@@ -367,7 +367,7 @@ class TestLiveSolverRespecialisation:
         y0 = {
             name: np.array([float(value)])
             for name, value in (
-                system.initial_values.values_dict.items()
+                system.initial_values.defaults.items()
             )
         }
         live = solver_mutable.solve(y0, {}, duration=0.01)

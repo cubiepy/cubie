@@ -47,7 +47,7 @@ from typing import (
     Union,
 )
 
-from numpy import asarray, dtype as np_dtype, float32
+from numpy import dtype as np_dtype, float32
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
     generate_observables_fac_code,
@@ -64,8 +64,9 @@ from cubie.odesystems.symbolic.parsing import (
 )
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 from cubie.odesystems.symbolic.engine.adapter import buffer_maps
+from cubie.odesystems.symbolic.specialiser import SystemSpecialiser
 from cubie.odesystems.baseODE import BaseODE, ODECache
-from cubie.odesystems.SystemValues import SystemValues
+from cubie.odesystems.variables import ParameterSet
 from cubie.odesystems.solver_helpers import (
     HelperResult,
     OperationCounts,

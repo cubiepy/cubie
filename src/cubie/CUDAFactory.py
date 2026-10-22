@@ -53,6 +53,7 @@ from enum import Enum
 from functools import cache
 from typing import (
     Any,
+    Callable,
     Dict,
     Optional,
     Set,

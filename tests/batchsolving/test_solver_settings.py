@@ -870,7 +870,7 @@ def test_output_selection_grows_on_update(solver_mutable):
 def test_rejected_update_changes_nothing(solver_mutable):
     """An update with an unknown name leaves the solver as it was."""
     name = solver_mutable.system.parameters.names[0]
-    before = float(solver_mutable.system.parameters.values_dict[name])
+    before = float(solver_mutable.system.parameters.defaults[name])
     given = solver_mutable.given
     verbosity = default_timelogger.verbosity
     with pytest.raises(KeyError, match="typo"):
@@ -878,7 +878,7 @@ def test_rejected_update_changes_nothing(solver_mutable):
             {name: before * 2.0, "dt": 0.123, "typo": 1,
              "time_logging_level": "silent"}
         )
-    assert float(solver_mutable.system.parameters.values_dict[name]) == (
+    assert float(solver_mutable.system.parameters.defaults[name]) == (
         pytest.approx(before)
     )
     assert solver_mutable.given is given

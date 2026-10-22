@@ -31,7 +31,7 @@ def test_copy_is_an_independent_unbuilt_system(tiny_system):
     assert tiny_system.cache_valid is True
     twin.set_default_parameters({"c0": 3.0})
     assert tiny_system.parameters.values_dict["c0"] == 1.0
-    assert twin.parameters.values_dict["c0"] == 3.0
+    assert twin.parameters.defaults["c0"] == 3.0
 
 
 class TestUpdate:
@@ -93,7 +93,7 @@ class TestSetDefaultParameters:
     def test_fixed_parameter_compiles_in_its_new_default(self, tiny_system):
         """A fixed parameter's new default is compiled in."""
         tiny_system.set_default_parameters({"c0": 7.0})
-        assert tiny_system.parameters.values_dict["c0"] == 7.0
+        assert tiny_system.parameters.defaults["c0"] == 7.0
         assert tiny_system.fixed_parameter_values["c0"] == 7.0
 
     def test_swept_parameter_stays_swept(self, tiny_system):

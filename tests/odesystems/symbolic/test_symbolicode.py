@@ -75,8 +75,8 @@ def test_create_ODE_system_strict(
         strict=True,
     )
     sys2 = simple_ode_strict
-    assert sys1.parameters.values_dict == sys2.parameters.values_dict
-    assert sys1.initial_values.values_dict == sys2.initial_values.values_dict
+    assert sys1.parameters.defaults == sys2.parameters.defaults
+    assert sys1.initial_values.defaults == sys2.initial_values.defaults
     assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
@@ -90,8 +90,8 @@ def test_create_ODE_system_nonstrict(
         name="simpletest_nonstrict",
     )
     sys2 = simple_ode_nonstrict
-    assert sys1.parameters.values_dict == sys2.parameters.values_dict
-    assert sys1.initial_values.values_dict == sys2.initial_values.values_dict
+    assert sys1.parameters.defaults == sys2.parameters.defaults
+    assert sys1.initial_values.defaults == sys2.initial_values.defaults
     assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
@@ -761,7 +761,7 @@ class TestValueSetters:
             name="test_set_init",
         )
 
-        ode.set_initial_value("x", 2.0)
+        ode.set_initial_values({"x": 2.0})
         assert ode.initial_values["x"] == 2.0
 
 
@@ -834,7 +834,7 @@ def test_list_units_follow_declared_names(dxdt, precision):
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}
 
     sweep(system, ["k"])
-    assert system.layout.parameters.subset(system.swept_parameters).units == {
+    assert system.parameters.subset(system.swept_parameters).units == {
         "k": "k_unit"
     }
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}

@@ -20,7 +20,6 @@ Subpackages
 
 from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.ODEData import ODEData, SystemSizes
-from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.variables import (
     CompiledParameter,
     Parameter,
@@ -44,7 +43,6 @@ __all__ = [
     "State",
     "SystemLayout",
     "SystemSizes",
-    "SystemValues",
     "Variable",
     "ValuedSet",
     "VariableSet",
