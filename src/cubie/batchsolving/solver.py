@@ -725,8 +725,8 @@ class Solver:
         """
         self.update(**kwargs)
         self.input_handler.set_swept_parameters(
-                parameters, fix_constant_parameters
-            )
+            parameters, fix_constant_parameters
+        )
         self.update()
 
         if optimize_candidates:
@@ -740,7 +740,7 @@ class Solver:
 
         self.kernel.compile()
 
-    def build_grid(
+    def prepare_grid_arrays(
         self,
         initial_values: Union[
             None, ndarray, Dict[str, Union[float, ndarray]]
@@ -911,13 +911,13 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
-            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             auto_size=auto_size,
             waves=waves,
             target_ms=target_ms,
             max_parallel=max_parallel,
+            fix_constant_parameters=fix_constant_parameters,
         )
 
     def optimize(
@@ -1001,7 +1001,6 @@ class Solver:
             settling_time=settling_time,
             t0=t0,
             grid_type=grid_type,
-            fix_constant_parameters=fix_constant_parameters,
             apply=apply,
             verbose=verbose,
             force=force,
@@ -1009,6 +1008,7 @@ class Solver:
             waves=waves,
             target_ms=target_ms,
             max_parallel=max_parallel,
+            fix_constant_parameters=fix_constant_parameters,
         )
 
     def update(
@@ -1336,7 +1336,7 @@ class Solver:
     @property
     def fixed_parameter_values(self) -> Dict[str, float]:
         """Values compiled into the kernel, keyed by parameter name."""
-        return self.system_interface.fixed_parameter_values
+        return self.system.fixed_parameter_values
 
     @property
     def swept_parameters(self) -> Tuple[str, ...]:
@@ -1344,7 +1344,7 @@ class Solver:
 
         Pass a parameters array with one row per name, in this order.
         """
-        return self.system_interface.swept_parameters
+        return self.system.swept_parameters
 
     @property
     def initial_values(self):

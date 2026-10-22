@@ -132,14 +132,12 @@ from numpy import (
     empty as np_empty,
     atleast_1d as np_atleast_1d,
     all as np_all,
-    flatnonzero as np_flatnonzero,
 )
 
 from numpy.typing import ArrayLike
 
 from cubie._utils import is_device_array
 from cubie.memory.driver_memory import is_pinned_array
-from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory import default_memmgr
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.variables import ValuedSet
@@ -531,8 +529,8 @@ class BatchInputHandler:
         memory_manager: "MemoryManager" = default_memmgr,
     ):
         """Initialise the handler with a system interface."""
-        self.interface = interface
-        self.precision = interface.precision
+        self.system = system
+        self.precision = system.precision
         self.memory_manager = memory_manager
 
     @classmethod
@@ -559,8 +557,8 @@ class BatchInputHandler:
 
     def __call__(
         self,
-        states: Optional[Union[Dict, ArrayLike]] = None,
-        params: Optional[Union[Dict, ArrayLike]] = None,
+        initial_values: Optional[Union[Dict, ArrayLike]] = None,
+        parameters: Optional[Union[Dict, ArrayLike]] = None,
         kind: str = "combinatorial",
         fix_constant_parameters: bool = True,
     ) -> tuple[object, object]:
@@ -702,13 +700,13 @@ class BatchInputHandler:
 
         device_result = self._process_device_inputs(
             states, params, swept_set, state_set
-                )
+        )
         if device_result is not None:
             return device_result
 
         fast_result = self._fast_return_arrays(
             states, params, kind, swept_set, state_set
-            )
+        )
         if fast_result is not None:
             return fast_result
 
@@ -811,11 +809,9 @@ class BatchInputHandler:
             return None
 
         if states_is_device:
-            self._validate_device_array(states, self.states, "states")
+            self._validate_device_array(states, state_set, "states")
         if params_is_device:
-            self._validate_device_array(
-                params, self.swept_values, "params"
-            )
+            self._validate_device_array(params, swept_set, "params")
 
         if states_is_device and params_is_device:
             if states.shape[1] != params.shape[1]:
@@ -830,12 +826,12 @@ class BatchInputHandler:
         if states_is_device:
             device_arr = states
             other = params
-            other_values = self.swept_values
+            other_values = swept_set
             other_label = "params"
         else:
             device_arr = params
             other = states
-            other_values = self.states
+            other_values = state_set
             other_label = "states"
         n_runs = device_arr.shape[1]
 
@@ -845,7 +841,7 @@ class BatchInputHandler:
                     f"Dict {other_label} cannot be combined with a "
                     f"device array; build the host side into a "
                     f"(variable, run) array first, e.g. with "
-                    f"Solver.build_grid."
+                    f"Solver.prepare_grid_arrays."
                 )
             other = None
 
@@ -1078,11 +1074,11 @@ class BatchInputHandler:
         n_params = params_plan["n_runs"]
         if kind == "combinatorial":
             states_array = self._fill_category(
-                states_plan, self.states, backed,
+                states_plan, state_set, backed,
                 repeats=n_params, tiles=1,
             )
             params_array = self._fill_category(
-                params_plan, self.swept_values, backed,
+                params_plan, swept_set, backed,
                 repeats=1, tiles=n_states,
             )
             return states_array, params_array
@@ -1104,14 +1100,14 @@ class BatchInputHandler:
                 states_array = states_plan["array"]
             else:
                 states_array = self._fill_category(
-                    states_plan, self.states, backed,
+                    states_plan, state_set, backed,
                     repeats=states_reps, tiles=1,
                 )
             if params_plan["mode"] == "array" and params_reps == 1:
                 params_array = params_plan["array"]
             else:
                 params_array = self._fill_category(
-                    params_plan, self.swept_values, backed,
+                    params_plan, swept_set, backed,
                     repeats=params_reps, tiles=1,
                 )
             return states_array, params_array
@@ -1365,7 +1361,7 @@ class BatchInputHandler:
         state_set: ValuedSet,
     ) -> Optional[Tuple[ndarray, ndarray]]:
         """Attempt fast returns for pre-sized host array inputs."""
-        params_values = self.swept_values
+        params_values = swept_set
         states_input = states
         params_input = params
         states_runs = self._get_run_count(states)
@@ -1373,7 +1369,7 @@ class BatchInputHandler:
         if not (params_values.empty and params is None):
             params_runs = self._get_run_count(params)
 
-        states_ok = self._is_right_sized_array(states, self.states)
+        states_ok = self._is_right_sized_array(states, state_set)
         params_ok = self._is_right_sized_array(params, params_values)
 
         if params_values.empty and params is None:
@@ -1429,7 +1425,7 @@ class BatchInputHandler:
             n_runs = params_runs if params_runs is not None else 1
             column = None
             if states is not None:
-                column = self._sanitise_arraylike(states, self.states)
+                column = self._sanitise_arraylike(states, state_set)
             if kind == "combinatorial":
                 # Mirror branch: the params grid cycles whole.
                 total = n_runs * n_runs
@@ -1445,7 +1441,7 @@ class BatchInputHandler:
                 params_array = params
             if column is None:
                 states_array = self._fill_defaults(
-                    self.states, total, backed
+                    state_set, total, backed
                 )
             else:
                 states_array = self._final_array(

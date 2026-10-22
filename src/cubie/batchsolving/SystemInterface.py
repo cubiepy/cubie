@@ -29,9 +29,7 @@ from typing import (
     Any,
     Dict,
     List,
-    Mapping,
     Optional,
-    Sequence,
     Tuple,
     Union,
 )
@@ -43,6 +41,7 @@ from numpy import (
     union1d as np_union1d,
     array as np_array,
 )
+from cubie.batchsolving._utils import format_time_domain_label
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.variables import ValuedSet, VariableSet
 

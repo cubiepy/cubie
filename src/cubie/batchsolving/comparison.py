@@ -37,6 +37,7 @@ from cubie.backend.utils import (
     active_blocks_per_multiprocessor,
     device_hardware,
 )
+from cubie.batchsolving.resolve_defaults import check_duration
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from numba_cuda_mlir.types import float32
 from cubie._cudasim_extensions import cuda

@@ -330,7 +330,7 @@ def test_compile_then_solve(
     driver_settings,
 ):
     """A compiled solver produces a valid batch result."""
-    expected_inits, expected_params = solver_mutable.build_grid(
+    expected_inits, expected_params = solver_mutable.prepare_grid_arrays(
         initial_values=simple_initial_values,
         parameters=simple_parameters,
         grid_type="combinatorial",
@@ -479,7 +479,7 @@ def test_compile_and_solve_device_input_layouts(
 ):
     """Device layouts preserve results across compilation and sizing."""
     solver = solver_mutable
-    initial, parameters = solver.build_grid(
+    initial, parameters = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters
     )
     solver.compile(parameters=simple_parameters, drivers=driver_settings)
@@ -1614,11 +1614,11 @@ def test_time_precision_with_float64_states(solver_mutable):
 # ============================================================================
 
 
-def test_build_grid_returns_correct_shape(
+def test_prepare_grid_arrays_returns_correct_shape(
     solver, simple_initial_values, simple_parameters
 ):
     """Test that build_grid returns arrays with correct shapes."""
-    inits, params = solver.build_grid(
+    inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="verbatim"
     )
 
@@ -1632,11 +1632,11 @@ def test_build_grid_returns_correct_shape(
     assert inits.shape[1] == params.shape[1]
 
 
-def test_build_grid_combinatorial(
+def test_prepare_grid_arrays_combinatorial(
     solver, simple_initial_values, simple_parameters
 ):
     """Test that build_grid with combinatorial creates product grid."""
-    inits, params = solver.build_grid(
+    inits, params = solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
 
@@ -1648,11 +1648,13 @@ def test_build_grid_combinatorial(
     assert params.shape[1] >= n_param_values
 
 
-def test_build_grid_precision(
+def test_prepare_grid_arrays_precision(
     solver, simple_initial_values, simple_parameters
 ):
     """Test that build_grid returns arrays with correct precision."""
-    inits, params = solver.build_grid(simple_initial_values, simple_parameters)
+    inits, params = solver.prepare_grid_arrays(
+        simple_initial_values, simple_parameters
+    )
 
     assert inits.dtype == solver.precision
     assert params.dtype == solver.precision
@@ -1678,7 +1680,7 @@ def test_solve_array_path_matches_dict_path(
     )
 
     # Build grid and solve with arrays
-    inits, params = solver_mutable.build_grid(
+    inits, params = solver_mutable.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="verbatim"
     )
     result_array = solver_mutable.solve(
@@ -2937,9 +2939,11 @@ def test_timing_events_kept_while_timing_is_on(
 
 def _prepare_batch(solver, inits, params):
     """Queue a batch's uploads and allocations without launching it."""
-    inits, params = solver.build_grid(inits, params)
+    inits, params = solver.prepare_grid_arrays(inits, params)
     kernel = solver.kernel
-    kernel._prepare_batch(inits, params, 0.05, 0.0, 0.0, kernel.stream)
+    kernel._prepare_batch(
+        inits, params, 0.05, 0.0, 0.0, kernel.stream
+    )
     return kernel.input_arrays
 
 
@@ -3262,7 +3266,7 @@ def test_parameter_changes_between_solves(
         None, {names[0]: simple_parameters[names[0]], names[1]: 0.75}
     )
     assert solver.fixed_parameter_values[names[1]] == 0.75
-    solver.build_grid(None, None)
+    solver.prepare_grid_arrays(None, None)
     assert solver.swept_parameters == ()
     assert solver.fixed_parameter_values == defaults
 

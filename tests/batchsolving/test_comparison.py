@@ -136,7 +136,7 @@ def test_settings_label_names_enums_and_placements():
 
 
 def _device_grid(solver, simple_initial_values, simple_parameters):
-    return solver.build_grid(
+    return solver.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
 

@@ -18,7 +18,6 @@ from cubie.batchsolving.BatchInputHandler import (
     unique_cartesian_product,
     verbatim_grid,
 )
-from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory.driver_memory import is_pinned_array
 
 
@@ -252,8 +251,8 @@ def test_init_stores_attributes(system):
 def test_from_system_creates_handler(system):
     """Creates handler via SystemInterface.from_system."""
     handler = BatchInputHandler.from_system(system)
-    assert handler.parameters.n == system.num_parameters
-    assert handler.states.n == system.sizes.states
+    assert handler.system.parameters.n == system.num_parameters
+    assert handler.system.states.n == system.sizes.states
 
 
 def test_call_updates_precision(input_handler_mutable, system):
@@ -551,7 +550,9 @@ def test_process_none_returns_defaults(input_handler, system):
         input_handler, None, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (system.sizes.states, 1)
-    assert_allclose(result[:, 0], system.initial_values.defaults_array(system.precision))
+    assert_allclose(
+        result[:, 0], system.initial_values.defaults_array(system.precision)
+    )
 
 
 def test_process_dict_combinatorial(input_handler, system):
@@ -652,7 +653,9 @@ def test_fill_defaults(input_handler, system):
     result = input_handler._fill_defaults(system.parameters, 5, set())
     assert result.shape == (system.num_parameters, 5)
     for col in range(5):
-        assert_array_equal(result[:, col], system.parameters.defaults_array(system.precision))
+        assert_array_equal(
+            result[:, col], system.parameters.defaults_array(system.precision)
+        )
 
 
 def test_fast_return_right_sized_matching(input_handler, system, precision):
@@ -662,7 +665,11 @@ def test_fast_return_right_sized_matching(input_handler, system, precision):
     states = np.ones((n_s, 3), dtype=precision)
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, params, "verbatim"
+        states,
+        params,
+        "verbatim",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape == (n_s, 3)
@@ -674,7 +681,9 @@ def test_fast_return_none_when_no_path(input_handler, system):
     state_names = list(system.initial_values.names)
     # Dict input => no fast path
     result = input_handler._fast_return_arrays(
-        {state_names[0]: [1, 2]}, {}, "combinatorial"
+        {state_names[0]: [1, 2]}, {}, "combinatorial",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is None
 
@@ -684,7 +693,7 @@ def test_fast_return_states_ok_params_small(input_handler, system, precision):
     n_s = system.sizes.states
     states = np.ones((n_s, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, None, "verbatim"
+        states, None, "verbatim", input_handler.system.swept_set, input_handler.system.states
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -695,7 +704,7 @@ def test_fast_return_params_ok_states_small(input_handler, system, precision):
     n_p = system.sizes.swept_parameters
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        None, params, "verbatim"
+        None, params, "verbatim", input_handler.system.swept_set, input_handler.system.states
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -740,7 +749,9 @@ def test_fill_aligned_combinatorial(input_handler):
     states_plan = {"mode": "array", "n_runs": 2, "array": s}
     params_plan = {"mode": "array", "n_runs": 3, "array": p}
     rs, rp = input_handler._fill_aligned(
-        states_plan, params_plan, "combinatorial", set()
+        states_plan, params_plan, "combinatorial", set(),
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert rs.shape[1] == 6
     assert rp.shape[1] == 6
@@ -756,7 +767,9 @@ def test_call_none_returns_defaults(input_handler_mutable, system):
     )
     assert inits.shape[1] == 1
     assert params.shape == (0, 1)
-    assert_allclose(inits[:, 0], system.initial_values.defaults_array(system.precision))
+    assert_allclose(
+        inits[:, 0], system.initial_values.defaults_array(system.precision)
+    )
     assert swept == ()
     assert fixed == system.parameters.defaults
 
@@ -894,7 +907,7 @@ def test_process_empty_values_object_empty_input_returns_zero_rows(
     (0, 1) array instead of raising."""
     handler = BatchInputHandler.from_system(no_param_system)
     result = assemble_single_category(
-        handler, empty_params, handler.parameters, kind="combinatorial"
+        handler, empty_params, handler.system.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -905,7 +918,7 @@ def test_process_empty_values_object_none_input_returns_zero_rows(
     """None input against an empty variable set also returns (0, 1)."""
     handler = BatchInputHandler.from_system(no_param_system)
     result = assemble_single_category(
-        handler, None, handler.parameters, kind="combinatorial"
+        handler, None, handler.system.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
 
@@ -922,7 +935,7 @@ def test_process_empty_values_object_nonempty_input_raises(
     handler = BatchInputHandler.from_system(no_param_system)
     with pytest.raises(ValueError, match="no settable variables"):
         handler._plan_single_input(
-            nonempty_params, handler.parameters, kind="combinatorial"
+            nonempty_params, handler.system.parameters, kind="combinatorial"
         )
 
 
@@ -942,7 +955,7 @@ def test_is_right_sized_empty_values_none_arr(no_param_system):
     """None is right-sized when values_object is empty."""
     handler = BatchInputHandler.from_system(no_param_system)
     assert (
-        handler._is_right_sized_array(None, handler.parameters) is True
+        handler._is_right_sized_array(None, handler.system.parameters) is True
     )
 
 
@@ -951,7 +964,7 @@ def test_is_right_sized_empty_values_zero_row_2d_array(no_param_system):
     handler = BatchInputHandler.from_system(no_param_system)
     arr = np.empty((0, 3))
     assert (
-        handler._is_right_sized_array(arr, handler.parameters) is True
+        handler._is_right_sized_array(arr, handler.system.parameters) is True
     )
 
 
@@ -960,11 +973,11 @@ def test_is_right_sized_empty_values_other_input_false(no_param_system):
     values_object."""
     handler = BatchInputHandler.from_system(no_param_system)
     assert (
-        handler._is_right_sized_array([1.0], handler.parameters) is False
+        handler._is_right_sized_array([1.0], handler.system.parameters) is False
     )
     assert (
         handler._is_right_sized_array(
-            np.ones((1, 2)), handler.parameters
+            np.ones((1, 2)), handler.system.parameters
         )
         is False
     )
@@ -991,9 +1004,11 @@ def test_fast_return_empty_params_none_marks_params_ok(no_param_system):
     """When parameters are empty and params is None, params_ok is
     forced True and an empty (0, n_runs) params array is synthesised."""
     handler = BatchInputHandler.from_system(no_param_system)
-    n_s = handler.states.n
+    n_s = handler.system.states.n
     states = np.ones((n_s, 4), dtype=handler.precision)
-    result = handler._fast_return_arrays(states, None, "verbatim")
+    result = handler._fast_return_arrays(
+        states, None, "verbatim", handler.system.swept_set, handler.system.states
+    )
     assert result is not None
     assert result[1].shape == (0, 4)
 
@@ -1008,7 +1023,11 @@ def test_fast_return_states_ok_params_provided_1d_broadcasts(
     states = np.ones((n_s, 3), dtype=precision)
     params = np.arange(n_p, dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, params, "verbatim"
+        states,
+        params,
+        "verbatim",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape[1] == 3
@@ -1025,7 +1044,11 @@ def test_fast_return_params_ok_states_provided_1d_broadcasts(
     params = np.ones((n_p, 3), dtype=precision)
     states = np.arange(n_s, dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, params, "verbatim"
+        states,
+        params,
+        "verbatim",
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape[1] == 3
@@ -1248,8 +1271,8 @@ def test_ragged_verbatim_entries_raise(input_handler_mutable, system):
 
 def _sweep_reversed(handler):
     """Sweep the first two parameters, second first."""
-    names = list(handler.parameters.names)
-    handler.interface.set_swept_parameters([names[1], names[0]])
+    names = list(handler.system.parameters.names)
+    handler.system.set_swept_parameters([names[1], names[0]])
     return names
 
 

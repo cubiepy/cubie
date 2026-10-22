@@ -540,7 +540,6 @@ def start_cuda_busy_work():
     from weakref import finalize
 
     from cuda.bindings import driver as cuda_driver
-    from cubie._cudasim_extensions import cuda
     from cubie.backend.jit import compile_kwargs
 
     @cuda.jit(**compile_kwargs)
@@ -1120,7 +1119,7 @@ def solverkernel_mutable(system, effective_settings):
     snapshot = system.compile_settings
     kernel = BatchSolverKernel(system, **effective_settings)
     yield kernel
-    _restore_system_flags(system, snapshot)
+    _restore_system(system, snapshot)
 
 
 @pytest.fixture(scope="session")
@@ -1133,7 +1132,7 @@ def solver(system, solver_settings, driver_settings, thread_mem_manager):
     )
 
 
-def _restore_system_flags(system, snapshot):
+def _restore_system(system, snapshot):
     """Restore the session system's jit and unroll flags."""
     system.update_compile_settings(
         {"jit_flags": snapshot.jit_flags, "unroll": snapshot.unroll},
@@ -1155,7 +1154,7 @@ def solver_mutable(
         driver_settings=driver_settings,
         memory_manager=thread_mem_manager,
     )
-    _restore_system_flags(system, snapshot)
+    _restore_system(system, snapshot)
 
 
 @pytest.fixture(scope="session")
@@ -1256,7 +1255,7 @@ def single_integrator_run_mutable(system, driver_array, effective_settings):
         driver_derivative_fn=_get_driver_del_t(driver_array),
         **effective_settings,
     )
-    _restore_system_flags(system, snapshot)
+    _restore_system(system, snapshot)
 
 
 @pytest.fixture(scope="session")

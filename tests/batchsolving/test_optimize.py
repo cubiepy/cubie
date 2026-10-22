@@ -519,7 +519,7 @@ def test_compile_caches_the_optimize_candidates_without_a_solve(
 
 def _runner(solver, inits, params):
     """Return a runner on ``solver`` over a combinatorial grid."""
-    grid_inits, grid_params = solver.build_grid(
+    grid_inits, grid_params = solver.prepare_grid_arrays(
         inits, params, grid_type="combinatorial"
     )
     return ComparisonRunner(
@@ -550,7 +550,7 @@ def test_optimize_takes_device_grids(
     solver_mutable, simple_initial_values, simple_parameters
 ):
     """Device grids optimise at the given batch."""
-    inits, params = solver_mutable.build_grid(
+    inits, params = solver_mutable.prepare_grid_arrays(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
     result = solver_mutable.optimize(
