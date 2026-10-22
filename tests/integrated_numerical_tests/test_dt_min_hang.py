@@ -82,6 +82,7 @@ def test_f32_save_drift_does_not_hang(
             "c_couple": np.full(2, 0.3, dtype=precision),
         },
         duration=float(solver_settings["duration"]),
+        fix_constant_parameters=False,
     )
     assert np.all(np.asarray(result.status_codes) == 0), (
         result.status_messages

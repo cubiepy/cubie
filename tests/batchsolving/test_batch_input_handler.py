@@ -25,13 +25,9 @@ def _handle(
     handler, states=None, params=None, kind="combinatorial",
     fix_constant_parameters=False,
 ):
-    """Split the parameters, set the sweep and build the arrays."""
-    values, swept, fixed = handler.split_parameters(
-        params, fix_constant_parameters
-    )
-    handler.interface.set_swept_parameters(swept, fixed)
-    inits, built = handler(states, values, kind)
-    return inits, built, swept, fixed
+    inits, built = handler(states, params, kind, fix_constant_parameters)
+    system = handler.system
+    return inits, built, system.swept_parameters, system.fixed_parameter_values
 
 
 def test_unique_cartesian_product_deduplicates(system):
@@ -240,12 +236,9 @@ def test_extend_grid_partial_sweep(system):
 
 
 def test_init_stores_attributes(system):
-    """Reads parameters, states and precision from the interface."""
-    interface = SystemInterface(system)
-    handler = BatchInputHandler(interface)
-    assert handler.parameters is interface.parameters
-    assert handler.states == interface.states
-    assert handler.precision == interface.precision
+    handler = BatchInputHandler(system)
+    assert handler.system is system
+    assert handler.precision == system.precision
 
 
 def test_from_system_creates_handler(system):
@@ -424,16 +417,19 @@ def test_call_dict_order_independent(input_handler_mutable, system):
         name: params[name] for name in reversed(param_names)
     }
     inits, _, swept, fixed = _handle(
-        input_handler_mutable, states, params, "verbatim"
+        input_handler_mutable, states, params, "verbatim",
+        fix_constant_parameters=True,
     )
     inits_s, _, swept_s, fixed_s = _handle(
         input_handler_mutable,
-        shuffled_states, shuffled_params, "verbatim"
+        shuffled_states, shuffled_params, "verbatim",
+        fix_constant_parameters=True,
     )
     assert_array_equal(inits_s, inits)
     assert (swept_s, fixed_s) == (swept, fixed)
     expected_inits = np.arange(1.0, len(state_names) + 1.0)
     assert_array_equal(inits[:, 0], expected_inits)
+    assert swept == ()
     assert fixed == {name: value[0] for name, value in params.items()}
 
 
@@ -463,8 +459,8 @@ def test_call_casts_to_precision(input_handler_mutable, system, precision):
 
 def _assert_cast_to_precision(system, precision):
     """Assert the handler returns C-contiguous arrays at *precision*."""
-    handler = BatchInputHandler.from_system(system)
-    inits, params = handler(states=None, params=None)
+    handler = BatchInputHandler.from_system(system.copy())
+    inits, params = handler(None, None)
     assert inits.dtype == precision
     assert params.dtype == precision
     assert inits.flags["C_CONTIGUOUS"]
@@ -1122,21 +1118,6 @@ def test_call_dict_inputs_return_pinned_grids(input_handler_mutable, system):
 
 # ── Swept and fixed parameters ────────────────────────────────── #
 
-def test_dict_sweeps_multiple_values_and_fixes_single_values(
-    input_handler_mutable, system
-):
-    """Several values sweep a parameter and one value fixes it."""
-    names = list(system.parameters.names)
-    _, params, swept, fixed = _handle(
-        input_handler_mutable,
-        params={names[0]: [1.0, 2.0, 3.0], names[1]: 4.0},
-        kind="verbatim",
-    )
-    assert swept == (names[0],)
-    assert_array_equal(params, [[1.0, 2.0, 3.0]])
-    assert fixed[names[1]] == 4.0
-
-
 def test_dict_sweeps_every_entry(input_handler_mutable, system):
     names = list(system.parameters.names)
     _, params, swept, fixed = _handle(
@@ -1180,6 +1161,7 @@ def test_fixed_parameters_keep_the_state_run_count(
         states={state: [0.5, 1.0, 1.5]},
         params={names[0]: 2.0},
         kind="verbatim",
+        fix_constant_parameters=True,
     )
     assert params.shape == (0, 3)
     assert inits.shape[1] == 3
@@ -1284,27 +1266,6 @@ def test_wrong_height_arrays_raise(input_handler_mutable, system, rows):
             states=np.ones((system.sizes.states + rows, 2)),
             kind="verbatim",
         )
-
-
-def test_swept_height_array_keeps_the_compiled_parameters(
-    input_handler_mutable, system
-):
-    """A row per swept parameter keeps the swept and fixed parameters."""
-    names = list(system.parameters.names)
-    fixed = {
-        name: value
-        for name, value in system.parameters.defaults.items()
-        if name != names[0]
-    }
-    fixed[names[1]] = 0.25
-    input_handler_mutable.interface.set_swept_parameters(names[:1], fixed)
-    params = np.ones((1, 4), dtype=system.precision)
-    _, result, swept, result_fixed = _handle(
-        input_handler_mutable, params=params, kind="verbatim"
-    )
-    assert swept == (names[0],)
-    assert result_fixed == fixed
-    assert result is params
 
 
 def test_swept_height_array_compiles_the_others_at_their_defaults(

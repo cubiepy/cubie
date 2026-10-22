@@ -62,6 +62,7 @@ def test_recovered_transient_failure_reports_success(
         parameters=swept_defaults(system),
         drivers=driver_settings,
         duration=float(solver_settings["duration"]),
+        fix_constant_parameters=False,
     )
 
     status_codes = result.status_codes
@@ -107,6 +108,7 @@ def test_irrecoverable_failure_preserves_fatal_flags(
         drivers=driver_settings,
         duration=float(solver_settings["duration"]),
         nan_error_trajectories=False,
+        fix_constant_parameters=False,
     )
 
     status_codes = result.status_codes

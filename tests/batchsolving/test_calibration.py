@@ -259,13 +259,18 @@ CHEAP_ERK_ORDERS = ("heun-21", "bogacki-shampine-32")
 
 @pytest.mark.nocudasim
 def test_erk_stage_times_the_specs_on_the_solver(
-    solver_mutable, simple_initial_values, simple_parameters, driver_settings
+    solver_mutable, simple_initial_values, simple_parameters,
+    parameter_batch, driver_settings,
 ):
     """Specs are timed in order and recalled; a rejected spec drops."""
     solver = solver_mutable
-    inits, params = solver.build_grid(
-        simple_initial_values, simple_parameters, grid_type="combinatorial"
+    names = list(solver.system.parameters.names)
+    parameters = {**simple_parameters, names[2]: float(parameter_batch[2, 0])}
+    inits, params = solver.input_handler(
+        simple_initial_values, parameters, kind="combinatorial"
     )
+    solver.update()
+    compiled = solver.system.compiled_parameters
     given = dict(solver.given.as_kwargs())
     algorithm = solver.kernel.settings_dict["algorithm"]
     specs = [
@@ -314,6 +319,7 @@ def test_erk_stage_times_the_specs_on_the_solver(
     assert race.ranking()[0].best_ms == min(r.best_ms for r in results)
     assert dict(solver.given.as_kwargs()) == given
     assert solver.kernel.settings_dict["algorithm"] == algorithm
+    assert solver.system.compiled_parameters == compiled
 
 
 class TestCalibrateGuards:

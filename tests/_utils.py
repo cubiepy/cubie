@@ -1388,7 +1388,6 @@ NON_SOLVER_SETTINGS = {
     "n_observables",
     "fix_singularities",
     "voltage_variable",
-    "parameter_input",
     "system_sweep",
 }
 

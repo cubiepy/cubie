@@ -211,7 +211,6 @@ def test_runner_isolates_candidates_and_restores_the_solver(
         solver, inits, params[:0], 0.1, 0.0, 0.0, max_parallel=1
     )
     runner.set_batch(2 * inits.shape[1])
-    assert runner._params is None
     assert runner._inits.shape == (inits.shape[0], 2 * inits.shape[1])
 
 

@@ -742,7 +742,6 @@ def solver_settings(solver_settings_override, system, precision):
         "fix_singularities": True,
         "voltage_variable": None,
         "auto_performance": True,
-        "parameter_input": "dict",
     }
 
     float_keys = {
@@ -826,59 +825,13 @@ def simple_parameters(system):
 def parameter_batch(system, simple_parameters, precision):
     """A row per parameter: two swept rows and one changed fixed row."""
     rows = np.tile(
-        system.parameters.defaults_array(system.precision)[:, np.newaxis], (1, 2)
-    ).astype(precision)
+        system.parameters.defaults_array(precision)[:, np.newaxis], (1, 2)
+    )
     names = list(system.parameters.names)
     rows[0] = simple_parameters[names[0]]
     rows[1] = simple_parameters[names[1]]
     rows[2] = 2.0 * rows[2] + 1.0
     return rows
-
-
-@pytest.fixture(scope="session")
-def parameter_solve(solver, system, solver_settings, parameter_batch):
-    """Solve parameter_batch given in the form ``parameter_input`` names."""
-    form = solver_settings["parameter_input"]
-    duration = solver_settings["duration"]
-    names = list(system.parameters.names)
-    as_dict = {
-        names[0]: parameter_batch[0],
-        names[1]: parameter_batch[1],
-        names[2]: float(parameter_batch[2, 0]),
-    }
-    defaults = dict(system.parameters.defaults)
-    record = {"defaults": defaults, "swept_before": None}
-    inits, params, options = None, as_dict, {}
-    if form == "full_array":
-        params = parameter_batch
-    elif form == "fixed_rows":
-        params = parameter_batch
-        options = {"fix_constant_parameters": True}
-    elif form in ("swept_rows", "device"):
-        fixed = {
-            name: value
-            for name, value in defaults.items()
-            if name not in names[:2]
-        }
-        fixed[names[2]] = as_dict[names[2]]
-        # Name the swept parameters in reverse to check that the rows
-        # are still in name order.
-        solver.set_swept_parameters((names[1], names[0]), fixed)
-        params = parameter_batch[[0, 1]]
-        if form == "device":
-            params = cuda.to_device(params)
-    elif form == "build_grid":
-        inits, params = solver.build_grid(None, as_dict)
-        record["swept_before"] = solver.swept_parameters
-        record["rows"] = params.shape[0]
-    elif form == "compile":
-        solver.compile(parameters=as_dict)
-        record["swept_before"] = solver.swept_parameters
-        record["kernel_before"] = solver.kernel.kernel
-    record["result"] = solver.solve(
-        inits, params, duration=duration, **options
-    )
-    return record
 
 
 @pytest.fixture(scope="session")
@@ -1131,7 +1084,7 @@ def solverkernel(system, effective_settings):
 @pytest.fixture(scope="function")
 def solverkernel_mutable(system, effective_settings):
     """Function-scoped composite fixture for BatchSolverKernel."""
-    snapshot = system.compile_settings
+    snapshot = _system_snapshot(system)
     kernel = BatchSolverKernel(system, **effective_settings)
     yield kernel
     _restore_system(system, snapshot)
@@ -1152,11 +1105,12 @@ def _system_snapshot(system):
 
 
 def _restore_system(system, snapshot):
-    """Restore the session system's jit and unroll flags."""
+    settings, compiled = snapshot
     system.update_compile_settings(
-        {"jit_flags": snapshot.jit_flags, "unroll": snapshot.unroll},
+        {"jit_flags": settings.jit_flags, "unroll": settings.unroll},
         silent=True,
     )
+    system.update(compiled_parameters=compiled)
 
 
 @pytest.fixture(scope="function")
@@ -1166,7 +1120,7 @@ def solver_mutable(
     driver_settings,
     thread_mem_manager,
 ):
-    snapshot = system.compile_settings
+    snapshot = _system_snapshot(system)
     yield _build_solver_instance(
         system=system,
         solver_settings=solver_settings,
@@ -1267,7 +1221,7 @@ def single_integrator_run_mutable(system, driver_array, effective_settings):
     as these are the two fundamental base CUDAFactory fixtures. All other
     dependencies are settings fixtures.
     """
-    snapshot = system.compile_settings
+    snapshot = _system_snapshot(system)
     yield SingleIntegratorRun(
         system,
         drivers_fn=_get_evaluate_driver_at_t(driver_array),
@@ -1595,10 +1549,8 @@ def batch_input_arrays(
 
     # A copy takes the sweep, leaving the session system as it is.
     handler = BatchInputHandler.from_system(system.copy())
-    values, swept, fixed = handler.split_parameters(params_dict)
-    handler.interface.set_swept_parameters(swept, fixed)
     inits, params = handler(
-        states=states_dict, params=values, kind=batch_settings["kind"]
+        states_dict, params_dict, kind=batch_settings["kind"]
     )
     return inits, params
 
