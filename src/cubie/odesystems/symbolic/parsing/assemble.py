@@ -81,6 +81,13 @@ class SpecialisedSystem(CUDADispatcherCache):
     functions: Dict[str, Callable] = field(factory=dict)
     fn_hash: str = field(default="")
     mass: Any = field(default=None, converter=_mass_matrix_converter)
+    sizes: SystemSizes = field(
+        init=False,
+        default=Factory(
+            lambda system: SystemSizes.of_layout(system.layout),
+            takes_self=True,
+        ),
+    )
 
 
 def _driver_derivatives(

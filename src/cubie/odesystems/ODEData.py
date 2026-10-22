@@ -75,60 +75,7 @@ ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})
 OPERATION_ORDERINGS = ("kahn", "greedy", "dfs", "liveness_auto")
 
 
-def _mass_matrix_converter(value: Any) -> Any:
-    """Normalise a mass matrix to ``None`` or a sealed float64 array.
-
-    SymPy matrices, NumPy arrays, and nested sequences normalise to
-    one canonical numeric array; symbolic entries raise. The stored
-    array is an owned read-only copy.
-    """
-    if value is None:
-        return None
-    if hasattr(value, "tolist"):
-        value = value.tolist()
-    array = np_array(value, dtype=np_float64)
-    array.setflags(write=False)
-    return array
-
-
-def _runtime_values_converter(value: Any) -> Any:
-    """Seal the structure of a runtime-valued container.
-
-    Values stay updatable in place: they are runtime data outside
-    configuration identity.
-    """
-    if value is None:
-        return None
-    return value.freeze(values_writable=True)
-
-
-def _parameters_converter(value: Any) -> Any:
-    """Seal the parameter container."""
-    if value is None:
-        return None
-    return value.freeze(values_writable=False)
-
-
-def _ordered_names(names: Iterable[str]) -> Tuple[str, ...]:
-    """Return ``names`` as a tuple of strings, rejecting repeats."""
-    ordered = tuple(str(name) for name in names)
-    if len(set(ordered)) != len(ordered):
-        raise ValueError(f"Swept parameters {list(ordered)} repeat a name.")
-    return ordered
-
-
-def _sorted_values(
-    values: Union[Mapping[str, float], Iterable[Tuple[str, float]]],
-) -> Tuple[Tuple[str, float], ...]:
-    """Return ``values`` as name-sorted ``(name, value)`` pairs."""
-    if isinstance(values, Mapping):
-        values = values.items()
-    return tuple(
-        sorted((str(name), float(value)) for name, value in values)
-    )
-
-
-@define
+@frozen
 class SystemSizes:
     """Store counts for each component category in an ODE system.
 
@@ -157,6 +104,16 @@ class SystemSizes:
     swept_parameters: int = field(validator=attrsval_instance_of(int))
     drivers: int = field(validator=attrsval_instance_of(int))
     driver_derivatives: int = field(validator=attrsval_instance_of(int))
+
+    @classmethod
+    def of_layout(cls, layout: SystemLayout) -> "SystemSizes":
+        return cls(
+            states=layout.states.n,
+            observables=layout.observables.n,
+            swept_parameters=len(layout.swept_names),
+            drivers=layout.num_drivers,
+            driver_derivatives=len(layout.driver_derivatives),
+        )
 
 
 @frozen
@@ -198,230 +155,7 @@ class ODEData(CUDAFactoryConfig):
     order.
     """
 
-    parameters: Optional[SystemValues] = field(
-        converter=_parameters_converter,
-        validator=attrsval_optional(
-            attrsval_instance_of(
-                SystemValues,
-            ),
-        ),
-    )
-    initial_states: SystemValues = field(
-        converter=_runtime_values_converter,
-        validator=attrsval_optional(
-            attrsval_instance_of(
-                SystemValues,
-            ),
-        ),
-    )
-    observables: SystemValues = field(
-        converter=_runtime_values_converter,
-        validator=attrsval_optional(
-            attrsval_instance_of(
-                SystemValues,
-            ),
-        ),
-    )
-    num_drivers: int = field(validator=attrsval_instance_of(int), default=1)
-    driver_derivatives: Tuple[Tuple[int, int], ...] = field(
-        default=(),
-        validator=attrsval_deep_iterable(
-            attrsval_deep_iterable(
-                attrsval_instance_of(int), attrsval_instance_of(tuple)
-            ),
-            attrsval_instance_of(tuple),
-        ),
-    )
-    swept_parameters: Tuple[str, ...] = field(
-        default=(), converter=_ordered_names
-    )
-    fixed_parameters: Tuple[Tuple[str, float], ...] = field(
-        default=(), converter=_sorted_values
-    )
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
         validator=attrsval_in(OPERATION_ORDERINGS),
     )
-    _mass: Any = field(
-        default=None,
-        converter=_mass_matrix_converter,
-        eq=attrs_cmp_using(eq=mass_equal),
-    )
-    def __attrs_post_init__(self):
-        super().__attrs_post_init__()
-        if self.parameters is None:
-            return
-        names = set(self.parameters.names)
-        swept = set(self.swept_parameters)
-        fixed = {name for name, _ in self.fixed_parameters}
-        if not swept <= names or fixed != names - swept:
-            raise ValueError(
-                f"Swept parameters {sorted(swept)} and fixed parameters "
-                f"{sorted(fixed)} must together name each parameter of "
-                f"this system once."
-            )
-
-    def update(
-        self, updates_dict: dict = None, **kwargs
-    ) -> Tuple["ODEData", Set[str], Set[str]]:
-        """Derive a replacement snapshot, propagating precision changes.
-
-        A changed ``precision`` re-materialises every embedded
-        :class:`SystemValues` container at the new precision on the
-        replacement snapshot, so packed value arrays always match the
-        configured precision.
-        """
-        replacement, recognized, changed = super().update(
-            updates_dict, **kwargs
-        )
-        if "precision" in changed:
-            precision = replacement.precision
-            reprecisioned = {}
-            for name in (
-                "parameters",
-                "initial_states",
-                "observables",
-            ):
-                container = getattr(replacement, name)
-                if container is not None:
-                    reprecisioned[name] = container.with_precision(precision)
-            replacement = evolve(replacement, **reprecisioned)
-        return replacement, recognized, changed
-
-    @property
-    def num_states(self) -> int:
-        """Number of state variables."""
-        return self.initial_states.n
-
-    @property
-    def num_observables(self) -> int:
-        """Number of observable variables."""
-        return self.observables.n
-
-    @property
-    def num_parameters(self) -> int:
-        """Number of parameters."""
-        return self.parameters.n
-
-    @property
-    def num_swept_parameters(self) -> int:
-        """Number of swept parameters."""
-        return len(self.swept_parameters)
-
-    @property
-    def sizes(self) -> SystemSizes:
-        """System component sizes grouped for CUDA kernels."""
-        return SystemSizes(
-            states=self.num_states,
-            observables=self.num_observables,
-            swept_parameters=self.num_swept_parameters,
-            drivers=self.num_drivers,
-            driver_derivatives=len(self.driver_derivatives),
-        )
-
-    @property
-    def fixed_parameter_values(self) -> Dict[str, float]:
-        """Values compiled into the code, keyed by parameter name."""
-        return dict(self.fixed_parameters)
-
-    @property
-    def mass(self) -> Any:
-        """Return the cached solver mass matrix."""
-        return self._mass
-
-    @property
-    def parameter_values(self) -> Dict[str, float]:
-        """Parameter values as plain floats keyed by name."""
-        return self.parameters.as_float_dict
-
-    @property
-    def initial_state_values(self) -> Dict[str, float]:
-        """Initial state values as plain floats keyed by name."""
-        return self.initial_states.as_float_dict
-
-    @classmethod
-    def from_BaseODE_initargs(
-        cls,
-        precision: PrecisionDType,
-        initial_values: Optional[Dict[str, float]] = None,
-        parameters: Optional[Dict[str, float]] = None,
-        observables: Optional[Dict[str, float]] = None,
-        default_initial_values: Optional[Dict[str, float]] = None,
-        default_parameters: Optional[Dict[str, float]] = None,
-        default_observable_names: Optional[Dict[str, float]] = None,
-        num_drivers: int = 1,
-        operation_ordering: str = operation_ordering_default(),
-        swept_parameters: Iterable[str] = (),
-        driver_derivatives: Tuple[Tuple[int, int], ...] = (),
-    ) -> "ODEData":
-        """Create :class:`ODEData` from ``BaseODE`` initialization arguments.
-
-        Parameters
-        ----------
-        initial_values
-            Initial values for state variables.
-        parameters
-            Parameter values for the system.
-        observables
-            Auxiliary variables to track during simulation.
-        default_initial_values
-            Default initial values if ``initial_values`` omits entries.
-        default_parameters
-            Default parameter values if ``parameters`` omits entries.
-        default_observable_names
-            Default observable names if ``observables`` omits entries.
-        precision
-            Precision factory used for calculations.
-        num_drivers
-            Drivers-buffer length: drivers plus driver derivatives read.
-            Defaults to ``1``.
-        operation_ordering
-            Generated-operation ordering policy: stable ``"kahn"``,
-            fixed ``"greedy"`` or ``"dfs"``, or thresholded
-            ``"liveness_auto"`` selection.
-        swept_parameters
-            Names of the parameters read from the parameters array.
-            Every other parameter compiles in at its default.
-        driver_derivatives
-            The driver index and order of each driver derivative the
-            equations read, in the order the derivatives follow the
-            drivers in the drivers buffer.
-
-        Returns
-        -------
-        ODEData
-            Initialised data container for CUDA compilation.
-        """
-        init_values = SystemValues(
-            initial_values, precision, default_initial_values, name="States"
-        )
-        parameters = SystemValues(
-            parameters,
-            precision,
-            default_parameters,
-            name="Parameters",
-        )
-        observables = SystemValues(
-            observables,
-            precision,
-            default_observable_names,
-            name="Observables",
-        )
-
-        swept_parameters = tuple(swept_parameters)
-        fixed_parameters = {
-            name: value
-            for name, value in parameters.as_float_dict.items()
-            if name not in swept_parameters
-        }
-        return cls(
-            parameters=parameters,
-            initial_states=init_values,
-            observables=observables,
-            precision=precision,
-            num_drivers=num_drivers,
-            driver_derivatives=driver_derivatives,
-            operation_ordering=operation_ordering,
-            swept_parameters=swept_parameters,
-            fixed_parameters=fixed_parameters,
-        )
