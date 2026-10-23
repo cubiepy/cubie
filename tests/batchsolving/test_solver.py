@@ -9,6 +9,9 @@ from tests._utils import (
     FLOAT64_PRECISION,
     _build_solver_instance,
 )
+from tests.odesystems.symbolic.test_swept_and_fixed_parameters import (
+    SCALED_CS_LIVE_SETTINGS,
+)
 from tests.system_fixtures import (
     build_diagonally_dominant_system,
     build_three_state_nonlinear_system,
@@ -335,8 +338,11 @@ def test_compile_then_solve(
         parameters=simple_parameters,
         grid_type="combinatorial",
     )
-    solver_mutable.compile(drivers=driver_settings)
+    solver_mutable.compile(
+        parameters=simple_parameters, drivers=driver_settings
+    )
     kernel = solver_mutable.kernel
+    compiled = kernel.kernel
     assert kernel.run_params.runs == 1
     assert _batch_bytes(kernel) == 0
     result = solver_mutable.solve(
@@ -349,6 +355,7 @@ def test_compile_then_solve(
         grid_type="combinatorial",
     )
     assert isinstance(result, SolveResult)
+    assert kernel.kernel is compiled
     assert kernel.run_params.runs == expected_inits.shape[1]
     assert (
         kernel.input_arrays.device_initial_values.shape
@@ -1639,12 +1646,13 @@ def test_prepare_grid_arrays_combinatorial(
         simple_initial_values, simple_parameters, grid_type="combinatorial"
     )
 
-    # Combinatorial produces more runs than verbatim
-    n_init_values = len(list(simple_initial_values.values())[0])
-    n_param_values = len(list(simple_parameters.values())[0])
-    # Number of runs is product of all value counts
-    assert inits.shape[1] >= n_init_values
-    assert params.shape[1] >= n_param_values
+    n_runs = 1
+    for values in (
+        *simple_initial_values.values(), *simple_parameters.values()
+    ):
+        n_runs *= len(np.unique(values))
+    assert inits.shape[1] == n_runs
+    assert params.shape[1] == n_runs
 
 
 def test_prepare_grid_arrays_precision(
@@ -3211,66 +3219,6 @@ def test_dict_parameters_solve_the_batch(
     assert legend_names == list(solver_mutable.swept_parameters)
 
 
-def test_fixed_constant_dict_entries_solve_the_batch(
-    solver_mutable, system_restored, solver_settings, parameter_batch,
-    parameter_batch_reference, output_functions, tolerance,
-):
-    system = system_restored
-    names = list(system.parameters.names)
-    defaults = dict(system.parameters.defaults)
-    result = solver_mutable.solve(
-        parameters=_batch_as_dict(system, parameter_batch),
-        duration=solver_settings["duration"],
-        fix_constant_parameters=True,
-    )
-    _assert_solved_batch(
-        result, solver_mutable, system, defaults, tuple(names[:2]),
-        parameter_batch_reference, output_functions, tolerance,
-    )
-    assert solver_mutable.fixed_parameter_values[names[2]] == (
-        pytest.approx(float(parameter_batch[2, 0]))
-    )
-
-
-def test_full_array_parameters_solve_the_batch(
-    solver_mutable, system_restored, solver_settings, parameter_batch,
-    parameter_batch_reference, output_functions, tolerance,
-):
-    system = system_restored
-    defaults = dict(system.parameters.defaults)
-    result = solver_mutable.solve(
-        parameters=parameter_batch,
-        duration=solver_settings["duration"],
-        fix_constant_parameters=False,
-    )
-    _assert_solved_batch(
-        result, solver_mutable, system, defaults,
-        tuple(system.parameters.names), parameter_batch_reference,
-        output_functions, tolerance,
-    )
-
-
-def test_fixed_constant_rows_solve_the_batch(
-    solver_mutable, system_restored, solver_settings, parameter_batch,
-    parameter_batch_reference, output_functions, tolerance,
-):
-    system = system_restored
-    names = list(system.parameters.names)
-    defaults = dict(system.parameters.defaults)
-    result = solver_mutable.solve(
-        parameters=parameter_batch,
-        duration=solver_settings["duration"],
-        fix_constant_parameters=True,
-    )
-    _assert_solved_batch(
-        result, solver_mutable, system, defaults, tuple(names[:2]),
-        parameter_batch_reference, output_functions, tolerance,
-    )
-    assert solver_mutable.fixed_parameter_values[names[2]] == (
-        pytest.approx(float(parameter_batch[2, 0]))
-    )
-
-
 @pytest.mark.parametrize("on_device", [False, True], ids=["host", "device"])
 def test_swept_rows_solve_the_batch(
     solver_mutable, system_restored, solver_settings, parameter_batch,
@@ -3291,49 +3239,39 @@ def test_swept_rows_solve_the_batch(
         parameter_batch_reference, output_functions, tolerance,
     )
 
-
-def test_prepared_grid_arrays_solve_the_batch(
-    solver_mutable, system_restored, solver_settings, parameter_batch,
-    parameter_batch_reference, output_functions, tolerance,
+@pytest.mark.parametrize(
+    "solver_settings_override", [SCALED_CS_LIVE_SETTINGS], indirect=True
+)
+def test_solve_value_that_restructures_runs_the_kept_states(
+    solver_mutable, system_restored, fresh_solver_factory
 ):
     system = system_restored
-    names = list(system.parameters.names)
-    defaults = dict(system.parameters.defaults)
-    inits, params = solver_mutable.prepare_grid_arrays(
-        None, _batch_as_dict(system, parameter_batch)
+    assert system.mass is not None
+    live = solver_mutable.solve(
+        parameters={"Cs": 2e-2}, duration=0.01, fix_constant_parameters=True
     )
-    assert params.shape[0] == 3
-    result = solver_mutable.solve(
-        inits, params, duration=solver_settings["duration"]
-    )
-    _assert_solved_batch(
-        result, solver_mutable, system, defaults, tuple(names[:3]),
-        parameter_batch_reference, output_functions, tolerance,
-    )
+    assert system.mass is None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        system.set_default_parameters({"Cs": 2e-2})
+    fresh = fresh_solver_factory(system).solve(duration=0.01)
+    assert live.time_domain_array.shape[1] == system.num_states
+    assert np.array_equal(live.time_domain_array, fresh.time_domain_array)
 
 
-def test_compiled_parameters_solve_the_batch(
-    solver_mutable, system_restored, solver_settings, parameter_batch,
-    parameter_batch_reference, output_functions, tolerance,
+@pytest.mark.parametrize(
+    "solver_settings_override", [SCALED_CS_LIVE_SETTINGS], indirect=True
+)
+def test_grid_after_a_restructuring_default_has_the_kept_states(
+    solver_mutable, system_restored
 ):
-    system = system_restored
-    names = list(system.parameters.names)
-    defaults = dict(system.parameters.defaults)
-    parameters = _batch_as_dict(system, parameter_batch)
-    solver_mutable.compile(
-        parameters=parameters, fix_constant_parameters=False
-    )
-    kernel = solver_mutable.kernel.kernel
-    result = solver_mutable.solve(
-        parameters=parameters,
-        duration=solver_settings["duration"],
-        fix_constant_parameters=False,
-    )
-    assert solver_mutable.kernel.kernel is kernel
-    _assert_solved_batch(
-        result, solver_mutable, system, defaults, tuple(names[:3]),
-        parameter_batch_reference, output_functions, tolerance,
-    )
+    system_restored.set_default_parameters({"Cs": 2e-2})
+    inits, params = solver_mutable.prepare_grid_arrays()
+    assert system_restored.mass is None
+    assert inits.shape[0] == system_restored.num_states
+    result = solver_mutable.solve(inits, params, duration=0.01)
+    assert result.time_domain_array.shape[1] == system_restored.num_states
+
 
 
 def test_parameter_changes_between_solves(

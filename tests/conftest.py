@@ -382,7 +382,6 @@ def system(request, solver_settings_override, precision):
 
 @pytest.fixture(autouse=True)
 def session_system_unchanged(request):
-
     if "system" not in request.fixturenames:
         yield
         return
