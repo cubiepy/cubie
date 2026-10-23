@@ -41,7 +41,6 @@ from warnings import warn
 
 if TYPE_CHECKING:
     from cubie.batchsolving.solver import Solver
-    import pandas as pd
 
 from attrs import (
     cmp_using as attrs_cmp_using,
@@ -266,6 +265,12 @@ class SolveResult:
         Mapping from time-domain indices to labels.
     summaries_legend
         Mapping from summary indices to labels.
+    parameter_legend
+        Mapping from parameter array indices to labels: each swept
+        parameter's name, with its unit in brackets unless it is
+        dimensionless.
+    fixed_parameter_values
+        Values for each fixed parameter used in the solve.
     solve_settings
         Solver run configuration snapshot.
     stream
@@ -321,6 +326,14 @@ class SolveResult:
     summaries_legend: Optional[dict[int, str]] = field(
         default=attrsFactory(dict),
         validator=attrsval_optional(attrsval_instance_of(dict)),
+    )
+    parameter_legend: dict[int, str] = field(
+        default=attrsFactory(dict),
+        validator=attrsval_instance_of(dict),
+    )
+    fixed_parameter_values: dict[str, float] = field(
+        default=attrsFactory(dict),
+        validator=attrsval_instance_of(dict),
     )
     solve_settings: Optional[SolveSpec] = field(
         default=None,
@@ -394,6 +407,8 @@ class SolveResult:
             iteration_counters=outputs.iteration_counters,
             time_domain_legend=cls.time_domain_legend_from_solver(solver),
             summaries_legend=cls.summary_legend_from_solver(solver),
+            parameter_legend=solver.parameter_legend,
+            fixed_parameter_values=solver.fixed_parameter_values,
             solve_settings=solver.solve_info,
             stream=solver.kernel.stream,
             singlevar_summary_legend=solver.summary_legend_per_variable,
@@ -595,13 +610,15 @@ class SolveResult:
         self.close()
 
     @property
-    def as_pandas(self) -> dict[str, "pd.DataFrame"]:
+    def as_pandas(self) -> dict[str, Any]:
         """Convert the results to pandas DataFrames.
 
         Returns
         -------
-        dict[str, pandas.DataFrame]
-            Dictionary containing ``time_domain`` and ``summaries`` DataFrames.
+        dict
+            ``time_domain`` and ``summaries`` DataFrames, and a
+            ``fixed_parameter_values`` Series of the values for each
+            fixed parameter used in the solve.
 
         Raises
         ------
@@ -686,7 +703,13 @@ class SolveResult:
         if time_index is not None:
             time_domain_df.index = time_index
 
-        return {"time_domain": time_domain_df, "summaries": summaries_df}
+        return {
+            "time_domain": time_domain_df,
+            "summaries": summaries_df,
+            "fixed_parameter_values": pd.Series(
+                self.fixed_parameter_values, dtype=float
+            ),
+        }
 
     @property
     def as_numpy(self) -> dict[str, Optional[NDArray]]:
@@ -697,7 +720,8 @@ class SolveResult:
         -------
         dict[str, Optional[NDArray]]
             Dictionary containing copies of time, time_domain_array,
-            summaries_array, time_domain_legend, summaries_legend, and
+            summaries_array, time_domain_legend, summaries_legend,
+            parameter_legend, fixed_parameter_values and
             iteration_counters.
         """
         counters = self.iteration_counters
@@ -715,6 +739,8 @@ class SolveResult:
             ),
             "time_domain_legend": self.time_domain_legend.copy(),
             "summaries_legend": self.summaries_legend.copy(),
+            "parameter_legend": self.parameter_legend.copy(),
+            "fixed_parameter_values": self.fixed_parameter_values.copy(),
             "iteration_counters": (
                 np_array(counters, copy=True, subok=False)
                 if counters is not None
@@ -894,6 +920,12 @@ class DeviceSolveResult:
         Device buffer of per-run integration status codes.
     stream
         The kernel's memory-manager stream the solve ran on.
+    parameter_legend
+        Mapping from parameter array indices to labels: each swept
+        parameter's name, with its unit in brackets unless it is
+        dimensionless.
+    fixed_parameter_values
+        Values for each fixed parameter used in the solve.
     """
 
     _state: Optional[DeviceNDArrayBase] = field(
@@ -943,6 +975,14 @@ class DeviceSolveResult:
     _save_time: bool = field(
         default=False, validator=attrsval_instance_of(bool)
     )
+    parameter_legend: dict[int, str] = field(
+        default=attrsFactory(dict),
+        validator=attrsval_instance_of(dict),
+    )
+    fixed_parameter_values: dict[str, float] = field(
+        default=attrsFactory(dict),
+        validator=attrsval_instance_of(dict),
+    )
 
     @classmethod
     def from_solver(cls, solver: "Solver") -> "DeviceSolveResult":
@@ -971,6 +1011,8 @@ class DeviceSolveResult:
             active_outputs=solver.active_outputs,
             stride_order=kernel.output_arrays.host.state.stride_order,
             save_time=bool(solver.save_time),
+            parameter_legend=solver.parameter_legend,
+            fixed_parameter_values=solver.fixed_parameter_values,
         )
 
     @property

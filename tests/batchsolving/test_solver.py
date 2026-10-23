@@ -778,6 +778,8 @@ def test_device_results_match_host(
     assert is_device_array(device.state)
     assert is_device_array(device.status_codes)
     assert device.stream is solver.kernel.stream
+    assert device.parameter_legend == host.parameter_legend
+    assert device.fixed_parameter_values == host.fixed_parameter_values
 
     # The documented host-read pattern: synchronize the solve's
     # stream, then copy the handles.
@@ -3225,6 +3227,21 @@ def test_dict_parameters_solve_the_batch(
         for label in solver_mutable.parameter_legend.values()
     ]
     assert legend_names == list(solver_mutable.swept_parameters)
+    assert result.parameter_legend == solver_mutable.parameter_legend
+    assert (
+        result.fixed_parameter_values
+        == solver_mutable.fixed_parameter_values
+    )
+    exported = result.as_numpy
+    assert exported["parameter_legend"] == result.parameter_legend
+    assert (
+        exported["fixed_parameter_values"]
+        == result.fixed_parameter_values
+    )
+    assert (
+        result.as_pandas["fixed_parameter_values"].to_dict()
+        == result.fixed_parameter_values
+    )
 
 
 @pytest.mark.parametrize("on_device", [False, True], ids=["host", "device"])
@@ -3305,12 +3322,19 @@ def test_parameter_changes_between_solves(
     assert solver.fixed_parameter_values == defaults
 
     duration = solver_settings["duration"]
-    first = solver.solve(duration=duration).time_domain_array.copy()
+    first_result = solver.solve(duration=duration)
+    first = first_result.time_domain_array.copy()
     value = 2.0 * defaults[names[0]] + 1.0
     system.set_default_parameters({names[0]: value})
-    second = solver.solve(duration=duration).time_domain_array.copy()
+    second_result = solver.solve(duration=duration)
+    second = second_result.time_domain_array.copy()
     assert solver.fixed_parameter_values[names[0]] == pytest.approx(value)
     assert not np.array_equal(first, second)
+    # Each result records the values its own solve compiled in.
+    assert first_result.fixed_parameter_values == defaults
+    assert second_result.fixed_parameter_values == (
+        solver.fixed_parameter_values
+    )
 
 
 def test_parameter_names_are_rejected_as_options(solver, system):
