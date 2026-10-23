@@ -2017,8 +2017,9 @@ def apply_device_array_readonly() -> None:
     stock = _descriptor._array_readonly
 
     def array_readonly(arg, ty=None):
-        # A launch checks every array argument, and Numba builds a
-        # device array's interface dict only to report it writable.
+        # Numba checks every array argument on each launch, and it
+        # builds a device array's interface dict only to report it
+        # writable.
         if isinstance(arg, _descriptor.DeviceNDArrayBase):
             return False
         return stock(arg, ty)
