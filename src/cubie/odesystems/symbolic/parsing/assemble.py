@@ -39,27 +39,27 @@ from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
-from cubie._utils import devfunc_returns_nonfloat
-
-
-def _mass_matrix_converter(value: Any) -> Any:
-    if value is None:
-        return None
-    if hasattr(value, "tolist"):
-        value = value.tolist()
-    array = np_array(value, dtype=np_float64)
-    array.setflags(write=False)
-    return array
+from cubie.odesystems.variables import ParameterSet, Variable, VariableSet
+from cubie._utils import (
+    devfunc_returns_nonfloat,
+    mass_equal,
+    mass_matrix_converter,
+)
 
 
 @frozen
 class SpecialisedSystem(CUDADispatcherCache):
 
     layout: SystemLayout = field()
-    equations: ParsedEquations = field()
-    functions: Dict[str, Callable] = field(factory=dict)
+    equations: ParsedEquations = field(hash=False)
+    functions: Dict[str, Callable] = field(factory=dict, hash=False)
     fn_hash: str = field(default="")
-    mass: Any = field(default=None, converter=_mass_matrix_converter)
+    mass: Any = field(
+        default=None,
+        converter=mass_matrix_converter,
+        eq=cmp_using(eq=mass_equal),
+        hash=False,
+    )
 
 
 def _driver_derivatives(

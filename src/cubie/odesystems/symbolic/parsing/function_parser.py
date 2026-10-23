@@ -262,20 +262,15 @@ def _build_name_hints(
         unknown-name error message should recommend.
     """
     hints: Dict[str, str] = {}
-    scalar_set = set(inspection.scalar_params)
-    containers = [
-        cp for cp in inspection.parameter_args if cp not in scalar_set
-    ]
-    container = containers[0] if containers else "p"
+    parameter_base, driver_base = _container_roles(inspection)
+    for name in parameters:
+        hints[name] = f"{parameter_base or 'p'}.{name}"
+    for name in drivers:
+        hints[name] = f"{driver_base or 'd'}.{name}"
+    for name in states:
     # A trailing container argument (e.g. ``def f(t, y, p, d)``) is the
     # natural spelling for drivers; with a single container both hints
     # coincide.
-    driver_container = containers[-1] if containers else "p"
-    for name in parameters:
-        hints[name] = f"{container}.{name}"
-    for name in drivers:
-        hints[name] = f"{driver_container}.{name}"
-    for name in states:
         hints.setdefault(name, f"{inspection.state_param}.{name}")
     return hints
 
@@ -350,6 +345,23 @@ def infer_function_states(func: Callable) -> Dict[str, float]:
         "state binding. Pass states=..., or return a dict keyed by "
         "state name."
     )
+
+
+def _container_roles(
+    inspection: FunctionInspection,
+) -> Tuple[Optional[str], Optional[str]]:
+    scalar_set = set(inspection.scalar_params)
+    containers = [
+        arg for arg in inspection.parameter_args if arg not in scalar_set
+    ]
+    if len(containers) > 2:
+        raise ValueError(
+            f"The ODE function takes {len(containers)} container "
+            f"arguments after the state ({containers}). Pass the "
+            f"parameters in the first and the drivers in the second."
+        )
+    containers += [None, None]
+    return containers[0], containers[1]
 
 
 def _build_symbol_map(
@@ -428,51 +440,51 @@ def _build_symbol_map(
                     f"{state_names}"
                 )
 
-    # Parameter/driver accesses on generic container args. A name
-    # reaches a parameter or a driver through any container. An index
-    # on the last of two or more containers counts through the
-    # drivers, an index on any other container through the
-    # parameters, and an index on a lone container through the
-    # parameters and then the drivers.
+    # Parameter/driver accesses on generic container args
     inferred_params: "OrderedDict[str, sp.Symbol]" = OrderedDict()
-    scalar_set = set(inspection.scalar_params)
-    containers = [
-        arg for arg in inspection.parameter_args if arg not in scalar_set
-    ]
-    driver_base = containers[-1] if len(containers) > 1 and drivers else None
+    parameter_base, driver_base = _container_roles(inspection)
+    parameter_set = set(parameters)
+    driver_set = set(drivers)
     for acc in inspection.parameter_accesses:
         key = acc["key"]
         ptype = acc["pattern_type"]
         base = acc["base"]
         if ptype not in ("int", "string", "attribute"):
             continue
-        target_sym = None
-            if ptype == "int":
-            if base == driver_base:
-                positional, positional_kind = drivers, "drivers"
-            elif driver_base is None:
-                positional = [*parameters, *drivers]
-                positional_kind = "parameters and drivers"
-            else:
-                positional, positional_kind = parameters, "parameters"
-            if 0 <= key < len(positional):
-                target_sym = _symbol(positional[key])
-        elif key in parameters or key in drivers:
-            target_sym = _symbol(key)
-
+        # Search parameters, then drivers
         if ptype == "int":
-            lookup = f"{base}[{key}]"
-        elif ptype == "string":
+            raise ValueError(
+                f"Container access '{base}[{key}]' reads by position. "
+                f"Read parameters and drivers by name, as "
+                f"'{base}.name' or '{base}[\"name\"]'."
+            )
+        if ptype == "string":
             lookup = f"{base}[{key!r}]"
         else:
             lookup = f"{base}.{key}"
 
-        if target_sym is None:
-            if ptype == "int":
+        target_sym = None
+        if base == driver_base:
+            if key in driver_set:
+                target_sym = _symbol(key)
+            elif key in parameter_set:
                 raise ValueError(
-                    f"Container access '{lookup}' is out of range for "
-                    f"the declared {positional_kind} ({positional})."
+                    f"'{key}' is a parameter but was accessed as "
+                    f"'{lookup}' on the driver argument. Read it "
+                    f"through the parameter argument: "
+                    f"'{parameter_base}.{key}'."
                 )
+        elif key in parameter_set:
+            target_sym = _symbol(key)
+        elif key in driver_set:
+            raise ValueError(
+                f"'{key}' is a driver but was accessed as '{lookup}' "
+                f"through the parameter argument '{base}'. Read drivers "
+                f"through the argument after the parameters, as "
+                f"'d.{key}' in 'def f(t, y, p, d)'."
+            )
+
+        if target_sym is None:
             if key in state_set:
                 raise ValueError(
                     f"'{key}' is a state but was accessed as "
@@ -484,6 +496,12 @@ def _build_symbol_map(
                     f"'{key}' is an observable but was accessed as "
                     f"'{lookup}'. Observables are assigned locally in "
                     f"the function body and referenced by bare name."
+                )
+            if base == driver_base:
+                raise ValueError(
+                    f"'{key}' is not a declared driver but was accessed "
+                    f"as '{lookup}' on the driver argument. Declare it "
+                    f"in drivers."
                 )
             if strict:
                 raise ValueError(
