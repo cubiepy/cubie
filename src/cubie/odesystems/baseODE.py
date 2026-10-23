@@ -246,9 +246,16 @@ class BaseODE(CUDAFactory):
         names = tuple(names)
         fixed = dict(fixed or {})
         parameters = self._parameters
+        # Spell the request out as strings, because _derived matches a
+        # tuple or dict only when it is the same object.
+        request = (
+            parameters,
+            ",".join(names),
+            ",".join(f"{name}={value!r}" for name, value in fixed.items()),
+        )
         compiled = self._derived(
             "compiled_parameters",
-            (parameters, names, fixed),
+            request,
             lambda: ParameterSet.build(parameters, names, fixed),
         )
         self.update(compiled_parameters=compiled)
