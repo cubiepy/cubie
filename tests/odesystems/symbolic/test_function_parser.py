@@ -25,6 +25,7 @@ from cubie.odesystems.symbolic.parsing import (
     parse_system,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
+from tests._utils import specialise_all_swept
 
 
 def _walk(node):
@@ -488,7 +489,7 @@ class TestDriverAccess:
         for _, rhs in eqs.state_derivatives:
             rhs_symbols |= ir.free_atoms(rhs)
         assert ir.sym(driver_sym.name) in rhs_symbols
-        assert "forcing" not in list(layout.swept_names)
+        assert "forcing" not in index_map.parameter_names
 
     def test_driver_via_dedicated_fourth_argument(self):
         """A dedicated d argument reaches drivers the same way."""
@@ -870,7 +871,7 @@ class TestScalarArguments:
         index_map, _, _, _, _ = parse_system(
             dxdt=f, states={"x": 1.0}
         ).specialise()
-        assert "p" not in list(layout.swept_names)
+        assert "p" not in index_map.parameter_names
 
     def test_scalar_arg_matching_state_raises(self):
         """A scalar arg shadowing a state points at the state arg."""

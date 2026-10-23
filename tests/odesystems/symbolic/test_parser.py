@@ -4,6 +4,7 @@ import warnings
 import pytest
 import sympy as sp
 
+from tests._utils import specialise_all_swept
 
 from cubie.odesystems.symbolic.codegen import (
     generate_linear_operator_code,
@@ -344,7 +345,7 @@ class TestLhsSemantics:
                 observables=["y"],
             ).specialise()
         assert parsed is not None
-        assert "y" in list(layout.state_names)
+        assert "y" in index_map.state_names
 
     def test_state_assigned_algebraically_is_eliminated(self):
         """A declared state with an algebraic assignment reduces."""
@@ -1004,7 +1005,7 @@ class TestSympyInputPathway:
             ).specialise()
         )
 
-        assert "x" in list(layout.state_names)
+        assert "x" in index_map.state_names
         assert len(parsed_eqs.state_derivatives) == 1
 
     def test_sympy_infer_parameters_non_strict(self):
@@ -1020,7 +1021,7 @@ class TestSympyInputPathway:
             )
         )
 
-        assert "k" in list(layout.swept_names)
+        assert "k" in index_map.parameter_names
 
     def test_sympy_user_functions_symbols_dict(self):
         """Test user functions are properly added to symbols dict in SymPy
@@ -1203,7 +1204,7 @@ class TestHashConsistency:
         )
 
         # delta_i should NOT create state elta_i
-        assert "elta_i" not in list(layout.state_names)
+        assert "elta_i" not in index_map.state_names
         # delta_i should be in auxiliaries
         assert "delta_i" in all_symbols
 
@@ -1248,7 +1249,7 @@ class TestDerivativeNotation:
             strict=True,
         ).specialise()
         assert ir.sym("delta_i") in parsed.auxiliary_symbols
-        assert "elta_i" not in list(layout.state_names)
+        assert "elta_i" not in index_map.state_names
 
     def test_ambiguous_prefix_is_a_state_treated_as_derivative(self):
         """delta = ... with state elta declared is derivative of elta."""
@@ -1259,7 +1260,7 @@ class TestDerivativeNotation:
             strict=True,
         ).specialise()
         assert len(parsed.state_derivatives) == 1
-        assert "delta" in list(layout.dxdt_names)
+        assert "delta" in index_map.dxdt_names
 
     def test_function_notation_with_declared_state(self):
         """d(x, t) = ... with state x declared is derivative."""
@@ -1311,7 +1312,7 @@ class TestDerivativeNotation:
             strict=False,
         ).specialise()
         assert ir.sym("delta") in parsed.auxiliary_symbols
-        assert "elta" not in list(layout.state_names)
+        assert "elta" not in index_map.state_names
 
     def test_function_notation_with_whitespace(self):
         """d( x , t ) = ... with extra whitespace works."""
