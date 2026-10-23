@@ -547,6 +547,13 @@ def test_auto_performance_is_a_kernel_setting(solverkernel_mutable):
     assert kernel.settings_dict["auto_performance"] is False
 
 
+def test_configured_launch_is_kept_for_its_geometry(solverkernel):
+    """A launch geometry asked for again gets the same configured launch."""
+    stream = solverkernel.stream
+    launch = solverkernel._configured_launch(1, (1, 32), stream, 4)
+    assert solverkernel._configured_launch(1, (1, 32), stream, 4) is launch
+
+
 def test_persistent_array_sized_from_persistent_layout(solverkernel):
     """The persistent scratch array is sized by the persistent layout.
 

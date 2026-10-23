@@ -41,6 +41,9 @@ from warnings import warn
 
 if TYPE_CHECKING:
     from cubie.batchsolving.solver import Solver
+    from cubie.integrators.SingleIntegratorRun import (
+        SingleIntegratorRun,
+    )
 
 from attrs import (
     cmp_using as attrs_cmp_using,
@@ -61,7 +64,7 @@ from numpy import (
     nan as np_nan,
     ndarray,
     squeeze as np_squeeze,
-    where as np_where,
+    flatnonzero as np_flatnonzero,
 )
 from numpy.typing import NDArray
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
@@ -419,23 +422,35 @@ class SolveResult:
         )
         outputs.loan_host_arrays(result)
         if nan_error_trajectories:
-            error_runs = result._error_run_indices()
-            if error_runs.size > 0:
-                result._mask_error_runs(error_runs)
-                warn(
-                    _failed_run_message(
-                        result.status_codes,
-                        solver.kernel.single_integrator.solver_diagnostics,
-                    )
-                )
+            result.mask_error_runs(solver.kernel.single_integrator)
         return result
+
+    def mask_error_runs(self, integrator: "SingleIntegratorRun") -> None:
+        """Overwrite runs with nonzero status codes with NaN and warn.
+
+        Call this only once the solve's outputs have landed.
+
+        Parameters
+        ----------
+        integrator
+            The solve's ``SingleIntegratorRun``, whose diagnostics the
+            warning reports.
+        """
+        error_runs = self._error_run_indices()
+        if error_runs.size > 0:
+            self._mask_error_runs(error_runs)
+            warn(
+                _failed_run_message(
+                    self.status_codes, integrator.solver_diagnostics
+                )
+            )
 
     def _error_run_indices(self) -> NDArray:
         """Return the indices of runs with nonzero status codes."""
         codes = self.status_codes
         if codes is None or codes.size == 0:
             return np_array([], dtype=int)
-        return np_where(codes != 0)[0]
+        return np_flatnonzero(codes)
 
     def _mask_error_runs(self, error_runs: NDArray) -> None:
         """NaN the given runs, keeping the state buffer's time column."""

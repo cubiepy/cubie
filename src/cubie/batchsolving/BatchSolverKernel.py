@@ -221,7 +221,8 @@ class RunParams:
             chunk_runs = self.runs - (self.num_chunks - 1) * self.chunk_length
         else:
             chunk_runs = self.chunk_length
-
+        if chunk_runs == self.runs:
+            return self
         return evolve(self, runs=chunk_runs)
 
     def update_from_allocation(self, response: "ArrayResponse") -> "RunParams":
@@ -393,7 +394,7 @@ class BatchSolverKernel(CUDAFactory):
 
         self.output_arrays.update(self)
 
-        self._known_system_config = system.config_hash
+        self._known_system_config = system.compile_settings
 
     def _setup_memory_manager(
         self, settings: Dict[str, Any]
@@ -443,17 +444,17 @@ class BatchSolverKernel(CUDAFactory):
 
         Notes
         -----
-        One workload event plus three per chunk. While timing is on
-        they are kept between runs and rebuilt when the chunk count or
-        logger verbosity changes; with timing off each run gets fresh
-        no-op events.
+        One workload event plus three per chunk. The kernel keeps them
+        between runs and rebuilds them when the chunk count or logger
+        verbosity changes.
         """
         verbosity = default_timelogger.verbosity
         key = (chunks, verbosity)
-        if verbosity is not None and key == self._cuda_events_key:
-            self._gpu_workload_event.register()
-            for event in self._cuda_events:
-                event.register()
+        if key == self._cuda_events_key:
+            if verbosity is not None:
+                self._gpu_workload_event.register()
+                for event in self._cuda_events:
+                    event.register()
             return
         self._gpu_workload_event = CUDAEvent("gpu_workload")
         self._cuda_events = []
@@ -702,14 +703,26 @@ class BatchSolverKernel(CUDAFactory):
         duration = np_float64(duration)
 
         # The partition follows the live arrays; an allocation replaces it.
-        self.run_params = evolve(
-            self.run_params,
-            duration=duration,
-            warmup=np_float64(warmup),
-            t0=np_float64(t0),
-            runs=inits.shape[1],
-            precision=self.single_integrator.precision,
-        )
+        run_params = self.run_params
+        warmup = np_float64(warmup)
+        t0 = np_float64(t0)
+        runs = inits.shape[1]
+        precision = self.single_integrator.precision
+        if (
+            run_params.duration != duration
+            or run_params.warmup != warmup
+            or run_params.t0 != t0
+            or run_params.runs != runs
+            or run_params.precision is not precision
+        ):
+            self.run_params = evolve(
+                run_params,
+                duration=duration,
+                warmup=warmup,
+                t0=t0,
+                runs=runs,
+                precision=precision,
+            )
 
         # An attached table is a cached build output: nothing to upload.
         driver_coefficients = self.driver_interpolator.coefficients
@@ -804,12 +817,12 @@ class BatchSolverKernel(CUDAFactory):
                 if i == 0
                 else self._kernel_launch_args(chunk_run_params)
             )
-            self.kernel[
+            self._configured_launch(
                 chunk_blocks,
                 (threads_per_loop, runsperblock),
                 stream,
                 dynamic_sharedmem,
-            ](*args)
+            )(*args)
             kernel_event.record_end(stream)
 
             # d2h transfer timing
@@ -821,6 +834,38 @@ class BatchSolverKernel(CUDAFactory):
 
         # Finalize GPU workload timing
         self._gpu_workload_event.record_end(stream)
+
+    def _configured_launch(
+        self,
+        blocks: int,
+        threads: Tuple[int, int],
+        stream: Any,
+        dynamic_sharedmem: int,
+    ) -> Callable:
+        """Return the kernel configured for one launch geometry.
+
+        Parameters
+        ----------
+        blocks
+            Blocks in the grid.
+        threads
+            Threads per run and runs per block.
+        stream
+            Stream to launch on.
+        dynamic_sharedmem
+            Dynamic shared memory per block, in bytes.
+
+        Returns
+        -------
+        Callable
+            The configured launch; call it with the kernel arguments.
+        """
+        dispatcher = self.kernel
+        return self._derived(
+            "configured_launch",
+            (dispatcher, blocks, *threads, stream, dynamic_sharedmem),
+            lambda: dispatcher[blocks, threads, stream, dynamic_sharedmem],
+        )
 
     def limit_blocksize(
         self,
@@ -1267,7 +1312,7 @@ class BatchSolverKernel(CUDAFactory):
             },
             silent=True,
         )
-        self._known_system_config = self.system.config_hash
+        self._known_system_config = self.system.compile_settings
         return recognised
 
     def _auto_defaults(self, settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -1603,7 +1648,7 @@ class BatchSolverKernel(CUDAFactory):
     def system_config_stale(self) -> bool:
         """``True`` when the system changed outside the update chain."""
 
-        return self.system.config_hash != self._known_system_config
+        return self.system.compile_settings is not self._known_system_config
 
     @property
     def algorithm(self) -> str:
