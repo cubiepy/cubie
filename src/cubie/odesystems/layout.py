@@ -4,9 +4,13 @@ Published Classes
 -----------------
 :class:`SystemLayout`
     The variables held in each device buffer, in buffer order, and the
-    parameters as the batch compiles them.
+    swept and fixed parameters.
 
-    >>> layout = SystemLayout(states=("x", "y"), parameters=("k",))
+    >>> states = VariableSet.of(Variable, ["x", "y"])
+    >>> declared = VariableSet.of(Parameter, {"k": 1.0})
+    >>> layout = SystemLayout(
+    ...     states=states, parameters=ParameterSet.build(declared, ["k"])
+    ... )
     >>> layout.dxdt_names
     ('dx', 'dy')
     >>> layout.swept_names
@@ -18,7 +22,7 @@ See Also
     The variable sets a layout holds.
 """
 
-from typing import Iterable, Tuple, Union
+from typing import Tuple
 
 from attrs import field, frozen
 from attrs.validators import (
@@ -26,30 +30,7 @@ from attrs.validators import (
     instance_of as attrsval_instance_of,
 )
 
-from cubie.odesystems.variables import (
-    CompiledParameter,
-    ParameterSet,
-    Variable,
-    VariableSet,
-)
-
-
-def _variables(values: Union[VariableSet, Iterable[str]]) -> VariableSet:
-    """Return the names and units of ``values`` as a set, with no values."""
-    if isinstance(values, VariableSet):
-        return values.without_values()
-    return VariableSet.of(Variable, list(values))
-
-
-def _parameters(
-    values: Union[ParameterSet, Iterable[str]],
-) -> ParameterSet:
-    """Return ``values`` as compiled parameters, sweeping bare names."""
-    if isinstance(values, ParameterSet):
-        return values
-    return ParameterSet(
-        [CompiledParameter(str(name), swept=True) for name in values]
-    )
+from cubie.odesystems.variables import ParameterSet, VariableSet
 
 
 @frozen(cache_hash=True)
@@ -65,8 +46,8 @@ class SystemLayout:
     states
         The states, in the order of the state buffer.
     parameters
-        Every parameter as the batch compiles it, in the system's
-        parameter order. Pass bare names to sweep every parameter.
+        Every parameter, swept or fixed, in the system's parameter
+        order.
     observables
         The observables, in the order of the observables buffer.
     drivers
@@ -77,10 +58,19 @@ class SystemLayout:
         them after the drivers.
     """
 
-    states: VariableSet = field(default=(), converter=_variables)
-    parameters: ParameterSet = field(default=(), converter=_parameters)
-    observables: VariableSet = field(default=(), converter=_variables)
-    drivers: VariableSet = field(default=(), converter=_variables)
+    states: VariableSet = field(
+        default=VariableSet(()), validator=attrsval_instance_of(VariableSet)
+    )
+    parameters: ParameterSet = field(
+        default=ParameterSet(()),
+        validator=attrsval_instance_of(ParameterSet),
+    )
+    observables: VariableSet = field(
+        default=VariableSet(()), validator=attrsval_instance_of(VariableSet)
+    )
+    drivers: VariableSet = field(
+        default=VariableSet(()), validator=attrsval_instance_of(VariableSet)
+    )
     driver_derivatives: Tuple[Tuple[int, int], ...] = field(
         default=(),
         converter=tuple,

@@ -27,11 +27,11 @@ Published Classes
     {'x': 1.0, 'y': 0.0}
 
 :class:`CompiledParameter`
-    A parameter as a batch compiles it: swept, or fixed at a value.
+    A parameter that is either swept or fixed at a value.
 
 :class:`ParameterSet`
-    A :class:`VariableSet` of compiled parameters: the parameters a
-    batch sweeps, and the value compiled in for every other parameter.
+    A :class:`VariableSet` of :class:`CompiledParameter` records: the
+    swept parameters, and the fixed value of every other parameter.
 
     >>> parameters = VariableSet.of(Parameter, {"a": 1.0, "b": 2.0})
     >>> batch = ParameterSet.build(parameters, ["b"], {"a": 3.0})
@@ -121,10 +121,11 @@ def _optional_float(value: Optional[float]) -> Optional[float]:
 
 @frozen
 class CompiledParameter(Variable):
-    """A parameter as a batch compiles it.
+    """A parameter that is either swept or fixed at a value.
 
-    Give a swept parameter no value, and give a fixed parameter the
-    value to compile into the code.
+    Pass ``swept=True`` and no value for a parameter you want read from
+    the parameters array in each run. Give a fixed parameter the value
+    to write into the generated source as a constant.
 
     Parameters
     ----------
@@ -132,7 +133,8 @@ class CompiledParameter(Variable):
         ``True`` to read the parameter from the parameters array in
         each run.
     value
-        The value compiled in, or ``None`` for a swept parameter.
+        The value of a fixed parameter, or ``None`` for a swept
+        parameter.
 
     Raises
     ------
@@ -470,7 +472,7 @@ class ValuedSet(VariableSet):
 
 @frozen(cache_hash=True)
 class ParameterSet(VariableSet):
-    """The parameters as a batch compiles them.
+    """The swept and fixed parameters of a specialised system.
 
     Hold one :class:`CompiledParameter` per parameter, in the system's
     parameter order, and no defaults. Pass parameter arrays with one row
@@ -553,8 +555,8 @@ class ParameterSet(VariableSet):
         """Return the :attr:`key` :meth:`build` would give the request.
 
         Compare it with an existing set's :attr:`key` to find out
-        whether the request compiles the same parameters, without
-        building the set.
+        whether :meth:`build` would give the same swept and fixed
+        parameters, without building the set.
 
         Parameters
         ----------
@@ -577,25 +579,25 @@ class ParameterSet(VariableSet):
         swept: Iterable[str] = (),
         values: Optional[Mapping[str, float]] = None,
     ) -> "ParameterSet":
-        """Compile ``parameters`` for a batch.
+        """Return a set with ``swept`` swept and the others fixed.
 
         Parameters
         ----------
         parameters
-            The declared parameters with their defaults.
+            The declared parameters with their default values.
         swept
             Names of the parameters to sweep, in any order. Pass
             parameter arrays with one row per swept parameter, in the
             system's parameter order.
         values
-            Values to compile in for some of the other parameters.
-            ``build`` compiles every parameter neither swept nor named
-            here at its default.
+            Fixed values for a subset of the other parameters.
+            ``build`` fixes every parameter neither swept nor named
+            here at its default value.
 
         Returns
         -------
         ParameterSet
-            The compiled parameters.
+            The swept and fixed parameters.
 
         Raises
         ------
@@ -619,7 +621,7 @@ class ParameterSet(VariableSet):
 
     @property
     def fixed(self) -> Dict[str, float]:
-        """The value compiled in for every parameter that is not swept."""
+        """The fixed value of every parameter that is not swept."""
         return {
             entry.name: entry.value
             for entry in self.entries
