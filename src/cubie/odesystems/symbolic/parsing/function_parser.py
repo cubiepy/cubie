@@ -504,10 +504,10 @@ def _build_symbol_map(
         elif key in driver_set:
             raise ValueError(
                 f"'{key}' is a driver but was accessed as '{lookup}' "
-                f"on the parameter argument. Read drivers through a "
-                f"second container argument, as '{driver_base or 'd'}"
-                f".{key}' in 'def f(t, y, {base}, "
-                f"{driver_base or 'd'})'."
+                f"through the parameter argument '{base}'. Read drivers "
+                f"through the argument after the parameters, as "
+                f"'d.{key}' in 'def f(t, y, p, d)', and keep 'p' when "
+                f"the system has no parameters."
             )
 
         if target_sym is None:

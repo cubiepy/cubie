@@ -508,6 +508,19 @@ class TestDriverAccess:
             rhs_symbols |= ir.free_atoms(rhs)
         assert ir.sym("forcing") in rhs_symbols
 
+    def test_driver_without_parameters(self):
+        """``parse_system`` reads ``d`` as the drivers when ``p`` is unused."""
+        def f(t, y, p, d):
+            return [-y.x + d.forcing]
+
+        eqs = parse_system(
+            dxdt=f,
+            states={"x": 1.0},
+            drivers=["forcing"],
+        ).specialise().equations
+        rhs = eqs.state_derivatives[0][1]
+        assert ir.sym("forcing") in ir.free_atoms(rhs)
+
     def test_driver_string_subscript(self):
         """String subscript access reaches drivers."""
         def f(t, y, p, d):

@@ -115,8 +115,9 @@ an example of how to do this:
     )
 
 Note how the driver appears: you declare it in ``drivers`` when you
-create the system, and read it by name inside the function body through a
-second container argument after the parameters, here ``d``.
+create the system, and read it by name inside the function body through
+the argument after the parameters, here ``d``. Keep the parameter
+argument ``p`` even when the system has no parameters.
 
 Sampled forcing data is defined using a ``DriverSamples`` object.
 It takes a ``dict`` of ``"[driver name]": [sampled data]`` pairs, with
