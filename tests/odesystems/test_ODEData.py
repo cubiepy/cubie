@@ -11,7 +11,12 @@ from cubie.odesystems.ODEData import (
     SystemSizes,
 )
 from cubie.odesystems.layout import SystemLayout
-from cubie.odesystems.variables import Parameter, ParameterSet, VariableSet
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    Variable,
+    VariableSet,
+)
 
 
 DECLARED = VariableSet.of(Parameter, {"a": 0.5, "b": 0.3, "g": 9.81})
@@ -70,10 +75,10 @@ def test_system_sizes_of_layout_counts_every_buffer():
     """Count a layout's states, observables, swept rows, drivers and
     driver derivatives."""
     layout = SystemLayout(
-        states=["x", "y"],
+        states=VariableSet.of(Variable, ["x", "y"]),
         parameters=ParameterSet.build(DECLARED, ["b", "a"]),
-        observables=["v", "w", "z"],
-        drivers=["u"],
+        observables=VariableSet.of(Variable, ["v", "w", "z"]),
+        drivers=VariableSet.of(Variable, ["u"]),
         driver_derivatives=((0, 1),),
     )
     sizes = SystemSizes.of_layout(layout)
