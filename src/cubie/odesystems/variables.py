@@ -485,20 +485,6 @@ class ParameterSet(VariableSet):
     entries: Tuple[Variable, ...] = field(
         converter=tuple, validator=[_unique_entries, _compiled_entries]
     )
-    key: tuple = field(init=False, eq=False, repr=False)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        # We compare each solve's request with this tuple, so we build
-        # it once.
-        object.__setattr__(
-            self,
-            "key",
-            tuple(
-                (entry.name, entry.swept, entry.value)
-                for entry in self.entries
-            ),
-        )
 
     @staticmethod
     def _resolve(
@@ -542,33 +528,6 @@ class ParameterSet(VariableSet):
             )
             for entry in parameters
         )
-
-    @classmethod
-    def key_for(
-        cls,
-        parameters: ValuedSet,
-        swept: Iterable[str] = (),
-        values: Optional[Mapping[str, float]] = None,
-    ) -> tuple:
-        """Return the :attr:`key` :meth:`build` would give the request.
-
-        Compare it with an existing set's :attr:`key` to find out
-        whether the request compiles the same parameters, without
-        building the set.
-
-        Parameters
-        ----------
-        parameters, swept, values
-            As for :meth:`build`.
-
-        Raises
-        ------
-        KeyError
-            If a name is not a parameter.
-        ValueError
-            If a swept name repeats or also has a value.
-        """
-        return cls._resolve(parameters, swept, values)
 
     @classmethod
     def build(

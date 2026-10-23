@@ -198,7 +198,7 @@ def combinatorial_grid(
         scalars or iterables describing sweep values. Value arrays may differ
         in length.
     values_instance
-        :class:`SystemValues` instance used to resolve indices for the
+        :class:`ValuedSet` instance used to resolve indices for the
         provided keys.
     silent
         When ``True`` suppresses warnings about unrecognised keys.
@@ -249,7 +249,7 @@ def verbatim_grid(
         Dictionary keyed by parameter names or indices whose values are
         scalars or iterables describing sweep values.
     values_instance
-        :class:`SystemValues` instance used to resolve indices for the
+        :class:`ValuedSet` instance used to resolve indices for the
         provided keys.
     silent
         When ``True`` suppresses warnings about unrecognised keys.
@@ -307,7 +307,7 @@ def generate_grid(
         Dictionary keyed by parameter names or indices whose values are
         scalars or iterables describing sweep values.
     values_instance
-        :class:`SystemValues` instance used to resolve indices for the
+        :class:`ValuedSet` instance used to resolve indices for the
         provided keys.
     kind
         Strategy used to assemble the grid. ``"combinatorial"`` expands all
@@ -971,7 +971,7 @@ class BatchInputHandler:
             Input as None (use defaults), dict (expand to grid),
             or array-like (sanitize).
         values_object
-            SystemValues instance for this category (params or states).
+            ValuedSet instance for this category (params or states).
         kind
             Grid type: "combinatorial" or "verbatim".
 
@@ -1155,7 +1155,7 @@ class BatchInputHandler:
         plan
             Plan from :meth:`_plan_single_input`.
         values_object
-            SystemValues instance for this category.
+            ValuedSet instance for this category.
         backed
             Identity set recording destination arrays this call
             allocated.
@@ -1288,7 +1288,7 @@ class BatchInputHandler:
         arr
             Input to check.
         values_object
-            SystemValues instance for dimension comparison.
+            ValuedSet instance for dimension comparison.
 
         Returns
         -------
@@ -1357,7 +1357,7 @@ class BatchInputHandler:
         Parameters
         ----------
         values_object
-            SystemValues instance containing default values.
+            ValuedSet instance containing default values.
         n_runs
             Number of run columns to create.
         backed

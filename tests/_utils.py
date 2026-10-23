@@ -42,6 +42,9 @@ def restoring_values(system):
     try:
         yield system
     finally:
+        # Restore the defaults first, because set_default_parameters
+        # recompiles the current swept names; then restore the compiled
+        # parameters.
         system.set_default_parameters(parameters.defaults)
         system.update(compiled_parameters=compiled)
         system.set_initial_values(states.defaults)

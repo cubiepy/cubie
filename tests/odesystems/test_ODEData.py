@@ -80,10 +80,13 @@ def test_system_sizes_of_layout_counts_every_buffer():
     assert sizes.swept_parameters == 2
     assert sizes.drivers == 2
     assert sizes.driver_derivatives == 1
-def _make_odedata(precision=np.float32, operation_ordering="kahn"):
-    return ODEData(
-        precision=precision, operation_ordering=operation_ordering
-    )
+
+
+# ── ODEData ───────────────────────────────────────────────────── #
+
+@pytest.fixture
+def odedata():
+    return ODEData(precision=np.float32, operation_ordering="kahn")
 
 
 def test_operation_ordering_public_values_are_exact():
@@ -101,24 +104,25 @@ def test_operation_ordering_public_values_are_exact():
     ["greedy", "dfs", "liveness_auto"],
 )
 def test_odedata_operation_ordering_participates_in_identity(
-    operation_ordering,
+    odedata, operation_ordering
 ):
     """Every opt-in ordering is validated and compile-critical."""
-    kahn = _make_odedata(operation_ordering="kahn")
-    alternative = _make_odedata(operation_ordering=operation_ordering)
+    alternative = odedata.update(operation_ordering=operation_ordering)[0]
     assert alternative.operation_ordering == operation_ordering
-    assert alternative.values_hash != kahn.values_hash
+    assert alternative.values_hash != odedata.values_hash
 
 
 @pytest.mark.parametrize("operation_ordering", ["liveness", "bogus"])
-def test_odedata_rejects_invalid_operation_ordering(operation_ordering):
+def test_odedata_rejects_invalid_operation_ordering(
+    odedata, operation_ordering
+):
     """Only the four supported ordering policies are accepted."""
     with pytest.raises(ValueError, match="operation_ordering"):
-        _make_odedata(operation_ordering=operation_ordering)
+        odedata.update(operation_ordering=operation_ordering)
 
 
-def test_odedata_precision_participates_in_identity():
+def test_odedata_precision_participates_in_identity(odedata):
     assert (
-        _make_odedata(precision=np.float32).values_hash
-        != _make_odedata(precision=np.float64).values_hash
+        odedata.update(precision=np.float64)[0].values_hash
+        != odedata.values_hash
     )
