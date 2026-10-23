@@ -206,7 +206,7 @@ class SystemInterface:
         Parameters
         ----------
         values_object
-            The SystemValues object to retrieve labels from.
+            The variable set to retrieve labels from.
         indices
             A 1D array of integer indices.
 

@@ -271,6 +271,10 @@ class SymbolicODE(BaseODE):
         specialiser = SystemSpecialiser(
             parsed_system, ParameterSet.build(declared, swept_parameters or ())
         )
+        # We keep every initial value we are given, including values
+        # for states that we remove in structural simplification.
+        # When we compile a specialisation that keeps such a state, we
+        # start it from the value the user set.
         super().__init__(
             precision,
             declared,
