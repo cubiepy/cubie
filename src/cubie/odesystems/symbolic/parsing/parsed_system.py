@@ -5,11 +5,20 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 import attrs
 
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.parsing.assemble import assemble_simplified
+from cubie.odesystems.symbolic.parsing.assemble import (
+    SpecialisedSystem,
+    assemble_simplified,
+)
 from cubie.odesystems.symbolic.parsing.normalise import NormalisedSystem
 from cubie.odesystems.symbolic.sym_utils import (
     RESERVED_CODEGEN_PREFIX,
     hash_system_definition,
+)
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    ValuedSet,
+    VariableSet,
 )
 
 
@@ -147,7 +156,7 @@ class ParsedSystem:
 
         return self.assemble(
             ParameterSet.build(self.declared_parameters, swept, values)
-            )
+        )
 
     def assemble(self, parameters: ParameterSet) -> SpecialisedSystem:
 

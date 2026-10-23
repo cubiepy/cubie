@@ -302,8 +302,8 @@ class TestSympyStringEquivalence:
         """Verify observables work identically in both pathways."""
         ode_sympy, ode_string = sympy_string_pair
 
-        assert len(ode_sympy.indices.observables.index_map) == 1
-        assert len(ode_string.indices.observables.index_map) == 1
+        assert len(ode_sympy.layout.observable_names) == 1
+        assert len(ode_string.layout.observable_names) == 1
 
 
 class TestSymbolicODEHash:
@@ -335,6 +335,8 @@ class TestSymbolicODEHash:
 
     def test_symbolic_ode_hash_fallback(self, precision):
         """Verify __init__ correctly computes hash when fn_hash=None."""
+        from cubie.odesystems.symbolic.parsing.parser import parse_system
+
         dxdt = ["dx = -k * x", "dy = k * x"]
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
@@ -531,7 +533,7 @@ class TestCacheSkipsCodegen:
         first.gen_file.add_function(
             generate_linear_operator_code(
                 first.equations,
-                first.indices,
+                first.layout,
                 jvp_equations=first._get_jvp_exprs(),
             )
         )
@@ -544,7 +546,7 @@ class TestCacheSkipsCodegen:
         second.gen_file.add_function(
             generate_linear_operator_code(
                 second.equations,
-                second.indices,
+                second.layout,
                 jvp_equations=second._get_jvp_exprs(),
             )
         )
@@ -612,11 +614,11 @@ class TestSweptParameters:
             name="test_sweep_param",
         )
 
-        assert ode.indices.parameter_names == []
+        assert ode.layout.swept_names == ()
 
         sweep(ode, ["c"])
 
-        assert ode.indices.parameter_names == ["c"]
+        assert ode.layout.swept_names == ("c",)
         assert ode.parameters["c"] == precision(0.5)
 
     def test_fixing_a_parameter_folds_its_value(self, precision):
@@ -629,11 +631,11 @@ class TestSweptParameters:
             name="test_fix_param",
         )
         sweep(ode, ["c", "k"])
-        assert ode.indices.parameter_names == ["c", "k"]
+        assert ode.layout.swept_names == ("c", "k",)
 
         sweep(ode, ["k"])
 
-        assert ode.indices.parameter_names == ["k"]
+        assert ode.layout.swept_names == ("k",)
         assert ode.fixed_parameter_values == {"c": 0.5}
 
     def test_creating_with_swept_parameters_matches_setting_them_later(
@@ -656,9 +658,7 @@ class TestSweptParameters:
 
         assert created.swept_parameters == tuple(sorted(names))
         assert later.swept_parameters == created.swept_parameters
-        assert created.indices.parameter_names == list(
-            created.swept_parameters
-        )
+        assert created.layout.swept_names == created.swept_parameters
         assert created.fn_hash == later.fn_hash
         assert (
             created.fixed_parameter_values == later.fixed_parameter_values

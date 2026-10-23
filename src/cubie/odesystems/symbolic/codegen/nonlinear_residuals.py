@@ -34,13 +34,16 @@ from cubie.odesystems.symbolic.engine.printer import (
 )
 from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.parsing import (
-    IndexedBases,
     ParsedEquations,
 )
+from cubie.odesystems.layout import SystemLayout
 from cubie.time_logger import default_timelogger
 
-from ._stage_utils import build_stage_metadata, prepare_stage_data
-from ._matrix_utils import mass_diagonal_flags
+from cubie.odesystems.symbolic.codegen._stage_utils import (
+    build_stage_metadata,
+    prepare_stage_data,
+)
+from cubie.odesystems.symbolic.codegen._matrix_utils import mass_diagonal_flags
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -341,7 +344,7 @@ def _build_n_stage_residual_lines(
 
 def generate_residual_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     variant: HelperVariant = HelperVariant.PLAIN,
     M: Optional[Union[Iterable, object]] = None,
     stage_coefficients: Optional[
@@ -361,7 +364,7 @@ def generate_residual_code(
     ----------
     equations
         Parsed ODE equations.
-    index_map
+    layout
         Symbol-to-array mapping for states, parameters, etc.
     variant
         Helper variant: single-stage or flattened all-stages.
@@ -390,7 +393,7 @@ def generate_residual_code(
     event = f"codegen_residual_{variant.value}"
     default_timelogger.start_event(event)
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     if variant.stacked_stages:
         coeff_matrix, node_values, _ = prepare_stage_data(
@@ -499,7 +502,7 @@ def _build_init_residual_lines(
 
 def generate_init_residual_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     M: Optional[Union[Iterable, object]] = None,
     func_name: str = "init_residual_factory",
     cse: bool = True,
@@ -511,7 +514,7 @@ def generate_init_residual_code(
     ----------
     equations
         Parsed ODE equations.
-    index_map
+    layout
         Symbol-to-array mapping for states, parameters, etc.
     M
         0/1 diagonal mass matrix; identity when omitted.
@@ -529,7 +532,7 @@ def generate_init_residual_code(
     """
     default_timelogger.start_event("codegen_init_residual")
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     mass_diag = mass_diagonal_flags(M, len(sysir.state_symbols))
     body = _build_init_residual_lines(
         sysir=sysir,

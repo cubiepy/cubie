@@ -23,8 +23,6 @@ See Also
     Disk cache that stores and imports the generated code.
 """
 
-from typing import Optional
-
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
@@ -36,10 +34,13 @@ from cubie.odesystems.symbolic.engine.printer import (
     print_cuda_multiple,
 )
 from cubie._env import operation_ordering_default
-from cubie.odesystems.symbolic.parsing import IndexedBases, ParsedEquations
+from cubie.odesystems.symbolic.parsing import ParsedEquations
+from cubie.odesystems.layout import SystemLayout
 from cubie.time_logger import default_timelogger
 
-from ._matrix_utils import mass_matrix_is_identity
+from cubie.odesystems.symbolic.codegen._matrix_utils import (
+    mass_matrix_is_identity,
+)
 
 # Register timing events for codegen functions
 # Module-level registration required since codegen functions return code
@@ -109,7 +110,7 @@ def generate_dxdt_lines(
     ----------
     equations
         Parsed equations describing ``dx/dt`` assignments.
-    index_map
+    layout
         Indexed bases that supply CUDA array references for each symbol.
     cse
         Whether to apply common subexpression elimination before emission.
@@ -119,7 +120,7 @@ def generate_dxdt_lines(
     list of str
         CUDA source lines that evaluate the ``dx/dt`` equations.
     """
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     working_equations = sysir.non_observable_equations()
 
     if cse:
@@ -156,7 +157,7 @@ def generate_dxdt_lines(
 
 def generate_observables_lines(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> list[str]:
@@ -166,7 +167,7 @@ def generate_observables_lines(
     ----------
     equations
         Parsed equations describing observable assignments.
-    index_map
+    layout
         Indexed bases used to substitute CUDA array references.
     cse
         Whether to apply common subexpression elimination before emission.
@@ -177,10 +178,10 @@ def generate_observables_lines(
         CUDA source lines that compute the observables.
     """
     # Early return if no observables
-    if not index_map.observables.ref_map:
+    if not layout.observable_names:
         return ["pass"]
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     working_equations = list(sysir.equations)
 
     if cse:
@@ -241,7 +242,7 @@ def generate_dxdt_fac_code(
     ----------
     equations
         Parsed equations describing ``dx/dt`` assignments.
-    index_map
+    layout
         Indexed bases that provide symbol references.
     func_name
         Name of the generated factory function.
@@ -261,7 +262,7 @@ def generate_dxdt_fac_code(
     default_timelogger.start_event("codegen_generate_dxdt_fac_code")
     dxdt_lines = generate_dxdt_lines(
         equations,
-        index_map=index_map,
+        layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
     )
@@ -334,7 +335,7 @@ def generate_evaluate_inv_mass_f_code(
         )
     lines = generate_dxdt_lines(
         equations,
-        index_map=index_map,
+        layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
     )
@@ -351,7 +352,7 @@ def generate_evaluate_inv_mass_f_code(
 
 def generate_observables_fac_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     func_name: str = "observables",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
@@ -362,7 +363,7 @@ def generate_observables_fac_code(
     ----------
     equations
         Parsed equations describing observable assignments.
-    index_map
+    layout
         Indexed bases that provide symbol lookups.
     func_name
         Name of the generated factory function.
@@ -378,7 +379,7 @@ def generate_observables_fac_code(
 
     obs_lines = generate_observables_lines(
         equations,
-        index_map=index_map,
+        layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
     )

@@ -32,9 +32,9 @@ from cubie.odesystems.symbolic.engine.printer import (
 )
 from cubie._env import operation_ordering_default
 from cubie.odesystems.symbolic.parsing import (
-    IndexedBases,
     ParsedEquations,
 )
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.parsing.parse_primitives import (
     check_derivative_orders,
 )
@@ -173,7 +173,7 @@ def _build_time_derivative_assignments(
 
 def generate_time_derivative_lines(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> List[str]:
@@ -183,7 +183,7 @@ def generate_time_derivative_lines(
     ----------
     equations
         Parsed equations describing the ODE system.
-    index_map
+    layout
         Indexed bases mapping symbols to CUDA array references.
     cse
         Whether to apply common subexpression elimination.
@@ -193,7 +193,7 @@ def generate_time_derivative_lines(
     list[str]
         CUDA source lines computing the explicit time derivative.
     """
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     assignments = _build_time_derivative_assignments(
         sysir,
         operation_ordering,
@@ -224,7 +224,7 @@ def generate_time_derivative_lines(
 
 def generate_time_derivative_fac_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     func_name: str = "time_derivative_rhs_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
@@ -235,7 +235,7 @@ def generate_time_derivative_fac_code(
     ----------
     equations
         Parsed equations describing the ODE system.
-    index_map
+    layout
         Indexed bases providing symbol references.
     func_name
         Name of the generated factory function.
@@ -251,7 +251,7 @@ def generate_time_derivative_fac_code(
 
     body_lines = generate_time_derivative_lines(
         equations,
-        index_map=index_map,
+        layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
     )

@@ -26,7 +26,6 @@ from cubie.odesystems.symbolic.structural.errors import (
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     sweep,
-    specialise_all_swept,
     run_dense_at_state_operator,
     run_device_dxdt,
     run_device_observables,
@@ -39,20 +38,23 @@ from tests.system_fixtures import (
     growth_d2,
     growth_d3,
 )
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
+
+
 
 
 class TestParseDaeInput:
     def test_string_implicit_and_alias(self):
         index_map, _syms, _funcs, parsed, _h = (
             specialise_all_swept(
-                dxdt=["dx = -k*x + y", "y = 2*x"],
-                states={"x": 1.0},
-                observables=["y"],
-                parameters={"k": 0.5},
+            dxdt=["dx = -k*x + y", "y = 2*x"],
+            states={"x": 1.0},
+            observables=["y"],
+            parameters={"k": 0.5},
             )
         )
-        assert list(index_map.state_names) == ["x"]
-        assert list(index_map.observable_names) == ["y"]
+        assert list(layout.state_names) == ["x"]
+        assert list(layout.observable_names) == ["y"]
         assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         x, k = ir.sym("x"), ir.sym("k")
@@ -65,12 +67,12 @@ class TestParseDaeInput:
     def test_nested_derivative_string(self):
         index_map, _syms, _funcs, parsed, _h = (
             parse_system(
-                dxdt=["d(d(x, t), t) = -x"],
-                states={"x": 1.0},
+            dxdt=["d(d(x, t), t) = -x"],
+            states={"x": 1.0},
             ).specialise()
         )
         # Two differential states, no torn residuals.
-        assert len(index_map.state_names) == 2
+        assert len(layout.state_names) == 2
         assert parsed.mass_matrix is None
 
     def test_sympy_higher_order_derivative(self):
@@ -78,38 +80,38 @@ class TestParseDaeInput:
         t = sp.Symbol("t", real=True)
         index_map, _syms, _funcs, parsed, _h = (
             parse_system(
-                dxdt=[(sp.Derivative(x, t, 2), -x)],
-                states={"x": 1.0},
+            dxdt=[(sp.Derivative(x, t, 2), -x)],
+            states={"x": 1.0},
             ).specialise()
         )
         # The second-order derivative introduces a second
         # differential state and no torn residuals.
-        assert len(index_map.state_names) == 2
+        assert len(layout.state_names) == 2
         assert parsed.mass_matrix is None
 
     def test_torn_system_mass_and_defaults_warning(self):
         with pytest.warns(EquationWarning):
             index_map, _s, _f, parsed, _h = (
                 specialise_all_swept(
-                    dxdt="""
-                    dx = vx
-                    dy = vy
-                    dvx = T*x
-                    dvy = T*y - g
-                    0 = x**2 + y**2 - L**2
+                dxdt="""
+                dx = vx
+                dy = vy
+                dvx = T*x
+                dvy = T*y - g
+                0 = x**2 + y**2 - L**2
                     """,
-                    states={
-                        "x": 1.0,
-                        "y": 0.0,
-                        "vx": 0.0,
-                        "vy": 0.0,
-                        "T": 0.0,
-                    },
-                    parameters={"g": 9.81, "L": 1.0},
-                    state_priority={"y": 10, "vy": 10},
+                states={
+                    "x": 1.0,
+                    "y": 0.0,
+                    "vx": 0.0,
+                    "vy": 0.0,
+                    "T": 0.0,
+                },
+                parameters={"g": 9.81, "L": 1.0},
+                state_priority={"y": 10, "vy": 10},
                 )
             )
-        assert len(index_map.state_names) == 5
+        assert len(layout.state_names) == 5
         mass = np.asarray(parsed.mass_matrix)
         # Three torn residual rows leave three zero diagonals.
         assert sum(mass[i, i] == 0.0 for i in range(5)) == 3
@@ -150,7 +152,7 @@ class TestParseDaeInput:
             states={"x": 1.0, "y": 1.0, "z1": 0.5, "z2": 0.5},
             observables=observables,
         ).specialise()
-        names = list(index_map.state_names)
+        names = list(layout.state_names)
         mass = np.asarray(parsed.mass_matrix)
         algebraic = [n for i, n in enumerate(names) if mass[i, i] == 0]
         assert sorted(algebraic) == ["z1", "z2"]
@@ -180,7 +182,7 @@ class TestParseDaeInput:
             states={"x": 1.0, "z": 0.0},
         ).specialise()
         # z solves through: one state, no mass, z an auxiliary.
-        assert list(index_map.state_names) == ["x"]
+        assert list(layout.state_names) == ["x"]
         assert parsed.mass_matrix is None
         x = ir.sym("x")
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
@@ -239,7 +241,7 @@ class TestSymbolicODEIntegration:
             precision=np.float64,
             name="dae_test_alias",
         )
-        assert ode.compile_settings.mass is None
+        assert ode.mass is None
         state = np.array([2.0], dtype=np.float64)
         params = np.array([0.5], dtype=np.float64)
         drivers = np.zeros(1, dtype=np.float64)
@@ -255,11 +257,11 @@ class TestSymbolicODEIntegration:
         assert obs[0] == pytest.approx(4.0, abs=1e-13)
 
     def test_torn_dae_mass_matrix_reaches_system(self, torn_dae_system):
-        mass = torn_dae_system.compile_settings.mass
+        mass = torn_dae_system.mass
         assert mass is not None
         assert mass.shape == (2, 2)
         assert mass[0, 0] == 1.0 and mass[1, 1] == 0.0
-        names = list(torn_dae_system.indices.state_names)
+        names = list(torn_dae_system.layout.state_names)
         assert names == ["x", "z"]
         state = np.array([2.0, 1.0], dtype=np.float64)
         params = np.zeros(1, dtype=np.float64)
@@ -335,11 +337,11 @@ class TestScaledDerivativeLhs:
         # Cs = 0 reduces identically to the explicit 0 = form.
         zero = system
         scaled = ring_modulator_scaled_system
-        assert list(scaled.indices.state_names) == list(
-            zero.indices.state_names
+        assert list(scaled.layout.state_names) == list(
+            zero.layout.state_names
         )
-        assert list(scaled.indices.observable_names) == list(
-            zero.indices.observable_names
+        assert list(scaled.layout.observable_names) == list(
+            zero.layout.observable_names
         )
         assert np.array_equal(scaled.mass, zero.mass)
         assert (
@@ -359,7 +361,7 @@ class TestScaledDerivativeLhs:
             states={"y": 1.0},
             observables=["q"],
         ).specialise()
-        assert list(index_map.state_names) == ["y"]
+        assert list(layout.state_names) == ["y"]
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         y = sp.Symbol("y", real=True)
         dfoo = sp.Symbol("dfoo", real=True)
@@ -378,7 +380,7 @@ class TestDerivativeBlockPolicy:
             name="policy_pivot",
         )
         sweep(system, ["p"])
-        assert list(system.indices.states.symbol_map) == ["x", "y"]
+        assert list(system.layout.state_names) == ["x", "y"]
         assert system.mass.tolist() == [[1.0, 0.0], [0.0, 0.0]]
         p = sp.Symbol("p", real=True)
         for _, rhs in system.equations.ordered:
@@ -410,10 +412,10 @@ class TestDerivativeBlockPolicy:
             precision=np.float32,
             name="transamp_split_c1",
         )
-        assert list(split.indices.states.symbol_map) == list(
-            numeric.indices.states.symbol_map
+        assert list(split.layout.state_names) == list(
+            numeric.layout.state_names
         )
-        assert len(split.indices.states.symbol_map) == 8
+        assert len(split.layout.state_names) == 8
 
 
 
@@ -429,8 +431,8 @@ def real_symbols(names):
     return sp.symbols(names, real=True)
 
 
-def algebraic_states(index_map, parsed):
-    names = list(index_map.state_names)
+def algebraic_states(layout, parsed):
+    names = list(layout.state_names)
     if parsed.mass_matrix is None:
         return []
     return [
@@ -440,16 +442,16 @@ def algebraic_states(index_map, parsed):
     ]
 
 
-def residual(index_map, parsed, name):
+def residual(layout, parsed, name):
     # A zero mass row holds its residual in the d<name> slot.
-    assert name in algebraic_states(index_map, parsed)
+    assert name in algebraic_states(layout, parsed)
     return solved(parsed)[f"d{name}"]
 
 
-def substituted(index_map, parsed, expr):
+def substituted(layout, parsed, expr):
     """``expr`` with every solved non-state assignment substituted."""
 
-    states = set(index_map.state_names)
+    states = set(list(layout.state_names))
     observed = {
         sp.Symbol(name, real=True): rhs
         for name, rhs in solved(parsed).items()
@@ -460,8 +462,8 @@ def substituted(index_map, parsed, expr):
     return sp.simplify(expr)
 
 
-def holds(index_map, parsed, expr):
-    return substituted(index_map, parsed, expr) == 0
+def holds(layout, parsed, expr):
+    return substituted(layout, parsed, expr) == 0
 
 
 class TestStructuralInputPaths:
@@ -514,8 +516,8 @@ class TestStructuralInputPaths:
         index_map, _s, _f, parsed, _h = parse_system(
             dxdt=dxdt, states=states
         ).specialise()
-        assert algebraic_states(index_map, parsed) == ["y"]
-        assert equivalent(residual(index_map, parsed, "y"), x * y - 1)
+        assert algebraic_states(layout, parsed) == ["y"]
+        assert equivalent(residual(layout, parsed, "y"), x * y - 1)
 
     def test_integer_constraint_reduced_twice(self):
         # The constraint is differentiated twice; the selected states
@@ -530,11 +532,11 @@ class TestStructuralInputPaths:
             states={"x1": 0.0, "x2": 0.0, "lam": 0.0},
         ).specialise()
         names = set(index_map.state_names)
-        assert len(names) - len(algebraic_states(index_map, parsed)) == 2
-        assert holds(index_map, parsed, x1 + 2 * x2 - sp.sin(t))
+        assert len(names) - len(algebraic_states(layout, parsed)) == 2
+        assert holds(layout, parsed, x1 + 2 * x2 - sp.sin(t))
         x1_t, x2_t = real_symbols("x1_t x2_t")
         velocity = x1_t + 2 * x2_t - sp.cos(t)
-        assert holds(index_map, parsed, velocity)
+        assert holds(layout, parsed, velocity)
 
     def test_alias_exposed_by_integer_elimination(self):
         a, b, c, x = real_symbols("a b c x")
@@ -549,7 +551,7 @@ class TestStructuralInputPaths:
         ).specialise()
         assert parsed.mass_matrix is None
         for constraint in (a + b + c, a + b + 2 * c, b - sp.sin(x)):
-            assert holds(index_map, parsed, constraint)
+            assert holds(layout, parsed, constraint)
 
     def test_alias_exposed_derivative_constraint_rejected(self):
         # Eliminating c leaves x + y = 0 alongside both derivative
@@ -610,8 +612,8 @@ class TestStructuralInputPaths:
         ).specialise()
         survivors = {"a", "b", "c"} & set(index_map.state_names)
         assert len(survivors) == 1
-        assert holds(index_map, parsed, a - b)
-        assert holds(index_map, parsed, b - c)
+        assert holds(layout, parsed, a - b)
+        assert holds(layout, parsed, b - c)
 
     def test_product_of_two_unknowns_is_not_an_alias(self):
         a, b, x = real_symbols("a b x")
@@ -619,10 +621,10 @@ class TestStructuralInputPaths:
             dxdt=["dx = -x + a + b", "0 = a*b", "0 = a - sin(x)"],
             states={"x": 1.0, "a": 0.0, "b": 0.0},
         ).specialise()
-        assert algebraic_states(index_map, parsed) == ["b"]
+        assert algebraic_states(layout, parsed) == ["b"]
         assert equivalent(
             substituted(
-                index_map, parsed, residual(index_map, parsed, "b")
+                layout, parsed, residual(layout, parsed, "b")
             ),
             sp.sin(x) * b,
         )
@@ -633,8 +635,8 @@ class TestStructuralInputPaths:
             dxdt=["dx = -x + z", "x = sin(z)"],
             states={"x": 0.5, "z": 0.5},
         ).specialise()
-        (name,) = algebraic_states(index_map, parsed)
-        row = residual(index_map, parsed, name)
+        (name,) = algebraic_states(layout, parsed)
+        row = residual(layout, parsed, name)
         assert equivalent(row, sp.sin(z) - x) or equivalent(
             row, x - sp.sin(z)
         )
@@ -647,7 +649,7 @@ class TestStructuralInputPaths:
             simplify_options={"fully_determined": False},
         ).specialise()
         assert parsed.mass_matrix is None
-        assert holds(index_map, parsed, y - sp.sin(x))
+        assert holds(layout, parsed, y - sp.sin(x))
 
     def test_repeated_alias_between_irreducibles_merges(self):
         index_map, _s, _f, _p, _h = parse_system(
@@ -669,7 +671,7 @@ class TestStructuralInputPaths:
             dxdt=["dx = -x + x_t", "0 = x_t - sin(x)"],
             states={"x": 1.0, "x_t": 0.0},
         ).specialise()
-        assert list(index_map.state_names) == ["x"]
+        assert list(layout.state_names) == ["x"]
         eqs = solved(parsed)
         assert equivalent(eqs["dx"], x_t - x)
         assert equivalent(eqs["x_t"], sp.sin(x))
@@ -691,7 +693,7 @@ class TestStructuralInputPaths:
             simplify_options={"consistency_check": False},
         ).specialise()
         assert parsed.mass_matrix is None
-        assert holds(index_map, parsed, y - sp.sin(x))
+        assert holds(layout, parsed, y - sp.sin(x))
 
     def test_alias_substitution_nonlinear_equation_is_residual(self):
         # b = -a makes the last equation nonlinear in a, its only
@@ -706,12 +708,12 @@ class TestStructuralInputPaths:
             ],
             states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
         ).specialise()
-        assert algebraic_states(index_map, parsed) == ["a"]
-        spare = residual(index_map, parsed, "a")
+        assert algebraic_states(layout, parsed) == ["a"]
+        spare = residual(layout, parsed, "a")
         target = a + sp.exp(-a) - sp.sin(x)
         assert equivalent(spare, target) or equivalent(spare, -target)
-        assert holds(index_map, parsed, a + b)
-        assert holds(index_map, parsed, c)
+        assert holds(layout, parsed, a + b)
+        assert holds(layout, parsed, c)
 
     def test_inconsistent_constraints_warn_singular(self):
         with pytest.warns(UserWarning) as record:
@@ -780,7 +782,7 @@ class TestStructuralInputPaths:
             z2 + z3 + z0,
             2 * z0 + 3 * z1 + z2 - sp.sin(t),
         )
-        satisfied = [holds(index_map, parsed, c) for c in constraints]
+        satisfied = [holds(layout, parsed, c) for c in constraints]
         assert satisfied.count(True) == 2
 
 
@@ -902,8 +904,8 @@ class TestUserFunctionDerivatives:
         ):
             generate_analytical_jvp(
                 parsed,
-                input_order=index_map.states.index_map,
-                output_order=index_map.dxdt.index_map,
+                input_order=buffer_maps(layout).state_order,
+                output_order=buffer_maps(layout).dxdt_order,
             )
 
     def test_jacobian_after_a_failed_jvp_names_the_order(self):
@@ -918,8 +920,8 @@ class TestUserFunctionDerivatives:
             user_function_derivatives={"growth": [growth_d1, growth_d2]},
         ).specialise()
         orders = dict(
-            input_order=index_map.states.index_map,
-            output_order=index_map.dxdt.index_map,
+            input_order=buffer_maps(layout).state_order,
+            output_order=buffer_maps(layout).dxdt_order,
         )
         with pytest.raises(ValueError, match="up to order 3"):
             generate_analytical_jvp(parsed, **orders)
@@ -939,7 +941,7 @@ class TestUserFunctionDerivatives:
                 r"time derivative.*\[<order-1 derivative>\]"
             ),
         ):
-            generate_time_derivative_lines(parsed, index_map)
+            generate_time_derivative_lines(parsed, layout)
 
 
 USER_DERIVATIVE_SYSTEM = {"system_type": "user_derivative"}
@@ -956,7 +958,7 @@ def test_user_derivative_residuals_vanish_on_the_solution(
     time = x + x**3 / 3.0
     x_t = 1.0 / (1.0 + x * x)
     solution = {"x": x, "x_t": x_t, "x_tt": -2.0 * x * x_t**3}
-    names = list(system.indices.state_names)
+    names = list(system.layout.state_names)
     state = np.array([solution[name] for name in names], dtype=precision)
     params = np.array([1.0], dtype=precision)
     drivers = np.zeros(1, dtype=precision)
@@ -987,7 +989,7 @@ def test_user_derivative_jacobian_calls_the_third_helper(
         "x_tt": {"x": x_tt * g2 + x_t**2 * g3, "x_t": 2.0 * x_t * g2,
                  "x_tt": g1},
     }
-    names = list(system.indices.state_names)
+    names = list(system.layout.state_names)
     jacobian = np.array(
         [[entries[row].get(column, 0.0) for column in names]
          for row in names]
@@ -1029,7 +1031,7 @@ def _driver_derivative(equations, order):
 def _reduced_dz(system):
     """Return the reduced dz with observables substituted."""
     return substituted(
-        system.indices, system.equations, solved(system.equations)["dz"]
+        system.layout, system.equations, solved(system.equations)["dz"]
     )
 
 
@@ -1055,7 +1057,7 @@ def test_read_driver_derivatives_follow_the_drive_by_order(system):
     assert system.driver_derivatives == ((0, 1), (0, 2))
     assert system.sizes.drivers == 3
     assert system.sizes.driver_derivatives == 2
-    sysir = system_ir(system.equations, system.indices)
+    sysir = system_ir(system.equations, system.layout)
     entries = {
         order: sysir.arrayrefs[symbol.name]
         for symbol, (_, order) in system.equations.driver_derivatives.items()

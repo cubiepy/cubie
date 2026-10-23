@@ -25,6 +25,15 @@ def test_bare_parameter_names_are_swept():
     assert layout.parameters.fixed == {}
 
 
+def test_num_drivers_counts_the_derivatives():
+    """The drivers buffer holds the drivers and their derivatives."""
+    layout = SystemLayout(
+        drivers=("u", "w"), driver_derivatives=((0, 1), (1, 2))
+    )
+    assert layout.num_drivers == 4
+    assert layout.driver_names == ("u", "w")
+
+
 def test_layout_records_the_compiled_parameters():
     """The rows of the parameters array are the swept parameters."""
     declared = VariableSet.of(Parameter, {"a": 1.0, "b": 2.0})
@@ -33,12 +42,3 @@ def test_layout_records_the_compiled_parameters():
     )
     assert layout.swept_names == ("b",)
     assert layout.parameters.fixed == {"a": 1.0}
-
-
-def test_num_drivers_counts_the_derivatives():
-    """The drivers buffer holds the drivers and their derivatives."""
-    layout = SystemLayout(
-        drivers=("u", "w"), driver_derivatives=((0, 1), (1, 2))
-    )
-    assert layout.num_drivers == 4
-    assert layout.driver_names == ("u", "w")

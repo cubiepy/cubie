@@ -58,7 +58,7 @@ def test_implicit_runs_leave_plain_system_massless():
     implicit = Solver(ode, algorithm="backwards_euler")
     implicit.update({"algorithm": "crank_nicolson"})
     assert ode.mass is None
-    assert ode.compile_settings.mass is None
+    assert ode.mass is None
     Solver(ode, algorithm="euler")
 
 

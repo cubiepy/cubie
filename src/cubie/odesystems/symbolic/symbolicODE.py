@@ -44,7 +44,6 @@ from typing import (
     Callable,
     Iterable,
     Optional,
-    Tuple,
     Union,
 )
 
@@ -64,7 +63,7 @@ from cubie.odesystems.symbolic.parsing import (
     parse_system,
 )
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
-from cubie.odesystems.symbolic.sym_utils import hash_system_definition
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.SystemValues import SystemValues
 from cubie.odesystems.solver_helpers import (
@@ -288,7 +287,7 @@ class SymbolicODE(BaseODE):
         self.name = name
 
         layout = specialised.layout
-        self.indices = all_indexed_bases
+        self.layout = layout
         self.equations = specialised.equations
         self.fn_hash = specialised.fn_hash
         self.user_functions = specialised.functions
@@ -296,13 +295,13 @@ class SymbolicODE(BaseODE):
         super().__init__(
             initial_values=_initial_values(layout, parsed_system.states),
             parameters=dict(sorted(parsed_system.parameters.items())),
-            observables=all_indexed_bases.observable_names,
+            observables=layout.observable_names,
             precision=precision,
             num_drivers=layout.num_drivers,
             driver_derivatives=layout.driver_derivatives,
             name=name,
             operation_ordering=operation_ordering,
-            swept_parameters=all_indexed_bases.parameter_names,
+            swept_parameters=layout.swept_names,
         )
         self._seed_derived_mass(specialised.mass)
         self.gen_file = ODEFile(
@@ -466,7 +465,7 @@ class SymbolicODE(BaseODE):
     @property
     def state_units(self) -> dict[str, str]:
         """Return units for state variables."""
-        return self.indices.states.units
+        return self.layout.states.units
 
     @property
     def parameter_units(self) -> dict[str, str]:
@@ -476,12 +475,12 @@ class SymbolicODE(BaseODE):
     @property
     def observable_units(self) -> dict[str, str]:
         """Return units for observables."""
-        return self.indices.observables.units
+        return self.layout.observables.units
 
     @property
     def driver_units(self) -> dict[str, str]:
         """Return units for drivers."""
-        return self.indices.drivers.units
+        return self.layout.drivers.units
 
     def _get_jvp_exprs(self) -> JVPEquations:
         """Return Jacobian-vector assignments for the current system.
@@ -526,10 +525,10 @@ class SymbolicODE(BaseODE):
         # The string parser renames user functions (trailing
         # underscore), and generated source prints the renamed symbol,
         # so each device callable is injected under its alias too.
-        for sym_name, orig_name in self.equations.function_aliases.items():
-            func = functions.get(orig_name)
+        for alias, original in self.equations.function_aliases.items():
+            func = functions.get(original)
             if func is not None and is_devfunc(func):
-                injections[sym_name] = func
+                injections[alias] = func
         return injections
 
     def build(self) -> ODECache:
@@ -553,7 +552,7 @@ class SymbolicODE(BaseODE):
         if not self.gen_file.function_is_cached("dxdt_factory"):
             dxdt_code = generate_dxdt_fac_code(
                 self.equations,
-                self.indices,
+                self.layout,
                 "dxdt_factory",
                 operation_ordering=(
                     self.compile_settings.operation_ordering
@@ -572,7 +571,7 @@ class SymbolicODE(BaseODE):
         obs_code = None
         if not self.gen_file.function_is_cached("observables_factory"):
             obs_code = generate_observables_fac_code(
-                self.equations, self.indices,
+                self.equations, self.layout,
                 func_name="observables_factory",
                 operation_ordering=(
                     self.compile_settings.operation_ordering
@@ -640,12 +639,9 @@ class SymbolicODE(BaseODE):
         specialised = self._parsed_system.specialise(swept, fixed)
         layout = specialised.layout
         if "swept_parameters" in updates:
-            updates = {
-                **updates,
-                "swept_parameters": index_map.parameter_names,
-            }
+            updates = {**updates, "swept_parameters": layout.swept_names}
         derived = {}
-        if index_map.state_names != settings.initial_states.names:
+        if layout.state_names != settings.initial_states.names:
             derived["initial_states"] = SystemValues(
                 _initial_values(
                     layout,
@@ -655,13 +651,13 @@ class SymbolicODE(BaseODE):
                 self.precision,
                 name="States",
             )
-        if index_map.observable_names != settings.observables.names:
+        if layout.observable_names != settings.observables.names:
             derived["observables"] = SystemValues(
-                index_map.observable_names,
+                layout.observable_names,
                 self.precision,
                 name="Observables",
             )
-        mass = parsed.mass_matrix
+        mass = specialised.mass
         if mass is not None:
             mass = asarray(mass, dtype=self.precision)
         derived["mass"] = mass
@@ -671,7 +667,7 @@ class SymbolicODE(BaseODE):
             {**updates, **derived}, silent=True
         )
 
-        self.indices = index_map
+        self.layout = layout
         self.equations = specialised.equations
         self.user_functions = specialised.functions
         self.fn_hash = specialised.fn_hash
@@ -721,7 +717,7 @@ class SymbolicODE(BaseODE):
             Each dict contains 'name', 'value', and 'unit' keys.
         """
         result = []
-        for name in self.indices.state_names:
+        for name in self.layout.state_names:
             result.append({
                 'name': name,
                 'value': self.initial_values.values_dict.get(name, 0.0),

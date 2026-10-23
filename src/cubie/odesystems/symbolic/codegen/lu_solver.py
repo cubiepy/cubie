@@ -65,9 +65,10 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie.odesystems.symbolic.parsing import (
-    IndexedBases,
     ParsedEquations,
 )
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.codegen._matrix_utils import (
     block_eigenstructure,
     mass_diagonal_flags,
@@ -1375,7 +1376,7 @@ def _transformed_solve_source(
 
 def generate_lu_solve_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     variant: HelperVariant = HelperVariant.PLAIN,
     M: Optional[Union[Iterable, object]] = None,
     stage_coefficients: Optional[
@@ -1405,7 +1406,7 @@ def generate_lu_solve_code(
     ----------
     equations
         Parsed ODE equations.
-    index_map
+    layout
         Symbol-to-array mapping for states, parameters, etc.
     variant
         Helper variant selecting the evaluation-point and auxiliary
@@ -1437,7 +1438,7 @@ def generate_lu_solve_code(
     event = f"codegen_lu_solve_{variant.value}"
     default_timelogger.start_event(event)
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
     maps = buffer_maps(layout)
@@ -1500,7 +1501,7 @@ def generate_lu_solve_code(
     elif variant.cached:
         jvp_equations = _resolve_jvp(
             equations,
-            index_map,
+            layout,
             cse,
             jvp_equations,
             operation_ordering,
@@ -1553,7 +1554,7 @@ def generate_lu_solve_code(
 
 def generate_init_lu_solve_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     M: Optional[Union[Iterable, object]] = None,
     func_name: str = "init_lu_solve_factory",
     cse: bool = True,
@@ -1569,7 +1570,7 @@ def generate_init_lu_solve_code(
     ----------
     equations
         Parsed ODE equations.
-    index_map
+    layout
         Symbol-to-array mapping for states, parameters, etc.
     M
         0/1 diagonal mass matrix; identity when omitted.
@@ -1587,7 +1588,7 @@ def generate_init_lu_solve_code(
     """
     default_timelogger.start_event("codegen_init_lu_solve")
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
     maps = buffer_maps(layout)
@@ -1635,7 +1636,7 @@ def generate_init_lu_solve_code(
 
 def generate_lu_prepare_blocks_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     variant: HelperVariant = HelperVariant.PREFACTORED,
     M: Optional[Union[Iterable, object]] = None,
     stage_coefficients: Optional[
@@ -1668,7 +1669,7 @@ def generate_lu_prepare_blocks_code(
     event = f"codegen_lu_prepare_blocks_{variant.value}"
     default_timelogger.start_event(event)
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
     maps = buffer_maps(layout)
@@ -1933,7 +1934,7 @@ def generate_lu_prepare_blocks_code(
 
 def generate_lu_smoothing_solve_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     M: Optional[Union[Iterable, object]] = None,
     stage_coefficients: Optional[
         Sequence[Sequence[Union[float, object]]]
@@ -1955,7 +1956,7 @@ def generate_lu_smoothing_solve_code(
     """
     default_timelogger.start_event("codegen_lu_smoothing_solve")
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
     maps = buffer_maps(layout)

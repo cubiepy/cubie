@@ -7,7 +7,9 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 )
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine import to_sympy
-from cubie.odesystems.symbolic.parsing import IndexedBases, ParsedEquations
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.parsing import ParsedEquations
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
 def _jac_matrix(jac):
@@ -53,11 +55,11 @@ def test_generate_jacobian_with_auxiliary():
         (dx, aux - x),
         (dy, -aux + y),
     ]
-    parsed = ParsedEquations.from_equations(equations, index_map)
+    parsed = ParsedEquations.from_equations(equations, layout)
     jac = generate_jacobian(
         parsed,
-        index_map.states.index_map,
-        index_map.dxdt.index_map,
+        buffer_maps(layout).state_order,
+        buffer_maps(layout).dxdt_order,
     )
     expected = sp.Matrix([[a - 1, b], [-a, -b + 1]])
     assert _jac_matrix(jac).equals(expected)
@@ -78,11 +80,11 @@ def test_generate_jacobian_coupled_nonlinear():
         (dx0, sp.sin(x0) + x0 * x1 ** 2),
         (dx1, x0 ** 2 + sp.exp(x1)),
     ]
-    parsed = ParsedEquations.from_equations(equations, index_map)
+    parsed = ParsedEquations.from_equations(equations, layout)
     jac = generate_jacobian(
         parsed,
-        index_map.states.index_map,
-        index_map.dxdt.index_map,
+        buffer_maps(layout).state_order,
+        buffer_maps(layout).dxdt_order,
     )
     expected = sp.Matrix(
         [
@@ -105,21 +107,21 @@ def test_jacobian_caching():
     x, y = list(index_map.states.ref_map.keys())
     dx = next(iter(index_map.dxdt.ref_map.keys()))
     equations = [(dx, x + y)]
-    parsed = ParsedEquations.from_equations(equations, index_map)
+    parsed = ParsedEquations.from_equations(equations, layout)
     _clear_cache()
     generate_jacobian(
-        parsed, index_map.states.index_map, index_map.dxdt.index_map
+        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
     )
     generate_analytical_jvp(
-        parsed, index_map.states.index_map, index_map.dxdt.index_map
+        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
     )
     counts = _get_cache_counts()
     assert counts == {"jac": 1, "jvp": 1}
     generate_jacobian(
-        parsed, index_map.states.index_map, index_map.dxdt.index_map
+        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
     )
     generate_analytical_jvp(
-        parsed, index_map.states.index_map, index_map.dxdt.index_map
+        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
     )
     counts2 = _get_cache_counts()
     assert counts2 == counts
@@ -135,8 +137,8 @@ def test_jvp_graph_defines_every_jacobian_entry():
         drivers=[],
     )
     x, y = list(index_map.states.ref_map.keys())
-    a = index_map.parameters.symbol_map["a"]
-    obs = index_map.observables.symbol_map["obs1"]
+    a = sp.Symbol("a", real=True)
+    obs = sp.Symbol("obs1", real=True)
     dx, dy = list(index_map.dxdt.ref_map.keys())
     aux = sp.Symbol("aux", real=True)
     equations = [
@@ -145,12 +147,12 @@ def test_jvp_graph_defines_every_jacobian_entry():
         (dx, obs + x ** 2),
         (dy, obs * y),
     ]
-    parsed = ParsedEquations.from_equations(equations, index_map)
+    parsed = ParsedEquations.from_equations(equations, layout)
     jvp = generate_analytical_jvp(
         parsed,
-        index_map.states.index_map,
-        index_map.dxdt.index_map,
-        observables=index_map.observable_symbols,
+        buffer_maps(layout).state_order,
+        buffer_maps(layout).dxdt_order,
+        observables=buffer_maps(layout).observable_symbols,
     )
     entries = jvp.jacobian_entry_symbols
     assert len(entries) == 4
@@ -176,11 +178,11 @@ def test_structurally_zero_jacobian_entry_is_zero():
         (dx, a * y),
         (dy, a * x),
     ]
-    parsed = ParsedEquations.from_equations(equations, index_map)
+    parsed = ParsedEquations.from_equations(equations, layout)
     jvp = generate_analytical_jvp(
         parsed,
-        index_map.states.index_map,
-        index_map.dxdt.index_map,
+        buffer_maps(layout).state_order,
+        buffer_maps(layout).dxdt_order,
     )
     assert jvp.jacobian_entry(0, 0) is ir.ZERO
     assert jvp.jacobian_entry(1, 1) is ir.ZERO

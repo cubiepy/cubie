@@ -12,16 +12,18 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from warnings import warn
 
 import sympy as sp
+from attrs import field, frozen
+from numpy import array as np_array, float64 as np_float64
 
+from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.parsing.normalise import (
     NormalisedSystem,
 )
 from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     ParsedEquations,
-    TIME_SYMBOL,
     check_derivative_orders,
     derivative_helpers,
 )
@@ -39,6 +41,7 @@ from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
+from cubie.odesystems.variables import ParameterSet, Variable, VariableSet
 from cubie._utils import devfunc_returns_nonfloat
 
 
@@ -105,9 +108,9 @@ def _driver_derivatives(
     )
 
 
-def _finalise_symbols_and_products(
+def _finalise_products(
     equation_map,
-    index_map,
+    layout,
     user_functions,
     user_function_derivatives,
     rename,
@@ -119,11 +122,11 @@ def _finalise_symbols_and_products(
 
     functions = dict(user_functions or {})
     functions.update(
-            {
-                fn.__name__: fn
-                for fn in derivative_helpers(user_function_derivatives)
-            }
-        )
+        {
+            fn.__name__: fn
+            for fn in derivative_helpers(user_function_derivatives)
+        }
+    )
 
     function_aliases = {
         name: name for name in (user_functions or {})
@@ -143,7 +146,7 @@ def _finalise_symbols_and_products(
             nonfloat_functions.add(func.__name__)
     parsed_equations = ParsedEquations.from_equations(
         equation_map,
-        index_map,
+        layout,
         derivative_names=derivative_names,
         function_aliases=function_aliases,
         nonfloat_functions=nonfloat_functions,
@@ -158,11 +161,11 @@ def _finalise_symbols_and_products(
     )
     fn_hash = hash_system_definition(
         parsed_equations,
-        state_labels=index_map.state_names,
-        dxdt_labels=index_map.dxdt_names,
-        parameter_labels=index_map.parameter_names,
-        driver_labels=index_map.driver_names,
-        observable_labels=index_map.observables.ref_map.keys(),
+        state_labels=layout.state_names,
+        dxdt_labels=layout.dxdt_names,
+        parameter_labels=layout.swept_names,
+        driver_labels=layout.driver_names,
+        observable_labels=layout.observable_names,
         derivative_names=parsed_equations.derivative_names,
         function_aliases=parsed_equations.function_aliases,
         nonfloat_functions=parsed_equations.nonfloat_functions,
@@ -273,10 +276,10 @@ def assemble_simplified(
                 EquationWarning,
             )
 
-    final_state_names = set(final_state_values)
+    final_state_set = set(final_state_names)
     final_observables = []
     for name in observables:
-        if name in final_state_names:
+        if name in final_state_set:
             warn(
                 f"Declared observable {name} was selected as a "
                 "solver state; its trajectory is available as a "
@@ -359,15 +362,15 @@ def assemble_simplified(
             for i, sym in enumerate(final_states)
         )
 
-    functions, parsed_equations, fn_hash = _finalise_symbols_and_products(
-            equation_map,
-            index_map,
-            user_functions,
-            user_function_derivatives,
-            normalised.rename,
-            derivative_names=normalised.derivative_names,
-            mass_matrix=mass,
-            driver_derivatives=driver_derivatives,
+    functions, parsed_equations, fn_hash = _finalise_products(
+        equation_map,
+        layout,
+        user_functions,
+        user_function_derivatives,
+        normalised.rename,
+        derivative_names=normalised.derivative_names,
+        mass_matrix=mass,
+        driver_derivatives=driver_derivatives,
     )
     # Inlined non-device callables keep their entries.
     functions = {**functions, **(normalised.funcs or {})}

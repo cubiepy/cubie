@@ -20,9 +20,10 @@ import sympy as sp
 from sympy.core.function import AppliedUndef
 from sympy.parsing.sympy_parser import T
 
-from ..engine import expr as ir_expr
-from ..indexedbasemaps import IndexedBases
+from cubie.odesystems.symbolic.engine import expr as ir_expr
 from cubie._utils import is_devfunc
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 __all__ = [
     "EquationWarning",

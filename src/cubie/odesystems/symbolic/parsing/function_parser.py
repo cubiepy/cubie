@@ -13,21 +13,20 @@ Published Functions
 """
 
 from collections import OrderedDict
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import ast
 import warnings
 
 import sympy as sp
 
-from ..indexedbasemaps import IndexedBases
-from .function_inspector import (
+from cubie.odesystems.symbolic.parsing.function_inspector import (
     AstToSympyConverter,
     FunctionInspection,
     _resolve_func_name,
     inspect_ode_function,
 )
-from .parse_primitives import (
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     KNOWN_FUNCTIONS,
     TIME_SYMBOL,
@@ -447,7 +446,7 @@ def _build_symbol_map(
         if ptype not in ("int", "string", "attribute"):
             continue
         target_sym = None
-            if ptype == "int":
+        if ptype == "int":
             if base == driver_base:
                 positional, positional_kind = drivers, "drivers"
             elif driver_base is None:

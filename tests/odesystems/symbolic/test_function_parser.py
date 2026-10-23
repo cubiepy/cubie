@@ -11,10 +11,6 @@ from cubie.odesystems.symbolic.codegen.linear_operators import (
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.expr import _children
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
-from cubie.odesystems.symbolic.indexedbasemaps import (
-    IndexedBaseMap,
-    IndexedBases,
-)
 from cubie.odesystems.symbolic.parsing.function_inspector import (
     AstToSympyConverter,
 )
@@ -29,7 +25,6 @@ from cubie.odesystems.symbolic.parsing import (
     parse_system,
 )
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
-from tests._utils import specialise_all_swept
 
 
 def _walk(node):
@@ -59,7 +54,7 @@ class TestParseInput:
             states={"x": 1.0},
         ).specialise()
         assert len(eqs.state_derivatives) == 1
-        assert len(index_map.state_names) == 1
+        assert len(layout.state_names) == 1
 
     def test_two_state_with_params(self):
         """Damped oscillator with parameter k."""
@@ -493,7 +488,7 @@ class TestDriverAccess:
         for _, rhs in eqs.state_derivatives:
             rhs_symbols |= ir.free_atoms(rhs)
         assert ir.sym(driver_sym.name) in rhs_symbols
-        assert "forcing" not in index_map.parameter_names
+        assert "forcing" not in list(layout.swept_names)
 
     def test_driver_via_dedicated_fourth_argument(self):
         """A dedicated d argument reaches drivers the same way."""
@@ -789,7 +784,7 @@ class TestUserFunctions:
             user_function_derivatives={"myfunc": myfunc_grad},
         ).specialise()
         code = generate_linear_operator_code(
-            equations=eqs, index_map=index_map
+            equations=eqs, layout=layout
         )
         assert "myfunc_grad(" in code
 
@@ -875,7 +870,7 @@ class TestScalarArguments:
         index_map, _, _, _, _ = parse_system(
             dxdt=f, states={"x": 1.0}
         ).specialise()
-        assert "p" not in index_map.parameter_names
+        assert "p" not in list(layout.swept_names)
 
     def test_scalar_arg_matching_state_raises(self):
         """A scalar arg shadowing a state points at the state arg."""
@@ -925,9 +920,7 @@ class TestParseFunctionInputDirect:
         def f(t, y):
             return [-y[0]]
 
-        equation_map, funcs, new_params = parse_function_input(
-            f, _single_state_index_map(), ["x"]
-        )
+        equation_map, funcs, new_params = parse_function_input(f, ["x"])
         assert len(equation_map) == 1
         assert funcs == {}
         assert new_params == []
@@ -939,7 +932,7 @@ class TestParseFunctionInputDirect:
             return [-y[0]]
 
         equation_map, _, _ = parse_function_input(
-            f, _single_state_index_map(), ["x"], observables=["flux"]
+            f, ["x"], observables=["flux"]
         )
         flux_sym = sp.Symbol("flux", real=True)
         x = sp.Symbol("x", real=True)
@@ -968,7 +961,7 @@ class TestParseFunctionInputDirect:
         def f(t, y):
             return {"x": -y[0]}
 
-        equation_map, _, _ = parse_function_input(f, index_map, ["x"])
+        equation_map, _, _ = parse_function_input(f, ["x"])
         dx_sym = sp.Symbol("dx", real=True)
         lhs, rhs = equation_map[-1]
         assert lhs == dx_sym

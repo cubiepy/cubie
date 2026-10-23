@@ -44,7 +44,7 @@ See Also
 --------
 :mod:`cubie.odesystems.symbolic.codegen`
     Code generation modules that consume these helpers.
-:class:`~cubie.odesystems.symbolic.indexedbasemaps.IndexedBases`
+:class:`~cubie.odesystems.layout.SystemLayout`
     Symbol-to-array mapping used alongside these utilities.
 """
 

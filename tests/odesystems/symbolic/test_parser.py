@@ -4,7 +4,6 @@ import warnings
 import pytest
 import sympy as sp
 
-from tests._utils import specialise_all_swept
 
 from cubie.odesystems.symbolic.codegen import (
     generate_linear_operator_code,
@@ -17,9 +16,6 @@ from cubie.odesystems.symbolic.engine.from_sympy import (
     to_sympy,
 )
 
-from cubie.odesystems.symbolic.indexedbasemaps import (
-    IndexedBases,
-)
 from cubie.odesystems.symbolic.parsing.normalise import (
     _process_calls,
 )
@@ -31,9 +27,9 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
 )
 from cubie.odesystems.symbolic.parsing.parser import (
     _detect_input_type,
-    _process_parameters,
     parse_system,
 )
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 
 
@@ -348,7 +344,7 @@ class TestLhsSemantics:
                 observables=["y"],
             ).specialise()
         assert parsed is not None
-        assert "y" in index_map.state_names
+        assert "y" in list(layout.state_names)
 
     def test_state_assigned_algebraically_is_eliminated(self):
         """A declared state with an algebraic assignment reduces."""
@@ -361,7 +357,7 @@ class TestLhsSemantics:
                 parameters=["a"],
             ).specialise()
         assert parsed is not None
-        assert list(index_map.state_names) == ["x"]
+        assert list(layout.state_names) == ["x"]
 
     def test_immutable_assignment_rejected(self):
         """Assigning a parameter raises."""
@@ -510,15 +506,15 @@ class TestParseInput:
             warnings.simplefilter("always")
             index_map, all_symbols, _, equation_map, fn_hash = (
                 specialise_all_swept(
-                    states=states,
-                    parameters=parameters,
-                    observables=observables,
-                    drivers=drivers,
-                    dxdt=dxdt_str,
+                states=states,
+                parameters=parameters,
+                observables=observables,
+                drivers=drivers,
+                dxdt=dxdt_str,
                 )
             )
 
-        assert isinstance(index_map, IndexedBases)
+        assert isinstance(layout, SystemLayout)
         assert isinstance(all_symbols, dict)
         assert isinstance(equation_map, ParsedEquations)
         assert isinstance(fn_hash, str)
@@ -543,11 +539,11 @@ class TestParseInput:
             warnings.simplefilter("always")
             index_map, all_symbols, _, equation_map, fn_hash = (
                 parse_system(
-                    states=states,
-                    parameters=parameters,
-                    observables=observables,
-                    drivers=drivers,
-                    dxdt=dxdt_list,
+                states=states,
+                parameters=parameters,
+                observables=observables,
+                drivers=drivers,
+                dxdt=dxdt_list,
                 ).specialise()
             )
 
@@ -565,12 +561,12 @@ class TestParseInput:
 
         index_map, all_symbols, funcs, equation_map, fn_hash = (
             parse_system(
-                states=states,
-                parameters=parameters,
-                observables=observables,
-                drivers=drivers,
-                user_functions=user_functions,
-                dxdt=dxdt,
+            states=states,
+            parameters=parameters,
+            observables=observables,
+            drivers=drivers,
+            user_functions=user_functions,
+            dxdt=dxdt,
             ).specialise()
         )
 
@@ -583,12 +579,12 @@ class TestParseInput:
 
         index_map, all_symbols, funcs, equation_map, fn_hash = (
             parse_system(
-                dxdt=["dx = t"],
-                states={"x": 0.0},
-                observables=[],
-                parameters={},
-                drivers=[],
-                strict=True,
+            dxdt=["dx = t"],
+            states={"x": 0.0},
+            observables=[],
+            parameters={},
+            drivers=[],
+            strict=True,
             ).specialise()
         )
 
@@ -624,11 +620,11 @@ class TestParseInput:
         dxdt = ["dx = x + a", "", "  ", "y = x"]  # Contains empty lines
         index_map, all_symbols, _, equation_map, fn_hash = (
             specialise_all_swept(
-                states=states,
-                parameters=parameters,
-                observables=observables,
-                drivers=drivers,
-                dxdt=dxdt,
+            states=states,
+            parameters=parameters,
+            observables=observables,
+            drivers=drivers,
+            dxdt=dxdt,
             )
         )
 
@@ -694,12 +690,12 @@ class TestParseInput:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                states=states,
-                parameters=parameters,
-                observables=observables,
-                drivers=drivers,
-                dxdt=dxdt,
-                strict=True,
+            states=states,
+            parameters=parameters,
+            observables=observables,
+            drivers=drivers,
+            dxdt=dxdt,
+            strict=True,
             ).specialise()
         )
 
@@ -883,7 +879,7 @@ class TestFunctions:
         assert any("myfunc(x, y)" in ln for ln in lines)
         # Operator-apply code calls the provided derivative name
         code = generate_linear_operator_code(
-            equations=eq_map, index_map=index_map
+            equations=eq_map, layout=layout
         )
         assert "myfunc_grad(" in code
 
@@ -900,7 +896,7 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             specialise_all_swept(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
         )
 
@@ -919,7 +915,7 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             ).specialise()
         )
 
@@ -935,11 +931,11 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt,
+            dxdt=dxdt,
                 states=["x", "y"],
-                parameters=["k"],
-                observables=["z"],
-                strict=True,
+            parameters=["k"],
+            observables=["z"],
+            strict=True,
             ).specialise()
         )
 
@@ -961,11 +957,11 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt,
-                states=["x"],
-                parameters=["k"],
-                user_functions={"custom_func": custom_impl},
-                strict=True,
+            dxdt=dxdt,
+            states=["x"],
+            parameters=["k"],
+            user_functions={"custom_func": custom_impl},
+            strict=True,
             ).specialise()
         )
 
@@ -1004,11 +1000,11 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt, states=[], parameters=["k"], strict=False
+            dxdt=dxdt, states=[], parameters=["k"], strict=False
             ).specialise()
         )
 
-        assert "x" in index_map.state_names
+        assert "x" in list(layout.state_names)
         assert len(parsed_eqs.state_derivatives) == 1
 
     def test_sympy_infer_parameters_non_strict(self):
@@ -1020,11 +1016,11 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             specialise_all_swept(
-                dxdt=dxdt, states=["x"], parameters=[], strict=False
+            dxdt=dxdt, states=["x"], parameters=[], strict=False
             )
         )
 
-        assert "k" in index_map.parameter_names
+        assert "k" in list(layout.swept_names)
 
     def test_sympy_user_functions_symbols_dict(self):
         """Test user functions are properly added to symbols dict in SymPy
@@ -1041,11 +1037,11 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt,
-                states=["x"],
-                parameters=["k"],
-                user_functions={"custom_func": custom_impl},
-                strict=True,
+            dxdt=dxdt,
+            states=["x"],
+            parameters=["k"],
+            user_functions={"custom_func": custom_impl},
+            strict=True,
             ).specialise()
         )
 
@@ -1065,7 +1061,7 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             specialise_all_swept(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
         )
 
@@ -1083,7 +1079,7 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             specialise_all_swept(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             )
         )
 
@@ -1105,11 +1101,11 @@ class TestSympyInputPathway:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt,
+            dxdt=dxdt,
                 states=["x", "y"],
-                parameters=["k"],
-                observables=["z"],
-                strict=True,
+            parameters=["k"],
+            observables=["z"],
+            strict=True,
             ).specialise()
         )
 
@@ -1202,12 +1198,12 @@ class TestHashConsistency:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt, states=["x"], parameters=["k"], strict=True
+            dxdt=dxdt, states=["x"], parameters=["k"], strict=True
             ).specialise()
         )
 
         # delta_i should NOT create state elta_i
-        assert "elta_i" not in index_map.state_names
+        assert "elta_i" not in list(layout.state_names)
         # delta_i should be in auxiliaries
         assert "delta_i" in all_symbols
 
@@ -1220,7 +1216,7 @@ class TestHashConsistency:
 
         index_map, all_symbols, funcs, parsed_eqs, fn_hash = (
             parse_system(
-                dxdt=dxdt, states=["elta"], parameters=["k"], strict=True
+            dxdt=dxdt, states=["elta"], parameters=["k"], strict=True
             ).specialise()
         )
 
@@ -1252,7 +1248,7 @@ class TestDerivativeNotation:
             strict=True,
         ).specialise()
         assert ir.sym("delta_i") in parsed.auxiliary_symbols
-        assert "elta_i" not in index_map.state_names
+        assert "elta_i" not in list(layout.state_names)
 
     def test_ambiguous_prefix_is_a_state_treated_as_derivative(self):
         """delta = ... with state elta declared is derivative of elta."""
@@ -1263,7 +1259,7 @@ class TestDerivativeNotation:
             strict=True,
         ).specialise()
         assert len(parsed.state_derivatives) == 1
-        assert "delta" in index_map.dxdt_names
+        assert "delta" in list(layout.dxdt_names)
 
     def test_function_notation_with_declared_state(self):
         """d(x, t) = ... with state x declared is derivative."""
@@ -1315,7 +1311,7 @@ class TestDerivativeNotation:
             strict=False,
         ).specialise()
         assert ir.sym("delta") in parsed.auxiliary_symbols
-        assert "elta" not in index_map.state_names
+        assert "elta" not in list(layout.state_names)
 
     def test_function_notation_with_whitespace(self):
         """d( x , t ) = ... with extra whitespace works."""

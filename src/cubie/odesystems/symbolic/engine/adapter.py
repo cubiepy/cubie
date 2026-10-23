@@ -1,14 +1,15 @@
 """Build the IR data used by source generators."""
 
-from typing import Dict, List, Tuple
+from types import MappingProxyType
+from typing import Dict, List, Mapping, Tuple
 
 import attrs
 
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.from_sympy import (
     convert_assignments,
     derivative_name_map,
-    from_sympy,
 )
 
 __all__ = ["BufferMaps", "SystemIR", "buffer_maps", "system_ir"]
@@ -127,7 +128,7 @@ def system_ir(equations, layout: SystemLayout) -> SystemIR:
     ----------
     equations
         ``ParsedEquations`` from the parser.
-    index_map
+    layout
         ``IndexedBases`` bundle for the same system.
 
     Returns

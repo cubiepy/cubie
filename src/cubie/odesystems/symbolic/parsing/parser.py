@@ -9,24 +9,24 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    List,
     Optional,
     Union,
 )
 
 import sympy as sp
 
-from ..engine import expr as ir_expr
-from ..engine.from_sympy import (
+from cubie.odesystems.symbolic.engine import expr as ir_expr
+from cubie.odesystems.symbolic.engine.from_sympy import (
     convert_assignments,
     derivative_name_map,
 )
-from ..indexedbasemaps import IndexedBases
-from .function_parser import (
+from cubie.odesystems.symbolic.parsing.function_parser import (
     infer_function_states,
     parse_function_input,
 )
-from .normalise import normalise_input
-from .parsed_system import ParsedSystem
+from cubie.odesystems.symbolic.parsing.normalise import normalise_input
+from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 
 def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
     """Detect whether dxdt contains strings, SymPy expressions, or a callable.

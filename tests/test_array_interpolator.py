@@ -981,9 +981,9 @@ def test_ordered_samples_follow_the_declared_order(
         t0=precision(0.5),
     )
 
-    ordered = shuffled.ordered(system.indices.driver_names)
+    ordered = shuffled.ordered(system.layout.driver_names)
 
-    assert ordered.names == tuple(system.indices.driver_names)
+    assert ordered.names == tuple(system.layout.driver_names)
     assert ordered.driver_sample_period == precision(0.1)
     assert ordered.t0 == precision(0.5)
     np.testing.assert_array_equal(ordered.input_array[:, 0], samples_a)
@@ -1036,7 +1036,7 @@ def test_interpolator_columns_track_declared_driver_order(
         {"d_b": samples_b, "d_a": samples_a},
         driver_sample_period=precision(0.1),
     )
-    names = system.indices.driver_names
+    names = system.layout.driver_names
 
     forward_interp = ArrayInterpolator(
         precision=precision, drivers=forward.ordered(names)
@@ -1289,7 +1289,7 @@ def test_ordered_rejects_wrong_count(system, precision):
         driver_sample_period=precision(0.1),
     )
     with pytest.raises(ValueError, match="does not match number of"):
-        samples.ordered(system.indices.driver_names)
+        samples.ordered(system.layout.driver_names)
 
 
 @pytest.mark.parametrize(
@@ -1307,7 +1307,7 @@ def test_ordered_rejects_wrong_symbols(system, precision):
         driver_sample_period=precision(0.1),
     )
     with pytest.raises(ValueError, match="do not match drivers"):
-        samples.ordered(system.indices.driver_names)
+        samples.ordered(system.layout.driver_names)
 
 
 # ── _compute_coefficients: periodic-boundary guards ─────────────────── #
