@@ -37,6 +37,7 @@ from cubie.backend.utils import (
     active_blocks_per_multiprocessor,
     device_hardware,
 )
+from cubie.batchsolving.resolve_defaults import check_duration
 from cubie.cache_root import get_cache_root_override, set_cache_root
 from numba_cuda_mlir.types import float32
 from cubie._cudasim_extensions import cuda
@@ -505,9 +506,9 @@ class ComparisonRunner:
 
     @staticmethod
     def _stage(grid: ndarray) -> Any:
-        """Upload ``grid``; a grid with no variables is passed as None."""
+        """Upload ``grid``; keep a grid with no variables on the host."""
         if grid.shape[0] == 0:
-            return None
+            return grid
         return cuda.to_device(grid)
 
     def compile(self, candidates: Sequence[Candidate]) -> List[Candidate]:
@@ -573,16 +574,21 @@ class ComparisonRunner:
     def solve_ms(self, blocksize: Optional[int] = None) -> float:
         """Solve the staged batch once; return its kernel milliseconds."""
         solver = self._solver
-        solver.solve(
-            self._inits,
-            self._params,
-            duration=self.duration,
-            settling_time=self.settling,
-            t0=self._t0,
-            blocksize=blocksize,
-            on_device=True,
-        )
+        check_duration(solver.effective, self.duration, solver.precision)
+        # Launch the kernel directly on the staged arrays, so each timed
+        # solve keeps the parameters the caller's input compiled in. The
+        # arrays have a row per swept parameter only, and the input
+        # handler compiles every other parameter at its default.
         kernel = solver.kernel
+        kernel.run(
+            inits=self._inits,
+            params=self._params,
+            duration=self.duration,
+            blocksize=blocksize,
+            warmup=self.settling,
+            t0=self._t0,
+            transfer_outputs=False,
+        )
         kernel.synchronize()
         return float(
             sum(

@@ -54,7 +54,7 @@ class TestUpdate:
 
 
 class TestSweptParameters:
-    """Cover the sweep and the values a batch compiles in."""
+    """Cover the swept parameters and the values a batch compiles in."""
 
     def test_swept_names_set_the_parameters_array_rows(self, tiny_system):
         """Swept names become the parameters array rows, in order."""
@@ -89,7 +89,7 @@ class TestSweptParameters:
         assert tiny_system.parameters.defaults == defaults
 
     def test_the_compiled_sweep_keeps_the_build(self, tiny_system):
-        """Keep the build when asked for the sweep already compiled."""
+        """Keep the build when asked for the swept names already compiled."""
         tiny_system.dxdt_fn
         compiled = tiny_system.compiled_parameters
         tiny_system.set_swept_parameters(())

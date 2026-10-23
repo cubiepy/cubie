@@ -29,9 +29,7 @@ from typing import (
     Any,
     Dict,
     List,
-    Mapping,
     Optional,
-    Sequence,
     Tuple,
     Union,
 )
@@ -43,6 +41,7 @@ from numpy import (
     union1d as np_union1d,
     array as np_array,
 )
+from cubie.batchsolving._utils import format_time_domain_label
 from cubie.odesystems.baseODE import BaseODE
 from cubie.odesystems.variables import ValuedSet, VariableSet
 
@@ -83,50 +82,16 @@ class SystemInterface:
         return self._system.observables
 
     @property
-    def precision(self) -> type:
-        """The system's precision."""
-        return self._system.precision
+    def parameter_legend(self) -> Dict[int, str]:
+        """Return the label of each row of the parameters array.
 
-    @property
-    def swept_parameters(self) -> Tuple[str, ...]:
-        """Names of the parameters array's rows, read live."""
-        return self._system.swept_parameters
-
-    @property
-    def swept_values(self) -> ValuedSet:
-        """The swept parameters with their defaults, in row order."""
-        return self._system.swept_set
-
-    @property
-    def fixed_parameter_values(self) -> Dict[str, float]:
-        """Values compiled into the code, read live."""
-        return self._system.fixed_parameter_values
-
-    def set_swept_parameters(
-        self,
-        names: Sequence[str],
-        fixed_values: Optional[Mapping[str, float]] = None,
-    ) -> None:
-        """Sweep ``names`` and compile every other parameter in.
-
-        Parameters
-        ----------
-        names
-            Names of the parameters read from the parameters array, in
-            any order.
-        fixed_values
-            Fixed values for a subset of the other parameters. This
-            method fixes every parameter neither swept nor named here
-            at its default value.
-
-        Raises
-        ------
-        KeyError
-            If a name is not a parameter of the system.
-        ValueError
-            If a name repeats or also has a fixed value.
+        Each label is the swept parameter's name, with its unit in
+        brackets unless it is dimensionless.
         """
-        self._system.set_swept_parameters(names, fixed_values)
+        return {
+            row: format_time_domain_label(parameter.name, parameter.unit)
+            for row, parameter in enumerate(self._system.swept_set)
+        }
 
     def state_indices(
         self,

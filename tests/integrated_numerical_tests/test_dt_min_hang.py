@@ -82,6 +82,7 @@ def test_f32_save_drift_does_not_hang(
             "c_couple": np.full(2, 0.3, dtype=precision),
         },
         duration=float(solver_settings["duration"]),
+        fix_constant_parameters=False,
     )
     assert np.all(np.asarray(result.status_codes) == 0), (
         result.status_messages
@@ -160,7 +161,7 @@ def test_adaptive_saves_land_on_schedule(solver, solver_settings):
         2.196480938416422,
         2.2375366568914954,
     ]
-    inits, params = solver.build_grid(
+    inits, params = solver.prepare_grid_arrays(
         parameters={**swept_defaults(solver.system, len(rhos)), "rho": rhos}
     )
     result = solver.solve(

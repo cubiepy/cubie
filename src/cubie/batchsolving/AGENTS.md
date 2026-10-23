@@ -24,7 +24,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `BatchSolverConfig.py` | `BatchSolverConfig(CUDAFactoryConfig)` — holds `precision`, `loop_fn`, `compile_flags`, `coefficients_shape`, `max_registers`, `kernel_name`, `blocksize` and `auto_performance` (both `eq=False`), and the hash-excluded (`eq=False`) nested `cache: CacheSettings` (`cache_enabled`/`cache_mode`/`max_cache_entries`/`cache_dir`, loose keys in `ALL_CACHE_PARAMETERS`, all part of `ALL_KERNEL_PARAMETERS`); the field's converter accepts the `cache=` shorthand (bool, `"flush_on_change"`, or a directory) and loose keys evolve the nested object like `UnrollFlags`. `ActiveOutputs(_CubieConfigBase)` — booleans for which output arrays are produced, built via `ActiveOutputs.from_compile_flags(...)`. |
 | `BatchInputHandler.py` | `BatchInputHandler` (plain class) + module-level grid builders (`unique_cartesian_product`, `combinatorial_grid`, `verbatim_grid`, `generate_grid`, `combine_grids`, `extend_grid_to_array`). Converts user dicts/arrays into `(variable, run)` 2D arrays; assembled grids are planned compactly, then written straight into a buffer chosen by the kernel's registered host backing policy (pinned within the cumulative budget, memmap past the spill threshold), so no full-size intermediate coexists with the result. A right-sized correct-precision user array passes through untouched. |
 | `SystemInterface.py` | `SystemInterface` — a live view onto the bound system's variable sets; resolves labels↔indices, and `merge_variable_labels_and_idxs` merges `save_variables`/`summarise_variables` labels + index kwargs into final index arrays. |
-| `comparison.py` | `ComparisonRunner(solver, inits, params, duration, settling_time, t0)`: the candidate-timing runner `calibrate` and `optimize` share. Stages the batch on the device once, switches the solver itself between `Candidate`s through `Solver.update` (plus block size and residency) and times each with device-only solves. `compile(candidates)` returns the accepted candidates (a rejected one keeps its error, no time); `time(candidates)` runs the fixed protocol and returns `CandidateTiming`s; `warm()`, `size_batch(candidates, waves)` and `fit_batch(measured, target_ms, grow, shrink)` are the shared warm-up and batch sizing; `rank_timings` ranks by success tier then time; `close` restores the configuration at `open`. |
+| `comparison.py` | `ComparisonRunner(solver, inits, params, duration, settling_time, t0)`: the candidate-timing runner `calibrate` and `optimize` share. Stages the batch on the device once, switches the solver itself between `Candidate`s through `Solver.update` (plus block size and residency) and times each with kernel launches on the staged arrays. `compile(candidates)` returns the accepted candidates (a rejected one keeps its error, no time); `time(candidates)` runs the fixed protocol and returns `CandidateTiming`s; `warm()`, `size_batch(candidates, waves)` and `fit_batch(measured, target_ms, grow, shrink)` are the shared warm-up and batch sizing; `rank_timings` ranks by success tier then time; `close` restores the configuration at `open`. |
 | `calibration.py` | `Solver.calibrate` backend: `run_calibration` races `CandidateSpec`s (`algorithm` plus settings) in stages through a `ComparisonRunner` and returns a `CalibrationResult` (winner, ranking, per-candidate `CandidateResult`). Each stage's winner is the top of `rank_timings`; a configuration timed once is recalled by later stages. Sizes the batch at the given duration. |
 | `optimize.py` | `Solver.optimize` backend: `run_optimization` times the solver's `optimisation_candidates(force)` at `launch_candidates(kernel, runs=)` through a `ComparisonRunner` and applies the best `LaunchResult` through `apply_launch`. Ramps the duration toward `target_ms` before sizing the batch. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
@@ -39,13 +39,17 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 
 ## Data flow
 `Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
-effective timing → `input_handler.split_parameters` picks the swept parameters →
-`set_swept_parameters` sets them on the system → `input_handler(...)` builds
-`(n_vars, n_runs)` `inits`/`params` →
+effective timing → `input_handler(initial_values, parameters, ...)`, which calls
+`system.set_swept_parameters(swept, fixed)` for the parameter input and then builds
+`(n_vars, n_runs)` `inits`/`params` against `system.layout` → `update()`, which sees the
+system's settings moved (`kernel.system_config_stale`) and rebuilds the kernel →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
 (which may split the batch into chunks) and launches per chunk. Results return through
 `OutputArrays` → `SolveResult.from_solver`.
+
+The handler sets the swept parameters before it builds the arrays, because a compiled-in
+value can change which states a DAE keeps.
 
 ## Solver settings
 `__init__` and `update` flatten the settings groups, record `given`, update the system's
@@ -60,21 +64,38 @@ logger. `settings_dict()` is the given record plus the logger's level; `copy()` 
 from it on a copied system. Child `update` calls are `silent=True`. New result
 accessors go on `kernel` with a `Solver` property.
 
-A system changed outside the Solver is `kernel.system_config_stale`; the next `update`
+A system changed outside the Solver is `kernel.system_config_stale`, which compares the
+system's `config_hash` with the one the kernel last built against; the next `update`
 pushes the whole effective record so every child re-reads its products.
 
 ## Swept and fixed parameters
-The parameters array has one row per swept parameter. Every other parameter is compiled
-into the code at a fixed value.
-- Dict: entries with several values are swept, in the system's parameter order. Entries
-  with one value are fixed at it, and parameters left out are fixed at their defaults.
-- Array with a row per parameter: every row is swept.
-- Array with a row per swept parameter: the swept and fixed parameters stay as they are.
-- `fix_constant_parameters=True`: a host array's rows with one value are fixed instead.
-- `None` or `{}`: every parameter is fixed at its default.
+The parameters array has one row per swept parameter, in parameter-name order;
+`SystemInterface.parameter_legend` labels the rows and `Solver.parameter_legend` passes
+it through. Every other parameter is compiled into the code at a fixed value. Each solve
+compiles the fixed values its input gives merged over the defaults, and nothing an
+earlier call compiled in survives it.
+- For a dict, we compile in every entry that holds one value and sweep the others.
+  Parameters left out of the dict compile at their defaults.
+- For an array with a row per parameter, we compile in every row that holds one value
+  and sweep the others. We compare each row with its first value and stop reading a row
+  at the first value that differs.
+- For an array with a row per swept parameter, we sweep those parameters and compile
+  every other parameter at its default. We never scan these arrays.
+- With `fix_constant_parameters=False`, we sweep every dict entry and every row of a
+  full-height array.
+- For `None`, an empty dict, or an empty 1D array, we compile every parameter at its
+  default.
+
+`Solver.prepare_grid_arrays` gives every parameter a dict names a row, so a parameter
+given a single number has a row with that number in every run. A user who wants a value
+compiled in sets it as the parameter's default and leaves it out of the dict.
+`Solver.compile(parameters, fix_constant_parameters)` compiles the kernel that a solve
+with the same inputs would use.
 
 Defaults change only through `BaseODE.set_default_parameters`. Changing the swept names
-or a fixed value rebuilds the system and kernel.
+or a fixed value rebuilds the system and kernel; asking for the swept names and values
+already compiled changes nothing, and `BaseODE.set_swept_parameters` decides that by comparing
+keys without building a `ParameterSet`.
 
 ## Teardown and memory pressure
 `Solver.close()` waits for its last run stream, drains staging work and deregisters the
@@ -89,7 +110,7 @@ staged through the pinned pool; results keep the disk backing until close, and
 ## Grids and variable selection
 `BatchInputHandler` builds `(variable, run)` arrays with the module-level grid builders:
 `combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). `solve_ivp`
-defaults to `"combinatorial"`, `Solver.solve`/`Solver.build_grid` to `"verbatim"`.
+defaults to `"combinatorial"`, `Solver.solve`/`Solver.prepare_grid_arrays` to `"verbatim"`.
 
 For states and observables, `None` = all, `[]` = none, labels plus index kwargs = union.
 `SystemInterface.merge_variable_labels_and_idxs` pops `save_variables`/
@@ -169,7 +190,7 @@ a swept or fixed parameter can change which driver derivatives the reduced equat
   `cubie.memory` (`default_memmgr`, `MemoryManager`, `ArrayRequest`/`ArrayResponse`,
   `chunk_buffer_pool`) + `cubie.buffer_registry`; `cubie.outputhandling` (`OutputCompileFlags`,
   `output_sizes`, `summary_metrics`); `cubie.odesystems` (`BaseODE`, `SymbolicODE`,
-  `ValuedSet`); `cubie.cubie_cache` (`CUBIECache`); `cubie._cudasim_extensions` (`cuda`);
+  `ParameterSet`, `VariableSet`); `cubie.cubie_cache` (`CUBIECache`); `cubie._cudasim_extensions` (`cuda`);
   `cubie.backend`; `cubie._utils`.
 ### External
 - numba-cuda-mlir; `numpy`; `attrs`; optional `pandas` (lazy in `as_pandas`).
