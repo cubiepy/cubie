@@ -66,6 +66,7 @@ from typing import (
 from attrs import (
     NOTHING,
     Attribute,
+    Converter,
     Factory,
     asdict,
     define,
@@ -146,6 +147,14 @@ def _config_field_map(cls: type) -> Dict[str, Attribute]:
     return field_map
 
 
+@cache
+def _init_field_map(cls: type) -> Dict[str, Attribute]:
+    """Return a settings class's init fields by init name."""
+    return {
+        (fld.alias or fld.name): fld for fld in fields(cls) if fld.init
+    }
+
+
 def declared_default(fld: Attribute) -> Any:
     """Return the field's declared default; ``NOTHING`` when required."""
     default = fld.default
@@ -178,6 +187,25 @@ def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
     return bool(old != new)
 
 
+def _keeps_value(fld: Attribute, current: Any, value: Any) -> bool:
+    """Return whether setting ``value`` leaves the field at ``current``.
+
+    Return ``False`` whenever the update must build a replacement to
+    find out: for a converter that reads the instance, and for a value
+    of another type that the field's validator must still check.
+    """
+    converter = fld.converter
+    if converter is not None:
+        if isinstance(converter, Converter):
+            return False
+        value = converter(value)
+    if value is current:
+        return True
+    if fld.validator is not None and type(value) is not type(current):
+        return False
+    return not values_differ(fld, current, value)
+
+
 @frozen
 class FrozenSettings:
     """Frozen attrs settings; :meth:`update` derives a replacement."""
@@ -201,17 +229,18 @@ class FrozenSettings:
             and the names whose converted value changed.
         """
         updates = {**(updates_dict or {}), **kwargs}
-        by_handle = {
-            (fld.alias or fld.name): fld
-            for fld in fields(type(self))
-            if fld.init
-        }
+        by_handle = _init_field_map(type(self))
         updates = with_defaults_for_none(updates, by_handle)
         given = {
             key: by_handle[key] for key in updates if key in by_handle
         }
         if not given:
             return self, set(), set()
+        if all(
+            _keeps_value(fld, getattr(self, fld.name), updates[key])
+            for key, fld in given.items()
+        ):
+            return self, set(given), set()
         candidate = evolve(self, **{key: updates[key] for key in given})
         changed = {
             key
@@ -601,11 +630,7 @@ class _CubieConfigBase(FrozenSettings):
         evolve_kwargs = {}
         for key, fld in direct.items():
             value = updates_dict[key]
-            if (
-                fld.converter is not None
-                or fld.validator is not None
-                or values_differ(fld, getattr(self, fld.name), value)
-            ):
+            if not _keeps_value(fld, getattr(self, fld.name), value):
                 evolve_kwargs[fld.alias or fld.name] = value
 
         changed = set()

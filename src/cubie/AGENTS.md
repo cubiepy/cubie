@@ -81,12 +81,12 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   `DerivedValues`. `inputs` match by value for numbers and strings and by identity for
   every other object, so pass objects that are replaced on change (settings snapshots,
   build products, frozen variable sets). `config_hash`, `BaseODE.set_swept_parameters`,
-  `BaseODE.states`, `BaseODE.swept_set` and `Solver.solve_info` use it. A value that
-  depends only on compile settings is a build product instead, and a frozen attrs class
-  holds a value derived from its own fields as an `init=False` field set in
-  `__attrs_post_init__`. Hold such values in no other
-  in-memory cache: no `functools` caches, module-level dicts or hand-written key/value
-  attributes. A function of a class or of the toolchain, which cannot change while the
+  `BaseODE.states`, `BaseODE.swept_set`, `BatchSolverKernel._configured_launch`,
+  `Solver.solve_info` and `Solver._check_duration` use it. A value that depends only on
+  compile settings is a build product instead, and a frozen attrs class holds a value
+  derived from its own fields as an `init=False` field set in `__attrs_post_init__`. Hold
+  such values in no other in-memory cache: no `functools` caches, module-level dicts or
+  hand-written key/value attributes. A function of a class or of the toolchain, which cannot change while the
   process runs, may use `functools.cache`.
 - **`update` / `update_compile_settings` contract:** keys are the non-underscored
   field names; an unrecognised key raises `KeyError` unless `silent=True`; returns a
@@ -98,7 +98,10 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   `(replacement, recognised, changed)`; `update_compile_settings` swaps the
   replacement in and invalidates the build when any field changed. Change detection
   compares post-conversion values: device-function fields by identity, arrays
-  elementwise, the rest by inequality. `values_hash` covers only eq-participating
+  elementwise, the rest by inequality. The config-level `update` returns `self` without
+  building a replacement when every given value is the stored object, or has its type
+  and compares equal after a converter that reads nothing else; a value of another type
+  still goes through the validators. `values_hash` covers only eq-participating
   fields, but a replaced `eq=False` callable still rebuilds the consumer.
   Snapshots are sealed: assignment raises, array fields are owned read-only copies,
   and value objects such as the variable sets are frozen. Updates derive a new object
