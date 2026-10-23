@@ -39,9 +39,7 @@ Key attributes:
    Dictionary mapping row indices to summary labels.
 
 ``parameter_legend``
-   Dictionary mapping parameter array indices to labels: each swept
-   parameter's name, with its unit in brackets unless it is
-   dimensionless.
+   Dictionary showing which swept parameter lives in which array index.
 
 ``fixed_parameter_values``
    Values for each fixed parameter used in the solve.
