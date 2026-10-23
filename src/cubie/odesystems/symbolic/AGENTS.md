@@ -86,8 +86,7 @@ whichever parameters are swept. When the swept names or fixed values change,
 folding, structural simplification and tearing, which can change the state layout and
 mass matrix. The derived settings (states, observables, mass, driver slots) go through
 one `update_compile_settings`, and `layout`, `equations`, `user_functions` and `fn_hash`
-are replaced together. A live solver picks up a change made directly on its system at
-the next solve.
+are replaced together.
 
 ## build() and system identity
 `build()` switches `self.gen_file` to a fresh `ODEFile` when the source identity changed.

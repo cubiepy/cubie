@@ -138,14 +138,8 @@ def create_ODE_system(
         time, ``y`` is the state vector, and additional arguments map to
         parameters or drivers. State access patterns supported:
         ``y[0]`` (positional), ``y["name"]`` (string), ``y.name``
-        (attribute). ``y[i]`` reads the i-th state in the order you
-        declare them. Read a parameter or driver from any later
-        argument by name (``p.k`` or ``p["k"]``), or by position in
-        the order you declare them: with two or more such arguments,
-        ``d[i]`` on the last reads the i-th driver and ``p[i]`` on any
-        other the i-th parameter; with one, ``p[i]`` counts through the
-        parameters and then the drivers. The return value must be a
-        list, tuple, or dict of derivative expressions.
+        (attribute). The return value must be a list, tuple, or dict of
+        derivative expressions.
     states
         State labels either as an iterable or as a mapping to default initial
         values.
@@ -156,10 +150,9 @@ def create_ODE_system(
         values. A parameter that holds one value across a batch is
         compiled into the generated code as a number.
     drivers
-        External driver variable labels required at runtime. Accepts either
-        an iterable of driver symbol names or a dictionary mapping driver
-        names to default values or driver-array samples and configuration
-        entries.
+        Names of the drivers you supply at solve time, as a list, or as a
+        dict whose keys are the names. ``create_ODE_system`` reads only the
+        keys.
     user_functions
         Custom callables referenced within ``dxdt`` expressions.
     user_function_derivatives
@@ -384,9 +377,9 @@ class SymbolicODE(BaseODE):
             Parameter labels either as an iterable or as a mapping to default
             values.
         drivers
-            External driver variable labels required at runtime. May be an
-            iterable of driver labels or a dictionary describing driver
-            defaults or driver-array samples alongside configuration entries.
+            Names of the drivers you supply at solve time, as a list, or
+            as a dict whose keys are the names. ``create`` reads only the
+            keys.
         user_functions
             Custom callables referenced within ``dxdt`` expressions.
         user_function_derivatives

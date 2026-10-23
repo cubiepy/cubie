@@ -4,6 +4,7 @@ import warnings
 import pytest
 import sympy as sp
 
+from tests._utils import specialise_all_swept
 
 from cubie.odesystems.symbolic.codegen import (
     generate_linear_operator_code,
@@ -202,12 +203,11 @@ class TestSympyEquationErrors:
     def test_mixed_ir_sympy_tuple(self, equation):
         """Each tuple member converts independently."""
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=[equation], states=["x"]
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        assert parsed.ordered == ((ir.sym("dx"), -ir.sym("x")),)
+        ).specialise()
+        equations = specialised.equations
+        assert equations.ordered == ((ir.sym("dx"), -ir.sym("x")),)
 
     def test_bare_expression_rejected(self):
         """A bare sp.Expr element cannot infer an LHS."""
@@ -275,64 +275,60 @@ class TestLhsSemantics:
             dxdt_list,
         ) = simple_system_defaults
 
-        parsed = parse_system(
+        specialised = parse_system(
             states=states,
             parameters=parameters,
             observables=observables,
             drivers=drivers,
             dxdt=dxdt_list,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
-        parsed = specialised.equations
-        assert parsed.mass_matrix is None
-        assert "done" in list(layout.dxdt_names)
-        assert ir.sym("uninited") in parsed.auxiliary_symbols
+        equations = specialised.equations
+        assert equations.mass_matrix is None
+        assert "done" in layout.dxdt_names
+        assert ir.sym("uninited") in equations.auxiliary_symbols
 
     def test_strict_unlisted_auxiliary(self):
         """Unlisted LHS assignments stay anonymous in strict mode."""
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=["obs = x + a", "aux_val = obs", "dx = obs"],
             states=["x"],
             parameters=["a"],
             observables=["obs"],
             strict=True,
         )
-        specialised = parsed.specialise(list(parsed.parameters))
-        parsed = specialised.equations
-        assert ir.sym("aux_val") in parsed.auxiliary_symbols
+        equations = specialised.equations
+        assert ir.sym("aux_val") in equations.auxiliary_symbols
 
     def test_observable_with_derivative_becomes_state(self):
         """A derivative equation for an observable promotes it."""
         with pytest.warns(
             EquationWarning, match="selected as a\\s+solver state"
         ):
-            parsed = parse_system(
+            specialised = parse_system(
                 dxdt=["dy = x + a", "dx = y"],
                 states=["x"],
                 parameters=["a"],
                 observables=["y"],
-            )
-            specialised = parsed.specialise()
+            ).specialise()
             layout = specialised.layout
-            parsed = specialised.equations
-        assert parsed is not None
-        assert "y" in list(layout.state_names)
+            equations = specialised.equations
+        assert equations is not None
+        assert "y" in layout.state_names
 
     def test_state_assigned_algebraically_is_eliminated(self):
         """A declared state with an algebraic assignment reduces."""
         with pytest.warns(
             EquationWarning, match="eliminated by structural"
         ):
-            parsed = parse_system(
+            specialised = parse_system(
                 dxdt=["dx = y", "y = a + 1"],
                 states={"x": 0.0, "y": 0.0},
                 parameters=["a"],
-            )
-            specialised = parsed.specialise()
+            ).specialise()
             layout = specialised.layout
-            parsed = specialised.equations
-        assert parsed is not None
+            equations = specialised.equations
+        assert equations is not None
         assert list(layout.state_names) == ["x"]
 
     def test_immutable_assignment_rejected(self):
@@ -372,41 +368,39 @@ class TestRhsSemantics:
 
     def test_if_else_becomes_piecewise(self):
         """Inline conditionals parse to Piecewise."""
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=["dx = a if x > 0 else b"],
             states=["x"],
             parameters=["a", "b"],
         )
-        specialised = parsed.specialise(list(parsed.parameters))
-        parsed = specialised.equations
+        equations = specialised.equations
         x, a, b = sp.symbols("x a b", real=True)
-        assert parsed.ordered[0][1] is from_sympy(
+        assert equations.ordered[0][1] is from_sympy(
             sp.Piecewise((a, x > 0), (b, True))
         )
 
     def test_time_symbol_available(self):
         """``t`` is available without declaration."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = t"],
             states={"x": 0.0},
             strict=True,
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        assert parsed.non_observable_equations() == [
+        ).specialise()
+        equations = specialised.equations
+        assert equations.non_observable_equations() == [
             (ir.sym("dx"), ir.sym("t"))
         ]
+        assert specialised.functions == {}
 
     def test_rhs_derivative_reference_binds_assignment(self):
         """RHS ``dX`` tokens bind to the derivative of ``X``."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = -x", "speed = dx**2"],
             states=["x"],
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        assert parsed.mass_matrix is None
-        eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
+        ).specialise()
+        equations = specialised.equations
+        assert equations.mass_matrix is None
+        eqs = {lhs.name: rhs for lhs, rhs in equations.ordered}
         # The solved derivative substitutes into the reference.
         x = sp.Symbol("x", real=True)
         assert sp.simplify(to_sympy(eqs["speed"]) - x**2) == 0
@@ -484,14 +478,13 @@ class TestParseInput:
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
-            parsed = parse_system(
+            specialised = specialise_all_swept(
                 states=states,
                 parameters=parameters,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt_str,
             )
-            specialised = parsed.specialise(list(parsed.parameters))
             layout = specialised.layout
             equation_map = specialised.equations
             fn_hash = specialised.fn_hash
@@ -518,14 +511,13 @@ class TestParseInput:
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
-            parsed = parse_system(
+            specialised = parse_system(
                 states=states,
                 parameters=parameters,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt_list,
-            )
-            specialised = parsed.specialise()
+            ).specialise()
             equation_map = specialised.equations
 
         assert isinstance(equation_map, ParsedEquations)
@@ -540,15 +532,14 @@ class TestParseInput:
         dxdt = ["dx = custom_func(x)", "y = x"]
         user_functions = {"custom_func": lambda x: x**2}
 
-        parsed = parse_system(
+        specialised = parse_system(
             states=states,
             parameters=parameters,
             observables=observables,
             drivers=drivers,
             user_functions=user_functions,
             dxdt=dxdt,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         funcs = specialised.functions
 
         assert funcs["custom_func"] == user_functions["custom_func"]
@@ -556,15 +547,14 @@ class TestParseInput:
     def test_parse_system_includes_time_symbol(self):
         """Ensure ``t`` is always present without explicit declaration."""
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = t"],
             states={"x": 0.0},
             observables=[],
             parameters={},
             drivers=[],
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         funcs = specialised.functions
         equation_map = specialised.equations
 
@@ -597,14 +587,13 @@ class TestParseInput:
         observables = ["y"]
         drivers = []
         dxdt = ["dx = x + a", "", "  ", "y = x"]  # Contains empty lines
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             states=states,
             parameters=parameters,
             observables=observables,
             drivers=drivers,
             dxdt=dxdt,
         )
-        specialised = parsed.specialise(list(parsed.parameters))
         equation_map = specialised.equations
 
         dx_equations = equation_map.non_observable_equations()
@@ -663,22 +652,21 @@ class TestParseInput:
             "damping = delta * k",  # auxiliary referencing delta
         ]
 
-        parsed = parse_system(
+        specialised = parse_system(
             states=states,
             parameters=parameters,
             observables=observables,
             drivers=drivers,
             dxdt=dxdt,
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
         parsed_eqs = specialised.equations
 
         # Verify correct categorization
-        assert "x" in list(layout.state_names)
-        assert "y" in list(layout.state_names)
-        assert "elta" not in list(layout.state_names)  # NOT a state
+        assert "x" in layout.state_names
+        assert "y" in layout.state_names
+        assert "elta" not in layout.state_names  # NOT a state
         assigned = {lhs.name for lhs, _ in parsed_eqs.ordered}
         assert "delta" in assigned  # auxiliary
         assert "damping" in assigned  # auxiliary
@@ -702,25 +690,21 @@ class TestIntegrationWithFixtures:
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             # Test both string and list versions
-            parsed = parse_system(
+            result1 = parse_system(
                 states=states,
                 parameters=parameters,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt_str,
-            )
-            specialised = parsed.specialise()
-            result1 = specialised
+            ).specialise()
 
-            parsed = parse_system(
+            result2 = parse_system(
                 states=states,
                 parameters=parameters,
                 observables=observables,
                 drivers=drivers,
                 dxdt=dxdt_list,
-            )
-            specialised = parsed.specialise()
-            result2 = specialised
+            ).specialise()
 
         # Results should be equivalent
         assert result1.fn_hash == result2.fn_hash
@@ -772,20 +756,19 @@ class TestNonStrictInput:
 
         with pytest.raises(ValueError, match="strict"):
             parse_system(dxdt=dxdt_str, strict=True).specialise()
-        parsed = parse_system(dxdt=dxdt_str, strict=False)
-        specialised = parsed.specialise(list(parsed.parameters))
+        specialised = specialise_all_swept(dxdt=dxdt_str, strict=False)
         layout = specialised.layout
         equation_map = specialised.equations
-        assert "apple" in list(layout.swept_names)
-        assert "zebra" in list(layout.swept_names)
-        assert "driver1" in list(layout.swept_names)
-        assert "one" in list(layout.state_names)
-        assert "safari" not in list(layout.observable_names)
-        assert "uninited" not in list(layout.observable_names)
+        assert "apple" in layout.swept_names
+        assert "zebra" in layout.swept_names
+        assert "driver1" in layout.swept_names
+        assert "one" in layout.state_names
+        assert "safari" not in layout.observable_names
+        assert "uninited" not in layout.observable_names
         assigned = {lhs.name for lhs, _ in equation_map.ordered}
         assert "safari" in assigned
         assert "uninited" in assigned
-        assert "dfoo" in list(layout.dxdt_names)
+        assert "dfoo" in layout.dxdt_names
 
 
 class TestFunctions:
@@ -796,10 +779,9 @@ class TestFunctions:
         user input
         """
         eqs = ("dx = sin(a) + exp(b)", "dy = min(c,d) + log(e)")
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=eqs
         )
-        specialised = parsed.specialise(list(parsed.parameters))
         eq_map = specialised.equations
         code = print_cuda_multiple(
             eq_map, function_aliases=eq_map.function_aliases
@@ -820,10 +802,9 @@ class TestFunctions:
         userfuncs = {"ex_squared": custom_func, "exp": lambda x: math.exp(x)}
 
         eqs = ["dx = exp(a) + exp(b)", "dy = x"]
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=eqs, user_functions=userfuncs
         )
-        specialised = parsed.specialise(list(parsed.parameters))
         eq_map = specialised.equations
         code = print_cuda_multiple(
             eq_map, function_aliases=eq_map.function_aliases
@@ -855,7 +836,7 @@ class TestFunctions:
         userfuncs = {"myfunc": MyFuncDevice()}
         userfunc_grads = {"myfunc": myfunc_grad}
         eqs = ["dx = myfunc(x, y)", "dy = x"]
-        parsed = parse_system(
+        specialised = parse_system(
             states=["x", "y"],
             parameters=[],
             observables=[],
@@ -863,8 +844,7 @@ class TestFunctions:
             dxdt=eqs,
             user_functions=userfuncs,
             user_function_derivatives=userfunc_grads,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
         eq_map = specialised.equations
         # Base code should reference the function name
@@ -889,10 +869,9 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x)]
 
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=dxdt, states=["x"], parameters=["k"], strict=True
         )
-        specialised = parsed.specialise(list(parsed.parameters))
         parsed_eqs = specialised.equations
 
         assert len(parsed_eqs.state_derivatives) == 1
@@ -908,10 +887,9 @@ class TestSympyInputPathway:
 
         dxdt = [(dx, -k * x)]
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt, states=["x"], parameters=["k"], strict=True
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         parsed_eqs = specialised.equations
 
         assert len(parsed_eqs.state_derivatives) == 1
@@ -924,14 +902,13 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x), sp.Eq(dy, k * x), sp.Eq(z, x + y)]
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt,
             states=["x", "y"],
             parameters=["k"],
             observables=["z"],
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         parsed_eqs = specialised.equations
 
         assert len(parsed_eqs.state_derivatives) == 2
@@ -950,14 +927,13 @@ class TestSympyInputPathway:
         def custom_impl(val):
             return val**2
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt,
             states=["x"],
             parameters=["k"],
             user_functions={"custom_func": custom_impl},
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         funcs = specialised.functions
         parsed_eqs = specialised.equations
 
@@ -972,17 +948,13 @@ class TestSympyInputPathway:
 
         dxdt_string = "dx = -k * x"
 
-        parsed = parse_system(
+        result_sympy = parse_system(
             dxdt=dxdt_sympy, states=["x"], parameters=["k"], strict=True
-        )
-        specialised = parsed.specialise()
-        result_sympy = specialised
+        ).specialise()
 
-        parsed = parse_system(
+        result_string = parse_system(
             dxdt=dxdt_string, states=["x"], parameters=["k"], strict=True
-        )
-        specialised = parsed.specialise()
-        result_string = specialised
+        ).specialise()
 
         sympy_eq = result_sympy.equations.state_derivatives[0]
         string_eq = result_string.equations.state_derivatives[0]
@@ -998,14 +970,13 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x)]
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt, states=[], parameters=["k"], strict=False
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
         parsed_eqs = specialised.equations
 
-        assert "x" in list(layout.state_names)
+        assert "x" in layout.state_names
         assert len(parsed_eqs.state_derivatives) == 1
 
     def test_sympy_infer_parameters_non_strict(self):
@@ -1015,13 +986,12 @@ class TestSympyInputPathway:
 
         dxdt = [sp.Eq(dx, -k * x)]
 
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=dxdt, states=["x"], parameters=[], strict=False
         )
-        specialised = parsed.specialise(list(parsed.parameters))
         layout = specialised.layout
 
-        assert "k" in list(layout.swept_names)
+        assert "k" in layout.swept_names
 
     def test_sympy_user_functions_symbols_dict(self):
         """Test user functions are properly added to symbols dict in SymPy
@@ -1036,14 +1006,13 @@ class TestSympyInputPathway:
         def custom_impl(val):
             return val**2
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt,
             states=["x"],
             parameters=["k"],
             user_functions={"custom_func": custom_impl},
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         funcs = specialised.functions
         parsed_eqs = specialised.equations
 
@@ -1058,10 +1027,9 @@ class TestSympyInputPathway:
         # Canonical SymPy form for ODEs
         dxdt = [sp.Eq(sp.Derivative(x, t), -k * x)]
 
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=dxdt, states=["x"], parameters=["k"], strict=True
         )
-        specialised = parsed.specialise(list(parsed.parameters))
         parsed_eqs = specialised.equations
 
         assert len(parsed_eqs.state_derivatives) == 1
@@ -1076,10 +1044,9 @@ class TestSympyInputPathway:
         # Tuple form with Derivative
         dxdt = [(sp.Derivative(x, t), -k * x)]
 
-        parsed = parse_system(
+        specialised = specialise_all_swept(
             dxdt=dxdt, states=["x"], parameters=["k"], strict=True
         )
-        specialised = parsed.specialise(list(parsed.parameters))
         parsed_eqs = specialised.equations
 
         assert len(parsed_eqs.state_derivatives) == 1
@@ -1098,14 +1065,13 @@ class TestSympyInputPathway:
             sp.Eq(z, x + y),
         ]
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt,
             states=["x", "y"],
             parameters=["k"],
             observables=["z"],
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         parsed_eqs = specialised.equations
 
         assert len(parsed_eqs.state_derivatives) == 2
@@ -1136,28 +1102,24 @@ class TestHashConsistency:
         verifies that reordering equations does not affect the hash.
         """
         # String input: dx first, then dy
-        parsed = parse_system(
+        result_string = parse_system(
             dxdt=["dx = -k*x", "dy = k*x"],
             states=["x", "y"],
             parameters=["k"],
             observables=[],
             drivers=[],
-        )
-        specialised = parsed.specialise()
-        result_string = specialised
+        ).specialise()
 
         # SymPy input with REVERSED order: dy first, then dx
         x, y, k = sp.symbols("x y k", real=True)
         dx, dy = sp.symbols("dx dy", real=True)
-        parsed = parse_system(
+        result_sympy = parse_system(
             dxdt=[sp.Eq(dy, k * x), sp.Eq(dx, -k * x)],
             states=["x", "y"],
             parameters=["k"],
             observables=[],
             drivers=[],
-        )
-        specialised = parsed.specialise()
-        result_sympy = specialised
+        ).specialise()
 
         # Hash should be identical regardless of input order
         fn_hash_string = result_string.fn_hash
@@ -1171,26 +1133,22 @@ class TestHashConsistency:
         produce identical hashes even with different input ordering.
         """
         # Order A: dx first
-        parsed = parse_system(
+        result_a = parse_system(
             dxdt=["dx = -x", "dy = x"],
             states=["x", "y"],
             parameters=[],
             observables=[],
             drivers=[],
-        )
-        specialised = parsed.specialise()
-        result_a = specialised
+        ).specialise()
 
         # Order B: dy first (reversed)
-        parsed = parse_system(
+        result_b = parse_system(
             dxdt=["dy = x", "dx = -x"],
             states=["x", "y"],
             parameters=[],
             observables=[],
             drivers=[],
-        )
-        specialised = parsed.specialise()
-        result_b = specialised
+        ).specialise()
 
         # Hash should be identical since equations define the same system
         assert result_a.fn_hash == result_b.fn_hash
@@ -1203,15 +1161,14 @@ class TestHashConsistency:
 
         dxdt = [sp.Eq(dx, -k * x), sp.Eq(delta_i, x + 1)]
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt, states=["x"], parameters=["k"], strict=True
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
         parsed_eqs = specialised.equations
 
         # delta_i should NOT create state elta_i
-        assert "elta_i" not in list(layout.state_names)
+        assert "elta_i" not in layout.state_names
         # delta_i should be in auxiliaries
         assert "delta_i" in {lhs.name for lhs, _ in parsed_eqs.ordered}
 
@@ -1222,10 +1179,9 @@ class TestHashConsistency:
 
         dxdt = [sp.Eq(delta, -k * elta)]
 
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=dxdt, states=["elta"], parameters=["k"], strict=True
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         parsed_eqs = specialised.equations
 
         assert len(parsed_eqs.state_derivatives) == 1
@@ -1237,58 +1193,54 @@ class TestDerivativeNotation:
 
     def test_basic_derivative_with_declared_state(self):
         """dx = ... with state x declared is treated as derivative."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = -k * x"],
             states=["x"],
             parameters=["k"],
             strict=True,
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        assert parsed.mass_matrix is None
-        assert len(parsed.state_derivatives) == 1
-        assert not parsed.auxiliaries
+        ).specialise()
+        equations = specialised.equations
+        assert equations.mass_matrix is None
+        assert len(equations.state_derivatives) == 1
+        assert not equations.auxiliaries
 
     def test_ambiguous_prefix_not_a_state_treated_as_auxiliary(self):
         """delta_i = ... with no state elta_i is auxiliary."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = -k * x", "delta_i = x + 1"],
             states=["x"],
             parameters=["k"],
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
-        parsed = specialised.equations
-        assert ir.sym("delta_i") in parsed.auxiliary_symbols
-        assert "elta_i" not in list(layout.state_names)
+        equations = specialised.equations
+        assert ir.sym("delta_i") in equations.auxiliary_symbols
+        assert "elta_i" not in layout.state_names
 
     def test_ambiguous_prefix_is_a_state_treated_as_derivative(self):
         """delta = ... with state elta declared is derivative of elta."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["delta = -k * elta"],
             states=["elta"],
             parameters=["k"],
             strict=True,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
-        parsed = specialised.equations
-        assert len(parsed.state_derivatives) == 1
-        assert "delta" in list(layout.dxdt_names)
+        equations = specialised.equations
+        assert len(equations.state_derivatives) == 1
+        assert "delta" in layout.dxdt_names
 
     def test_function_notation_with_declared_state(self):
         """d(x, t) = ... with state x declared is derivative."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["d(x, t) = -k * x"],
             states=["x"],
             parameters=["k"],
             strict=True,
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        assert len(parsed.state_derivatives) == 1
-        assert not parsed.auxiliaries
+        ).specialise()
+        equations = specialised.equations
+        assert len(equations.state_derivatives) == 1
+        assert not equations.auxiliaries
 
     def test_function_notation_undeclared_state_strict_raises(self):
         """d(x, t) = ... with no state x in strict mode raises."""
@@ -1302,81 +1254,75 @@ class TestDerivativeNotation:
 
     def test_function_notation_undeclared_state_non_strict_infers(self):
         """d(x, t) = ... with no state x in non-strict infers x."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["d(x, t) = -k * x"],
             states=[],
             parameters=["k"],
             strict=False,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
-        assert "x" in list(layout.state_names)
+        assert "x" in layout.state_names
 
     def test_non_strict_state_inference_from_d_prefix(self):
         """dx = ... with no state x in non-strict infers x as state."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = -k * x"],
             states=[],
             parameters=["k"],
             strict=False,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
-        assert "x" in list(layout.state_names)
+        assert "x" in layout.state_names
 
     def test_non_strict_auxiliary_not_inferred_as_state(self):
         """delta = ... with no state elta in non-strict is auxiliary."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = -k * x", "delta = x + 1"],
             states=["x"],
             parameters=["k"],
             strict=False,
-        )
-        specialised = parsed.specialise()
+        ).specialise()
         layout = specialised.layout
-        parsed = specialised.equations
-        assert ir.sym("delta") in parsed.auxiliary_symbols
-        assert "elta" not in list(layout.state_names)
+        equations = specialised.equations
+        assert ir.sym("delta") in equations.auxiliary_symbols
+        assert "elta" not in layout.state_names
 
     def test_function_notation_with_whitespace(self):
         """d( x , t ) = ... with extra whitespace works."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["d( x , t ) = -k * x"],
             states=["x"],
             parameters=["k"],
             strict=True,
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        assert len(parsed.state_derivatives) == 1
+        ).specialise()
+        equations = specialised.equations
+        assert len(equations.state_derivatives) == 1
 
     def test_single_letter_d_treated_as_auxiliary(self):
         """d = ... alone is treated as auxiliary, not derivative."""
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = -k * x", "d = x + 1"],
             states=["x"],
             parameters=["k"],
             strict=True,
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        assert ir.sym("d") in parsed.auxiliary_symbols
+        ).specialise()
+        equations = specialised.equations
+        assert ir.sym("d") in equations.auxiliary_symbols
 
 
 class TestParsedEquationsAccessors:
     """Cover ParsedEquations indexing and property accessors."""
 
     def _parsed(self):
-        parsed = parse_system(
+        specialised = parse_system(
             dxdt=["dx = x + a", "obs = x"],
             states=["x"],
             parameters=["a"],
             observables=["obs"],
             strict=True,
-        )
-        specialised = parsed.specialise()
-        parsed = specialised.equations
-        return parsed
+        ).specialise()
+        equations = specialised.equations
+        return equations
 
     def test_getitem_returns_equation(self):
         """Indexing returns the equation in original order."""

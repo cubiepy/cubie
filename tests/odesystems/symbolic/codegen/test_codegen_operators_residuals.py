@@ -63,7 +63,7 @@ def test_prepare_jac_without_cache_emits_pass(
 
 
 @pytest.mark.parametrize(
-    "equations_fixture,bases_fixture",
+    "equations_fixture,layout_fixture",
     [
         ("cacheable_equations", "bare_layout"),
         (
@@ -74,12 +74,12 @@ def test_prepare_jac_without_cache_emits_pass(
     ids=["plain-aux", "observable-and-aux"],
 )
 def test_cached_operator_defines_every_referenced_auxiliary(
-    request, equations_fixture, bases_fixture
+    request, equations_fixture, layout_fixture
 ):
     """Every auxiliary a cached operator body references is defined."""
     code = generate_linear_operator_code(
         request.getfixturevalue(equations_fixture),
-        request.getfixturevalue(bases_fixture),
+        request.getfixturevalue(layout_fixture),
         variant=HelperVariant.CACHED,
     )
     referenced, defined = factory_name_bindings(code)
@@ -87,7 +87,7 @@ def test_cached_operator_defines_every_referenced_auxiliary(
 
 
 @pytest.mark.parametrize(
-    "equations_fixture,bases_fixture",
+    "equations_fixture,layout_fixture",
     [
         ("cacheable_equations", "bare_layout"),
         (
@@ -98,12 +98,12 @@ def test_cached_operator_defines_every_referenced_auxiliary(
     ids=["plain-aux", "observable-and-aux"],
 )
 def test_prepare_jac_stores_every_slot_in_order(
-    request, equations_fixture, bases_fixture
+    request, equations_fixture, layout_fixture
 ):
     """prepare_jac stores each cached slot and defines every name."""
     code, aux_count = generate_prepare_jac_code(
         request.getfixturevalue(equations_fixture),
-        request.getfixturevalue(bases_fixture),
+        request.getfixturevalue(layout_fixture),
     )
     assert aux_count > 0
     for slot in range(aux_count):
