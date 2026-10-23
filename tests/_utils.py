@@ -61,6 +61,28 @@ def sweep(system, names):
     system.update(swept_parameters=tuple(names), fixed_parameters=fixed)
 
 
+def swept_values(system):
+    """Return the swept parameters' defaults in row order."""
+    defaults = system.parameters.values_dict
+    return np.array(
+        [defaults[name] for name in system.swept_parameters],
+        dtype=system.precision,
+    )
+
+
+def swept_defaults(system, runs=2):
+    """Return each swept parameter's default, repeated for ``runs`` runs.
+
+    Pass this as a solve's parameters to run the system's own sweep at
+    its default values.
+    """
+    defaults = system.parameters.values_dict
+    return {
+        name: np.full(runs, defaults[name])
+        for name in system.swept_parameters
+    }
+
+
 def parse_input_swept(**kwargs):
     """Return ``parse_input`` products with every parameter swept."""
     from cubie.odesystems.symbolic.parsing.parser import parse_input
@@ -1008,13 +1030,7 @@ def run_device_loop(
     # Iteration counters output (4 counters per save)
     counters_output = np.zeros((save_samples, 4), dtype=np.int32)
 
-    params = np.array(
-        [
-            system.parameters.values_dict[name]
-            for name in system.swept_parameters
-        ],
-        dtype=precision,
-    )
+    params = swept_values(system).astype(precision)
     init_state = np.array(initial_state, dtype=precision, copy=True)
     status = np.zeros(1, dtype=np.int32)
 
@@ -1391,6 +1407,7 @@ NON_SOLVER_SETTINGS = {
     "fix_singularities",
     "voltage_variable",
     "parameter_input",
+    "system_sweep",
 }
 
 

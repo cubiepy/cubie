@@ -336,6 +336,7 @@ class TestScaledDerivativeLhs:
         [
             {
                 "system_type": "ring_modulator_index2",
+                "system_sweep": (),
                 "precision": np.float64,
             }
         ],
