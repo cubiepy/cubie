@@ -45,9 +45,10 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
   child (`symbolic/specialiser.py`), a `ParameterSet`. The child assembles the parsed
   system for that set when it builds; `BaseODE.layout`, `sizes`, `mass`, `states` and
   `observables` read its products. `config_hash` recurses into the child.
-- `BaseODE._update` passes every update to the child and, when the child's `config_hash`
-  moved, passes the child's `fn_hash` down with the settings, so the system rebuilds when
-  the specialisation changes. `states` and `swept_set` come from `_derived`.
+- `BaseODE._update` passes every update to the child and, when the child replaced its
+  settings snapshot, passes the child's `fn_hash` down with the settings, so the system
+  rebuilds when the specialisation changes. The child has no child factories, so a new
+  snapshot is exactly a new `config_hash`. `states` and `swept_set` come from `_derived`.
 - `BaseODE.set_swept_parameters(names, fixed)` is where a request meets the defaults. It
   derives the `ParameterSet` from the declared parameters, the names and the fixed values
   through `_derived`, so for a repeated request it passes the same set to `update` and
