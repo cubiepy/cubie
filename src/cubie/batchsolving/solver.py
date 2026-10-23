@@ -233,11 +233,12 @@ def solve_ivp(
         value of every parameter you leave out of a dict. Give an array
         either one row per parameter in the system, or one row per
         swept parameter in parameter name order, in which case the
-        solver uses the default value of every other parameter. The
-        solver compiles into the code every dict entry and every row of
-        a full-height array that holds one value; see
-        ``fix_constant_parameters``. Pass None, an empty dict, or an
-        empty 1D array to use the default parameters for all runs.
+        solver uses the default value of every other parameter. For a
+        dict or an array with one row per parameter, any parameters
+        given as a single value will be removed from the array and
+        compiled into the code; see ``fix_constant_parameters``. Pass
+        None, an empty dict, or an empty 1D array to use the default
+        parameters for all runs.
     drivers
         The :class:`~cubie.array_interpolator.DriverSamples` to
         interpolate during integration.
@@ -275,13 +276,13 @@ def solve_ivp(
         invalid data. When ``False``, all trajectories are returned with
         original values.
     fix_constant_parameters : bool, default=True
-        Compile into the code every parameter whose value does not
-        change over the batch: a dict entry with one value, or a row of
-        a full-height parameter array that holds one value. The code
-        runs faster than it does reading those parameters from the
-        array. Pass ``False`` to give each of them a row instead, for
-        example when the parameters that hold one value change from one
-        solve to the next and you want to avoid a recompile.
+        If ``False``, leave any parameters that have been given the
+        same value for all runs in the parameters array that the GPU
+        sees. Defaults to ``True``, so that constant parameters are
+        compiled into the code and the whole thing runs faster. Set it
+        ``False`` if you are changing a single value per batch
+        frequently, and the compile time is long enough to make it
+        annoying.
     **kwargs
         Additional keyword arguments passed to :class:`Solver`. Any
         system parameters passed as kwargs are rejected, as they should
@@ -601,11 +602,12 @@ class Solver:
             Give an array either one row per parameter in the system,
             or one row per swept parameter in parameter name order, in
             which case the solver uses the default value of every other
-            parameter. The solver compiles into the code every dict
-            entry and every row of a full-height array that holds one
-            value; see ``fix_constant_parameters``. Pass None, an empty
-            dict, or an empty 1D array to use the default parameters
-            for all runs.
+            parameter. For a dict or an array with one row per
+            parameter, any parameters given as a single value will be
+            removed from the array and compiled into the code; see
+            ``fix_constant_parameters``. Pass None, an empty dict, or
+            an empty 1D array to use the default parameters for all
+            runs.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.
@@ -632,15 +634,13 @@ class Solver:
             solver's device output buffers plus the CUDA stream the
             solve ran on; see Notes. Default ``False``.
         fix_constant_parameters
-            Compile into the code every parameter whose value does not
-            change over the batch: a dict entry with one value, or a
-            row of a full-height parameter array that holds one value.
-            The code runs faster than it does reading those parameters
-            from the array.
-            Default ``True``. Pass ``False`` to give each of them a row
-            instead, for example when the parameters that hold one
-            value change from one solve to the next and you want to
-            avoid a recompile.
+            If ``False``, leave any parameters that have been given the
+            same value for all runs in the parameters array that the
+            GPU sees. Defaults to ``True``, so that constant parameters
+            are compiled into the code and the whole thing runs faster.
+            Set it ``False`` if you are changing a single value per
+            batch frequently, and the compile time is long enough to
+            make it annoying.
         **kwargs
             Additional options forwarded to :meth:`update`. See "Optional
             Arguments" in the docs for possibilities. Any system
@@ -743,15 +743,13 @@ class Solver:
             Parameter values as in :meth:`solve`. Compile the kernel
             that a solve with the same parameters would use.
         fix_constant_parameters
-            Compile into the code every parameter whose value does not
-            change over the batch: a dict entry with one value, or a
-            row of a full-height parameter array that holds one value.
-            The code runs faster than it does reading those parameters
-            from the array.
-            Default ``True``. Pass ``False`` to give each of them a row
-            instead, for example when the parameters that hold one
-            value change from one solve to the next and you want to
-            avoid a recompile.
+            If ``False``, leave any parameters that have been given the
+            same value for all runs in the parameters array that the
+            GPU sees. Defaults to ``True``, so that constant parameters
+            are compiled into the code and the whole thing runs faster.
+            Set it ``False`` if you are changing a single value per
+            batch frequently, and the compile time is long enough to
+            make it annoying.
         optimize_candidates
             Also compile the candidate kernels for :meth:`optimize`.
         max_parallel
@@ -833,9 +831,9 @@ class Solver:
 
         Call this before you pass :meth:`solve` an array that holds only
         the varying parameters; a dict or a full-height array sets the
-        swept parameters itself. Give the names in any order, and give
-        the array its rows in parameter-name order. The solver compiles
-        every other parameter in at its default.
+        swept parameters itself. Names can be in any order, but the
+        array you pass must have its rows in parameter-name order. The
+        solver compiles every other parameter in at its default.
 
         Parameters
         ----------

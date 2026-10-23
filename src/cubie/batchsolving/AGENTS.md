@@ -48,16 +48,8 @@ system's settings moved (`kernel.system_config_stale`) and rebuilds the kernel â
 (which may split the batch into chunks) and launches per chunk. Results return through
 `OutputArrays` â†’ `SolveResult.from_solver`.
 
-The handler sets the swept parameters before it builds the arrays because a compiled-in
-value can change which states a DAE keeps, and the initial-values array needs one row per
-state of the system as compiled. `system.set_swept_parameters` is the handler's one call
-into the system; it reads the declared parameters and the current swept names before it
-and the layout after it. `compile` calls `input_handler.set_swept_parameters` alone, and
-`prepare_grid_arrays` calls the handler with `fix_constant_parameters=False`; both then
-call `update()`. `calibrate` and `optimize` call the handler with the caller's
-`fix_constant_parameters`, so the candidates race the kernel the caller's solves compile.
-`ComparisonRunner` stages the arrays on the device and times `kernel.run` on them,
-because a solve of a swept-only array compiles every other parameter at its default.
+The handler sets the swept parameters before it builds the arrays, because a compiled-in
+value can change which states a DAE keeps.
 
 ## Solver settings
 `__init__` and `update` flatten the settings groups, record `given`, update the system's

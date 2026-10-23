@@ -120,18 +120,19 @@ values, like this:
         duration=1.0,
     )
 
-Every parameter you name gets a row of the parameters array, so ``x0``
-above holds 0.4 in every run. If you set default values for the states
-or parameters, you can leave them out of the dicts and they will use
-their default values. You can leave either dict out entirely, too. If
+Cubie compiles ``x0`` above into the code, because it holds one value,
+and gives ``x1`` a row of the parameters array. If you set default
+values for the states or parameters, you can leave them out of the dicts
+and they will use their default values. You can leave either dict out
+entirely, too. If
 you didn't set defaults when you built the system, you can set them on
 the system with ``system.set_default_parameters({"x0": 0.4})`` for
 parameters and ``system.set_initial_values({"y1": 0.3})`` for states.
 If you include a constant value for a parameter or initial value that
 has a different default, the default doesn't change: Cubie presumes
 that arguments to ``solve`` are intended for that run only. Pass
-``fix_constant_parameters=True`` to compile every constant value in
-the dict into the code instead of giving it a row; see below.
+``fix_constant_parameters=False`` to give every constant value in the
+dict a row instead; see below.
 ``solve_ivp``, ``Solver.compile``, ``Solver.calibrate`` and
 ``Solver.optimize`` treat their inputs the same way.
 
@@ -179,14 +180,12 @@ Arrays of swept parameters only are intended as a convenience: some
 models have hundreds of parameters, and if you're only sweeping two of
 them you probably don't want to throw hundreds-high arrays around. If it
 ends up being easier to pass full-height parameter arrays because of how
-you generate the values, you can set ``fix_constant_parameters=True`` in
-your call to ``solve``, and Cubie will scan your array for values that
-don't change over the whole batch and compile them into your code. This
-keeps the performance benefits when running the solve, at the expense of
-a few milliseconds scanning the array. The same flag compiles in the
-constant entries of a dict. ``fix_constant_parameters`` works with
-dicts and full-height parameter arrays, not with arrays of swept
-parameters only.
+you generate the values, Cubie will spend a few ms scanning the array
+for values that are the same across every run, and it will remove those
+from the array it passes to the GPU and compile them into your code
+instead. You can save a few ms per solve by disabling this with
+``fix_constant_parameters=False``, but it may slow down the solve itself
+if you have a lot of constant parameters.
 
 If you want to go *really* fast and you are comfortable with the CUDA
 environment, you can pass arrays on the GPU (device arrays) directly to
