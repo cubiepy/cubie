@@ -92,6 +92,14 @@ def test_runparams_getitem_single_chunk():
     assert chunk_params.t0 == 0.0
 
 
+def test_runparams_getitem_of_an_unchunked_run_returns_itself():
+    """An unchunked run's only chunk is the run itself."""
+    params = RunParams(
+        duration=1.0, warmup=0.0, t0=0.0, runs=100, chunk_length=100
+    )
+    assert params[0] is params
+
+
 def test_runparams_getitem_multiple_chunks():
     """Verify __getitem__ returns correct runs for each chunk."""
     # 100 runs divided into 4 chunks: ceil(100/4) = 25 runs per chunk

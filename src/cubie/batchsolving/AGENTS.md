@@ -38,15 +38,19 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `arrays/` | Host/device array managers (`InputArrays`/`OutputArrays`/`BaseArrayManager`/`ManagedArray`) — allocation, chunked transfers, writeback. See `arrays/AGENTS.md`. |
 
 ## Data flow
-`Solver.solve()` → `update(**kwargs)` for solve-time settings → `check_duration` on the
-effective timing → `input_handler(initial_values, parameters, ...)`, which calls
+`Solver.solve()` → `update(**kwargs)` when it has solve-time settings or the system is
+stale → `check_duration` on the effective timing, memoised through `_derived` →
+`input_handler(initial_values, parameters, ...)`, which calls
 `system.set_swept_parameters(swept, fixed)` for the parameter input and then builds
 `(n_vars, n_runs)` `inits`/`params` against `system.layout` → `update()`, which sees the
 system's settings moved (`kernel.system_config_stale`) and rebuilds the kernel →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
-(which may split the batch into chunks) and launches per chunk. Results return through
-`OutputArrays` → `SolveResult.from_solver`.
+(which may split the batch into chunks) and launches per chunk. A host solve builds its
+`SolveResult` while the kernel runs, then synchronizes and masks the failed runs. The
+solve holds the result in `Solver._host_result`, never as a local of `solve`: the first
+compile leaves a reference cycle through the `solve` frame, and a result in that frame
+lives until the cycle collector runs, so its buffers do not return to their slots.
 
 The handler sets the swept parameters before it builds the arrays, because a compiled-in
 value can change which states a DAE keeps.
@@ -64,9 +68,11 @@ logger. `settings_dict()` is the given record plus the logger's level; `copy()` 
 from it on a copied system. Child `update` calls are `silent=True`. New result
 accessors go on `kernel` with a `Solver` property.
 
-A system changed outside the Solver is `kernel.system_config_stale`, which compares the
-system's `config_hash` with the one the kernel last built against; the next `update`
-pushes the whole effective record so every child re-reads its products.
+A system changed outside the Solver is `kernel.system_config_stale`, which checks whether
+the system's settings snapshot is the one the kernel last built against; the next
+`update` pushes the whole effective record so every child re-reads its products. The
+identity check covers the specialiser too, because `BaseODE._update` passes the
+specialiser's `fn_hash` into the system's settings whenever the specialisation changes.
 
 ## Swept and fixed parameters
 The parameters array has one row per swept parameter, in parameter-name order;
@@ -133,7 +139,10 @@ settings dict; summarised defaults to saved when every summarise input is `None`
   `runs=None` sizes a full block. Launch choices and geometry are cached per signature;
   launch policies live in `optimize.py`.
 - Kept across solves: the system snapshot identity, the chunk partition until an
-  allocation replaces it, and the timing `CUDAEvent`s while timing is on.
+  allocation replaces it, `run_params` while the run's times and size are unchanged, the
+  timing `CUDAEvent`s until the chunk count or logger verbosity changes, and the
+  configured launch, which `_configured_launch` derives from the dispatcher, geometry
+  and stream through `_derived`.
 
 ## Results
 A `SolveResult` owns the solve's host buffers with no copy: `OutputArrays.loan_host_arrays`
