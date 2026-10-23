@@ -847,8 +847,10 @@ def parameter_solve(solver, system, solver_settings, parameter_batch):
             if name not in names[:2]
         }
         fixed[names[2]] = as_dict[names[2]]
+        # Name the swept parameters in reverse to check that the rows
+        # are still in name order.
         solver.set_swept_parameters((names[1], names[0]), fixed)
-        params = parameter_batch[[1, 0]]
+        params = parameter_batch[[0, 1]]
         if form == "device":
             params = cuda.to_device(params)
     elif form == "build_grid":

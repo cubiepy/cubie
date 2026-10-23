@@ -89,7 +89,6 @@ class CellMLCache:
     def _serialize_args(
         self,
         observables: Optional[Iterable[str]],
-        precision,
         name: str,
         fix_singularities: bool = True,
         voltage_variable: Optional[str] = None,
@@ -97,19 +96,8 @@ class CellMLCache:
         initial_values: Optional[Mapping[str, Any]] = None,
     ) -> str:
         """Return a stable JSON cache-key payload."""
-        # Handle precision consistently - convert numpy dtype to string name
-        if precision is not None:
-            precision_str = (
-                precision.__name__
-                if hasattr(precision, "__name__")
-                else str(precision)
-            )
-        else:
-            precision_str = "None"
-
         args_dict = {
             "observables": sorted(observables) if observables else None,
-            "precision": precision_str,
             "name": name,
             "fix_singularities": fix_singularities,
             "voltage_variable": voltage_variable,
@@ -135,7 +123,6 @@ class CellMLCache:
     def compute_cache_key(
         self,
         observables: Optional[Iterable[str]],
-        precision,
         name: str,
         fix_singularities: bool = True,
         voltage_variable: Optional[str] = None,
@@ -144,11 +131,13 @@ class CellMLCache:
     ) -> str:
         """Compute cache key from file content hash and argument hash.
 
-        Returns a short hash (first 16 chars) for use in filename.
+        Returns a short hash (first 16 chars) for use in filename. We
+        leave precision out of the key because the cached parsed system
+        is the same at every precision.
         """
         file_hash = self.get_cellml_hash()
         args_str = self._serialize_args(
-            observables, precision, name,
+            observables, name,
             fix_singularities=fix_singularities,
             voltage_variable=voltage_variable,
             parameter_values=parameter_values,
@@ -258,51 +247,28 @@ class CellMLCache:
     def save_to_cache(
         self,
         args_hash: str,
-        parsed_equations,
-        indexed_bases,
-        all_symbols: dict,
-        user_functions: Optional[dict],
-        fn_hash: str,
-        precision,
+        parsed_system,
         name: str,
-        parsed_system=None,
     ) -> None:
         """Save cached data for given args_hash. Handles LRU eviction.
+
+        We cache the parsed system before it is specialised, so one
+        entry serves every choice of swept parameters.
 
         Parameters
         ----------
         args_hash : str
             Cache key computed from arguments
-        parsed_equations : ParsedEquations
-            Equation container from parse_input
-        indexed_bases : IndexedBases
-            Index maps from parse_input
-        all_symbols : dict
-            Symbol mapping from parse_input
-        user_functions : dict or None
-            User-provided functions (may be None)
-        fn_hash : str
-            System hash from parse_input
-        precision : PrecisionDType
-            Floating-point precision
+        parsed_system : ParsedSystem
+            Parsed system with every parameter left as a symbol.
         name : str
             Model name
-        parsed_system : ParsedSystem
-            Parsed system from parse_input with every parameter left
-            as a symbol, used to rebuild the equations when the swept
-            parameters change.
         """
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
             # Build cache dictionary
             cache_data = {
-                "parsed_equations": parsed_equations,
-                "indexed_bases": indexed_bases,
-                "all_symbols": all_symbols,
-                "user_functions": user_functions,
-                "fn_hash": fn_hash,
-                "precision": precision,
                 "name": name,
                 "parsed_system": parsed_system,
             }

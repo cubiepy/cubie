@@ -112,7 +112,8 @@ class SystemInterface:
         Parameters
         ----------
         names
-            Names of the parameters array's rows, in order.
+            Names of the parameters read from the parameters array, in
+            any order.
         fixed_values
             Values to compile in for the other parameters. Defaults to
             their default values.
@@ -137,10 +138,11 @@ class SystemInterface:
                 for name, value in defaults.items()
                 if name not in names
             }
-        if (
-            names == self.swept_parameters
-            and dict(fixed_values) == self.fixed_parameter_values
-        ):
+        current = self.swept_parameters
+        same_names = len(names) == len(current) and set(names) == set(
+            current
+        )
+        if same_names and dict(fixed_values) == self.fixed_parameter_values:
             return
         # Pairs, as update reads a dict value as a settings group.
         self._system.update(
