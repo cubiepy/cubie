@@ -401,17 +401,17 @@ _CACHED_SOURCE_SYSTEMS = [
 
 
 @pytest.mark.parametrize(
-    "equations_fixture,bases_fixture",
+    "equations_fixture,layout_fixture",
     _CACHED_SOURCE_SYSTEMS,
     ids=["plain-aux", "observable-and-aux"],
 )
 def test_cached_jacobi_defines_every_referenced_auxiliary(
-    request, equations_fixture, bases_fixture
+    request, equations_fixture, layout_fixture
 ):
     """Every auxiliary a cached Jacobi body references is defined."""
     code = generate_jacobi_preconditioner_code(
         request.getfixturevalue(equations_fixture),
-        request.getfixturevalue(bases_fixture),
+        request.getfixturevalue(layout_fixture),
         variant=HelperVariant.CACHED,
     )
     referenced, defined = factory_name_bindings(code)
@@ -420,17 +420,17 @@ def test_cached_jacobi_defines_every_referenced_auxiliary(
 
 
 @pytest.mark.parametrize(
-    "equations_fixture,bases_fixture",
+    "equations_fixture,layout_fixture",
     _CACHED_SOURCE_SYSTEMS,
     ids=["plain-aux", "observable-and-aux"],
 )
 def test_cached_neumann_defines_every_referenced_auxiliary(
-    request, equations_fixture, bases_fixture
+    request, equations_fixture, layout_fixture
 ):
     """Every auxiliary a cached Neumann body references is defined."""
     code = generate_neumann_preconditioner_code(
         request.getfixturevalue(equations_fixture),
-        request.getfixturevalue(bases_fixture),
+        request.getfixturevalue(layout_fixture),
         variant=HelperVariant.CACHED,
     )
     referenced, defined = factory_name_bindings(code)

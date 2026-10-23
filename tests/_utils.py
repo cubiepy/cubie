@@ -23,6 +23,7 @@ from cubie.integrators.step_control import (
     filter_coefficients_to_gains,
 )
 from cubie.odesystems.symbolic import SymbolicODE
+from cubie.odesystems.symbolic.parsing.parser import parse_system
 from cubie.batchsolving.solver import Solver
 from cubie.outputhandling import OutputFunctions
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples
@@ -80,6 +81,16 @@ def swept_defaults(system, runs=2):
         name: np.full(runs, defaults[name])
         for name in system.swept_parameters
     }
+
+
+def specialise_all_swept(**kwargs):
+    """Parse equations and specialise them, sweeping every parameter.
+
+    Take the arguments of ``parse_system`` and return the products of
+    ``ParsedSystem.specialise``.
+    """
+    parsed_system = parse_system(**kwargs)
+    return parsed_system.specialise(list(parsed_system.parameters))
 
 
 class MockMemoryManager(MemoryManager):

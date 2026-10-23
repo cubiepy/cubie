@@ -207,21 +207,19 @@ def solver_scaling_collision_equations(
     solver_scaling_collision_layout,
 ):
     """One-state equation using colliding beta/gamma parameters."""
-    ib = solver_scaling_collision_layout
     x = sp.Symbol("x", real=True)
     beta = sp.Symbol("beta", real=True)
     gamma = sp.Symbol("gamma", real=True)
     dx = sp.Symbol("dx", real=True)
     return ParsedEquations.from_equations(
         [(dx, beta * x + gamma)],
-        ib,
+        solver_scaling_collision_layout,
     )
 
 
 @pytest.fixture
 def bare_nonlinear_equations(bare_layout):
     """Two-state nonlinear equations with no cacheable auxiliaries."""
-    ib = bare_layout
     x = sp.Symbol("x", real=True)
     y = sp.Symbol("y", real=True)
     a = sp.Symbol("a", real=True)
@@ -233,13 +231,12 @@ def bare_nonlinear_equations(bare_layout):
         (dx, a * x - b * x * y),
         (dy, b * x * y - a * y),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
 def zero_diagonal_equations(bare_layout):
     """Two cross-coupled states with vanishing Jacobian diagonals."""
-    ib = bare_layout
     x = sp.Symbol("x", real=True)
     y = sp.Symbol("y", real=True)
     a = sp.Symbol("a", real=True)
@@ -251,13 +248,12 @@ def zero_diagonal_equations(bare_layout):
         (dx, a * y),
         (dy, b * x),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
 def identical_diagonal_equations(bare_layout):
     """Two cross-coupled states sharing one Jacobian diagonal."""
-    ib = bare_layout
     x = sp.Symbol("x", real=True)
     y = sp.Symbol("y", real=True)
     a = sp.Symbol("a", real=True)
@@ -269,7 +265,7 @@ def identical_diagonal_equations(bare_layout):
         (dx, a * y - x),
         (dy, b * x - y),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
@@ -281,7 +277,6 @@ def cacheable_equations(bare_layout):
     cache; this drives the ``cached_aux`` branches of the cached
     generators.
     """
-    ib = bare_layout
     x = sp.Symbol("x", real=True)
     y = sp.Symbol("y", real=True)
     a = sp.Symbol("a", real=True)
@@ -294,13 +289,12 @@ def cacheable_equations(bare_layout):
         (dx, a * shared + x**3),
         (dy, b * shared + y**3),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
 def chained_aux_equations(bare_layout):
     """Two chained auxiliaries on a system without drivers/observables."""
-    ib = bare_layout
     x = sp.Symbol("x", real=True)
     y = sp.Symbol("y", real=True)
     a = sp.Symbol("a", real=True)
@@ -316,7 +310,7 @@ def chained_aux_equations(bare_layout):
         (dx, second * a),
         (dy, first * b),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
@@ -333,7 +327,6 @@ def observable_driver_layout():
 @pytest.fixture
 def observable_driver_equations(observable_driver_layout):
     """Two-state equations using an observable and a driver."""
-    ib = observable_driver_layout
     x = sp.Symbol("x", real=True)
     y = sp.Symbol("y", real=True)
     a = sp.Symbol("a", real=True)
@@ -348,13 +341,12 @@ def observable_driver_equations(observable_driver_layout):
         (dx, obs * y - b * x * y),
         (dy, b * x * y - a * y),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, observable_driver_layout)
 
 
 @pytest.fixture
 def cacheable_observable_equations(observable_driver_layout):
     """Cache-triggering equations with an observable and a chained aux."""
-    ib = observable_driver_layout
     x = sp.Symbol("x", real=True)
     y = sp.Symbol("y", real=True)
     a = sp.Symbol("a", real=True)
@@ -371,7 +363,7 @@ def cacheable_observable_equations(observable_driver_layout):
         (dx, a * obs + x**3),
         (dy, b * obs + y**3 + first),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, observable_driver_layout)
 
 
 @pytest.fixture
@@ -385,7 +377,6 @@ def single_observable_layout():
 @pytest.fixture
 def single_observable_equations(single_observable_layout):
     """Single-state equations carrying one observable."""
-    ib = single_observable_layout
     x = sp.Symbol("x", real=True)
     a = sp.Symbol("a", real=True)
     obs = sp.Symbol("obs1", real=True)
@@ -395,7 +386,7 @@ def single_observable_equations(single_observable_layout):
         (obs, a * x * x),
         (dx, obs + a * x),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, single_observable_layout)
 
 
 @pytest.fixture

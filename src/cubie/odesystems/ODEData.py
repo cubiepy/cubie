@@ -59,7 +59,6 @@ from attrs.validators import (
     instance_of as attrsval_instance_of,
     optional as attrsval_optional,
 )
-from numpy import array as np_array, float64 as np_float64
 
 
 from cubie._env import operation_ordering_default
@@ -67,28 +66,19 @@ from cubie.CUDAFactory import CUDAFactoryConfig
 from cubie._utils import (
     PrecisionDType,
     mass_equal,
+    mass_matrix_converter,
 )
 from cubie.odesystems.SystemValues import SystemValues
 
 
 ALL_ODE_PARAMETERS = frozenset({"operation_ordering"})
 OPERATION_ORDERINGS = ("kahn", "greedy", "dfs", "liveness_auto")
-
-
-def _mass_matrix_converter(value: Any) -> Any:
     """Normalise a mass matrix to ``None`` or a sealed float64 array.
 
     SymPy matrices, NumPy arrays, and nested sequences normalise to
     one canonical numeric array; symbolic entries raise. The stored
     array is an owned read-only copy.
     """
-    if value is None:
-        return None
-    if hasattr(value, "tolist"):
-        value = value.tolist()
-    array = np_array(value, dtype=np_float64)
-    array.setflags(write=False)
-    return array
 
 
 def _runtime_values_converter(value: Any) -> Any:
@@ -244,7 +234,7 @@ class ODEData(CUDAFactoryConfig):
     )
     _mass: Any = field(
         default=None,
-        converter=_mass_matrix_converter,
+        converter=mass_matrix_converter,
         eq=attrs_cmp_using(eq=mass_equal),
     )
     def __attrs_post_init__(self):

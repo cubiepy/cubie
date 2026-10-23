@@ -12,7 +12,10 @@ from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_lines,
 )
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.engine.adapter import system_ir
+from cubie.odesystems.symbolic.engine.adapter import (
+    buffer_maps,
+    system_ir,
+)
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.parsing import (
     EquationWarning,
@@ -26,6 +29,7 @@ from cubie.odesystems.symbolic.structural.errors import (
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     sweep,
+    specialise_all_swept,
     run_dense_at_state_operator,
     run_device_dxdt,
     run_device_observables,
@@ -38,23 +42,11 @@ from tests.system_fixtures import (
     growth_d2,
     growth_d3,
 )
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
-
-
-def parse_dae_input(**kwargs):
-
-    return parse_system(**kwargs).specialise()
-
-
-def parse_dae_input_swept(**kwargs):
-
-    parsed = parse_system(**kwargs)
-    return parsed.specialise(list(parsed.parameters))
 
 
 class TestParseDaeInput:
     def test_string_implicit_and_alias(self):
-        specialised = parse_dae_input_swept(
+        specialised = specialise_all_swept(
             dxdt=["dx = -k*x + y", "y = 2*x"],
             states={"x": 1.0},
             observables=["y"],
@@ -74,10 +66,10 @@ class TestParseDaeInput:
         assert sp.simplify(to_sympy(eqs["y"] - 2 * x)) == 0
 
     def test_nested_derivative_string(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["d(d(x, t), t) = -x"],
             states={"x": 1.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         # Two differential states, no torn residuals.
@@ -87,10 +79,10 @@ class TestParseDaeInput:
     def test_sympy_higher_order_derivative(self):
         x = sp.Symbol("x", real=True)
         t = sp.Symbol("t", real=True)
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[(sp.Derivative(x, t, 2), -x)],
             states={"x": 1.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         # The second-order derivative introduces a second
@@ -100,7 +92,7 @@ class TestParseDaeInput:
 
     def test_torn_system_mass_and_defaults_warning(self):
         with pytest.warns(EquationWarning):
-            specialised = parse_dae_input_swept(
+            specialised = specialise_all_swept(
                 dxdt="""
                 dx = vx
                 dy = vy
@@ -156,11 +148,11 @@ class TestParseDaeInput:
     def test_torn_residuals_pair_rows(self, dxdt, observables):
         # Each algebraic row's residual depends on that row's state,
         # directly or through the assignments it reads.
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=dxdt,
             states={"x": 1.0, "y": 1.0, "z1": 0.5, "z2": 0.5},
             observables=observables,
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         names = list(layout.state_names)
@@ -188,10 +180,10 @@ class TestParseDaeInput:
     def test_numeric_literal_implicit_lhs(self):
         # Implicit equations accept any numeric-literal LHS, not
         # just the exact token "0".
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -z", "0.0 = z + 2*x"],
             states={"x": 1.0, "z": 0.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         # z solves through: one state, no mass, z an auxiliary.
@@ -202,12 +194,12 @@ class TestParseDaeInput:
         assert sp.simplify(to_sympy(eqs["z"] + 2 * x)) == 0
 
     def test_undeclared_symbol_inferred_parameter(self):
-        specialised = parse_dae_input_swept(
+        specialised = specialise_all_swept(
             dxdt=["dx = -mu * x"],
             states={"x": 1.0},
         )
         layout = specialised.layout
-        assert "mu" in list(layout.swept_names)
+        assert "mu" in layout.swept_names
 
     def test_strict_rejects_undeclared(self):
         with pytest.raises(ValueError, match="(?i)undefined symbol"):
@@ -221,10 +213,10 @@ class TestParseDaeInput:
         def rhs(t, y):
             return [-y[0]]
 
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=rhs,
             states={"x": 1.0},
-        )
+        ).specialise()
         parsed = specialised.equations
         assert parsed.mass_matrix is None
         assert len(parsed.ordered) == 1
@@ -299,17 +291,17 @@ class TestSymbolicODEIntegration:
 
 class TestScaledDerivativeLhs:
     def test_string_coefficient_solves_through(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt="""
             M * dv = -k * x - c * v
             dx = v
             """,
             states={"x": 1.0, "v": 0.0},
             parameters={"M": 2.0, "k": 4.0, "c": 0.5},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
-        assert set(list(layout.state_names)) == {"x", "v"}
+        assert set(layout.state_names) == {"x", "v"}
         assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         x, v = sp.symbols("x v", real=True)
@@ -323,14 +315,14 @@ class TestScaledDerivativeLhs:
         x, v = sp.symbols("x v", real=True)
         M, k = sp.symbols("M k", real=True)
         dv = sp.Symbol("dv", real=True)
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[(M * dv, -k * x), ("dx", "v")],
             states={"x": 1.0, "v": 0.0},
             parameters={"M": 2.0, "k": 4.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
-        assert set(list(layout.state_names)) == {"x", "v"}
+        assert set(layout.state_names) == {"x", "v"}
         assert parsed.mass_matrix is None
         eqs = {lhs.name: rhs for lhs, rhs in parsed.ordered}
         assert sp.simplify(
@@ -370,7 +362,7 @@ class TestScaledDerivativeLhs:
 
     def test_assigned_dx_auxiliary_keeps_reference_semantics(self):
         # An assigned dfoo stays a reference, not d(foo)/dt.
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt="""
             dfoo = 2*y
             foo = y + 1
@@ -379,7 +371,7 @@ class TestScaledDerivativeLhs:
             """,
             states={"y": 1.0},
             observables=["q"],
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert list(layout.state_names) == ["y"]
@@ -472,7 +464,7 @@ def residual(layout, parsed, name):
 def substituted(layout, parsed, expr):
     """``expr`` with every solved non-state assignment substituted."""
 
-    states = set(list(layout.state_names))
+    states = set(layout.state_names)
     observed = {
         sp.Symbol(name, real=True): rhs
         for name, rhs in solved(parsed).items()
@@ -527,18 +519,18 @@ class TestStructuralInputPaths:
         x, y = real_symbols("x y")
         dxdt = ["dx = -x + y", "0 = x*y - 1"]
         states = {"x": 1.0, "y": 1.0}
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=dxdt,
             states=states,
             simplify_options={"allow_symbolic": True},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert parsed.mass_matrix is None
         assert equivalent(solved(parsed)["y"], 1 / x)
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=dxdt, states=states
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert algebraic_states(layout, parsed) == ["y"]
@@ -548,17 +540,17 @@ class TestStructuralInputPaths:
         # The constraint is differentiated twice; the selected states
         # satisfy it and its first derivative exactly.
         t, x1, x2 = real_symbols("t x1 x2")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[
                 "d(d(x1,t),t) = -x1 + lam",
                 "d(d(x2,t),t) = -x2 + 2*lam",
                 "0 = x1 + 2*x2 - sin(t)",
             ],
             states={"x1": 0.0, "x2": 0.0, "lam": 0.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
-        names = set(list(layout.state_names))
+        names = set(layout.state_names)
         assert len(names) - len(algebraic_states(layout, parsed)) == 2
         assert holds(layout, parsed, x1 + 2 * x2 - sp.sin(t))
         x1_t, x2_t = real_symbols("x1_t x2_t")
@@ -567,7 +559,7 @@ class TestStructuralInputPaths:
 
     def test_alias_exposed_by_integer_elimination(self):
         a, b, c, x = real_symbols("a b c x")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[
                 "dx = -x + a",
                 "0 = a + b + c",
@@ -575,7 +567,7 @@ class TestStructuralInputPaths:
                 "0 = b - sin(x)",
             ],
             states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert parsed.mass_matrix is None
@@ -601,40 +593,40 @@ class TestStructuralInputPaths:
             ).specialise()
 
     def test_conflicting_aliases_keep_irreducible_member(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + a", "0 = a - b", "0 = a + b"],
             states={"x": 1.0, "a": 0.0, "b": 0.0},
             irreducible=["a"],
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
-        assert "a" in list(layout.state_names)
+        assert "a" in layout.state_names
         assert solved(parsed)["b"] == 0
 
     def test_conflicting_aliases_zero_derivative_chain(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + y", "0 = x - y", "0 = x + y"],
             states={"x": 1.0, "y": 0.0},
             simplify_options={"fully_determined": False},
-        )
+        ).specialise()
         parsed = specialised.equations
         eqs = solved(parsed)
         assert eqs["x"] == 0
         assert eqs["y"] == 0
 
     def test_conflict_group_absorbs_later_alias(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + a + c", "0 = a - b", "0 = a + b", "0 = c - a"],
             states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
             simplify_options={"fully_determined": False},
-        )
+        ).specialise()
         parsed = specialised.equations
         eqs = solved(parsed)
         assert [eqs[name] for name in ("a", "b", "c")] == [0, 0, 0]
 
     def test_smaller_alias_group_joins_larger(self):
         a, b, c = real_symbols("a b c")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[
                 "dx = -x + a**3 + c**3",
                 "0 = cos(b) - 0.5",
@@ -642,20 +634,20 @@ class TestStructuralInputPaths:
                 "0 = a - b",
             ],
             states={"x": 0.1, "a": 0.1, "b": 0.1, "c": 0.1},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
-        survivors = {"a", "b", "c"} & set(list(layout.state_names))
+        survivors = {"a", "b", "c"} & set(layout.state_names)
         assert len(survivors) == 1
         assert holds(layout, parsed, a - b)
         assert holds(layout, parsed, b - c)
 
     def test_product_of_two_unknowns_is_not_an_alias(self):
         a, b, x = real_symbols("a b x")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + a + b", "0 = a*b", "0 = a - sin(x)"],
             states={"x": 1.0, "a": 0.0, "b": 0.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert algebraic_states(layout, parsed) == ["b"]
@@ -668,10 +660,10 @@ class TestStructuralInputPaths:
 
     def test_assignment_to_differential_state_stays_a_constraint(self):
         x, z = real_symbols("x z")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + z", "x = sin(z)"],
             states={"x": 0.5, "z": 0.5},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         (name,) = algebraic_states(layout, parsed)
@@ -682,18 +674,18 @@ class TestStructuralInputPaths:
 
     def test_identity_assignment_is_not_torn(self):
         x, y = real_symbols("x y")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + y", "y = y", "0 = y - sin(x)"],
             states={"x": 1.0, "y": 0.0},
             simplify_options={"fully_determined": False},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert parsed.mass_matrix is None
         assert holds(layout, parsed, y - sp.sin(x))
 
     def test_repeated_alias_between_irreducibles_merges(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[
                 "dx = -x + a",
                 "0 = a - b",
@@ -703,16 +695,16 @@ class TestStructuralInputPaths:
             states={"x": 1.0, "a": 0.0, "b": 0.0},
             irreducible=["a", "b"],
             simplify_options={"fully_determined": False},
-        )
+        ).specialise()
         layout = specialised.layout
-        assert {"a", "b"} <= set(list(layout.state_names))
+        assert {"a", "b"} <= set(layout.state_names)
 
     def test_user_symbol_named_like_derivative(self):
         x, x_t = real_symbols("x x_t")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + x_t", "0 = x_t - sin(x)"],
             states={"x": 1.0, "x_t": 0.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert list(layout.state_names) == ["x"]
@@ -730,12 +722,12 @@ class TestStructuralInputPaths:
 
     def test_index_reduction_skips_equation_without_unknowns(self):
         x, y = real_symbols("x y")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = -x + y", "0 = y - sin(x)", "0 = k - 1"],
             states={"x": 1.0, "y": 0.0},
             parameters={"k": 1.0},
             simplify_options={"consistency_check": False},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert parsed.mass_matrix is None
@@ -745,7 +737,7 @@ class TestStructuralInputPaths:
         # b = -a makes the last equation nonlinear in a, its only
         # unknown, so it stays as a's residual.
         x, a, b, c = real_symbols("x a b c")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[
                 "dx = -x + a",
                 "0 = a + b + c",
@@ -753,7 +745,7 @@ class TestStructuralInputPaths:
                 "0 = a + exp(b) - sin(x)",
             ],
             states={"x": 1.0, "a": 0.0, "b": 0.0, "c": 0.0},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         assert algebraic_states(layout, parsed) == ["a"]
@@ -812,7 +804,7 @@ class TestStructuralInputPaths:
 
     def test_coupled_linear_loop_torn_acyclic(self):
         t, x0, z0, z1, z2, z3 = real_symbols("t x0 z0 z1 z2 z3")
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=[
                 "d(x0,t) = -x0 + z3*z2",
                 "0 = -2*z1 + z0 - 2*x0",
@@ -822,7 +814,7 @@ class TestStructuralInputPaths:
             states={"x0": 0.1, "z0": 0.1, "z1": 0.1, "z2": 0.1},
             parameters={"z3": 0.1},
             simplify_options={"fully_determined": False},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         # Two of the three constraints are solved explicitly; the
@@ -864,7 +856,7 @@ class TestUserFunctionDerivatives:
     def test_reduction_calls_each_supplied_derivative(self):
         # Expect calls to the first and second helpers, because
         # reducing the system differentiates growth twice.
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},
             observables=["v", "w"],
@@ -873,7 +865,7 @@ class TestUserFunctionDerivatives:
             user_function_derivatives={
                 "growth": [growth_d1, growth_d2, growth_d3]
             },
-        )
+        ).specialise()
         parsed = specialised.equations
         assert {"growth_d1", "growth_d2"} <= self._calls(parsed)
         assert parsed.derivative_names == {
@@ -883,14 +875,14 @@ class TestUserFunctionDerivatives:
         }
 
     def test_single_derivative_names_first_helper(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = v", "0 = growth(x) - p*t"],
             states={"x": 0.0},
             observables=["v"],
             parameters=dict(USER_DERIVATIVE_PARAMETERS),
             user_functions={"growth": growth},
             user_function_derivatives={"growth": growth_d1},
-        )
+        ).specialise()
         parsed = specialised.equations
         assert "growth_d1" in self._calls(parsed)
         assert parsed.derivative_names == {"growth_": "growth_d1"}
@@ -939,14 +931,14 @@ class TestUserFunctionDerivatives:
             ).specialise()
 
     def test_too_few_derivatives_for_jacobian_names_the_order(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},
             observables=["v", "w"],
             parameters=dict(USER_DERIVATIVE_PARAMETERS),
             user_functions={"growth": growth},
             user_function_derivatives={"growth": [growth_d1, growth_d2]},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         with pytest.raises(
@@ -965,14 +957,14 @@ class TestUserFunctionDerivatives:
     def test_jacobian_after_a_failed_jvp_names_the_order(self):
         # Request the JVP first, so its Jacobian is already cached
         # under the key the full Jacobian looks up.
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=USER_DERIVATIVE_EQUATIONS,
             states={"x": 0.0},
             observables=["v", "w"],
             parameters=dict(USER_DERIVATIVE_PARAMETERS),
             user_functions={"growth": growth},
             user_function_derivatives={"growth": [growth_d1, growth_d2]},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         orders = dict(
@@ -985,11 +977,11 @@ class TestUserFunctionDerivatives:
             generate_jacobian(parsed, **orders)
 
     def test_missing_derivative_for_time_derivative_names_the_order(self):
-        specialised = parse_dae_input(
+        specialised = parse_system(
             dxdt=["dx = growth(t)"],
             states={"x": 0.0},
             user_functions={"growth": growth},
-        )
+        ).specialise()
         layout = specialised.layout
         parsed = specialised.equations
         with pytest.raises(
