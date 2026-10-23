@@ -706,8 +706,8 @@ class Solver(DerivedValues):
         )
 
         if on_device:
-            # Device results return unsynchronized: the caller orders
-            # further work on the returned stream.
+            # Return device results without synchronizing; the caller
+            # orders further work on the returned stream.
             default_timelogger.stop_event("solver_solve")
             default_timelogger.print_summary()
             return DeviceSolveResult.from_solver(self)
@@ -715,7 +715,7 @@ class Solver(DerivedValues):
         return self._host_result(nan_error_trajectories)
 
     def _host_result(self, nan_error_trajectories: bool) -> SolveResult:
-        """Return the result of the launched host solve once it lands.
+        """Wait for the launched host solve and return its result.
 
         Parameters
         ----------
@@ -727,10 +727,10 @@ class Solver(DerivedValues):
         SolveResult
             Result owning the solve's host buffers.
         """
-        # Build the result while the kernel runs. We hold it here rather
-        # than in solve: on the first solve the compiler leaves a
-        # reference cycle through solve's frame, and a result held there
-        # would outlive its caller until the cycle collector runs.
+        # Build the result while the kernel runs. We keep it out of
+        # solve's frame: the first compile leaves a reference cycle
+        # through that frame, and Python frees what the frame holds
+        # only when the cycle collector runs.
         result = SolveResult.from_solver(self, nan_error_trajectories=False)
         # Wait for the stream, and for the writeback of a chunked run.
         self.kernel.synchronize()
@@ -744,7 +744,8 @@ class Solver(DerivedValues):
         return result
 
     def _check_duration(self, duration: float) -> None:
-        """Raise ``ValueError`` when a solve of ``duration`` saves nothing.
+        """Raise ``ValueError`` if the solver would save nothing in
+        ``duration``.
 
         Parameters
         ----------

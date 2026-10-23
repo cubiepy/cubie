@@ -190,9 +190,9 @@ def values_differ(fld: Attribute, old: Any, new: Any) -> bool:
 def _keeps_value(fld: Attribute, current: Any, value: Any) -> bool:
     """Return whether setting ``value`` leaves the field at ``current``.
 
-    Return ``False`` whenever the update must build a replacement to
-    find out: for a converter that reads the instance, and for a value
-    of another type that the field's validator must still check.
+    Return ``False`` for a field whose converter reads the instance and
+    for a value of another type, so that the caller builds a replacement
+    and runs the converter and validators on it.
     """
     converter = fld.converter
     if converter is not None:

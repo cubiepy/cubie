@@ -1208,7 +1208,10 @@ class MemoryManager:
     def begin_work(self, owner: object) -> None:
         """Mark an owner as submitting CUDA work.
 
-        Raise ``RuntimeError`` if the CUDA context is not usable.
+        Raises
+        ------
+        RuntimeError
+            If the CUDA context is not usable.
         """
         _ensure_cuda_context()
         self._usage_clock += 1
