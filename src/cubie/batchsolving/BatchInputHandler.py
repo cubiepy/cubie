@@ -562,10 +562,6 @@ class BatchInputHandler:
         kind: str = "combinatorial",
         fix_constant_parameters: bool = True,
     ) -> tuple[object, object]:
-
-
-
-
         values = self.set_swept_parameters(
             parameters, fix_constant_parameters
         )
@@ -576,10 +572,7 @@ class BatchInputHandler:
         parameters: Optional[Union[Dict, ArrayLike]] = None,
         fix_constant_parameters: bool = True,
     ) -> object:
-
-
-
-
+        self.precision = self.system.precision
         system = self.system
         if parameters is None:
             system.set_swept_parameters(())
@@ -638,7 +631,6 @@ class BatchInputHandler:
         return swept or None
 
     def _array_sweep(self, n_rows: int) -> None:
-
         system = self.system
         n_swept = len(system.swept_parameters)
         n_parameters = system.parameters.n
@@ -694,7 +686,6 @@ class BatchInputHandler:
         Returns
         -------
         tuple
-        self.precision = self.system.precision
         swept_set = self.system.swept_set
         state_set = self.system.states
 
