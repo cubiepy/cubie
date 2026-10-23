@@ -50,9 +50,10 @@ than arbitrary Python. Because the source is read with ``inspect``, the
 function must live in a real file or a notebook cell; a function typed
 into a bare REPL cannot be parsed.
 
-States and named values can be accessed by attribute (``y.x``), by name
-(``y["x"]``), or by index (``y[0]``). The derivatives can be returned as a
-list or tuple in ``states`` order, or as a dict keyed by state name. The
+Read states by attribute (``y.x``), by name (``y["x"]``), or by index
+(``y[0]``, in ``states`` order). Read parameters by attribute (``p.a``) or
+by name (``p["a"]``), but not by index. The derivatives can be returned as
+a list or tuple in ``states`` order, or as a dict keyed by state name. The
 keyword arguments sort your variables into roles:
 
 - ``states`` are the variables being solved for. The dict values are

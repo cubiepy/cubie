@@ -93,8 +93,8 @@ an example of how to do this:
     signal = np.sin(2 * np.pi * 5 * t_driver) * np.exp(-t_driver)
     drive = qb.DriverSamples({"drive_signal": signal}, time=t_driver)
 
-    def driven(t, y, p):
-        dx = -p.k * y.x + p.amplitude * drive_signal
+    def driven(t, y, p, d):
+        dx = -p.k * y.x + p.amplitude * d.drive_signal
         return [dx]
 
     sys = qb.create_ODE_system(
@@ -115,8 +115,8 @@ an example of how to do this:
     )
 
 Note how the driver appears: it is declared in ``drivers`` when the
-system is created, and referenced by its bare name inside the function
-body, since drivers are not part of the state or parameter containers.
+system is created, and read by name inside the function body through a
+second container argument after the parameters, here ``d``.
 
 Sampled forcing data is defined using a ``DriverSamples`` object.
 It takes a ``dict`` of ``"[driver name]": [sampled data]`` pairs, with

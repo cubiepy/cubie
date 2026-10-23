@@ -670,6 +670,22 @@ def ensure_nonzero_size(
         return value
 
 
+def mass_matrix_converter(value: Any) -> Any:
+    """Return a mass matrix as ``None`` or a sealed float64 array.
+
+    SymPy matrices, NumPy arrays, and nested sequences convert to one
+    canonical numeric array, and symbolic entries raise. The returned
+    array is an owned read-only copy.
+    """
+    if value is None:
+        return None
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    array = np_array(value, dtype=np_float64)
+    array.setflags(write=False)
+    return array
+
+
 def mass_equal(left, right) -> bool:
     """Compare two ODE mass matrices for attrs equality.
 

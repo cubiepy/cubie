@@ -269,21 +269,17 @@ class TestSympyStringEquivalence:
 
         dxdt_string = "dx = -k * x"
 
-        parsed = parse_system(
+        result_sympy = parse_system(
             dxdt=dxdt_sympy,
             states=['x'],
             parameters=['k'],
-        )
-        specialised = parsed.specialise()
-        result_sympy = specialised
+        ).specialise()
 
-        parsed = parse_system(
+        result_string = parse_system(
             dxdt=dxdt_string,
             states=['x'],
             parameters=['k'],
-        )
-        specialised = parsed.specialise()
-        result_string = specialised
+        ).specialise()
 
         hash_sympy = result_sympy.fn_hash
         hash_string = result_string.fn_hash
@@ -327,20 +323,15 @@ class TestSymbolicODEHash:
 
     def test_symbolic_ode_hash_fallback(self, precision):
         """Verify __init__ correctly computes hash when fn_hash=None."""
-        from cubie.odesystems.symbolic.parsing.parser import parse_system
-
         dxdt = ["dx = -k * x", "dy = k * x"]
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
 
-        # Create via parse_system (provides fn_hash)
-        parsed = parse_system(
+        parsed_result = parse_system(
             dxdt=dxdt,
             states=list(states.keys()),
             parameters=parameters,
-        )
-        specialised = parsed.specialise()
-        parsed_result = specialised
+        ).specialise()
         expected_hash = parsed_result.fn_hash
 
         # Create via SymbolicODE.create (computes hash internally)
@@ -626,7 +617,7 @@ class TestSweptParameters:
             name="test_fix_param",
         )
         sweep(ode, ["c", "k"])
-        assert ode.layout.swept_names == ("c", "k",)
+        assert ode.layout.swept_names == ("c", "k")
 
         sweep(ode, ["k"])
 

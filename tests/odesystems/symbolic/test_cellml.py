@@ -10,7 +10,6 @@ from cubie.odesystems.symbolic.parsing.cellml import (
 from cubie.odesystems.symbolic.parsing.cellml_cache import CellMLCache
 from cubie._utils import is_devfunc
 from tests._utils import sweep
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
 def test_load_simple_cellml_model(basic_model):
@@ -258,9 +257,7 @@ def test_cache_used_on_reload(
     # Verify both ODEs are equivalent
     assert ode1.num_states == ode2.num_states
     assert ode1.fn_hash == ode2.fn_hash
-    assert len(buffer_maps(ode1.layout).state_order) == len(
-        buffer_maps(ode2.layout).state_order
-    )
+    assert len(ode1.layout.state_names) == len(ode2.layout.state_names)
 
 
 def test_cache_invalidated_on_file_change(

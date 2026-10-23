@@ -190,10 +190,9 @@ def parse_system(
     parameters
         Parameter names or mapping to default values.
     drivers
-        Driver variable names supplied at runtime. Accepts either an iterable
-        of driver labels or a dictionary mapping driver labels to default
-        values and, when using driver arrays, configuration entries such as
-        ``time``, ``dt``, ``wrap``, and ``order``.
+        Names of the drivers you supply at solve time, as a list, or as a
+        dict whose keys are the names. ``parse_system`` reads only the
+        keys.
     user_functions
         Mapping of callable names used in equations to their implementations.
     user_function_derivatives

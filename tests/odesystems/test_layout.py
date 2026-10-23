@@ -5,7 +5,7 @@ from cubie.odesystems.variables import Parameter, ParameterSet, VariableSet
 
 
 def test_dxdt_names_follow_the_states():
-    """Each state's derivative takes the state's position."""
+    """We place each state's derivative at the state's position."""
     layout = SystemLayout(states=("v", "x"))
     assert layout.dxdt_names == ("dv", "dx")
 
@@ -35,7 +35,7 @@ def test_num_drivers_counts_the_derivatives():
 
 
 def test_layout_records_the_compiled_parameters():
-    """The swept parameters are the rows of the parameters array."""
+    """The rows of the parameters array are the swept parameters."""
     declared = VariableSet.of(Parameter, {"a": 1.0, "b": 2.0})
     layout = SystemLayout(
         states=("x",), parameters=ParameterSet.build(declared, ["b"])
