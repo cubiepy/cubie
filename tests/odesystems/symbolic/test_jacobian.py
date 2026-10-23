@@ -1,7 +1,6 @@
 import sympy as sp
 
 from cubie.odesystems.symbolic.codegen.jacobian import (
-    _cache,
     generate_analytical_jvp,
     generate_jacobian,
 )
@@ -23,23 +22,6 @@ def _jac_matrix(jac):
     return sp.Matrix(
         [[to_sympy(entry) for entry in row] for row in jac]
     )
-
-
-def _clear_cache():
-    """Clear the Jacobian/JVP module cache between tests."""
-    _cache.clear()
-
-
-def _get_cache_counts():
-    """Count cached Jacobian and JVP artifacts."""
-    counts = {"jac": 0, "jvp": 0}
-    for value in _cache.values():
-        if isinstance(value, dict):
-            if "jac" in value:
-                counts["jac"] += 1
-            if "jvp" in value:
-                counts["jvp"] += 1
-    return counts
 
 
 def test_generate_jacobian_with_auxiliary():
@@ -94,33 +76,6 @@ def test_generate_jacobian_coupled_nonlinear():
         ]
     )
     assert _jac_matrix(jac).equals(expected)
-
-
-def test_jacobian_caching():
-    """Repeated calls reuse cached Jacobian and JVP."""
-
-    layout = SystemLayout(states=VariableSet.of(Variable, ("x", "y")))
-    x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
-    dx = sp.Symbol(layout.dxdt_names[0], real=True)
-    equations = [(dx, x + y)]
-    parsed = ParsedEquations.from_equations(equations, layout)
-    _clear_cache()
-    generate_jacobian(
-        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
-    )
-    generate_analytical_jvp(
-        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
-    )
-    counts = _get_cache_counts()
-    assert counts == {"jac": 1, "jvp": 1}
-    generate_jacobian(
-        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
-    )
-    generate_analytical_jvp(
-        parsed, buffer_maps(layout).state_order, buffer_maps(layout).dxdt_order
-    )
-    counts2 = _get_cache_counts()
-    assert counts2 == counts
 
 
 def test_jvp_graph_defines_every_jacobian_entry():

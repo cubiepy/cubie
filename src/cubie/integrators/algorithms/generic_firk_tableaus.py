@@ -48,7 +48,7 @@ See Also
 """
 
 from fractions import Fraction
-from functools import lru_cache
+from functools import cache
 from typing import Dict, Optional, Tuple
 
 from attrs import frozen
@@ -74,7 +74,7 @@ class FIRKTableau(ButcherTableau):
         self._validate_weight_sums()
 
 
-@lru_cache(maxsize=None)
+@cache
 def _sole_real_eigenvalue(
     a: Tuple[Tuple[float, ...], ...],
 ) -> Optional[float]:

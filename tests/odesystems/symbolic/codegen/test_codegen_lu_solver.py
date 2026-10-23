@@ -6,10 +6,12 @@ import pytest
 import sympy as sp
 
 from cubie.odesystems.solver_helpers import HelperVariant
+from cubie.odesystems.symbolic.codegen.jacobian import generate_jacobian
 from cubie.odesystems.symbolic.codegen.lu_solver import (
     _markowitz_symbolic_lu,
     generate_lu_solve_code,
 )
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from tests.odesystems.symbolic.codegen._source_checks import (
     factory_name_bindings,
@@ -33,6 +35,23 @@ def test_lu_solve_hoists_the_jacobian_scale(
     )
     assert loaded_name_count(code, "_cubie_codegen_lu_scale") >= 2
 
+
+
+def test_lu_solve_uses_a_given_jacobian(
+    bare_nonlinear_equations, bare_layout
+):
+    """A Jacobian passed in emits the source the generator builds itself."""
+    maps = buffer_maps(bare_layout)
+    jacobian = generate_jacobian(
+        bare_nonlinear_equations,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
+    )
+    built = generate_lu_solve_code(bare_nonlinear_equations, bare_layout)
+    given = generate_lu_solve_code(
+        bare_nonlinear_equations, bare_layout, jacobian=jacobian
+    )
+    assert given == built
 
 def test_prefactored_preamble_binds_only_compared_diagonals(
     bare_nonlinear_equations, bare_layout

@@ -31,7 +31,7 @@ subpackages.
 | File | Description |
 |------|-------------|
 | `__init__.py` | Package entry point: checks numba-cuda-mlir is installed, imports `backend/_mlir_compat` and `backend/_mlir_cubie_extensions`, star-imports subpackages, defines `__all__` and `__version__`. |
-| `CUDAFactory.py` | Core cached-compilation framework: `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`; `update` merges, flattens groups and raises, `_update` is the subclass hook), `FrozenSettings` (frozen attrs base; `update(updates)` returns `(replacement, recognised, changed)` with converters and validators run on the replacement), `values_differ`, `build_config` (builds a config from a settings mapping; keys without a field go to its `FrozenSettings`-typed fields, e.g. `unroll_*`/`lineinfo`) and `nested_config_fields`, `JITFlags` (defaults from `backend.jit.JIT_FLAG_DEFAULTS`), `UnrollFlags`/`UnrollChoice`/`unroll_flag_converter`/`ALL_UNROLL_PARAMETERS`, `CUDAFactoryConfig`/`_CubieConfigBase` (`FrozenSettings` snapshots whose `update` recurses into nested settings fields; carry the `jit_flags: JITFlags` and `unroll: UnrollFlags` compile settings every factory honours, with a read-only `lineinfo` passthrough; `init_kwargs` returns the `__init__` fields by `__init__` name without device-function slots), `CUDADispatcherCache`, and the `MultipleInstance*` variants. `CUDAFactory.settings_dict` merges every child factory's `settings_dict` (the `config_hash` children), writes the config's `init_kwargs` over them and keeps the class's `settings_keys` (a factory's loose-key set; `None` keeps every key); a factory that derives values overrides it to return them only as given. `copy()` is `type(self)(**settings_dict)`; factories that take a system override it. Hashing derives from `_serialize`. |
+| `CUDAFactory.py` | Core cached-compilation framework: `DerivedValues` (the `_derived` memo `CUDAFactory` and `Solver` inherit), `CUDAFactory` (ABC; exposes `jit_kwargs`, the property every `build()` splats into `@cuda.jit`; `update` merges, flattens groups and raises, `_update` is the subclass hook), `FrozenSettings` (frozen attrs base; `update(updates)` returns `(replacement, recognised, changed)` with converters and validators run on the replacement), `values_differ`, `build_config` (builds a config from a settings mapping; keys without a field go to its `FrozenSettings`-typed fields, e.g. `unroll_*`/`lineinfo`) and `nested_config_fields`, `JITFlags` (defaults from `backend.jit.JIT_FLAG_DEFAULTS`), `UnrollFlags`/`UnrollChoice`/`unroll_flag_converter`/`ALL_UNROLL_PARAMETERS`, `CUDAFactoryConfig`/`_CubieConfigBase` (`FrozenSettings` snapshots whose `update` recurses into nested settings fields; carry the `jit_flags: JITFlags` and `unroll: UnrollFlags` compile settings every factory honours, with a read-only `lineinfo` passthrough; `init_kwargs` returns the `__init__` fields by `__init__` name without device-function slots), `CUDADispatcherCache`, and the `MultipleInstance*` variants. `CUDAFactory.settings_dict` merges every child factory's `settings_dict` (the `config_hash` children), writes the config's `init_kwargs` over them and keeps the class's `settings_keys` (a factory's loose-key set; `None` keeps every key); a factory that derives values overrides it to return them only as given. `copy()` is `type(self)(**settings_dict)`; factories that take a system override it. Hashing derives from `_serialize`. |
 | `_serialize.py` | Versioned typed canonical serializer: `canonical_bytes`/`canonical_digest` with explicit type tags and length prefixes over the compile-setting value domain (no `str()` fallback — unsupported values raise). Every semantic identity (values_hash, config_hash, helper source/member hashes, swept and fixed parameters) derives from it; `SCHEMA_VERSION` prefixes every digest. Value objects join via a `_cubie_canonical_()` method. |
 | `_env.py` | `CUBIE_*` environment-variable registry: `env_bool`, `lineinfo_default` (`CUBIE_LINEINFO`), `cache_dir_default` (`CUBIE_CACHE_DIR`), `kernel_cache_dir_default` (`CUBIE_KERNEL_CACHE_DIR`), `max_cache_entries_default` (`CUBIE_MAX_CACHE_ENTRIES`), `operation_ordering_default` (`CUBIE_OPERATION_ORDERING`, the codegen ordering-policy default consumed by every `operation_ordering` signature default), `block_schedule_default`/`active_block_schedule`/`set_active_block_schedule` (`CUBIE_BLOCK_SCHEDULE`, the typed-IR scheduler policy, default `anchor_dfs`; the active value folds into the kernel-cache fingerprint). Env values are defaults; explicit solver arguments always win. |
 | `cache_root.py` | Single source of truth for the on-disk cache root (`get_cache_root`/`set_cache_root`/`get_cache_root_override`; precedence: `set_cache_root` override → `CUBIE_CACHE_DIR` → `<cwd>/generated`). The codegen, CellML parse, and compiled-kernel caches all resolve through it. |
@@ -76,15 +76,18 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   3. **Codegen source cache** (`odesystems/symbolic`: `ODEFile`), keyed by
      `fn_hash`: one generated source file per source identity.
 - **Derived values:** compute a value derived from settings snapshots, build products
-  or runtime defaults through `CUDAFactory._derived(name, inputs, compute)`, which
-  recomputes it only when `inputs` change. Pass immutable objects that are replaced on
-  change (a snapshot's `values_hash`, build products, frozen variable sets) as `inputs`,
-  never an object whose equality compares arrays. `config_hash` and
-  `BaseODE.set_swept_parameters` use it. A value that depends only on compile settings
-  is a build product instead.
-  Add no other in-memory cache: no `functools` caches, module-level dicts or
-  hand-written key/value attributes. A function of a class or of the toolchain, which
-  cannot change while the process runs, may use `functools.cache`.
+  or runtime defaults through `DerivedValues._derived(name, inputs, compute)`, which
+  recomputes it only when `inputs` change. `CUDAFactory` and `Solver` inherit
+  `DerivedValues`. `inputs` match by value for numbers and strings and by identity for
+  every other object, so pass objects that are replaced on change (settings snapshots,
+  build products, frozen variable sets). `config_hash`, `BaseODE.set_swept_parameters`,
+  `BaseODE.states`, `BaseODE.swept_set` and `Solver.solve_info` use it. A value that
+  depends only on compile settings is a build product instead, and a frozen attrs class
+  holds a value derived from its own fields as an `init=False` field set in
+  `__attrs_post_init__`. Hold such values in no other
+  in-memory cache: no `functools` caches, module-level dicts or hand-written key/value
+  attributes. A function of a class or of the toolchain, which cannot change while the
+  process runs, may use `functools.cache`.
 - **`update` / `update_compile_settings` contract:** keys are the non-underscored
   field names; an unrecognised key raises `KeyError` unless `silent=True`; returns a
   **`set`** of recognised labels. `CUDAFactory.update` merges `updates_dict` and

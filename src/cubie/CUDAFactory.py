@@ -80,6 +80,7 @@ from numpy import (
     array_equal,
     asarray,
     dtype as np_dtype,
+    generic as np_generic,
     ndarray as np_ndarray,
 )
 from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
@@ -742,7 +743,76 @@ class CUDADispatcherCache:
     pass
 
 
-class CUDAFactory(ABC):
+_VALUE_TYPES = (str, bytes, int, float, bool, type(None), np_generic)
+
+
+def _same_inputs(stored: Tuple[Any, ...], inputs: Tuple[Any, ...]) -> bool:
+    """Return whether ``inputs`` match ``stored`` element by element.
+
+    Numbers and strings match by value and every other object by
+    identity, so no comparison touches an array.
+    """
+    if len(stored) != len(inputs):
+        return False
+    for old, new in zip(stored, inputs):
+        if old is new:
+            continue
+        if not (
+            isinstance(old, _VALUE_TYPES)
+            and type(old) is type(new)
+            and old == new
+        ):
+            return False
+    return True
+
+
+class DerivedValues:
+    """Give a class values that are recomputed only when their inputs
+    change.
+
+    :class:`CUDAFactory` and :class:`~cubie.batchsolving.solver.Solver`
+    inherit it. Subclasses call :meth:`_derived` from a property.
+    """
+
+    def _derived(
+        self,
+        name: str,
+        inputs: Tuple[Any, ...],
+        compute: Callable[[], Any],
+    ) -> Any:
+        """Return ``compute()``, reusing the last result for equal inputs.
+
+        Use this for a value computed from settings snapshots, build
+        products or runtime defaults that callers read more than once
+        between changes.
+
+        Parameters
+        ----------
+        name
+            Name of the derived value, unique within the object.
+        inputs
+            What the value is computed from. Numbers and strings match
+            the stored inputs by value; every other object matches only
+            if it is the same object, so pass objects that are replaced,
+            never modified, when they change.
+        compute
+            Function returning the value from the current inputs.
+
+        Returns
+        -------
+        Any
+            The value for ``inputs``.
+        """
+        values = self.__dict__.setdefault("_derived_values", {})
+        stored = values.get(name)
+        if stored is not None and _same_inputs(stored[0], inputs):
+            return stored[1]
+        value = compute()
+        values[name] = (inputs, value)
+        return value
+
+
+class CUDAFactory(DerivedValues, ABC):
     """Factory for creating and caching CUDA device functions.
 
     Subclasses implement :meth:`build` to construct Numba CUDA device functions
@@ -802,7 +872,6 @@ class CUDAFactory(ABC):
         self._compile_settings = None
         self._cache_valid = True
         self._cache = None
-        self._derived_values = {}
 
     @property
     def settings_dict(self) -> Dict[str, Any]:
@@ -1068,44 +1137,6 @@ class CUDAFactory(ABC):
             for fld in fields(type(cache))
         }
 
-    def _derived(
-        self,
-        name: str,
-        inputs: Tuple[Any, ...],
-        compute: Callable[[], Any],
-    ) -> Any:
-        """Return ``compute()``, reusing the last result for equal inputs.
-
-        Use this for a value computed from settings snapshots, build
-        products or runtime defaults that callers read more than once
-        between changes.
-
-        Parameters
-        ----------
-        name
-            Name of the derived value, unique within the factory.
-        inputs
-            The immutable objects the value is computed from. Pass
-            objects that are replaced, never modified, when they change,
-            and whose equality never compares arrays: a settings
-            snapshot's ``values_hash`` rather than the snapshot itself.
-            Comparing inputs that are the same objects as last time costs
-            one identity check each.
-        compute
-            Function returning the value from the current inputs.
-
-        Returns
-        -------
-        Any
-            The value for ``inputs``.
-        """
-        stored = self._derived_values.get(name)
-        if stored is not None and stored[0] == inputs:
-            return stored[1]
-        value = compute()
-        self._derived_values[name] = (inputs, value)
-        return value
-
     @property
     def config_hash(self):
         """Returns the hash of the current compile settings of the factory.
@@ -1126,7 +1157,7 @@ class CUDAFactory(ABC):
             return own_hash
 
         return self._derived(
-            "config_hash", (own_hash, child_hashes), combine
+            "config_hash", (own_hash, *child_hashes), combine
         )
 
     _excluded_child_factories: frozenset = frozenset()

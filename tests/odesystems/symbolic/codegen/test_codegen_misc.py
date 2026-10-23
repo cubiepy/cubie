@@ -1,10 +1,9 @@
 """Source-level tests for the remaining codegen branches.
 
-Covers the Jacobian cache-key dict path and non-CSE JVP emission, the
-CUDA printer's function-dispatch branches, the ``dxdt``/observables/
-time-derivative non-CSE paths, and ``ODEFile.import_function``
-re-initialising a stale cache file. Equation-set fixtures live in the
-local conftest.
+Covers non-CSE JVP emission, the CUDA printer's function-dispatch
+branches, the ``dxdt``/observables/time-derivative non-CSE paths, and
+``ODEFile.import_function`` re-initialising a stale cache file.
+Equation-set fixtures live in the local conftest.
 """
 
 import ast
@@ -25,7 +24,6 @@ from cubie.odesystems.symbolic.codegen import print_cuda
 from cubie.odesystems.symbolic.engine import call, sym
 from cubie.odesystems.symbolic.codegen.jacobian import (
     generate_analytical_jvp,
-    get_cache_key,
 )
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_lines,
@@ -37,55 +35,10 @@ from cubie.odesystems.symbolic.codegen.time_derivative import (
 from cubie.odesystems.symbolic.odefile import ODEFile
 
 
-# ── jacobian cache key / non-CSE JVP ────────────────────────────── #
-
-def test_get_cache_key_accepts_mapping():
-    """A dict of equations hashes to the same key as its item tuple.
-
-    The key includes ordering and ends with sorted ``derivative_names``
-    tuple, which is empty unless the kwarg is supplied.
-    """
-    x, y = sp.symbols("x y")
-    equations = {x: y, y: x}
-    order = {x: 0, y: 1}
-    key = get_cache_key(
-        equations, order, order, cse=True, operation_ordering="kahn"
-    )
-    assert key[0] == tuple(equations.items())
-    assert key[3] is True
-    assert key[4] == "kahn"
-    assert key[-1] == ()
-
-    alternative_keys = {
-        get_cache_key(
-            equations,
-            order,
-            order,
-            cse=True,
-            operation_ordering=operation_ordering,
-        )
-        for operation_ordering in ("greedy", "dfs", "liveness_auto")
-    }
-    assert key not in alternative_keys
-    assert len(alternative_keys) == 3
-
-    named_key = get_cache_key(
-        equations,
-        order,
-        order,
-        cse=True,
-        derivative_names={"b": "d_b", "a": "d_a"},
-    )
-    assert named_key[-1] == (("a", "d_a"), ("b", "d_b"))
-
+# ── non-CSE JVP ─────────────────────────────────────────────────── #
 
 def test_generate_analytical_jvp_without_cse():
-    """Non-CSE JVP generation orders assignments via topological sort.
-
-    Uses distinct state names (not the shared fixture's ``x, y``) so
-    the jacobian module's memoisation cache cannot serve a CSE'd
-    result computed by another test.
-    """
+    """Non-CSE JVP generation orders assignments via topological sort."""
     layout = SystemLayout(
         states=VariableSet.of(Variable, ("p", "q")),
         parameters=ParameterSet.build(

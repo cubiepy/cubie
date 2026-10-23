@@ -17,6 +17,8 @@ See Also
     Source generators the roles dispatch to.
 """
 
+from typing import Any, List
+
 from cubie._serialize import canonical_digest
 from cubie.odesystems.solver_helpers import (
     HelperVariant,
@@ -38,6 +40,10 @@ from cubie.odesystems.symbolic.codegen import (
 from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_evaluate_inv_mass_f_code,
 )
+from cubie.odesystems.symbolic.codegen.jacobian import (
+    generate_analytical_jvp,
+    generate_jacobian,
+)
 from cubie.odesystems.symbolic.codegen.lu_solver import (
     generate_init_lu_solve_code,
     generate_lu_prepare_blocks_code,
@@ -47,6 +53,8 @@ from cubie.odesystems.symbolic.codegen.lu_solver import (
 from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_fac_code,
 )
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
+from cubie.odesystems.symbolic.parsing import JVPEquations
 
 __all__ = [
     "LinearOperator",
@@ -65,7 +73,47 @@ __all__ = [
     "PrepareJac",
     "helper_source_hash",
     "helper_member_hash",
+    "system_jacobian",
+    "system_jvp_equations",
 ]
+
+
+def system_jacobian(system) -> List[List[Any]]:
+    """Return the Jacobian of ``system`` as IR rows.
+
+    Generate the rows once per build of ``system`` and keep them in the
+    build's helper cache.
+    """
+    helpers = system.get_cached_output("helpers")
+    if helpers.jacobian is None:
+        maps = buffer_maps(system.layout)
+        helpers.jacobian = generate_jacobian(
+            system.equations,
+            input_order=maps.state_order,
+            output_order=maps.dxdt_order,
+            operation_ordering=system.operation_ordering,
+        )
+    return helpers.jacobian
+
+
+def system_jvp_equations(system) -> JVPEquations:
+    """Return the Jacobian-vector product assignments of ``system``.
+
+    Generate the assignments once per build of ``system`` and keep them
+    in the build's helper cache.
+    """
+    helpers = system.get_cached_output("helpers")
+    if helpers.jvp_equations is None:
+        maps = buffer_maps(system.layout)
+        helpers.jvp_equations = generate_analytical_jvp(
+            system.equations,
+            input_order=maps.state_order,
+            output_order=maps.dxdt_order,
+            observables=maps.observable_symbols,
+            cse=True,
+            operation_ordering=system.operation_ordering,
+        )
+    return helpers.jvp_equations
 
 
 class LinearOperator(SolverHelperRole):
@@ -86,7 +134,7 @@ class LinearOperator(SolverHelperRole):
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
-            jvp_equations=system._get_jvp_exprs(),
+            jvp_equations=system_jvp_equations(system),
             operation_ordering=system.operation_ordering,
             beta=request.operator_beta,
             gamma=request.operator_gamma,
@@ -114,7 +162,7 @@ class NeumannPreconditioner(SolverHelperRole):
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
-            jvp_equations=system._get_jvp_exprs(),
+            jvp_equations=system_jvp_equations(system),
             operation_ordering=system.operation_ordering,
             beta=request.operator_beta,
             gamma=request.operator_gamma,
@@ -158,6 +206,14 @@ class JacobiPreconditioner(SolverHelperRole):
 
     @classmethod
     def generate(cls, system, request, func_name):
+        # The cached variants read the Jacobian entries from the JVP
+        # graph, so only the others need the system's Jacobian.
+        jacobian = None
+        if request.variant not in (
+            HelperVariant.CACHED,
+            HelperVariant.CACHED_STACKED,
+        ):
+            jacobian = system_jacobian(system)
         return generate_jacobi_preconditioner_code(
             system.equations,
             system.layout,
@@ -166,8 +222,9 @@ class JacobiPreconditioner(SolverHelperRole):
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
-            jvp_equations=system._get_jvp_exprs(),
+            jvp_equations=system_jvp_equations(system),
             operation_ordering=system.operation_ordering,
+            jacobian=jacobian,
             beta=request.operator_beta,
             gamma=request.operator_gamma,
             a_ij=request.a_ij,
@@ -235,8 +292,9 @@ class LuSolve(SolverHelperRole):
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
-            jvp_equations=system._get_jvp_exprs(),
+            jvp_equations=system_jvp_equations(system),
             operation_ordering=system.operation_ordering,
+            jacobian=system_jacobian(system),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
             a_ij=request.a_ij,
@@ -281,6 +339,7 @@ class LuPrepareBlocks(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            jacobian=system_jacobian(system),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
         )
@@ -326,6 +385,7 @@ class LuSmoothingSolve(SolverHelperRole):
             stage_nodes=request.stage_nodes,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
+            jacobian=system_jacobian(system),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
         )
@@ -397,6 +457,7 @@ class InitLuSolve(SolverHelperRole):
                 M=system.mass,
                 func_name=func_name,
                 operation_ordering=system.operation_ordering,
+                jacobian=system_jacobian(system),
             )
         except ValueError as error:
             if "structurally singular" not in str(error):
@@ -482,7 +543,7 @@ class PrepareJac(SolverHelperRole):
             system.equations,
             system.layout,
             func_name=func_name,
-            jvp_equations=system._get_jvp_exprs(),
+            jvp_equations=system_jvp_equations(system),
             operation_ordering=system.operation_ordering,
         )
         return code
@@ -497,7 +558,7 @@ def helper_source_hash(system, request: SolverHelperRequest) -> str:
     """
     selection = None
     if request.role.uses_cache_selection(request.variant):
-        plan = system._get_jvp_exprs().cache_selection
+        plan = system_jvp_equations(system).cache_selection
         selection = (
             tuple(repr(leaf) for leaf in plan.cached_leaf_order),
             tuple(repr(node) for node in plan.removal_nodes),
