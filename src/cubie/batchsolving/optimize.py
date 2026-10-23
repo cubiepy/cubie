@@ -507,7 +507,6 @@ def run_optimization(
     settling_time: float = 0.0,
     t0: float = 0.0,
     grid_type: str = "verbatim",
-    fix_constant_parameters: bool = False,
     apply: bool = True,
     verbose: bool = True,
     force: bool = False,
@@ -516,6 +515,7 @@ def run_optimization(
     target_ms: float = 20.0,
     max_parallel: int = 4,
     compile_only: bool = False,
+    fix_constant_parameters: bool = True,
 ) -> OptimizeResult:
     """Time the solver's candidate kernels on itself; apply the fastest.
 
@@ -540,9 +540,6 @@ def run_optimization(
         Initial integration time.
     grid_type
         Grid strategy when dict inputs trigger grid construction.
-    fix_constant_parameters
-        Check whether any parameters are set to the same value across
-        all runs, and compile them into the code if they are.
     apply
         Apply the best launch's settings to ``parent`` when ``True``.
     verbose
@@ -564,6 +561,10 @@ def run_optimization(
         Maximum compilations to run in parallel.
     compile_only
         Compile the kernels but do not run them.
+    fix_constant_parameters
+        Compile in every dict entry and every row of a full-height
+        parameter array that holds one value, as :meth:`Solver.solve`
+        does.
 
     Returns
     -------
@@ -599,12 +600,13 @@ def run_optimization(
         return OptimizeResult(
             launches=launches, best=None, applied_settings={}
         )
-    inits, params = parent.build_grid(
+    inits, params = parent.input_handler(
         initial_values,
         parameters,
-        grid_type=grid_type,
+        kind=grid_type,
         fix_constant_parameters=fix_constant_parameters,
     )
+    parent.update()
     blocksizes = (
         (parent.kernel.compile_settings.blocksize,)
         if parent.given.is_given("blocksize") and not force

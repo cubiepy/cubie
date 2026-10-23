@@ -202,7 +202,7 @@ def test_build_rejects_invalid_batches(swept, values, error):
 
 
 def test_identity_covers_the_sweep_and_compiled_in_values():
-    """Changing the sweep or a compiled-in value changes the identity,
+    """Changing the swept names or a compiled-in value changes the identity,
     and changing a swept parameter's default does not."""
     batch = ParameterSet.build(PARAMETERS, ["a"])
     assert canonical_digest(batch) != canonical_digest(
