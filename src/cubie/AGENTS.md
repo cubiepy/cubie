@@ -81,10 +81,10 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   `DerivedValues`. `inputs` match by value for numbers and strings and by identity for
   every other object, so pass objects that are replaced on change (settings snapshots,
   build products, frozen variable sets). `config_hash`, `BaseODE.set_swept_parameters`,
-  `BaseODE.states`, `BaseODE.swept_set`, `SymbolicODE._get_jacobian`, `SymbolicODE._get_jvp_exprs`
-  and `Solver.solve_info` use it. A value that depends only on compile settings is a build
-  product instead, and a frozen attrs class holds a value derived from its own fields as
-  an `init=False` field set in `__attrs_post_init__`. Hold such values in no other
+  `BaseODE.states`, `BaseODE.swept_set` and `Solver.solve_info` use it. A value that
+  depends only on compile settings is a build product instead, and a frozen attrs class
+  holds a value derived from its own fields as an `init=False` field set in
+  `__attrs_post_init__`. Hold such values in no other
   in-memory cache: no `functools` caches, module-level dicts or hand-written key/value
   attributes. A function of a class or of the toolchain, which cannot change while the
   process runs, may use `functools.cache`.

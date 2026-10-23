@@ -7,7 +7,10 @@ from cubie.odesystems.solver_helpers import SolverHelperRequest
 from cubie.odesystems.symbolic.codegen.linear_operators import (
     generate_linear_operator_code,
 )
-from cubie.odesystems.symbolic.helper_registry import helper_source_hash
+from cubie.odesystems.symbolic.helper_registry import (
+    helper_source_hash,
+    system_jvp_equations,
+)
 from cubie.odesystems.symbolic.parsing.parser import parse_system
 from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
@@ -161,7 +164,7 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     first_function = ode.dxdt_fn
     first_source_hash = ode.gen_file.fn_hash
     first_fn_hash = ode.fn_hash
-    first_jvp = ode._get_jvp_exprs()
+    first_jvp = system_jvp_equations(ode)
 
     recognised = ode.update(operation_ordering="liveness_auto")
 
@@ -173,7 +176,7 @@ def test_operation_ordering_update_rebuilds_source_and_jvp(precision):
     assert second_function is not first_function
     assert ode.gen_file.fn_hash != first_source_hash
     assert ode.fn_hash == first_fn_hash
-    assert ode._get_jvp_exprs() is not first_jvp
+    assert system_jvp_equations(ode) is not first_jvp
 
 
 @pytest.fixture(scope="session")
@@ -520,7 +523,7 @@ class TestCacheSkipsCodegen:
             generate_linear_operator_code(
                 first.equations,
                 first.layout,
-                jvp_equations=first._get_jvp_exprs(),
+                jvp_equations=system_jvp_equations(first),
             )
         )
         assert "grad_a(" in first.gen_file.file_path.read_text()
@@ -533,7 +536,7 @@ class TestCacheSkipsCodegen:
             generate_linear_operator_code(
                 second.equations,
                 second.layout,
-                jvp_equations=second._get_jvp_exprs(),
+                jvp_equations=system_jvp_equations(second),
             )
         )
         second_source = second.gen_file.file_path.read_text()
@@ -827,14 +830,3 @@ def test_list_units_follow_declared_names(dxdt, precision):
         "k": "k_unit"
     }
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}
-
-
-def test_jacobian_is_reused_until_the_system_is_specialised_again(
-    system_restored,
-):
-    """Return the same Jacobian until the swept parameters change."""
-    system = system_restored
-    first = system._get_jacobian()
-    assert system._get_jacobian() is first
-    system.set_swept_parameters(system.parameters.names[:1])
-    assert system._get_jacobian() is not first
