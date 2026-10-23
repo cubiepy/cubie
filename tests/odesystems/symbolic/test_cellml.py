@@ -35,7 +35,7 @@ def test_algebraic_equations_as_observables(beeler_reuter_model):
     # Keys are symbols, so we compare names
     obs_map = beeler_reuter_model.layout.observable_names
     assert len(obs_map) == 2
-    obs_symbol_names = [str(k) for k in obs_map.keys()]
+    obs_symbol_names = list(obs_map)
     for obs_name in observable_names:
         assert obs_name in obs_symbol_names
 

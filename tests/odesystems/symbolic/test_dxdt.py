@@ -213,11 +213,11 @@ class TestDxdtIntegration:
         observables = []
         drivers = []
 
-        indexed_bases = IndexedBases.from_user_inputs(
-            states=states,
-            parameters=parameters,
-            observables=observables,
-            drivers=drivers,
+        layout = SystemLayout(
+            states=sorted(states),
+            parameters=sorted(parameters),
+            observables=sorted(observables),
+            drivers=sorted(drivers),
         )
 
         # Define equations symbolically
@@ -250,11 +250,11 @@ class TestDxdtIntegration:
         observables = ["total"]
         drivers = []
 
-        indexed_bases = IndexedBases.from_user_inputs(
-            states=states,
-            parameters=parameters,
-            observables=observables,
-            drivers=drivers,
+        layout = SystemLayout(
+            states=sorted(states),
+            parameters=sorted(parameters),
+            observables=sorted(observables),
+            drivers=sorted(drivers),
         )
 
         x, y = sp.symbols("x y")
@@ -294,14 +294,17 @@ class TestDxdtIntegration:
             "dx3 = x3 * a1",
         ]
 
-        index_map, _, _, equations, _ = parse_system(
+        parsed = parse_system(
             dxdt=dxdt_lines,
             states={"x1": 0.0, "x2": 0.0, "x3": 0.0},
             observables=["o1", "o2"],
             parameters={"p1": 0.0, "p2": 0.0},
             drivers=[],
             strict=False,
-        ).specialise()
+        )
+        specialised = parsed.specialise()
+        layout = specialised.layout
+        equations = specialised.equations
 
         code = generate_dxdt_fac_code(equations, layout)
 
@@ -417,8 +420,12 @@ class TestObservablesDeviceParity:
             precision(0.0),
         )
 
-        state_idx = system.states.indices_dict
-        param_idx = system.parameters.indices_dict
+        state_idx = {
+            name: row for row, name in enumerate(system.states.names)
+        }
+        param_idx = {
+            name: row for row, name in enumerate(system.parameters.names)
+        }
         driver_names = system.layout.driver_names
         drive_idx = driver_names.index("drive")
         const_value = precision(system.parameters.values_dict["c0"])

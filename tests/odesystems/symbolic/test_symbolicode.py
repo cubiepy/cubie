@@ -75,15 +75,9 @@ def test_create_ODE_system_strict(
         strict=True,
     )
     sys2 = simple_ode_strict
-    assert_array_equal(
-        sys1.parameters.values_array, sys2.parameters.values_array
-    )
-    assert_array_equal(
-        sys1.initial_values.values_array, sys2.initial_values.values_array
-    )
-    assert_array_equal(
-        sys1.observables.values_array, sys2.observables.values_array
-    )
+    assert sys1.parameters.values_dict == sys2.parameters.values_dict
+    assert sys1.initial_values.values_dict == sys2.initial_values.values_dict
+    assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
 
@@ -96,15 +90,9 @@ def test_create_ODE_system_nonstrict(
         name="simpletest_nonstrict",
     )
     sys2 = simple_ode_nonstrict
-    assert_array_equal(
-        sys1.parameters.values_array, sys2.parameters.values_array
-    )
-    assert_array_equal(
-        sys1.initial_values.values_array, sys2.initial_values.values_array
-    )
-    assert_array_equal(
-        sys1.observables.values_array, sys2.observables.values_array
-    )
+    assert sys1.parameters.values_dict == sys2.parameters.values_dict
+    assert sys1.initial_values.values_dict == sys2.initial_values.values_dict
+    assert sys1.observables.names == sys2.observables.names
     assert_array_equal(sys1.num_drivers, sys2.num_drivers)
 
 
@@ -281,20 +269,24 @@ class TestSympyStringEquivalence:
 
         dxdt_string = "dx = -k * x"
 
-        result_sympy = parse_system(
+        parsed = parse_system(
             dxdt=dxdt_sympy,
             states=['x'],
             parameters=['k'],
-        ).specialise()
+        )
+        specialised = parsed.specialise()
+        result_sympy = specialised
 
-        result_string = parse_system(
+        parsed = parse_system(
             dxdt=dxdt_string,
             states=['x'],
             parameters=['k'],
-        ).specialise()
+        )
+        specialised = parsed.specialise()
+        result_string = specialised
 
-        hash_sympy = result_sympy[4]
-        hash_string = result_string[4]
+        hash_sympy = result_sympy.fn_hash
+        hash_string = result_string.fn_hash
 
         assert hash_sympy == hash_string
 
@@ -341,12 +333,14 @@ class TestSymbolicODEHash:
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
 
-        parsed_result = parse_system(
+        parsed = parse_system(
             dxdt=dxdt,
             states=list(states.keys()),
             parameters=parameters,
-        ).specialise()
-        expected_hash = parsed_result[4]
+        )
+        specialised = parsed.specialise()
+        parsed_result = specialised
+        expected_hash = parsed_result.fn_hash
 
         # Create via SymbolicODE.create (computes hash internally)
         ode = SymbolicODE.create(
@@ -722,7 +716,7 @@ class TestValueSetters:
         )
 
         ode.set_default_parameters({"k": 0.5})
-        assert ode.parameters["k"] == 0.5
+        assert ode.parameters["k"] == precision(0.5)
 
     def test_parameters_getter_is_sealed_against_bypass(self, precision):
         """In-place mutation through the public getter raises.
@@ -839,5 +833,7 @@ def test_list_units_follow_declared_names(dxdt, precision):
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}
 
     sweep(system, ["k"])
-    assert system.indices.parameters.units == {"k": "k_unit"}
+    assert system.layout.parameters.subset(system.swept_parameters).units == {
+        "k": "k_unit"
+    }
     assert system.parameter_units == {"b": "b_unit", "k": "k_unit"}

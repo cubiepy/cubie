@@ -39,16 +39,11 @@ def _get_cache_counts():
 def test_generate_jacobian_with_auxiliary():
     """Jacobian matches expected expressions with auxiliaries."""
 
-    index_map = IndexedBases.from_user_inputs(
-        states=["x", "y"],
-        parameters={"a": 0.0, "b": 0.0},
-        observables=[],
-        drivers=[],
-    )
-    x, y = list(index_map.states.ref_map.keys())
-    a = index_map.parameters.symbol_map["a"]
-    b = index_map.parameters.symbol_map["b"]
-    dx, dy = list(index_map.dxdt.ref_map.keys())
+    layout = SystemLayout(states=("x", "y"), parameters=("a", "b"))
+    x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx, dy = [sp.Symbol(name, real=True) for name in layout.dxdt_names]
     aux = sp.Symbol("aux", real=True)
     equations = [
         (aux, a * x + b * y),
@@ -68,14 +63,9 @@ def test_generate_jacobian_with_auxiliary():
 def test_generate_jacobian_coupled_nonlinear():
     """Jacobian of a coupled nonlinear system matches full expression."""
 
-    index_map = IndexedBases.from_user_inputs(
-        states=["x0", "x1"],
-        parameters=[],
-        observables=[],
-        drivers=[],
-    )
-    x0, x1 = list(index_map.states.ref_map.keys())
-    dx0, dx1 = list(index_map.dxdt.ref_map.keys())
+    layout = SystemLayout(states=("x0", "x1"))
+    x0, x1 = [sp.Symbol(name, real=True) for name in layout.state_names]
+    dx0, dx1 = [sp.Symbol(name, real=True) for name in layout.dxdt_names]
     equations = [
         (dx0, sp.sin(x0) + x0 * x1 ** 2),
         (dx1, x0 ** 2 + sp.exp(x1)),
@@ -98,14 +88,9 @@ def test_generate_jacobian_coupled_nonlinear():
 def test_jacobian_caching():
     """Repeated calls reuse cached Jacobian and JVP."""
 
-    index_map = IndexedBases.from_user_inputs(
-        states=["x", "y"],
-        parameters=[],
-        observables=[],
-        drivers=[],
-    )
-    x, y = list(index_map.states.ref_map.keys())
-    dx = next(iter(index_map.dxdt.ref_map.keys()))
+    layout = SystemLayout(states=("x", "y"))
+    x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
+    dx = sp.Symbol(layout.dxdt_names[0], real=True)
     equations = [(dx, x + y)]
     parsed = ParsedEquations.from_equations(equations, layout)
     _clear_cache()
@@ -130,16 +115,13 @@ def test_jacobian_caching():
 def test_jvp_graph_defines_every_jacobian_entry():
     """Every nonzero entry symbol has a defining graph assignment."""
 
-    index_map = IndexedBases.from_user_inputs(
-        states=["x", "y"],
-        parameters=["a"],
-        observables=["obs1"],
-        drivers=[],
+    layout = SystemLayout(
+        states=("x", "y"), parameters=("a",), observables=("obs1",)
     )
-    x, y = list(index_map.states.ref_map.keys())
+    x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
     a = sp.Symbol("a", real=True)
     obs = sp.Symbol("obs1", real=True)
-    dx, dy = list(index_map.dxdt.ref_map.keys())
+    dx, dy = [sp.Symbol(name, real=True) for name in layout.dxdt_names]
     aux = sp.Symbol("aux", real=True)
     equations = [
         (aux, x * y),
@@ -165,15 +147,10 @@ def test_jvp_graph_defines_every_jacobian_entry():
 def test_structurally_zero_jacobian_entry_is_zero():
     """A structurally zero entry reads back as the zero literal."""
 
-    index_map = IndexedBases.from_user_inputs(
-        states=["x", "y"],
-        parameters=["a"],
-        observables=[],
-        drivers=[],
-    )
-    x, y = list(index_map.states.ref_map.keys())
-    a = index_map.parameters.symbol_map["a"]
-    dx, dy = list(index_map.dxdt.ref_map.keys())
+    layout = SystemLayout(states=("x", "y"), parameters=("a",))
+    x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
+    a = sp.Symbol("a", real=True)
+    dx, dy = [sp.Symbol(name, real=True) for name in layout.dxdt_names]
     equations = [
         (dx, a * y),
         (dy, a * x),

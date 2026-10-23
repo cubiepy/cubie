@@ -56,23 +56,6 @@ def simple_system_defaults():
     )
 
 
-@pytest.fixture(scope="session")
-def simple_symbols_dict(simple_system_defaults):
-    (
-        states,
-        parameters,
-        drivers,
-        observables,
-        dxdt_str,
-        dxdt_list,
-    ) = simple_system_defaults
-    ib = IndexedBases.from_user_inputs(
-        states, parameters, observables, drivers
-    )
-    symbols = ib.all_symbols
-    return symbols
-
-
 @pytest.fixture
 def simple_symbols():
     """Basic SymPy symbols for testing."""
@@ -148,14 +131,6 @@ def observables_kernel_system(precision):
     sweep(system, ["alpha", "beta"])
 
     return system
-
-
-@pytest.fixture
-def indexed_base_map():
-    """Sample IndexedBaseMap for testing."""
-    symbols = ["x", "y", "z"]
-    defaults = [1.0, 2.0, 3.0]
-    return IndexedBaseMap("test_base", symbols, defaults)
 
 
 @pytest.fixture

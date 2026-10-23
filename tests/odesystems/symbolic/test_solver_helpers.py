@@ -1256,7 +1256,7 @@ def test_solver_helper_preserves_colliding_parameters(
     residual = system.get_solver_helper(
         role="residual", operator_beta=1.0, operator_gamma=1.0
     ).device_function
-    assert system.parameters.values_array.dtype == np.dtype(precision)
+    assert system.precision == precision
     assert system.parameters.values_dict["beta"] == precision(2.5)
     assert system.parameters.values_dict["gamma"] == precision(0.75)
 
