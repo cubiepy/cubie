@@ -13,6 +13,12 @@ import uuid
 import sympy as sp
 
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    Variable,
+    VariableSet,
+)
 from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.codegen import print_cuda
@@ -80,7 +86,12 @@ def test_generate_analytical_jvp_without_cse():
     the jacobian module's memoisation cache cannot serve a CSE'd
     result computed by another test.
     """
-    layout = SystemLayout(states=("p", "q"), parameters=("k",))
+    layout = SystemLayout(
+        states=VariableSet.of(Variable, ("p", "q")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("k",)), ("k",)
+        ),
+    )
     p = sp.Symbol("p", real=True)
     q = sp.Symbol("q", real=True)
     k = sp.Symbol("k", real=True)

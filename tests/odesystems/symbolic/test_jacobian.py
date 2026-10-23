@@ -8,6 +8,12 @@ from cubie.odesystems.symbolic.codegen.jacobian import (
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine import to_sympy
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    Variable,
+    VariableSet,
+)
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
@@ -39,7 +45,12 @@ def _get_cache_counts():
 def test_generate_jacobian_with_auxiliary():
     """Jacobian matches expected expressions with auxiliaries."""
 
-    layout = SystemLayout(states=("x", "y"), parameters=("a", "b"))
+    layout = SystemLayout(
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a", "b")), ("a", "b")
+        ),
+    )
     x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
     a = sp.Symbol("a", real=True)
     b = sp.Symbol("b", real=True)
@@ -63,7 +74,7 @@ def test_generate_jacobian_with_auxiliary():
 def test_generate_jacobian_coupled_nonlinear():
     """Jacobian of a coupled nonlinear system matches full expression."""
 
-    layout = SystemLayout(states=("x0", "x1"))
+    layout = SystemLayout(states=VariableSet.of(Variable, ("x0", "x1")))
     x0, x1 = [sp.Symbol(name, real=True) for name in layout.state_names]
     dx0, dx1 = [sp.Symbol(name, real=True) for name in layout.dxdt_names]
     equations = [
@@ -88,7 +99,7 @@ def test_generate_jacobian_coupled_nonlinear():
 def test_jacobian_caching():
     """Repeated calls reuse cached Jacobian and JVP."""
 
-    layout = SystemLayout(states=("x", "y"))
+    layout = SystemLayout(states=VariableSet.of(Variable, ("x", "y")))
     x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
     dx = sp.Symbol(layout.dxdt_names[0], real=True)
     equations = [(dx, x + y)]
@@ -116,7 +127,11 @@ def test_jvp_graph_defines_every_jacobian_entry():
     """Every nonzero entry symbol has a defining graph assignment."""
 
     layout = SystemLayout(
-        states=("x", "y"), parameters=("a",), observables=("obs1",)
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a",)), ("a",)
+        ),
+        observables=VariableSet.of(Variable, ("obs1",)),
     )
     x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
     a = sp.Symbol("a", real=True)
@@ -147,7 +162,12 @@ def test_jvp_graph_defines_every_jacobian_entry():
 def test_structurally_zero_jacobian_entry_is_zero():
     """A structurally zero entry reads back as the zero literal."""
 
-    layout = SystemLayout(states=("x", "y"), parameters=("a",))
+    layout = SystemLayout(
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a",)), ("a",)
+        ),
+    )
     x, y = [sp.Symbol(name, real=True) for name in layout.state_names]
     a = sp.Symbol("a", real=True)
     dx, dy = [sp.Symbol(name, real=True) for name in layout.dxdt_names]

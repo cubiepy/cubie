@@ -13,6 +13,12 @@ from cubie.odesystems.symbolic.parsing import (
     parse_system,
 )
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    Variable,
+    VariableSet,
+)
 from cubie.odesystems.symbolic.symbolicODE import SymbolicODE
 from tests._utils import run_device_dxdt, run_device_observables
 
@@ -214,10 +220,13 @@ class TestDxdtIntegration:
         drivers = []
 
         layout = SystemLayout(
-            states=sorted(states),
-            parameters=sorted(parameters),
-            observables=sorted(observables),
-            drivers=sorted(drivers),
+            states=VariableSet.of(Variable, sorted(states)),
+            parameters=ParameterSet.build(
+                VariableSet.of(Parameter, sorted(parameters)),
+                sorted(parameters),
+            ),
+            observables=VariableSet.of(Variable, sorted(observables)),
+            drivers=VariableSet.of(Variable, sorted(drivers)),
         )
 
         # Define equations symbolically
@@ -251,10 +260,13 @@ class TestDxdtIntegration:
         drivers = []
 
         layout = SystemLayout(
-            states=sorted(states),
-            parameters=sorted(parameters),
-            observables=sorted(observables),
-            drivers=sorted(drivers),
+            states=VariableSet.of(Variable, sorted(states)),
+            parameters=ParameterSet.build(
+                VariableSet.of(Parameter, sorted(parameters)),
+                sorted(parameters),
+            ),
+            observables=VariableSet.of(Variable, sorted(observables)),
+            drivers=VariableSet.of(Variable, sorted(drivers)),
         )
 
         x, y = sp.symbols("x y")

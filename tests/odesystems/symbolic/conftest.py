@@ -3,6 +3,12 @@ import pytest
 import sympy as sp
 
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    Variable,
+    VariableSet,
+)
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.symbolicODE import (
     SymbolicODE,
@@ -137,10 +143,13 @@ def observables_kernel_system(precision):
 def layout():
     """Sample layout for testing."""
     return SystemLayout(
-        states=("x", "y"),
-        parameters=("a", "b", "c", "d"),
-        observables=("obs1",),
-        drivers=("driver1",),
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a", "b", "c", "d")),
+            ("a", "b", "c", "d"),
+        ),
+        observables=VariableSet.of(Variable, ("obs1",)),
+        drivers=VariableSet.of(Variable, ("driver1",)),
     )
 
 
@@ -193,13 +202,23 @@ def bare_layout():
     No observables or drivers: codegen tests use this to
     reach the no-observable and no-driver generator branches.
     """
-    return SystemLayout(states=("x", "y"), parameters=("a", "b"))
+    return SystemLayout(
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a", "b")), ("a", "b")
+        ),
+    )
 
 
 @pytest.fixture(scope="session")
 def solver_scaling_collision_layout():
     """A layout with parameters named like solver scalings."""
-    return SystemLayout(states=("x",), parameters=("beta", "gamma"))
+    return SystemLayout(
+        states=VariableSet.of(Variable, ("x",)),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("beta", "gamma")), ("beta", "gamma")
+        ),
+    )
 
 
 @pytest.fixture(scope="session")
@@ -317,10 +336,12 @@ def chained_aux_equations(bare_layout):
 def observable_driver_layout():
     """A layout with an observable and a driver declared."""
     return SystemLayout(
-        states=("x", "y"),
-        parameters=("a", "b"),
-        observables=("obs1",),
-        drivers=("driver1",),
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a", "b")), ("a", "b")
+        ),
+        observables=VariableSet.of(Variable, ("obs1",)),
+        drivers=VariableSet.of(Variable, ("driver1",)),
     )
 
 
@@ -370,7 +391,11 @@ def cacheable_observable_equations(observable_driver_layout):
 def single_observable_layout():
     """A layout with a single state and one observable."""
     return SystemLayout(
-        states=("x",), parameters=("a",), observables=("obs1",)
+        states=VariableSet.of(Variable, ("x",)),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a",)), ("a",)
+        ),
+        observables=VariableSet.of(Variable, ("obs1",)),
     )
 
 

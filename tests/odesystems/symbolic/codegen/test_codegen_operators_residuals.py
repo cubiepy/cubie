@@ -14,6 +14,10 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
 )
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Variable,
+    VariableSet,
+)
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from tests.odesystems.symbolic.codegen._source_checks import (
     factory_name_bindings,
@@ -241,7 +245,7 @@ def test_n_stage_operator_without_cse(
 
 def test_operator_zero_mass_row_emits_residual_form():
     """A zero mass row emits only the Jacobian term for its output."""
-    layout = SystemLayout(states=("x0", "x1"))
+    layout = SystemLayout(states=VariableSet.of(Variable, ("x0", "x1")))
     equations = ParsedEquations.from_equations(
         [
             (ir.sym("dx0"), ir.sym("x1")),
@@ -271,7 +275,7 @@ def test_operator_zero_mass_row_emits_residual_form():
 
 def test_operator_rejects_general_mass_matrix():
     """Anything but a 0/1 diagonal is rejected at generation."""
-    layout = SystemLayout(states=("x0", "x1"))
+    layout = SystemLayout(states=VariableSet.of(Variable, ("x0", "x1")))
     equations = ParsedEquations.from_equations(
         [
             (ir.sym("dx0"), ir.sym("x1")),
