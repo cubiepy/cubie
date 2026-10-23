@@ -523,6 +523,54 @@ class TestDriverAccess:
         rhs = eqs.state_derivatives[0][1]
         assert ir.sym(driver_sym.name) in ir.free_atoms(rhs)
 
+    def test_positional_parameters_follow_written_order(self):
+        def f(t, y, p):
+            return [-p[0] * y[0]]
+
+        parsed = parse_system(
+            dxdt=f, states={"x": 1.0}, parameters={"b": 1.0, "a": 2.0}
+        )
+        rhs = parsed.specialise(["a", "b"]).equations.state_derivatives[0][1]
+        assert ir.free_atoms(rhs) == {ir.sym("b"), ir.sym("x")}
+
+    def test_positional_index_on_last_container_reads_drivers(self):
+        def f(t, y, p, d):
+            return [-p[1] * y[0] + d[0]]
+
+        parsed = parse_system(
+            dxdt=f,
+            states={"x": 1.0},
+            parameters={"b": 1.0, "a": 2.0},
+            drivers=["w", "u"],
+        )
+        rhs = parsed.specialise(["a", "b"]).equations.state_derivatives[0][1]
+        assert ir.free_atoms(rhs) == {ir.sym("a"), ir.sym("x"), ir.sym("w")}
+
+    def test_positional_index_on_lone_container_reaches_drivers(self):
+        def f(t, y, p):
+            return [-p[0] * y[0] + p[3]]
+
+        parsed = parse_system(
+            dxdt=f,
+            states={"x": 1.0},
+            parameters={"b": 1.0, "a": 2.0},
+            drivers=["w", "u"],
+        )
+        rhs = parsed.specialise(["a", "b"]).equations.state_derivatives[0][1]
+        assert ir.free_atoms(rhs) == {ir.sym("b"), ir.sym("x"), ir.sym("u")}
+
+    def test_driver_index_out_of_range_names_the_drivers(self):
+        def f(t, y, p, d):
+            return [-p[0] * y[0] + d[2]]
+
+        with pytest.raises(ValueError, match=r"declared drivers \("):
+            parse_system(
+                dxdt=f,
+                states={"x": 1.0},
+                parameters={"k": 1.0},
+                drivers=["w", "u"],
+            ).specialise()
+
     def test_bare_driver_name_raises_with_hint(self):
         """Bare-name driver references raise with the container hint."""
         def f(t, y, p):

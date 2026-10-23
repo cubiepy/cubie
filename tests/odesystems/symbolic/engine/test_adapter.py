@@ -1,0 +1,32 @@
+
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
+from cubie.odesystems.symbolic.engine.expr import arr, sym
+
+
+def test_dxdt_order_matches_the_states():
+    layout = SystemLayout(states=("v", "x"))
+    assert buffer_maps(layout).dxdt_order == {sym("dv"): 0, sym("dx"): 1}
+
+
+def test_arrayrefs_place_each_name_in_its_buffer():
+    layout = SystemLayout(
+        states=("x",),
+        parameters=("k", "c"),
+        observables=("o",),
+        drivers=("u",),
+    )
+    refs = buffer_maps(layout).arrayrefs
+    assert refs["x"] is arr("state", 0)
+    assert refs["k"] is arr("parameters", 0)
+    assert refs["c"] is arr("parameters", 1)
+    assert refs["o"] is arr("observables", 0)
+    assert refs["u"] is arr("drivers", 0)
+    assert refs["dx"] is arr("out", 0)
+
+
+def test_orders_map_symbols_to_positions():
+    maps = buffer_maps(SystemLayout(states=("a", "b"), drivers=("u", "w")))
+    assert maps.state_order == {sym("a"): 0, sym("b"): 1}
+    assert maps.driver_order == {sym("u"): 0, sym("w"): 1}
+    assert maps.observable_symbols == ()

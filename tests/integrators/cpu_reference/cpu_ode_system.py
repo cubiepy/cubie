@@ -16,6 +16,13 @@ from .cpu_utils import Array
 TIME_SYMBOL = sp.Symbol("t", real=True)
 
 
+def _sympy_order(names) -> Dict[sp.Symbol, int]:
+    return {
+        sp.Symbol(name, real=True): index
+        for index, name in enumerate(names)
+    }
+
+
 class CPUODESystem:
     """Evaluator for symbolic systems using compiled numerical functions."""
 

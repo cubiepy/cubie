@@ -41,6 +41,15 @@ from tests.system_fixtures import (
 from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
+def parse_dae_input(**kwargs):
+
+    return parse_system(**kwargs).specialise()
+
+
+def parse_dae_input_swept(**kwargs):
+
+    parsed = parse_system(**kwargs)
+    return parsed.specialise(list(parsed.parameters))
 
 
 class TestParseDaeInput:
