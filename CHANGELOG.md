@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.0.0](https://github.com/cubiepy/cubie/compare/v0.16.0...v1.0.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* **batchsolving:** solve inputs (params, inits) now optional ([#1063](https://github.com/cubiepy/cubie/issues/1063))
+* **odesystems:** SystemValues removed in favour of VariableSet and SystemSpecialiser ([#1062](https://github.com/cubiepy/cubie/issues/1062))
+* **odesystems:** ParsedSystem.specialise returns a SpecialisedSystem with a SystemLayout (swept/compiled param handler) ([#1061](https://github.com/cubiepy/cubie/issues/1061))
+
+### Features
+
+* **batchsolving:** Parameter legend and fixed param values made available on results objects ([#1064](https://github.com/cubiepy/cubie/issues/1064)) ([0fff03b](https://github.com/cubiepy/cubie/commit/0fff03b9c84bd46bafc1df2d634d94d9f27c7d08))
+* **batchsolving:** solve inputs (params, inits) now optional ([#1063](https://github.com/cubiepy/cubie/issues/1063)) ([2b93058](https://github.com/cubiepy/cubie/commit/2b9305857aa1f0f180b9ce4f26905cba219fe1e7))
+* **jit:** reassoc fast-math added, off by default ([#1055](https://github.com/cubiepy/cubie/issues/1055)) ([ac268d3](https://github.com/cubiepy/cubie/commit/ac268d31e2c55d8573ee6fa2892150ae896961c0))
+* **odesystems:** ParsedSystem.specialise returns a SpecialisedSystem with a SystemLayout (swept/compiled param handler) ([#1061](https://github.com/cubiepy/cubie/issues/1061)) ([be68b79](https://github.com/cubiepy/cubie/commit/be68b79e3457d766b24a6b7364ad81e534afb208))
+* **odesystems:** Systems can be built with an explicit set of swept parameters to avoid a second specialization ([#1050](https://github.com/cubiepy/cubie/issues/1050)) ([7ed362d](https://github.com/cubiepy/cubie/commit/7ed362d104a082c60fa537359ba959fda359bc52))
+* **odesystems:** SystemValues removed in favour of VariableSet and SystemSpecialiser ([#1062](https://github.com/cubiepy/cubie/issues/1062)) ([2b483a7](https://github.com/cubiepy/cubie/commit/2b483a77324a73abc4e8d9fe2ee6945158362a3c))
+* **odesystems:** variables.py and layout.py declared variables and their indexes in device buffers ([#1060](https://github.com/cubiepy/cubie/issues/1060)) ([6737638](https://github.com/cubiepy/cubie/commit/67376385d51c6fba3022824a7cc6bdd3b5bea6f2))
+
+
+### Bug Fixes
+
+* **CUDAFactory:** per-attribute memos and caches now come only from DerivedValues._derived or attrs post-init fields ([#1066](https://github.com/cubiepy/cubie/issues/1066)) ([2ccf705](https://github.com/cubiepy/cubie/commit/2ccf7057c8ab8533e7b522e42e8d6be8e549b40d))
+* **tests:** session-scoped system fixtures have a consistent set of swept parameters, preventing cache misses ([#1049](https://github.com/cubiepy/cubie/issues/1049)) ([b90b427](https://github.com/cubiepy/cubie/commit/b90b427096d19c46abafdd0de69954de9695267f))
+
+
+### Documentation
+
+* **agents:** the code-style notes give docstrings the numpydoc imperative and rule out data and objects as the subject of a sentence ([#1057](https://github.com/cubiepy/cubie/issues/1057)) ([6f1dcf4](https://github.com/cubiepy/cubie/commit/6f1dcf4602b7103da0c050b5ff3f10795ee2e280))
+
 ## [0.16.0](https://github.com/cubiepy/cubie/compare/v0.15.1...v0.16.0) (2026-10-07)
 
 
