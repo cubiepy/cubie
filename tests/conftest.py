@@ -398,7 +398,9 @@ def session_system_unchanged(request):
     yield
     assert system.compiled_parameters == compiled, (
         f"{request.node.nodeid} left the session system compiling "
-        f"{system.compiled_parameters.key} instead of {compiled.key}."
+        f"{system.compiled_parameters.swept} swept with "
+        f"{system.compiled_parameters.fixed} fixed instead of "
+        f"{compiled.swept} swept with {compiled.fixed} fixed."
     )
 
 

@@ -26,8 +26,8 @@ returns the values that vary between runs:
 
 The handler raises ``ValueError`` for an array of any other height. It
 sets the system's parameters before it builds the arrays, because a
-fixed value can change which states the equations keep. ``BatchInputHandler.__call__`` builds
-the arrays from three arguments:
+fixed value can change which states the equations keep.
+``BatchInputHandler.__call__`` builds the arrays from three arguments:
 
 ``states``
     Mapping or array containing state values only. One-dimensional
@@ -647,6 +647,7 @@ class BatchInputHandler:
             parameters nor every parameter, or it has more than two
             dimensions.
         """
+        self.precision = self.system.precision
         system = self.system
         if parameters is None:
             system.set_swept_parameters(())
@@ -709,8 +710,10 @@ class BatchInputHandler:
     def _array_sweep(self, n_rows: int) -> None:
         """Set the swept parameters for an array with ``n_rows`` rows.
 
-        An array with a row per swept parameter names no other
-        parameter, so compile every other parameter in at its default.
+        Keep the current swept parameters for an array with a row for
+        each of them, compiling every other parameter in at its
+        default, and sweep every parameter for an array with a row per
+        parameter.
         """
         system = self.system
         n_swept = len(system.swept_parameters)
@@ -759,7 +762,7 @@ class BatchInputHandler:
         params: Optional[Union[Dict, ArrayLike]],
         kind: str,
     ) -> tuple[object, object]:
-        """Return the input arrays for the system as it is compiled.
+        """Return the (state, run) and (swept parameter, run) arrays.
 
         Parameters
         ----------
@@ -776,7 +779,6 @@ class BatchInputHandler:
         tuple
             The (state, run) and (swept parameter, run) arrays.
         """
-        self.precision = self.system.precision
         swept_set = self.system.swept_set
         state_set = self.system.states
 

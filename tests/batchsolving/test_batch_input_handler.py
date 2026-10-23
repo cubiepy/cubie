@@ -25,8 +25,8 @@ def _handle(
     handler, states=None, params=None, kind="combinatorial",
     fix_constant_parameters=False,
 ):
-    """Build a batch's arrays, which sets the system's sweep, and return
-    them with the swept names and fixed values."""
+    """Build a batch's arrays, setting the system's swept parameters,
+    and return them with the swept names and fixed values."""
     inits, built = handler(states, params, kind, fix_constant_parameters)
     system = handler.system
     return inits, built, system.swept_parameters, system.fixed_parameter_values
