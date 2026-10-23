@@ -17,6 +17,7 @@ import operator
 from collections import defaultdict
 
 from numba_cuda_mlir import ast_transforms as _ast_transforms
+from numba_cuda_mlir import descriptor as _descriptor
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_compiler as _mlir_compiler
 from numba_cuda_mlir import mlir_lowering as _ml
@@ -2004,6 +2005,29 @@ def apply_float_rounding_parity() -> None:
 
 
 apply_float_rounding_parity()
+
+
+# ------------------------------------------------------------------ #
+# perf-device-array-readonly                                         #
+# ------------------------------------------------------------------ #
+
+
+def apply_device_array_readonly() -> None:
+    """Read a device array's readonly flag without its array interface."""
+    stock = _descriptor._array_readonly
+
+    def array_readonly(arg, ty=None):
+        # Numba checks every array argument on each launch, and it
+        # builds a device array's interface dict only to report it
+        # writable.
+        if isinstance(arg, _descriptor.DeviceNDArrayBase):
+            return False
+        return stock(arg, ty)
+
+    _descriptor._array_readonly = array_readonly
+
+
+apply_device_array_readonly()
 
 
 # ------------------------------------------------------------------ #

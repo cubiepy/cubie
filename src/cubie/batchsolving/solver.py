@@ -681,8 +681,9 @@ class Solver(DerivedValues):
         """
         if drivers is not None:
             kwargs["drivers"] = drivers
-        self.update(**kwargs)
-        check_duration(self.effective, duration, self.precision)
+        if kwargs or self.kernel.system_config_stale:
+            self.update(**kwargs)
+        self._check_duration(duration)
 
         # Start wall-clock timing for solve
         default_timelogger.start_event("solver_solve")
@@ -704,24 +705,59 @@ class Solver(DerivedValues):
             transfer_outputs=not on_device,
         )
 
-        if not on_device:
-            # Synchronize stream, wait until arrays written in
-            # "chunked" mode. Device results return unsynchronized:
-            # the caller orders further work on the returned stream.
-            self.kernel.synchronize()
-            self.kernel.wait_for_writeback()
-            self.kernel.memory_manager.release_idle_memory()
-
-        # Stop wall-clock timing for solve
-        default_timelogger.stop_event("solver_solve")
-        default_timelogger.print_summary()
-
         if on_device:
+            # Return device results without synchronizing; the caller
+            # orders further work on the returned stream.
+            default_timelogger.stop_event("solver_solve")
+            default_timelogger.print_summary()
             return DeviceSolveResult.from_solver(self)
 
-        return SolveResult.from_solver(
-            self,
-            nan_error_trajectories=nan_error_trajectories,
+        return self._host_result(nan_error_trajectories)
+
+    def _host_result(self, nan_error_trajectories: bool) -> SolveResult:
+        """Wait for the launched host solve and return its result.
+
+        Parameters
+        ----------
+        nan_error_trajectories
+            Overwrite the runs with nonzero status codes with NaN.
+
+        Returns
+        -------
+        SolveResult
+            Result owning the solve's host buffers.
+        """
+        # Build the result while the kernel runs. We keep it out of
+        # solve's frame: the first compile leaves a reference cycle
+        # through that frame, and Python frees what the frame holds
+        # only when the cycle collector runs.
+        result = SolveResult.from_solver(self, nan_error_trajectories=False)
+        # Wait for the stream, and for the writeback of a chunked run.
+        self.kernel.synchronize()
+        self.kernel.wait_for_writeback()
+        self.kernel.memory_manager.release_idle_memory()
+
+        default_timelogger.stop_event("solver_solve")
+        default_timelogger.print_summary()
+        if nan_error_trajectories:
+            result.mask_error_runs(self.kernel.single_integrator)
+        return result
+
+    def _check_duration(self, duration: float) -> None:
+        """Raise ``ValueError`` if the solver would save nothing in
+        ``duration``.
+
+        Parameters
+        ----------
+        duration
+            Integration time of the solve.
+        """
+        effective = self.effective
+        precision = self.precision
+        self._derived(
+            "duration_check",
+            (effective, duration, precision),
+            lambda: check_duration(effective, duration, precision),
         )
 
     def compile(
