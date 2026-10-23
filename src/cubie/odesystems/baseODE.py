@@ -11,28 +11,6 @@ Published Classes
     declared defaults, the child factory that assembles the system for
     the parameters a batch compiles, and the codegen settings.
 
-    >>> from numpy import float32
-    >>> from cubie.odesystems.symbolic.parsing import parse_system
-    >>> from cubie.odesystems.symbolic.specialiser import SystemSpecialiser
-    >>> from cubie.odesystems.variables import ParameterSet
-    >>> parsed = parse_system(
-    ...     dxdt=["dx = -k * x"], states={"x": 1.0}, parameters={"k": 1.0}
-    ... )
-    >>> # Subclass and override build() to use:
-    >>> class MyODE(BaseODE):
-    ...     def build(self):
-    ...         pass  # compile dxdt here
-    >>> ode = MyODE(
-    ...     float32,
-    ...     parsed.declared_parameters,
-    ...     SystemSpecialiser(
-    ...         parsed, ParameterSet.build(parsed.declared_parameters)
-    ...     ),
-    ...     initial_values={"x": 0.0},
-    ... )
-    >>> ode.num_states
-    1
-
 See Also
 --------
 :class:`~cubie.CUDAFactory.CUDAFactory`
@@ -76,22 +54,6 @@ from cubie.odesystems.variables import (
     ValuedSet,
     VariableSet,
 )
-
-
-def _states_with_defaults(
-    layout: SystemLayout, initial_values: ValuedSet
-) -> ValuedSet:
-    """Return the layout's states with their default initial values.
-
-    A state with no initial value starts from ``0.0``.
-    """
-    defaults = initial_values.defaults
-    return ValuedSet(
-        [
-            State(state.name, state.unit, defaults.get(state.name, 0.0))
-            for state in layout.states
-        ]
-    )
 
 
 @define
@@ -179,6 +141,7 @@ class BaseODE(CUDAFactory):
             ODEData(
                 precision=precision,
                 operation_ordering=operation_ordering,
+                fn_hash=specialiser.fn_hash,
             )
         )
         self.name = name
@@ -236,7 +199,7 @@ class BaseODE(CUDAFactory):
         """
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        """Apply settings to this system and to its specialiser.
+        """Apply settings to the specialiser, then to this system.
 
         Parameters
         ----------
@@ -250,19 +213,11 @@ class BaseODE(CUDAFactory):
         set[str]
             The recognised names.
         """
-        recognised = self.update_compile_settings(updates, silent=True)
-        if "compiled_parameters" not in updates:
-            return recognised
-        # Forward only the compiled parameters, because assembling
-        # depends on nothing else and a precision or flag change would
-        # otherwise assemble the system again. We generate code from
-        # the child's products, so we rebuild when its settings change.
-        settings = self._specialiser.compile_settings
-        recognised |= self._specialiser.update(
-            compiled_parameters=updates["compiled_parameters"]
+        recognised = self._specialiser.update(updates, silent=True)
+        recognised |= self.update_compile_settings(updates, silent=True)
+        self.update_compile_settings(
+            {"fn_hash": self._specialiser.fn_hash}, silent=True
         )
-        if self._specialiser.compile_settings is not settings:
-            self._invalidate_cache()
         return recognised
 
     def set_swept_parameters(
@@ -270,16 +225,16 @@ class BaseODE(CUDAFactory):
         names: Iterable[str],
         fixed: Optional[Mapping[str, float]] = None,
     ) -> None:
-        """Compile the system with ``names`` swept.
+        """Set the swept parameters to ``names``.
 
         Parameters
         ----------
         names
             Names of the parameters to sweep, in any order.
         fixed
-            Values to compile in for some of the other parameters. The
-            system compiles every parameter that is neither swept nor
-            named here at its default.
+            Fixed values for a subset of the other parameters. This
+            method fixes every parameter neither swept nor named here
+            at its default value.
 
         Raises
         ------
@@ -289,22 +244,20 @@ class BaseODE(CUDAFactory):
             If a swept name repeats or also has a fixed value.
         """
         names = tuple(names)
-        # Compare keys before building the set, so a solve that asks
-        # for the parameters already compiled constructs nothing.
-        key = ParameterSet.key_for(self._parameters, names, fixed)
-        if key == self.compiled_parameters.key:
-            return
-        self.update(
-            compiled_parameters=ParameterSet.build(
-                self._parameters, names, fixed
-            )
+        fixed = dict(fixed or {})
+        parameters = self._parameters
+        compiled = self._derived(
+            "compiled_parameters",
+            (parameters, names, fixed),
+            lambda: ParameterSet.build(parameters, names, fixed),
         )
+        self.update(compiled_parameters=compiled)
 
     def set_default_parameters(self, values: Mapping[str, float]) -> None:
         """Set parameter defaults.
 
-        Afterwards the system compiles its swept parameters as before
-        and every other parameter at its default.
+        This method fixes every parameter that is not swept at its new
+        default value.
 
         Parameters
         ----------
@@ -317,6 +270,8 @@ class BaseODE(CUDAFactory):
             If a name is not a parameter of the system.
         """
         self._parameters = self._parameters.with_defaults(values)
+        # We copy each fixed value into the compiled set when we build
+        # it, so build it again from the new defaults.
         self.set_swept_parameters(self.swept_parameters)
 
     def set_initial_values(self, values: Mapping[str, float]) -> None:
@@ -335,8 +290,6 @@ class BaseODE(CUDAFactory):
         unknown = sorted(set(values) - set(self.states.names))
         if unknown:
             raise KeyError(f"{unknown} are not states of this system.")
-        # Replace the set rather than changing it, because the states
-        # derived from it are reused while it stays the same object.
         self._initial_values = VariableSet.of(
             State, {**self._initial_values.defaults, **values}
         )
@@ -353,34 +306,29 @@ class BaseODE(CUDAFactory):
 
     @property
     def parameters(self) -> ValuedSet:
-        """Every parameter with its default."""
+        """Every parameter with its default value."""
         return self._parameters
 
     @property
     def compiled_parameters(self) -> ParameterSet:
-        """Every parameter as the system compiles it."""
+        """The parameter set of the currently compiled system."""
         return self._specialiser.compiled_parameters
 
     @property
     def swept_set(self) -> ValuedSet:
-        """The swept parameters with their defaults, in row order."""
-        compiled = self.compiled_parameters
-        parameters = self._parameters
-        return self._derived(
-            "swept_set",
-            (compiled, parameters),
-            lambda: parameters.subset(compiled.swept),
-        )
+        """The swept parameters with their default values, in row order."""
+        return self._parameters.subset(self.compiled_parameters.swept)
 
     @property
     def states(self) -> ValuedSet:
-        """Every state with its default initial value."""
-        layout = self.layout
-        initial_values = self._initial_values
-        return self._derived(
-            "states",
-            (layout, initial_values),
-            lambda: _states_with_defaults(layout, initial_values),
+        """Every state with its default initial value, or ``0.0`` for a
+        state given none."""
+        defaults = self._initial_values.defaults
+        return ValuedSet(
+            [
+                State(state.name, state.unit, defaults.get(state.name, 0.0))
+                for state in self.layout.states
+            ]
         )
 
     @property
@@ -395,7 +343,7 @@ class BaseODE(CUDAFactory):
 
     @property
     def observables(self) -> VariableSet:
-        """The observables the system records."""
+        """The system's observables."""
         return self.layout.observables
 
     @property

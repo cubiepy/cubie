@@ -41,44 +41,22 @@ identity protocol lives in `symbolic/AGENTS.md`. `BaseODE.get_solver_helper` rai
 `NotImplementedError`; `SymbolicODE` overrides it.
 
 ## BaseODE updates and identity
-- The parameters a batch compiles are the compile setting `compiled_parameters` of the
-  specialiser child (`symbolic/specialiser.py`), a `ParameterSet` holding one
-  `CompiledParameter` per parameter, in system order: swept with no value, or fixed at
-  the value we compile in. We fill the parameters array with the swept parameters in
-  that order. The child's build assembles the parsed system for that set, and its
-  products (`layout`, `equations`, `functions`, `fn_hash`, `mass`) are what
-  `BaseODE.layout`, `sizes`, `mass`, `states` and `observables` read, so reading any of
-  them assembles the system without generating or compiling code.
-- `BaseODE._update` forwards `compiled_parameters`, and only that name, to the child, so
-  a precision or compile-flag update never assembles the system again, and it invalidates
-  the system's own build when the child's settings changed, because the generated code
-  embeds the child's products. `SpecialiserConfig` is a `_CubieConfigBase` with that one
-  field. `config_hash` recurses into the child, so the swept names and fixed values reach
-  the kernel cache key with no field on `ODEData`.
-- `BaseODE.set_swept_parameters(names, fixed)` is where a request meets the defaults: it
-  compares `ParameterSet.key_for(declared, names, fixed)` with the compiled set's key
-  and builds a new `ParameterSet` only when they differ, so asking for the parameters
-  already compiled constructs nothing. Fixing a parameter at its default gives an equal
-  set, and nothing rebuilds.
-- We keep the declared `states` and `parameters`, with their defaults, on `BaseODE`,
-  outside the compile settings. `set_initial_values()` replaces the default initial
-  values and never rebuilds. `set_default_parameters()` replaces the declared
-  parameters and recompiles the current sweep from the new defaults, so it rebuilds only
-  when a fixed value changes, and it drops any values a solve gave for its own batch.
-- `config_hash` encodes the `ParameterSet` through its attrs fields: each parameter's
-  name, unit, sweep and compiled value. The set holds no defaults, so a swept
-  parameter's default never changes `config_hash`.
-- The sets and records are frozen, hold no dicts, and are precision-free:
-  `defaults_array(precision)` builds an array at the point of use. `BaseODE.states` and
-  `swept_set` come from `CUDAFactory._derived`, so they are rebuilt only when the layout,
-  the compiled parameters or the defaults are replaced. `BaseODE.sizes` is the
-  specialiser product `sizes`. `set_initial_values`
-  and `set_default_parameters` replace the declared sets rather than changing them.
+- The parameters a batch compiles are the `compiled_parameters` setting of the specialiser
+  child (`symbolic/specialiser.py`), a `ParameterSet`. The child assembles the parsed
+  system for that set when it builds; `BaseODE.layout`, `sizes`, `mass`, `states` and
+  `observables` read its products. `config_hash` recurses into the child.
+- `BaseODE._update` passes every update to the child and then folds the child's `fn_hash`
+  into `ODEData`, so the system rebuilds when the specialisation changes.
+- `BaseODE.set_swept_parameters(names, fixed)` is where a request meets the defaults. It
+  derives the `ParameterSet` from the declared parameters, the names and the fixed values
+  through `_derived`, so for a repeated request it passes the same set to `update` and
+  nothing rebuilds.
+- `BaseODE` holds the declared parameters and initial values outside its compile
+  settings. `set_initial_values()` rebuilds nothing; `set_default_parameters()` builds the
+  compiled set again from the new defaults.
 - The mass matrix is the specialiser product `mass` (`BaseODE.mass`), a float64 array or
   `None`; codegen reads it as boolean diagonal flags. Explicit algorithms and Neumann
   preconditioners reject a non-identity mass matrix.
-- `BaseODE.initial_values` and `.states` both return the layout's states with their
-  default initial values.
 
 ## Adding a component category
 A fourth category (beyond states/parameters/observables) needs a `VariableSet` field on

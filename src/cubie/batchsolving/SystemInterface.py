@@ -115,9 +115,9 @@ class SystemInterface:
             Names of the parameters read from the parameters array, in
             any order.
         fixed_values
-            Values to compile in for some of the other parameters. This
-            method compiles every parameter not named here at its
-            default.
+            Fixed values for a subset of the other parameters. This
+            method fixes every parameter neither swept nor named here
+            at its default value.
 
         Raises
         ------

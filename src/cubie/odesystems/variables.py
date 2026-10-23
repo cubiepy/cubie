@@ -123,9 +123,10 @@ def _optional_float(value: Optional[float]) -> Optional[float]:
 class CompiledParameter(Variable):
     """A parameter that is either swept or fixed at a value.
 
-    Pass ``swept=True`` and no value for a parameter you want read from
-    the parameters array in each run. Give a fixed parameter the value
-    to write into the generated source as a constant.
+    The generated code reads a swept parameter from the parameters
+    array in each run, and writes a fixed parameter's value into the
+    source as a constant. Give a swept parameter no value, and give a
+    fixed parameter its value.
 
     Parameters
     ----------
@@ -487,20 +488,6 @@ class ParameterSet(VariableSet):
     entries: Tuple[Variable, ...] = field(
         converter=tuple, validator=[_unique_entries, _compiled_entries]
     )
-    key: tuple = field(init=False, eq=False, repr=False)
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        # We compare each solve's request with this tuple, so we build
-        # it once.
-        object.__setattr__(
-            self,
-            "key",
-            tuple(
-                (entry.name, entry.swept, entry.value)
-                for entry in self.entries
-            ),
-        )
 
     @staticmethod
     def _resolve(
@@ -546,40 +533,13 @@ class ParameterSet(VariableSet):
         )
 
     @classmethod
-    def key_for(
-        cls,
-        parameters: ValuedSet,
-        swept: Iterable[str] = (),
-        values: Optional[Mapping[str, float]] = None,
-    ) -> tuple:
-        """Return the :attr:`key` :meth:`build` would give the request.
-
-        Compare it with an existing set's :attr:`key` to find out
-        whether :meth:`build` would give the same swept and fixed
-        parameters, without building the set.
-
-        Parameters
-        ----------
-        parameters, swept, values
-            As for :meth:`build`.
-
-        Raises
-        ------
-        KeyError
-            If a name is not a parameter.
-        ValueError
-            If a swept name repeats or also has a value.
-        """
-        return cls._resolve(parameters, swept, values)
-
-    @classmethod
     def build(
         cls,
         parameters: ValuedSet,
         swept: Iterable[str] = (),
         values: Optional[Mapping[str, float]] = None,
     ) -> "ParameterSet":
-        """Return a set with ``swept`` swept and the others fixed.
+        """Return the set that sweeps ``swept`` and fixes the others.
 
         Parameters
         ----------

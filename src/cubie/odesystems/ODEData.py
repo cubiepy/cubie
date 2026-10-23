@@ -11,8 +11,9 @@ Published Classes
     4
 
 :class:`ODEData`
-    The compile settings of a :class:`~cubie.odesystems.baseODE.BaseODE`
-    that are not the parameters a batch compiles.
+    Compile settings of a :class:`~cubie.odesystems.baseODE.BaseODE`:
+    the precision, the operation ordering and the hash of the generated
+    source.
 
     >>> from numpy import float32
     >>> data = ODEData(precision=float32, operation_ordering="kahn")
@@ -86,26 +87,23 @@ class SystemSizes:
 
 @frozen
 class ODEData(CUDAFactoryConfig):
-    """Bundle the settings an ODE system generates code with.
+    """Compile settings of an ODE system.
 
-    Parameters
+    Attributes
     ----------
     precision
-        Precision factory used for numerical calculations.
+        NumPy floating-point data type of the generated device functions.
     operation_ordering
-        Generated-operation ordering policy.
-
-    Notes
-    -----
-    Solver-helper request parameters (operator_beta, operator_gamma,
-    preconditioner order, stage tableaus) belong to the requesting
-    algorithm's compile settings and reach the system as immutable
-    :class:`~cubie.odesystems.solver_helpers.SolverHelperRequest`
-    values, so the system's identity never depends on helper request
-    order.
+        Ordering policy for the generated operations: ``"kahn"``,
+        ``"greedy"``, ``"dfs"`` or ``"liveness_auto"``.
+    fn_hash
+        Hash of the values written into the generated source.
+        ``BaseODE`` reads it from the specialiser on each update, so a
+        new specialisation changes these settings.
     """
 
     operation_ordering: str = field(
         default=Factory(operation_ordering_default),
         validator=attrsval_in(OPERATION_ORDERINGS),
     )
+    fn_hash: str = field(default="", validator=attrsval_instance_of(str))
