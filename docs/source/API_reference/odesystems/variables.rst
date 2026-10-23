@@ -3,13 +3,12 @@ Variables
 
 .. currentmodule:: cubie.odesystems.variables
 
-When you parse a system of equations, it records the variables it
-identifies as states, parameters and observables. Each set is ordered by
-name and kept as a :class:`VariableSet`; states and parameters keep
+When you parse a system, you get its states, parameters and observables
+as a :class:`VariableSet` ordered by name. States and parameters keep
 their default values in a :class:`ValuedSet`. A :class:`ParameterSet`
-also captures whether a parameter is swept as part of a batch solve or
-set to a fixed value. A new :class:`ParameterSet` is created for each
-combination of swept parameters you solve over.
+also records whether you sweep each parameter in a batch solve or fix it
+at a value, and you get a new one for each combination of swept
+parameters and fixed values you solve with.
 
 .. autoclass:: Variable
     :members:

@@ -146,7 +146,7 @@ class TestRespecialisation:
         assert system.fn_hash != first_hash
         second = _dxdt_source(system)
         assert "precision(5.0)" in second
-        assert float(system.parameters["amp"]) == 4.0
+        assert system.parameters["amp"].default == 4.0
 
     def test_unchanged_value_keeps_hash(self, system_restored):
         system = system_restored
@@ -196,13 +196,13 @@ class TestStructuralRespecialisation:
         self, system_restored
     ):
         system = system_restored
-        zero_states = list(system.initial_values.values_dict)
+        zero_states = list(system.initial_values.defaults)
         assert system.mass is not None
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             system.set_default_parameters({"Cs": 2e-2})
         assert system.mass is None
-        new_states = list(system.initial_values.values_dict)
+        new_states = list(system.initial_values.defaults)
         assert set(new_states) == {"U3", "I1", "I3"}
         assert new_states != zero_states
         source = _dxdt_source(system)
@@ -221,11 +221,24 @@ class TestStructuralRespecialisation:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             system.set_default_parameters({"Cs": 2e-2})
-            system.set_initial_value("U3", 0.75)
+            system.set_initial_values({"U3": 0.75})
             system.set_default_parameters({"Cs": 4e-2})
         assert float(
-            system.initial_values.values_dict["U3"]
+            system.initial_values.defaults["U3"]
         ) == pytest.approx(0.75)
+
+    def test_dropped_state_keeps_its_initial_value(self, system_restored):
+        """A state simplification drops and restores keeps its value."""
+        system = system_restored
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            system.set_default_parameters({"Cs": 2e-2})
+            system.set_initial_values({"U3": 0.75})
+            system.set_default_parameters({"Cs": 0.0})
+            algebraic_states = system.initial_values.n
+            system.set_default_parameters({"Cs": 2e-2})
+        assert algebraic_states == 2
+        assert system.initial_values.defaults["U3"] == 0.75
 
 
 class TestStructuralSortKey:
@@ -353,7 +366,7 @@ class TestLiveSolverRespecialisation:
         y0 = {
             name: np.array([float(value)])
             for name, value in (
-                system.initial_values.values_dict.items()
+                system.initial_values.defaults.items()
             )
         }
         algebraic = solver_mutable.solve(y0, {}, duration=0.01)
@@ -367,7 +380,7 @@ class TestLiveSolverRespecialisation:
         y0 = {
             name: np.array([float(value)])
             for name, value in (
-                system.initial_values.values_dict.items()
+                system.initial_values.defaults.items()
             )
         }
         live = solver_mutable.solve(y0, {}, duration=0.01)

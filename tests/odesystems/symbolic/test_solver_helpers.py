@@ -802,10 +802,10 @@ def test_cached_operator_apply_dense(
     out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
-    a = precision(cached_system.parameters.values_dict["a"])
-    b = precision(cached_system.parameters.values_dict["b"])
-    c = precision(cached_system.parameters.values_dict["c"])
-    d = precision(cached_system.parameters.values_dict["d"])
+    a = precision(cached_system.parameters.defaults["a"])
+    b = precision(cached_system.parameters.defaults["b"])
+    c = precision(cached_system.parameters.defaults["c"])
+    d = precision(cached_system.parameters.defaults["d"])
 
     x0, x1 = state_values
     jacobian = np.array(
@@ -1107,10 +1107,10 @@ def test_neumann_preconditioner_cached_expression(
     out = out_dev.copy_to_host(stream=stream)
     stream.synchronize()
 
-    a = precision(cached_system.parameters.values_dict["a"])
-    b = precision(cached_system.parameters.values_dict["b"])
-    c = precision(cached_system.parameters.values_dict["c"])
-    d = precision(cached_system.parameters.values_dict["d"])
+    a = precision(cached_system.parameters.defaults["a"])
+    b = precision(cached_system.parameters.defaults["b"])
+    c = precision(cached_system.parameters.defaults["c"])
+    d = precision(cached_system.parameters.defaults["d"])
 
     x0, x1 = state_values
     jacobian = np.array(
@@ -1256,8 +1256,8 @@ def test_solver_helper_preserves_colliding_parameters(
         role="residual", operator_beta=1.0, operator_gamma=1.0
     ).device_function
     assert system.precision == precision
-    assert system.parameters.values_dict["beta"] == precision(2.5)
-    assert system.parameters.values_dict["gamma"] == precision(0.75)
+    assert system.parameters.defaults["beta"] == precision(2.5)
+    assert system.parameters.defaults["gamma"] == precision(0.75)
 
     kernel = residual_kernel(
         residual, swept_values(system).astype(precision)
@@ -2471,7 +2471,7 @@ def test_hh_cached_jacobi_reads_prepare_only_auxiliaries(
     stream.synchronize()
 
     hg, m, nn, vm = (float(value) for value in state_values)
-    values = system.parameters.values_dict
+    values = system.parameters.defaults
     alpha_m = 0.1 * (vm + 40.0) / (1.0 - np.exp(-(vm + 40.0) / 10.0))
     beta_m = 4.0 * np.exp(-(vm + 65.0) / 18.0)
     alpha_h = 0.07 * np.exp(-(vm + 65.0) / 20.0)

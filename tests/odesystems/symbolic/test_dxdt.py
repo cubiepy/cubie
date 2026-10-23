@@ -439,7 +439,7 @@ class TestObservablesDeviceParity:
         }
         driver_names = system.layout.driver_names
         drive_idx = driver_names.index("drive")
-        const_value = precision(system.parameters.values_dict["c0"])
+        const_value = precision(system.parameters.defaults["c0"])
 
         x_val = state_kernel[state_idx["x"]]
         y_val = state_kernel[state_idx["y"]]

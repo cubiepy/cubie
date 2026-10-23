@@ -142,7 +142,7 @@ from cubie.memory.driver_memory import is_pinned_array
 from cubie.batchsolving.SystemInterface import SystemInterface
 from cubie.memory import default_memmgr
 from cubie.odesystems.baseODE import BaseODE
-from cubie.odesystems.SystemValues import SystemValues
+from cubie.odesystems.variables import ValuedSet
 
 if TYPE_CHECKING:
     from cubie.memory.mem_manager import MemoryManager
@@ -186,7 +186,7 @@ def unique_cartesian_product(arrays: List[ndarray]) -> ndarray:
 
 def combinatorial_grid(
     request: Dict[Union[str, int], Union[float, ArrayLike, ndarray]],
-    values_instance: SystemValues,
+    values_instance: ValuedSet,
     silent: bool = False,
 ) -> tuple[ndarray, ndarray]:
     """Build a grid of all unique combinations of requested values.
@@ -198,7 +198,7 @@ def combinatorial_grid(
         scalars or iterables describing sweep values. Value arrays may differ
         in length.
     values_instance
-        :class:`SystemValues` instance used to resolve indices for the
+        :class:`ValuedSet` instance used to resolve indices for the
         provided keys.
     silent
         When ``True`` suppresses warnings about unrecognised keys.
@@ -238,7 +238,7 @@ def combinatorial_grid(
 
 def verbatim_grid(
     request: Dict[Union[str, int], Union[float, ArrayLike, ndarray]],
-    values_instance: SystemValues,
+    values_instance: ValuedSet,
     silent: bool = False,
 ) -> tuple[ndarray, ndarray]:
     """Build a grid that aligns parameter rows without combinatorial expansion.
@@ -249,7 +249,7 @@ def verbatim_grid(
         Dictionary keyed by parameter names or indices whose values are
         scalars or iterables describing sweep values.
     values_instance
-        :class:`SystemValues` instance used to resolve indices for the
+        :class:`ValuedSet` instance used to resolve indices for the
         provided keys.
     silent
         When ``True`` suppresses warnings about unrecognised keys.
@@ -295,7 +295,7 @@ def verbatim_grid(
 
 def generate_grid(
     request: Dict[Union[str, int], Union[float, ArrayLike, ndarray]],
-    values_instance: SystemValues,
+    values_instance: ValuedSet,
     kind: str = "combinatorial",
     silent: bool = False,
 ) -> tuple[ndarray, ndarray]:
@@ -307,7 +307,7 @@ def generate_grid(
         Dictionary keyed by parameter names or indices whose values are
         scalars or iterables describing sweep values.
     values_instance
-        :class:`SystemValues` instance used to resolve indices for the
+        :class:`ValuedSet` instance used to resolve indices for the
         provided keys.
     kind
         Strategy used to assemble the grid. ``"combinatorial"`` expands all
@@ -511,21 +511,21 @@ class BatchInputHandler:
     ):
         """Initialise the handler with a system interface."""
         self.interface = interface
-        self.precision = interface.parameters.precision
+        self.precision = interface.precision
         self.memory_manager = memory_manager
 
     @property
-    def parameters(self) -> SystemValues:
+    def parameters(self) -> ValuedSet:
         """Parameter metadata, read live from the interface."""
         return self.interface.parameters
 
     @property
-    def states(self) -> SystemValues:
+    def states(self) -> ValuedSet:
         """State metadata, read live from the interface."""
         return self.interface.states
 
     @property
-    def swept_values(self) -> SystemValues:
+    def swept_values(self) -> ValuedSet:
         """Swept parameter defaults, read live from the interface."""
         return self.interface.swept_values
 
@@ -596,7 +596,7 @@ class BatchInputHandler:
         ``InputArrays._attach_device_inputs``.
         """
         # Update precision from current system state
-        self.precision = self.states.precision
+        self.precision = self.interface.precision
 
         device_result = self._process_device_inputs(states, params)
         if device_result is not None:
@@ -685,7 +685,7 @@ class BatchInputHandler:
             sweep, swept, given = self._split_array(
                 params, fix_constant_parameters
             )
-        defaults = self.parameters.as_float_dict
+        defaults = self.parameters.defaults
         fixed = {
             name: given.get(name, value)
             for name, value in defaults.items()
@@ -749,7 +749,7 @@ class BatchInputHandler:
     def _validate_device_array(
         self,
         arr: object,
-        values_object: SystemValues,
+        values_object: ValuedSet,
         label: str,
     ) -> None:
         """Validate a device array against system metadata.
@@ -906,7 +906,7 @@ class BatchInputHandler:
         return host_arr, device_arr
 
     def _sanitise_arraylike(
-        self, arr: Optional[ArrayLike], values_object: SystemValues
+        self, arr: Optional[ArrayLike], values_object: ValuedSet
     ) -> Optional[ndarray]:
         """Convert array-likes to 2D arrays in (variable, run) format.
 
@@ -960,7 +960,7 @@ class BatchInputHandler:
     def _plan_single_input(
         self,
         input_data: Optional[Union[Dict, ArrayLike]],
-        values_object: SystemValues,
+        values_object: ValuedSet,
         kind: str,
     ) -> dict:
         """Classify a single input category without materialising runs.
@@ -971,7 +971,7 @@ class BatchInputHandler:
             Input as None (use defaults), dict (expand to grid),
             or array-like (sanitize).
         values_object
-            SystemValues instance for this category (params or states).
+            ValuedSet instance for this category (params or states).
         kind
             Grid type: "combinatorial" or "verbatim".
 
@@ -991,7 +991,7 @@ class BatchInputHandler:
             values_object has no variables, or a dict grid's row
             count does not match its indices.
         """
-        # Handle empty SystemValues (system has no variables of this type)
+        # The set is empty when the system has no variables of this type.
         if values_object.empty:
             if input_data is not None:
                 # Check if input is truly empty or has actual data
@@ -1143,7 +1143,7 @@ class BatchInputHandler:
     def _fill_category(
         self,
         plan: dict,
-        values_object: SystemValues,
+        values_object: ValuedSet,
         backed: set,
         repeats: int,
         tiles: int,
@@ -1155,7 +1155,7 @@ class BatchInputHandler:
         plan
             Plan from :meth:`_plan_single_input`.
         values_object
-            SystemValues instance for this category.
+            ValuedSet instance for this category.
         backed
             Identity set recording destination arrays this call
             allocated.
@@ -1173,7 +1173,7 @@ class BatchInputHandler:
         total_runs = tiles * plan["n_runs"] * repeats
         if plan["mode"] == "empty":
             return np_empty((0, total_runs), dtype=self.precision)
-        defaults = values_object.values_array
+        defaults = values_object.defaults_array(self.precision)
         if plan["mode"] == "defaults":
             return self._fill_defaults(values_object, total_runs, backed)
         if plan["mode"] == "grid":
@@ -1279,7 +1279,7 @@ class BatchInputHandler:
     def _is_right_sized_array(
         self,
         arr: Optional[Union[ArrayLike, Dict]],
-        values_object: SystemValues,
+        values_object: ValuedSet,
     ) -> bool:
         """Check if input is a right-sized 2D array.
 
@@ -1288,7 +1288,7 @@ class BatchInputHandler:
         arr
             Input to check.
         values_object
-            SystemValues instance for dimension comparison.
+            ValuedSet instance for dimension comparison.
 
         Returns
         -------
@@ -1296,7 +1296,7 @@ class BatchInputHandler:
             True if arr is a 2D ndarray with correct variable count,
             or True if values_object is empty and arr is None.
         """
-        # If the SystemValues is empty (no variables), consider it right-sized
+        # An empty set (no variables) counts as right-sized
         # if the array is None or an empty 2D array with 0 rows
         if values_object.empty:
             if arr is None:
@@ -1348,7 +1348,7 @@ class BatchInputHandler:
 
     def _fill_defaults(
         self,
-        values_object: SystemValues,
+        values_object: ValuedSet,
         n_runs: int,
         backed: set,
     ) -> ndarray:
@@ -1357,7 +1357,7 @@ class BatchInputHandler:
         Parameters
         ----------
         values_object
-            SystemValues instance containing default values.
+            ValuedSet instance containing default values.
         n_runs
             Number of run columns to create.
         backed
@@ -1369,7 +1369,7 @@ class BatchInputHandler:
         ndarray
             2D array in (variable, run) format with defaults.
         """
-        defaults = values_object.values_array
+        defaults = values_object.defaults_array(self.precision)
         if defaults.size == 0:
             return np_empty((0, n_runs), dtype=self.precision)
         out = self._final_array(defaults.size, n_runs, backed)

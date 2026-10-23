@@ -59,7 +59,7 @@ def step_inputs(
     )
     return {
         "state": initial_state,
-        "parameters": system.parameters.values_array.astype(precision),
+        "parameters": system.parameters.defaults_array(precision),
         "drivers": np.zeros(width, dtype=precision),
         "driver_coefficients": driver_coefficients,
     }
