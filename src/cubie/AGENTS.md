@@ -99,9 +99,10 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   replacement in and invalidates the build when any field changed. Change detection
   compares post-conversion values: device-function fields by identity, arrays
   elementwise, the rest by inequality. The config-level `update` returns `self` without
-  building a replacement when every given value is the stored object, or has its type
-  and compares equal after a converter that reads nothing else; a value of another type
-  still goes through the validators. `values_hash` covers only eq-participating
+  building a replacement when each given value is the stored object, or has the stored
+  value's type and compares equal to it after a converter that reads no other field. It
+  builds a replacement for a value of another type, so the field's validators check
+  that value. `values_hash` covers only eq-participating
   fields, but a replaced `eq=False` callable still rebuilds the consumer.
   Snapshots are sealed: assignment raises, array fields are owned read-only copies,
   and value objects such as the variable sets are frozen. Updates derive a new object

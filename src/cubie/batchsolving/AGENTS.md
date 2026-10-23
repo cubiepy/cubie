@@ -46,11 +46,12 @@ stale → `check_duration` on the effective timing, memoised through `_derived` 
 system's settings moved (`kernel.system_config_stale`) and rebuilds the kernel →
 `kernel.run()` sets `RunParams`, queues allocations via
 `InputArrays.update`/`OutputArrays.update`, calls `memory_manager.allocate_queue(self)`
-(which may split the batch into chunks) and launches per chunk. A host solve builds its
-`SolveResult` while the kernel runs, then synchronizes and masks the failed runs. The
-solve holds the result in `Solver._host_result`, never as a local of `solve`: the first
-compile leaves a reference cycle through the `solve` frame, and a result in that frame
-lives until the cycle collector runs, so its buffers do not return to their slots.
+(which may split the batch into chunks) and launches per chunk. For a host solve,
+`Solver._host_result` builds the `SolveResult` while the kernel runs, then synchronizes
+and masks the failed runs. Keep the result out of the locals of `solve`: the first
+compile leaves a reference cycle through the `solve` frame, Python frees what that frame
+holds only when the cycle collector runs, and `OutputArrays` cannot reclaim the result's
+buffers until then.
 
 The handler sets the swept parameters before it builds the arrays, because a compiled-in
 value can change which states a DAE keeps.
@@ -70,9 +71,10 @@ accessors go on `kernel` with a `Solver` property.
 
 A system changed outside the Solver is `kernel.system_config_stale`, which checks whether
 the system's settings snapshot is the one the kernel last built against; the next
-`update` pushes the whole effective record so every child re-reads its products. The
-identity check covers the specialiser too, because `BaseODE._update` passes the
-specialiser's `fn_hash` into the system's settings whenever the specialisation changes.
+`update` pushes the whole effective record so every child re-reads its products.
+`kernel.system_config_stale` also detects a new specialisation, because
+`BaseODE._update` passes the specialiser's `fn_hash` into the system's settings whenever
+the specialiser's settings change.
 
 ## Swept and fixed parameters
 The parameters array has one row per swept parameter, in parameter-name order;

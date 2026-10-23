@@ -426,15 +426,15 @@ class SolveResult:
         return result
 
     def mask_error_runs(self, integrator: "SingleIntegratorRun") -> None:
-        """Overwrite runs with nonzero status codes with NaN and warn.
+        """Overwrite the runs with nonzero status codes with NaN and warn.
 
-        Call this only once the solve's outputs have landed.
+        Call this method after you synchronize the solve's stream.
 
         Parameters
         ----------
         integrator
-            The solve's ``SingleIntegratorRun``, whose diagnostics the
-            warning reports.
+            The ``SingleIntegratorRun`` that ran the solve. This method
+            reports its solver diagnostics in the warning.
         """
         error_runs = self._error_run_indices()
         if error_runs.size > 0:
