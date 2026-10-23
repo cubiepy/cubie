@@ -9,6 +9,9 @@ from tests._utils import (
     FLOAT64_PRECISION,
     _build_solver_instance,
 )
+from tests.odesystems.symbolic.test_swept_and_fixed_parameters import (
+    SCALED_CS_LIVE_SETTINGS,
+)
 from tests.system_fixtures import (
     build_diagonally_dominant_system,
     build_three_state_nonlinear_system,
