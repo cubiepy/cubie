@@ -68,18 +68,6 @@ from cubie.odesystems.variables import (
 )
 
 
-def _states_with_defaults(
-    layout: SystemLayout, initial_values: ValuedSet
-) -> ValuedSet:
-    defaults = initial_values.defaults
-    return ValuedSet(
-        [
-            State(state.name, state.unit, defaults.get(state.name, 0.0))
-            for state in layout.states
-        ]
-    )
-
-
 @define
 class ODECache(CUDADispatcherCache):
     """Cache the compiled base outputs and helper products of an ODE build.
@@ -174,6 +162,7 @@ class BaseODE(CUDAFactory):
             ODEData(
                 precision=precision,
                 operation_ordering=operation_ordering,
+                fn_hash=specialiser.fn_hash,
             )
         )
         self.name = name
@@ -230,15 +219,11 @@ class BaseODE(CUDAFactory):
         """
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
-        recognised = self.update_compile_settings(updates, silent=True)
-        if "compiled_parameters" not in updates:
-            return recognised
-        settings = self._specialiser.compile_settings
-        recognised |= self._specialiser.update(
-            compiled_parameters=updates["compiled_parameters"]
+        recognised = self._specialiser.update(updates, silent=True)
+        recognised |= self.update_compile_settings(updates, silent=True)
+        self.update_compile_settings(
+            {"fn_hash": self._specialiser.fn_hash}, silent=True
         )
-        if self._specialiser.compile_settings is not settings:
-            self._invalidate_cache()
         return recognised
 
     def set_swept_parameters(
@@ -247,14 +232,14 @@ class BaseODE(CUDAFactory):
         fixed: Optional[Mapping[str, float]] = None,
     ) -> None:
         names = tuple(names)
-        key = ParameterSet.key_for(self._parameters, names, fixed)
-        if key == self.compiled_parameters.key:
-            return
-        self.update(
-            compiled_parameters=ParameterSet.build(
-                self._parameters, names, fixed
-            )
+        fixed = dict(fixed or {})
+        parameters = self._parameters
+        compiled = self._derived(
+            "compiled_parameters",
+            (parameters, names, fixed),
+            lambda: ParameterSet.build(parameters, names, fixed),
         )
+        self.update(compiled_parameters=compiled)
 
     def set_default_parameters(self, values: Mapping[str, float]) -> None:
         """Set parameter defaults.
@@ -272,6 +257,8 @@ class BaseODE(CUDAFactory):
             If a name is not a parameter of the system.
         """
         self._parameters = self._parameters.with_defaults(values)
+        # We copy each fixed value into the compiled set when we build
+        # it, so build it again from the new defaults.
         self.set_swept_parameters(self.swept_parameters)
 
     def set_initial_values(self, values: Mapping[str, float]) -> None:
@@ -303,22 +290,16 @@ class BaseODE(CUDAFactory):
 
     @property
     def swept_set(self) -> ValuedSet:
-        compiled = self.compiled_parameters
-        parameters = self._parameters
-        return self._derived(
-            "swept_set",
-            (compiled, parameters),
-            lambda: parameters.subset(compiled.swept),
-        )
+        return self._parameters.subset(self.compiled_parameters.swept)
 
     @property
     def states(self) -> ValuedSet:
-        layout = self.layout
-        initial_values = self._initial_values
-        return self._derived(
-            "states",
-            (layout, initial_values),
-            lambda: _states_with_defaults(layout, initial_values),
+        defaults = self._initial_values.defaults
+        return ValuedSet(
+            [
+                State(state.name, state.unit, defaults.get(state.name, 0.0))
+                for state in self.layout.states
+            ]
         )
 
     @property

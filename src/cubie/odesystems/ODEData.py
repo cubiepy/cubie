@@ -159,3 +159,4 @@ class ODEData(CUDAFactoryConfig):
         default=Factory(operation_ordering_default),
         validator=attrsval_in(OPERATION_ORDERINGS),
     )
+    fn_hash: str = field(default="", validator=attrsval_instance_of(str))
