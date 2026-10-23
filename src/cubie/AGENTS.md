@@ -79,8 +79,9 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   or runtime defaults through `CUDAFactory._derived(name, inputs, compute)`, which
   recomputes it only when `inputs` change. Pass immutable objects that are replaced on
   change (a snapshot's `values_hash`, build products, frozen variable sets) as `inputs`,
-  never an object whose equality compares arrays. `config_hash` and `BaseODE.states`
-  use it. A value that depends only on compile settings is a build product instead.
+  never an object whose equality compares arrays. `config_hash` and
+  `BaseODE.set_swept_parameters` use it. A value that depends only on compile settings
+  is a build product instead.
   Add no other in-memory cache: no `functools` caches, module-level dicts or
   hand-written key/value attributes. A function of a class or of the toolchain, which
   cannot change while the process runs, may use `functools.cache`.

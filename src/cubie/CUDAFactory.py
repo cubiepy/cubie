@@ -520,6 +520,8 @@ class _CubieConfigBase(FrozenSettings):
     semantic hash is a pure derivation of the snapshot, memoized on
     first access.
 
+    Notes
+    -----
     Memoizing the hash is only sound because nested values seal at
     the snapshot boundary: converters on array-valued fields store
     owned read-only copies (never aliases of caller arrays), and

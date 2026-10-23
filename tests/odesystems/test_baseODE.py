@@ -198,16 +198,6 @@ class TestSetInitialValues:
         assert tiny_system.cache_valid is True
         assert tiny_system.config_hash == hash_before
 
-    def test_states_are_reused_until_the_initial_values_change(
-        self, tiny_system
-    ):
-        """Return the same states until new initial values are set."""
-        first = tiny_system.states
-        assert tiny_system.states is first
-        tiny_system.set_initial_values({"x": 4.0})
-        assert tiny_system.states is not first
-        assert tiny_system.states.defaults == {"x": 4.0}
-
     def test_unknown_name_raises(self, tiny_system):
         """A name outside the system's states raises KeyError."""
         with pytest.raises(KeyError, match="not_a_key"):

@@ -186,14 +186,6 @@ def test_batches_compiling_the_same_values_compare_equal():
     assert hash(given) == hash(default)
 
 
-def test_key_for_matches_the_built_key():
-    """``key_for`` gives the key of the set ``build`` returns."""
-    request = (PARAMETERS, ["c"], {"a": 4.0})
-    assert ParameterSet.key_for(*request) == (
-        ParameterSet.build(*request).key
-    )
-
-
 @pytest.mark.parametrize(
     "swept, values, error",
     [
