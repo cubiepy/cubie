@@ -449,9 +449,7 @@ def test_finish_check_no_float32_stagnation():
     result = run_device_loop(
         singleintegratorrun=sir,
         system=system,
-        initial_state=system.initial_values.values_array.astype(
-            precision
-        ),
+        initial_state=system.initial_values.defaults_array(precision),
         solver_config=solver_config,
     )
     assert result.status == 0

@@ -2866,7 +2866,7 @@ def test_repeat_solve_reuses_the_build_state(
     assert kernel.run_params.chunk_length == partition.chunk_length
 
     name = sorted(system_restored.fixed_parameter_values)[0]
-    value = float(system_restored.parameters.values_dict[name])
+    value = float(system_restored.parameters.defaults[name])
     system_restored.set_default_parameters({name: 2.0 * value + 1.0})
     assert kernel.system_config_stale
     solver.solve(
@@ -2884,7 +2884,7 @@ def test_repeat_solve_reuses_the_build_state(
     rebuilt_legend = kernel.time_domain_legend
     assert rebuilt_legend is not legend
     assert rebuilt_legend == legend
-    assert float(kernel.system.parameters.values_dict[name]) == (
+    assert float(kernel.system.parameters.defaults[name]) == (
         pytest.approx(2.0 * value + 1.0)
     )
     assert kernel.system.fixed_parameter_values[name] == (
@@ -3231,7 +3231,7 @@ def test_solve_leaves_defaults_and_the_system_current(
 ):
     """A solve changes no defaults and leaves the kernel up to date."""
     assert (
-        system.compile_settings.parameter_values
+        system.parameters.defaults
         == parameter_solve["defaults"]
     )
     assert not solver.kernel.system_config_stale
@@ -3257,7 +3257,7 @@ def test_parameter_changes_between_solves(
     """Single values last one call; a new default reaches the next solve."""
     system = system_restored
     names = list(system.parameters.names)
-    defaults = dict(system.compile_settings.parameter_values)
+    defaults = dict(system.parameters.defaults)
     solver.build_grid(
         None, {names[0]: simple_parameters[names[0]], names[1]: 0.75}
     )
