@@ -2,7 +2,7 @@
 
 Converts the AST metadata from :func:`inspect_ode_function` into
 ``(equation_map, funcs, new_params)`` — the same triple that the string
-and SymPy branches of :func:`parse_system` produce.
+and SymPy branches of :func:`~.parser.parse_system` produce.
 
 Published Functions
 -------------------
@@ -35,6 +35,7 @@ from cubie.odesystems.symbolic.parsing.parse_primitives import (
 
 
 def _symbol(name: str) -> sp.Symbol:
+    """Return the real SymPy symbol called ``name``."""
     return sp.Symbol(name, real=True)
 
 
@@ -58,11 +59,17 @@ def parse_function_input(
     ----------
     func
         Python function defining the ODE right-hand side.
-    index_map
-        Pre-built indexed bases from user-supplied state/param metadata.
     declared_states
-        State names in written order, which positional access and
-        list returns bind to.
+        State names in written order. ``y[i]`` reads the i-th name, and
+        the i-th entry of a list return is its derivative.
+    parameters
+        Declared parameter names, in written order.
+    drivers
+        Declared driver names, in written order. When ``func`` takes
+        two or more containers after the state, ``d[i]`` on the last
+        of them reads the i-th driver and ``p[i]`` on any other reads
+        the i-th parameter. With one container, ``p[i]`` reads the
+        parameters and then the drivers.
     observables
         Observable variable names to extract from local assignments.
     user_functions
@@ -80,7 +87,7 @@ def parse_function_input(
     -------
     tuple
         ``(equation_map, funcs, new_params)`` matching the output contract
-        of the string and SymPy branches in :func:`parse_system`.
+        of the string and SymPy branches in :func:`~.parser.parse_system`.
     """
     if observables is None:
         observables = []
@@ -251,8 +258,8 @@ def _build_name_hints(
     ----------
     inspection
         Result of AST analysis.
-    index_map
-        Pre-built indexed bases.
+    parameters, drivers, states
+        Declared parameter, driver and state names.
 
     Returns
     -------
@@ -365,8 +372,10 @@ def _build_symbol_map(
     ----------
     inspection
         Result of AST analysis.
-    index_map
-        Pre-built indexed bases.
+    parameters, drivers
+        Declared parameter and driver names, in written order.
+    observables
+        Declared observable names.
     strict
         When ``True`` undeclared container accesses raise instead of
         inferring new parameters.

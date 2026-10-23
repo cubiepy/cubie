@@ -1,11 +1,10 @@
-"""Assemble normalised systems into parser products.
+"""Assemble normalised systems into specialised systems.
 
 :func:`assemble_simplified` structurally simplifies a normalised
-system and maps the result into ``ParsedEquations``, storing the
-derived mass matrix of a torn system in
-``ParsedEquations.mass_matrix``. Equations are engine IR pairs
-throughout; SymPy appears only in the ``all_symbols`` table consumed
-by GUIs and device-function injection.
+system and packages the result as a :class:`SpecialisedSystem`: the
+buffer layout, the surviving states and observables, the
+``ParsedEquations``, the source hash and the mass matrix of a torn
+system. Equations are engine IR pairs throughout.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -46,6 +45,7 @@ from cubie._utils import devfunc_returns_nonfloat
 
 
 def _mass_matrix_converter(value: Any) -> Any:
+    """Return ``None`` or ``value`` as a read-only float64 array."""
     if value is None:
         return None
     if hasattr(value, "tolist"):
@@ -57,6 +57,24 @@ def _mass_matrix_converter(value: Any) -> Any:
 
 @frozen
 class SpecialisedSystem(CUDADispatcherCache):
+    """A parsed system assembled for the parameters a batch compiles.
+
+    Parameters
+    ----------
+    layout
+        The variables in each device buffer, in buffer order, and the
+        parameters as the batch compiles them.
+    equations
+        The equations, with every fixed parameter folded in.
+    functions
+        Every callable the generated code may call, by the name it is
+        called with: user functions, inlined helpers and derivative
+        helpers.
+    fn_hash
+        Hash of every value the generated source embeds.
+    mass
+        The mass matrix as a float64 array, or ``None`` for an ODE.
+    """
 
     layout: SystemLayout = field()
     equations: ParsedEquations = field()
@@ -118,7 +136,7 @@ def _finalise_products(
     mass_matrix=None,
     driver_derivatives=None,
 ):
-    """Build ``all_symbols``, ``ParsedEquations``, and the hash."""
+    """Build the callables, ``ParsedEquations`` and the source hash."""
 
     functions = dict(user_functions or {})
     functions.update(
@@ -191,11 +209,10 @@ def assemble_simplified(
 ) -> SpecialisedSystem:
     """Structurally simplify a normalised system and package it.
 
-    ``parameters`` holds the swept parameters, in order. The others are
-    already numbers in ``normalised``. Returns
-    ``(index_map, all_symbols, funcs, parsed_equations, fn_hash)``,
-    with the derived mass matrix in ``parsed_equations.mass_matrix``.
-    Solver states are held in sorted name order.
+    Pass the compiled parameter set whose fixed values ``normalised``
+    already holds as numbers. Return the states, observables and
+    drivers in sorted name order, and the mass matrix of a torn system
+    as ``mass``.
     """
 
     priorities = {}
@@ -222,7 +239,7 @@ def assemble_simplified(
         simplified, normalised.registry, driver_names
     )
 
-    # Sorted, matching the layout IndexedBaseMap builds.
+    # Hold the states in sorted name order.
     surviving = {
         sym.name: sym
         for sym in simplified.differential_states

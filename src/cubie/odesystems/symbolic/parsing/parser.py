@@ -106,6 +106,7 @@ def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
 
 
 def _driver_names(drivers: Optional[Iterable[str]]) -> List[str]:
+    """Return the driver names from a list or a dict of drivers."""
     if drivers is None:
         return []
     names = [str(name) for name in drivers]
@@ -119,6 +120,7 @@ def _driver_names(drivers: Optional[Iterable[str]]) -> List[str]:
 def _defaults(
     values: Union[Dict[str, float], Iterable[str], None],
 ) -> Dict[str, float]:
+    """Return names mapped to defaults, zero for bare names."""
     if values is None:
         return {}
     if isinstance(values, dict):

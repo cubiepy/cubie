@@ -504,7 +504,7 @@ def generate_neumann_preconditioner_code(
     equations
         Parsed ODE equations.
     layout
-        Symbol-to-array mapping for states, parameters, etc.
+        The buffer layout that gives each symbol's array reference.
     variant
         Helper variant selecting the evaluation-point and auxiliary
         conventions.
@@ -1075,7 +1075,7 @@ def generate_jacobi_preconditioner_code(
     equations
         Parsed ODE equations.
     layout
-        Symbol-to-array mapping for states, parameters, etc.
+        The buffer layout that gives each symbol's array reference.
     variant
         Helper variant selecting the evaluation-point and auxiliary
         conventions.

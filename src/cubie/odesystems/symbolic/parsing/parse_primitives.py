@@ -228,12 +228,7 @@ class ParsedEquations:
             Dict[ir_expr.Sym, Tuple[ir_expr.Sym, int]]
         ] = None,
     ) -> "ParsedEquations":
-        """Partition equations according to their assigned symbols.
-
-        Membership is resolved by symbol name against the index
-        map's dxdt and observable collections, so the SymPy-facing
-        ``IndexedBases`` and the IR equation pairs interoperate.
-        """
+        """Partition equations according to their assigned symbols."""
 
         if isinstance(equations, dict):
             items = list(equations.items())

@@ -571,6 +571,7 @@ class TestDriverAccess:
         assert ir.sym(driver_sym.name) in ir.free_atoms(rhs)
 
     def test_positional_parameters_follow_written_order(self):
+        """``p[i]`` reads the i-th parameter in written order."""
         def f(t, y, p):
             return [-p[0] * y[0]]
 
@@ -581,6 +582,7 @@ class TestDriverAccess:
         assert ir.free_atoms(rhs) == {ir.sym("b"), ir.sym("x")}
 
     def test_positional_index_on_last_container_reads_drivers(self):
+        """``d[i]`` on the last of two containers reads the i-th driver."""
         def f(t, y, p, d):
             return [-p[1] * y[0] + d[0]]
 
@@ -594,6 +596,7 @@ class TestDriverAccess:
         assert ir.free_atoms(rhs) == {ir.sym("a"), ir.sym("x"), ir.sym("w")}
 
     def test_positional_index_on_lone_container_reaches_drivers(self):
+        """A lone container counts through parameters, then drivers."""
         def f(t, y, p):
             return [-p[0] * y[0] + p[3]]
 
@@ -607,6 +610,7 @@ class TestDriverAccess:
         assert ir.free_atoms(rhs) == {ir.sym("b"), ir.sym("x"), ir.sym("u")}
 
     def test_driver_index_out_of_range_names_the_drivers(self):
+        """An index past the drivers on the driver container raises."""
         def f(t, y, p, d):
             return [-p[0] * y[0] + d[2]]
 
@@ -1045,7 +1049,7 @@ class TestParseFunctionInputDirect:
         assert new_params == []
 
     def test_observable_symbol_falls_back_to_new_symbol(self):
-        """An observable absent from the index map gets a fresh symbol."""
+        """A declared observable assigned in the body gets an equation."""
         def f(t, y):
             flux = 2.0 * y[0]  # noqa: F841
             return [-y[0]]
@@ -1063,7 +1067,7 @@ class TestParseFunctionInputDirect:
         assert sp.simplify(rhs - 2.0 * x) == 0
 
     def test_dict_return_synthesizes_missing_dxdt_symbol(self):
-        """A dict return with no matching dxdt entry synthesizes one."""
+        """A dict return assigns the derivative of each named state."""
 
         def f(t, y):
             return {"x": -y[0]}

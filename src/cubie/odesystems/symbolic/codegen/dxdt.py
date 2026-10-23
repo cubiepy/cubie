@@ -111,7 +111,7 @@ def generate_dxdt_lines(
     equations
         Parsed equations describing ``dx/dt`` assignments.
     layout
-        Indexed bases that supply CUDA array references for each symbol.
+        The buffer layout that gives each symbol's array reference.
     cse
         Whether to apply common subexpression elimination before emission.
 
@@ -168,7 +168,7 @@ def generate_observables_lines(
     equations
         Parsed equations describing observable assignments.
     layout
-        Indexed bases used to substitute CUDA array references.
+        The buffer layout that gives each symbol's array reference.
     cse
         Whether to apply common subexpression elimination before emission.
 
@@ -243,7 +243,7 @@ def generate_dxdt_fac_code(
     equations
         Parsed equations describing ``dx/dt`` assignments.
     layout
-        Indexed bases that provide symbol references.
+        The buffer layout that gives each symbol's array reference.
     func_name
         Name of the generated factory function.
     cse
@@ -364,7 +364,7 @@ def generate_observables_fac_code(
     equations
         Parsed equations describing observable assignments.
     layout
-        Indexed bases that provide symbol lookups.
+        The buffer layout that gives each symbol's array reference.
     func_name
         Name of the generated factory function.
     cse

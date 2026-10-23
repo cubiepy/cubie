@@ -42,11 +42,13 @@ from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 
 
 def parse_dae_input(**kwargs):
+    """Parse and specialise with nothing swept."""
 
     return parse_system(**kwargs).specialise()
 
 
 def parse_dae_input_swept(**kwargs):
+    """Parse and specialise with every parameter swept."""
 
     parsed = parse_system(**kwargs)
     return parsed.specialise(list(parsed.parameters))

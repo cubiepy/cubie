@@ -1048,8 +1048,7 @@ class TestSympyInputPathway:
         parsed_eqs = specialised.equations
 
         assert funcs["custom_func"] is custom_impl
-        # Verify user function in symbols dict
-        # Verify no alias map for SymPy input (aliases only for string pathway)
+        # SymPy input keeps each user function's own name.
         assert parsed_eqs.function_aliases == {"custom_func": "custom_func"}
 
     def test_sympy_derivative_lhs_equality(self):

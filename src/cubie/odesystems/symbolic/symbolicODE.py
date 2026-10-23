@@ -92,6 +92,12 @@ def _unit_map(
 def _initial_values(
     layout, declared: dict[str, float], current: Optional[dict] = None
 ) -> dict[str, float]:
+    """Return an initial value for every state in ``layout``.
+
+    Take each state's value from ``current``, then ``declared``, and
+    give a state that structural simplification introduced the value
+    ``0.0``.
+    """
     values = {**declared, **(current or {})}
     return {name: values.get(name, 0.0) for name in layout.state_names}
 
@@ -132,8 +138,14 @@ def create_ODE_system(
         time, ``y`` is the state vector, and additional arguments map to
         parameters or drivers. State access patterns supported:
         ``y[0]`` (positional), ``y["name"]`` (string), ``y.name``
-        (attribute). The return value must be a list, tuple, or dict of
-        derivative expressions.
+        (attribute). ``y[i]`` reads the i-th state in the order you
+        declare them. Read a parameter or driver from any later
+        argument by name (``p.k`` or ``p["k"]``), or by position in
+        the order you declare them: with two or more such arguments,
+        ``d[i]`` on the last reads the i-th driver and ``p[i]`` on any
+        other the i-th parameter; with one, ``p[i]`` counts through the
+        parameters and then the drivers. The return value must be a
+        list, tuple, or dict of derivative expressions.
     states
         State labels either as an iterable or as a mapping to default initial
         values.

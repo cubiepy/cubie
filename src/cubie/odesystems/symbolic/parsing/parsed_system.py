@@ -47,8 +47,8 @@ class ParsedSystem:
         Declared observable names.
     parameters
         Parameter names mapped to default values.
-    driver_names, driver_dict
-        Driver labels and the optional driver settings dictionary.
+    driver_names
+        Driver labels.
     known_symbol_map
         Name-to-SymPy-symbol map for the immutable inputs.
     user_functions, user_function_derivatives
@@ -57,7 +57,7 @@ class ParsedSystem:
         Options forwarded to
         :func:`~..structural.simplify.structural_simplify`.
     state_units, parameter_units, observable_units, driver_units
-        Unit annotations forwarded to the assembler.
+        Unit strings keyed by name.
     """
 
     normalised: Any
@@ -111,6 +111,7 @@ class ParsedSystem:
 
     @property
     def declared_parameters(self) -> ValuedSet:
+        """Every parameter with its default and unit, in sorted order."""
         units = self.parameter_units or {}
         return VariableSet.of(
             Parameter, dict(sorted(self.parameters.items())), units
@@ -121,37 +122,31 @@ class ParsedSystem:
         swept: Iterable[str] = (),
         values: Optional[Dict[str, float]] = None,
     ) -> SpecialisedSystem:
-        """Assemble the equations for the swept parameters ``swept``.
-
-        Lay out the parameters array with one row per swept parameter,
-        sorted by name, so that the layout does not depend on the order
-        the caller lists the names in.
+        """Assemble the system with ``swept`` as the array's rows.
 
         Parameters
         ----------
         swept
-            Names read from the parameters array, in any order. Every
-            other parameter is substituted as a number.
+            Names of the parameters to read from the parameters array,
+            in any order. Pass parameter arrays with one row per swept
+            parameter, in the system's parameter order. ``specialise``
+            substitutes every other parameter as a number.
         values
-            Values for the parameters. Defaults to the parsed values.
-        state_values
-            Overrides for declared-state initial values.
+            Values for some of the other parameters. The rest take
+            their parsed defaults.
 
         Returns
         -------
-        tuple
-            ``(index_map, all_symbols, funcs, parsed_equations,
-            fn_hash)``. ``index_map.parameters`` holds the swept
-            parameters in row order, and
-            ``parsed_equations.mass_matrix`` holds the derived mass
+        SpecialisedSystem
+            The layout, equations, callables, source hash and mass
             matrix.
 
         Raises
         ------
         KeyError
-            If a name is not a parameter of the system.
+            If a name is not a parameter.
         ValueError
-            If a swept name repeats.
+            If a swept name repeats or also has a value.
         """
 
         return self.assemble(
@@ -159,7 +154,18 @@ class ParsedSystem:
         )
 
     def assemble(self, parameters: ParameterSet) -> SpecialisedSystem:
+        """Return the system assembled with ``parameters`` compiled in.
 
+        Parameters
+        ----------
+        parameters
+            Every parameter of this system, swept or fixed at a value.
+
+        Returns
+        -------
+        SpecialisedSystem
+            The layout, equations, callables and source hash.
+        """
         rules = _literal_rules(parameters.fixed)
         source = self.normalised
         folded_equations = [

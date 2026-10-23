@@ -17,6 +17,7 @@ TIME_SYMBOL = sp.Symbol("t", real=True)
 
 
 def _sympy_order(names) -> Dict[sp.Symbol, int]:
+    """Map each name's real SymPy symbol to its buffer position."""
     return {
         sp.Symbol(name, real=True): index
         for index, name in enumerate(names)

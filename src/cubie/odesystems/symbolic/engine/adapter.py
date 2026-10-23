@@ -23,6 +23,18 @@ DXDT_BUFFER = "out"
 
 @attrs.frozen(eq=False)
 class BufferMaps:
+    """Hold the buffer position and array element of each variable.
+
+    Parameters
+    ----------
+    state_order, dxdt_order, driver_order
+        Position of each state, derivative and driver symbol in its
+        buffer.
+    observable_symbols
+        Observable symbols, in buffer order.
+    arrayrefs
+        The array element of each variable, by name.
+    """
 
     state_order: Mapping[ir.Sym, int]
     dxdt_order: Mapping[ir.Sym, int]
@@ -32,12 +44,25 @@ class BufferMaps:
 
 
 def _order(names: Tuple[str, ...]) -> Mapping[ir.Sym, int]:
+    """Map each name's IR symbol to its position."""
     return MappingProxyType(
         {ir.sym(name): index for index, name in enumerate(names)}
     )
 
 
 def buffer_maps(layout: SystemLayout) -> BufferMaps:
+    """Return the positions and array elements of ``layout``.
+
+    Parameters
+    ----------
+    layout
+        The buffer layout.
+
+    Returns
+    -------
+    BufferMaps
+        The read-only maps.
+    """
     refs = {}
     for buffer, names in (
         (STATE_BUFFER, layout.state_names),
@@ -129,7 +154,7 @@ def system_ir(equations, layout: SystemLayout) -> SystemIR:
     equations
         ``ParsedEquations`` from the parser.
     layout
-        ``IndexedBases`` bundle for the same system.
+        The buffer layout of the same system.
 
     Returns
     -------

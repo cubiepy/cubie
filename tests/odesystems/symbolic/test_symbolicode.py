@@ -333,6 +333,7 @@ class TestSymbolicODEHash:
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
 
+        # Create via parse_system (provides fn_hash)
         parsed = parse_system(
             dxdt=dxdt,
             states=list(states.keys()),

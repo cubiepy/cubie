@@ -188,7 +188,7 @@ def nonlinear_equations(layout):
 
 @pytest.fixture
 def bare_layout():
-    """IndexedBases with two states and two parameters only.
+    """A layout with two states and two parameters only.
 
     No observables or drivers: codegen tests use this to
     reach the no-observable and no-driver generator branches.
@@ -321,7 +321,7 @@ def chained_aux_equations(bare_layout):
 
 @pytest.fixture
 def observable_driver_layout():
-    """IndexedBases with an observable and a driver declared."""
+    """A layout with an observable and a driver declared."""
     return SystemLayout(
         states=("x", "y"),
         parameters=("a", "b"),

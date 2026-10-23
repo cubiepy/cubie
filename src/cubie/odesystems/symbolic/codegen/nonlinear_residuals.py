@@ -365,7 +365,7 @@ def generate_residual_code(
     equations
         Parsed ODE equations.
     layout
-        Symbol-to-array mapping for states, parameters, etc.
+        The buffer layout that gives each symbol's array reference.
     variant
         Helper variant: single-stage or flattened all-stages.
     M
@@ -515,7 +515,7 @@ def generate_init_residual_code(
     equations
         Parsed ODE equations.
     layout
-        Symbol-to-array mapping for states, parameters, etc.
+        The buffer layout that gives each symbol's array reference.
     M
         0/1 diagonal mass matrix; identity when omitted.
     func_name

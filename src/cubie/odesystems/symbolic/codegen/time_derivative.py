@@ -184,7 +184,7 @@ def generate_time_derivative_lines(
     equations
         Parsed equations describing the ODE system.
     layout
-        Indexed bases mapping symbols to CUDA array references.
+        The buffer layout that gives each symbol's array reference.
     cse
         Whether to apply common subexpression elimination.
 
@@ -236,7 +236,7 @@ def generate_time_derivative_fac_code(
     equations
         Parsed equations describing the ODE system.
     layout
-        Indexed bases providing symbol references.
+        The buffer layout that gives each symbol's array reference.
     func_name
         Name of the generated factory function.
     cse

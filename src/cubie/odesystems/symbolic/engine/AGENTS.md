@@ -18,7 +18,7 @@ Nodes pickle through their constructor functions, so unpickled expressions re-in
 |------|-------------|
 | `expr.py` | IR nodes, weak interning, algebraic folding, substitution, `expand` (products over sums, integer powers over products), `rationalize` (float literals to exact rationals), differentiation, and operation counts. `Local` represents generated scalar temporaries. |
 | `from_sympy.py` | The only SymPy-importing module: `from_sympy`/`convert_assignments` (SymPy → IR, memoised), `to_sympy` (verification utility for tests), `derivative_name_map` (recovers `fdiff` placeholder names from the parser's dynamic device-function classes). |
-| `adapter.py` | `SystemIR` + `system_ir(equations, index_map)` — builds the equations, ordered symbol tables, array-reference maps, and derivative names used by generators. `driver_symbols` is the drivers then `driver_derivatives`. |
+| `adapter.py` | `buffer_maps(layout)` — the IR positions (`state_order`, `dxdt_order`, `driver_order`), `observable_symbols` and `arrayrefs` of a `SystemLayout`, as read-only maps. `SystemIR` + `system_ir(equations, layout)` — builds the equations, ordered symbol tables, array-reference maps (from `buffer_maps`), and derivative names used by generators. `driver_symbols` is the drivers then `driver_derivatives`. |
 | `assignments.py` | Assignment-list transforms: `topological_sort` (policy-driven ordering — `liveness_auto` default, `kahn`, `greedy`, `dfs` — deterministic tie-breaks), `prune_unused` (drop assignments not feeding outputs), `cse_and_stack` (reference-counting CSE over the DAG plus partial Add/Mul subset matching, atomic-assignment inlining before and after extraction, and pow-family strength reduction). |
 | `printer.py` | `IRPrinter` and `print_cuda`/`print_cuda_multiple`: renders IR as Numba-CUDA source — `precision(...)` literal wrapping, integer and integral-float powers up to `_POW_CHAIN_LIMIT` as multiplication chains (structural Pow rules), half powers to `math.sqrt`, guarded reciprocals, Piecewise as branchless `cuda.selp` selections (bitwise `&`/`|` predicates), `CUDA_FUNCTIONS` mapping, scalar→array symbol remapping. Fixed parameters never reach the printer as symbols — their values fold in as `Num` literals before generation. Accepts SymPy input at the boundary (auto-converts). |
 
@@ -38,7 +38,7 @@ by hash or intern order, so generated source is byte-identical across processes.
 iteration may influence emitted structure.
 
 ## Array references
-`Arr(name, index)` with a fixed int index is the engine's `IndexedBase`. Bracket-named
+`Arr(name, index)` with a fixed int index is the engine's array element. Bracket-named
 SymPy symbols (`sp.Symbol("jvp[0]")`) and 1-D `sp.Indexed` leaves convert to `Arr`. JVP
 outputs are `Arr("jvp", i)`.
 
