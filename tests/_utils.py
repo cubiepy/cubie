@@ -49,7 +49,6 @@ def restoring_values(system):
             swept_parameters=swept, fixed_parameters=tuple(fixed.items())
         )
         system.initial_values.update_from_dict(states, silent=True)
-        system.indices.states.update_values(states)
 
 
 def sweep(system, names):
@@ -87,8 +86,8 @@ def swept_defaults(system, runs=2):
 def specialise_all_swept(**kwargs):
     """Parse equations and specialise them, sweeping every parameter.
 
-    Take the arguments of ``parse_system`` and return the products of
-    ``ParsedSystem.specialise``.
+    Take the arguments of ``parse_system`` and return the
+    ``SpecialisedSystem`` that ``ParsedSystem.specialise`` builds.
     """
     parsed_system = parse_system(**kwargs)
     return parsed_system.specialise(list(parsed_system.parameters))

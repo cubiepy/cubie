@@ -96,7 +96,7 @@ a previous parameter set's session. For these modules:
 Three further module-level conftests are sanctioned because they pin
 protocols the shared hierarchy cannot express:
 
-- `tests/odesystems/symbolic/conftest.py` — SymPy symbols, `IndexedBases`,
+- `tests/odesystems/symbolic/conftest.py` — SymPy symbols, `SystemLayout`s,
   and `ParsedEquations` fixtures for parser/codegen unit tests. These run
   no device code; routing them through the `system` fixture would test the
   wrong layer.

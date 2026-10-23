@@ -1,27 +1,27 @@
-"""Assemble normalised systems into parser products.
+"""Assemble normalised systems into specialised systems.
 
 :func:`assemble_simplified` structurally simplifies a normalised
-system and maps the result into ``ParsedEquations``, storing the
-derived mass matrix of a torn system in
-``ParsedEquations.mass_matrix``. Equations are engine IR pairs
-throughout; SymPy appears only in the ``all_symbols`` table consumed
-by GUIs and device-function injection.
+system and packages the result as a :class:`SpecialisedSystem`: the
+buffer layout, the surviving states and observables, the
+``ParsedEquations``, the source hash and the mass matrix of a torn
+system. Equations are engine IR pairs throughout.
 """
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from warnings import warn
 
 import sympy as sp
+from attrs import cmp_using, field, frozen
 
+from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
+from cubie.odesystems.layout import SystemLayout
 from cubie.odesystems.symbolic.parsing.normalise import (
     NormalisedSystem,
 )
 from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     ParsedEquations,
-    TIME_SYMBOL,
     check_derivative_orders,
     derivative_helpers,
 )
@@ -39,7 +39,45 @@ from cubie.odesystems.symbolic.structural.system_structure import (
     StructuralState,
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
-from cubie._utils import devfunc_returns_nonfloat
+from cubie.odesystems.variables import ParameterSet, Variable, VariableSet
+from cubie._utils import (
+    devfunc_returns_nonfloat,
+    mass_equal,
+    mass_matrix_converter,
+)
+
+
+@frozen
+class SpecialisedSystem(CUDADispatcherCache):
+    """A parsed system assembled for the parameters a batch compiles.
+
+    Parameters
+    ----------
+    layout
+        The variables in each device buffer, in buffer order, and the
+        parameters as the batch compiles them.
+    equations
+        The equations, with every fixed parameter folded in.
+    functions
+        Every callable the generated code may call, by the name it is
+        called with: user functions, inlined helpers and derivative
+        helpers.
+    fn_hash
+        Hash of every value the generated source embeds.
+    mass
+        The mass matrix as a float64 array, or ``None`` for an ODE.
+    """
+
+    layout: SystemLayout = field()
+    equations: ParsedEquations = field(hash=False)
+    functions: Dict[str, Callable] = field(factory=dict, hash=False)
+    fn_hash: str = field(default="")
+    mass: Any = field(
+        default=None,
+        converter=mass_matrix_converter,
+        eq=cmp_using(eq=mass_equal),
+        hash=False,
+    )
 
 
 def _driver_derivatives(
@@ -85,38 +123,25 @@ def _driver_derivatives(
     )
 
 
-def _finalise_symbols_and_products(
+def _finalise_products(
     equation_map,
-    index_map,
+    layout,
     user_functions,
     user_function_derivatives,
     rename,
     derivative_names=None,
-    extra_symbol_names=(),
     mass_matrix=None,
     driver_derivatives=None,
 ):
-    """Build ``all_symbols``, ``ParsedEquations``, and the hash."""
+    """Build the callables, ``ParsedEquations`` and the source hash."""
 
-    all_symbols = index_map.all_symbols.copy()
-    all_symbols.setdefault("t", TIME_SYMBOL)
-    for name in extra_symbol_names:
-        all_symbols.setdefault(name, sp.Symbol(name, real=True))
-
-    if user_functions:
-        all_symbols.update(
-            {name: fn for name, fn in user_functions.items()}
-        )
-        all_symbols.update(
-            {
-                fn.__name__: fn
-                for fn in derivative_helpers(user_function_derivatives)
-            }
-        )
-        if rename:
-            all_symbols["__function_aliases__"] = {
-                v: k for k, v in rename.items()
-            }
+    functions = dict(user_functions or {})
+    functions.update(
+        {
+            fn.__name__: fn
+            for fn in derivative_helpers(user_function_derivatives)
+        }
+    )
 
     function_aliases = {
         name: name for name in (user_functions or {})
@@ -136,7 +161,7 @@ def _finalise_symbols_and_products(
             nonfloat_functions.add(func.__name__)
     parsed_equations = ParsedEquations.from_equations(
         equation_map,
-        index_map,
+        layout,
         derivative_names=derivative_names,
         function_aliases=function_aliases,
         nonfloat_functions=nonfloat_functions,
@@ -151,43 +176,40 @@ def _finalise_symbols_and_products(
     )
     fn_hash = hash_system_definition(
         parsed_equations,
-        state_labels=index_map.state_names,
-        dxdt_labels=index_map.dxdt_names,
-        parameter_labels=index_map.parameter_names,
-        driver_labels=index_map.driver_names,
-        observable_labels=index_map.observables.ref_map.keys(),
+        state_labels=layout.state_names,
+        dxdt_labels=layout.dxdt_names,
+        parameter_labels=layout.swept_names,
+        driver_labels=layout.driver_names,
+        observable_labels=layout.observable_names,
         derivative_names=parsed_equations.derivative_names,
         function_aliases=parsed_equations.function_aliases,
         nonfloat_functions=parsed_equations.nonfloat_functions,
     )
-    return all_symbols, parsed_equations, fn_hash
+    return functions, parsed_equations, fn_hash
 
 
 def assemble_simplified(
     normalised: NormalisedSystem,
     states: Dict[str, float],
     observables: List[str],
-    parameters: Dict[str, float],
+    parameters: ParameterSet,
     driver_names: List[str],
-    driver_dict: Optional[Dict[str, Any]],
     known_symbol_map: Dict[str, sp.Symbol],
     user_functions: Optional[Dict[str, Callable]],
     user_function_derivatives: Optional[Dict[str, Callable]],
     state_priority: Optional[Dict[str, float]] = None,
     irreducible: Optional[Iterable[str]] = None,
-    state_units=None,
-    parameter_units=None,
-    observable_units=None,
-    driver_units=None,
+    state_units: Optional[Dict[str, str]] = None,
+    observable_units: Optional[Dict[str, str]] = None,
+    driver_units: Optional[Dict[str, str]] = None,
     simplify_options: Optional[Dict[str, Any]] = None,
-):
+) -> SpecialisedSystem:
     """Structurally simplify a normalised system and package it.
 
-    ``parameters`` holds the swept parameters, in order. The others are
-    already numbers in ``normalised``. Returns
-    ``(index_map, all_symbols, funcs, parsed_equations, fn_hash)``,
-    with the derived mass matrix in ``parsed_equations.mass_matrix``.
-    Solver states are held in sorted name order.
+    Pass the compiled parameter set whose fixed values ``normalised``
+    already holds as numbers. Return the states, observables and
+    drivers in sorted name order, and the mass matrix of a torn system
+    as ``mass``.
     """
 
     priorities = {}
@@ -214,7 +236,7 @@ def assemble_simplified(
         simplified, normalised.registry, driver_names
     )
 
-    # Sorted, matching the layout IndexedBaseMap builds.
+    # Hold the states in sorted name order.
     surviving = {
         sym.name: sym
         for sym in simplified.differential_states
@@ -222,14 +244,10 @@ def assemble_simplified(
     }
     final_states = [surviving[name] for name in sorted(surviving)]
 
-    final_state_values = {}
-    default_warned = []
-    for sym in final_states:
-        if sym.name in states:
-            final_state_values[sym.name] = states[sym.name]
-        else:
-            final_state_values[sym.name] = 0.0
-            default_warned.append(sym.name)
+    final_state_names = [sym.name for sym in final_states]
+    default_warned = [
+        name for name in final_state_names if name not in states
+    ]
     if default_warned:
         warn(
             f"States {default_warned} were introduced by structural "
@@ -272,10 +290,10 @@ def assemble_simplified(
                 EquationWarning,
             )
 
-    final_state_names = set(final_state_values)
+    final_state_set = set(final_state_names)
     final_observables = []
     for name in observables:
-        if name in final_state_names:
+        if name in final_state_set:
             warn(
                 f"Declared observable {name} was selected as a "
                 "solver state; its trajectory is available as a "
@@ -290,26 +308,21 @@ def assemble_simplified(
             )
         final_observables.append(name)
 
-    if state_units is not None:
-        state_units = {
-            k: v
-            for k, v in state_units.items()
-            if k in final_state_names
-        }
-
-    index_map = IndexedBases.from_user_inputs(
-        final_state_values,
-        parameters,
-        final_observables,
-        driver_names,
-        state_units=state_units,
-        parameter_units=parameter_units,
-        observable_units=observable_units,
-        driver_units=driver_units,
-        sort_parameters=False,
+    final_observables = sorted(final_observables)
+    final_drivers = sorted(driver_names)
+    driver_index = {name: index for index, name in enumerate(final_drivers)}
+    layout = SystemLayout(
+        states=VariableSet.of(Variable, final_state_names, state_units),
+        parameters=parameters,
+        observables=VariableSet.of(
+            Variable, final_observables, observable_units
+        ),
+        drivers=VariableSet.of(Variable, final_drivers, driver_units),
+        driver_derivatives=tuple(
+            (driver_index[driver.name], int(order))
+            for driver, order in driver_derivatives.values()
+        ),
     )
-    if driver_dict is not None:
-        index_map.drivers.set_passthrough_defaults(driver_dict)
 
     # Declared observables are pure outputs in cubie: the dxdt device
     # function excludes observable-LHS assignments and reads
@@ -363,24 +376,22 @@ def assemble_simplified(
             for i, sym in enumerate(final_states)
         )
 
-    observed_names = [sym.name for sym, _ in simplified.observed]
-    all_symbols, parsed_equations, fn_hash = (
-        _finalise_symbols_and_products(
-            equation_map,
-            index_map,
-            user_functions,
-            user_function_derivatives,
-            normalised.rename,
-            derivative_names=normalised.derivative_names,
-            extra_symbol_names=observed_names,
-            mass_matrix=mass,
-            driver_derivatives=driver_derivatives,
-        )
+    functions, parsed_equations, fn_hash = _finalise_products(
+        equation_map,
+        layout,
+        user_functions,
+        user_function_derivatives,
+        normalised.rename,
+        derivative_names=normalised.derivative_names,
+        mass_matrix=mass,
+        driver_derivatives=driver_derivatives,
     )
-    return (
-        index_map,
-        all_symbols,
-        normalised.funcs,
-        parsed_equations,
-        fn_hash,
+    # Inlined non-device callables keep their entries.
+    functions = {**functions, **(normalised.funcs or {})}
+    return SpecialisedSystem(
+        layout=layout,
+        equations=parsed_equations,
+        functions=functions,
+        fn_hash=fn_hash,
+        mass=mass,
     )

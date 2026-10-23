@@ -1391,7 +1391,7 @@ def test_equations_take_driver_names_from_the_samples(precision):
         drivers,
         precision=precision,
     )
-    assert list(system.indices.driver_names) == ["d1"]
+    assert list(system.layout.driver_names) == ["d1"]
 
 
 def test_solver_routes_system_ordering_settings_before_kernel(precision):
@@ -2993,7 +2993,7 @@ def test_driverless_batch_queues_only_the_run_inputs(
 def _doubled_first_driver(driver_settings, system):
     """Return ``driver_settings`` with the first driver's samples doubled."""
     samples = dict(driver_settings.samples)
-    first_driver = list(system.indices.driver_names)[0]
+    first_driver = list(system.layout.driver_names)[0]
     samples[first_driver] = samples[first_driver] * 2.0
     return DriverSamples(
         samples,

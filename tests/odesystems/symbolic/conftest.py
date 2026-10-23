@@ -2,9 +2,12 @@ import numpy as np
 import pytest
 import sympy as sp
 
-from cubie.odesystems.symbolic.indexedbasemaps import (
-    IndexedBaseMap,
-    IndexedBases,
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    Variable,
+    VariableSet,
 )
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from cubie.odesystems.symbolic.symbolicODE import (
@@ -59,23 +62,6 @@ def simple_system_defaults():
     )
 
 
-@pytest.fixture(scope="session")
-def simple_symbols_dict(simple_system_defaults):
-    (
-        states,
-        parameters,
-        drivers,
-        observables,
-        dxdt_str,
-        dxdt_list,
-    ) = simple_system_defaults
-    ib = IndexedBases.from_user_inputs(
-        states, parameters, observables, drivers
-    )
-    symbols = ib.all_symbols
-    return symbols
-
-
 @pytest.fixture
 def simple_symbols():
     """Basic SymPy symbols for testing."""
@@ -85,33 +71,33 @@ def simple_symbols():
 
 
 @pytest.fixture
-def simple_equations(indexed_bases):
+def simple_equations(layout):
     """Simple symbolic equations for testing."""
-    x = indexed_bases.states.symbol_map["x"]
-    y = indexed_bases.states.symbol_map["y"]
-    a = indexed_bases.parameters.symbol_map["a"]
-    b = indexed_bases.parameters.symbol_map["b"]
-    dx = indexed_bases.dxdt.symbol_map["dx"]
-    dy = indexed_bases.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     equations = [
         (dx, -a * x + b * y),
         (dy, a * x - b * y),
     ]
-    return ParsedEquations.from_equations(equations, indexed_bases)
+    return ParsedEquations.from_equations(equations, layout)
 
 
 @pytest.fixture
-def complex_equations(indexed_bases):
+def complex_equations(layout):
     """More complex equations with auxiliary variables."""
-    x = indexed_bases.states.symbol_map["x"]
-    y = indexed_bases.states.symbol_map["y"]
-    a = indexed_bases.parameters.symbol_map["a"]
-    b = indexed_bases.parameters.symbol_map["b"]
-    c = indexed_bases.parameters.symbol_map["c"]
-    dx = indexed_bases.dxdt.symbol_map["dx"]
-    dy = indexed_bases.dxdt.symbol_map["dy"]
-    obs = indexed_bases.observables.symbol_map["obs1"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    c = sp.Symbol("c", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
+    obs = sp.Symbol("obs1", real=True)
 
     aux = sp.Symbol("aux", real=True)
     equations = [
@@ -120,7 +106,7 @@ def complex_equations(indexed_bases):
         (dy, aux - c * y),
         (obs, x + y),
     ]
-    return ParsedEquations.from_equations(equations, indexed_bases)
+    return ParsedEquations.from_equations(equations, layout)
 
 
 @pytest.fixture(scope="session")
@@ -154,26 +140,16 @@ def observables_kernel_system(precision):
 
 
 @pytest.fixture
-def indexed_base_map():
-    """Sample IndexedBaseMap for testing."""
-    symbols = ["x", "y", "z"]
-    defaults = [1.0, 2.0, 3.0]
-    return IndexedBaseMap("test_base", symbols, defaults)
-
-
-@pytest.fixture
-def indexed_bases():
-    """Sample IndexedBases for testing."""
-    states = ["x", "y"]
-    parameters = ["a", "b", "c", "d"]
-    observables = ["obs1"]
-    drivers = ["driver1"]
-
-    return IndexedBases.from_user_inputs(
-        states=states,
-        parameters=parameters,
-        observables=observables,
-        drivers=drivers,
+def layout():
+    """Sample layout for testing."""
+    return SystemLayout(
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a", "b", "c", "d")),
+            ("a", "b", "c", "d"),
+        ),
+        observables=VariableSet.of(Variable, ("obs1",)),
+        drivers=VariableSet.of(Variable, ("driver1",)),
     )
 
 
@@ -184,139 +160,135 @@ def sample_hash():
 
 
 @pytest.fixture
-def linear_system_equations(indexed_bases):
+def linear_system_equations(layout):
     """Linear system equations for Jacobian testing."""
-    x = indexed_bases.states.symbol_map["x"]
-    y = indexed_bases.states.symbol_map["y"]
-    a = indexed_bases.parameters.symbol_map["a"]
-    b = indexed_bases.parameters.symbol_map["b"]
-    c = indexed_bases.parameters.symbol_map["c"]
-    d = indexed_bases.parameters.symbol_map["d"]
-    dx = indexed_bases.dxdt.symbol_map["dx"]
-    dy = indexed_bases.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    c = sp.Symbol("c", real=True)
+    d = sp.Symbol("d", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     equations = [
         (dx, a * x + b * y),
         (dy, c * x + d * y),
     ]
-    return ParsedEquations.from_equations(equations, indexed_bases)
+    return ParsedEquations.from_equations(equations, layout)
 
 
 @pytest.fixture
-def nonlinear_equations(indexed_bases):
+def nonlinear_equations(layout):
     """Nonlinear equations for comprehensive testing."""
-    x = indexed_bases.states.symbol_map["x"]
-    y = indexed_bases.states.symbol_map["y"]
-    a = indexed_bases.parameters.symbol_map["a"]
-    b = indexed_bases.parameters.symbol_map["b"]
-    dx = indexed_bases.dxdt.symbol_map["dx"]
-    dy = indexed_bases.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     equations = [
         (dx, a * x - b * x * y),
         (dy, b * x * y - a * y),
     ]
-    return ParsedEquations.from_equations(equations, indexed_bases)
+    return ParsedEquations.from_equations(equations, layout)
 
 
 @pytest.fixture
-def bare_indexed_bases():
-    """IndexedBases with two states and two parameters only.
+def bare_layout():
+    """A layout with two states and two parameters only.
 
     No observables or drivers: codegen tests use this to
     reach the no-observable and no-driver generator branches.
     """
-    return IndexedBases.from_user_inputs(
-        states=["x", "y"],
-        parameters=["a", "b"],
-        observables=[],
-        drivers=[],
+    return SystemLayout(
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a", "b")), ("a", "b")
+        ),
     )
 
 
 @pytest.fixture(scope="session")
-def solver_scaling_collision_indexed_bases():
-    """IndexedBases with parameters named like solver scalings."""
-    return IndexedBases.from_user_inputs(
-        states={"x": 1.0},
-        parameters={"beta": 2.0, "gamma": 3.0},
-        observables=[],
-        drivers=[],
+def solver_scaling_collision_layout():
+    """A layout with parameters named like solver scalings."""
+    return SystemLayout(
+        states=VariableSet.of(Variable, ("x",)),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("beta", "gamma")), ("beta", "gamma")
+        ),
     )
 
 
 @pytest.fixture(scope="session")
 def solver_scaling_collision_equations(
-    solver_scaling_collision_indexed_bases,
+    solver_scaling_collision_layout,
 ):
     """One-state equation using colliding beta/gamma parameters."""
-    ib = solver_scaling_collision_indexed_bases
-    x = ib.states.symbol_map["x"]
-    beta = ib.parameters.symbol_map["beta"]
-    gamma = ib.parameters.symbol_map["gamma"]
-    dx = ib.dxdt.symbol_map["dx"]
+    x = sp.Symbol("x", real=True)
+    beta = sp.Symbol("beta", real=True)
+    gamma = sp.Symbol("gamma", real=True)
+    dx = sp.Symbol("dx", real=True)
     return ParsedEquations.from_equations(
         [(dx, beta * x + gamma)],
-        ib,
+        solver_scaling_collision_layout,
     )
 
 
 @pytest.fixture
-def bare_nonlinear_equations(bare_indexed_bases):
+def bare_nonlinear_equations(bare_layout):
     """Two-state nonlinear equations with no cacheable auxiliaries."""
-    ib = bare_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    b = ib.parameters.symbol_map["b"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     equations = [
         (dx, a * x - b * x * y),
         (dy, b * x * y - a * y),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
-def zero_diagonal_equations(bare_indexed_bases):
+def zero_diagonal_equations(bare_layout):
     """Two cross-coupled states with vanishing Jacobian diagonals."""
-    ib = bare_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    b = ib.parameters.symbol_map["b"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     equations = [
         (dx, a * y),
         (dy, b * x),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
-def identical_diagonal_equations(bare_indexed_bases):
+def identical_diagonal_equations(bare_layout):
     """Two cross-coupled states sharing one Jacobian diagonal."""
-    ib = bare_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    b = ib.parameters.symbol_map["b"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     equations = [
         (dx, a * y - x),
         (dy, b * x - y),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
-def cacheable_equations(bare_indexed_bases):
+def cacheable_equations(bare_layout):
     """Equations whose shared transcendental aux triggers caching.
 
     The Jacobian entries reuse ``sin(x)*cos(y) + exp(x*y)`` across
@@ -324,32 +296,30 @@ def cacheable_equations(bare_indexed_bases):
     cache; this drives the ``cached_aux`` branches of the cached
     generators.
     """
-    ib = bare_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    b = ib.parameters.symbol_map["b"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     shared = sp.sin(x) * sp.cos(y) + sp.exp(x * y)
     equations = [
         (dx, a * shared + x**3),
         (dy, b * shared + y**3),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
-def chained_aux_equations(bare_indexed_bases):
+def chained_aux_equations(bare_layout):
     """Two chained auxiliaries on a system without drivers/observables."""
-    ib = bare_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    b = ib.parameters.symbol_map["b"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     first = sp.Symbol("first")
     second = sp.Symbol("second")
@@ -359,52 +329,52 @@ def chained_aux_equations(bare_indexed_bases):
         (dx, second * a),
         (dy, first * b),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, bare_layout)
 
 
 @pytest.fixture
-def observable_driver_indexed_bases():
-    """IndexedBases with an observable and a driver declared."""
-    return IndexedBases.from_user_inputs(
-        states=["x", "y"],
-        parameters=["a", "b"],
-        observables=["obs1"],
-        drivers=["driver1"],
+def observable_driver_layout():
+    """A layout with an observable and a driver declared."""
+    return SystemLayout(
+        states=VariableSet.of(Variable, ("x", "y")),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a", "b")), ("a", "b")
+        ),
+        observables=VariableSet.of(Variable, ("obs1",)),
+        drivers=VariableSet.of(Variable, ("driver1",)),
     )
 
 
 @pytest.fixture
-def observable_driver_equations(observable_driver_indexed_bases):
+def observable_driver_equations(observable_driver_layout):
     """Two-state equations using an observable and a driver."""
-    ib = observable_driver_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    b = ib.parameters.symbol_map["b"]
-    drive = ib.drivers.symbol_map["driver1"]
-    obs = ib.observables.symbol_map["obs1"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    drive = sp.Symbol("driver1", real=True)
+    obs = sp.Symbol("obs1", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     equations = [
         (obs, a * x + drive),
         (dx, obs * y - b * x * y),
         (dy, b * x * y - a * y),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, observable_driver_layout)
 
 
 @pytest.fixture
-def cacheable_observable_equations(observable_driver_indexed_bases):
+def cacheable_observable_equations(observable_driver_layout):
     """Cache-triggering equations with an observable and a chained aux."""
-    ib = observable_driver_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    b = ib.parameters.symbol_map["b"]
-    obs = ib.observables.symbol_map["obs1"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    b = sp.Symbol("b", real=True)
+    obs = sp.Symbol("obs1", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
 
     first = sp.Symbol("first")
     shared = sp.sin(x) * sp.cos(y) + sp.exp(x * y)
@@ -414,34 +384,34 @@ def cacheable_observable_equations(observable_driver_indexed_bases):
         (dx, a * obs + x**3),
         (dy, b * obs + y**3 + first),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, observable_driver_layout)
 
 
 @pytest.fixture
-def single_observable_indexed_bases():
-    """IndexedBases with a single state and one observable."""
-    return IndexedBases.from_user_inputs(
-        states=["x"],
-        parameters=["a"],
-        observables=["obs1"],
-        drivers=[],
+def single_observable_layout():
+    """A layout with a single state and one observable."""
+    return SystemLayout(
+        states=VariableSet.of(Variable, ("x",)),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("a",)), ("a",)
+        ),
+        observables=VariableSet.of(Variable, ("obs1",)),
     )
 
 
 @pytest.fixture
-def single_observable_equations(single_observable_indexed_bases):
+def single_observable_equations(single_observable_layout):
     """Single-state equations carrying one observable."""
-    ib = single_observable_indexed_bases
-    x = ib.states.symbol_map["x"]
-    a = ib.parameters.symbol_map["a"]
-    obs = ib.observables.symbol_map["obs1"]
-    dx = ib.dxdt.symbol_map["dx"]
+    x = sp.Symbol("x", real=True)
+    a = sp.Symbol("a", real=True)
+    obs = sp.Symbol("obs1", real=True)
+    dx = sp.Symbol("dx", real=True)
 
     equations = [
         (obs, a * x * x),
         (dx, obs + a * x),
     ]
-    return ParsedEquations.from_equations(equations, ib)
+    return ParsedEquations.from_equations(equations, single_observable_layout)
 
 
 @pytest.fixture

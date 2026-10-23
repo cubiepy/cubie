@@ -80,9 +80,9 @@ class LinearOperator(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_linear_operator_code(
             system.equations,
-            system.indices,
+            system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -109,7 +109,7 @@ class NeumannPreconditioner(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_neumann_preconditioner_code(
             system.equations,
-            system.indices,
+            system.layout,
             variant=request.variant,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
@@ -124,7 +124,7 @@ class NeumannPreconditioner(SolverHelperRole):
     @classmethod
     def validate(cls, system, request):
         """Raise ``ValueError`` when the system carries a mass matrix."""
-        if system.compile_settings.mass is not None:
+        if system.mass is not None:
             raise ValueError(
                 "Neumann preconditioners assume an identity mass "
                 "matrix and cannot precondition a system with torn "
@@ -160,9 +160,9 @@ class JacobiPreconditioner(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_jacobi_preconditioner_code(
             system.equations,
-            system.indices,
+            system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -229,9 +229,9 @@ class LuSolve(SolverHelperRole):
     def generate(cls, system, request, func_name):
         code, _ = generate_lu_solve_code(
             system.equations,
-            system.indices,
+            system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -274,9 +274,9 @@ class LuPrepareBlocks(SolverHelperRole):
     def generate(cls, system, request, func_name):
         code, _ = generate_lu_prepare_blocks_code(
             system.equations,
-            system.indices,
+            system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -320,8 +320,8 @@ class LuSmoothingSolve(SolverHelperRole):
     def generate(cls, system, request, func_name):
         code, _ = generate_lu_smoothing_solve_code(
             system.equations,
-            system.indices,
-            M=system.compile_settings.mass,
+            system.layout,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -343,9 +343,9 @@ class Residual(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_residual_code(
             system.equations,
-            system.indices,
+            system.layout,
             variant=request.variant,
-            M=system.compile_settings.mass,
+            M=system.mass,
             stage_coefficients=request.stage_coefficients,
             stage_nodes=request.stage_nodes,
             func_name=func_name,
@@ -370,8 +370,8 @@ class InitResidual(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_init_residual_code(
             system.equations,
-            system.indices,
-            M=system.compile_settings.mass,
+            system.layout,
+            M=system.mass,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
         )
@@ -393,8 +393,8 @@ class InitLuSolve(SolverHelperRole):
         try:
             code, _ = generate_init_lu_solve_code(
                 system.equations,
-                system.indices,
-                M=system.compile_settings.mass,
+                system.layout,
+                M=system.mass,
                 func_name=func_name,
                 operation_ordering=system.operation_ordering,
             )
@@ -421,8 +421,8 @@ class ApplyMass(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_apply_mass_code(
             system.equations,
-            system.indices,
-            M=system.compile_settings.mass,
+            system.layout,
+            M=system.mass,
             func_name=func_name,
         )
 
@@ -437,8 +437,8 @@ class EvaluateInvMassF(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_evaluate_inv_mass_f_code(
             system.equations,
-            system.indices,
-            M=system.compile_settings.mass,
+            system.layout,
+            M=system.mass,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
         )
@@ -454,7 +454,7 @@ class TimeDerivativeRHS(SolverHelperRole):
     def generate(cls, system, request, func_name):
         return generate_time_derivative_fac_code(
             system.equations,
-            system.indices,
+            system.layout,
             func_name=func_name,
             operation_ordering=system.operation_ordering,
         )
@@ -480,7 +480,7 @@ class PrepareJac(SolverHelperRole):
     def generate(cls, system, request, func_name):
         code, _ = generate_prepare_jac_code(
             system.equations,
-            system.indices,
+            system.layout,
             func_name=func_name,
             jvp_equations=system._get_jvp_exprs(),
             operation_ordering=system.operation_ordering,

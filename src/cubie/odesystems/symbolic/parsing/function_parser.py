@@ -2,7 +2,7 @@
 
 Converts the AST metadata from :func:`inspect_ode_function` into
 ``(equation_map, funcs, new_params)`` — the same triple that the string
-and SymPy branches of :func:`parse_system` produce.
+and SymPy branches of :func:`~.parser.parse_system` produce.
 
 Published Functions
 -------------------
@@ -13,21 +13,20 @@ Published Functions
 """
 
 from collections import OrderedDict
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import ast
 import warnings
 
 import sympy as sp
 
-from ..indexedbasemaps import IndexedBases
-from .function_inspector import (
+from cubie.odesystems.symbolic.parsing.function_inspector import (
     AstToSympyConverter,
     FunctionInspection,
     _resolve_func_name,
     inspect_ode_function,
 )
-from .parse_primitives import (
+from cubie.odesystems.symbolic.parsing.parse_primitives import (
     EquationWarning,
     KNOWN_FUNCTIONS,
     TIME_SYMBOL,
@@ -35,10 +34,16 @@ from .parse_primitives import (
 )
 
 
+def _symbol(name: str) -> sp.Symbol:
+    """Return the real SymPy symbol called ``name``."""
+    return sp.Symbol(name, real=True)
+
+
 def parse_function_input(
     func: Callable,
-    index_map: IndexedBases,
     declared_states: List[str],
+    parameters: Sequence[str] = (),
+    drivers: Sequence[str] = (),
     observables: Optional[List[str]] = None,
     user_functions: Optional[Dict[str, Callable]] = None,
     user_function_derivatives: Optional[Dict[str, Callable]] = None,
@@ -54,11 +59,15 @@ def parse_function_input(
     ----------
     func
         Python function defining the ODE right-hand side.
-    index_map
-        Pre-built indexed bases from user-supplied state/param metadata.
     declared_states
-        State names in written order, which positional access and
-        list returns bind to.
+        State names in written order. ``y[i]`` reads the i-th name, and
+        the i-th entry of a list return is its derivative.
+    parameters
+        Declared parameter names. Read them by name through the first
+        container argument after the state, as ``p.k`` or ``p["k"]``.
+    drivers
+        Declared driver names. Read them by name through the second
+        container argument, as ``d.forcing``.
     observables
         Observable variable names to extract from local assignments.
     user_functions
@@ -76,15 +85,22 @@ def parse_function_input(
     -------
     tuple
         ``(equation_map, funcs, new_params)`` matching the output contract
-        of the string and SymPy branches in :func:`parse_system`.
+        of the string and SymPy branches in :func:`~.parser.parse_system`.
     """
     if observables is None:
         observables = []
 
     inspection = inspect_ode_function(func)
     state_order = [str(name) for name in declared_states]
+    parameters = [str(name) for name in parameters]
+    drivers = [str(name) for name in drivers]
     symbol_map, new_params = _build_symbol_map(
-        inspection, index_map, strict=strict, state_order=state_order
+        inspection,
+        parameters,
+        drivers,
+        observables,
+        strict=strict,
+        state_order=state_order,
     )
 
     parse_locals, _, dev_map = _build_sympy_user_functions(
@@ -95,13 +111,15 @@ def parse_function_input(
     }
     symbolic_user_names |= set((user_function_derivatives or {}).keys())
 
-    dxdt_alias_set = set(index_map.dxdt_names)
+    dxdt_alias_set = {f"d{name}" for name in state_order}
     inline_assignments = {
         name: node
         for name, node in inspection.assignments.items()
         if name in dxdt_alias_set
     }
-    name_hints = _build_name_hints(inspection, index_map)
+    name_hints = _build_name_hints(
+        inspection, parameters, drivers, state_order
+    )
 
     converter = AstToSympyConverter(
         symbol_map,
@@ -113,8 +131,8 @@ def parse_function_input(
         name_hints=name_hints,
     )
 
-    state_names = index_map.state_names
-    dxdt_names = list(index_map.dxdt_names)
+    state_names = sorted(state_order)
+    dxdt_names = [f"d{name}" for name in state_names]
 
     # Auxiliary assignments (non-state, non-observable locals). Their
     # symbols are seeded into the map before any conversion so that
@@ -163,11 +181,8 @@ def parse_function_input(
     # Observable assignments
     for obs_name in observables:
         if obs_name in inspection.assignments:
-            obs_sym = index_map.observables.symbol_map.get(obs_name)
-            if obs_sym is None:
-                obs_sym = sp.Symbol(obs_name, real=True)
             rhs = converter.convert(inspection.assignments[obs_name])
-            equation_map.append((obs_sym, rhs))
+            equation_map.append((_symbol(obs_name), rhs))
 
     # State derivative equations
     if isinstance(ret_value, ast.Dict):
@@ -183,17 +198,11 @@ def parse_function_input(
                 raise ValueError(
                     f"Dict return key '{sname}' is not a declared state"
                 )
-            dx_name = f"d{sname}"
-            dx_sym = index_map.dxdt.symbol_map.get(dx_name)
-            if dx_sym is None:
-                dx_sym = sp.Symbol(dx_name, real=True)
-            equation_map.append((dx_sym, expr))
+            equation_map.append((_symbol(f"d{sname}"), expr))
     else:
         # List/tuple return: positional against the written state order
         for i, expr in enumerate(ret_exprs):
-            dx_name = f"d{state_order[i]}"
-            dx_sym = index_map.dxdt.symbol_map[dx_name]
-            equation_map.append((dx_sym, expr))
+            equation_map.append((_symbol(f"d{state_order[i]}"), expr))
 
     funcs = _resolve_called_functions(
         inspection.function_calls, user_functions
@@ -237,7 +246,9 @@ def _resolve_called_functions(
 
 def _build_name_hints(
     inspection: FunctionInspection,
-    index_map: IndexedBases,
+    parameters: Sequence[str],
+    drivers: Sequence[str],
+    states: Sequence[str],
 ) -> Dict[str, str]:
     """Suggest container spellings for declared-but-bare names.
 
@@ -245,8 +256,8 @@ def _build_name_hints(
     ----------
     inspection
         Result of AST analysis.
-    index_map
-        Pre-built indexed bases.
+    parameters, drivers, states
+        Declared parameter, driver and state names.
 
     Returns
     -------
@@ -255,20 +266,12 @@ def _build_name_hints(
         unknown-name error message should recommend.
     """
     hints: Dict[str, str] = {}
-    scalar_set = set(inspection.scalar_params)
-    containers = [
-        cp for cp in inspection.parameter_args if cp not in scalar_set
-    ]
-    container = containers[0] if containers else "p"
-    # A trailing container argument (e.g. ``def f(t, y, p, d)``) is the
-    # natural spelling for drivers; with a single container both hints
-    # coincide.
-    driver_container = containers[-1] if containers else "p"
-    for name in index_map.parameters.symbol_map:
-        hints[name] = f"{container}.{name}"
-    for name in index_map.drivers.symbol_map:
-        hints[name] = f"{driver_container}.{name}"
-    for name in index_map.states.symbol_map:
+    parameter_base, driver_base = _container_roles(inspection)
+    for name in parameters:
+        hints[name] = f"{parameter_base or 'p'}.{name}"
+    for name in drivers:
+        hints[name] = f"{driver_base or 'd'}.{name}"
+    for name in states:
         hints.setdefault(name, f"{inspection.state_param}.{name}")
     return hints
 
@@ -345,9 +348,48 @@ def infer_function_states(func: Callable) -> Dict[str, float]:
     )
 
 
+def _container_roles(
+    inspection: FunctionInspection,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Return the parameter and driver container argument names.
+
+    Parameters
+    ----------
+    inspection
+        Result of AST analysis.
+
+    Returns
+    -------
+    tuple
+        ``(parameter_base, driver_base)``. These are the names of the
+        first and second extra arguments that the function reads as
+        containers, and each is ``None`` when the function has no such
+        argument.
+
+    Raises
+    ------
+    ValueError
+        If the function takes more than two container arguments.
+    """
+    scalar_set = set(inspection.scalar_params)
+    containers = [
+        arg for arg in inspection.parameter_args if arg not in scalar_set
+    ]
+    if len(containers) > 2:
+        raise ValueError(
+            f"The ODE function takes {len(containers)} container "
+            f"arguments after the state ({containers}). Pass the "
+            f"parameters in the first and the drivers in the second."
+        )
+    containers += [None, None]
+    return containers[0], containers[1]
+
+
 def _build_symbol_map(
     inspection: FunctionInspection,
-    index_map: IndexedBases,
+    parameters: List[str],
+    drivers: List[str],
+    observables: List[str],
     state_order: List[str],
     strict: bool = False,
 ) -> Tuple[Dict[str, sp.Basic], List[sp.Symbol]]:
@@ -357,8 +399,10 @@ def _build_symbol_map(
     ----------
     inspection
         Result of AST analysis.
-    index_map
-        Pre-built indexed bases.
+    parameters, drivers
+        Declared parameter and driver names.
+    observables
+        Declared observable names.
     strict
         When ``True`` undeclared container accesses raise instead of
         inferring new parameters.
@@ -378,9 +422,8 @@ def _build_symbol_map(
     smap[inspection.param_names[0]] = TIME_SYMBOL
 
     state_names = list(state_order)
-    state_symbols = [
-        index_map.states.symbol_map[name] for name in state_names
-    ]
+    state_symbols = [_symbol(name) for name in state_names]
+    state_set = set(state_names)
 
     # State accesses: build lookup keys for subscript/attribute patterns
     for acc in inspection.state_accesses:
@@ -398,8 +441,8 @@ def _build_symbol_map(
                     f"states: {state_names}"
                 )
         elif ptype == "string":
-            if key in index_map.states.symbol_map:
-                sym = index_map.states.symbol_map[key]
+            if key in state_set:
+                sym = _symbol(key)
                 lookup = f"{acc['base']}[{key!r}]"
                 smap[lookup] = sym
             else:
@@ -409,8 +452,8 @@ def _build_symbol_map(
                     f"{state_names}"
                 )
         elif ptype == "attribute":
-            if key in index_map.states.symbol_map:
-                sym = index_map.states.symbol_map[key]
+            if key in state_set:
+                sym = _symbol(key)
                 lookup = f"{acc['base']}.{key}"
                 smap[lookup] = sym
             else:
@@ -420,56 +463,70 @@ def _build_symbol_map(
                     f"{state_names}"
                 )
 
-    # Parameter/driver accesses on generic container args
+    # Read parameters through the first container argument and drivers
+    # through the second, by name only. We refuse positional access
+    # because the arrays hold their variables in name order, not in
+    # the order the user wrote them.
     inferred_params: "OrderedDict[str, sp.Symbol]" = OrderedDict()
-    searched_maps = (
-        index_map.parameters,
-        index_map.drivers,
-    )
+    parameter_base, driver_base = _container_roles(inspection)
+    parameter_set = set(parameters)
+    driver_set = set(drivers)
     for acc in inspection.parameter_accesses:
         key = acc["key"]
         ptype = acc["pattern_type"]
         base = acc["base"]
         if ptype not in ("int", "string", "attribute"):
             continue
-        # Search parameters, then drivers
-        target_sym = None
-        for ibm in searched_maps:
-            if ptype == "int":
-                names = list(ibm.symbol_map.keys())
-                if 0 <= key < len(names):
-                    target_sym = ibm.symbol_map[names[key]]
-                    break
-            elif key in ibm.symbol_map:
-                target_sym = ibm.symbol_map[key]
-                break
-
         if ptype == "int":
-            lookup = f"{base}[{key}]"
-        elif ptype == "string":
+            raise ValueError(
+                f"Container access '{base}[{key}]' reads by position. "
+                f"Read parameters and drivers by name, as "
+                f"'{base}.name' or '{base}[\"name\"]'."
+            )
+        if ptype == "string":
             lookup = f"{base}[{key!r}]"
         else:
             lookup = f"{base}.{key}"
 
-        if target_sym is None:
-            if ptype == "int":
+        target_sym = None
+        if base == driver_base:
+            if key in driver_set:
+                target_sym = _symbol(key)
+            elif key in parameter_set:
                 raise ValueError(
-                    f"Container access '{lookup}' is out of range for "
-                    f"the declared parameters "
-                    f"({list(index_map.parameters.symbol_map)}) and "
-                    f"drivers ({list(index_map.drivers.symbol_map)})."
+                    f"'{key}' is a parameter but was accessed as "
+                    f"'{lookup}' on the driver argument. Read it "
+                    f"through the parameter argument: "
+                    f"'{parameter_base}.{key}'."
                 )
-            if key in index_map.states.symbol_map:
+        elif key in parameter_set:
+            target_sym = _symbol(key)
+        elif key in driver_set:
+            raise ValueError(
+                f"'{key}' is a driver but was accessed as '{lookup}' "
+                f"through the parameter argument '{base}'. Read drivers "
+                f"through the argument after the parameters, as "
+                f"'d.{key}' in 'def f(t, y, p, d)'."
+            )
+
+        if target_sym is None:
+            if key in state_set:
                 raise ValueError(
                     f"'{key}' is a state but was accessed as "
                     f"'{lookup}'. Access states through the state "
                     f"argument: '{inspection.state_param}.{key}'."
                 )
-            if key in index_map.observables.symbol_map:
+            if key in observables:
                 raise ValueError(
                     f"'{key}' is an observable but was accessed as "
                     f"'{lookup}'. Observables are assigned locally in "
                     f"the function body and referenced by bare name."
+                )
+            if base == driver_base:
+                raise ValueError(
+                    f"'{key}' is not a declared driver but was accessed "
+                    f"as '{lookup}' on the driver argument. Declare it "
+                    f"in drivers."
                 )
             if strict:
                 raise ValueError(
@@ -498,12 +555,10 @@ def _build_symbol_map(
     # declared as parameters or drivers).
     for arg_name in inspection.scalar_params:
         target_sym = None
-        for ibm in searched_maps:
-            if arg_name in ibm.symbol_map:
-                target_sym = ibm.symbol_map[arg_name]
-                break
+        if arg_name in parameters or arg_name in drivers:
+            target_sym = _symbol(arg_name)
         if target_sym is None:
-            if arg_name in index_map.states.symbol_map:
+            if arg_name in state_set:
                 raise ValueError(
                     f"Scalar argument '{arg_name}' matches a declared "
                     f"state. States are passed together in the second "
@@ -544,8 +599,8 @@ def _build_symbol_map(
     # the dxdt output symbol (which would create a circular reference).
 
     # Observable symbols
-    for obs_name, obs_sym in index_map.observables.symbol_map.items():
-        smap[obs_name] = obs_sym
+    for obs_name in observables:
+        smap[obs_name] = _symbol(obs_name)
 
     return smap, list(inferred_params.values())
 

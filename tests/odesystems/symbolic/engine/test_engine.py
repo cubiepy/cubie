@@ -47,7 +47,13 @@ from cubie.odesystems.symbolic.engine import (
     xreplace,
 )
 from cubie.odesystems.symbolic.engine.adapter import system_ir
-from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Parameter,
+    ParameterSet,
+    Variable,
+    VariableSet,
+)
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 
 
@@ -1114,21 +1120,21 @@ class TestSympyRoundTrip:
 
 def test_system_ir_reflects_index_layout():
     equations_input = [(sym("dx"), add(sym("x"), sym("k"), sym("c")))]
-    index_map = IndexedBases.from_user_inputs(
-        states={"x": 1.0},
-        parameters={"k": 2.0},
-        observables=[],
-        drivers=[],
+    layout = SystemLayout(
+        states=VariableSet.of(Variable, ("x",)),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("k",)), ("k",)
+        ),
     )
-    remapped = IndexedBases.from_user_inputs(
-        states={"x": 1.0},
-        parameters={"k": 2.0, "c": 3.0},
-        observables=[],
-        drivers=[],
+    remapped = SystemLayout(
+        states=VariableSet.of(Variable, ("x",)),
+        parameters=ParameterSet.build(
+            VariableSet.of(Parameter, ("c", "k")), ("c", "k")
+        ),
     )
     before = system_ir(
-        ParsedEquations.from_equations(equations_input, index_map),
-        index_map,
+        ParsedEquations.from_equations(equations_input, layout),
+        layout,
     )
     after = system_ir(
         ParsedEquations.from_equations(equations_input, remapped),
