@@ -506,8 +506,7 @@ def _build_symbol_map(
                 f"'{key}' is a driver but was accessed as '{lookup}' "
                 f"through the parameter argument '{base}'. Read drivers "
                 f"through the argument after the parameters, as "
-                f"'d.{key}' in 'def f(t, y, p, d)', and keep 'p' when "
-                f"the system has no parameters."
+                f"'d.{key}' in 'def f(t, y, p, d)'."
             )
 
         if target_sym is None:
