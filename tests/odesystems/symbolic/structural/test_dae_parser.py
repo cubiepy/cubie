@@ -12,7 +12,10 @@ from cubie.odesystems.symbolic.codegen.time_derivative import (
     generate_time_derivative_lines,
 )
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.engine.adapter import system_ir
+from cubie.odesystems.symbolic.engine.adapter import (
+    buffer_maps,
+    system_ir,
+)
 from cubie.odesystems.symbolic.engine.from_sympy import to_sympy
 from cubie.odesystems.symbolic.parsing import (
     EquationWarning,
@@ -26,6 +29,7 @@ from cubie.odesystems.symbolic.structural.errors import (
 from cubie.odesystems.symbolic.symbolicODE import create_ODE_system
 from tests._utils import (
     sweep,
+    specialise_all_swept,
     run_dense_at_state_operator,
     run_device_dxdt,
     run_device_observables,
@@ -38,18 +42,6 @@ from tests.system_fixtures import (
     growth_d2,
     growth_d3,
 )
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
-
-
-def parse_dae_input(**kwargs):
-
-    return parse_system(**kwargs).specialise()
-
-
-def parse_dae_input_swept(**kwargs):
-
-    parsed = parse_system(**kwargs)
-    return parsed.specialise(list(parsed.parameters))
 
 
 class TestParseDaeInput:
@@ -460,7 +452,7 @@ def residual(layout, parsed, name):
 def substituted(layout, parsed, expr):
     """``expr`` with every solved non-state assignment substituted."""
 
-    states = set(list(layout.state_names))
+    states = set(index_map.state_names)
     observed = {
         sp.Symbol(name, real=True): rhs
         for name, rhs in solved(parsed).items()

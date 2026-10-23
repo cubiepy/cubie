@@ -12,8 +12,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from warnings import warn
 
 import sympy as sp
-from attrs import field, frozen
-from numpy import array as np_array, float64 as np_float64
+from attrs import cmp_using, field, frozen
 
 from cubie.CUDAFactory import CUDADispatcherCache
 from cubie.odesystems.symbolic.engine import expr as ir
@@ -42,27 +41,26 @@ from cubie.odesystems.symbolic.structural.system_structure import (
 )
 from cubie.odesystems.symbolic.sym_utils import hash_system_definition
 from cubie.odesystems.variables import ParameterSet, Variable, VariableSet
-from cubie._utils import devfunc_returns_nonfloat
-
-
-def _mass_matrix_converter(value: Any) -> Any:
-    if value is None:
-        return None
-    if hasattr(value, "tolist"):
-        value = value.tolist()
-    array = np_array(value, dtype=np_float64)
-    array.setflags(write=False)
-    return array
+from cubie._utils import (
+    devfunc_returns_nonfloat,
+    mass_equal,
+    mass_matrix_converter,
+)
 
 
 @frozen
 class SpecialisedSystem(CUDADispatcherCache):
 
     layout: SystemLayout = field()
-    equations: ParsedEquations = field()
-    functions: Dict[str, Callable] = field(factory=dict)
+    equations: ParsedEquations = field(hash=False)
+    functions: Dict[str, Callable] = field(factory=dict, hash=False)
     fn_hash: str = field(default="")
-    mass: Any = field(default=None, converter=_mass_matrix_converter)
+    mass: Any = field(
+        default=None,
+        converter=mass_matrix_converter,
+        eq=cmp_using(eq=mass_equal),
+        hash=False,
+    )
 
 
 def _driver_derivatives(

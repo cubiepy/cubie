@@ -335,8 +335,6 @@ class TestSymbolicODEHash:
 
     def test_symbolic_ode_hash_fallback(self, precision):
         """Verify __init__ correctly computes hash when fn_hash=None."""
-        from cubie.odesystems.symbolic.parsing.parser import parse_system
-
         dxdt = ["dx = -k * x", "dy = k * x"]
         states = {"x": 1.0, "y": 0.0}
         parameters = {"k": 0.1, "c": 2.0}
@@ -631,7 +629,7 @@ class TestSweptParameters:
             name="test_fix_param",
         )
         sweep(ode, ["c", "k"])
-        assert ode.layout.swept_names == ("c", "k",)
+        assert ode.indices.parameter_names == ["c", "k"]
 
         sweep(ode, ["k"])
 

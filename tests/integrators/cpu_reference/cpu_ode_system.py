@@ -147,10 +147,10 @@ class CPUODESystem:
         # Build a dense symbol slot mapping covering base symbols and all
         # equation LHS. Order categories by their integer index for stable,
         # deterministic layout.
-        def sorted_symbols(layout: Dict[sp.Symbol, int]) -> list[sp.Symbol]:
+        def sorted_symbols(index_map: Dict[sp.Symbol, int]) -> list[sp.Symbol]:
             return [
                 sym
-                for sym, _ in sorted(layout.items(), key=lambda kv: kv[1])
+                for sym, _ in sorted(index_map.items(), key=lambda kv: kv[1])
             ]
 
         symbol_order: list[sp.Symbol] = []
@@ -177,11 +177,11 @@ class CPUODESystem:
 
         # Map array indices (state/param/driver/observable) -> slots for fast
         # vectorized fill
-        def slots_for(layout: Dict[sp.Symbol, int]) -> np.ndarray:
+        def slots_for(index_map: Dict[sp.Symbol, int]) -> np.ndarray:
             # Build array where position is the category index and value is the
             # slot index
-            arr = np.empty(len(layout), dtype=np.int64)
-            for sym, idx in layout.items():
+            arr = np.empty(len(index_map), dtype=np.int64)
+            for sym, idx in index_map.items():
                 arr[idx] = symbol_to_slot[sym]
             return arr
 

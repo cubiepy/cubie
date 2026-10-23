@@ -58,12 +58,12 @@ def test_torn_offslot_constraint_pivots_off_diagonal(
 ):
     """A constraint without its slot variable factorises via an
     off-diagonal pivot."""
-    ib = bare_layout
-    x = sp.Symbol("x", real=True)
-    y = sp.Symbol("y", real=True)
-    a = sp.Symbol("a", real=True)
-    dx = sp.Symbol("dx", real=True)
-    dy = sp.Symbol("dy", real=True)
+    ib = bare_indexed_bases
+    x = ib.states.symbol_map["x"]
+    y = ib.states.symbol_map["y"]
+    a = ib.parameters.symbol_map["a"]
+    dx = ib.dxdt.symbol_map["dx"]
+    dy = ib.dxdt.symbol_map["dy"]
     equations = ParsedEquations.from_equations(
         [(dx, a * y), (dy, x)], ib
     )
@@ -98,11 +98,11 @@ def test_block_size_keeps_pivots_inside_diagonal_blocks():
 
 def test_structurally_singular_pattern_refused(bare_layout):
     """A structurally singular shifted matrix fails at generation."""
-    ib = bare_layout
-    x = sp.Symbol("x", real=True)
-    a = sp.Symbol("a", real=True)
-    dx = sp.Symbol("dx", real=True)
-    dy = sp.Symbol("dy", real=True)
+    ib = bare_indexed_bases
+    x = ib.states.symbol_map["x"]
+    a = ib.parameters.symbol_map["a"]
+    dx = ib.dxdt.symbol_map["dx"]
+    dy = ib.dxdt.symbol_map["dy"]
     equations = ParsedEquations.from_equations(
         [(dx, a * x), (dy, a)], ib
     )

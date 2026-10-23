@@ -23,6 +23,7 @@ from cubie.integrators.step_control import (
     filter_coefficients_to_gains,
 )
 from cubie.odesystems.symbolic import SymbolicODE
+from cubie.odesystems.symbolic.parsing.parser import parse_system
 from cubie.batchsolving.solver import Solver
 from cubie.outputhandling import OutputFunctions
 from cubie.array_interpolator import ArrayInterpolator, DriverSamples

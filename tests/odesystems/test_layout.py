@@ -26,7 +26,6 @@ def test_bare_parameter_names_are_swept():
 
 
 def test_num_drivers_counts_the_derivatives():
-    """The drivers buffer holds the drivers and their derivatives."""
     layout = SystemLayout(
         drivers=("u", "w"), driver_derivatives=((0, 1), (1, 2))
     )
