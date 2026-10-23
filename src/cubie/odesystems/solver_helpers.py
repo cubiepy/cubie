@@ -501,7 +501,15 @@ class SolverHelperCache:
         Imported generated factories keyed by ``source_hash``.
     members
         Bound helper members keyed by ``member_hash``.
+    jacobian
+        The system's Jacobian as IR rows, or ``None`` until
+        ``helper_registry.system_jacobian`` generates it.
+    jvp_equations
+        The system's Jacobian-vector product assignments, or ``None``
+        until ``helper_registry.system_jvp_equations`` generates them.
     """
 
     factories: dict = Factory(dict)
     members: dict = Factory(dict)
+    jacobian: Any = None
+    jvp_equations: Any = None

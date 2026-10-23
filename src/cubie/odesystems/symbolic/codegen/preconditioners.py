@@ -37,10 +37,8 @@ from cubie.odesystems.symbolic.engine.printer import (
     indent_lines,
     print_cuda_multiple,
 )
-from cubie.odesystems.symbolic.codegen.jacobian import (
-    generate_jacobian,
-)
 from cubie.odesystems.symbolic.codegen.linear_operators import (
+    _resolve_jacobian,
     _resolve_jvp,
     _state_increment_subs,
     build_stage_cached_jvp_assignments,
@@ -56,7 +54,6 @@ from cubie.odesystems.symbolic.parsing import (
     ParsedEquations,
 )
 from cubie.odesystems.layout import SystemLayout
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.codegen._matrix_utils import (
     mass_diagonal_flags,
 )
@@ -802,6 +799,7 @@ def _build_jacobi_body(
     operation_ordering: str = operation_ordering_default(),
     a_ij: Optional[float] = None,
     series: bool = False,
+    jacobian: Optional[List[List[ir.Expr]]] = None,
 ) -> List[str]:
     """Build the single-system Jacobi diagonal body for one variant.
 
@@ -828,12 +826,8 @@ def _build_jacobi_body(
             return jvp_equations.jacobian_entry(comp_idx, comp_idx)
 
     else:
-        maps = buffer_maps(layout)
-        jac = generate_jacobian(
-            equations,
-            input_order=maps.state_order,
-            output_order=maps.dxdt_order,
-            operation_ordering=operation_ordering,
+        jac = _resolve_jacobian(
+            equations, layout, jacobian, operation_ordering
         )
         # dx/observable outputs become locals; states evaluate at
         # base_state + a_ij * state when state is a Newton increment,
@@ -893,6 +887,7 @@ def _build_n_stage_jacobi_lines(
     M: Optional[Union[Sequence, object]] = None,
     operation_ordering: str = operation_ordering_default(),
     series: bool = False,
+    jacobian: Optional[List[List[ir.Expr]]] = None,
 ) -> List[str]:
     """Build diagonal Jacobi preconditioner body for n-stage FIRK.
 
@@ -907,12 +902,8 @@ def _build_n_stage_jacobi_lines(
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
 
-    maps = buffer_maps(layout)
-    jac = generate_jacobian(
-        equations,
-        input_order=maps.state_order,
-        output_order=maps.dxdt_order,
-        operation_ordering=operation_ordering,
+    jac = _resolve_jacobian(
+        equations, layout, jacobian, operation_ordering
     )
 
     h_sym = ir.sym("_cubie_codegen_h")
@@ -1062,6 +1053,7 @@ def generate_jacobi_preconditioner_code(
     beta: float = 1.0,
     gamma: float = 1.0,
     a_ij: Optional[float] = None,
+    jacobian: Optional[List[List[ir.Expr]]] = None,
 ) -> str:
     """Generate the diagonal Jacobi preconditioner for one variant.
 
@@ -1098,6 +1090,9 @@ def generate_jacobi_preconditioner_code(
         Jacobian-term weight, folded in as a numeric literal.
     a_ij
         Stage diagonal baked as a literal; ``None`` keeps it runtime.
+    jacobian
+        Prebuilt Jacobian of ``equations`` as IR rows; generated from
+        ``equations`` when omitted.
 
     Returns
     -------
@@ -1172,6 +1167,7 @@ def generate_jacobi_preconditioner_code(
                 M=M,
                 operation_ordering=operation_ordering,
                 series=series,
+                jacobian=jacobian,
             )
 
         diag_body = build_diag(False)
@@ -1209,6 +1205,7 @@ def generate_jacobi_preconditioner_code(
                 operation_ordering=operation_ordering,
                 a_ij=a_ij,
                 series=series,
+                jacobian=jacobian,
             )
 
         diag_body = build_diag(False)

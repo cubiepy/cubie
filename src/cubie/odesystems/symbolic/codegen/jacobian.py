@@ -16,9 +16,6 @@ Published Functions
     Compute the full Jacobian as a row-major list of IR expression
     rows.
 
-:func:`get_cache_key`
-    Build a hashable key for the module-level Jacobian cache.
-
 See Also
 --------
 :class:`~cubie.odesystems.symbolic.parsing.jvp_equations.JVPEquations`
@@ -45,17 +42,6 @@ from cubie.odesystems.symbolic.parsing import JVPEquations
 from cubie.odesystems.symbolic.parsing.parse_primitives import (
     check_derivative_orders,
 )
-
-CacheKey = Tuple[
-    Tuple[Tuple[ir.Expr, ir.Expr], ...],
-    Tuple[Tuple[ir.Sym, int], ...],
-    Tuple[Tuple[ir.Sym, int], ...],
-    bool,
-    str,
-    Tuple[Tuple[str, str], ...],
-]
-
-_cache: Dict[CacheKey, Dict[str, object]] = {}
 
 
 def _ir_order(order: Dict) -> Dict[ir.Sym, int]:
@@ -127,54 +113,6 @@ def _check_jacobian_orders(
         getattr(equations, "function_aliases", None) or {},
         derivative_names,
         "Jacobian",
-    )
-
-
-def get_cache_key(
-    equations: Iterable[Tuple[ir.Expr, ir.Expr]],
-    input_order: Dict[ir.Sym, int],
-    output_order: Dict[ir.Sym, int],
-    cse: bool,
-    operation_ordering: str = operation_ordering_default(),
-    derivative_names: Optional[Dict[str, str]] = None,
-) -> CacheKey:
-    """Generate the cache key from IR equations, orders, and CSE flag.
-
-    Parameters
-    ----------
-    equations
-        IR assignment pairs (interned nodes, so tuples are hashable).
-    input_order
-        Mapping from each input symbol to its position.
-    output_order
-        Mapping from each output symbol to its position.
-    cse
-        Whether common-subexpression elimination is enabled.
-    derivative_names
-        User-function derivative placeholder names. Included so two
-        systems whose equations intern identically but bind
-        different derivative helpers to a same-named function do
-        not share a cache entry.
-
-    Returns
-    -------
-    CacheKey
-        Hashable representation of the computation inputs.
-    """
-    if isinstance(equations, dict):
-        eq_tuple = tuple(equations.items())
-    else:
-        eq_tuple = tuple(tuple(pair) for pair in equations)
-    input_tuple = tuple(input_order.items())
-    output_tuple = tuple(output_order.items())
-    names_tuple = tuple(sorted((derivative_names or {}).items()))
-    return (
-        eq_tuple,
-        input_tuple,
-        output_tuple,
-        bool(cse),
-        operation_ordering,
-        names_tuple,
     )
 
 
@@ -276,8 +214,6 @@ def generate_jacobian(
     equations,
     input_order: Dict,
     output_order: Dict,
-    use_cache: bool = True,
-    cache_cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> List[List[ir.Expr]]:
     """Return the Jacobian for the given equations as IR rows.
@@ -292,11 +228,6 @@ def generate_jacobian(
     output_order
         Mapping from each output symbol to its position in the output
         vector (SymPy or IR symbols).
-    use_cache
-        Whether to reuse cached Jacobian computations when available.
-    cache_cse
-        CSE flag folded into the cache key (the Jacobian itself is
-        CSE-independent).
 
     Returns
     -------
@@ -309,16 +240,6 @@ def generate_jacobian(
     ir_outputs = _ir_order(output_order)
     derivative_names = _derivative_names(equations)
 
-    if use_cache:
-        return _cached_jacobian_for(
-            equations,
-            eq_list,
-            ir_inputs,
-            ir_outputs,
-            cache_cse,
-            derivative_names,
-            operation_ordering,
-        )
     jac = _chain_rule_jacobian(
         eq_list,
         ir_inputs,
@@ -391,28 +312,15 @@ def generate_analytical_jvp(
     else:
         substituted = list(eq_list)
 
-    cache_key = get_cache_key(
-        substituted,
-        ir_inputs,
-        ir_outputs,
-        cse=cse,
-        operation_ordering=operation_ordering,
-        derivative_names=derivative_names,
-    )
-    cached_entry = _cache.get(cache_key)
-    if isinstance(cached_entry, dict) and "jvp" in cached_entry:
-        return cached_entry["jvp"]
-
     n_inputs = len(ir_inputs)
-    jac = _cached_jacobian_for(
-        equations,
+    jac = _chain_rule_jacobian(
         substituted,
         ir_inputs,
         ir_outputs,
-        cse,
         derivative_names,
         operation_ordering,
     )
+    _check_jacobian_orders(equations, jac, derivative_names)
 
     prod_exprs: List[Tuple[ir.Expr, ir.Expr]] = []
     j_symbols: Dict[Tuple[int, int], ir.Sym] = {}
@@ -462,71 +370,4 @@ def generate_analytical_jvp(
     output_symbols.extend(j_symbols.values())
     all_exprs = prune_unused(all_exprs, output_symbols=output_symbols)
 
-    equations_obj = JVPEquations(all_exprs, entry_symbols=j_symbols)
-    entry = _cache.setdefault(cache_key, {})
-    entry["jvp"] = equations_obj
-    return equations_obj
-
-
-def _cached_jacobian_for(
-    equations,
-    substituted: List[Tuple[ir.Expr, ir.Expr]],
-    ir_inputs: Dict[ir.Sym, int],
-    ir_outputs: Dict[ir.Sym, int],
-    cse: bool,
-    derivative_names: Dict[str, str],
-    operation_ordering: str = operation_ordering_default(),
-) -> List[List[ir.Expr]]:
-    """Return the Jacobian for pre-substituted IR equations, cached.
-
-    We check the derivative orders before caching, so every cached
-    Jacobian has passed the check.
-
-    Parameters
-    ----------
-    equations
-        Parsed equations carrying the user-function aliases.
-    substituted
-        IR equation pairs to differentiate.
-    ir_inputs, ir_outputs
-        Map each input and output symbol to its vector position.
-    cse
-        Whether CSE is on; it is part of the cache key.
-    derivative_names
-        Maps the name of each user function, and of each helper, to the
-        name of the helper for its next derivative.
-    operation_ordering
-        The operation-ordering policy, which is part of the cache key.
-
-    Returns
-    -------
-    list of list
-        Row-major Jacobian of IR expressions.
-
-    Raises
-    ------
-    ValueError
-        A user function is differentiated past its last helper.
-    """
-    cache_key = get_cache_key(
-        substituted,
-        ir_inputs,
-        ir_outputs,
-        cse=cse,
-        operation_ordering=operation_ordering,
-        derivative_names=derivative_names,
-    )
-    cached_entry = _cache.get(cache_key)
-    if isinstance(cached_entry, dict) and "jac" in cached_entry:
-        return cached_entry["jac"]
-    jac = _chain_rule_jacobian(
-        substituted,
-        ir_inputs,
-        ir_outputs,
-        derivative_names,
-        operation_ordering,
-    )
-    _check_jacobian_orders(equations, jac, derivative_names)
-    entry = _cache.setdefault(cache_key, {})
-    entry["jac"] = jac
-    return jac
+    return JVPEquations(all_exprs, entry_symbols=j_symbols)

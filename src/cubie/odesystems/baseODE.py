@@ -213,11 +213,13 @@ class BaseODE(CUDAFactory):
         set[str]
             The recognised names.
         """
+        known_hash = self._specialiser.config_hash
         recognised = self._specialiser.update(updates, silent=True)
+        # A new specialisation changes the generated source, so pass
+        # its hash down with the settings.
+        if self._specialiser.config_hash != known_hash:
+            updates = {**updates, "fn_hash": self._specialiser.fn_hash}
         recognised |= self.update_compile_settings(updates, silent=True)
-        self.update_compile_settings(
-            {"fn_hash": self._specialiser.fn_hash}, silent=True
-        )
         return recognised
 
     def set_swept_parameters(
@@ -246,9 +248,16 @@ class BaseODE(CUDAFactory):
         names = tuple(names)
         fixed = dict(fixed or {})
         parameters = self._parameters
+        # Spell the request out as strings, because _derived matches a
+        # tuple or dict only when it is the same object.
+        request = (
+            parameters,
+            ",".join(names),
+            ",".join(f"{name}={value!r}" for name, value in fixed.items()),
+        )
         compiled = self._derived(
             "compiled_parameters",
-            (parameters, names, fixed),
+            request,
             lambda: ParameterSet.build(parameters, names, fixed),
         )
         self.update(compiled_parameters=compiled)
@@ -317,18 +326,33 @@ class BaseODE(CUDAFactory):
     @property
     def swept_set(self) -> ValuedSet:
         """The swept parameters with their default values, in row order."""
-        return self._parameters.subset(self.compiled_parameters.swept)
+        compiled = self.compiled_parameters
+        parameters = self._parameters
+        return self._derived(
+            "swept_set",
+            (compiled, parameters),
+            lambda: parameters.subset(compiled.swept),
+        )
 
     @property
     def states(self) -> ValuedSet:
         """Every state with its default initial value, or ``0.0`` for a
         state given none."""
-        defaults = self._initial_values.defaults
-        return ValuedSet(
-            [
-                State(state.name, state.unit, defaults.get(state.name, 0.0))
-                for state in self.layout.states
-            ]
+        layout = self.layout
+        initial_values = self._initial_values
+        return self._derived(
+            "states",
+            (layout, initial_values),
+            lambda: ValuedSet(
+                [
+                    State(
+                        state.name,
+                        state.unit,
+                        initial_values.defaults.get(state.name, 0.0),
+                    )
+                    for state in layout.states
+                ]
+            ),
         )
 
     @property

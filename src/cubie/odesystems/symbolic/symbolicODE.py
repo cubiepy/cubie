@@ -52,18 +52,13 @@ from cubie.odesystems.symbolic.codegen.dxdt import (
     generate_dxdt_fac_code,
     generate_observables_fac_code,
 )
-from cubie.odesystems.symbolic.codegen.jacobian import generate_analytical_jvp
 from cubie.odesystems.symbolic.helper_registry import (
     helper_member_hash,
     helper_source_hash,
 )
 from cubie.odesystems.symbolic.odefile import ODEFile
-from cubie.odesystems.symbolic.parsing import (
-    JVPEquations,
-    parse_system,
-)
+from cubie.odesystems.symbolic.parsing import parse_system
 from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
-from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.specialiser import SystemSpecialiser
 from cubie.odesystems.baseODE import BaseODE, ODECache
 from cubie.odesystems.variables import ParameterSet
@@ -450,31 +445,6 @@ class SymbolicODE(BaseODE):
     def driver_units(self) -> dict[str, str]:
         """Return units for drivers."""
         return self.layout.drivers.units
-
-    def _get_jvp_exprs(self) -> JVPEquations:
-        """Return Jacobian-vector assignments for the current system.
-
-        Return the same assignments until the system is specialised
-        again or its ordering policy changes.
-        """
-        equations = self.equations
-        layout = self.layout
-        ordering = self.compile_settings.operation_ordering
-
-        def generate():
-            maps = buffer_maps(layout)
-            return generate_analytical_jvp(
-                equations,
-                input_order=maps.state_order,
-                output_order=maps.dxdt_order,
-                observables=maps.observable_symbols,
-                cse=True,
-                operation_ordering=ordering,
-            )
-
-        return self._derived(
-            "jvp_exprs", (equations, layout, ordering), generate
-        )
 
     def _device_function_injections(self) -> dict[str, Callable]:
         """Collect device callables the generated module must resolve.

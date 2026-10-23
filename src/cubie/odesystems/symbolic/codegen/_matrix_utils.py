@@ -17,7 +17,6 @@ Published Functions
     Real block eigenstructure of ``inv(A)`` for the FIRK transform.
 """
 
-from functools import lru_cache
 from typing import List, Tuple
 
 import mpmath
@@ -42,7 +41,6 @@ def mass_matrix_is_identity(M) -> bool:
     )
 
 
-@lru_cache(maxsize=None)
 def block_eigenstructure(
     a_rows: Tuple[Tuple[float, ...], ...],
 ) -> Tuple[

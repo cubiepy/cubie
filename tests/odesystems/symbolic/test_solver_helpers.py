@@ -33,6 +33,7 @@ from cubie.odesystems.symbolic.helper_registry import (
     PrepareJac,
     Residual,
     helper_source_hash,
+    system_jvp_equations,
 )
 from cubie.odesystems.symbolic.parsing import (
     JVPEquations as _JVPEquations,
@@ -2293,7 +2294,7 @@ def system_cached_precond_kernel(system, precision):
 )
 def test_hh_planner_selects_cached_slots(system):
     """The planner activates on a transcendental-heavy real system."""
-    equations = system._get_jvp_exprs()
+    equations = system_jvp_equations(system)
     selection = equations.cache_selection
 
     assert len(selection.cached_leaf_order) > 0
@@ -2337,7 +2338,7 @@ def test_cache_selection_changes_cached_source_hash(system):
     plain_request = SolverHelperRequest(
         role="linear_operator", operator_beta=1.0, operator_gamma=1.0
     )
-    equations = system._get_jvp_exprs()
+    equations = system_jvp_equations(system)
     original = equations.cache_selection
     cached_before = helper_source_hash(system, cached_request)
     plain_before = helper_source_hash(system, plain_request)
