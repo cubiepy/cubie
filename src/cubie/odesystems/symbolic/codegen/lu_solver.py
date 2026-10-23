@@ -1440,10 +1440,11 @@ def generate_lu_solve_code(
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     if variant.takes_stage_data:
@@ -1589,10 +1590,11 @@ def generate_init_lu_solve_code(
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     entry_exprs, prefix_assigns = _inline_entry_exprs(
@@ -1669,10 +1671,11 @@ def generate_lu_prepare_blocks_code(
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     row_perm, col_perm, lu_pattern, slots, nnz, _ = (
@@ -1955,10 +1958,11 @@ def generate_lu_smoothing_solve_code(
     sysir = system_ir(equations, index_map)
     n = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, n)
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
     row_perm, col_perm, lu_pattern, slots, nnz, _ = (

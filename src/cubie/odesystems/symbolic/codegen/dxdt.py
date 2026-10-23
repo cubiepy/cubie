@@ -99,7 +99,7 @@ OBSERVABLES_TEMPLATE = (
 
 def generate_dxdt_lines(
     equations: ParsedEquations,
-    index_map: Optional[IndexedBases] = None,
+    layout: SystemLayout,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
 ) -> list[str]:
@@ -230,7 +230,7 @@ def generate_observables_lines(
 
 def generate_dxdt_fac_code(
     equations: ParsedEquations,
-    index_map: Optional[IndexedBases] = None,
+    layout: SystemLayout,
     func_name: str = "dxdt_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
@@ -305,7 +305,7 @@ INV_MASS_F_TEMPLATE = (
 
 def generate_evaluate_inv_mass_f_code(
     equations: ParsedEquations,
-    index_map: Optional[IndexedBases] = None,
+    layout: SystemLayout,
     M=None,
     func_name: str = "evaluate_inv_mass_f_factory",
     cse: bool = True,

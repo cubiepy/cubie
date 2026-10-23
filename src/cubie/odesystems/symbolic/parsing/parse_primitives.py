@@ -218,7 +218,7 @@ class ParsedEquations:
     def from_equations(
         cls,
         equations: Iterable[Tuple[ir_expr.Expr, ir_expr.Expr]],
-        index_map: "IndexedBases",
+        layout: SystemLayout,
         derivative_names: Optional[Dict[str, str]] = None,
         function_aliases: Optional[Dict[str, str]] = None,
         nonfloat_functions: Optional[Iterable[str]] = None,
@@ -239,14 +239,9 @@ class ParsedEquations:
         else:
             items = list(equations)
         ordered = tuple((lhs, rhs) for lhs, rhs in items)
-        state_symbols = frozenset(
-            ir_expr.sym(str(key))
-            for key in index_map.dxdt.ref_map.keys()
-        )
-        observable_symbols = frozenset(
-            ir_expr.sym(str(key))
-            for key in index_map.observables.ref_map.keys()
-        )
+        maps = buffer_maps(layout)
+        state_symbols = frozenset(maps.dxdt_order)
+        observable_symbols = frozenset(maps.observable_symbols)
         state_eqs = tuple(eq for eq in ordered if eq[0] in state_symbols)
         observable_eqs = tuple(
             eq for eq in ordered if eq[0] in observable_symbols

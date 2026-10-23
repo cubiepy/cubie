@@ -281,11 +281,12 @@ def _resolve_jvp(
     """Return the JVP equations, generating them when not supplied."""
     if jvp_equations is not None:
         return jvp_equations
+    maps = buffer_maps(layout)
     return generate_analytical_jvp(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
-        observables=index_map.observable_symbols,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
+        observables=maps.observable_symbols,
         cse=cse,
         operation_ordering=operation_ordering,
     )

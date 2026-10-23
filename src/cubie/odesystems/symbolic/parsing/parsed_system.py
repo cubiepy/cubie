@@ -56,7 +56,6 @@ class ParsedSystem:
     observables: List[str]
     parameters: Dict[str, float]
     driver_names: List[str]
-    driver_dict: Optional[Dict[str, Any]]
     known_symbol_map: Dict[str, Any]
     user_functions: Optional[Dict[str, Callable]]
     user_function_derivatives: Optional[Dict[str, Callable]]
@@ -69,7 +68,13 @@ class ParsedSystem:
     driver_units: Any = None
 
     def __attrs_post_init__(self):
-        for name in self.parameters:
+        names = (
+            *self.states,
+            *self.observables,
+            *self.parameters,
+            *self.driver_names,
+        )
+        for name in names:
             if str(name).startswith(RESERVED_CODEGEN_PREFIX):
                 raise ValueError(
                     f"Name '{name}' is reserved: user symbols cannot "
@@ -95,12 +100,18 @@ class ParsedSystem:
             function_aliases=self.normalised.rename,
         )
 
+    @property
+    def declared_parameters(self) -> ValuedSet:
+        units = self.parameter_units or {}
+        return VariableSet.of(
+            Parameter, dict(sorted(self.parameters.items())), units
+        )
+
     def specialise(
         self,
         swept: Iterable[str] = (),
         values: Optional[Dict[str, float]] = None,
-        state_values: Optional[Dict[str, float]] = None,
-    ):
+    ) -> SpecialisedSystem:
         """Assemble the equations for the swept parameters ``swept``.
 
         Lay out the parameters array with one row per swept parameter,
@@ -134,33 +145,13 @@ class ParsedSystem:
             If a swept name repeats.
         """
 
-        swept = tuple(sorted(swept))
-        if len(set(swept)) != len(swept):
-            raise ValueError(f"Swept parameters {list(swept)} repeat a name.")
-        values = {**self.parameters, **(values or {})}
-        unknown = (set(swept) | set(values)) - set(self.parameters)
-        if unknown:
-            raise KeyError(
-                f"{sorted(unknown)} are not parameters of this system."
+        return self.assemble(
+            ParameterSet.build(self.declared_parameters, swept, values)
             )
 
-        states = dict(self.states)
-        if state_values is not None:
-            states.update(
-                {
-                    name: value
-                    for name, value in state_values.items()
-                    if name in states
-                }
-            )
+    def assemble(self, parameters: ParameterSet) -> SpecialisedSystem:
 
-        rules = _literal_rules(
-            {
-                name: value
-                for name, value in values.items()
-                if name not in swept
-            }
-        )
+        rules = _literal_rules(parameters.fixed)
         source = self.normalised
         folded_equations = [
             (ir.xreplace(lhs, rules), ir.xreplace(rhs, rules))
@@ -178,31 +169,19 @@ class ParsedSystem:
             derivative_names=source.derivative_names,
         )
 
-        swept_values = {name: values[name] for name in swept}
-        (
-            index_map,
-            all_symbols,
-            funcs,
-            parsed_equations,
-            fn_hash,
-        ) = assemble_simplified(
+        return assemble_simplified(
             folded,
-            states,
+            dict(self.states),
             list(self.observables),
-            swept_values,
+            parameters,
             list(self.driver_names),
-            self.driver_dict,
             dict(self.known_symbol_map),
             self.user_functions,
             self.user_function_derivatives,
             state_priority=self.state_priority,
             irreducible=self.irreducible,
             state_units=self.state_units,
-            parameter_units=self.parameter_units,
             observable_units=self.observable_units,
             driver_units=self.driver_units,
             simplify_options=self.simplify_options,
         )
-        # Inlined non-device callables keep their entries.
-        funcs = {**(self.user_functions or {}), **(funcs or {})}
-        return index_map, all_symbols, funcs, parsed_equations, fn_hash

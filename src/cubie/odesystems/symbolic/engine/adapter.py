@@ -11,7 +11,51 @@ from cubie.odesystems.symbolic.engine.from_sympy import (
     from_sympy,
 )
 
-__all__ = ["SystemIR", "system_ir"]
+__all__ = ["BufferMaps", "SystemIR", "buffer_maps", "system_ir"]
+
+STATE_BUFFER = "state"
+PARAMETER_BUFFER = "parameters"
+OBSERVABLE_BUFFER = "observables"
+DRIVER_BUFFER = "drivers"
+DXDT_BUFFER = "out"
+
+
+@attrs.frozen(eq=False)
+class BufferMaps:
+
+    state_order: Mapping[ir.Sym, int]
+    dxdt_order: Mapping[ir.Sym, int]
+    driver_order: Mapping[ir.Sym, int]
+    observable_symbols: Tuple[ir.Sym, ...]
+    arrayrefs: Mapping[str, ir.Expr]
+
+
+def _order(names: Tuple[str, ...]) -> Mapping[ir.Sym, int]:
+    return MappingProxyType(
+        {ir.sym(name): index for index, name in enumerate(names)}
+    )
+
+
+def buffer_maps(layout: SystemLayout) -> BufferMaps:
+    refs = {}
+    for buffer, names in (
+        (STATE_BUFFER, layout.state_names),
+        (PARAMETER_BUFFER, layout.swept_names),
+        (OBSERVABLE_BUFFER, layout.observable_names),
+        (DRIVER_BUFFER, layout.driver_names),
+        (DXDT_BUFFER, layout.dxdt_names),
+    ):
+        for index, name in enumerate(names):
+            refs[name] = ir.arr(buffer, index)
+    return BufferMaps(
+        state_order=_order(layout.state_names),
+        dxdt_order=_order(layout.dxdt_names),
+        driver_order=_order(layout.driver_names),
+        observable_symbols=tuple(
+            ir.sym(name) for name in layout.observable_names
+        ),
+        arrayrefs=MappingProxyType(refs),
+    )
 
 
 @attrs.frozen(eq=False)
@@ -76,15 +120,7 @@ class SystemIR:
         ]
 
 
-def _ordered_syms(index_map) -> Tuple[Tuple[ir.Sym, ...], Dict]:
-    """Convert a SymPy ``symbol -> position`` map to ordered IR."""
-    ordered = sorted(index_map.items(), key=lambda item: item[1])
-    symbols = tuple(ir.sym(str(sym)) for sym, _ in ordered)
-    index = {symbol: pos for pos, symbol in enumerate(symbols)}
-    return symbols, index
-
-
-def system_ir(equations, index_map) -> SystemIR:
+def system_ir(equations, layout: SystemLayout) -> SystemIR:
     """Return the current IR view of a parsed system.
 
     Parameters
@@ -112,32 +148,21 @@ def system_ir(equations, index_map) -> SystemIR:
         eq_pairs = tuple(convert_assignments(eq_list, memo))
         derivative_names = derivative_name_map(eq_list)
 
-    states, state_index = _ordered_syms(index_map.states.index_map)
-    dxdt, dxdt_index = _ordered_syms(index_map.dxdt.index_map)
-    drivers, driver_index = _ordered_syms(
-        index_map.drivers.index_map
-    )
+    maps = buffer_maps(layout)
+    states = tuple(maps.state_order)
+    state_index = dict(maps.state_order)
+    dxdt = tuple(maps.dxdt_order)
+    dxdt_index = dict(maps.dxdt_order)
     # Place driver derivatives after the driver symbols.
     driver_derivatives = tuple(
         getattr(equations, "driver_derivatives", None) or {}
     )
-    drivers = drivers + driver_derivatives
+    drivers = tuple(maps.driver_order) + driver_derivatives
     driver_index = {symbol: pos for pos, symbol in enumerate(drivers)}
-    observables = tuple(
-        ir.sym(str(sym))
-        for sym in index_map.observables.index_map.keys()
-    )
+    observables = maps.observable_symbols
 
-    arrayrefs: Dict[str, ir.Expr] = {}
+    arrayrefs: Dict[str, ir.Expr] = dict(maps.arrayrefs)
     aliases = dict(getattr(equations, "function_aliases", None) or {})
-    for sym_key, ref in index_map.all_arrayrefs.items():
-        if sym_key == "__function_aliases__" or str(
-            sym_key
-        ) == "__function_aliases__":
-            if isinstance(ref, dict):
-                aliases = dict(ref)
-            continue
-        arrayrefs[str(sym_key)] = from_sympy(ref, memo)
     for symbol in driver_derivatives:
         arrayrefs[symbol.name] = ir.arr("drivers", driver_index[symbol])
     for derivative_name in derivative_names.values():

@@ -827,10 +827,11 @@ def _build_jacobi_body(
             return jvp_equations.jacobian_entry(comp_idx, comp_idx)
 
     else:
+        maps = buffer_maps(layout)
         jac = generate_jacobian(
             equations,
-            input_order=index_map.states.index_map,
-            output_order=index_map.dxdt.index_map,
+            input_order=maps.state_order,
+            output_order=maps.dxdt_order,
             operation_ordering=operation_ordering,
         )
         # dx/observable outputs become locals; states evaluate at
@@ -905,10 +906,11 @@ def _build_n_stage_jacobi_lines(
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
 
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
 
