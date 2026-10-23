@@ -114,8 +114,8 @@ an example of how to do this:
         duration=1.0,
     )
 
-Note how the driver appears: it is declared in ``drivers`` when the
-system is created, and read by name inside the function body through a
+Note how the driver appears: you declare it in ``drivers`` when you
+create the system, and read it by name inside the function body through a
 second container argument after the parameters, here ``d``.
 
 Sampled forcing data is defined using a ``DriverSamples`` object.

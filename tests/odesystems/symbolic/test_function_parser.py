@@ -488,7 +488,7 @@ class TestDetectInputType:
 
 
 class TestDriverAccess:
-    """Drivers resolve through the second container argument (#564)."""
+    """Tests for reading drivers through the second container argument."""
 
     def test_driver_via_dedicated_fourth_argument(self):
         """``parse_system`` reads a driver by name through ``d``."""

@@ -361,9 +361,10 @@ def _container_roles(
     Returns
     -------
     tuple
-        ``(parameter_base, driver_base)``: the first and second extra
-        arguments that are not scalar arguments, ``None`` where the
-        function takes no such argument.
+        ``(parameter_base, driver_base)``. These are the names of the
+        first and second extra arguments that the function reads as
+        containers, and each is ``None`` when the function has no such
+        argument.
 
     Raises
     ------
@@ -462,10 +463,10 @@ def _build_symbol_map(
                     f"{state_names}"
                 )
 
-    # Parameter/driver accesses on container args. The first container
-    # holds the parameters and the second the drivers, and each reads
-    # its own variables by name only, because positions inside the
-    # function would not match the name-sorted arrays.
+    # Read parameters through the first container argument and drivers
+    # through the second, by name only. We refuse positional access
+    # because the arrays hold their variables in name order, not in
+    # the order the user wrote them.
     inferred_params: "OrderedDict[str, sp.Symbol]" = OrderedDict()
     parameter_base, driver_base = _container_roles(inspection)
     parameter_set = set(parameters)

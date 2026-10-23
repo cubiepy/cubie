@@ -673,9 +673,8 @@ def ensure_nonzero_size(
 def mass_matrix_converter(value: Any) -> Any:
     """Return a mass matrix as ``None`` or a sealed float64 array.
 
-    SymPy matrices, NumPy arrays, and nested sequences convert to one
-    canonical numeric array, and symbolic entries raise. The returned
-    array is an owned read-only copy.
+    Accept a SymPy matrix, a NumPy array or nested sequences, and return
+    an owned read-only copy. Raise if an entry is symbolic.
     """
     if value is None:
         return None
