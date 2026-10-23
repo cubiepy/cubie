@@ -2,7 +2,6 @@
 
 from cubie.odesystems.symbolic.codegen import *  # noqa: F401,F403
 from cubie.odesystems.symbolic.codegen.dxdt import *  # noqa: F401,F403
-from cubie.odesystems.symbolic.indexedbasemaps import *  # noqa: F401,F403
 from cubie.odesystems.symbolic.codegen.jacobian import *  # noqa: F401,F403
 from cubie.odesystems.symbolic.odefile import *  # noqa: F401,F403
 from cubie.odesystems.symbolic.parsing import *  # noqa: F401,F403

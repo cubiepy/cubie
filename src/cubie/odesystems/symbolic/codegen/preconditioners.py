@@ -53,9 +53,10 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
 )
 from cubie.odesystems.symbolic.parsing.jvp_equations import JVPEquations
 from cubie.odesystems.symbolic.parsing import (
-    IndexedBases,
     ParsedEquations,
 )
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.symbolic.engine.adapter import buffer_maps
 from cubie.odesystems.symbolic.codegen._matrix_utils import (
     mass_diagonal_flags,
 )
@@ -482,7 +483,7 @@ def _build_cached_stacked_jv_lines(
 
 def generate_neumann_preconditioner_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     variant: HelperVariant = HelperVariant.PLAIN,
     stage_coefficients: Optional[
         Sequence[Sequence[Union[float, object]]]
@@ -502,8 +503,8 @@ def generate_neumann_preconditioner_code(
     ----------
     equations
         Parsed ODE equations.
-    index_map
-        Symbol-to-array mapping for states, parameters, etc.
+    layout
+        The buffer layout that gives each symbol's array reference.
     variant
         Helper variant selecting the evaluation-point and auxiliary
         conventions.
@@ -532,10 +533,10 @@ def generate_neumann_preconditioner_code(
     event = f"codegen_neumann_preconditioner_{variant.value}"
     default_timelogger.start_event(event)
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     jvp_equations = _resolve_jvp(
         equations,
-        index_map,
+        layout,
         cse,
         jvp_equations,
         operation_ordering,
@@ -790,7 +791,7 @@ def _finalise_diag_body(
 
 def _build_jacobi_body(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     beta: float,
     gamma: float,
     cse: bool = True,
@@ -806,7 +807,7 @@ def _build_jacobi_body(
 
     The diagonal is ``beta*M_ii - gamma*h*a_ij*J_ii``.
     """
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     state_count = len(sysir.state_symbols)
 
     h_sym = ir.sym("_cubie_codegen_h")
@@ -827,10 +828,11 @@ def _build_jacobi_body(
             return jvp_equations.jacobian_entry(comp_idx, comp_idx)
 
     else:
+        maps = buffer_maps(layout)
         jac = generate_jacobian(
             equations,
-            input_order=index_map.states.index_map,
-            output_order=index_map.dxdt.index_map,
+            input_order=maps.state_order,
+            output_order=maps.dxdt_order,
             operation_ordering=operation_ordering,
         )
         # dx/observable outputs become locals; states evaluate at
@@ -882,7 +884,7 @@ def _build_jacobi_body(
 
 def _build_n_stage_jacobi_lines(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     stage_coefficients: List[List[ir.Expr]],
     stage_nodes: Tuple[ir.Expr, ...],
     beta: float,
@@ -898,17 +900,18 @@ def _build_n_stage_jacobi_lines(
     stage point, forms d = beta*M_ii - gamma*h*a_ss*J_ii with M_ii
     the system's 0/1 mass diagonal, and applies out[k] = v[k] / d[k].
     """
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     metadata_exprs, coeff_symbols, node_symbols = build_stage_metadata(
         stage_coefficients, stage_nodes
     )
     state_count = len(sysir.state_symbols)
     stage_count = len(stage_coefficients)
 
+    maps = buffer_maps(layout)
     jac = generate_jacobian(
         equations,
-        input_order=index_map.states.index_map,
-        output_order=index_map.dxdt.index_map,
+        input_order=maps.state_order,
+        output_order=maps.dxdt_order,
         operation_ordering=operation_ordering,
     )
 
@@ -1045,7 +1048,7 @@ def _build_cached_stacked_jacobi_lines(
 
 def generate_jacobi_preconditioner_code(
     equations: ParsedEquations,
-    index_map: IndexedBases,
+    layout: SystemLayout,
     variant: HelperVariant = HelperVariant.PLAIN,
     M: Optional[Union[Sequence, object]] = None,
     stage_coefficients: Optional[
@@ -1071,8 +1074,8 @@ def generate_jacobi_preconditioner_code(
     ----------
     equations
         Parsed ODE equations.
-    index_map
-        Symbol-to-array mapping for states, parameters, etc.
+    layout
+        The buffer layout that gives each symbol's array reference.
     variant
         Helper variant selecting the evaluation-point and auxiliary
         conventions.
@@ -1104,12 +1107,12 @@ def generate_jacobi_preconditioner_code(
     event = f"codegen_jacobi_preconditioner_{variant.value}"
     default_timelogger.start_event(event)
 
-    sysir = system_ir(equations, index_map)
+    sysir = system_ir(equations, layout)
     state_count = len(sysir.state_symbols)
     mass_diag = mass_diagonal_flags(M, state_count)
     jvp_equations = _resolve_jvp(
         equations,
-        index_map,
+        layout,
         cse,
         jvp_equations,
         operation_ordering,
@@ -1160,7 +1163,7 @@ def generate_jacobi_preconditioner_code(
         def build_diag(series: bool) -> List[str]:
             return _build_n_stage_jacobi_lines(
                 equations=equations,
-                index_map=index_map,
+                layout=layout,
                 stage_coefficients=coeff_matrix,
                 stage_nodes=node_values,
                 beta=beta,
@@ -1195,7 +1198,7 @@ def generate_jacobi_preconditioner_code(
         def build_diag(series: bool) -> List[str]:
             return _build_jacobi_body(
                 equations,
-                index_map,
+                layout,
                 beta,
                 gamma,
                 cse,

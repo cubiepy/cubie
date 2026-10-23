@@ -9,24 +9,24 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    List,
     Optional,
     Union,
 )
 
 import sympy as sp
 
-from ..engine import expr as ir_expr
-from ..engine.from_sympy import (
+from cubie.odesystems.symbolic.engine import expr as ir_expr
+from cubie.odesystems.symbolic.engine.from_sympy import (
     convert_assignments,
     derivative_name_map,
 )
-from ..indexedbasemaps import IndexedBases
-from .function_parser import (
+from cubie.odesystems.symbolic.parsing.function_parser import (
     infer_function_states,
     parse_function_input,
 )
-from .normalise import normalise_input
-from .parsed_system import ParsedSystem
+from cubie.odesystems.symbolic.parsing.normalise import normalise_input
+from cubie.odesystems.symbolic.parsing.parsed_system import ParsedSystem
 
 def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
     """Detect whether dxdt contains strings, SymPy expressions, or a callable.
@@ -105,53 +105,27 @@ def _detect_input_type(dxdt: Union[str, Iterable, Callable]) -> str:
     )
 
 
-def _process_parameters(
-    states: Union[Dict[str, float], Iterable[str]],
-    parameters: Union[Dict[str, float], Iterable[str]],
-    observables: Iterable[str],
-    drivers: Iterable[str],
-    state_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-    parameter_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-    observable_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-    driver_units: Optional[Union[Dict[str, str], Iterable[str]]] = None,
-) -> IndexedBases:
-    """Convert user-specified symbols into ``IndexedBases`` structures.
+def _driver_names(drivers: Optional[Iterable[str]]) -> List[str]:
+    """Return the driver names from a list or a dict of drivers."""
+    if drivers is None:
+        return []
+    names = [str(name) for name in drivers]
+    if isinstance(drivers, dict) and not names:
+        raise ValueError(
+            "Driver dictionary must include at least one driver symbol."
+        )
+    return names
 
-    Parameters
-    ----------
-    states
-        State symbols or mapping to initial values.
-    parameters
-        Parameter symbols or mapping to default values.
-    observables
-        Observable symbol names supplied by the user.
-    drivers
-        External driver symbol names.
-    state_units
-        Optional units for states. Defaults to "dimensionless".
-    parameter_units
-        Optional units for parameters. Defaults to "dimensionless".
-    observable_units
-        Optional units for observables. Defaults to "dimensionless".
-    driver_units
-        Optional units for drivers. Defaults to "dimensionless".
 
-    Returns
-    -------
-    IndexedBases
-        Structured representation of all indexed symbol collections.
-    """
-    indexed_bases = IndexedBases.from_user_inputs(
-        states,
-        parameters,
-        observables,
-        drivers,
-        state_units=state_units,
-        parameter_units=parameter_units,
-        observable_units=observable_units,
-        driver_units=driver_units,
-    )
-    return indexed_bases
+def _defaults(
+    values: Union[Dict[str, float], Iterable[str], None],
+) -> Dict[str, float]:
+    """Return names mapped to defaults, zero for bare names."""
+    if values is None:
+        return {}
+    if isinstance(values, dict):
+        return {str(name): float(value) for name, value in values.items()}
+    return {str(name): 0.0 for name in values}
 
 
 def _units_by_name(
@@ -216,10 +190,9 @@ def parse_system(
     parameters
         Parameter names or mapping to default values.
     drivers
-        Driver variable names supplied at runtime. Accepts either an iterable
-        of driver labels or a dictionary mapping driver labels to default
-        values and, when using driver arrays, configuration entries such as
-        ``time``, ``dt``, ``wrap``, and ``order``.
+        Names of the drivers you supply at solve time, as a list, or as a
+        dict whose keys are the names. ``parse_system`` reads only the
+        keys.
     user_functions
         Mapping of callable names used in equations to their implementations.
     user_function_derivatives
@@ -295,18 +268,7 @@ def parse_system(
     observables = list(observables or [])
     parameters = parameters if parameters is not None else {}
 
-    driver_dict = None
-    if drivers is None:
-        driver_names = []
-    elif isinstance(drivers, dict):
-        driver_dict = drivers
-        driver_names = list(drivers.keys())
-        if not driver_names:
-            raise ValueError(
-                "Driver dictionary must include at least one driver symbol."
-            )
-    else:
-        driver_names = list(drivers)
+    driver_names = _driver_names(drivers)
 
     known_symbol_map = {}
     for name in list(parameters) + driver_names:
@@ -343,7 +305,6 @@ def parse_system(
         observables=observables,
         parameters=parameters_dict,
         driver_names=driver_names,
-        driver_dict=driver_dict,
         known_symbol_map=known_symbol_map,
         user_functions=user_functions,
         user_function_derivatives=user_function_derivatives,
@@ -381,40 +342,22 @@ def _parse_function_path(
                 "model from a set of equations alone, set strict=False"
             )
         states = infer_function_states(dxdt)
-    if observables is None:
-        observables = []
-    if parameters is None:
-        parameters = {}
-    driver_dict = None
-    if drivers is None:
-        drivers = []
-    elif isinstance(drivers, dict):
-        driver_dict = drivers
-        drivers = list(drivers.keys())
-        if len(drivers) == 0:
-            raise ValueError(
-                "Driver dictionary must include at least one driver symbol."
-            )
-
-    index_map = _process_parameters(
-        states=states,
-        parameters=parameters,
-        observables=observables,
-        drivers=drivers,
-        state_units=state_units,
-        parameter_units=parameter_units,
-        observable_units=observable_units,
-        driver_units=driver_units,
-    )
+    observables = list(observables or [])
+    drivers = _driver_names(drivers)
+    declared_states = [str(name) for name in states]
+    states_dict = dict(sorted(_defaults(states).items()))
+    declared_parameters = _defaults(parameters)
+    parameters_dict = dict(sorted(declared_parameters.items()))
 
     equation_map, funcs, new_params = parse_function_input(
         func=dxdt,
-        index_map=index_map,
-        observables=list(observables),
+        parameters=list(declared_parameters),
+        drivers=drivers,
+        observables=observables,
         user_functions=user_functions,
         user_function_derivatives=user_function_derivatives,
         strict=strict,
-        declared_states=list(states),
+        declared_states=declared_states,
     )
     # Derivative placeholder names must be recovered from the SymPy
     # function objects before the equations convert to IR.
@@ -424,15 +367,6 @@ def _parse_function_path(
         allowed_functions=user_functions,
     )
 
-    states_dict = {
-        str(name): float(value)
-        for name, value in index_map.state_values.items()
-    }
-    observables = list(observables)
-    parameters_dict = {
-        str(name): float(value)
-        for name, value in index_map.parameter_values.items()
-    }
     for param in new_params:
         parameters_dict.setdefault(str(param), 0.0)
 
@@ -460,8 +394,7 @@ def _parse_function_path(
         states=states_dict,
         observables=observables,
         parameters=parameters_dict,
-        driver_names=list(drivers),
-        driver_dict=driver_dict,
+        driver_names=drivers,
         known_symbol_map=known_symbol_map,
         user_functions=funcs,
         user_function_derivatives=user_function_derivatives,

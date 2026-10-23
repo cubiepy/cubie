@@ -13,7 +13,11 @@ from cubie.odesystems.symbolic.codegen.nonlinear_residuals import (
     generate_residual_code,
 )
 from cubie.odesystems.symbolic.engine import expr as ir
-from cubie.odesystems.symbolic.indexedbasemaps import IndexedBases
+from cubie.odesystems.layout import SystemLayout
+from cubie.odesystems.variables import (
+    Variable,
+    VariableSet,
+)
 from cubie.odesystems.symbolic.parsing import ParsedEquations
 from tests.odesystems.symbolic.codegen._source_checks import (
     factory_name_bindings,
@@ -24,12 +28,12 @@ from tests.odesystems.symbolic.codegen._source_checks import (
 # ── cached linear operator / JVP / prepare ──────────────────────── #
 
 def test_cached_operator_reads_cache_buffer(
-    cacheable_equations, bare_indexed_bases
+    cacheable_equations, bare_layout
 ):
     """Cached operator body indexes ``cached_aux`` and defaults the mass."""
     code = generate_linear_operator_code(
         cacheable_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.CACHED,
     )
     ast.parse(code)
@@ -38,11 +42,11 @@ def test_cached_operator_reads_cache_buffer(
 
 
 def test_prepare_jac_populates_cache_slots(
-    cacheable_equations, bare_indexed_bases
+    cacheable_equations, bare_layout
 ):
     """prepare_jac writes selected auxiliaries into ``cached_aux``."""
     code, aux_count = generate_prepare_jac_code(
-        cacheable_equations, bare_indexed_bases
+        cacheable_equations, bare_layout
     )
     ast.parse(code)
     assert aux_count > 0
@@ -51,11 +55,11 @@ def test_prepare_jac_populates_cache_slots(
 
 
 def test_prepare_jac_without_cache_emits_pass(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """With nothing cached, prepare_jac body is a bare ``pass``."""
     code, aux_count = generate_prepare_jac_code(
-        bare_nonlinear_equations, bare_indexed_bases
+        bare_nonlinear_equations, bare_layout
     )
     ast.parse(code)
     assert aux_count == 0
@@ -63,23 +67,23 @@ def test_prepare_jac_without_cache_emits_pass(
 
 
 @pytest.mark.parametrize(
-    "equations_fixture,bases_fixture",
+    "equations_fixture,layout_fixture",
     [
-        ("cacheable_equations", "bare_indexed_bases"),
+        ("cacheable_equations", "bare_layout"),
         (
             "cacheable_observable_equations",
-            "observable_driver_indexed_bases",
+            "observable_driver_layout",
         ),
     ],
     ids=["plain-aux", "observable-and-aux"],
 )
 def test_cached_operator_defines_every_referenced_auxiliary(
-    request, equations_fixture, bases_fixture
+    request, equations_fixture, layout_fixture
 ):
     """Every auxiliary a cached operator body references is defined."""
     code = generate_linear_operator_code(
         request.getfixturevalue(equations_fixture),
-        request.getfixturevalue(bases_fixture),
+        request.getfixturevalue(layout_fixture),
         variant=HelperVariant.CACHED,
     )
     referenced, defined = factory_name_bindings(code)
@@ -87,23 +91,23 @@ def test_cached_operator_defines_every_referenced_auxiliary(
 
 
 @pytest.mark.parametrize(
-    "equations_fixture,bases_fixture",
+    "equations_fixture,layout_fixture",
     [
-        ("cacheable_equations", "bare_indexed_bases"),
+        ("cacheable_equations", "bare_layout"),
         (
             "cacheable_observable_equations",
-            "observable_driver_indexed_bases",
+            "observable_driver_layout",
         ),
     ],
     ids=["plain-aux", "observable-and-aux"],
 )
 def test_prepare_jac_stores_every_slot_in_order(
-    request, equations_fixture, bases_fixture
+    request, equations_fixture, layout_fixture
 ):
     """prepare_jac stores each cached slot and defines every name."""
     code, aux_count = generate_prepare_jac_code(
         request.getfixturevalue(equations_fixture),
-        request.getfixturevalue(bases_fixture),
+        request.getfixturevalue(layout_fixture),
     )
     assert aux_count > 0
     for slot in range(aux_count):
@@ -113,12 +117,12 @@ def test_prepare_jac_stores_every_slot_in_order(
 
 
 def test_operator_hoists_the_jacobian_scale(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """One named scale product feeds every operator row."""
     code = generate_linear_operator_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         a_ij=0.435866,
     )
     ast.parse(code)
@@ -134,15 +138,15 @@ def test_operator_hoists_the_jacobian_scale(
     ids=["plain", "cached"],
 )
 def test_operator_bakes_stage_diagonal(
-    cacheable_equations, bare_indexed_bases, variant
+    cacheable_equations, bare_layout, variant
 ):
     """A baked ``a_ij`` folds into the operator as a literal."""
     runtime = generate_linear_operator_code(
-        cacheable_equations, bare_indexed_bases, variant=variant
+        cacheable_equations, bare_layout, variant=variant
     )
     baked = generate_linear_operator_code(
         cacheable_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=variant,
         a_ij=0.435866,
     )
@@ -158,15 +162,15 @@ def test_operator_bakes_stage_diagonal(
     ids=["plain", "cached"],
 )
 def test_residual_bakes_stage_diagonal(
-    cacheable_equations, bare_indexed_bases, variant
+    cacheable_equations, bare_layout, variant
 ):
     """A baked ``a_ij`` folds into the residual as a literal."""
     runtime = generate_residual_code(
-        cacheable_equations, bare_indexed_bases, variant=variant
+        cacheable_equations, bare_layout, variant=variant
     )
     baked = generate_residual_code(
         cacheable_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=variant,
         a_ij=0.435866,
     )
@@ -180,12 +184,12 @@ def test_residual_bakes_stage_diagonal(
 
 def test_n_stage_operator_isolates_user_parameters_from_scalings(
     solver_scaling_collision_equations,
-    solver_scaling_collision_indexed_bases,
+    solver_scaling_collision_layout,
 ):
     """User beta/gamma parameters cannot replace solver scalings."""
     code = generate_linear_operator_code(
         solver_scaling_collision_equations,
-        solver_scaling_collision_indexed_bases,
+        solver_scaling_collision_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=[[1.0]],
         stage_nodes=[1.0],
@@ -205,14 +209,14 @@ def test_n_stage_operator_isolates_user_parameters_from_scalings(
 
 def test_n_stage_operator_skips_zero_stage_coupling(
     bare_nonlinear_equations,
-    bare_indexed_bases,
+    bare_layout,
     lower_triangular_stage_coefficients,
 ):
     """Lower-triangular tableau parses with default mass and JVP."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_linear_operator_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -223,14 +227,14 @@ def test_n_stage_operator_skips_zero_stage_coupling(
 
 def test_n_stage_operator_without_cse(
     bare_nonlinear_equations,
-    bare_indexed_bases,
+    bare_layout,
     lower_triangular_stage_coefficients,
 ):
     """Topological-sort emission (``cse=False``) still parses."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_linear_operator_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -241,24 +245,19 @@ def test_n_stage_operator_without_cse(
 
 def test_operator_zero_mass_row_emits_residual_form():
     """A zero mass row emits only the Jacobian term for its output."""
-    index_map = IndexedBases.from_user_inputs(
-        states=["x0", "x1"],
-        parameters=[],
-        observables=[],
-        drivers=[],
-    )
+    layout = SystemLayout(states=VariableSet.of(Variable, ("x0", "x1")))
     equations = ParsedEquations.from_equations(
         [
             (ir.sym("dx0"), ir.sym("x1")),
             (ir.sym("dx1"), ir.sym("x0")),
         ],
-        index_map,
+        layout,
     )
     mass = [[1.0, 0.0], [0.0, 0.0]]
 
     code = generate_linear_operator_code(
         equations,
-        index_map,
+        layout,
         M=mass,
         beta=2.0,
     )
@@ -276,39 +275,34 @@ def test_operator_zero_mass_row_emits_residual_form():
 
 def test_operator_rejects_general_mass_matrix():
     """Anything but a 0/1 diagonal is rejected at generation."""
-    index_map = IndexedBases.from_user_inputs(
-        states=["x0", "x1"],
-        parameters=[],
-        observables=[],
-        drivers=[],
-    )
+    layout = SystemLayout(states=VariableSet.of(Variable, ("x0", "x1")))
     equations = ParsedEquations.from_equations(
         [
             (ir.sym("dx0"), ir.sym("x1")),
             (ir.sym("dx1"), ir.sym("x0")),
         ],
-        index_map,
+        layout,
     )
     with pytest.raises(ValueError, match="0/1 diagonal"):
         generate_linear_operator_code(
             equations,
-            index_map,
+            layout,
             M=[[2.0, 0.0], [0.0, 1.0]],
         )
     with pytest.raises(ValueError, match="0/1 diagonal"):
         generate_residual_code(
             equations,
-            index_map,
+            layout,
             M=[[1.0, 0.5], [0.0, 1.0]],
         )
 
 
 # ── nonlinear residuals ─────────────────────────────────────────── #
 
-def test_residual_without_cse(bare_nonlinear_equations, bare_indexed_bases):
+def test_residual_without_cse(bare_nonlinear_equations, bare_layout):
     """Single-stage residual parses under topological sort."""
     code = generate_residual_code(
-        bare_nonlinear_equations, bare_indexed_bases, cse=False
+        bare_nonlinear_equations, bare_layout, cse=False
     )
     ast.parse(code)
     assert "def residual(" in code
@@ -316,14 +310,14 @@ def test_residual_without_cse(bare_nonlinear_equations, bare_indexed_bases):
 
 def test_n_stage_residual_skips_zero_stage_coupling(
     bare_nonlinear_equations,
-    bare_indexed_bases,
+    bare_layout,
     lower_triangular_stage_coefficients,
 ):
     """Lower-triangular FIRK residual parses with default identity mass."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_residual_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,
@@ -334,14 +328,14 @@ def test_n_stage_residual_skips_zero_stage_coupling(
 
 def test_n_stage_residual_without_cse(
     bare_nonlinear_equations,
-    bare_indexed_bases,
+    bare_layout,
     lower_triangular_stage_coefficients,
 ):
     """FIRK residual parses under topological sort."""
     stage_coefficients, stage_nodes = lower_triangular_stage_coefficients
     code = generate_residual_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.STACKED_STAGES,
         stage_coefficients=stage_coefficients,
         stage_nodes=stage_nodes,

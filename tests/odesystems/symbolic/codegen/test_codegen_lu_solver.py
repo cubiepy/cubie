@@ -3,6 +3,7 @@
 import ast
 
 import pytest
+import sympy as sp
 
 from cubie.odesystems.solver_helpers import HelperVariant
 from cubie.odesystems.symbolic.codegen.lu_solver import (
@@ -17,12 +18,12 @@ from tests.odesystems.symbolic.codegen._source_checks import (
 
 
 def test_lu_solve_hoists_the_jacobian_scale(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """One named scale product feeds every W entry."""
     code, _ = generate_lu_solve_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         a_ij=0.435866,
     )
     ast.parse(code)
@@ -34,12 +35,12 @@ def test_lu_solve_hoists_the_jacobian_scale(
 
 
 def test_prefactored_preamble_binds_only_compared_diagonals(
-    bare_nonlinear_equations, bare_indexed_bases
+    bare_nonlinear_equations, bare_layout
 ):
     """Every bound diagonal literal is read by a branch test."""
     code, _ = generate_lu_solve_code(
         bare_nonlinear_equations,
-        bare_indexed_bases,
+        bare_layout,
         variant=HelperVariant.PREFACTORED,
         stage_coefficients=[[0.25, 0.0], [0.4, 0.5]],
         stage_nodes=[0.25, 0.9],
@@ -53,22 +54,21 @@ def test_prefactored_preamble_binds_only_compared_diagonals(
 
 
 def test_torn_offslot_constraint_pivots_off_diagonal(
-    bare_indexed_bases,
+    bare_layout,
 ):
     """A constraint without its slot variable factorises via an
     off-diagonal pivot."""
-    ib = bare_indexed_bases
-    x = ib.states.symbol_map["x"]
-    y = ib.states.symbol_map["y"]
-    a = ib.parameters.symbol_map["a"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    y = sp.Symbol("y", real=True)
+    a = sp.Symbol("a", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
     equations = ParsedEquations.from_equations(
-        [(dx, a * y), (dy, x)], ib
+        [(dx, a * y), (dy, x)], bare_layout
     )
     code, _ = generate_lu_solve_code(
         equations,
-        ib,
+        bare_layout,
         M=[[1, 0], [0, 0]],
     )
     ast.parse(code)
@@ -95,19 +95,18 @@ def test_block_size_keeps_pivots_inside_diagonal_blocks():
     )
 
 
-def test_structurally_singular_pattern_refused(bare_indexed_bases):
+def test_structurally_singular_pattern_refused(bare_layout):
     """A structurally singular shifted matrix fails at generation."""
-    ib = bare_indexed_bases
-    x = ib.states.symbol_map["x"]
-    a = ib.parameters.symbol_map["a"]
-    dx = ib.dxdt.symbol_map["dx"]
-    dy = ib.dxdt.symbol_map["dy"]
+    x = sp.Symbol("x", real=True)
+    a = sp.Symbol("a", real=True)
+    dx = sp.Symbol("dx", real=True)
+    dy = sp.Symbol("dy", real=True)
     equations = ParsedEquations.from_equations(
-        [(dx, a * x), (dy, a)], ib
+        [(dx, a * x), (dy, a)], bare_layout
     )
     with pytest.raises(ValueError, match="structurally singular"):
         generate_lu_solve_code(
             equations,
-            ib,
+            bare_layout,
             M=[[1, 0], [0, 0]],
         )
