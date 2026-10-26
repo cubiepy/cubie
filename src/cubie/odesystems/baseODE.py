@@ -213,11 +213,11 @@ class BaseODE(CUDAFactory):
         set[str]
             The recognised names.
         """
-        known_hash = self._specialiser.config_hash
+        known = self._specialiser.compile_settings
         recognised = self._specialiser.update(updates, silent=True)
-        # A new specialisation changes the generated source, so pass
-        # its hash down with the settings.
-        if self._specialiser.config_hash != known_hash:
+        # Pass the specialiser's fn_hash down when its settings change,
+        # so the system rebuilds with the new generated source.
+        if self._specialiser.compile_settings is not known:
             updates = {**updates, "fn_hash": self._specialiser.fn_hash}
         recognised |= self.update_compile_settings(updates, silent=True)
         return recognised

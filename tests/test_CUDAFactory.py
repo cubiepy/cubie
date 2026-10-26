@@ -1272,6 +1272,28 @@ def test_update_validates_a_value_equal_to_the_stored_one():
         _C().update({"x": True})
 
 
+def test_update_keeps_a_stored_value_without_validating_it():
+    """An equal value of the stored type keeps the snapshot as it is."""
+    validated = []
+
+    @attrs.frozen
+    class _C(_CubieConfigBase):
+        x: float = attrs.field(
+            default=1.0,
+            validator=lambda instance, attribute, value: validated.append(
+                value
+            ),
+        )
+
+    config = _C()
+    validated.clear()
+    replacement, recognised, changed = config.update({"x": 1.0})
+    assert replacement is config
+    assert recognised == {"x"}
+    assert changed == set()
+    assert validated == []
+
+
 def test_unroll_flags_update_reads_field_keys():
     """``unroll_*`` keys derive a replacement; other keys are ignored."""
     from cubie.CUDAFactory import ALL_UNROLL_PARAMETERS, UnrollFlags

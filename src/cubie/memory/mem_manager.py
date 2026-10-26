@@ -51,7 +51,7 @@ See Also
 from collections import deque
 from tempfile import mkstemp
 from threading import Lock
-from functools import partial
+from functools import cache, partial
 from typing import Any, Optional, Callable, Dict, Set, Tuple, Union
 from warnings import warn
 from copy import deepcopy
@@ -174,6 +174,7 @@ def _memory_status() -> "_MemoryStatusEx":
     return status
 
 
+@cache
 def total_system_ram() -> int:
     """Return total physical RAM in bytes."""
     if sys.platform == "win32":
@@ -1205,7 +1206,14 @@ class MemoryManager:
         ]
 
     def begin_work(self, owner: object) -> None:
-        """Mark an owner as submitting CUDA work."""
+        """Mark an owner as submitting CUDA work.
+
+        Raises
+        ------
+        RuntimeError
+            If the CUDA context is not usable.
+        """
+        _ensure_cuda_context()
         self._usage_clock += 1
         for settings in self._owner_settings(id(owner)):
             settings.submitting = True
@@ -1897,7 +1905,6 @@ class MemoryManager:
             Destination device arrays to copy to.
 
         """
-        _ensure_cuda_context()
         if stream is None:
             stream = self.get_stream(instance)
         self.registry[id(instance)].last_stream = stream
@@ -1935,7 +1942,6 @@ class MemoryManager:
             Destination arrays to copy to.
 
         """
-        _ensure_cuda_context()
         if stream is None:
             stream = self.get_stream(instance)
         self.registry[id(instance)].last_stream = stream
@@ -1963,7 +1969,6 @@ class MemoryManager:
             Instance whose stream to synchronize.
 
         """
-        _ensure_cuda_context()
         if stream is None:
             settings = self.registry.get(id(instance))
             stream = None if settings is None else settings.last_stream
