@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/cubiepy/cubie/compare/v0.17.0...v0.17.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **ci:** Windows GPU AMI bake installs Python 3.11 and 3.14 into the toolcache ([#1088](https://github.com/cubiepy/cubie/issues/1088)) ([a1263a6](https://github.com/cubiepy/cubie/commit/a1263a69b788cdfb0f08f6a5ce532b51910e9320))
+
 ## [0.17.0](https://github.com/cubiepy/cubie/compare/v0.16.0...v0.17.0) (2026-10-26)
 
 
