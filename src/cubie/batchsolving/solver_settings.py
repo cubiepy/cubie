@@ -160,9 +160,7 @@ class SolverSettings(_CubieConfigBase):
     blocksize: Optional[int] = None
     max_registers: Optional[int] = None
     kernel_name: Optional[str] = None
-    cache: Any = None
     cache_enabled: Optional[bool] = None
-    cache_mode: Optional[str] = None
     cache_dir: Any = None
     max_cache_entries: Optional[int] = None
 

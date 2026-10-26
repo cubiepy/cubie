@@ -19,7 +19,7 @@ See Also
 """
 
 from pathlib import Path
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple
 
 import attrs
 from attrs import validators as val
@@ -121,9 +121,6 @@ class CacheSettings(_CubieConfigBase):
     ----------
     cache_enabled
         Whether the compiled kernel persists to a disk cache.
-    cache_mode
-        ``"hash"`` keeps every configuration's entry;
-        ``"flush_on_change"`` clears the directory on a settings change.
     max_cache_entries
         Entries kept per cache directory before LRU eviction; ``0``
         disables eviction.
@@ -133,9 +130,6 @@ class CacheSettings(_CubieConfigBase):
 
     cache_enabled: bool = attrs.field(
         default=True, validator=val.instance_of(bool)
-    )
-    cache_mode: str = attrs.field(
-        default="hash", validator=val.in_(("hash", "flush_on_change"))
     )
     max_cache_entries: int = attrs.field(
         factory=max_cache_entries_default,
@@ -159,28 +153,12 @@ ALL_KERNEL_PARAMETERS = (
         {
             "max_registers",
             "kernel_name",
-            "cache",
             "blocksize",
             "auto_performance",
         }
     )
     | ALL_CACHE_PARAMETERS
 )
-
-
-def cache_settings_converter(
-    value: Union[CacheSettings, bool, str, Path, None],
-) -> CacheSettings:
-    """Accept a CacheSettings or the ``cache`` shorthand."""
-    if isinstance(value, CacheSettings):
-        return value
-    if value in (False, None):
-        return CacheSettings(cache_enabled=False)
-    if value is True:
-        return CacheSettings()
-    if value == "flush_on_change":
-        return CacheSettings(cache_mode="flush_on_change")
-    return CacheSettings(cache_dir=Path(value))
 
 
 def _as_int_tuple(value: Tuple) -> Tuple[int, ...]:
@@ -231,8 +209,9 @@ class BatchSolverConfig(CUDAFactoryConfig):
         ``{algorithm}_{system name}``; the LTO state is appended as
         ``_ltoon``/``_ltooff`` either way.
     cache
-        :class:`CacheSettings`; accepts the ``cache`` shorthand and
-        loose ``cache_*`` keys through ``update``.
+        :class:`CacheSettings`, which ``update`` changes through the
+        loose ``cache_enabled``, ``max_cache_entries`` and
+        ``cache_dir`` keys.
     blocksize
         Threads per block; ``None`` = the kernel picks under
         ``auto_performance``, else ``DEFAULT_BLOCKSIZE``.
@@ -267,7 +246,6 @@ class BatchSolverConfig(CUDAFactoryConfig):
     )
     cache: CacheSettings = attrs.field(
         factory=CacheSettings,
-        converter=cache_settings_converter,
         validator=val.instance_of(CacheSettings),
         eq=False,
     )

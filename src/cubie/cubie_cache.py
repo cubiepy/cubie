@@ -5,8 +5,8 @@ enabling faster startup on subsequent runs with identical settings.
 Cache files are stored in
 ``<cache root>/<system_name>/CUDA_cache_{system_hash[:8]}`` under the
 shared cache root (:mod:`cubie.cache_root`) or in
-``custom_dir/CUDA_cache_{system_hash[:8]}`` if a custom directory is
-provided as an argument to "cache".
+``<cache_dir>/CUDA_cache_{system_hash[:8]}`` when you set the
+``cache_dir`` setting.
 
 Notes
 -----
@@ -23,7 +23,6 @@ from importlib.metadata import (
     version as dist_version,
 )
 from pathlib import Path
-from shutil import rmtree
 from sys import implementation, version_info
 from time import monotonic, sleep
 from typing import Optional
@@ -361,9 +360,6 @@ class CUBIECache(CUDACache):
         Maximum number of cache entries before LRU eviction.
         Set to 0 to disable eviction. ``None`` reads the
         ``CUBIE_MAX_CACHE_ENTRIES`` environment default.
-    mode
-        Caching mode: 'hash' for content-addressed caching,
-        'flush_on_change' to clear cache when settings change.
     custom_cache_dir
         Optional custom cache directory. Overrides default location.
 
@@ -381,7 +377,6 @@ class CUBIECache(CUDACache):
         system_hash: str,
         config_hash: str,
         max_entries: Optional[int] = None,
-        mode: str = "hash",
         custom_cache_dir: Optional[Path] = None,
     ) -> None:
         """Initialize CUBIECache with system and compile info.
@@ -401,7 +396,6 @@ class CUBIECache(CUDACache):
         if custom_cache_dir is None:
             custom_cache_dir = kernel_cache_dir_default()
         self._max_entries = max_entries
-        self._mode = mode
 
         self._impl = CUBIECacheImpl(
             system_name,
@@ -542,21 +536,6 @@ class CUBIECache(CUDACache):
                     f"{exc}",
                     RuntimeWarning,
                 )
-
-    def flush_cache(self) -> None:
-        """Delete all cache files in the cache directory.
-
-        Removes all .nbi and .nbc files, then recreates an empty
-        cache directory.
-        """
-        cache_path = Path(self._cache_path)
-        with _CacheFileLock(self._write_lock_path):
-            if cache_path.exists():
-                try:
-                    rmtree(cache_path)
-                except OSError:
-                    pass
-            cache_path.mkdir(parents=True, exist_ok=True)
 
     @property
     def cache_path(self) -> Path:

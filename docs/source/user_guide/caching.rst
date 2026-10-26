@@ -51,30 +51,36 @@ The kernel cache lives inside the ``generated/`` directory, under
 Cache Settings
 --------------
 
-On the :class:`~cubie.Solver`:
+Pass these settings to the :class:`~cubie.Solver`, to
+:func:`~cubie.solve_ivp`, or to :meth:`~cubie.Solver.update`:
 
-``cache=True`` (default)
-   Enable both code-generation and Numba caching.
+``cache_enabled=True`` (default)
+   Load compiled kernels from the disk cache and save new ones to it.
 
-``cache=False``
-   Disable caching; recompile every time.
+``cache_enabled=False``
+   Compile every kernel without reading or writing the disk cache.
 
-``cache="path/to/dir"``
-   Store the compiled-kernel cache in a custom directory.  (The
-   generated Python source still goes to ``generated/`` in the working
-   directory.)
+``cache_dir="path/to/dir"``
+   Store the compiled-kernel cache in this directory.  The generated
+   Python source still goes to ``generated/`` in the working directory.
+
+``max_cache_entries=N``
+   Keep at most ``N`` compiled kernels per cache directory, removing
+   the least recently used kernel first.  ``0`` keeps every kernel.
+   The default comes from the ``CUBIE_MAX_CACHE_ENTRIES`` environment
+   variable and is ``0`` when it is unset.
 
 .. code-block:: python
 
    solver = qb.Solver(system, algorithm="dormand-prince-54",
-                       cache="/tmp/cubie_cache")
+                       cache_dir="/tmp/cubie_cache")
 
 Clearing Caches
 ---------------
 
 Delete the ``generated/`` directory to clear both caches: it holds the
 generated source files and, in the ``CUDA_cache_*`` subdirectories, the
-compiled kernels.  To skip the caches for a single run, pass
-``cache=False``.  If you have edited CuBIE's own code-generation
+compiled kernels.  To skip the kernel cache for a single solver, pass
+``cache_enabled=False``.  If you have edited CuBIE's own code-generation
 internals, clear ``generated/`` manually — the kernel cache key does
 not account for package-code changes.
