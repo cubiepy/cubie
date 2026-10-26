@@ -3,7 +3,7 @@
 $ErrorActionPreference = 'Stop'
 
 # Python versions the CUDA test matrix uses on Windows runners.
-$pythonVersions = @('3.10', '3.11')
+$pythonVersions = @('3.11', '3.14')
 
 $pythonManifestUrl = 'https://raw.githubusercontent.com/actions/' +
     'python-versions/main/versions-manifest.json'
