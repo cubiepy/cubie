@@ -85,6 +85,8 @@ class SolverSettings(_CubieConfigBase):
     cached_auxiliaries_location: Optional[str] = None
     delta_location: Optional[str] = None
     dxdt_location: Optional[str] = None
+    history_intervals_location: Optional[str] = None
+    history_values_location: Optional[str] = None
     increment_cache_location: Optional[str] = None
     krylov_iters_local_location: Optional[str] = None
     krylov_iters_out_location: Optional[str] = None
