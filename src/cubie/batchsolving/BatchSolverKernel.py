@@ -320,7 +320,6 @@ class BatchSolverKernel(CUDAFactory):
     def __init__(self, system: "SymbolicODE", **settings: Any) -> None:
         super().__init__()
         self._disk_cache = None
-        self._disk_cache_settings = None
         settings, _ = unpack_dict_values(settings)
         memory_settings, _ = merge_kwargs_into_settings(
             settings, ALL_MEMORY_MANAGER_PARAMETERS
@@ -1209,14 +1208,12 @@ class BatchSolverKernel(CUDAFactory):
         # Attach this configuration's disk cache, if caching is on.
         cache_settings = self.compile_settings.cache
         self._disk_cache = None
-        self._disk_cache_settings = cache_settings
         if cache_settings.cache_enabled:
             self._disk_cache = CUBIECache(
                 system_name=self._system_name,
                 system_hash=self.system.fn_hash,
                 config_hash=self.config_hash,
                 max_entries=cache_settings.max_cache_entries,
-                mode=cache_settings.cache_mode,
                 custom_cache_dir=cache_settings.cache_dir,
             )
             integration_kernel._cache = self._disk_cache
@@ -1413,20 +1410,6 @@ class BatchSolverKernel(CUDAFactory):
     def _on_allocation(self, response: "ArrayResponse") -> None:
         """Update run parameters with chunking metadata from allocation."""
         self.run_params = self.run_params.update_from_allocation(response)
-
-    def _invalidate_cache(self) -> None:
-        """Drop the build; flush the disk cache in flush_on_change mode."""
-        super()._invalidate_cache()
-        disk_cache = self._disk_cache
-        if disk_cache is None:
-            return
-        cache_settings = self.compile_settings.cache
-        if cache_settings != self._disk_cache_settings:
-            # A cache built under other cache settings is never flushed.
-            self._disk_cache = None
-            return
-        if cache_settings.cache_mode == "flush_on_change":
-            disk_cache.flush_cache()
 
     @property
     def kernel(self) -> Callable:

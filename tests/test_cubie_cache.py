@@ -8,7 +8,6 @@ from numpy import array, float32
 
 from attrs import define, field
 
-from cubie.batchsolving.BatchSolverConfig import ALL_CACHE_PARAMETERS
 from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 from cubie.cubie_cache import (
     CUBIECacheLocator,
@@ -186,67 +185,16 @@ def test_cache_locator_path_includes_system_hash():
 # --- ALL_CACHE_PARAMETERS and CacheConfig tests ---
 
 
-def test_all_cache_parameters_contains_expected_keys():
-    """Verify ALL_CACHE_PARAMETERS contains expected cache parameter names."""
-    expected_keys = {
-        "cache_enabled",
-        "cache_mode",
-        "max_cache_entries",
-        "cache_dir",
-    }
-    assert ALL_CACHE_PARAMETERS == expected_keys
-
-
-def test_cache_setting_change_never_flushes_previous_cache(
-    system, tmp_path
-):
-    """Changing cache settings drops the attached cache unflushed."""
-    old_dir = tmp_path / "artifact"
-    kernel = BatchSolverKernel(
-        system, algorithm="euler", cache=old_dir
-    )
-    kernel.kernel
-    cache_path = kernel._disk_cache.cache_path
-    cache_path.mkdir(parents=True, exist_ok=True)
-    marker = cache_path / "entry.nbi"
-    marker.write_bytes(b"payload")
-
-    kernel.update(
-        cache_mode="flush_on_change", cache_dir=tmp_path / "elsewhere"
-    )
-    assert kernel._disk_cache is None
-    assert marker.exists()
-
-
-def test_flush_on_change_flushes_the_attached_cache(system, tmp_path):
-    """A compile-setting change flushes the cache in flush_on_change."""
-    kernel = BatchSolverKernel(
-        system,
-        algorithm="euler",
-        cache=tmp_path / "cache",
-        cache_mode="flush_on_change",
-    )
-    kernel.kernel
-    cache_path = kernel._disk_cache.cache_path
-    cache_path.mkdir(parents=True, exist_ok=True)
-    marker = cache_path / "entry.nbi"
-    marker.write_bytes(b"payload")
-
-    kernel.update(max_registers=64)
-    assert not marker.exists()
-    assert cache_path.exists()
-
-
 def test_equal_cache_settings_leave_the_build_valid(system, tmp_path):
     """Re-supplying equal cache settings does not invalidate the build."""
     cache_dir = tmp_path / "cache"
     kernel = BatchSolverKernel(
-        system, algorithm="euler", cache=cache_dir
+        system, algorithm="euler", cache_dir=cache_dir
     )
     config = kernel.compile_settings.cache
     resupplied = dict(
         cache_dir=Path(str(config.cache_dir)),
-        cache_mode=str(config.cache_mode),
+        cache_enabled=bool(config.cache_enabled),
         max_cache_entries=int(config.max_cache_entries),
     )
     # Prime loop_fn as run() would.
@@ -459,7 +407,7 @@ def test_batch_solver_kernel_disk_cache_keys_on_system_hash(
     kernel = BatchSolverKernel(
         system,
         algorithm="euler",
-        cache=tmp_path / "cache",
+        cache_dir=tmp_path / "cache",
     )
     kernel.kernel
     cache = kernel._disk_cache
@@ -479,9 +427,9 @@ def test_batch_solver_kernel_uses_name_from_system(solverkernel, system):
 def test_batch_solver_kernel_disabled_cache_attaches_nothing(
     system, effective_settings
 ):
-    """cache=False builds a kernel with no disk cache attached."""
+    """cache_enabled=False builds a kernel with no disk cache attached."""
     kernel = BatchSolverKernel(
-        system, **{**effective_settings, "cache": False}
+        system, **{**effective_settings, "cache_enabled": False}
     )
     assert kernel.compile_settings.cache.cache_enabled is False
     kernel.kernel
@@ -492,17 +440,11 @@ def test_batch_solver_kernel_update_forwards_cache_params(
     isolated_cache_root,
     solverkernel_mutable,
 ):
-    """update(cache_mode='flush_on_change') lands in compile settings."""
-    initial_mode = solverkernel_mutable.compile_settings.cache.cache_mode
-    assert initial_mode == "hash"
+    """update(cache_enabled=False) lands in compile settings."""
+    recognized = solverkernel_mutable.update(cache_enabled=False)
 
-    recognized = solverkernel_mutable.update(cache_mode="flush_on_change")
-
-    assert "cache_mode" in recognized
-    assert (
-        solverkernel_mutable.compile_settings.cache.cache_mode
-        == "flush_on_change"
-    )
+    assert "cache_enabled" in recognized
+    assert solverkernel_mutable.compile_settings.cache.cache_enabled is False
 
 
 # --- Integration tests for complete cache flow ---
@@ -515,12 +457,11 @@ def test_solver_cache_configuration_flow(system):
     solver = Solver(
         system,
         algorithm="euler",
-        cache=True,
-        cache_mode="hash",
+        cache_enabled=True,
         max_cache_entries=5,
     )
 
-    assert solver.kernel.compile_settings.cache.cache_mode == "hash"
+    assert solver.kernel.compile_settings.cache.cache_enabled is True
     assert solver.kernel.compile_settings.cache.max_cache_entries == 5
 
 
@@ -533,17 +474,17 @@ def test_cache_setting_change_leaves_identity_unchanged(
     system_hash_before = kernel.system.config_hash
 
     recognized = kernel.update(
-        cache_mode="flush_on_change",
+        cache_enabled=False,
         max_cache_entries=7,
         cache_dir=tmp_path,
     )
-    assert {"cache_mode", "max_cache_entries", "cache_dir"} <= recognized
+    assert {"cache_enabled", "max_cache_entries", "cache_dir"} <= recognized
 
     assert kernel.config_hash == hash_before
     assert kernel.system.config_hash == system_hash_before
 
     config = kernel.compile_settings.cache
-    assert config.cache_mode == "flush_on_change"
+    assert config.cache_enabled is False
     assert config.max_cache_entries == 7
     assert config.cache_dir == tmp_path
 
@@ -596,35 +537,6 @@ def test_enforce_cache_limit_warns_and_continues_on_unlink_failure(
     assert blocked_nbc.exists()
 
 
-def test_flush_cache_handles_rmtree_failure_silently(tmp_path):
-    """Verify flush_cache does not raise when rmtree fails to remove
-    the cache directory, e.g. because a file inside it is still open.
-
-    Uses a real open file handle to force a genuine OSError from
-    shutil.rmtree rather than mocking.
-    """
-    cache = CUBIECache(
-        system_name="flush_test",
-        system_hash="flushhash1",
-        config_hash="b" * 64,
-        custom_cache_dir=tmp_path,
-    )
-    cache_path = Path(cache.cache_path)
-    cache_path.mkdir(parents=True, exist_ok=True)
-    locked_file = cache_path / "locked.nbi"
-    locked_file.write_bytes(b"data")
-
-    handle = open(locked_file, "rb")
-    try:
-        # Should not raise even though rmtree cannot remove the open file.
-        cache.flush_cache()
-    finally:
-        handle.close()
-
-    # flush_cache recreates the directory regardless of rmtree's outcome.
-    assert cache_path.exists()
-
-
 def test_index_save_retries_while_the_index_is_held_open(tmp_path):
     """A save denied by an open index handle lands once it closes."""
     from threading import Timer
@@ -647,5 +559,3 @@ def test_index_save_retries_while_the_index_is_held_open(tmp_path):
 
     assert cache_file.load(("key", 1)) == {"payload": 1}
     assert cache_file.load(("key", 2)) == {"payload": 2}
-
-

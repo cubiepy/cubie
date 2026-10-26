@@ -24,7 +24,6 @@ def cache_config(request):
     params = getattr(request, "param", {})
     return CacheSettings(
         cache_enabled=params.get("enabled", True),
-        cache_mode=params.get("mode", "hash"),
         max_cache_entries=params.get("max_entries", 0),
         cache_dir=params.get("cache_dir", None),
     )
@@ -41,7 +40,6 @@ def cubie_cache(request, tmp_path, precision):
         system_hash=system_hash,
         config_hash=DEFAULT_CUBIE_CACHE_CONFIG_HASH,
         max_entries=params.get("max_entries", None),
-        mode=params.get("mode", "hash"),
         custom_cache_dir=params.get("custom_cache_dir", None),
     )
 
@@ -50,10 +48,9 @@ class TestCacheSettingDefaults:
     """Tests for the cache field defaults."""
 
     def test_cache_setting_defaults(self, isolated_cache_root):
-        """A bare config caches in hash mode at the shared root."""
+        """A bare config caches at the shared root."""
         config = BatchSolverConfig(precision=float32).cache
         assert config.cache_enabled is True
-        assert config.cache_mode == "hash"
         assert config.max_cache_entries == 0
         assert config.cache_dir is None
 
@@ -64,7 +61,6 @@ class TestCacheSettingDefaults:
             precision=float32,
             cache=CacheSettings(
                 cache_enabled=False,
-                cache_mode="flush_on_change",
                 max_cache_entries=3,
                 cache_dir=tmp_path,
             ),
@@ -75,42 +71,12 @@ class TestCacheSettingDefaults:
         """Loose cache_* keys evolve the nested CacheSettings."""
         base = BatchSolverConfig(precision=float32)
         replacement, recognized, changed = base.update(
-            cache_mode="flush_on_change", cache_dir=tmp_path
+            cache_enabled=False, cache_dir=tmp_path
         )
-        assert {"cache_mode", "cache_dir"} <= recognized
-        assert {"cache_mode", "cache_dir"} <= changed
-        assert replacement.cache.cache_mode == "flush_on_change"
+        assert {"cache_enabled", "cache_dir"} <= recognized
+        assert {"cache_enabled", "cache_dir"} <= changed
+        assert replacement.cache.cache_enabled is False
         assert replacement.cache.cache_dir == tmp_path
-
-    def test_shorthand_with_loose_keys(self, tmp_path):
-        """A cache shorthand is the base for loose keys in one update."""
-        base = BatchSolverConfig(precision=float32)
-        replacement, _, _ = base.update(
-            cache="flush_on_change", cache_dir=tmp_path
-        )
-        assert replacement.cache.cache_mode == "flush_on_change"
-        assert replacement.cache.cache_dir == tmp_path
-
-
-class TestCacheModeValidation:
-    """Tests for cache_mode validation."""
-
-    @pytest.mark.parametrize(
-        "cache_config,mode",
-        [
-            ({"mode": "hash"}, "hash"),
-            ({"mode": "flush_on_change"}, "flush_on_change"),
-        ],
-        indirect=["cache_config"],
-    )
-    def test_cache_mode_valid(self, cache_config, mode):
-        """Verify supported modes are accepted."""
-        assert cache_config.cache_mode == mode
-
-    def test_cache_mode_validation(self, precision):
-        """Verify mode only accepts 'hash' or 'flush_on_change'."""
-        with pytest.raises(ValueError):
-            CacheSettings(cache_mode="invalid_mode")
 
 
 class TestMaxCacheEntriesValidation:
@@ -326,99 +292,6 @@ class TestEnforceCacheLimitPairs:
         assert "cache_1.1.nbc" not in remaining_nbc_names
 
 
-class TestCUBIECacheModeStored:
-    """Tests for CUBIECache mode parameter."""
-
-    def test_cubie_cache_mode_stored(self, tmp_path, precision):
-        """Verify mode is stored on CUBIECache instance."""
-        cache = CUBIECache(
-            system_name="test_system",
-            system_hash="abc123",
-            config_hash=DEFAULT_CUBIE_CACHE_CONFIG_HASH,
-            mode="flush_on_change",
-        )
-        assert cache._mode == "flush_on_change"
-
-    def test_cubie_cache_mode_default(self, tmp_path, precision):
-        """Verify mode defaults to 'hash'."""
-        cache = CUBIECache(
-            system_name="test_system",
-            system_hash="abc123",
-            config_hash=DEFAULT_CUBIE_CACHE_CONFIG_HASH,
-        )
-        assert cache._mode == "hash"
-
-
-class TestFlushCacheRemovesFiles:
-    """Tests for flush_cache file removal."""
-
-    def test_flush_cache_removes_files(self, tmp_path, precision):
-        """Verify flush_cache removes all cache files."""
-        cache_dir = tmp_path / "test_system" / "cache"
-        cache_dir.mkdir(parents=True)
-
-        # Create some cache files
-        (cache_dir / "cache_0.nbi").write_text("test")
-        (cache_dir / "cache_0.0.nbc").write_text("test")
-        (cache_dir / "cache_1.nbi").write_text("test")
-        (cache_dir / "cache_1.0.nbc").write_text("test")
-
-        cache = CUBIECache(
-            system_name="test_system",
-            system_hash="abc123",
-            config_hash=DEFAULT_CUBIE_CACHE_CONFIG_HASH,
-        )
-        # Override cache path to use tmp_path
-        cache._cache_path = str(cache_dir)
-
-        cache.flush_cache()
-
-        # Directory should exist but be empty
-        assert cache_dir.exists()
-        assert len(list(cache_dir.glob("*"))) == 0
-
-
-class TestFlushCacheRecreatesDirectory:
-    """Tests for flush_cache directory recreation."""
-
-    def test_flush_cache_recreates_directory(self, tmp_path, precision):
-        """Verify flush_cache creates empty directory after removal."""
-        cache_dir = tmp_path / "test_system" / "cache"
-        cache_dir.mkdir(parents=True)
-
-        # Add a file
-        (cache_dir / "test.nbi").write_text("test")
-        cache = CUBIECache(
-            system_name="test_system",
-            system_hash="abc123",
-            config_hash=DEFAULT_CUBIE_CACHE_CONFIG_HASH,
-        )
-        cache._cache_path = str(cache_dir)
-
-        cache.flush_cache()
-
-        # Directory should be recreated and empty
-        assert cache_dir.exists()
-        assert cache_dir.is_dir()
-        assert len(list(cache_dir.iterdir())) == 0
-
-    def test_flush_cache_handles_missing_directory(self, tmp_path, precision):
-        """Verify flush_cache handles non-existent directory."""
-        cache_dir = tmp_path / "nonexistent" / "cache"
-        cache = CUBIECache(
-            system_name="test_system",
-            system_hash="abc123",
-            config_hash=DEFAULT_CUBIE_CACHE_CONFIG_HASH,
-        )
-        cache._cache_path = str(cache_dir)
-
-        # Should not raise an error
-        cache.flush_cache()
-
-        # Directory should now exist
-        assert cache_dir.exists()
-
-
 class TestCustomCacheDir:
     """Tests for custom_cache_dir parameter."""
 
@@ -451,21 +324,20 @@ class TestCustomCacheDir:
         assert cache._cache_path.endswith("CUDA_cache_abc123")
 
 
-class TestParseCacheParam:
-    """Tests for BatchSolverKernel._parse_cache_param."""
+class TestKernelCacheKeys:
+    """Tests for the cache keys a BatchSolverKernel takes."""
 
-    def test_parse_cache_param_true(self, simple_system):
-        """Verify cache=True enables hash-mode caching."""
+    def test_cache_enabled_true(self, simple_system):
+        """Verify cache_enabled=True enables caching."""
         from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
         kernel = BatchSolverKernel(
             simple_system,
             algorithm="euler",
-            cache=True,
+            cache_enabled=True,
         )
 
         assert kernel.compile_settings.cache.cache_enabled is True
-        assert kernel.compile_settings.cache.cache_mode == "hash"
         # Without a cache argument the directory is the environment
         # default: CUBIE_KERNEL_CACHE_DIR when set, None otherwise.
         expected_dir = kernel_cache_dir_default()
@@ -476,81 +348,45 @@ class TestParseCacheParam:
                 expected_dir
             )
 
-    def test_parse_cache_param_false(self, simple_system):
-        """Verify cache=False disables caching."""
+    def test_cache_enabled_false(self, simple_system):
+        """Verify cache_enabled=False disables caching."""
         from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
         kernel = BatchSolverKernel(
             simple_system,
             algorithm="euler",
-            cache=False,
+            cache_enabled=False,
         )
 
         assert kernel.compile_settings.cache.cache_enabled is False
 
-    def test_parse_cache_param_flush_on_change(self, simple_system):
-        """Verify cache='flush_on_change' sets flush mode."""
-        from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
-
-        kernel = BatchSolverKernel(
-            simple_system,
-            algorithm="euler",
-            cache="flush_on_change",
-        )
-
-        assert kernel.compile_settings.cache.cache_enabled is True
-        assert kernel.compile_settings.cache.cache_mode == "flush_on_change"
-
-    def test_parse_cache_param_path(self, simple_system, tmp_path):
-        """Verify cache=Path sets custom cache_dir."""
+    def test_cache_dir_path(self, simple_system, tmp_path):
+        """Verify a Path cache_dir sets the custom directory."""
         from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
         custom_path = tmp_path / "custom_cache"
         kernel = BatchSolverKernel(
             simple_system,
             algorithm="euler",
-            cache=custom_path,
+            cache_dir=custom_path,
         )
 
         assert kernel.compile_settings.cache.cache_enabled is True
-        assert kernel.compile_settings.cache.cache_mode == "hash"
         assert kernel.compile_settings.cache.cache_dir == custom_path
 
-    def test_parse_cache_param_string_path(self, simple_system, tmp_path):
-        """Verify cache=string path sets custom cache_dir."""
+    def test_cache_dir_string(self, simple_system, tmp_path):
+        """Verify a string cache_dir sets the custom directory."""
         from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
 
         custom_path = str(tmp_path / "custom_cache")
         kernel = BatchSolverKernel(
             simple_system,
             algorithm="euler",
-            cache=custom_path,
+            cache_dir=custom_path,
         )
 
         assert kernel.compile_settings.cache.cache_enabled is True
         assert kernel.compile_settings.cache.cache_dir == Path(custom_path)
-
-
-class TestKernelCacheSettings:
-    """Tests for the cache fields on the kernel's compile settings."""
-
-    def test_kernel_settings_override_the_cache_shorthand(
-        self, simple_system, tmp_path
-    ):
-        """Explicit cache_* keys win over the cache shorthand."""
-        from cubie.batchsolving.BatchSolverKernel import BatchSolverKernel
-
-        kernel = BatchSolverKernel(
-            simple_system,
-            algorithm="euler",
-            cache="flush_on_change",
-            cache_mode="hash",
-            cache_dir=tmp_path,
-        )
-
-        assert kernel.compile_settings.cache.cache_enabled is True
-        assert kernel.compile_settings.cache.cache_mode == "hash"
-        assert kernel.compile_settings.cache.cache_dir == tmp_path
 
 
 class TestSetCacheDir:
@@ -563,7 +399,7 @@ class TestSetCacheDir:
         kernel = BatchSolverKernel(
             simple_system,
             algorithm="euler",
-            cache=True,
+            cache_enabled=True,
         )
         new_path_str = str(tmp_path / "string_cache_dir")
 
@@ -579,7 +415,7 @@ class TestSetCacheDir:
         kernel = BatchSolverKernel(
             simple_system,
             algorithm="euler",
-            cache=True,
+            cache_enabled=True,
         )
         new_path = tmp_path / "path_cache_dir"
 
@@ -604,47 +440,36 @@ def simple_system():
     )
 
 
-class TestSolverCacheParam:
-    """Tests for Solver cache parameter pass-through."""
+class TestSolverCacheKeys:
+    """Tests for Solver cache key pass-through."""
 
-    def test_solver_cache_param_passed_to_kernel(
+    def test_solver_cache_dir_passed_to_kernel(
         self, simple_system, tmp_path
     ):
-        """Verify Solver passes cache param to kernel."""
+        """Verify Solver passes cache_dir to the kernel."""
         from cubie.batchsolving.solver import Solver
 
         custom_path = tmp_path / "solver_cache"
-        solver = Solver(simple_system, cache=custom_path)
+        solver = Solver(simple_system, cache_dir=custom_path)
 
         assert solver.kernel.compile_settings.cache.cache_enabled is True
         assert solver.kernel.compile_settings.cache.cache_dir == custom_path
 
-    def test_solver_cache_true_default(self, simple_system):
-        """Verify cache=True is the default."""
+    def test_solver_caches_by_default(self, simple_system):
+        """Verify caching is on by default."""
         from cubie.batchsolving.solver import Solver
 
         solver = Solver(simple_system)
 
         assert solver.kernel.compile_settings.cache.cache_enabled is True
-        assert solver.kernel.compile_settings.cache.cache_mode == "hash"
 
-    def test_solver_cache_false(self, simple_system):
-        """Verify cache=False disables caching."""
+    def test_solver_cache_disabled(self, simple_system):
+        """Verify cache_enabled=False disables caching."""
         from cubie.batchsolving.solver import Solver
 
-        solver = Solver(simple_system, cache=False)
+        solver = Solver(simple_system, cache_enabled=False)
 
         assert solver.kernel.compile_settings.cache.cache_enabled is False
-
-    def test_solver_cache_flush_on_change(self, simple_system):
-        """Verify cache='flush_on_change' sets mode."""
-        from cubie.batchsolving.solver import Solver
-
-        solver = Solver(simple_system, cache="flush_on_change")
-
-        cache = solver.kernel.compile_settings.cache
-        assert cache.cache_enabled is True
-        assert cache.cache_mode == "flush_on_change"
 
 
 class TestSolverCacheProperties:
@@ -654,27 +479,17 @@ class TestSolverCacheProperties:
         """Verify cache_enabled returns kernel value."""
         from cubie.batchsolving.solver import Solver
 
-        solver = Solver(simple_system, cache=True)
+        solver = Solver(simple_system, cache_enabled=True)
         assert solver.cache_enabled is True
 
-        solver_disabled = Solver(simple_system, cache=False)
+        solver_disabled = Solver(simple_system, cache_enabled=False)
         assert solver_disabled.cache_enabled is False
-
-    def test_solver_cache_mode_property(self, simple_system):
-        """Verify cache_mode returns kernel value."""
-        from cubie.batchsolving.solver import Solver
-
-        solver = Solver(simple_system, cache=True)
-        assert solver.cache_mode == "hash"
-
-        solver_flush = Solver(simple_system, cache="flush_on_change")
-        assert solver_flush.cache_mode == "flush_on_change"
 
     def test_solver_cache_dir_property(self, simple_system, tmp_path):
         """Verify cache_dir returns kernel value."""
         from cubie.batchsolving.solver import Solver
 
-        solver = Solver(simple_system, cache=True)
+        solver = Solver(simple_system, cache_enabled=True)
         # Without a cache argument the directory is the environment
         # default: CUBIE_KERNEL_CACHE_DIR when set, None otherwise.
         expected_dir = kernel_cache_dir_default()
@@ -684,7 +499,7 @@ class TestSolverCacheProperties:
             assert solver.cache_dir == Path(expected_dir)
 
         custom_path = tmp_path / "cache_dir_test"
-        solver_custom = Solver(simple_system, cache=custom_path)
+        solver_custom = Solver(simple_system, cache_dir=custom_path)
         assert solver_custom.cache_dir == custom_path
 
 
@@ -695,7 +510,7 @@ class TestSolverSetCacheDir:
         """Verify set_cache_dir calls kernel method."""
         from cubie.batchsolving.solver import Solver
 
-        solver = Solver(simple_system, cache=True)
+        solver = Solver(simple_system, cache_enabled=True)
         new_path = tmp_path / "new_cache"
 
         solver.set_cache_dir(new_path)
@@ -708,7 +523,7 @@ class TestSolverSetCacheDir:
         from cubie.batchsolving.solver import Solver
         from pathlib import Path
 
-        solver = Solver(simple_system, cache=True)
+        solver = Solver(simple_system, cache_enabled=True)
         new_path_str = str(tmp_path / "string_cache")
 
         solver.set_cache_dir(new_path_str)
@@ -719,7 +534,7 @@ class TestSolverSetCacheDir:
         """Verify set_cache_dir accepts Path object."""
         from cubie.batchsolving.solver import Solver
 
-        solver = Solver(simple_system, cache=True)
+        solver = Solver(simple_system, cache_enabled=True)
         new_path = tmp_path / "path_cache"
 
         solver.set_cache_dir(new_path)

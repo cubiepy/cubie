@@ -2022,19 +2022,6 @@ def test_system_no_observables_default(precision, solver_settings):
 # ============================================================================
 
 
-def test_solver_accepts_cache_mode_kwarg(system, solver_settings):
-    """Verify Solver(system, cache_mode='flush_on_change') is recognized."""
-    solver = Solver(
-        system,
-        algorithm=solver_settings["algorithm"],
-        memory_manager=solver_settings["memory_manager"],
-        stream_group=solver_settings["stream_group"],
-        cache_mode="flush_on_change",
-    )
-
-    assert solver.kernel.compile_settings.cache.cache_mode == "flush_on_change"
-
-
 def test_solver_accepts_max_cache_entries_kwarg(system, solver_settings):
     """Verify Solver(system, max_cache_entries=5) is recognized."""
     solver = Solver(
@@ -2064,7 +2051,7 @@ def test_solver_accepts_max_registers_kwarg(system, solver_settings):
 def test_solve_ivp_passes_cache_kwargs(
     system, simple_initial_values, simple_parameters, driver_settings
 ):
-    """Verify solve_ivp(system, y0, params, cache_mode='hash') works.
+    """Verify solve_ivp passes the cache keys to the solver.
 
     The entry limit sits far above any realistic entry count: a small
     limit against a shared kernel-cache directory (the CI artifact)
@@ -2079,7 +2066,7 @@ def test_solve_ivp_passes_cache_kwargs(
         dt=1e-2,
         duration=0.05,
         method="euler",
-        cache_mode="hash",
+        cache_enabled=True,
         max_cache_entries=100000,
     )
 

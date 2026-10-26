@@ -432,7 +432,6 @@ class Solver(DerivedValues):
         memory_settings: Optional[Dict[str, object]] = None,
         loop_settings: Optional[Dict[str, object]] = None,
         time_logging_level: Optional[str] = None,
-        cache: Union[bool, str, Path, None] = None,
         auto_performance: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
@@ -446,7 +445,6 @@ class Solver(DerivedValues):
             "loop_settings": loop_settings,
             "algorithm": algorithm,
             "lineinfo": lineinfo,
-            "cache": cache,
             "auto_performance": auto_performance,
             "time_logging_level": time_logging_level,
             **kwargs,
@@ -1525,11 +1523,6 @@ class Solver(DerivedValues):
     def cache_enabled(self) -> bool:
         """Whether file-based caching is enabled."""
         return self.kernel.compile_settings.cache.cache_enabled
-
-    @property
-    def cache_mode(self) -> str:
-        """Current caching mode ('hash' or 'flush_on_change')."""
-        return self.kernel.compile_settings.cache.cache_mode
 
     @property
     def cache_dir(self) -> Optional[Path]:
