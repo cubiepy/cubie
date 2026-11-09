@@ -8,6 +8,8 @@ Published Objects
     Every launch, the best one, and the applied settings.
 :func:`resident_blocks_within_l2`
     Blocks per SM whose local memory fits in L2.
+:func:`multiprocessors_filled`
+    SMs a launch puts at least one block on.
 :func:`default_launch`
     Block size and blocks per SM for a launch with no block size given.
 :func:`launch_candidates`
@@ -266,13 +268,37 @@ def resident_blocks_within_l2(
     return blocks
 
 
+def multiprocessors_filled(
+    blocksize: int, runs: Optional[int], hardware: DeviceHardware
+) -> int:
+    """Return the SMs a launch of ``runs`` puts at least one block on.
+
+    Parameters
+    ----------
+    blocksize
+        Threads per block.
+    runs
+        Runs in the launch; ``None`` counts every SM.
+    hardware
+        The device's SM count.
+    """
+    multiprocessors = hardware.multiprocessor_count
+    if runs is None:
+        return multiprocessors
+    return min(multiprocessors, -(-runs // blocksize))
+
+
 def default_launch(
     shapes: Dict[int, int],
     frame: int,
     sass_bytes: int,
     hardware: DeviceHardware,
+    runs: Optional[int] = None,
 ) -> Tuple[int, int]:
     """Return the ``(blocksize, resident_blocks)`` of an untimed launch.
+
+    Among launches holding equal resident threads per SM, pick the one
+    whose grid of ``runs`` reaches the most SMs.
 
     Parameters
     ----------
@@ -284,6 +310,9 @@ def default_launch(
         Machine-code size of the kernel.
     hardware
         The device's L2 size, SM count and instruction cache.
+    runs
+        Runs in the launch; ``None`` treats every launch as reaching
+        every SM.
 
     Returns
     -------
@@ -306,14 +335,23 @@ def default_launch(
         elif budget % blocksize == 0:
             launches.append((blocksize, budget // blocksize))
     most = max(size * blocks for size, blocks in launches)
-    # Over the instruction cache: largest block within the tie band.
+    # Over the instruction cache: the tie band's launch reaching the
+    # most SMs, then the largest block. A batch under one wave leaves
+    # SMs idle at large blocks.
     if sass_bytes > hardware.instruction_cache_bytes:
         fitting = [
             launch for launch in launches
             if launch[0] * launch[1] >= LAUNCH_OCCUPANCY_TIE * most
         ]
-        return max(fitting, key=lambda launch: launch[0])
-    # Otherwise the most threads, the smaller block on a tie.
+        return max(
+            fitting,
+            key=lambda launch: (
+                multiprocessors_filled(launch[0], runs, hardware),
+                launch[0],
+            ),
+        )
+    # Otherwise the most threads, the smaller block on a tie. The
+    # smaller block of equal threads already reaches the most SMs.
     return min(
         launches, key=lambda launch: (-launch[0] * launch[1], launch[0])
     )

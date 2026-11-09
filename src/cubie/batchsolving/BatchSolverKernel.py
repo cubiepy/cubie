@@ -1047,6 +1047,7 @@ class BatchSolverKernel(CUDAFactory):
             resources.local_bytes_per_thread,
             resources.sass_bytes,
             device_hardware(),
+            runs,
         )
         launches_by_runs[key] = chosen
         return chosen

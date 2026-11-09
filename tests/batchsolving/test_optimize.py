@@ -98,6 +98,17 @@ def test_default_launch_over_the_instruction_cache_takes_the_larger_block():
     assert default_launch(SHAPES, 0, 2048, hardware) == (128, 4)
 
 
+def test_default_launch_over_the_instruction_cache_fills_the_most_sms():
+    """A batch under one wave takes the tie-band block reaching most SMs."""
+    hardware = _hardware(48 * MIB, instruction_cache_bytes=1024)
+    # 64-thread blocks reach 16 SMs, 128-thread blocks reach 8.
+    assert default_launch(SHAPES, 0, 2048, hardware, runs=1000) == (64, 8)
+    full_wave = 128 * hardware.multiprocessor_count
+    assert default_launch(
+        SHAPES, 0, 2048, hardware, runs=full_wave
+    ) == (128, 4)
+
+
 def test_default_launch_cuts_every_block_size_to_the_budget():
     """The 64-thread-block budget caps every block size in whole blocks."""
     hardware = _hardware(48 * MIB)
