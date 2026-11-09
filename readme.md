@@ -7,6 +7,8 @@
 [![Python tests](https://github.com/cubiepy/cubie/actions/workflows/ci_nocuda_tests.yml/badge.svg)](https://github.com/cubiepy/cubie/actions/workflows/ci_nocuda_tests.yml)
 [![codecov](https://codecov.io/gh/cubiepy/cubie/graph/badge.svg?token=SKJNOT6061)](https://codecov.io/gh/cubiepy/cubie)
 ![PyPI version](https://img.shields.io/pypi/v/cubie)
+![PyPI Downloads](https://img.shields.io/pypi/dm/cubie)
+
 
 CuBIE performs numerical integration in parallel on NVIDIA GPUs. It provides a ~10000x* 
 speedup over functions like MATLAB's `ode45` and SciPy's `solve_ivp` for parallel batch integrations, 
