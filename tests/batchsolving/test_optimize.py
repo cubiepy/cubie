@@ -99,9 +99,9 @@ def test_default_launch_over_the_instruction_cache_takes_the_larger_block():
 
 
 def test_default_launch_over_the_instruction_cache_fills_the_most_sms():
-    """A batch under one wave takes the tie-band block reaching most SMs."""
+    """Under one wave, pick the tie-band block that fills the most SMs."""
     hardware = _hardware(48 * MIB, instruction_cache_bytes=1024)
-    # 64-thread blocks reach 16 SMs, 128-thread blocks reach 8.
+    # We fill 16 SMs with 64-thread blocks and 8 with 128-thread blocks.
     assert default_launch(SHAPES, 0, 2048, hardware, runs=1000) == (64, 8)
     full_wave = 128 * hardware.multiprocessor_count
     assert default_launch(
