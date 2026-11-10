@@ -136,6 +136,9 @@ ALL_ALGORITHM_STEP_PARAMETERS = {
     "increment_cache_location",
     # CrankNicolson buffer location parameters
     "dxdt_location",
+    # BDF history buffer location parameters
+    "history_values_location",
+    "history_intervals_location",
     # MR/SD solver buffer location parameters
     "preconditioned_vec_location",
     "temp_location",

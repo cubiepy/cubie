@@ -8,6 +8,7 @@ from attrs import fields
 from cubie.integrators.algorithms import (
     BackwardsEulerPCStep,
     BackwardsEulerStep,
+    BDFStep,
     CrankNicolsonStep,
     DIRKStep,
     ERKStep,
@@ -18,6 +19,10 @@ from cubie.integrators.algorithms import (
     resolve_supplied_tableau,
 )
 from cubie.integrators.algorithms.base_algorithm_step import ButcherTableau
+from cubie.integrators.algorithms.generic_bdf_tableaus import (
+    BDFTableau,
+    DEFAULT_BDF_TABLEAU,
+)
 from cubie.integrators.algorithms.generic_dirk_tableaus import (
     DIRKTableau,
     DEFAULT_DIRK_TABLEAU,
@@ -2087,7 +2092,270 @@ class CPUBackwardEulerPCStep(CPUStep):
         )
 
 
+class CPUBDFStep(CPUBackwardEulerStep):
+    """Variable-step BDF over a history of accepted states."""
+
+    def __init__(
+        self,
+        evaluator: CPUODESystem,
+        driver_evaluator: DriverEvaluator,
+        newton_tol: float,
+        newton_max_iters: int,
+        linear_tol: float,
+        linear_max_iters: int,
+        *,
+        newton_rtol: float = 0.0,
+        linear_rtol: float = 0.0,
+        linear_correction_type: str = "minimal_residual",
+        preconditioner_order: int = 2,
+        residual_reduction: Optional[float] = None,
+        residual_floor: Optional[float] = None,
+        inexact_newton: bool = False,
+        tableau: Optional[BDFTableau] = None,
+        uses_error: bool = True,
+    ) -> None:
+        super().__init__(
+            evaluator,
+            driver_evaluator,
+            newton_tol=newton_tol,
+            newton_rtol=newton_rtol,
+            newton_max_iters=newton_max_iters,
+            linear_tol=linear_tol,
+            linear_rtol=linear_rtol,
+            linear_max_iters=linear_max_iters,
+            linear_correction_type=linear_correction_type,
+            preconditioner_order=preconditioner_order,
+            residual_reduction=residual_reduction,
+            residual_floor=residual_floor,
+            inexact_newton=inexact_newton,
+        )
+        if tableau is None:
+            tableau = DEFAULT_BDF_TABLEAU
+        self.tableau = tableau
+        self._uses_error = uses_error
+        self._max_order = tableau.order
+        self._history_length = tableau.history_length
+        self._ratio_limits = np.asarray(
+            tableau.ratio_limits, dtype=self.precision
+        )
+        self._values = np.zeros(
+            (self._history_length, self._state_size), dtype=self.precision
+        )
+        self._intervals = np.zeros(self._history_length, dtype=self.precision)
+        self._stored = 0
+        self._step_start = np.zeros(self._state_size, dtype=self.precision)
+
+    def jacobian(self, candidate: Array) -> Array:
+        # Simplified Newton evaluates at the frozen step-start state.
+        if self._inexact_newton:
+            stage_state = self._step_start
+        else:
+            stage_state = self._be_state + candidate
+        _, jacobian = self.observables_and_jac(
+            stage_state,
+            self._be_params,
+            self._be_drivers,
+            self._be_time,
+        )
+        return self._identity - self._be_dt * jacobian
+
+    def _commit(self, state: Array, step_size, first: bool, accepted: bool):
+        """Commit the previous proposal, then record this attempt."""
+        if accepted and not first:
+            self._values[1:] = self._values[:-1].copy()
+            self._intervals[2:] = self._intervals[1:-1].copy()
+            self._intervals[1] = self._intervals[0]
+            self._stored = min(self._stored + 1, self._history_length)
+            self._values[0] = state
+        if first:
+            self._values[0] = state
+            self._stored = 1
+        limit = self._ratio_limits[0]
+        if self._stored > 2 and not (
+            step_size <= self.precision(limit * self._intervals[1])
+        ):
+            self._values[1:-1] = self._values[2:].copy()
+            self._intervals[1] = self.precision(
+                self._intervals[1] + self._intervals[2]
+            )
+            self._intervals[2:-1] = self._intervals[3:].copy()
+            self._stored -= 1
+        self._intervals[0] = step_size
+
+    def _coefficients(self, step_size):
+        """Return corrector and predictor weights, step and error scale."""
+        precision = self.precision
+        zero = precision(0.0)
+        one = precision(1.0)
+        max_order = self._max_order
+        length = self._history_length
+
+        rho = np.zeros(length, dtype=precision)
+        rho[0] = one
+        elapsed = step_size
+        for m in range(1, length):
+            elapsed = precision(elapsed + self._intervals[m])
+            if elapsed > zero:
+                rho[m] = precision(step_size / elapsed)
+
+        order = 0
+        for index in range(max_order):
+            limit = self._ratio_limits[index]
+            within = True
+            for step_index in range(index + 1):
+                newer = (
+                    step_size if step_index == 0
+                    else self._intervals[step_index]
+                )
+                older = self._intervals[step_index + 1]
+                within = within and newer <= precision(limit * older)
+            candidate = index + 1
+            if (
+                candidate < self._stored
+                and within
+                and (index == 0 or step_size > zero)
+            ):
+                order = candidate
+            else:
+                break
+        restart = order == 0
+        corrector_order = max(order, 1)
+
+        leading = zero
+        for m in range(corrector_order):
+            leading = precision(leading + rho[m])
+
+        corrector = np.zeros(max_order, dtype=precision)
+        for j in range(corrector_order):
+            power = one
+            spread = one
+            for m in range(max_order):
+                if m < corrector_order:
+                    power = precision(power * rho[j])
+                    if m != j:
+                        spread = precision(spread * (rho[j] - rho[m]))
+            corrector[j] = precision(power / precision(spread * leading))
+
+        predictor = np.zeros(length, dtype=precision)
+        if restart:
+            predictor[0] = one
+        else:
+            for j in range(corrector_order + 1):
+                numerator = one
+                denominator = one
+                for m in range(corrector_order + 1):
+                    if m != j:
+                        numerator = precision(numerator * rho[j])
+                        denominator = precision(
+                            denominator * (rho[j] - rho[m])
+                        )
+                predictor[j] = precision(numerator / denominator)
+
+        if restart:
+            error_scale = precision(0.5)
+        else:
+            error_scale = precision(rho[corrector_order] / leading)
+        corrector_step = precision(step_size / leading)
+        return corrector, predictor, corrector_step, error_scale, restart
+
+    def step(
+        self,
+        *,
+        state: Optional[Array] = None,
+        params: Optional[Array] = None,
+        dt: Optional[float] = None,
+        time: float = 0.0,
+        prev_accepted: bool = True,
+    ) -> StepResultLike:
+        state_vector = self.ensure_array(state, copy=True)
+        params_array = self.ensure_array(params)
+        dt_value = self.precision(dt)
+        current_time = self.precision(time)
+        next_time = current_time + dt_value
+        first = self._stored == 0
+
+        self._commit(state_vector, dt_value, first, prev_accepted)
+        corrector, predictor, corrector_step, error_scale, restart = (
+            self._coefficients(dt_value)
+        )
+        base_state = np.zeros(self._state_size, dtype=self.precision)
+        prediction = np.zeros(self._state_size, dtype=self.precision)
+        for j in range(self._history_length):
+            if j < self._max_order:
+                base_state += corrector[j] * self._values[j]
+            prediction += predictor[j] * self._values[j]
+
+        # A restart predicts with explicit Euler.
+        if restart:
+            drivers_now = self.drivers(current_time)
+            observables_now = self.observables(
+                state_vector, params_array, drivers_now, current_time
+            )
+            derivative = self.rhs(
+                state_vector,
+                params_array,
+                drivers_now,
+                observables_now,
+                current_time,
+            )
+            prediction = prediction + dt_value * derivative
+
+        drivers_next = self.drivers(next_time)
+        self._be_state = base_state
+        self._be_params = params_array
+        self._be_drivers = drivers_next
+        self._be_time = next_time
+        self._be_dt = corrector_step
+        self._step_start = state_vector
+        self._linear_norm_reference = base_state
+
+        def correction_norm(update, iterate):
+            return correction_norm_reference(
+                update,
+                base_state + iterate,
+                state_vector,
+                self._newton_tol,
+                self._newton_rtol,
+            )
+
+        initial_increment = prediction - base_state
+        increment, converged, niters, nlinear = newton_solve(
+            initial_increment.copy(),
+            precision=self.precision,
+            residual_fn=self.residual,
+            jacobian_fn=self.jacobian,
+            linear_solver=self.linear_solve,
+            newton_tol=self._newton_tol,
+            newton_rtol=self._newton_rtol,
+            newton_max_iters=self._newton_max_iters,
+            correction_norm=correction_norm,
+            prev_theta_store=self._newton_prev_theta,
+        )
+        next_state = base_state + increment
+        if self._uses_error:
+            error = error_scale * (increment - initial_increment)
+        else:
+            error = np.zeros_like(increment)
+
+        observables = self.observables(
+            next_state,
+            params_array,
+            drivers_next,
+            next_time,
+        )
+        status = self._status(converged, niters)
+        return self._make_result(
+            state=next_state,
+            observables=observables,
+            error=error,
+            status=status,
+            niters=niters,
+            nlinear=nlinear,
+        )
+
+
 _STEP_CONSTRUCTOR_TO_CLASS = {
+    BDFStep: CPUBDFStep,
     ExplicitEulerStep: CPUExplicitEulerStep,
     BackwardsEulerStep: CPUBackwardEulerStep,
     BackwardsEulerPCStep: CPUBackwardEulerPCStep,
@@ -2180,8 +2448,11 @@ def get_ref_step_factory(
         attempt_dense_prediction: bool = True,
         use_smoothed_error: bool = False,
         inexact_newton: bool = False,
+        uses_error: bool = True,
     ) -> Callable:
         extra_kwargs = {}
+        if step_class is CPUBDFStep:
+            extra_kwargs["uses_error"] = uses_error
         if step_class in (CPUFIRKStep, CPUDIRKStep):
             extra_kwargs["attempt_dense_prediction"] = (
                 attempt_dense_prediction
@@ -2194,6 +2465,7 @@ def get_ref_step_factory(
             CPUBackwardEulerStep,
             CPUBackwardEulerPCStep,
             CPUCrankNicolsonStep,
+            CPUBDFStep,
         ):
             extra_kwargs["inexact_newton"] = inexact_newton
         if tableau_value is None:
@@ -2267,6 +2539,7 @@ def get_ref_stepper(
         newton_max_iters = getattr(step_object, "newton_max_iters", None)
         if newton_max_iters is None:
             newton_max_iters = fields(NewtonKrylovConfig).max_iters.default
+    uses_error = getattr(step_object, "uses_error", True)
     factory = get_ref_step_factory(algorithm, tableau=tableau)
     return factory(
         evaluator,
@@ -2284,4 +2557,5 @@ def get_ref_stepper(
         attempt_dense_prediction=attempt_dense_prediction,
         use_smoothed_error=use_smoothed_error,
         inexact_newton=inexact_newton,
+        uses_error=uses_error,
     )
