@@ -43,7 +43,7 @@ def _matched_rows(pattern: Pattern, n: int) -> List[int]:
     Raises
     ------
     ValueError
-        If no matching covers every column.
+        If the pattern is structurally singular.
     """
     graph = BipartiteGraph(n, n)
     for i, j in pattern:
@@ -211,8 +211,8 @@ def markowitz_ordering(
     rows = state.rows
     cols = state.cols
     strong_cols = state.strong_cols
-    # Pack (tier, count, row, column) into one integer so that one
-    # comparison orders two candidates lexicographically.
+    # Pack (tier, count, row, column) into one integer so we compare
+    # candidates lexicographically in a single integer comparison.
     span = n * n
     unset = 4 * span * span
     for _ in range(n):
@@ -276,7 +276,7 @@ def min_fill_ordering(
     cols = state.cols
     strong_cols = state.strong_cols
     # Pack (tier, fill) into a prefix and (count, row, column) into a
-    # suffix, so two integer comparisons order two candidates.
+    # suffix, so we compare candidates in two integer comparisons.
     span = n * n
     for _ in range(n):
         best_prefix = 4 * span
@@ -291,8 +291,9 @@ def min_fill_ordering(
                 tier = 0 if j in strong_row else 2
                 if row_block >= 0 and j // block_size != row_block:
                     tier += 1
-                # Stop counting once the fill can no longer match the
-                # best candidate; a worse tier has a negative bound.
+                # Stop counting once this fill exceeds the best
+                # candidate's. We skip a candidate of a worse tier,
+                # whose bound is negative.
                 bound = best_prefix - tier * span
                 if bound < 0:
                     continue
@@ -467,8 +468,8 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
                     elements[i].discard(e)
                 del element_weight[e]
 
-        # Eliminate together with p every variable adjacent to nothing
-        # but the new element; its degree would make it the next pivot.
+        # We would pick a variable adjacent only to the new element
+        # next anyway, so we eliminate it together with p.
         for i in sorted(reach):
             if not variables[i] and len(elements[i]) == 1:
                 order.extend(sorted(groups[i]))
