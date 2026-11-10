@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.18.0](https://github.com/cubiepy/cubie/compare/v0.17.0...v0.18.0) (2026-11-10)
+
+
+### Features
+
+* LU solves pivot in the order whose factor has the fewest nonzeros ([#1095](https://github.com/cubiepy/cubie/issues/1095)) ([be0063a](https://github.com/cubiepy/cubie/commit/be0063a4f196171b477878b71cb203c9a2ab7ec7))
+
+
+### Bug Fixes
+
+* auto-performance now optimises for number of SMs when instruction cache exceeded and batch is under 1 wave ([#1093](https://github.com/cubiepy/cubie/issues/1093)) ([1211438](https://github.com/cubiepy/cubie/commit/121143881dbe64639f02f17d223cfe3f14f2dd78))
+* **ci:** Windows GPU AMI bake installs Python 3.11 and 3.14 into the toolcache ([#1088](https://github.com/cubiepy/cubie/issues/1088)) ([a1263a6](https://github.com/cubiepy/cubie/commit/a1263a69b788cdfb0f08f6a5ce532b51910e9320))
+* Rosenbrock-W factorises W once per step through the prefactored LU pair ([#1094](https://github.com/cubiepy/cubie/issues/1094)) ([0102b90](https://github.com/cubiepy/cubie/commit/0102b902fd45588ca029f9c9555dc14526330b6a))
+
 ## [0.17.0](https://github.com/cubiepy/cubie/compare/v0.16.0...v0.17.0) (2026-10-26)
 
 
