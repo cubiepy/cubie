@@ -266,13 +266,38 @@ def resident_blocks_within_l2(
     return blocks
 
 
+def _multiprocessors_filled(
+    blocksize: int, runs: Optional[int], hardware: DeviceHardware
+) -> int:
+    """Return how many SMs receive a block when ``runs`` launch.
+
+    Parameters
+    ----------
+    blocksize
+        Threads per block.
+    runs
+        Runs in the launch; pass ``None`` to count every SM.
+    hardware
+        The device's SM count.
+    """
+    multiprocessors = hardware.multiprocessor_count
+    if runs is None:
+        return multiprocessors
+    return min(multiprocessors, -(-runs // blocksize))
+
+
 def default_launch(
     shapes: Dict[int, int],
     frame: int,
     sass_bytes: int,
     hardware: DeviceHardware,
+    runs: Optional[int] = None,
 ) -> Tuple[int, int]:
     """Return the ``(blocksize, resident_blocks)`` of an untimed launch.
+
+    For a kernel larger than the instruction cache, return the launch
+    within the occupancy tie band that puts a block on the most SMs,
+    and the largest block among those.
 
     Parameters
     ----------
@@ -284,6 +309,8 @@ def default_launch(
         Machine-code size of the kernel.
     hardware
         The device's L2 size, SM count and instruction cache.
+    runs
+        Runs in the launch; pass ``None`` to count every SM as filled.
 
     Returns
     -------
@@ -306,14 +333,23 @@ def default_launch(
         elif budget % blocksize == 0:
             launches.append((blocksize, budget // blocksize))
     most = max(size * blocks for size, blocks in launches)
-    # Over the instruction cache: largest block within the tie band.
+    # Over the instruction cache, take the tie-band launch that fills
+    # the most SMs, then the largest block. We count SMs because a
+    # batch under one wave leaves SMs idle when blocks are large.
     if sass_bytes > hardware.instruction_cache_bytes:
         fitting = [
             launch for launch in launches
             if launch[0] * launch[1] >= LAUNCH_OCCUPANCY_TIE * most
         ]
-        return max(fitting, key=lambda launch: launch[0])
-    # Otherwise the most threads, the smaller block on a tie.
+        return max(
+            fitting,
+            key=lambda launch: (
+                _multiprocessors_filled(launch[0], runs, hardware),
+                launch[0],
+            ),
+        )
+    # Otherwise take the most threads and the smaller block on a tie,
+    # which also fills the most SMs.
     return min(
         launches, key=lambda launch: (-launch[0] * launch[1], launch[0])
     )
