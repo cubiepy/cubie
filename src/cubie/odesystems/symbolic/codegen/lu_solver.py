@@ -70,6 +70,9 @@ from cubie.odesystems.symbolic.codegen._matrix_utils import (
     block_eigenstructure,
     mass_diagonal_flags,
 )
+from cubie.odesystems.symbolic.codegen.lu_pivoting import (
+    markowitz_ordering,
+)
 from cubie.odesystems.symbolic.codegen._stage_utils import (
     build_stage_metadata,
     prepare_stage_data,
@@ -193,87 +196,6 @@ LU_PREPARE_TEMPLATE = (
     "{func_name}.aux_count = {aux_count}\n"
     "{func_name}.lu_nnz = None\n"
 )
-
-
-def _markowitz_symbolic_lu(
-    pattern: Set[Tuple[int, int]],
-    n: int,
-    strong: Set[Tuple[int, int]] = frozenset(),
-    block_size: Optional[int] = None,
-) -> Tuple[List[int], List[int], Set[Tuple[int, int]], int]:
-    """Order and symbolically factorise a structural pattern.
-
-    The Markowitz rule picks each pivot from the remaining
-    structural nonzeros, ``strong`` entries first, then entries
-    inside a ``block_size``-wide diagonal block ahead of entries
-    coupling two blocks, giving independent row and column
-    permutations. Returns the two permutations, the ``L + U``
-    pattern in permuted coordinates, and the predicted flop
-    count; raises ValueError on a structurally singular pattern.
-    """
-    rows: Dict[int, Set[int]] = {i: set() for i in range(n)}
-    cols: Dict[int, Set[int]] = {j: set() for j in range(n)}
-    filled = set(pattern)
-    for i, j in filled:
-        rows[i].add(j)
-        cols[j].add(i)
-
-    active_rows = set(range(n))
-    active_cols = set(range(n))
-    row_perm: List[int] = []
-    col_perm: List[int] = []
-    flops = 0
-    for _ in range(n):
-        best = None
-        best_key = None
-        for i in sorted(active_rows):
-            row_targets = rows[i] & active_cols
-            row_deg = len(row_targets)
-            for j in sorted(row_targets):
-                col_deg = len(cols[j] & active_rows)
-                cross_block = (
-                    block_size is not None
-                    and i // block_size != j // block_size
-                )
-                key = (
-                    (i, j) not in strong,
-                    cross_block,
-                    (row_deg - 1) * (col_deg - 1),
-                    i,
-                    j,
-                )
-                if best_key is None or key < best_key:
-                    best = (i, j)
-                    best_key = key
-        if best is None:
-            raise ValueError(
-                "Direct LU generation failed: the matrix pattern "
-                "is structurally singular (an elimination step has "
-                "no structurally nonzero pivot). The system's "
-                "constraints do not determine its variables."
-            )
-        pivot_row, pivot_col = best
-        row_perm.append(pivot_row)
-        col_perm.append(pivot_col)
-        active_rows.discard(pivot_row)
-        active_cols.discard(pivot_col)
-        row_targets = sorted(rows[pivot_row] & active_cols)
-        col_sources = sorted(cols[pivot_col] & active_rows)
-        flops += len(col_sources)
-        flops += 2 * len(col_sources) * len(row_targets)
-        for i in col_sources:
-            for j in row_targets:
-                if (i, j) not in filled:
-                    filled.add((i, j))
-                    rows[i].add(j)
-                    cols[j].add(i)
-
-    row_position = {orig: k for k, orig in enumerate(row_perm)}
-    col_position = {orig: k for k, orig in enumerate(col_perm)}
-    lu_pattern = {
-        (row_position[i], col_position[j]) for (i, j) in filled
-    }
-    return row_perm, col_perm, lu_pattern, flops
 
 
 def _mass_strong_entries(
@@ -649,8 +571,8 @@ def _lu_body_from_entries(
     strong = _mass_strong_entries(mass_diag, n)
     pattern = set(entry_exprs) | strong
     block_size = system_n if n != system_n else None
-    row_perm, col_perm, lu_pattern, _ = _markowitz_symbolic_lu(
-        pattern, n, strong, block_size=block_size
+    row_perm, col_perm, lu_pattern, _ = markowitz_ordering(
+        pattern, n, strong, block_size
     )
     nnz = len(lu_pattern)
     slots = {
@@ -897,7 +819,7 @@ def _system_pattern_structure(
     int,
     int,
 ]:
-    """Return the Markowitz structure of the system's own pattern."""
+    """Return the pivot structure of the system's own pattern."""
     n = len(sysir.state_symbols)
     strong = _mass_strong_entries(mass_diag, n)
     pattern = {
@@ -906,7 +828,7 @@ def _system_pattern_structure(
         for j in range(n)
         if not ir.is_zero(jac[i][j])
     } | strong
-    row_perm, col_perm, lu_pattern, flops = _markowitz_symbolic_lu(
+    row_perm, col_perm, lu_pattern, flops = markowitz_ordering(
         pattern, n, strong
     )
     slots = {
