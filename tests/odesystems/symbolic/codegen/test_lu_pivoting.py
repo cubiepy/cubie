@@ -16,8 +16,8 @@ ORDERINGS = [
     amd_ordering,
 ]
 
-# A torn system: rows 0-3 carry mass, rows 4 and 5 are constraints
-# without their own diagonal entry.
+# Model a torn system: rows 0-3 have mass on their diagonal, and rows
+# 4 and 5 are constraints without a diagonal entry.
 TORN_PATTERN = {
     (0, 0), (0, 4),
     (1, 1), (1, 0), (1, 5),
@@ -85,8 +85,7 @@ def _replay(pattern, n, strong, block_size, row_perm, col_perm):
 def test_ordering_returns_the_symbolic_factor_of_its_pivots(
     ordering, pattern, n, strong, block_size
 ):
-    """The returned pattern and flops are those of the pivot sequence,
-    and every pivot is a structural nonzero of the best tier."""
+    """Check the pattern and flops against a replay of the pivots."""
     row_perm, col_perm, lu_pattern, flops = ordering(
         set(pattern), n, strong, block_size
     )
@@ -105,7 +104,7 @@ def test_ordering_returns_the_symbolic_factor_of_its_pivots(
 
 @pytest.mark.parametrize("ordering", ORDERINGS)
 def test_block_size_keeps_pivots_inside_diagonal_blocks(ordering):
-    """Same-block pivots win over a lower-fill cross-block entry."""
+    """Check that a block size keeps every pivot inside its block."""
     pattern = {
         (0, 0), (0, 1), (0, 2),
         (1, 0), (1, 1),
@@ -127,8 +126,9 @@ def test_block_size_keeps_pivots_inside_diagonal_blocks(ordering):
     "pattern, strong",
     [
         ({(0, 0), (1, 0)}, frozenset()),
-        # Rows 1 and 2 hold only column 0; the fill of the strong
-        # pivot (0, 0) gives both rows entries in columns 1 and 2.
+        # Rows 1 and 2 have an entry in column 0 only. Eliminating
+        # the strong pivot (0, 0) fills both rows in columns 1 and 2,
+        # so the elimination alone finds a pivot for every row.
         (
             {(0, 0), (0, 1), (0, 2), (1, 0), (2, 0)},
             frozenset({(0, 0)}),
@@ -136,7 +136,7 @@ def test_block_size_keeps_pivots_inside_diagonal_blocks(ordering):
     ],
 )
 def test_structurally_singular_pattern_refused(ordering, pattern, strong):
-    """A pattern with no complete row-to-column matching raises."""
+    """Check that a structurally singular pattern raises."""
     n = 1 + max(max(entry) for entry in pattern)
     with pytest.raises(ValueError, match="structurally singular"):
         ordering(set(pattern), n, strong)

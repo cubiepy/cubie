@@ -14,15 +14,14 @@ Published Functions
 :func:`amd_ordering`
     Pivot the columns in approximate-minimum-degree order.
 
-Every ordering takes the structural pattern of a square matrix and
+Each ordering takes the structural pattern of a square matrix and
 returns the row and column permutations, the ``L + U`` pattern in
-permuted coordinates and the predicted flop count. Every ordering
-picks each pivot from the structural nonzeros of the active
-submatrix, fill included. Every ordering takes
-``strong`` entries first, then entries inside a ``block_size``-wide
-diagonal block ahead of entries coupling two blocks, and applies its
-own rule within the best tier present. Every ordering raises
-ValueError on a structurally singular pattern.
+permuted coordinates and the predicted flop count. It picks each
+pivot from the structural nonzeros of the active submatrix, fill
+included. It takes ``strong`` entries first and entries inside a
+``block_size``-wide diagonal block ahead of entries that couple two
+blocks, and applies its own rule among the entries of the best tier
+left. It raises ValueError on a structurally singular pattern.
 """
 
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
