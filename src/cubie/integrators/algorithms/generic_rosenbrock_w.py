@@ -302,7 +302,12 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         # A cached member carries prepare_jac and the aux size.
         if self.uses_direct_solver:
             lu_result = get_fn(
-                "lu_solve", jacobian_at="step", **request_kwargs
+                "lu_solve",
+                jacobian_at="step",
+                prefactored=True,
+                stage_coefficients=config.tableau.stage_coefficients,
+                stage_nodes=config.tableau.stage_nodes,
+                **request_kwargs,
             )
             prepare_jacobian = lu_result.prepare_jac
             cached_auxiliary_count = lu_result.cached_auxiliary_count
