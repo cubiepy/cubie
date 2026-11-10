@@ -224,7 +224,9 @@ def markowitz_ordering(
             row_block = _row_block(i, block_size)
             row_base = i * n
             for j in row:
-                tier = _tier(j, strong_row, row_block, block_size)
+                tier = 0 if j in strong_row else 2
+                if row_block >= 0 and j // block_size != row_block:
+                    tier += 1
                 count = row_count * (len(cols[j]) - 1)
                 key = (tier * span + count) * span + row_base + j
                 if key < best:
@@ -286,7 +288,9 @@ def min_fill_ordering(
             row_block = _row_block(i, block_size)
             row_base = i * n
             for j in row:
-                tier = _tier(j, strong_row, row_block, block_size)
+                tier = 0 if j in strong_row else 2
+                if row_block >= 0 and j // block_size != row_block:
+                    tier += 1
                 # Stop counting once the fill can no longer match the
                 # best candidate; a worse tier has a negative bound.
                 bound = best_prefix - tier * span
