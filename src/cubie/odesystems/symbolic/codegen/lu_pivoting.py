@@ -14,6 +14,9 @@ Published Functions
 :func:`amd_ordering`
     Pivot the columns in approximate-minimum-degree order.
 
+:func:`best_ordering`
+    Keep the ordering whose factor has the fewest nonzeros.
+
 Each ordering takes the structural pattern of a square matrix and
 returns the row and column permutations, the ``L + U`` pattern in
 permuted coordinates and the predicted flop count. It picks each
@@ -407,16 +410,104 @@ def natural_ordering(
     )
 
 
-def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
-    """Return a symmetric elimination order by approximate degree.
+class _AssemblyTree:
+    """Record the elements of one minimum-degree elimination.
+
+    The tree stores the elements in elimination order in
+    ``sequence``. For each element it stores in ``fronts`` the
+    variables the element pivots, its own supervariable first and
+    then the variables eliminated together with it, and in
+    ``front_size`` that pivot count plus the element's external
+    degree. It stores the absorbing element of each absorbed element
+    in ``parent``.
+    """
+
+    __slots__ = ("sequence", "fronts", "parent", "front_size")
+
+    def __init__(self) -> None:
+        self.sequence: List[int] = []
+        self.fronts: Dict[int, List[int]] = {}
+        self.parent: Dict[int, int] = {}
+        self.front_size: Dict[int, int] = {}
+
+    def elimination_order(self) -> List[int]:
+        """Return the variables in elimination order.
+
+        List each element's supervariable by index, then each
+        variable group eliminated with it by index.
+        """
+        order: List[int] = []
+        for element in self.sequence:
+            order.extend(self.fronts[element])
+        return order
+
+    def postorder(self) -> List[int]:
+        """Return the variables in a postorder of the assembly tree.
+
+        Visit children before their parent, children by index with
+        the largest front last, and list each element's variables by
+        index with the element's own variable last.
+        """
+        children: Dict[int, List[int]] = {e: [] for e in self.sequence}
+        for element in sorted(self.parent):
+            children[self.parent[element]].append(element)
+        front_size = self.front_size
+        for kids in children.values():
+            if len(kids) > 1:
+                largest = max(
+                    range(len(kids)),
+                    key=lambda k: (front_size[kids[k]], k),
+                )
+                kids.append(kids.pop(largest))
+        order: List[int] = []
+        roots = sorted(e for e in self.sequence if e not in self.parent)
+        for root in roots:
+            # Walk the tree with an explicit stack of child iterators.
+            stack = [(root, iter(children[root]))]
+            while stack:
+                element, pending = stack[-1]
+                child = next(pending, None)
+                if child is not None:
+                    stack.append((child, iter(children[child])))
+                    continue
+                stack.pop()
+                front = self.fronts[element]
+                order.extend(sorted(v for v in front if v != element))
+                order.append(element)
+        return order
+
+
+def _approximate_minimum_degree(
+    adjacency: List[Set[int]],
+    recent_ties: bool,
+    highest_principal: bool,
+) -> _AssemblyTree:
+    """Eliminate a symmetric pattern by approximate minimum degree.
 
     Eliminate the variable of least approximate external degree on
-    the quotient graph, breaking ties by index. Absorb every element
-    that the newest element covers, eliminate with each pivot the
-    variables adjacent only to its element, and merge variables with
-    identical adjacency into one supervariable, listing its members
-    consecutively. Pass the off-diagonal adjacency of a symmetric
-    pattern; the function consumes ``adjacency``.
+    the quotient graph. Absorb every element that the newest element
+    covers, eliminate with each pivot the variables adjacent only to
+    its element, and merge variables with identical adjacency into
+    one supervariable. Pass the off-diagonal adjacency of a
+    symmetric pattern; the function consumes ``adjacency``.
+
+    Parameters
+    ----------
+    adjacency
+        Off-diagonal neighbours of every variable.
+    recent_ties
+        Break degree ties towards the variable whose degree changed
+        most recently, and between variables first given a degree
+        together towards the highest index; ``False`` breaks them
+        towards the lowest index.
+    highest_principal
+        Name each new supervariable after its highest-index member;
+        ``False`` names it after the lowest.
+
+    Returns
+    -------
+    _AssemblyTree
+        The elements of the elimination.
     """
     n = len(adjacency)
     variables = adjacency
@@ -426,13 +517,17 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
     weight = [1] * n
     groups: List[List[int]] = [[v] for v in range(n)]
     degree = [len(adjacency[v]) for v in range(n)]
+    # Rank degree ties by priority, lowest first.
+    priority = [-v for v in range(n)] if recent_ties else list(range(n))
+    clock = -n
     alive = set(range(n))
     remaining = n
-    order: List[int] = []
+    tree = _AssemblyTree()
     while alive:
-        p = min(alive, key=lambda v: (degree[v], v))
+        p = min(alive, key=lambda v: (degree[v], priority[v]))
         alive.discard(p)
-        order.extend(sorted(groups[p]))
+        tree.sequence.append(p)
+        front = sorted(groups[p])
         remaining -= weight[p]
 
         absorbed = elements[p]
@@ -440,6 +535,7 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
         for e in absorbed:
             reach |= members.pop(e)
             del element_weight[e]
+            tree.parent[e] = p
         reach.discard(p)
         variables[p] = None
         elements[p] = None
@@ -447,7 +543,6 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
         reach_weight = 0
         for i in reach:
             reach_weight += weight[i]
-        element_weight[p] = reach_weight
 
         # Count each adjacent element's weight outside the new one.
         outside: Dict[int, int] = {}
@@ -467,12 +562,13 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
                 for i in members.pop(e):
                     elements[i].discard(e)
                 del element_weight[e]
+                tree.parent[e] = p
 
         # We would pick a variable adjacent only to the new element
         # next anyway, so we eliminate it together with p.
         for i in sorted(reach):
             if not variables[i] and len(elements[i]) == 1:
-                order.extend(sorted(groups[i]))
+                front.extend(sorted(groups[i]))
                 remaining -= weight[i]
                 reach_weight -= weight[i]
                 alive.discard(i)
@@ -480,6 +576,8 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
                 variables[i] = None
                 elements[i] = None
         element_weight[p] = reach_weight
+        tree.fronts[p] = front
+        tree.front_size[p] = len(front) + reach_weight
 
         for i in reach:
             external = reach_weight - weight[i]
@@ -496,7 +594,7 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
             )
 
         candidates: Dict[Tuple[int, ...], List[int]] = {}
-        for i in sorted(reach):
+        for i in sorted(reach, reverse=highest_principal):
             signature = (
                 sum(variables[i]),
                 sum(elements[i]),
@@ -523,7 +621,16 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
                     break
             else:
                 bucket.append(i)
-    return order
+        if recent_ties:
+            for i in sorted(reach):
+                clock -= 1
+                priority[i] = clock
+    return tree
+
+
+def _better(candidate: OrderingResult, best: OrderingResult) -> bool:
+    """Return whether ``candidate`` has fewer nonzeros, then flops."""
+    return (len(candidate[2]), candidate[3]) < (len(best[2]), best[3])
 
 
 def amd_ordering(
@@ -536,9 +643,12 @@ def amd_ordering(
 
     Match every column to a structurally nonzero row, then order the
     columns by approximate minimum degree on the symmetrised pattern
-    of the matched matrix.
-    Pick each pivot within its tier from the earliest-ordered active
-    column, taking the active row matched earliest.
+    of the matched matrix. Run the ordering with each tie-break and
+    supervariable naming, read each run in elimination order and in
+    assembly-tree postorder, and keep the order whose factor has the
+    fewest nonzeros, then the fewest flops. Pick each pivot within
+    its tier from the earliest-ordered active column, taking the
+    active row matched earliest.
 
     Parameters
     ----------
@@ -573,15 +683,79 @@ def amd_ordering(
         if position != j:
             adjacency[position].add(j)
             adjacency[j].add(position)
-    order = _approximate_minimum_degree(adjacency)
+    orders: List[List[int]] = []
+    for recent_ties in (False, True):
+        for highest_principal in (False, True):
+            tree = _approximate_minimum_degree(
+                [set(neighbours) for neighbours in adjacency],
+                recent_ties,
+                highest_principal,
+            )
+            for order in (tree.elimination_order(), tree.postorder()):
+                if order not in orders:
+                    orders.append(order)
+    best = None
     col_rank = [0] * n
     row_rank = [0] * n
-    for rank, column in enumerate(order):
-        col_rank[column] = rank
-        row_rank[row_of[column]] = rank
-    return _ranked_ordering(
-        pattern, n, strong, block_size, col_rank, row_rank
-    )
+    for order in orders:
+        for rank, column in enumerate(order):
+            col_rank[column] = rank
+            row_rank[row_of[column]] = rank
+        result = _ranked_ordering(
+            pattern, n, strong, block_size, col_rank, row_rank
+        )
+        if best is None or _better(result, best):
+            best = result
+    return best
+
+
+def best_ordering(
+    pattern: Pattern,
+    n: int,
+    strong: Set[Tuple[int, int]] = frozenset(),
+    block_size: Optional[int] = None,
+) -> OrderingResult:
+    """Return the ordering whose factor has the fewest nonzeros.
+
+    Run :func:`markowitz_ordering`, :func:`min_fill_ordering`,
+    :func:`natural_ordering` and :func:`amd_ordering`, and keep the
+    result with the fewest ``L + U`` nonzeros, then the fewest flops,
+    then the earliest in that list.
+
+    Parameters
+    ----------
+    pattern
+        Structural nonzeros ``(row, column)`` of the matrix.
+    n
+        Matrix width.
+    strong
+        Entries preferred as pivots over every other entry.
+    block_size
+        Width of the diagonal blocks whose entries are preferred
+        over entries coupling two blocks; ``None`` for one block.
+
+    Returns
+    -------
+    tuple
+        Row permutation, column permutation, ``L + U`` pattern in
+        permuted coordinates, and predicted flop count.
+
+    Raises
+    ------
+    ValueError
+        If the pattern is structurally singular.
+    """
+    best = None
+    for ordering in (
+        markowitz_ordering,
+        min_fill_ordering,
+        natural_ordering,
+        amd_ordering,
+    ):
+        result = ordering(pattern, n, strong, block_size)
+        if best is None or _better(result, best):
+            best = result
+    return best
 
 
 __all__ = [
@@ -589,4 +763,5 @@ __all__ = [
     "min_fill_ordering",
     "natural_ordering",
     "amd_ordering",
+    "best_ordering",
 ]

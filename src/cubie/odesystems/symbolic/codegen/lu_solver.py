@@ -71,7 +71,7 @@ from cubie.odesystems.symbolic.codegen._matrix_utils import (
     mass_diagonal_flags,
 )
 from cubie.odesystems.symbolic.codegen.lu_pivoting import (
-    markowitz_ordering,
+    best_ordering,
 )
 from cubie.odesystems.symbolic.codegen._stage_utils import (
     build_stage_metadata,
@@ -571,7 +571,7 @@ def _lu_body_from_entries(
     strong = _mass_strong_entries(mass_diag, n)
     pattern = set(entry_exprs) | strong
     block_size = system_n if n != system_n else None
-    row_perm, col_perm, lu_pattern, _ = markowitz_ordering(
+    row_perm, col_perm, lu_pattern, _ = best_ordering(
         pattern, n, strong, block_size
     )
     nnz = len(lu_pattern)
@@ -828,7 +828,7 @@ def _system_pattern_structure(
         for j in range(n)
         if not ir.is_zero(jac[i][j])
     } | strong
-    row_perm, col_perm, lu_pattern, flops = markowitz_ordering(
+    row_perm, col_perm, lu_pattern, flops = best_ordering(
         pattern, n, strong
     )
     slots = {
@@ -882,13 +882,18 @@ def _prefactored_slot_plan(
     beta: float,
     gamma: float,
     stacked: bool,
+    row_perm: List[int],
+    col_perm: List[int],
+    lu_pattern: Set[Tuple[int, int]],
 ) -> Tuple[Dict[tuple, ir.Expr], Dict[tuple, int], int]:
     """Classify prefactored ``cached_aux`` slots.
 
     Runs each block's elimination on folded values and assigns
     compact slot indices: structurally zero entries read as literal
     zero, duplicate entries alias the first slot holding the value,
-    and the rest keep their own slot.
+    and the rest keep their own slot. Pass the permutations and
+    ``L + U`` pattern that :func:`_system_pattern_structure` returns
+    for the same system.
 
     Returns
     -------
@@ -897,9 +902,6 @@ def _prefactored_slot_plan(
         key, and the compacted ``cached_aux`` length. Real keys are
         ``(block, a, b)``; complex keys add ``"re"``/``"im"``.
     """
-    row_perm, col_perm, lu_pattern, _, _, _ = (
-        _system_pattern_structure(sysir, jac, mass_diag)
-    )
     entry_exprs, _ = _inline_entry_exprs(
         sysir, jac, state_is_increment=False
     )
@@ -1046,7 +1048,8 @@ def _prefactored_solve_source(
     diagonals = _distinct_diagonals(coeff_floats)
     plan_reads, _, _ = _prefactored_slot_plan(
         sysir, jac, coeff_floats, mass_diag, beta, gamma,
-        stacked=False,
+        stacked=False, row_perm=row_perm, col_perm=col_perm,
+        lu_pattern=lu_pattern,
     )
 
     branch_bodies: List[List[str]] = []
@@ -1134,7 +1137,8 @@ def _transformed_solve_source(
     )
     plan_reads, _, _ = _prefactored_slot_plan(
         sysir, jac, coeff_floats, mass_diag, beta, gamma,
-        stacked=True,
+        stacked=True, row_perm=row_perm, col_perm=col_perm,
+        lu_pattern=lu_pattern,
     )
     real_values, pair_values, transform, inverse_transform = (
         block_eigenstructure(coeff_floats)
@@ -1610,6 +1614,9 @@ def generate_lu_prepare_blocks_code(
         beta,
         gamma,
         stacked=variant is HelperVariant.PREFACTORED_STACKED,
+        row_perm=row_perm,
+        col_perm=col_perm,
+        lu_pattern=lu_pattern,
     )
     entry_exprs, prefix_assigns = _inline_entry_exprs(
         sysir, jac, state_is_increment=False
@@ -1890,7 +1897,8 @@ def generate_lu_smoothing_solve_code(
     coeff_floats = _coefficient_floats(stage_coefficients)
     plan_reads, _, _ = _prefactored_slot_plan(
         sysir, jac, coeff_floats, mass_diag, beta, gamma,
-        stacked=True,
+        stacked=True, row_perm=row_perm, col_perm=col_perm,
+        lu_pattern=lu_pattern,
     )
     real_values, _, _, _ = block_eigenstructure(coeff_floats)
     if len(real_values) != 1:

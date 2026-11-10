@@ -4,17 +4,19 @@ import pytest
 
 from cubie.odesystems.symbolic.codegen.lu_pivoting import (
     amd_ordering,
+    best_ordering,
     markowitz_ordering,
     min_fill_ordering,
     natural_ordering,
 )
 
-ORDERINGS = [
+CANDIDATES = [
     markowitz_ordering,
     min_fill_ordering,
     natural_ordering,
     amd_ordering,
 ]
+ORDERINGS = CANDIDATES + [best_ordering]
 
 # Model a torn system: rows 0-3 have mass on their diagonal, and rows
 # 4 and 5 are constraints without a diagonal entry.
@@ -140,3 +142,16 @@ def test_structurally_singular_pattern_refused(ordering, pattern, strong):
     n = 1 + max(max(entry) for entry in pattern)
     with pytest.raises(ValueError, match="structurally singular"):
         ordering(set(pattern), n, strong)
+
+
+@pytest.mark.parametrize("block_size", [None, 3])
+def test_best_ordering_keeps_the_fewest_nonzeros(block_size):
+    """Check that the best ordering matches the sparsest candidate."""
+    results = [
+        ordering(set(TORN_PATTERN), 6, TORN_STRONG, block_size)
+        for ordering in CANDIDATES
+    ]
+    best = best_ordering(set(TORN_PATTERN), 6, TORN_STRONG, block_size)
+    fewest = min((len(r[2]), r[3]) for r in results)
+    assert (len(best[2]), best[3]) == fewest
+    assert best in results
