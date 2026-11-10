@@ -869,7 +869,8 @@ def _coefficient_floats(
 def _distinct_diagonals(
     coeff_floats: Tuple[Tuple[float, ...], ...],
 ) -> List[float]:
-    """Return the distinct nonzero tableau diagonals, ascending."""
+    """Return the distinct nonzero tableau diagonals ascending, or
+    ``[1.0]`` when every diagonal is zero."""
     values: List[float] = []
     for idx, row in enumerate(coeff_floats):
         entry = row[idx] if idx < len(row) else 0.0
@@ -877,12 +878,7 @@ def _distinct_diagonals(
             continue
         if entry not in values:
             values.append(entry)
-    if not values:
-        raise ValueError(
-            "Prefactored LU requires at least one nonzero tableau "
-            "diagonal."
-        )
-    return sorted(values)
+    return sorted(values) if values else [1.0]
 
 
 def _system_pattern_structure(

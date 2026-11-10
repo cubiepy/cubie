@@ -105,7 +105,7 @@ resolves a name or `ButcherTableau` to the right factory.
   `stage_base` → `accumulator`). Implicit steps take child allocators for their solver
   via `get_child_allocators(self, self.solver, ...)`.
 - Rosenbrock registers `cached_auxiliaries` at size 0; `build_implicit_helpers()`
-  resizes it from `prepare_jac`'s `HelperResult.cached_auxiliary_count`.
+  resizes it from the solve helper's `HelperResult.cached_auxiliary_count`.
 
 ## Dense stage prediction (FIRK, DIRK)
 Both own a `DenseStagePredictor` (`../stage_predictors.py`) that turns the last accepted
