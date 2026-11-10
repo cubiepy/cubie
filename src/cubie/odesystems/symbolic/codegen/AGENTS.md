@@ -140,7 +140,8 @@ indices stay plain integers), integer powers as multiplication chains up to
 ### Internal
 - `cubie.odesystems.layout` (`SystemLayout`); `cubie.odesystems.symbolic.engine.adapter` (`buffer_maps`); `cubie.odesystems.symbolic.parsing` (`ParsedEquations`, `JVPEquations`,
   `TIME_SYMBOL`); `cubie.time_logger`
-  (`default_timelogger` codegen timing). Consumed by `symbolicODE` and, downstream,
+  (`default_timelogger` codegen timing); `cubie.odesystems.symbolic.structural.bipartite`
+  (`BipartiteGraph`, `maximal_matching` for the LU structural-rank check). Consumed by `symbolicODE` and, downstream,
   `cubie.integrators.matrix_free_solvers` and the implicit algorithms.
 ### External
 - `sympy` only at the conversion boundary (via `engine.from_sympy`). `numba` (CUDA) is the

@@ -24,12 +24,13 @@ blocks, and applies its own rule among the entries of the best tier
 left. It raises ValueError on a structurally singular pattern.
 """
 
+from heapq import heapify, heappop, heappush
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 
 from cubie.odesystems.symbolic.structural.bipartite import (
+    UNASSIGNED,
     BipartiteGraph,
-    Matching,
-    construct_augmenting_path,
+    maximal_matching,
 )
 
 Pattern = Set[Tuple[int, int]]
@@ -39,8 +40,6 @@ OrderingResult = Tuple[List[int], List[int], Set[Tuple[int, int]], int]
 def _matched_rows(pattern: Pattern, n: int) -> List[int]:
     """Return a structurally nonzero row for every column.
 
-    Keep every structural diagonal entry and augment the rest.
-
     Raises
     ------
     ValueError
@@ -49,29 +48,15 @@ def _matched_rows(pattern: Pattern, n: int) -> List[int]:
     graph = BipartiteGraph(n, n)
     for i, j in pattern:
         graph.add_edge(i, j)
-    matching = Matching(n)
-    unmatched_rows = []
-    for i in range(n):
-        if (i, i) in pattern:
-            matching[i] = i
-        else:
-            unmatched_rows.append(i)
-    # An augmenting path keeps every matched row matched, so each
-    # row without a diagonal needs exactly one search.
-    colour = [False] * n
-    for i in unmatched_rows:
-        for k in range(n):
-            colour[k] = False
-        if not construct_augmenting_path(
-            matching, graph, i, lambda column: True, colour
-        ):
-            raise ValueError(
-                "Direct LU generation failed: the matrix pattern "
-                "is structurally singular (no assignment of rows "
-                "to columns covers every variable). The system's "
-                "constraints do not determine its variables."
-            )
-    return list(matching.match)
+    rows = list(maximal_matching(graph))
+    if any(row is UNASSIGNED for row in rows):
+        raise ValueError(
+            "Direct LU generation failed: the matrix pattern "
+            "is structurally singular (no assignment of rows "
+            "to columns covers every variable). The system's "
+            "constraints do not determine its variables."
+        )
+    return rows
 
 
 class _Elimination:
@@ -80,8 +65,10 @@ class _Elimination:
     The elimination stores the active columns of each active row in
     ``rows`` and the active rows of each active column in ``cols``,
     fill included. :meth:`pivot` removes a pivot's row and column and
-    adds the fill its update creates; :meth:`result` returns the
-    ordering output once every row has been pivoted.
+    adds the fill its update creates, appending each row's new
+    columns to ``fill_log`` when the caller sets a list there;
+    :meth:`result` returns the ordering output once every row has
+    been pivoted.
     """
 
     __slots__ = (
@@ -89,9 +76,9 @@ class _Elimination:
         "cols",
         "active_rows",
         "strong_cols",
-        "block_size",
         "steps",
         "flops",
+        "fill_log",
     )
 
     def __init__(
@@ -99,7 +86,6 @@ class _Elimination:
         pattern: Pattern,
         n: int,
         strong: Set[Tuple[int, int]],
-        block_size: Optional[int],
     ) -> None:
         rows: List[Set[int]] = [set() for _ in range(n)]
         cols: List[Set[int]] = [set() for _ in range(n)]
@@ -116,27 +102,15 @@ class _Elimination:
         self.cols = cols
         self.active_rows = set(range(n))
         self.strong_cols = strong_cols
-        self.block_size = block_size
         self.steps: List[Tuple[int, int, Set[int], Set[int]]] = []
         self.flops = 0
-
-    def tier(self, i: int, j: int) -> int:
-        """Return the pivot tier of entry ``(i, j)``, lowest first.
-
-        Return 0 for a strong entry inside a diagonal block and 1 for
-        a strong entry coupling two blocks, and 2 and 3 for the same
-        two cases of any other entry.
-        """
-        weak = 0 if j in self.strong_cols[i] else 2
-        block_size = self.block_size
-        if block_size is not None and i // block_size != j // block_size:
-            return weak + 1
-        return weak
+        self.fill_log: Optional[List[Tuple[int, Set[int]]]] = None
 
     def pivot(self, pivot_row: int, pivot_col: int) -> None:
         """Eliminate the pivot and add the fill of its update."""
         rows = self.rows
         cols = self.cols
+        fill_log = self.fill_log
         targets = rows[pivot_row]
         sources = cols[pivot_col]
         targets.discard(pivot_col)
@@ -154,6 +128,8 @@ class _Elimination:
                 row |= fill
                 for j in fill:
                     cols[j].add(i)
+                if fill_log is not None:
+                    fill_log.append((i, fill))
         self.flops += len(sources) * (1 + 2 * len(targets))
         self.steps.append((pivot_row, pivot_col, sources, targets))
 
@@ -169,6 +145,30 @@ class _Elimination:
             lu_pattern.update((row_position[i], k) for i in sources)
             lu_pattern.update((k, col_position[j]) for j in targets)
         return row_perm, col_perm, lu_pattern, self.flops
+
+
+def _row_block(i: int, block_size: Optional[int]) -> int:
+    """Return the diagonal block of row ``i``, or -1 for one block."""
+    return -1 if block_size is None else i // block_size
+
+
+def _tier(
+    j: int,
+    strong_row: FrozenSet[int],
+    row_block: int,
+    block_size: Optional[int],
+) -> int:
+    """Return the pivot tier of column ``j`` in one row, lowest first.
+
+    Return 0 for a strong entry inside a diagonal block and 1 for a
+    strong entry coupling two blocks, and 2 and 3 for the same two
+    cases of any other entry. Pass the row's strong columns and the
+    block :func:`_row_block` returns for it.
+    """
+    tier = 0 if j in strong_row else 2
+    if row_block >= 0 and j // block_size != row_block:
+        tier += 1
+    return tier
 
 
 def markowitz_ordering(
@@ -207,26 +207,29 @@ def markowitz_ordering(
         If the pattern is structurally singular.
     """
     _matched_rows(pattern, n)
-    state = _Elimination(pattern, n, strong, block_size)
+    state = _Elimination(pattern, n, strong)
     rows = state.rows
     cols = state.cols
+    strong_cols = state.strong_cols
+    # Pack (tier, count, row, column) into one integer so that one
+    # comparison orders two candidates lexicographically.
+    span = n * n
+    unset = 4 * span * span
     for _ in range(n):
-        best = None
-        best_key = None
+        best = unset
         for i in state.active_rows:
             row = rows[i]
             row_count = len(row) - 1
+            strong_row = strong_cols[i]
+            row_block = _row_block(i, block_size)
+            row_base = i * n
             for j in row:
-                key = (
-                    state.tier(i, j),
-                    row_count * (len(cols[j]) - 1),
-                    i,
-                    j,
-                )
-                if best_key is None or key < best_key:
-                    best_key = key
-                    best = (i, j)
-        state.pivot(*best)
+                tier = _tier(j, strong_row, row_block, block_size)
+                count = row_count * (len(cols[j]) - 1)
+                key = (tier * span + count) * span + row_base + j
+                if key < best:
+                    best = key
+        state.pivot((best // n) % n, best % n)
     return state.result()
 
 
@@ -266,43 +269,44 @@ def min_fill_ordering(
         If the pattern is structurally singular.
     """
     _matched_rows(pattern, n)
-    state = _Elimination(pattern, n, strong, block_size)
+    state = _Elimination(pattern, n, strong)
     rows = state.rows
     cols = state.cols
+    strong_cols = state.strong_cols
+    # Pack (tier, fill) into a prefix and (count, row, column) into a
+    # suffix, so two integer comparisons order two candidates.
+    span = n * n
     for _ in range(n):
-        best = None
-        best_key = None
+        best_prefix = 4 * span
+        best_suffix = 0
         for i in state.active_rows:
             row = rows[i]
             row_count = len(row) - 1
+            strong_row = strong_cols[i]
+            row_block = _row_block(i, block_size)
+            row_base = i * n
             for j in row:
-                tier = state.tier(i, j)
-                if best_key is not None and tier > best_key[0]:
+                tier = _tier(j, strong_row, row_block, block_size)
+                # Stop counting once the fill can no longer match the
+                # best candidate; a worse tier has a negative bound.
+                bound = best_prefix - tier * span
+                if bound < 0:
                     continue
-                # Stop counting once this candidate can no longer
-                # beat the best fill of its tier.
-                bound = (
-                    best_key[1]
-                    if best_key is not None and tier == best_key[0]
-                    else None
-                )
                 fill = 0
                 for source in cols[j]:
                     if source != i:
                         fill += len(row.difference(rows[source]))
-                        if bound is not None and fill > bound:
+                        if fill > bound:
                             break
-                key = (
-                    tier,
-                    fill,
-                    row_count * (len(cols[j]) - 1),
-                    i,
-                    j,
-                )
-                if best_key is None or key < best_key:
-                    best_key = key
-                    best = (i, j)
-        state.pivot(*best)
+                if fill > bound:
+                    continue
+                prefix = tier * span + fill
+                count = row_count * (len(cols[j]) - 1)
+                suffix = count * span + row_base + j
+                if prefix < best_prefix or suffix < best_suffix:
+                    best_prefix = prefix
+                    best_suffix = suffix
+        state.pivot((best_suffix // n) % n, best_suffix % n)
     return state.result()
 
 
@@ -314,20 +318,46 @@ def _ranked_ordering(
     col_rank: Sequence[int],
     row_rank: Sequence[int],
 ) -> OrderingResult:
-    """Pivot the active entry of lowest ``(tier, col, row)`` rank."""
-    state = _Elimination(pattern, n, strong, block_size)
+    """Pivot the active entry of lowest ``(tier, col, row)`` rank.
+
+    Pass ``col_rank`` and ``row_rank`` as permutations of
+    ``range(n)``.
+    """
+    state = _Elimination(pattern, n, strong)
     rows = state.rows
+    strong_cols = state.strong_cols
+    col_of_rank = [0] * n
+    row_of_rank = [0] * n
+    for index in range(n):
+        col_of_rank[col_rank[index]] = index
+        row_of_rank[row_rank[index]] = index
+    span = n * n
+
+    def entry_key(i: int, j: int) -> int:
+        tier = _tier(
+            j, strong_cols[i], _row_block(i, block_size), block_size
+        )
+        return tier * span + col_rank[j] * n + row_rank[i]
+
+    # An entry's key never changes, so we keep every entry, fill
+    # included, in one heap and skip entries already eliminated.
+    heap = [entry_key(i, j) for i, j in pattern]
+    heapify(heap)
+    fill_log: List[Tuple[int, Set[int]]] = []
+    state.fill_log = fill_log
     for _ in range(n):
-        best = None
-        best_key = None
-        for i in state.active_rows:
-            rank_i = row_rank[i]
-            for j in rows[i]:
-                key = (state.tier(i, j), col_rank[j], rank_i)
-                if best_key is None or key < best_key:
-                    best_key = key
-                    best = (i, j)
-        state.pivot(*best)
+        while True:
+            key = heappop(heap)
+            i = row_of_rank[key % n]
+            j = col_of_rank[(key // n) % n]
+            row = rows[i]
+            if row is not None and j in row:
+                break
+        state.pivot(i, j)
+        for source, fill in fill_log:
+            for target in fill:
+                heappush(heap, entry_key(source, target))
+        fill_log.clear()
     return state.result()
 
 
@@ -377,7 +407,8 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
 
     Eliminate the variable of least approximate external degree on
     the quotient graph, breaking ties by index. Absorb every element
-    that the newest element covers, and merge variables with
+    that the newest element covers, eliminate with each pivot the
+    variables adjacent only to its element, and merge variables with
     identical adjacency into one supervariable, listing its members
     consecutively. Pass the off-diagonal adjacency of a symmetric
     pattern; the function consumes ``adjacency``.
@@ -432,6 +463,19 @@ def _approximate_minimum_degree(adjacency: List[Set[int]]) -> List[int]:
                     elements[i].discard(e)
                 del element_weight[e]
 
+        # Eliminate together with p every variable adjacent to nothing
+        # but the new element; its degree would make it the next pivot.
+        for i in sorted(reach):
+            if not variables[i] and len(elements[i]) == 1:
+                order.extend(sorted(groups[i]))
+                remaining -= weight[i]
+                reach_weight -= weight[i]
+                alive.discard(i)
+                reach.discard(i)
+                variables[i] = None
+                elements[i] = None
+        element_weight[p] = reach_weight
+
         for i in reach:
             external = reach_weight - weight[i]
             bound = external
@@ -485,9 +529,9 @@ def amd_ordering(
 ) -> OrderingResult:
     """Order pivots by approximate minimum degree.
 
-    Match every column to a structurally nonzero row, keeping the
-    structural diagonal, then order the columns by approximate
-    minimum degree on the symmetrised pattern of the matched matrix.
+    Match every column to a structurally nonzero row, then order the
+    columns by approximate minimum degree on the symmetrised pattern
+    of the matched matrix.
     Pick each pivot within its tier from the earliest-ordered active
     column, taking the active row matched earliest.
 
