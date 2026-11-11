@@ -11,9 +11,10 @@ you need specific details about a function or class, the :doc:`Reference Manual 
    :maxdepth: 2
    :caption: Contents
 
-   getting_started
+   getting_started/index
    tutorials/index
    user_guide/index
+   troubleshooting
    theory/index
    developer_guide/index
    API_reference/index

@@ -65,7 +65,7 @@ Line by line, the differences are:
   direct equivalent; ``save_every`` sets a regular output interval.
 * **Method names differ.** See the table below.
 * **Results come back as arrays per batch run**, not a single
-  trajectory — see :doc:`results`.
+  trajectory — see :doc:`/user_guide/results`.
 
 cubie never calls your function. It reads the source, converts the
 mathematics to symbolic form, and compiles a CUDA kernel from it. This
@@ -91,7 +91,7 @@ SciPy ``method=``     cubie ``method=``
 ===================== ==============================================
 
 ``rtol`` and ``atol`` keep their names. See
-:doc:`choosing_algorithms` for the full list and guidance.
+:doc:`/user_guide/choosing_algorithms` for the full list and guidance.
 
 Where cubie pays off: batches
 -----------------------------
@@ -113,7 +113,7 @@ integrates every run in parallel on the GPU:
 
 By default every combination of the supplied values is run
 (``grid_type="combinatorial"``); pass ``grid_type="verbatim"`` to pair
-inputs run-for-run. See :doc:`batching`.
+inputs run-for-run. See :doc:`/user_guide/batching`.
 
 Repeated solves: build the system once
 --------------------------------------

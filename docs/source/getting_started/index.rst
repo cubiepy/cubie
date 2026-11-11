@@ -92,8 +92,8 @@ reuses the compiled GPU kernel:
            grid_type="combinatorial")
 
 Coming from another ecosystem? See
-:doc:`Coming from SciPy <user_guide/coming_from_scipy>` and
-:doc:`Coming from MATLAB <user_guide/coming_from_matlab>` for direct,
+:doc:`Coming from SciPy <coming_from_scipy>` and
+:doc:`Coming from MATLAB <coming_from_matlab>` for direct,
 line-by-line ports.
 
 Features
@@ -121,10 +121,16 @@ Optional Dependencies
 
 * Pandas: For DataFrame output support
 * Matplotlib: For plotting support. Only used to plot an interpolated driver function for sanity-checks (see
-  :doc:`Drivers <user_guide/drivers>`), but generally useful for visualizing results.
+  :doc:`Drivers </user_guide/drivers>`), but generally useful for visualizing results.
 
 GPU Requirements
 ~~~~~~~~~~~~~~~~
 
 cubie requires an NVIDIA GPU with compute capability 6.0 or higher (see nvidia's
 documentation for details) and an up-to-date NVIDIA driver.
+
+.. toctree::
+   :hidden:
+
+   coming_from_scipy
+   coming_from_matlab

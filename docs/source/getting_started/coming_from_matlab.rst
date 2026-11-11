@@ -55,7 +55,7 @@ The translations, line by line:
 * **``odeset`` options are keyword arguments.** ``RelTol``/``AbsTol``
   are ``rtol``/``atol``; ``MaxStep`` is ``dt_max``.
 * **Outputs are batch arrays.** Instead of ``[t, y]`` for one run,
-  ``result`` holds every run in the batch — see :doc:`results`.
+  ``result`` holds every run in the batch — see :doc:`/user_guide/results`.
 
 Method names
 ------------
@@ -71,7 +71,7 @@ MATLAB                cubie ``method=``
                       ``"crank_nicolson"``, or ``"firk"``
 ===================== ==============================================
 
-See :doc:`choosing_algorithms` for guidance on the stiff solvers.
+See :doc:`/user_guide/choosing_algorithms` for guidance on the stiff solvers.
 
 Replacing the parfor sweep
 --------------------------
@@ -104,7 +104,7 @@ parallel on the GPU:
    )
 
 Supplying arrays for several parameters (or initial values) runs every
-combination by default; see :doc:`batching` for pairing inputs
+combination by default; see :doc:`/user_guide/batching` for pairing inputs
 run-for-run instead.
 
 Repeated solves: build the system once
@@ -147,4 +147,4 @@ cubie also accepts them as strings — no indexing at all:
    )
 
 Note the power operator is Python's ``**``, not MATLAB's ``^``. See
-:doc:`systems` for everything the string form supports.
+:doc:`/user_guide/systems` for everything the string form supports.
