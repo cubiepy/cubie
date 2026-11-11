@@ -1,14 +1,12 @@
 Getting Started with Cubie
 ==========================
 
-cubie is a Python library designed to provide an easy entry point for users to
-perform large-scale batch integration of ivps: from many initial values or with
-many different parameter sets, or both, cubie don't care.
+cubie is a fast numerical integration engine with a large set of integration algorithms. It works on Windows and Linux (MacOS untested) and is as close to a drop-in replacement of SciPy/MATLAB as seems possible. For advanced users, it allows customisation down to minute algorithm details and BYO-tableaux. For everyone else, you just give it a problem and a starting point and then watch it do a full night's work in a couple of seconds. 
 
 Installation
 ------------
+# This isn't correct really, the we should lead with cuda13 here and have a point underneath: If you already have a CUDA toolkit installed, omit the [cuda13] backend option, and just run pip install cubie.
 
-Install cubie using pip, selecting the toolkit that matches your setup:
 
 .. code-block:: bash
 
@@ -25,11 +23,11 @@ Basic Usage
 To use Cubie, you need to:
 
 1. Define a system of ODEs
-2. Solve a batch of IVPs
+2. Solve it from some starting states and parameters
 
 .. code-block:: python
    :caption: Creating and solving a system of ODEs.
-
+# We need to decide on the cubie-native form of inputs. I first made string recognition and am not sure if that offers any actual advantages - check this. Dict inputs i think are the native format, with arrays as faster or when programatically generated. all examples should be in native-form unless demonstrating another form.
    import cubie as qb
    import numpy as np
 
@@ -50,6 +48,8 @@ To use Cubie, you need to:
 
 This runs 10,000 different IVPs of the Lotka-Volterra equations, starting from
 every combination of x and y each ranging from 0 to 99.
+
+# This is stupid. the top example is already a function, this point was supposed to be the function-form alternative to a string-form system, but it looks like it's really only showing the create ode system difference which seems irrelevant. making your own system just allows the setting of defaults, so it's not part of this.. I think we'd be best to settle on the canonical form, and call solve_ivp by default. reusing a solver can introduce the solver form and that should probably go in "solving", and tutorials should come after the user guides section.
 
 Systems can also be defined as plain Python functions in the style of
 ``scipy.integrate.solve_ivp``, and passed straight to ``solve_ivp`` for a
@@ -96,6 +96,7 @@ Coming from another ecosystem? See
 :doc:`Coming from MATLAB <coming_from_matlab>` for direct,
 line-by-line ports.
 
+# This stuff all looks like it actually belongson the top index page
 Features
 --------
 
@@ -126,8 +127,7 @@ Optional Dependencies
 GPU Requirements
 ~~~~~~~~~~~~~~~~
 
-cubie requires an NVIDIA GPU with compute capability 6.0 or higher (see nvidia's
-documentation for details) and an up-to-date NVIDIA driver.
+cubie requires an NVIDIA GPU with compute capability 6.0 or higher and an up-to-date NVIDIA driver.
 
 .. toctree::
    :hidden:

@@ -7,8 +7,11 @@ CUDA Not Found
 **Symptom:** ``CudaSupportError`` or "CUDA toolkit not found".
 
 **Fix:**
+#this looks like bollocks, check you have a NVIDIA GPU installed, then either:
+# - Check the toolkit with nvidia-smi, install if not, or
+# - install cubie again with the backend
 
-1. Verify an NVIDIA GPU is present: ``nvidia-smi``.
+1. Verify an NVIDIA GPU is present by running ``nvidia-smi`` in a terminal.
 2. Reinstall with a toolkit extra so the toolkit wheels ship with the
    backend: ``pip install cubie[cuda12]`` (or ``cubie[cuda13]``).
 
@@ -17,7 +20,7 @@ Newton Solver Not Converging
 
 If an implicit algorithm reports many failed trajectories or slow
 convergence:
-
+# These are all largely bollocks, and probably for a stiffness section, the actual path is use a more stiff-capable algorithm, loosen tolerances, move to f64 above a certain tol (although this is more of a case for a tolerances page as part of timing maybe)
 1. **Tighten tolerances.** Try ``atol=1e-8, rtol=1e-6`` to give the
    solver more room.
 2. **Increase the preconditioner order.** Higher Neumann-series orders
@@ -37,7 +40,7 @@ Out of VRAM
 **Symptom:** ``CudaAPIError`` with an out-of-memory message.
 
 **Fixes:**
-
+# Chunking patt is bullshit, remove, and the reduce output section is weird and terse. I don't even thing these are theoretically reachable with chunking, so we should probably delete the section
 - Reduce output: save fewer variables, use summaries instead of
   time-domain data.
 - Enable automatic chunking (it should trigger automatically, but verify
@@ -46,6 +49,7 @@ Out of VRAM
 
 CUDASIM Mode
 ------------
+#CUDASIM is definitely not someting for users, delete.
 
 For CPU-only debugging, set the environment variable *before* importing
 CuBIE:
@@ -70,6 +74,7 @@ GPUs.
 
 Common Attrs Validation Errors
 ------------------------------
+# This doesn't look like it helps anyone, I'd say delete, it looks kind-of developer focussed but then also extremely basic, why is negative tolerance a special thing worth mentioning, who on earth is inputting a negative tolerance then surprised when it fails.
 
 CuBIE uses ``attrs`` classes for configuration.  Common mistakes:
 
