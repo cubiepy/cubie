@@ -1,7 +1,7 @@
 Batching and Parameter Sweeps
 =============================
 
-CuBIE's main strength is solving many IVPs in parallel.  This page
+CuBIE's game is solving many IVPs in parallel.  This page
 explains how to set up parameter sweeps and map results back to inputs.
 
 Combinatorial Grids
@@ -31,15 +31,15 @@ every combination of the supplied parameter arrays is solved.
        LV,
        y0={"x": np.array([0.5]), "y": np.array([0.3])},
        parameters={
-           "b": np.linspace(0.01, 0.05, 50),
-           "d": np.linspace(0.005, 0.02, 40),
+           "b": np.linspace(0.01, 0.05, 500),
+           "d": np.linspace(0.005, 0.02, 400),
        },
        method="dormand-prince-54",
        duration=100.0,
        grid_type="combinatorial",
    )
 
-This produces :math:`50 \times 40 = 2000` IVPs.  The result arrays are
+This produces :math:`500 \times 400 = 200000` IVPs.  The result arrays are
 indexed in C-order over the Cartesian product of the input arrays.
 
 Verbatim Grids
