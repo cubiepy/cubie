@@ -35,14 +35,14 @@ When you don't specify any step size parameters, CuBIE uses these defaults:
      - Parameter
      - Default Value
    * - Adaptive
-     - ``dt_min``
-     - ``1e-6``
-   * - Adaptive
      - ``dt_max``
      - ``1.0``
    * - Adaptive
      - ``dt``
-     - ``sqrt(dt_min * dt_max)`` = ``1e-3``
+     - ``dt_max / 1000`` = ``1e-3``
+   * - Adaptive
+     - ``dt_min``
+     - ``dt / 1e6`` = ``1e-9``
    * - Fixed
      - ``dt``
      - ``1e-3``
@@ -62,25 +62,30 @@ missing values. The rules differ for adaptive and fixed controllers:
    * - You Provide
      - CuBIE Derives
    * - ``dt`` only
-     - ``dt_min = dt / 100``, ``dt_max = dt * 100``
+     - ``dt_min = dt / 1e6``, ``dt_max = dt * 1000``
    * - ``dt_min`` only
-     - ``dt_max = 1.0`` (default), ``dt = sqrt(dt_min * dt_max)``
+     - ``dt_max = 1.0`` (``dt_min * 1000`` if ``dt_min > 1.0``),
+       ``dt = sqrt(dt_min * dt_max)``
    * - ``dt_max`` only
-     - ``dt_min = 1e-6`` (default), ``dt = sqrt(dt_min * dt_max)``
+     - ``dt = dt_max / 1000``, ``dt_min = dt / 1e6``
    * - ``dt_min`` and ``dt_max``
      - ``dt = sqrt(dt_min * dt_max)``
    * - ``dt`` and ``dt_min``
-     - ``dt_max = dt * 100``
+     - ``dt_max = dt * 1000``
    * - ``dt`` and ``dt_max``
-     - ``dt_min = dt / 100``
+     - ``dt_min = dt / 1e6``
    * - All three
      - Nothing derived (all values used as given)
 
+``dt_min`` is a floor the controller stops at, not a step it takes:
+the controller shrinks the step only as far as the error demands, so a
+small ``dt_min`` costs nothing on a run that never needs it.
+
 **Fixed-step controllers:**
 
-Fixed controllers collapse ``dt``, ``dt_min``, and ``dt_max`` to a single
-value. If you provide any of them, the first non-None value in the order
-``dt``, ``dt_min``, ``dt_max`` is used as the step size.
+Fixed controllers use a single step size. CuBIE uses ``dt`` when you
+give it; otherwise it uses ``sqrt(dt_min * dt_max)`` when you give both
+bounds, or the one bound you give.
 
 Example usage:
 

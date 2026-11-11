@@ -41,7 +41,6 @@ from cubie.integrators.algorithms.ode_implicitstep import (
 from cubie.integrators.step_control import _CONTROLLER_REGISTRY
 from cubie.integrators.step_control.adaptive_step_controller import (
     DEFAULT_DT_MAX,
-    DEFAULT_DT_MIN,
 )
 from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
@@ -60,8 +59,11 @@ DEFAULT_TOLERANCE = float(
 )
 """Controller tolerance used when none is given."""
 
-STEP_BOUND_DECADES = 3
-"""How many decades either side of dt to set the min and max step bounds."""
+DT_MIN_DECADES = 6
+"""How many decades below dt to set the minimum step when none is given."""
+
+DT_MAX_DECADES = 3
+"""How many decades above dt to set the maximum step when none is given."""
 
 
 def given_or(given: Any, name: str, default: Any) -> Any:
@@ -215,6 +217,12 @@ def resolve_step_bounds(
 ) -> Dict[str, Any]:
     """Fill the step bounds from ``dt``, or ``dt`` from the bounds.
 
+    A missing ``dt_min`` is set ``DT_MIN_DECADES`` below ``dt`` and a
+    missing ``dt_max`` ``DT_MAX_DECADES`` above it. Without ``dt``, the
+    adaptive step starts at the geometric mean of a given ``dt_min``
+    and ``dt_max``, or ``DT_MAX_DECADES`` below ``dt_max`` when no
+    ``dt_min`` is given.
+
     Parameters
     ----------
     dt, dt_min, dt_max
@@ -240,25 +248,24 @@ def resolve_step_bounds(
             else:
                 dt = DEFAULT_FIXED_DT
         return {"dt": dt}
-    factor = 10.0**STEP_BOUND_DECADES
-    # Missing bounds sit STEP_BOUND_DECADES either side of a given dt.
-    if dt_min is None:
-        if dt is not None:
-            dt_min = dt / factor
-        else:
-            dt_min = DEFAULT_DT_MIN
-            if dt_max is not None and dt_max < dt_min:
-                dt_min = dt_max / factor
-    if dt_max is None:
-        if dt is not None:
-            dt_max = dt * factor
-        else:
-            dt_max = DEFAULT_DT_MAX
-            if dt_min > dt_max:
-                dt_max = dt_min * factor
-    # No dt: start at the bounds' geometric mean.
+    min_factor = 10.0**DT_MIN_DECADES
+    max_factor = 10.0**DT_MAX_DECADES
     if dt is None:
-        dt = sqrt(dt_min * dt_max)
+        if dt_min is None:
+            # Start DT_MAX_DECADES below the maximum step.
+            if dt_max is None:
+                dt_max = DEFAULT_DT_MAX
+            dt = dt_max / max_factor
+        else:
+            if dt_max is None:
+                dt_max = DEFAULT_DT_MAX
+                if dt_min > dt_max:
+                    dt_max = dt_min * max_factor
+            dt = sqrt(dt_min * dt_max)
+    if dt_min is None:
+        dt_min = dt / min_factor
+    if dt_max is None:
+        dt_max = dt * max_factor
     return {"dt": dt, "dt_min": dt_min, "dt_max": dt_max}
 
 

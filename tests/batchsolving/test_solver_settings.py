@@ -365,10 +365,27 @@ def test_scalar_newton_rtol_with_array_rtol_resolves(system):
 # ── Step bounds and tolerances ──────────────────────────────────────── #
 
 
-def test_adaptive_bounds_follow_a_lone_dt():
-    """A lone dt gives bounds three decades either side."""
-    bounds = resolve_step_bounds(0.01, None, None, True)
-    assert bounds == {"dt": 0.01, "dt_min": 1e-5, "dt_max": 10.0}
+@pytest.mark.parametrize(
+    "dt, dt_min, dt_max",
+    [
+        (None, None, None),
+        (1e-2, None, None),
+        (None, 1e-2, None),
+        (None, 10.0, None),
+        (None, None, 1e-2),
+        (None, None, 1e-7),
+        (1e-3, 1e-5, None),
+        (1e-3, None, 1e-1),
+    ],
+)
+def test_adaptive_bounds_bracket_dt(dt, dt_min, dt_max):
+    """Derived bounds keep dt within them and given values unchanged."""
+    bounds = resolve_step_bounds(dt, dt_min, dt_max, True)
+    assert bounds["dt_min"] <= bounds["dt"] <= bounds["dt_max"]
+    given = {"dt": dt, "dt_min": dt_min, "dt_max": dt_max}
+    for name, value in given.items():
+        if value is not None:
+            assert bounds[name] == value
 
 
 def test_adaptive_dt_is_the_geometric_mean_of_given_bounds():
