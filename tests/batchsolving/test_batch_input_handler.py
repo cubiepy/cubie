@@ -849,7 +849,7 @@ def test_call_1d_array_single_run(input_handler_mutable, system):
 def test_call_1d_array_one_swept_parameter_is_a_row(
     input_handler_mutable, system
 ):
-    """A 1D array gives one run per value of the one swept parameter."""
+    """Take each value of a 1D array as one run of the swept parameter."""
     name = system.parameters.names[0]
     input_handler_mutable.system.set_swept_parameters((name,))
     values = np.linspace(0.5, 1.5, system.num_parameters + 1)
@@ -864,12 +864,12 @@ def test_call_1d_array_one_swept_parameter_is_a_row(
 def test_call_1d_array_one_swept_full_length_raises(
     input_handler_mutable, system
 ):
-    """A 1D array with a value for every parameter raises while one
-    parameter is swept."""
+    """Raise ValueError for a 1D array with a value for every parameter
+    while one parameter is swept."""
     name = system.parameters.names[0]
     input_handler_mutable.system.set_swept_parameters((name,))
     values = np.arange(system.num_parameters, dtype=float)
-    with pytest.raises(ValueError, match="could be one run"):
+    with pytest.raises(ValueError, match="cannot tell"):
         _handle(input_handler_mutable, params=values)
 
 
