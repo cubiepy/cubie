@@ -60,10 +60,10 @@ DEFAULT_TOLERANCE = float(
 """Controller tolerance used when none is given."""
 
 DT_MIN_DECADES = 6
-"""How many decades below dt to set the minimum step when none is given."""
+"""Number of decades between dt and a derived minimum step."""
 
 DT_MAX_DECADES = 3
-"""How many decades above dt to set the maximum step when none is given."""
+"""Number of decades between dt and a derived maximum step."""
 
 
 def given_or(given: Any, name: str, default: Any) -> Any:
@@ -217,11 +217,11 @@ def resolve_step_bounds(
 ) -> Dict[str, Any]:
     """Fill the step bounds from ``dt``, or ``dt`` from the bounds.
 
-    A missing ``dt_min`` is set ``DT_MIN_DECADES`` below ``dt`` and a
-    missing ``dt_max`` ``DT_MAX_DECADES`` above it. Without ``dt``, the
-    adaptive step starts at the geometric mean of a given ``dt_min``
-    and ``dt_max``, or ``DT_MAX_DECADES`` below ``dt_max`` when no
-    ``dt_min`` is given.
+    Set a missing ``dt_min`` ``DT_MIN_DECADES`` below ``dt`` and a
+    missing ``dt_max`` ``DT_MAX_DECADES`` above it. When ``dt`` is not
+    given, start an adaptive step at the geometric mean of the given
+    ``dt_min`` and ``dt_max``, or ``DT_MAX_DECADES`` below ``dt_max``
+    when ``dt_min`` is not given.
 
     Parameters
     ----------

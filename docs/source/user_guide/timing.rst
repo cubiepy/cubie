@@ -77,15 +77,16 @@ missing values. The rules differ for adaptive and fixed controllers:
    * - All three
      - Nothing derived (all values used as given)
 
-``dt_min`` is a floor the controller stops at, not a step it takes:
-the controller shrinks the step only as far as the error demands, so a
-small ``dt_min`` costs nothing on a run that never needs it.
+The controller shrinks the step only as far as the error estimate
+requires and stops the run if it would go below ``dt_min``. You pay
+nothing for a small ``dt_min`` on a run that never needs steps that
+small.
 
 **Fixed-step controllers:**
 
-Fixed controllers use a single step size. CuBIE uses ``dt`` when you
-give it; otherwise it uses ``sqrt(dt_min * dt_max)`` when you give both
-bounds, or the one bound you give.
+A fixed controller takes one step size throughout. CuBIE uses ``dt``
+when you give it. Otherwise it uses ``sqrt(dt_min * dt_max)`` when you
+give both bounds, or the one bound you give.
 
 Example usage:
 

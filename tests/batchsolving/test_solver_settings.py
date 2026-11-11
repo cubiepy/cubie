@@ -379,7 +379,7 @@ def test_scalar_newton_rtol_with_array_rtol_resolves(system):
     ],
 )
 def test_adaptive_bounds_bracket_dt(dt, dt_min, dt_max):
-    """Derived bounds keep dt within them and given values unchanged."""
+    """Resolve bounds that contain dt, keeping every given value."""
     bounds = resolve_step_bounds(dt, dt_min, dt_max, True)
     assert bounds["dt_min"] <= bounds["dt"] <= bounds["dt_max"]
     given = {"dt": dt, "dt_min": dt_min, "dt_max": dt_max}
