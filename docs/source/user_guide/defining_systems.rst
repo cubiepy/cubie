@@ -1,7 +1,7 @@
 Defining systems
 ================
 
-These pages show how to describe your model to Cubie: as a Python
+Read these pages to learn how to describe your model to Cubie: as a Python
 function or as equation strings, with time-dependent inputs, with your
 own helper functions, or loaded from a CellML file.
 

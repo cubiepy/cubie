@@ -18,7 +18,8 @@ Install cubie with pip:
 
    pip install cubie[cuda13]
 
-The ``[cuda13]`` extra installs a CUDA 13 toolkit along with cubie. If you
+With the ``[cuda13]`` extra, pip installs a CUDA 13 toolkit along with
+cubie. If you
 already have a CUDA toolkit installed, leave the extra out and run
 ``pip install cubie``. Use ``cubie[cuda12]`` instead to install a CUDA 12
 toolkit.
@@ -50,7 +51,7 @@ To use Cubie, you need to:
        duration=100.0,
    )
 
-This runs 10,000 different IVPs of the Lotka-Volterra equations, one for
+Cubie solves 10,000 different IVPs of the Lotka-Volterra equations, one for
 every combination of the 100 starting values of ``x`` and the 100 starting
 values of ``y``. To solve the same system again with new values, keep a
 solver instead of calling ``solve_ivp`` each time; see

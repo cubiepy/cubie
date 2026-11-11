@@ -1,7 +1,7 @@
 Algorithms and tuning
 =====================
 
-These pages help you choose an integration algorithm, set its
+Read these pages to choose an integration algorithm, set its
 tolerances and solver options, and make your solves run faster.
 
 .. toctree::
