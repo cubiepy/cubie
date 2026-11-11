@@ -101,7 +101,7 @@ Two levers fix a ``STEP_TOO_SMALL`` exit:
    scales, pass a vector-valued ``atol`` with one entry per state
    (``atol=np.array([1e-6, 1e-2])``) rather than tightening every
    state to suit the smallest one.
-2. Lower ``dt_min`` (default ``dt / 1e6``) when the dynamics genuinely
+2. Lower ``dt_min`` (default ``1e-9``) when the dynamics genuinely
    need steps smaller than the floor, for example when resolving a
    relaxation spike at high ``mu``.
 

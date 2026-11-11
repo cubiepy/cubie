@@ -83,7 +83,7 @@ def gain_converter(value):
     return float(value)
 
 
-DEFAULT_DT_MIN = 1e-6
+DEFAULT_DT_MIN = 1e-9
 """Minimum step when none is given."""
 
 DEFAULT_DT_MAX = 1.0

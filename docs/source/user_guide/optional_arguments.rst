@@ -47,7 +47,7 @@ Controlling the step size
     methods the solver takes it as the first step. If you give ``dt``
     alone, CuBIE sets ``dt_min = dt/1e6`` and ``dt_max = dt*1000``.
 
-    - Default: ``1e-3``
+    - Default: ``1e-3`` (fixed); ``sqrt(dt_min * dt_max)`` (adaptive)
     - Type: ``float``, positive
 
 **dt_min** / **dt_max** — hard bounds on the adaptive step size.
@@ -57,7 +57,7 @@ Controlling the step size
     ``result.status_codes`` rather than silently continuing.
     Supplying ``dt_max < dt_min`` raises ``ValueError``.
 
-    - Defaults: ``dt_min=dt/1e6``, ``dt_max=1.0``
+    - Defaults: ``dt_min=1e-9``, ``dt_max=1.0``
     - Type: ``float``, positive
 
 See :doc:`timing` for the full derivation rules, and for the output
