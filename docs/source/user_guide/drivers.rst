@@ -163,6 +163,3 @@ your samples:
         method="dormand-prince-54",
         duration=1.0,
     )
-
-A worked example, including a sanity-check plot of the interpolated
-driver, lives in ``docs/source/examples/array_interpolation_example.py``.
