@@ -19,6 +19,11 @@ returns the values that vary between runs:
 - For an array with a row per parameter the system sweeps now, the
   handler keeps those parameters swept, compiles every other parameter
   in at its default and takes the rows as the batch values.
+- For a 1D array while the system sweeps one parameter, the handler
+  takes each value as one run of that parameter. It raises
+  ``ValueError`` for a 1D array the same length as the total number of
+  parameters in the system, because it cannot tell whether you meant
+  one run or a sweep.
 - With ``fix_constant_parameters=False``, the handler sweeps every dict
   entry and every row of a full-height array.
 - For ``None``, an empty dict, or an empty 1D array, the handler
@@ -34,8 +39,9 @@ fixed value can change which states the equations keep.
     inputs override defaults for every run, while two-dimensional inputs
     are treated as pre-built grids in (variable, run) format.
 ``params``
-    Mapping or array of values for the swept parameters. Interpretation
-    matches ``states``.
+    Mapping or array of values for the swept parameters. The handler
+    reads them as it reads ``states``, except that it takes each value
+    of a 1D array as one run when the system sweeps one parameter.
 ``kind``
     Controls how inputs are combined. ``"combinatorial"`` builds the
     Cartesian product, while ``"verbatim"`` preserves column-wise groupings.
@@ -623,7 +629,9 @@ class BatchInputHandler:
         sweeps the others; pass ``fix_constant_parameters=False`` to
         sweep them all. Give any other array a row per parameter the
         system sweeps now; the handler keeps those parameters swept and
-        compiles every other parameter in at its default.
+        compiles every other parameter in at its default. While the
+        system sweeps one parameter, you can give its values as a 1D
+        array with one value per run.
 
         Parameters
         ----------
@@ -645,7 +653,10 @@ class BatchInputHandler:
         ValueError
             If an array's row count matches neither the swept
             parameters nor every parameter, or it has more than two
-            dimensions.
+            dimensions. Also if the system sweeps one parameter and you
+            pass a 1D array with the same number of values as the
+            system has parameters, because the handler cannot tell one
+            run from a sweep.
         """
         self.precision = self.system.precision
         system = self.system
@@ -675,6 +686,19 @@ class BatchInputHandler:
         if array.size == 0 and array.ndim < 2:
             system.set_swept_parameters(())
             return None
+        if array.ndim == 1 and len(system.swept_parameters) == 1:
+            name = system.swept_parameters[0]
+            n_parameters = system.parameters.n
+            if array.size == n_parameters > 1:
+                raise ValueError(
+                    f"Cubie cannot tell whether a 1D parameters array "
+                    f"of length {n_parameters} is one run with a value "
+                    f"for every parameter or {n_parameters} runs of "
+                    f"'{name}'. Pass a "
+                    f"({n_parameters}, 1) array for one run or a "
+                    f"(1, {n_parameters}) array to sweep '{name}'."
+                )
+            array = array[np_newaxis, :]
         if (
             fix_constant_parameters
             and array.shape[0] == system.parameters.n

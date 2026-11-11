@@ -89,6 +89,10 @@ earlier call compiled in survives it.
   at the first value that differs.
 - For an array with a row per swept parameter, we sweep those parameters and compile
   every other parameter at its default. We never scan these arrays.
+- For a 1D array while the system sweeps one parameter, we take each value as one run of
+  that parameter. We raise `ValueError` for a 1D array the same length as the total
+  number of parameters in the system, because we cannot tell whether the user meant one
+  run or a sweep.
 - With `fix_constant_parameters=False`, we sweep every dict entry and every row of a
   full-height array.
 - For `None`, an empty dict, or an empty 1D array, we compile every parameter at its
