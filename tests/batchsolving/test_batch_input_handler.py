@@ -846,6 +846,33 @@ def test_call_1d_array_single_run(input_handler_mutable, system):
     assert_allclose(params[:, 0], vals)
 
 
+def test_call_1d_array_one_swept_parameter_is_a_row(
+    input_handler_mutable, system
+):
+    """A 1D array gives one run per value of the one swept parameter."""
+    name = system.parameters.names[0]
+    input_handler_mutable.system.set_swept_parameters((name,))
+    values = np.linspace(0.5, 1.5, system.num_parameters + 1)
+    _, params, swept, _ = _handle(
+        input_handler_mutable, params=values, kind="verbatim"
+    )
+    assert params.shape == (1, values.size)
+    assert_allclose(params[0], values, rtol=1e-6)
+    assert swept == (name,)
+
+
+def test_call_1d_array_one_swept_full_length_raises(
+    input_handler_mutable, system
+):
+    """A 1D array with a value for every parameter raises while one
+    parameter is swept."""
+    name = system.parameters.names[0]
+    input_handler_mutable.system.set_swept_parameters((name,))
+    values = np.arange(system.num_parameters, dtype=float)
+    with pytest.raises(ValueError, match="could be one run"):
+        _handle(input_handler_mutable, params=values)
+
+
 def test_call_positional_args(input_handler_mutable, system):
     """Positional args route correctly: states first, params second."""
     n_s = system.sizes.states

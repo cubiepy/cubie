@@ -147,7 +147,9 @@ both cases, rows should be ordered by parameter names.
 To pass just the varying parameters, you will need to tell the system which
 parameters to expect. To do this, call ``solver.set_swept_parameters``
 with a set of the parameter names you want to vary, or pass the same set
-to the ``swept_parameters`` argument when building the system.
+to the ``swept_parameters`` argument when building the system. When you
+sweep one parameter, you can pass its values as a 1D array with one
+value per run.
 
 .. code-block:: python
 
@@ -155,7 +157,7 @@ to the ``swept_parameters`` argument when building the system.
         dxdt, parameters={"x0": 0.4, "x1": 1.0}, swept_parameters=["x1"]
     )
     solver = Solver(system)
-    solver.solve(inits, np.logspace(1, 3, 1000)[np.newaxis, :])
+    solver.solve(inits, np.logspace(1, 3, 1000))
 
     # or, on an existing solver
     solver.set_swept_parameters(["x1"])

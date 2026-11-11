@@ -599,9 +599,11 @@ class Solver(DerivedValues):
             Give an array either one row per parameter in the system,
             or one row per swept parameter in parameter name order, in
             which case the solver uses the default value of every other
-            parameter. For a dict or an array with one row per
-            parameter, any parameters given as a single value will be
-            removed from the array and compiled into the code; see
+            parameter. When one parameter is swept, you can give its
+            values as a 1D array with one value per run. For a dict or
+            an array with one row per parameter, any parameters given
+            as a single value will be removed from the array and
+            compiled into the code; see
             ``fix_constant_parameters``. Pass None, an empty dict, or
             an empty 1D array to use the default parameters for all
             runs.
