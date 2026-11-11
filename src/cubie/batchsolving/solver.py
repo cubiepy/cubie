@@ -593,20 +593,13 @@ class Solver(DerivedValues):
             they must already match the system precision. ``None``
             starts every run from the system's default initial values.
         parameters
-            Parameter values for each run, as a dict mapping parameter
-            names to values, or as an array. The solver uses the
-            default value of every parameter you leave out of a dict.
-            Give an array either one row per parameter in the system,
-            or one row per swept parameter in parameter name order, in
-            which case the solver uses the default value of every other
-            parameter. When one parameter is swept, you can give its
-            values as a 1D array with one value per run. For a dict or
-            an array with one row per parameter, any parameters given
-            as a single value will be removed from the array and
-            compiled into the code; see
-            ``fix_constant_parameters``. Pass None, an empty dict, or
-            an empty 1D array to use the default parameters for all
-            runs.
+            Parameter values for each run: a dict mapping parameter
+            names to values, or an array with a row for every
+            parameter or a row per swept parameter, in parameter-name
+            order. The solver uses the default of every parameter you
+            leave out and compiles in each parameter you give one
+            value; see ``fix_constant_parameters``. With one swept
+            parameter, you can pass its values as a 1D array.
         drivers
             :class:`~cubie.array_interpolator.DriverSamples`
             replacing the solver's configured samples.

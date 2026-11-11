@@ -864,8 +864,8 @@ def test_call_1d_array_one_swept_parameter_is_a_row(
 def test_call_1d_array_one_swept_full_length_raises(
     input_handler_mutable, system
 ):
-    """Raise ValueError for a 1D array with a value for every parameter
-    while one parameter is swept."""
+    """Raise ValueError for a 1D array the same length as the number of
+    parameters while one parameter is swept."""
     name = system.parameters.names[0]
     input_handler_mutable.system.set_swept_parameters((name,))
     values = np.arange(system.num_parameters, dtype=float)

@@ -21,8 +21,9 @@ returns the values that vary between runs:
   in at its default and takes the rows as the batch values.
 - For a 1D array while the system sweeps one parameter, the handler
   takes each value as one run of that parameter. It raises
-  ``ValueError`` for a 1D array with a value for every parameter,
-  because it cannot tell whether you meant one run or a sweep.
+  ``ValueError`` for a 1D array the same length as the total number of
+  parameters in the system, because it cannot tell whether you meant
+  one run or a sweep.
 - With ``fix_constant_parameters=False``, the handler sweeps every dict
   entry and every row of a full-height array.
 - For ``None``, an empty dict, or an empty 1D array, the handler
@@ -653,8 +654,9 @@ class BatchInputHandler:
             If an array's row count matches neither the swept
             parameters nor every parameter, or it has more than two
             dimensions. Also if the system sweeps one parameter and you
-            pass a 1D array with a value for every parameter, because
-            the handler cannot tell one run from a sweep.
+            pass a 1D array with the same number of values as the
+            system has parameters, because the handler cannot tell one
+            run from a sweep.
         """
         self.precision = self.system.precision
         system = self.system
