@@ -4,85 +4,33 @@ Troubleshooting
 CUDA Not Found
 --------------
 
-**Symptom:** ``CudaSupportError`` or "CUDA toolkit not found".
+If cubie cannot find a GPU, it raises an error such as
+``NoCudaDeviceError`` the first time it builds or runs a solver.
 
-**Fix:**
-#this looks like bollocks, check you have a NVIDIA GPU installed, then either:
-# - Check the toolkit with nvidia-smi, install if not, or
-# - install cubie again with the backend
+1. Check that your computer has an NVIDIA GPU and driver by running
+   ``nvidia-smi`` in a terminal. It lists your GPU and the newest CUDA
+   version your driver supports. If the command is missing, install the
+   NVIDIA driver.
+2. Then either install a CUDA toolkit yourself, or reinstall cubie with a
+   toolkit included: ``pip install cubie[cuda13]``, or
+   ``pip install cubie[cuda12]`` if ``nvidia-smi`` reports a CUDA version
+   below 13.
 
-1. Verify an NVIDIA GPU is present by running ``nvidia-smi`` in a terminal.
-2. Reinstall with a toolkit extra so the toolkit wheels ship with the
-   backend: ``pip install cubie[cuda12]`` (or ``cubie[cuda13]``).
+Runs Fail on Stiff Problems
+---------------------------
 
-Newton Solver Not Converging
------------------------------
+When a run fails, cubie fills its output with NaN and records why in
+``result.status_messages``, a dict that maps each failed run's index to
+flag names such as ``MAX_NEWTON_ITERATIONS_EXCEEDED``,
+``NEWTON_DIVERGENCE`` or ``STEP_TOO_SMALL``. If many runs fail:
 
-If an implicit algorithm reports many failed trajectories or slow
-convergence:
-# These are all largely bollocks, and probably for a stiffness section, the actual path is use a more stiff-capable algorithm, loosen tolerances, move to f64 above a certain tol (although this is more of a case for a tolerances page as part of timing maybe)
-1. **Tighten tolerances.** Try ``atol=1e-8, rtol=1e-6`` to give the
-   solver more room.
-2. **Increase the preconditioner order.** Higher Neumann-series orders
-   improve Krylov convergence at some compute cost.
-3. **Neumann can diverge.** Try ``preconditioner_type="jacobi"``.
-4. **Reduce the initial step size.** A large first step can push the
-   Newton iteration far from convergence.
-5. **Try a different algorithm.** Rosenbrock-W methods avoid Newton
-   iteration entirely; FIRK methods are more robust than DIRK for very
-   stiff problems.
-6. **Check the equations.** Singular or near-singular Jacobians can
-   prevent convergence.
-
-Out of VRAM
-------------
-
-**Symptom:** ``CudaAPIError`` with an out-of-memory message.
-
-**Fixes:**
-# Chunking patt is bullshit, remove, and the reduce output section is weird and terse. I don't even thing these are theoretically reachable with chunking, so we should probably delete the section
-- Reduce output: save fewer variables, use summaries instead of
-  time-domain data.
-- Enable automatic chunking (it should trigger automatically, but verify
-  ``mem_proportion`` is not set too high).
-- Reduce the batch size.
-
-CUDASIM Mode
-------------
-#CUDASIM is definitely not someting for users, delete.
-
-For CPU-only debugging, set the environment variable *before* importing
-CuBIE:
-
-.. code-block:: bash
-
-   # Bash
-   export NUMBA_ENABLE_CUDASIM=1
-
-   # PowerShell
-   $env:NUMBA_ENABLE_CUDASIM = "1"
-
-CUDASIM runs the CUDA kernels on the CPU in a single thread.  It is
-orders of magnitude slower than GPU execution but does not require a GPU.
-Useful for debugging logic errors and running in CI environments without
-GPUs.
-
-.. note::
-
-   Never set ``NUMBA_ENABLE_CUDASIM`` inside Python code.  It must be
-   set before ``cubie`` is imported.
-
-Common Attrs Validation Errors
-------------------------------
-# This doesn't look like it helps anyone, I'd say delete, it looks kind-of developer focussed but then also extremely basic, why is negative tolerance a special thing worth mentioning, who on earth is inputting a negative tolerance then surprised when it fails.
-
-CuBIE uses ``attrs`` classes for configuration.  Common mistakes:
-
-- **Wrong type:** passing a Python ``float`` where a NumPy float is
-  expected, or vice versa.  CuBIE's validators are tolerant of NumPy
-  dtypes, but passing a string where a number is expected will raise
-  ``TypeError``.
-- **Negative tolerance:** ``atol`` and ``rtol`` must be non-negative;
-  a negative value raises ``ValueError``.
-- **Step size bounds:** ``dt_min`` must be less than ``dt_max``, and
-  ``dt`` must be between them.
+1. **Use an algorithm built for stiff problems.** ``method="radau"``
+   handles very stiff systems; :doc:`/user_guide/choosing_algorithms`
+   lists the cheaper options.
+2. **Loosen the tolerances.** Tolerances tighter than your problem needs
+   force tiny steps and make each implicit solve harder to converge.
+3. **Use double precision for tight tolerances.** Single precision holds
+   about seven significant digits, so it cannot meet an ``rtol`` or
+   ``atol`` much below ``1e-6``. Build the system with
+   ``precision=np.float64``, which ``create_ODE_system`` accepts, and so
+   does ``solve_ivp`` when you pass it the equations directly.
