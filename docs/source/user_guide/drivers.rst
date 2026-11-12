@@ -49,10 +49,10 @@ That system could be modelled in Cubie like this:
     )
 
 Here ``x`` and ``v`` are the cantilever's deflection and velocity, ``T`` is
-the heater's temperature, ``u`` is the filtered control signal that drives
-the heater, and ``h`` is a high-pass-filtered copy of the deflection that
+the heater's temperature, ``u`` is the filtered control signal sent to the
+heater, and ``h`` is a high-pass-filtered copy of the deflection that
 the controller feeds back. The piezo reference and the control signal are
-both clipped to ``±clip``, like the hardware. The solve sweeps the
+both clipped to ``±clip``, like the hardware. We sweep the
 controller's gain ``a`` and offset ``b`` over 200 values each, so cubie
 solves all 40,000 combinations.
 
@@ -129,8 +129,8 @@ your samples:
    ``"periodic"`` when ``wrap=True`` and ``"clamped"`` when
    ``wrap=False``.
 
-Pass these settings to ``solve_ivp`` along with ``drivers=``. This solve
-reuses ``driven`` and ``drive`` from the example above, and runs past the
+Pass these settings to ``solve_ivp`` along with ``drivers=``. In this solve
+we reuse ``driven`` and ``drive`` from the example above, and run past the
 end of the samples with wrapping turned off:
 
 .. code-block:: python

@@ -51,7 +51,7 @@ inside CuBIE — no extra install is needed.
 Limitations
 -----------
 
-- Some CellML 2.0 features may not be fully handled by ``cellmlmanip``.
-- Large CellML models (hundreds of states) may take noticeable time (a few seconds) to
-  parse and differentiate on first use; subsequent loads of the same
-  file and settings come from an on-disk cache.
+- ``cellmlmanip`` may not handle every CellML 2.0 feature.
+- cubie may take a few seconds to parse and differentiate a large CellML
+  model (hundreds of states) the first time you load it. After that,
+  cubie loads the same file and settings from an on-disk cache.

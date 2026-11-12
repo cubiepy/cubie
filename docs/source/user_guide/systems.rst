@@ -61,7 +61,7 @@ From equation strings
 If your model already exists as equations on paper, you can hand Cubie the
 equations directly as strings and let it parse them with SymPy. Write each
 derivative as ``d<name> = ...``; cubie reads ``x`` as a state because it
-has a ``dx`` equation:
+you wrote a ``dx`` equation for it:
 
 .. code-block:: python
    :caption: Creating a system of ODEs from equation strings.
@@ -79,8 +79,8 @@ has a ``dx`` equation:
    )
    print(LV)
 
-Strings can also hold implicit equations, which a Python function can't
-express. Put an expression on the left-hand side, such as ``C*dx = ...``,
+In strings, you can also write implicit equations, which you can't express
+in a Python function. Put an expression on the left-hand side, such as ``C*dx = ...``,
 or write an algebraic constraint as ``0 = ...``. Solve these systems with
 an implicit algorithm.
 
@@ -120,7 +120,7 @@ you can declare them ``observables``:
    )
    print(LV)
 
-An intermediate value that you don't list in ``observables`` still takes
-part in the equations, but cubie doesn't save its trajectory. The same
-works in equation strings: write ``predator_death_rate = c*y`` as its own
+cubie still uses an intermediate value that you don't list in
+``observables``, but it doesn't save that value's trajectory. You can do
+the same in equation strings: write ``predator_death_rate = c*y`` as its own
 line and list it in ``observables``.

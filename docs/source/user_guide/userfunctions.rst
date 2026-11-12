@@ -3,8 +3,8 @@ User functions and derivatives
 
 You can call your own functions inside your equations. Pass them as
 ``user_functions`` when you build the system, as a dict that maps the name
-you call in the equations to your function. This works for both Python
-function and equation-string systems. If your function has the same name as
+you call in the equations to your function. You can do this in both
+Python-function and equation-string systems. If your function has the same name as
 one of the maths functions cubie knows, such as ``exp``, cubie uses yours.
 
 You can give cubie two kinds of function: a plain Python function, or a
@@ -14,9 +14,9 @@ Python functions
 ----------------
 
 cubie calls a plain Python function with symbols instead of numbers, and
-writes the expression it returns into your equations. Your function has to
-follow the same rules as a system function, so it can only contain
-arithmetic and the maths functions cubie knows. cubie can't evaluate a
+writes the expression it returns into your equations. Write your function by
+the same rules as a system function, using only arithmetic and the maths
+functions cubie knows. cubie can't evaluate a
 function that branches on its argument, such as ``if x > 0:``; write that
 one as a CUDA device function instead.
 
@@ -50,7 +50,7 @@ CUDA device functions
 ---------------------
 
 Write a CUDA device function with ``@cuda.jit(device=True)``, importing
-``cuda`` from ``numba_cuda_mlir``, the CUDA backend that installs with
+``cuda`` from ``numba_cuda_mlir``, the CUDA backend that pip installs with
 cubie. cubie calls your device function directly from the GPU code.
 
 .. code-block:: python
@@ -82,17 +82,17 @@ Function derivatives
 If you pass a device function, you will also need to provide a function
 that evaluates its derivative if you want to use an implicit algorithm. If
 you're solving a DAE, you might need to provide a function for each
-higher-order derivative required after tearing. cubie raises an error that
-tells you which orders you need when you leave one out.
+higher-order derivative required after tearing. If you leave one out,
+cubie raises an error and names the orders you need.
 
 Pass the derivatives as ``user_function_derivatives``, a dict keyed by the
 same names as ``user_functions``:
 
-- Write each derivative as a CUDA device function too. The first
-  derivative takes your function's arguments followed by the 0-based index
-  of the argument to differentiate by.
-- For higher orders, pass a list of functions, lowest order first. The
-  order-``n`` derivative takes your function's arguments followed by ``n``
+- Write each derivative as a CUDA device function too. Give the first
+  derivative your function's arguments followed by the 0-based index of
+  the argument to differentiate by.
+- For higher orders, pass a list of functions, lowest order first. Give
+  the order-``n`` derivative your function's arguments followed by ``n``
   argument indices.
 - Give each derivative function its own name, different from every user
   function's name, because cubie finds it by its ``__name__`` in the code
@@ -127,5 +127,5 @@ same names as ``user_functions``:
        dt=0.01,
    )
 
-Explicit algorithms such as ``ode45`` don't need derivatives, so you only
-need ``user_function_derivatives`` when you use an implicit algorithm.
+cubie doesn't use derivatives with explicit algorithms such as ``ode45``,
+so you only need ``user_function_derivatives`` with an implicit algorithm.
