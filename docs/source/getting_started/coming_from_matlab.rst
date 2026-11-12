@@ -48,7 +48,8 @@ Key changes:
   argument of your function, and give its value in ``parameters=`` when you
   call ``solve_ivp``.
 - Return a list: return the derivatives as a Python list, ``[dy1, dy2]``,
-  instead of a column vector. cubie does not accept a NumPy array here.
+  or a tuple, instead of a column vector. cubie does not accept a NumPy
+  array here.
 - Time: instead of a time span, give the total integration time as
   ``duration``, a start time as ``t0`` if it isn't 0, and the time between
   saved points as ``save_every``. Without ``save_every``, cubie saves only

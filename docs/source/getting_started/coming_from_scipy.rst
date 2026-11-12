@@ -81,8 +81,8 @@ only use arithmetic, maths functions such as ``np.sin`` or ``math.exp``,
 use:
 
 - ``while`` loops or list comprehensions.
-- NumPy array functions such as ``np.array``. Return the derivatives as a
-  list.
+- NumPy array functions such as ``np.array`` or ``np.zeros``. Return the
+  derivatives as a list or a tuple.
 - Variables defined outside your function. Add them as arguments and give
   their values in ``parameters=``.
 - Anything that isn't maths, such as printing or reading files.
