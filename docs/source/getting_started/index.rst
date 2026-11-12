@@ -51,11 +51,9 @@ To use Cubie, you need to:
        duration=100.0,
    )
 
-Cubie solves 10,000 different IVPs of the Lotka-Volterra equations, one for
+This example solves 10,000 different IVPs of the Lotka-Volterra equations, one for
 every combination of the 100 starting values of ``x`` and the 100 starting
-values of ``y``. To solve the same system again with new values, keep a
-solver instead of calling ``solve_ivp`` each time; see
-:doc:`/user_guide/solving`.
+values of ``y``. 
 
 Coming from another ecosystem? See
 :doc:`Coming from SciPy <coming_from_scipy>` and

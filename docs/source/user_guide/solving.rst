@@ -29,7 +29,7 @@ solve the Lotka--Volterra system for a single initial condition:
        name="LotkaVolterra",
    )
 
-# Make this more indicative of a real system, this uses np.array for some reason and also only a single run. the lead in to batching isn't required, no one is here because they wanted a single run.
+   # Make this more indicative of a real system, this uses np.array for some reason and also only a single run. the lead in to batching isn't required, no one is here because they wanted a single run.
    result = qb.solve_ivp(
        LV,
        y0={"x": 1.0, "y": [0.3])},

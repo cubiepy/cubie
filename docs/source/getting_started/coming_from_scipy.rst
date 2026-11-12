@@ -2,10 +2,7 @@ Coming from SciPy
 =================
 
 If you have a right-hand-side function written for
-``scipy.integrate.solve_ivp``, cubie can usually run it unchanged. The
-function body stays the same; what changes is how parameters, time, and
-results are spelled. This page walks through a direct port and then
-shows the two things cubie adds: batch sweeps and reusable solvers.
+``scipy.integrate.solve_ivp``, cubie can usually run it unchanged. 
 
 A direct port
 -------------
@@ -13,6 +10,7 @@ A direct port
 The same function object works in both libraries. In SciPy you pass
 parameter values through ``args=``; in cubie you declare them by name so
 they can be swept in batches later.
+# Is this by-name thing true? I think they now must be part of a params object, which makes them a closer match to args.
 
 .. code-block:: python
    :caption: SciPy
@@ -50,6 +48,7 @@ they can be swept in batches later.
    )
    trajectories = result.as_numpy["time_domain_array"]
 
+# Change this to match my voice and content from the matlab one, this is weird robot language that is written to a coder, not actual meaning communicated to an entry-level scipy user.
 Line by line, the differences are:
 
 * **Parameters are named.** SciPy's ``args=(1.5,)`` becomes
@@ -67,6 +66,7 @@ Line by line, the differences are:
 * **Results come back as arrays per batch run**, not a single
   trajectory — see :doc:`/user_guide/results`.
 
+# Who gives a solitary fuck about the below? We can list the things they can't use here, if it helps. can scipy run the things we exclude?
 cubie never calls your function. It reads the source, converts the
 mathematics to symbolic form, and compiles a CUDA kernel from it. This
 means the body must be expressible mathematics — arithmetic, ``math``
@@ -90,12 +90,13 @@ SciPy ``method=``     cubie ``method=``
                       ``"crank_nicolson"``
 ===================== ==============================================
 
+#Bullshit robot wording about rtol and atol. How is that relevant here at all? 
 ``rtol`` and ``atol`` keep their names. See
 :doc:`/user_guide/choosing_algorithms` for the full list and guidance.
 
 Where cubie pays off: batches
 -----------------------------
-
+# Include the closer match to the parfor section. 
 In SciPy, a parameter sweep is a Python loop around ``solve_ivp``. In
 cubie, arrays of values describe the whole batch and one call
 integrates every run in parallel on the GPU:
@@ -115,6 +116,7 @@ By default every combination of the supplied values is run
 (``grid_type="combinatorial"``); pass ``grid_type="verbatim"`` to pair
 inputs run-for-run. See :doc:`/user_guide/batching`.
 
+#Nothing to do with scipy.
 Repeated solves: build the system once
 --------------------------------------
 
@@ -150,6 +152,7 @@ Not supported
 * ``dense_output`` and event functions have no cubie equivalent.
 * Solutions are saved on the regular ``save_every`` grid, not at
   arbitrary ``t_eval`` points.
+# How on earth would the scipy user know what a closure variable is or a global constant, why would they care what a "parse-time"error is.
 * The right-hand side must be self-contained: closure variables and
   global constants raise a parse-time error naming the symbol —
   declare them in ``parameters`` instead.

@@ -1,6 +1,8 @@
 Coming from MATLAB
 ==================
 
+# Weird robot language. Instead you'd write something from the voice of: Most parts of a MATLAB script just need translated into Python, then they'll work. The main difference is that cubie has a single "solve" function and takes the integration method as an argument, instead of one function to call per algorithm.
+
 cubie's interface follows the same shape as MATLAB's ODE suite: a
 right-hand-side function of ``(t, y)`` returning the derivatives, a
 solver call naming the method, and tolerances as options. This page
@@ -20,7 +22,8 @@ A direct port
 .. code-block:: python
    :caption: cubie
 
-   import cubie as qb
+   import cubie as qb 
+# Is there any python style guidance on using import acronyms? I imagine it's cleaner just to type cubie throughout. In this case you'd probablyjust do form cubie import solve_ivp
 
    def f(t, y, mu):
        return [y[1], mu * (1 - y[0] ** 2) * y[1] - y[0]]
@@ -35,10 +38,18 @@ A direct port
        atol=1e-8,
        save_every=0.1,
    )
+# Does save_every cause a match to the MATLAB settings? is that default?
+# I can't see where trajectories matches matlab here. I think we'd assign directly to t, y.
    trajectories = result.as_numpy["time_domain_array"]
 
-The translations, line by line:
+Key changes:
 
+- Python indexing: square brackets, count from 0 instead of 1.
+- Parameters as arguments: cubie can't capture local variables from inside the script like MATLAB does. You need to pass parameter values as `parameters=` when you call the solve function. 
+- Time is different: the total integration span is given as a starting time t0 and a duration is given as duration and save frequency (save_every), rather than a span
+- The "odeset" options are given as individual keyword arguments, see [optional arguments]
+# Is that return point valid? can they not return an array?
+- Results come back as one array for all batches, as part of a solveResult object, see: results
 * **Indexing starts at 0.** MATLAB's ``y(1)``, ``y(2)`` become
   ``y[0]``, ``y[1]``. If you prefer names to indices, cubie also
   accepts ``y.x`` / ``y.v`` in the function body.
@@ -68,15 +79,14 @@ MATLAB                cubie ``method=``
 ``ode89``             ``"dop853"`` (closest high-order explicit)
 ``ode15s``, ``ode23s`` no direct equivalent; for stiff systems use
                       ``"rosenbrock"``, ``"backwards_euler"``,
-                      ``"crank_nicolson"``, or ``"firk"``
+                      ``"crank_nicolson"``, or ``"firk"`` # is ode23s not a rosenbrock23 solver?
 ===================== ==============================================
 
 See :doc:`/user_guide/choosing_algorithms` for guidance on the stiff solvers.
 
-Replacing the parfor sweep
+Replacing a parfor sweep
 --------------------------
-
-The MATLAB pattern cubie replaces is the sweep loop:
+Cubie directly replaces a parfor or for loop if you're already doing batch integration in MATLAB.
 
 .. code-block:: matlab
 
@@ -87,8 +97,7 @@ The MATLAB pattern cubie replaces is the sweep loop:
        results{i} = y;
    end
 
-In cubie the sweep is the input, and one call integrates every run in
-parallel on the GPU:
+In cubie the solve call takes all of the input values instead:
 
 .. code-block:: python
 
@@ -104,9 +113,9 @@ parallel on the GPU:
    )
 
 Supplying arrays for several parameters (or initial values) runs every
-combination by default; see :doc:`/user_guide/batching` for pairing inputs
-run-for-run instead.
+combination of the supplied values by default, see :doc:`/user_guide/batching` other options.
 
+# This looks like a restatement not required.
 Repeated solves: build the system once
 --------------------------------------
 
@@ -130,6 +139,7 @@ solves reuse the compiled GPU kernel:
        grid_type="combinatorial",
    )
 
+# This looks like it's got nothing to do with MATLAB.
 Equation strings
 ----------------
 

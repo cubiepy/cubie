@@ -16,7 +16,9 @@ If cubie cannot find a GPU, it raises an error such as
    ``pip install cubie[cuda12]`` if ``nvidia-smi`` reports a CUDA version
    below 13.
 
-Runs Fail on Stiff Problems
+#This section is still no good. This should be a list of possible error/status codes that cubie can return with a pointer to the appropriate page - each can have a list. we wouldn't list a default algorithm like this anywhere, we'd point to the choosing algorithm page.
+
+Runs Fail on ff Problems
 ---------------------------
 
 When a run fails, cubie fills its output with NaN and records why in
@@ -24,6 +26,7 @@ When a run fails, cubie fills its output with NaN and records why in
 see flag names such as ``MAX_NEWTON_ITERATIONS_EXCEEDED``,
 ``NEWTON_DIVERGENCE`` or ``STEP_TOO_SMALL``. If many runs fail:
 
+#get rid of the 
 1. **Use an algorithm built for stiff problems.** Pass ``method="radau"``
    for very stiff systems, or pick a cheaper option from
    :doc:`/user_guide/choosing_algorithms`.
