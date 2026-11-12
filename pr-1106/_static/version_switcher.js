@@ -1,9 +1,9 @@
 // Add a documentation version picker to the top-right corner of every page.
 //
-// docs_site.py gives every page a script tag for this file, with a
-// data-version attribute naming the page's folder and a data-versions
-// attribute pointing at versions.json at the site root. We read that list
-// when the reader opens the page, so we offer every published version.
+// In docs_site.py we add a script tag for this file to every page, with
+// the page's folder in data-version and the URL of versions.json in
+// data-versions. We read that list when the reader opens the page, so that
+// we offer every published version.
 (function () {
   const script = document.currentScript;
   const current = script.dataset.version;
