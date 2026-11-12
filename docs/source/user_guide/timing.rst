@@ -36,13 +36,13 @@ When you don't specify any step size parameters, CuBIE uses these defaults:
      - Default Value
    * - Adaptive
      - ``dt_min``
-     - ``1e-6``
+     - ``1e-9``
    * - Adaptive
      - ``dt_max``
      - ``1.0``
    * - Adaptive
      - ``dt``
-     - ``sqrt(dt_min * dt_max)`` = ``1e-3``
+     - ``sqrt(dt_min * dt_max)`` = ``3.2e-5``
    * - Fixed
      - ``dt``
      - ``1e-3``
@@ -62,17 +62,17 @@ missing values. The rules differ for adaptive and fixed controllers:
    * - You Provide
      - CuBIE Derives
    * - ``dt`` only
-     - ``dt_min = dt / 100``, ``dt_max = dt * 100``
+     - ``dt_min = dt / 1e6``, ``dt_max = dt * 1000``
    * - ``dt_min`` only
      - ``dt_max = 1.0`` (default), ``dt = sqrt(dt_min * dt_max)``
    * - ``dt_max`` only
-     - ``dt_min = 1e-6`` (default), ``dt = sqrt(dt_min * dt_max)``
+     - ``dt_min = 1e-9`` (default), ``dt = sqrt(dt_min * dt_max)``
    * - ``dt_min`` and ``dt_max``
      - ``dt = sqrt(dt_min * dt_max)``
    * - ``dt`` and ``dt_min``
-     - ``dt_max = dt * 100``
+     - ``dt_max = dt * 1000``
    * - ``dt`` and ``dt_max``
-     - ``dt_min = dt / 100``
+     - ``dt_min = dt / 1e6``
    * - All three
      - Nothing derived (all values used as given)
 
