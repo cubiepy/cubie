@@ -289,40 +289,45 @@ and feed some function of that measured signal back into the cantilever’s actu
 That system could be modelled in Cubie like this:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">solve_ivp</span>
-
-<span class="k">def</span><span class="w"> </span><span class="nf">cantilever</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
-    <span class="n">reference</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">rhat</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">omega_forcing</span> <span class="o">*</span> <span class="n">t</span><span class="p">),</span> <span class="o">-</span><span class="n">p</span><span class="o">.</span><span class="n">clip</span><span class="p">),</span> <span class="n">p</span><span class="o">.</span><span class="n">clip</span><span class="p">)</span>
-    <span class="n">control</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">a</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">h</span> <span class="o">+</span> <span class="n">p</span><span class="o">.</span><span class="n">b</span><span class="p">,</span> <span class="o">-</span><span class="n">p</span><span class="o">.</span><span class="n">clip</span><span class="p">),</span> <span class="n">p</span><span class="o">.</span><span class="n">clip</span><span class="p">)</span>
-    <span class="n">dx</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">v</span>
-    <span class="n">dv</span> <span class="o">=</span> <span class="o">-</span><span class="n">y</span><span class="o">.</span><span class="n">x</span> <span class="o">-</span> <span class="n">p</span><span class="o">.</span><span class="n">delta</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">v</span> <span class="o">+</span> <span class="n">p</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="n">p</span><span class="o">.</span><span class="n">pz_sign</span> <span class="o">*</span> <span class="n">reference</span>
-    <span class="n">dT</span> <span class="o">=</span> <span class="o">-</span><span class="n">p</span><span class="o">.</span><span class="n">beta</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">T</span> <span class="o">+</span> <span class="n">p</span><span class="o">.</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">u</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">u</span>
-    <span class="n">du</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">omega_l</span> <span class="o">*</span> <span class="p">(</span><span class="n">control</span> <span class="o">-</span> <span class="n">y</span><span class="o">.</span><span class="n">u</span><span class="p">)</span>
-    <span class="n">dh</span> <span class="o">=</span> <span class="o">-</span><span class="n">p</span><span class="o">.</span><span class="n">omega_h</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">h</span> <span class="o">+</span> <span class="n">p</span><span class="o">.</span><span class="n">hpf_sign</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">v</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">dx</span><span class="p">,</span> <span class="n">dv</span><span class="p">,</span> <span class="n">dT</span><span class="p">,</span> <span class="n">du</span><span class="p">,</span> <span class="n">dh</span><span class="p">]</span>
-
-<span class="n">result</span> <span class="o">=</span> <span class="n">solve_ivp</span><span class="p">(</span>
-    <span class="n">cantilever</span><span class="p">,</span>
-    <span class="n">y0</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">"v"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">"T"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">"u"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">"h"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">"alpha"</span><span class="p">:</span> <span class="mf">0.52</span><span class="p">,</span>
-        <span class="s2">"beta"</span><span class="p">:</span> <span class="mf">0.0133</span><span class="p">,</span>
-        <span class="s2">"gamma"</span><span class="p">:</span> <span class="mf">0.0624</span><span class="p">,</span>
-        <span class="s2">"delta"</span><span class="p">:</span> <span class="mf">0.012</span><span class="p">,</span>
-        <span class="s2">"omega_h"</span><span class="p">:</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">114</span><span class="p">,</span>
-        <span class="s2">"omega_l"</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span>
-        <span class="s2">"pz_sign"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
-        <span class="s2">"hpf_sign"</span><span class="p">:</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span>
-        <span class="s2">"rhat"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">,</span>
-        <span class="s2">"clip"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
-        <span class="s2">"omega_forcing"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
-        <span class="s2">"a"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span>
-        <span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span>
-    <span class="p">},</span>
-    <span class="n">method</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span>
-    <span class="n">duration</span><span class="o">=</span><span class="mf">500.0</span><span class="p">,</span>
-<span class="p">)</span>
 </pre></div>
 </div>
+<dl>
+<dt>#Define this in string form, it will be clearer.</dt><dd><dl>
+<dt>def cantilever(t, y, p):</dt><dd><p>reference = min(max(p.rhat * np.cos(p.omega_forcing * t), -p.clip), p.clip)
+control = min(max(p.a * y.h + p.b, -p.clip), p.clip)
+dx = y.v
+dv = -y.x - p.delta * y.v + p.alpha * y.T + p.pz_sign * reference
+dT = -p.beta * y.T + p.gamma * y.u * y.u
+du = p.omega_l * (control - y.u)
+dh = -p.omega_h * y.h + p.hpf_sign * y.v
+return [dx, dv, dT, du, dh]</p>
+</dd>
+<dt>result = solve_ivp(</dt><dd><p>cantilever,
+y0={“x”: 0.0, “v”: 0.0, “T”: 0.0, “u”: 0.0, “h”: 0.0},
+parameters={</p>
+<blockquote>
+<div><p>“alpha”: 0.52,
+“beta”: 0.0133,
+“gamma”: 0.0624,
+“delta”: 0.012,
+“omega_h”: 1 / 114,
+“omega_l”: 2.0,
+“pz_sign”: 1.0,
+“hpf_sign”: -1.0,
+“rhat”: 0.01,
+“clip”: 1.0,
+“omega_forcing”: 1.0,
+“a”: np.linspace(0.0, 4.0, 200),
+“b”: np.linspace(-1.0, 1.0, 200),</p>
+</div></blockquote>
+<p>},
+method=”ode45”,
+duration=500.0,</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
 <p>Here <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">v</span></code> are the cantilever’s deflection and velocity, <code class="docutils literal notranslate"><span class="pre">T</span></code> is
 the heater’s temperature, <code class="docutils literal notranslate"><span class="pre">u</span></code> is the filtered control signal sent to the
 heater, and <code class="docutils literal notranslate"><span class="pre">h</span></code> is a high-pass-filtered copy of the deflection that
@@ -330,7 +335,8 @@ the controller feeds back. The piezo reference and the control signal are
 both clipped to <code class="docutils literal notranslate"><span class="pre">±clip</span></code>, like the hardware. We sweep the
 controller’s gain <code class="docutils literal notranslate"><span class="pre">a</span></code> and offset <code class="docutils literal notranslate"><span class="pre">b</span></code> over 200 values each, so cubie
 solves all 40,000 combinations.</p>
-<p>This is an easy way to set up and parametrize a forcing term, and see how your system responds to different versions of
+<p><code class="docutils literal notranslate"><span class="pre">t</span></code> appears in the system the same way you’d write it in math, and cubie does the
+rest of the work. This is an easy way to set up and parametrize a forcing term, and see how your system responds to different versions of
 it.</p>
 <section id="measured-arbitrary-values">
 <h2>Measured/Arbitrary Values<a class="headerlink" href="#measured-arbitrary-values" title="Link to this heading"></a></h2>

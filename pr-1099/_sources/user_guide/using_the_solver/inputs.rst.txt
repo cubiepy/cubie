@@ -2,10 +2,12 @@ Inputs and Parameter Sweeps
 ===========================
 
 You give every solve two inputs: the initial values of the states, and the
-parameter values. Here we show the formats you can give each input in, then
-how cubie combines your values into a batch of runs. We use this system in
-the examples:
+parameter values. You can provide these in a number of ways. Every function that
+ends up in a ``solve`` takes inputs the same way. All examples in this page 
+will follow the same Lotka-Volterra system as the rest of the docs, defined 
+here:
 
+#don't import functions you use later in this example, import them where they're used.
 .. code-block:: python
 
    import numpy as np
@@ -36,38 +38,45 @@ keyed by name:
 
    solver = Solver(LV, algorithm="ode45")
    result = solver.solve(
-       initial_values={"x": np.linspace(0.1, 2.0, 10000), "y": 0.3},
+       initial_values={"x": np.linspace(0.1, 2.0, 10000),},
        parameters={"a": 0.2, "b": np.linspace(0.01, 0.05, 10000)},
        duration=100.0,
    )
 
 Give a single value for anything that is the same in every run, and a list
-or array of values for anything you want to vary. Cubie compiles ``a``
-above into the code, because you gave it one value, and gives ``b`` a row of
-the parameters array. If you set default values for the states or
-parameters, you can leave them out of the dicts and cubie will use their
-default values. You can leave either dict out entirely, too. If you didn't
+or array of values for anything you want to vary. If you've already given 
+a default value when you created the system and you don't want to modify it, 
+you can leave it out, like ``y`` above. If we wanted to start all trajectories
+from the default state, or under default parameters, we could leave the whole
+``initial_values`` or ``parameters`` arguments out completely. If you didn't
 set defaults when you built the system, you can set them on the system with
 ``system.set_default_parameters({"a": 0.2})`` for parameters and
 ``system.set_initial_values({"y": 0.3})`` for states. If you include a
 constant value for a parameter or initial value that has a different
 default, the default doesn't change: Cubie presumes that arguments to
-``solve`` are intended for that run only. Pass
-``fix_constant_parameters=False`` to give every constant value in the dict
-a row instead. ``solve_ivp``, ``Solver.compile``, ``Solver.calibrate`` and
-``Solver.optimize`` treat their inputs the same way.
+``solve`` are intended for that run only.
 
 Arrays
 ~~~~~~
 
+# Is the "precision" thingrequired or does the input cast?
+#Is that variable name claim right? I think it only applies to parameters.
 If you're looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead. Lay each
-array out as ``(n_variables, n_runs)``, in the system's precision, with
-its rows ordered by variable name. Give an initial values array one row
+array out as ``(n_variables, n_runs)``, in the system's ``precision`` datatype, 
+with its rows ordered by variable name. Give an initial values array one row
 per state in your system. Give the parameters array either one row for
 every parameter in your system (a full-height parameter array), or one row
 per parameter that varies across the batch. Read
 ``solver.parameter_legend`` to see each row's parameter name.
+
+When you pass a dict, cubie compiles every constant parameter directly into 
+the GPU code to make it go faster. Passing a full parameters array can therefore
+slow the solve down. To get around this, you have two options:
+- pass the full array with the argument 'fix_constant_parameters=true`
+- use solver.set_swept_parameters(parameter_names) to tell the solver which 
+parameters will change, then pass only an array of the parameters that vary 
+over a batch in name order.
 
 To pass just the varying parameters, you will need to tell the system which
 parameters to expect. To do this, call ``solver.set_swept_parameters`` with

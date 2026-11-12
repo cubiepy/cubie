@@ -280,23 +280,27 @@
   <section id="inputs-and-parameter-sweeps">
 <h1>Inputs and Parameter Sweeps<a class="headerlink" href="#inputs-and-parameter-sweeps" title="Link to this heading"></a></h1>
 <p>You give every solve two inputs: the initial values of the states, and the
-parameter values. Here we show the formats you can give each input in, then
-how cubie combines your values into a batch of runs. We use this system in
-the examples:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span><span class="p">,</span> <span class="n">create_ODE_system</span><span class="p">,</span> <span class="n">solve_ivp</span>
-
-<span class="n">LV</span> <span class="o">=</span> <span class="n">create_ODE_system</span><span class="p">(</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    dx = a*x - b*x*y</span>
-<span class="sd">    dy = -c*y + d*x*y</span>
-<span class="sd">    """</span><span class="p">,</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
-    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
-    <span class="n">name</span><span class="o">=</span><span class="s2">"LotkaVolterra"</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
+parameter values. You can provide these in a number of ways. Every function that
+ends up in a <code class="docutils literal notranslate"><span class="pre">solve</span></code> takes inputs the same way. All examples in this page
+will follow the same Lotka-Volterra system as the rest of the docs, defined
+here:</p>
+<p>#don’t import functions you use later in this example, import them where they’re used.
+.. code-block:: python</p>
+<blockquote>
+<div><p>import numpy as np
+from cubie import Solver, create_ODE_system, solve_ivp</p>
+<dl class="simple">
+<dt>LV = create_ODE_system(</dt><dd><p>“””
+dx = a*x - b*x*y
+dy = -c*y + d*x*y
+“””,
+parameters={“a”: 0.1, “b”: 0.02, “c”: 0.3, “d”: 0.01},
+states={“x”: 0.5, “y”: 0.3},
+name=”LotkaVolterra”,</p>
+</dd>
+</dl>
+<p>)</p>
+</div></blockquote>
 <section id="input-formats">
 <span id="parameter-inputs"></span><h2>Input formats<a class="headerlink" href="#input-formats" title="Link to this heading"></a></h2>
 <section id="dicts">
@@ -305,38 +309,44 @@ the examples:</p>
 keyed by name:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">)</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
-    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">10000</span><span class="p">),</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">10000</span><span class="p">),},</span>
     <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.2</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)},</span>
     <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 <p>Give a single value for anything that is the same in every run, and a list
-or array of values for anything you want to vary. Cubie compiles <code class="docutils literal notranslate"><span class="pre">a</span></code>
-above into the code, because you gave it one value, and gives <code class="docutils literal notranslate"><span class="pre">b</span></code> a row of
-the parameters array. If you set default values for the states or
-parameters, you can leave them out of the dicts and cubie will use their
-default values. You can leave either dict out entirely, too. If you didn’t
+or array of values for anything you want to vary. If you’ve already given
+a default value when you created the system and you don’t want to modify it,
+you can leave it out, like <code class="docutils literal notranslate"><span class="pre">y</span></code> above. If we wanted to start all trajectories
+from the default state, or under default parameters, we could leave the whole
+<code class="docutils literal notranslate"><span class="pre">initial_values</span></code> or <code class="docutils literal notranslate"><span class="pre">parameters</span></code> arguments out completely. If you didn’t
 set defaults when you built the system, you can set them on the system with
 <code class="docutils literal notranslate"><span class="pre">system.set_default_parameters({&quot;a&quot;:</span> <span class="pre">0.2})</span></code> for parameters and
 <code class="docutils literal notranslate"><span class="pre">system.set_initial_values({&quot;y&quot;:</span> <span class="pre">0.3})</span></code> for states. If you include a
 constant value for a parameter or initial value that has a different
 default, the default doesn’t change: Cubie presumes that arguments to
-<code class="docutils literal notranslate"><span class="pre">solve</span></code> are intended for that run only. Pass
-<code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=False</span></code> to give every constant value in the dict
-a row instead. <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code>, <code class="docutils literal notranslate"><span class="pre">Solver.compile</span></code>, <code class="docutils literal notranslate"><span class="pre">Solver.calibrate</span></code> and
-<code class="docutils literal notranslate"><span class="pre">Solver.optimize</span></code> treat their inputs the same way.</p>
+<code class="docutils literal notranslate"><span class="pre">solve</span></code> are intended for that run only.</p>
 </section>
 <section id="arrays">
 <h3>Arrays<a class="headerlink" href="#arrays" title="Link to this heading"></a></h3>
-<p>If you’re looking for something faster (by ~tens of ms per solve) or are
+<p># Is the “precision” thingrequired or does the input cast?
+#Is that variable name claim right? I think it only applies to parameters.
+If you’re looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead. Lay each
-array out as <code class="docutils literal notranslate"><span class="pre">(n_variables,</span> <span class="pre">n_runs)</span></code>, in the system’s precision, with
-its rows ordered by variable name. Give an initial values array one row
+array out as <code class="docutils literal notranslate"><span class="pre">(n_variables,</span> <span class="pre">n_runs)</span></code>, in the system’s <code class="docutils literal notranslate"><span class="pre">precision</span></code> datatype,
+with its rows ordered by variable name. Give an initial values array one row
 per state in your system. Give the parameters array either one row for
 every parameter in your system (a full-height parameter array), or one row
 per parameter that varies across the batch. Read
 <code class="docutils literal notranslate"><span class="pre">solver.parameter_legend</span></code> to see each row’s parameter name.</p>
+<p>When you pass a dict, cubie compiles every constant parameter directly into
+the GPU code to make it go faster. Passing a full parameters array can therefore
+slow the solve down. To get around this, you have two options:
+- pass the full array with the argument ‘fix_constant_parameters=true`
+- use solver.set_swept_parameters(parameter_names) to tell the solver which
+parameters will change, then pass only an array of the parameters that vary
+over a batch in name order.</p>
 <p>To pass just the varying parameters, you will need to tell the system which
 parameters to expect. To do this, call <code class="docutils literal notranslate"><span class="pre">solver.set_swept_parameters</span></code> with
 the parameter names you want to vary, or pass the same names to the

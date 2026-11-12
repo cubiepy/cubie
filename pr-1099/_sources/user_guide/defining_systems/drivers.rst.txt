@@ -16,6 +16,7 @@ That system could be modelled in Cubie like this:
     import numpy as np
     from cubie import solve_ivp
 
+#Define this in string form, it will be clearer.
     def cantilever(t, y, p):
         reference = min(max(p.rhat * np.cos(p.omega_forcing * t), -p.clip), p.clip)
         control = min(max(p.a * y.h + p.b, -p.clip), p.clip)
@@ -56,7 +57,8 @@ both clipped to ``±clip``, like the hardware. We sweep the
 controller's gain ``a`` and offset ``b`` over 200 values each, so cubie
 solves all 40,000 combinations.
 
-This is an easy way to set up and parametrize a forcing term, and see how your system responds to different versions of
+``t`` appears in the system the same way you'd write it in math, and cubie does the 
+rest of the work. This is an easy way to set up and parametrize a forcing term, and see how your system responds to different versions of
 it.
 
 Measured/Arbitrary Values
