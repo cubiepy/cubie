@@ -14,8 +14,9 @@ from tests._utils import (
     swept_values,
 )
 
-# We test the torn system for its algebraic row, which the estimate
-# holds over the Euler step and leaves out of the norms.
+# We test the torn system for its algebraic row, which
+# starting_step_fn holds over the Euler step and leaves out of the
+# norms.
 TORN_ESTIMATED_DT = {
     "system_type": "torn_driver",
     "algorithm": "radau",
@@ -50,9 +51,9 @@ def test_starting_step_matches_reference(
     observables_fn = system.observables_fn
     numba_precision = from_dtype(precision)
 
-    # Start the second run at zero, where the estimate falls back to
-    # its fixed first guess. Start the third off the torn system's
-    # constraint, so the estimate has an algebraic residual to hold.
+    # Start the second run at zero, where starting_step_fn uses its
+    # fixed first guess. Start the third off the torn system's
+    # constraint, so that starting_step_fn has a residual to hold.
     # Start the fourth at NaN, where every norm is NaN.
     states = np.stack(
         [
@@ -150,7 +151,7 @@ def test_starting_step_matches_reference(
     "solver_settings_override", [ESTIMATED_DT_CHAIN], indirect=True
 )
 def test_given_dt_replaces_the_estimate(single_integrator_run_mutable):
-    """The loop calls the estimate until the run is given a dt."""
+    """Check that giving dt removes the estimate from the loop."""
     run = single_integrator_run_mutable
     estimator = run._starting_step
     assert estimator.estimates_dt is True
@@ -168,7 +169,7 @@ def test_given_dt_replaces_the_estimate(single_integrator_run_mutable):
 def test_initial_derivative_location_moves_the_buffer(
     single_integrator_run_mutable, system
 ):
-    """The location setting places the derivative buffer."""
+    """Check that the location setting moves the derivative buffer."""
     run = single_integrator_run_mutable
     estimator = run._starting_step
     assert estimator.local_buffer_size == system.sizes.states

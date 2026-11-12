@@ -42,7 +42,7 @@ sets `irrecoverable`: the run ends at the t0 save with the uncorrected values.
 ## Starting step
 After the t0 save we set `dt_raw` to the value `starting_step_fn` returns, or to the
 compiled `dt` when `starting_step_fn` is `None` (fixed control, or a given `dt`).
-`starting_step_fn` takes the step function's buffers in the step's order: `(state,
+Call `starting_step_fn` with the step function's buffers in the step's order: `(state,
 proposed_state, parameters, driver_coefficients, drivers_buffer, proposed_drivers,
 observables, proposed_observables, error, time_scalar, shared, persistent_local)`. We
 pass `proposed_state`, `proposed_drivers`, `proposed_observables` and `error` as

@@ -748,9 +748,9 @@ class IVPLoop(CUDAFactory):
             status = int32(success | init_status)
             iteration_status = int32(0)
             dt_raw = initial_dt
-            # Estimate this run's starting step. We lend the estimate
-            # the proposal and error buffers as scratch; the first step
-            # overwrites them.
+            # Estimate this run's starting step. We lend starting_step_fn
+            # the proposal and error buffers, which the first step
+            # writes before it reads.
             if starting_step_fn is not None:
                 dt_raw = starting_step_fn(
                     state_buffer,

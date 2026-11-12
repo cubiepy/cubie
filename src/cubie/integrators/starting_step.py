@@ -1,10 +1,10 @@
 """Starting-step estimate for adaptive integrations.
 
 Build a device function that returns a run's first step by Hairer's
-method. The function measures the state, its derivative and the change
-in the derivative over one explicit Euler step with the step
-controller's error norm, and returns a step from those three norms and
-the algorithm's order. On a mass-matrix system the function reads the
+method. The function takes the step controller's error norm of the
+state, of its derivative and of the change in the derivative over one
+explicit Euler step, and returns a step from those three norms and the
+algorithm's order. On a mass-matrix system the function reads the
 differential rows only.
 
 Published Classes
@@ -21,7 +21,7 @@ Published Classes
 Constants
 ---------
 :data:`ALL_STARTING_STEP_PARAMETERS`
-    Setting names :class:`StartingStepEstimator` takes from the Solver.
+    Names of the Solver settings :class:`StartingStepEstimator` takes.
 """
 
 from math import sqrt as math_sqrt
@@ -55,7 +55,7 @@ ALL_STARTING_STEP_PARAMETERS = (
     | ALL_UNROLL_PARAMETERS
     | ALL_JIT_PARAMETERS
 )
-"""Setting names :class:`StartingStepEstimator` takes from the Solver."""
+""":class:`StartingStepEstimator` takes these settings from the Solver."""
 
 
 @frozen
@@ -126,7 +126,8 @@ class StartingStepConfig(CUDAFactoryConfig):
 
     @property
     def initial_derivative_size(self) -> int:
-        """Return the derivative buffer's length; zero without an estimate."""
+        """Return the derivative buffer's length, or zero when the
+        estimator compiles no estimate."""
         return self.n_states if self.estimates_dt else 0
 
     @property
@@ -148,9 +149,9 @@ class StartingStepCache(CUDADispatcherCache):
     ----------
     starting_step_fn
         Compiled device function that returns the starting step, or
-        ``None`` when no estimate is compiled.
+        ``None`` when the estimator compiled no estimate.
     estimates_dt
-        Whether the build estimates each run's starting step.
+        Whether the estimator compiled an estimate.
     """
 
     starting_step_fn: Optional[Callable] = field(default=None, eq=False)
@@ -177,7 +178,7 @@ class StartingStepEstimator(CUDAFactory):
 
     @classmethod
     def system_inputs(cls, system: Any) -> Dict[str, Any]:
-        """Return the estimator settings a system object provides."""
+        """Return the estimator settings read from a system object."""
         return dict(
             precision=system.precision,
             n_states=system.sizes.states,
@@ -223,8 +224,8 @@ class StartingStepEstimator(CUDAFactory):
         Returns
         -------
         StartingStepCache
-            Cache holding the compiled device function, or ``None`` in
-            its place when no estimate is compiled.
+            The compiled device function, or ``None`` in its place for
+            a fixed controller or a given ``dt``.
         """
         config = self.compile_settings
         if not config.estimates_dt:
@@ -292,8 +293,7 @@ class StartingStepEstimator(CUDAFactory):
             derivative_norm2 = norm_fn(derivative, state, state)
 
             # Guess the step that changes the state by 1% of its norm.
-            # With a zero state or derivative we have no such step, so
-            # we guess 1e-6.
+            # We guess 1e-6 for a zero state or a zero derivative.
             no_scale = (state_norm2 < zero_norm2) | (
                 derivative_norm2 < zero_norm2
             )
@@ -307,7 +307,7 @@ class StartingStepEstimator(CUDAFactory):
             first_guess = clamp(first_guess, dt_min, dt_max)
 
             # Take one explicit Euler step of the first guess. Hold the
-            # algebraic rows, whose right-hand side is a residual.
+            # algebraic rows, because dxdt_fn returns their residuals.
             for i in unroll_if(range(n_states), unroll_step_element):
                 euler_value = state[i] + first_guess * derivative[i]
                 if all_differential:
@@ -339,16 +339,16 @@ class StartingStepEstimator(CUDAFactory):
                 error[i] = error[i] - derivative[i]
 
             # Estimate the second derivative from the derivative's change
-            # per unit step. We divide twice because the square of a
-            # small first guess underflows.
+            # per unit step. We divide by the first guess twice so that
+            # we never square a very small guess.
             second_derivative_norm2 = (
                 norm_fn(error, state, state) / first_guess / first_guess
             )
 
             # Solve h^(order + 1) * norm = 0.01 for the second guess h,
-            # with the larger of the two derivative norms. At rest both
-            # norms are zero and h is not finite; we rely on fmin to
-            # return the first operand then.
+            # with the larger of the two derivative norms. For a system
+            # at rest we divide by zero here and rely on fmin to return
+            # its first operand.
             largest_norm2 = fmax(derivative_norm2, second_derivative_norm2)
             second_guess = precision(
                 (target_norm2 / largest_norm2) ** half_inverse_order
@@ -374,8 +374,7 @@ class StartingStepEstimator(CUDAFactory):
         Returns
         -------
         set[str]
-            Names the estimator settings and the buffer registry
-            recognised.
+            Recognised setting names.
         """
         recognised = self.update_compile_settings(updates, silent=True)
         recognised |= buffer_registry.update(self, updates, silent=True)
@@ -389,5 +388,5 @@ class StartingStepEstimator(CUDAFactory):
 
     @property
     def estimates_dt(self) -> bool:
-        """Return whether the build estimates each run's starting step."""
+        """Return whether the estimator compiled an estimate."""
         return self.get_cached_output("estimates_dt")

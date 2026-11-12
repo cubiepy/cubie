@@ -328,8 +328,8 @@ SPECIFIC_ALGORITHM_COMBOS = {
     },
 }
 
-# The adaptive ERK chain given no dt, so each run starts at its
-# estimated step.
+# We leave dt out of the adaptive ERK chain so that the loop estimates
+# each run's starting step.
 ESTIMATED_DT_CHAIN = {
     **MID_RUN_PARAMS,
     **ALGORITHM_CONTROLLER_COMBOS["erk"],

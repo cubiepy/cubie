@@ -161,7 +161,7 @@ class CPUAdaptiveController:
         state_norm2 = self.error_norm(state, state, state)
         derivative_norm2 = self.error_norm(state, state, derivative)
 
-        # A system at rest divides by zero without error on the device.
+        # Silence numpy: we divide by the zero norms of a system at rest.
         with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             zero_norm2 = precision(1e-5**2)
             if state_norm2 < zero_norm2 or derivative_norm2 < zero_norm2:
@@ -188,7 +188,8 @@ class CPUAdaptiveController:
             change = (
                 np.asarray(end_derivative, dtype=precision) - derivative
             ).astype(precision)
-            # Two divisions, not one by the square: rounding-sensitive.
+            # Divide twice, not once by the square: the result is
+            # rounding-sensitive.
             second_derivative_norm2 = precision(
                 self.error_norm(state, state, change)
                 / first_guess
