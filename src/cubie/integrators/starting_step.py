@@ -130,11 +130,7 @@ class StartingStepConfig(CUDAFactoryConfig):
 
     @property
     def estimates_dt(self) -> bool:
-        """Return whether to estimate the starting step.
-
-        Return ``True`` for an adaptive controller given no initial
-        step.
-        """
+        """Return ``True`` for an adaptive controller given no ``dt``."""
         return self.is_adaptive and self._dt is None
 
     @property

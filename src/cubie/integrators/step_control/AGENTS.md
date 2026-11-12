@@ -51,11 +51,11 @@ Gustafsson 2 (previous `dt` and norm); fixed and I register nothing. Query its s
 and Gustafsson to `max(..., 1e-16)`; the buffer is not pre-filled.
 
 ## Controller specifics
-- Step bounds are plain fields with `DEFAULT_*` defaults, and the config raises
-  `ValueError` on contradictory bounds. With `dt` unset, an adaptive controller's `dt`
-  property returns the bounds' geometric mean, which the DAE initialiser's `"shampine"`
-  mode uses as its step; the loop starts each run at the step that
-  `StartingStepEstimator` (`../starting_step.py`) estimates.
+- Step bounds are plain fields with `DEFAULT_*` defaults. The config raises
+  `ValueError` on contradictory bounds.
+- With `dt` unset, an adaptive controller's `dt` property returns the bounds' geometric
+  mean. The DAE initialiser's `"shampine"` mode uses that value as its step, and
+  `StartingStepEstimator` (`../starting_step.py`) estimates each run's starting step.
 - `build()` also writes `norm_fn` (the error norm, `None` for the fixed controller) into
   `ControllerCache` for `StartingStepEstimator`.
 - Deadband: `deadband_min == deadband_max == 1.0` compiles the branch out; accepted gains

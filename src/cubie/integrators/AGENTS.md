@@ -62,9 +62,9 @@ mass flags). Construction order:
 4. The controller named by `step_controller`, given the step's order.
 5. `DAEInitialiser` from the step's `settings_dict`. A no-op initialiser registers
    zero-size buffers.
-6. `StartingStepEstimator` from `dt`, its system inputs, the drivers function,
-   `is_adaptive`, the step's `algorithm_order` and the controller's `dt_min`, `dt_max`
-   and `norm_fn` products.
+6. `StartingStepEstimator`, which takes `dt`, `is_adaptive`, its system inputs, the
+   drivers function, the step's `algorithm_order` and the controller's `dt_min`,
+   `dt_max` and `norm_fn`.
 7. `IVPLoop` from the loop keys plus `_loop_inputs()` (the children's products). We
    register the step, controller, initialiser and estimator under it and capture
    `loop_fn`.
