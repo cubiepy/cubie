@@ -473,7 +473,7 @@ def _ramp_start(solver: Any, given: float) -> float:
     """Return the shortest duration to time: at least one save or
     summary sample and at least one step, or ``given`` when the
     sample interval rejects anything shorter."""
-    trial = max(_duration_floor(solver, given), float(solver.effective.dt))
+    trial = max(_duration_floor(solver, given), float(solver.dt))
     trial = min(trial, given)
     if trial < given and not _fits_sample_interval(solver, trial):
         return given

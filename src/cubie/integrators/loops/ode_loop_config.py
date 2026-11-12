@@ -98,6 +98,9 @@ class ODELoopConfig(CUDAFactoryConfig):
         Device function correcting the state at ``t0`` to a
         consistent DAE starting point; a no-op on non-DAE
         configurations.
+    starting_step_fn
+        Device function returning each run's starting step, or
+        ``None`` to start every run at ``dt``.
     dt
         Initial timestep prior to controller feedback.
     is_adaptive
@@ -209,6 +212,7 @@ class ODELoopConfig(CUDAFactoryConfig):
     drivers_fn: Optional[Callable] = device_function_field()
     observables_fn: Optional[Callable] = device_function_field()
     initialise_state_fn: Optional[Callable] = device_function_field()
+    starting_step_fn: Optional[Callable] = device_function_field()
     _dt: Optional[float] = field(
         default=0.01,
         validator=opt_gttype_validator(float, 0),

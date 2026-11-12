@@ -167,7 +167,7 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
 
     @property
     def dt(self) -> float:
-        """Return the initial step; the bounds' geometric mean if unset."""
+        """Return the given initial step, else the bounds' geometric mean."""
         if self._dt is not None:
             return self.precision(self._dt)
         return self.precision(sqrt(self._dt_min * self._dt_max))
@@ -360,3 +360,9 @@ class BaseAdaptiveStepController(BaseStepController):
         """Return the integration algorithm order assumed by the controller."""
 
         return int(self.compile_settings.algorithm_order)
+
+    @property
+    def norm_fn(self) -> Callable:
+        """Return the error-norm device function."""
+
+        return self.compile_settings.norm_fn

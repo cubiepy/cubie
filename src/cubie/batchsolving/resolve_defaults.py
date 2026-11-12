@@ -216,7 +216,7 @@ def resolve_step_bounds(
     dt_max: Optional[float],
     is_adaptive: bool,
 ) -> Dict[str, Any]:
-    """Fill the step bounds from ``dt``, or ``dt`` from the bounds.
+    """Fill the step bounds from ``dt``, or a fixed ``dt`` from the bounds.
 
     Parameters
     ----------
@@ -258,9 +258,6 @@ def resolve_step_bounds(
             dt_max = DEFAULT_DT_MAX
             if dt_min > dt_max:
                 dt_max = dt_min * factor
-    # No dt: start at the bounds' geometric mean.
-    if dt is None:
-        dt = sqrt(dt_min * dt_max)
     return {"dt": dt, "dt_min": dt_min, "dt_max": dt_max}
 
 

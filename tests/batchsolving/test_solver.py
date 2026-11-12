@@ -2549,6 +2549,7 @@ def _unroll_factories(solver):
         integrator._loop,
         integrator._output_functions,
         integrator._dae_initialiser,
+        integrator._starting_step,
         algo_step,
         algo_step.solver,
         algo_step.solver.norm,

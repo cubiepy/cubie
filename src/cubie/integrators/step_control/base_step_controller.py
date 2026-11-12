@@ -307,6 +307,8 @@ class ControllerCache(CUDADispatcherCache):
         Compiled CUDA device function, or ``-1`` before compilation.
     is_adaptive, dt, dt_min, dt_max, atol, rtol
         The controller's adaptivity, step bounds and tolerances.
+    norm_fn
+        Error-norm device function, or ``None`` for a fixed controller.
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)
@@ -316,6 +318,7 @@ class ControllerCache(CUDADispatcherCache):
     dt_max: float = field(default=0.0)
     atol: Optional[ndarray] = field(default=None)
     rtol: Optional[ndarray] = field(default=None)
+    norm_fn: Optional[Callable] = field(default=None, eq=False)
 
 
 @frozen
@@ -555,6 +558,7 @@ class BaseStepController(CUDAFactory):
         cache.dt_max = self.dt_max
         cache.atol = self.atol
         cache.rtol = self.rtol
+        cache.norm_fn = self.norm_fn
         return cache
 
     @abstractmethod
@@ -596,6 +600,12 @@ class BaseStepController(CUDAFactory):
         """Return ``True`` if the controller is adaptive."""
 
         return self.compile_settings.is_adaptive
+
+    @property
+    def norm_fn(self) -> Optional[Callable]:
+        """Return the error-norm device function, ``None`` for fixed."""
+
+        return None
 
     @property
     def atol(self) -> ndarray:

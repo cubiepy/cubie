@@ -216,6 +216,16 @@ def run_reference_loop(
         drivers_initial,
         t32,
     )
+    if controller.estimates_dt:
+        controller.dt = controller.starting_step(
+            evaluator,
+            driver_evaluator,
+            state,
+            params,
+            drivers_initial,
+            observables,
+            t32,
+        )
 
     if warmup > np.float64(0.0):
         next_save_time = precision(warmup + t0)

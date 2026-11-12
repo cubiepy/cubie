@@ -42,6 +42,7 @@ from cubie.integrators.algorithms.base_algorithm_step import (
 )
 from cubie.integrators.dae_initialiser import DAEInitialiser
 from cubie.integrators.loops.ode_loop import ALL_LOOP_SETTINGS, IVPLoop
+from cubie.integrators.starting_step import StartingStepEstimator
 from cubie.outputhandling.output_functions import (
     ALL_OUTPUT_FUNCTION_PARAMETERS,
     OutputFunctions,
@@ -127,6 +128,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._algo_step = self._new_step(settings)
         self._step_controller = self._new_controller(settings)
         self._dae_initialiser = self._new_initialiser(settings)
+        self._starting_step = self._new_starting_step(settings)
         self._loop = self._new_loop(settings)
         self._register_loop_children()
         self.update_compile_settings(
@@ -191,6 +193,9 @@ class SingleIntegratorRunCore(CUDAFactory):
 
         recognised |= self._dae_initialiser.update(
             {**updates, **DAEInitialiser.system_inputs(system)}, silent=True
+        )
+        recognised |= self._starting_step.update(
+            {**updates, **self._starting_step_inputs()}, silent=True
         )
 
         self._register_loop_children()
@@ -270,6 +275,27 @@ class SingleIntegratorRunCore(CUDAFactory):
             }
         )
 
+    def _new_starting_step(
+        self, settings: Dict[str, Any]
+    ) -> StartingStepEstimator:
+        """Build the estimator from ``settings`` and its inputs."""
+        return StartingStepEstimator(
+            **{**settings, **self._starting_step_inputs()}
+        )
+
+    def _starting_step_inputs(self) -> Dict[str, Any]:
+        """Return what the estimator takes from the system and children."""
+        controller = self._step_controller.products
+        return dict(
+            **StartingStepEstimator.system_inputs(self._system),
+            drivers_fn=self.compile_settings.drivers_fn,
+            algorithm_order=self._algo_step.algorithm_order,
+            is_adaptive=controller["is_adaptive"],
+            dt_min=controller["dt_min"],
+            dt_max=controller["dt_max"],
+            norm_fn=controller["norm_fn"],
+        )
+
     def _new_loop(self, settings: Dict[str, Any]) -> IVPLoop:
         """Build the loop from ``settings`` and the children's products."""
         loop_settings, _ = merge_kwargs_into_settings(
@@ -311,6 +337,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             initialise_state_fn=self._dae_initialiser.products[
                 "initialise_state_fn"
             ],
+            starting_step_fn=self._starting_step.products["starting_step_fn"],
         )
 
     def _register_loop_children(self) -> None:
@@ -326,6 +353,9 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._dae_initialiser,
             name="initialiser",
             aliases="algorithm_shared",
+        )
+        buffer_registry.register_child(
+            self._loop, self._starting_step, name="starting_step"
         )
 
     def _check_algorithm_consumes_mass(self, step: BaseAlgorithmStep) -> None:
@@ -370,6 +400,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._loop,
             self._output_functions,
             self._dae_initialiser,
+            self._starting_step,
             self._step_controller,
             self._algo_step,
         ):

@@ -12,6 +12,7 @@ import pytest
 from tests._utils import (
     ALGORITHM_CHAIN_CASES,
     ALGORITHM_CHAIN_SETS,
+    ESTIMATED_DT_CHAIN,
     MIXED_OUTPUTS_LAST,
     MIXED_OUTPUTS_LAST_SHORT_SCHEDULE,
     MIXED_OUTPUTS_WINDOWED,
@@ -47,7 +48,8 @@ COUNTER_TOLERANCE = np.array([5, 5, 2, 2])
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    ALGORITHM_PARAM_SETS,
+    ALGORITHM_PARAM_SETS
+    + [pytest.param(ESTIMATED_DT_CHAIN, id="erk-estimated-dt")],
     indirect=True,
 )
 def test_loop(
