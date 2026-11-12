@@ -11,10 +11,9 @@ Porting a loop of solves
 
 Cubie directly replaces a loop of ``solve_ivp`` calls. You pass all of the
 input values to one solve call, and cubie solves every run in parallel on
-the GPU. You can use the same function in both libraries. SciPy passes the
+the GPU. You can usually use the same function in both libraries. SciPy passes the
 values in ``args=`` to your function's extra arguments in order; cubie
-matches each extra argument to the entry with the same name in
-``parameters=``.
+passes them by matching their name to a key in ``parameters=``.
 
 .. code-block:: python
    :caption: SciPy
@@ -27,17 +26,19 @@ matches each extra argument to the entry with the same name in
 
    mus = np.linspace(0.5, 4.0, 10000)
    t_eval = np.linspace(0.0, 20.0, 201)
-   solutions = [
-       solve_ivp(
+   t = np.empty((201, 10000))
+   y = np.empty((201, 2, 10000))
+   for i in range(10000):
+       sol = solve_ivp(
            van_der_pol,
            (0.0, 20.0),
            [1.0, 0.0],
-           args=(mu,),
+           args=(mus[i],),
            method="RK45",
            t_eval=t_eval,
        )
-       for mu in mus
-   ]
+       t[:, i] = sol.t
+       y[:, :, i] = sol.y.T
 
 .. code-block:: python
    :caption: cubie, with the same function
@@ -53,8 +54,8 @@ matches each extra argument to the entry with the same name in
        save_every=0.1,
        output_types=["state", "time"],
    )
-   t = result.time    # compare t[:, i] with solutions[i].t
-   y = result.state   # compare y[:, :, i].T with solutions[i].y
+   t = result.time
+   y = result.state
 
 Key changes:
 
