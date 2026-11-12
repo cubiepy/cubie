@@ -28,21 +28,21 @@ from numpy import array as np_array
 from numpy import bool_ as np_bool
 from numpy import finfo as np_finfo
 
-from cubie.CUDAFactory import (
-    CUDAFactory,
-    CUDAFactoryConfig,
-    CUDADispatcherCache,
-    build_config,
-)
+from cubie._cudasim_extensions import cuda, fmax, fmin
 from cubie._utils import (
     PrecisionDType,
     device_function_field,
     getype_validator,
     opt_getype_validator,
 )
-from cubie.buffer_registry import buffer_registry
 from cubie.backend.intrinsics import unroll_if
-from cubie._cudasim_extensions import cuda, fmax, fmin
+from cubie.buffer_registry import buffer_registry
+from cubie.CUDAFactory import (
+    CUDADispatcherCache,
+    CUDAFactory,
+    CUDAFactoryConfig,
+    build_config,
+)
 
 FLAT_NORM_THRESHOLD = 1e-5
 """Scaled state or derivative norm below which the first guess is fixed."""
