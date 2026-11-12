@@ -69,10 +69,6 @@ Key changes:
   ``duration``, and a start time as ``t0`` if it isn't 0. Instead of
   ``t_eval``, give the time between saved points as ``save_every``.
   Without ``save_every``, cubie saves only the first and last points.
-- Tolerances: cubie's default ``rtol`` is ``1e-6``, where SciPy's is
-  ``1e-3``, so you get different answers from the two unless you pass the
-  same ``rtol`` to both.
-- cubie uses different method names; see the table below.
 - cubie returns every run's results in one array, inside a
   ``SolveResult``. Index the array by time first, then state, then run; see
   :doc:`/user_guide/results`. Add ``"time"`` to ``output_types`` to get
@@ -80,6 +76,8 @@ Key changes:
 - If you supply arrays for several parameters or initial values, cubie runs
   every combination of the supplied values by default. See
   :doc:`/user_guide/batching` for the other options.
+
+Note: SciPy's default relative tolerance is 1e-3, and Cubie's is 1e-6. Results will not match unless these are the same. Even when the tolerances do match directly, there will be differences due to numerical precision (float32 vs float64) and due to the way that floating point math is carried out on GPUs vs CPUs. Even though the results do not match exactly, comparing each one to a much more accurate solution (solved to a much tighter tolerance) will show that Cubie's and SciPy's results are _equally wrong_. 
 
 What your function can contain
 ------------------------------

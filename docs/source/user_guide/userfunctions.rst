@@ -1,3 +1,5 @@
+# The derivative stuff in here is convoluted and spread. We should define the ways to give a user function, and include a section on the bottom, function derivatives. That should start like: If cubie can't parse your Python function (because it doesn't follow the rules of a cubie function), or if you pass a device function directly, you will also need to provide a function that evaluates its derivative if you want to use an implicit algorithm. If you're solving a DAE (see DAEs), you might need to provide a function for each higher-order derivative required after tearing - Cubie will warn you if you do. Them the two function bits are just how to provide a function of each kind.
+
 User functions and derivatives
 ==============================
 
@@ -7,7 +9,9 @@ main cases:
 - Pure Python callables: These are treated like ordinary functions. When
   possible, Cubie inlines them symbolically.
 - CUDA device functions: These are detected and treated as opaque calls in
-  generated code. For differentiation (Jacobian/JVP/VJP), provide a
+  generated code. 
+
+For differentiation (Jacobian/JVP/VJP), provide a
   corresponding derivative function.
 
 Providing functions

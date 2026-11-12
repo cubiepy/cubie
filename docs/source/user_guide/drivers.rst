@@ -6,10 +6,12 @@ system is one where time isn't explicitly included in the equations. The trick t
 to add an extra state variable that changes at a constant rate - effectively, a clock. In Cubie, we skip the middle-state
 and just allow you to use the symbol `t` in your equations, and it will be automatically evaluated with time as the
 integration proceeds. If you can neatly express your variable as a function of time, this is the cleanest way to get a
-forcing term into your problem. As an example, an experiment I was working on recently involved us shaking a tiny MEMS
-cantilever using a piezoelectric actuator under its base, measuring how much the cantilever bent as a result, then feeding
-that measured signal back into a heater on the cantilever that caused it to bend. That system could be modelled in Cubie
-like this:
+forcing term into your problem. As an example, we'll follow a self-actuated atomic force microscopy cantilever being shaken
+by a piezoelectric actuator under its base. In the real experiment, we measure how much the cantilever bends as a result,
+and feed some function of that measured signal back into the cantilevers actuator, a heater which causes it to bend. 
+That system could be modelled in Cubie like this:
+
+# The system looks wrong throughout, get the real ones from an early version here: "\\file\Usersc$\cca79\Home\My Documents\Work\MEMS\sims\CUDA_system\CuNODE\systems\thermal_cantilever_ax_b.py"
 
 .. code-block::
     :linenos:
@@ -19,7 +21,7 @@ like this:
 
     # Parameters
     k = 0.1      # cantilever spring constant
-    c = 0.01     # cantilever damping coefficient (largely due to air)
+    c = 0.01     # cantilever damping coefficient
     alpha = 0.5  # heater coupling coefficient (how much bend the heat caused)
     beta = 0.1   # heater dissipation coefficient (how quickly the heat dissipates)
 
@@ -71,7 +73,7 @@ like this:
 This is an easy way to set up and parametrize a forcing term, and see how your system responds to different versions of
 it.
 
-Arbitrary Values
+Measured/Arbitrary Values
 ----------------
 Sometimes, your forcing function might not be easily expressed as a function of time. You might have some measured data
 that you want to test, you might want to use a random signal, or you might just want to throw some numbers in and see what
@@ -114,6 +116,7 @@ an example of how to do this:
         duration=1.0,
     )
 
+# awkward robot language, not voiced to a user at all. 
 Note how the driver appears: you declare it in ``drivers`` when you
 create the system, and read it by name inside the function body through
 the argument after the parameters, here ``d``. Keep the parameter
@@ -122,7 +125,9 @@ argument ``p`` even when the system has no parameters.
 Sampled forcing data is defined using a ``DriverSamples`` object.
 It takes a ``dict`` of ``"[driver name]": [sampled data]`` pairs, with
 either the sample time vector given as ``time``, or a starting time
-and sample spacing given as ``t0`` and ``driver_sample_period``. It is
+and sample spacing given as ``t0`` and ``driver_sample_period``.
+# Way, way too early to be talking about solver.update, that's a dev-facing code distinction.
+ It is
 a solver setting, so ``Solver`` and ``Solver.update`` accept it too,
 and a ``solve`` without ``drivers`` reuses the last ones given.
 
@@ -152,7 +157,7 @@ your samples:
    ``wrap=False``.
 
 .. code-block:: python
-
+# drive doesn't seem to be defined here
     result = qb.solve_ivp(
         sys,
         y0={"x": np.array([0.0])},
