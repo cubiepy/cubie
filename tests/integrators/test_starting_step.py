@@ -53,11 +53,13 @@ def test_starting_step_matches_reference(
     # Start the second run at zero, where the estimate falls back to
     # its fixed first guess. Start the third off the torn system's
     # constraint, so the estimate has an algebraic residual to hold.
+    # Start the fourth at NaN, where every norm is NaN.
     states = np.stack(
         [
             initial_state,
             np.zeros_like(initial_state),
             np.ones_like(initial_state),
+            np.full_like(initial_state, np.nan),
         ]
     )
     n_runs, n_states = states.shape
