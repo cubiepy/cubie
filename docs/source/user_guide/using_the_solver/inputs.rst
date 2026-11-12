@@ -89,8 +89,6 @@ To get around this, you can:
   both the scan for constant parameters and the cost of keeping them in memory.
 
 For the system above, we can pass the smaller parameters array like this.
-When you sweep a single parameter, as here, you can pass its values as a 1D
-array:
 
 .. code-block:: python
 
