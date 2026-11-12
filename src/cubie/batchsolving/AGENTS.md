@@ -121,8 +121,9 @@ staged through the pinned pool; results keep the disk backing until close, and
 
 ## Grids and variable selection
 `BatchInputHandler` builds `(variable, run)` arrays with the module-level grid builders:
-`combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). `solve_ivp`
-defaults to `"combinatorial"`, `Solver.solve`/`Solver.prepare_grid_arrays` to `"verbatim"`.
+`combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). Every entry point
+(`solve_ivp`, `Solver.solve`, `Solver.prepare_grid_arrays`, `Solver.calibrate`,
+`Solver.optimize`) defaults to `"combinatorial"`.
 
 For states and observables, `None` = all, `[]` = none, labels plus index kwargs = union.
 `SystemInterface.merge_variable_labels_and_idxs` pops `save_variables`/

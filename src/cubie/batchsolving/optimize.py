@@ -542,7 +542,7 @@ def run_optimization(
     duration: float = 1.0,
     settling_time: float = 0.0,
     t0: float = 0.0,
-    grid_type: str = "verbatim",
+    grid_type: str = "combinatorial",
     apply: bool = True,
     verbose: bool = True,
     force: bool = False,

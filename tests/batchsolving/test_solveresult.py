@@ -499,6 +499,7 @@ def solved_batch_solver_errorcode(error_injection_solver, driver_settings):
         },
         drivers=driver_settings,
         duration=0.1,
+        grid_type="verbatim",
     )
     outputs = solver.kernel.output_arrays
     outputs.reclaim_or_release_loan()
