@@ -2,15 +2,16 @@ Coming from SciPy
 =================
 
 If you have a right-hand-side function written for
-``scipy.integrate.solve_ivp``, cubie can usually run it unchanged. 
+``scipy.integrate.solve_ivp``, cubie can usually run it unchanged. The main
+differences are in how you pass the parameters and the time span, and in
+what comes back.
 
 A direct port
 -------------
 
-The same function object works in both libraries. In SciPy you pass
-parameter values through ``args=``; in cubie you declare them by name so
-they can be swept in batches later.
-# Is this by-name thing true? I think they now must be part of a params object, which makes them a closer match to args.
+The same function works in both libraries. SciPy passes the values in
+``args=`` to your function's extra arguments in order; cubie matches each
+extra argument to the entry with the same name in ``parameters=``.
 
 .. code-block:: python
    :caption: SciPy
@@ -27,53 +28,64 @@ they can be swept in batches later.
        [1.0, 0.0],
        args=(1.5,),
        method="RK45",
+       t_eval=np.linspace(0.0, 20.0, 201),
    )
-   # sol.t, sol.y
+   t, y = sol.t, sol.y
 
 .. code-block:: python
-   :caption: cubie — the same function, unchanged
+   :caption: cubie, with the same function
 
-   import cubie as qb
+   from cubie import solve_ivp
 
    def van_der_pol(t, y, mu):
        return [y[1], mu * (1 - y[0] ** 2) * y[1] - y[0]]
 
-   result = qb.solve_ivp(
+   result = solve_ivp(
        van_der_pol,
-       y0={"x": [1.0], "v": [0.0]},
-       parameters={"mu": [1.5]},
-       duration=20.0,
+       y0={"y1": 1.0, "y2": 0.0},
+       parameters={"mu": 1.5},
        method="ode45",
+       duration=20.0,
        save_every=0.1,
+       output_types=["state", "time"],
    )
-   trajectories = result.as_numpy["time_domain_array"]
+   t, y = result.time[:, 0], result.time_domain_array[:, :, 0].T
 
-# Change this to match my voice and content from the matlab one, this is weird robot language that is written to a coder, not actual meaning communicated to an entry-level scipy user.
-Line by line, the differences are:
+Key changes:
 
-* **Parameters are named.** SciPy's ``args=(1.5,)`` becomes
-  ``parameters={"mu": 1.5}``. The name must match the argument name in
-  the function signature. Extra arguments after ``(t, y)`` are matched
-  to the parameters or drivers with the same name.
-* **States are named.** The ``y0`` dict gives each state a label and an
-  initial value; dict order matches the order of the returned
-  derivatives. If you pass a plain array instead, cubie synthesises
-  names (``y0``, ``y1``, ...) from positional access.
-* **Time is a duration.** ``t_span=(0.0, 20.0)`` becomes
-  ``duration=20.0`` (with an optional ``t0``). ``t_eval`` has no
-  direct equivalent; ``save_every`` sets a regular output interval.
-* **Method names differ.** See the table below.
-* **Results come back as arrays per batch run**, not a single
-  trajectory — see :doc:`/user_guide/results`.
+- Parameters by name: give the parameter values in a dict in
+  ``parameters=``, keyed by your function's argument names, instead of in
+  ``args=``.
+- Named starting values: give ``y0`` as a dict that names each state.
+  cubie sorts the state columns by name, so naming the states ``y1`` and
+  ``y2`` keeps SciPy's order.
+- Time: instead of ``t_span``, give the total integration time as
+  ``duration``, and a start time as ``t0`` if it isn't 0. Instead of
+  ``t_eval``, give the time between saved points as ``save_every``.
+  Without ``save_every``, cubie saves only the first and last points.
+- Tolerances: cubie's default ``rtol`` is ``1e-6``, where SciPy's is
+  ``1e-3``, so the two give different answers unless you pass the same
+  ``rtol`` to both.
+- Method names differ; see the table below.
+- Results come back in one array that holds every run in the batch, as
+  part of a ``SolveResult``; see :doc:`/user_guide/results`. Add
+  ``"time"`` to ``output_types`` to get the time points.
 
-# Who gives a solitary fuck about the below? We can list the things they can't use here, if it helps. can scipy run the things we exclude?
-cubie never calls your function. It reads the source, converts the
-mathematics to symbolic form, and compiles a CUDA kernel from it. This
-means the body must be expressible mathematics — arithmetic, ``math``
-or ``numpy`` scalar calls, ``if``/``else``, and constant-bound ``for``
-loops — rather than arbitrary Python (no ``while``, comprehensions, or
-I/O). Because your function is still an ordinary Python function, you
-can keep testing it directly with SciPy or plain NumPy on the CPU.
+What your function can contain
+------------------------------
+
+SciPy calls your function, so anything Python allows works there. cubie
+reads your function and turns it into GPU code instead, so the function
+can only contain arithmetic, maths functions such as ``np.sin`` or
+``math.exp``, ``if``/``else``, and ``for`` loops over a fixed
+``range(...)``. You can't use:
+
+- ``while`` loops or list comprehensions.
+- NumPy array functions such as ``np.array``. Return the derivatives as a
+  list.
+- Variables defined outside your function. Add them as arguments and give
+  their values in ``parameters=``.
+- Anything that isn't maths, such as printing or reading files.
 
 Method names
 ------------
@@ -84,75 +96,49 @@ SciPy ``method=``     cubie ``method=``
 ``RK45``              ``"ode45"`` (also ``"rk45"``, ``"dopri54"``)
 ``RK23``              ``"ode23"`` (also ``"rk23"``)
 ``DOP853``            ``"dop853"``
-``Radau``             ``"firk"`` (fully implicit Runge-Kutta)
-``BDF``, ``LSODA``    no direct equivalent; for stiff systems use
-                      ``"rosenbrock"``, ``"backwards_euler"``, or
-                      ``"crank_nicolson"``
+``Radau``             ``"radau"``
+``BDF``, ``LSODA``    no direct equivalent; pick a stiff method from
+                      :doc:`/user_guide/choosing_algorithms`
 ===================== ==============================================
 
-#Bullshit robot wording about rtol and atol. How is that relevant here at all? 
-``rtol`` and ``atol`` keep their names. See
-:doc:`/user_guide/choosing_algorithms` for the full list and guidance.
+See :doc:`/user_guide/choosing_algorithms` for every method cubie offers.
 
-Where cubie pays off: batches
------------------------------
-# Include the closer match to the parfor section. 
-In SciPy, a parameter sweep is a Python loop around ``solve_ivp``. In
-cubie, arrays of values describe the whole batch and one call
-integrates every run in parallel on the GPU:
+Replacing a loop of solves
+--------------------------
+
+Cubie directly replaces a loop of ``solve_ivp`` calls if you're already
+solving a batch in SciPy:
 
 .. code-block:: python
+   :caption: SciPy
 
-   result = qb.solve_ivp(
+   mus = np.linspace(0.5, 4.0, 10000)
+   solutions = [
+       solve_ivp(van_der_pol, (0.0, 20.0), [1.0, 0.0], args=(mu,))
+       for mu in mus
+   ]
+
+In cubie the solve call takes all of the input values instead:
+
+.. code-block:: python
+   :caption: cubie
+
+   result = solve_ivp(
        van_der_pol,
-       y0={"x": [1.0], "v": [0.0]},
-       parameters={"mu": np.linspace(0.5, 4.0, 1024)},
-       duration=20.0,
+       y0={"y1": 1.0, "y2": 0.0},
+       parameters={"mu": np.linspace(0.5, 4.0, 10000)},
        method="ode45",
+       duration=20.0,
        save_every=0.1,
    )
 
-By default every combination of the supplied values is run
-(``grid_type="combinatorial"``); pass ``grid_type="verbatim"`` to pair
-inputs run-for-run. See :doc:`/user_guide/batching`.
-
-#Nothing to do with scipy.
-Repeated solves: build the system once
---------------------------------------
-
-``qb.solve_ivp(function, ...)`` builds and compiles the system on every
-call. If you solve the same system repeatedly — new parameters or
-initial values each time — build it once with
-:func:`~cubie.odesystems.symbolic.symbolicODE.create_ODE_system` and
-keep a :class:`~cubie.batchsolving.solver.Solver`, so later calls skip
-system construction and reuse the compiled kernel:
-
-.. code-block:: python
-
-   system = qb.create_ODE_system(
-       van_der_pol,
-       states={"x": 1.0, "v": 0.0},
-       parameters={"mu": 1.5},
-   )
-   solver = qb.Solver(system, algorithm="ode45", save_every=0.1)
-
-   for mu_batch in mu_batches:
-       result = solver.solve(
-           {"x": [1.0], "v": [0.0]},
-           {"mu": mu_batch},
-           duration=20.0,
-       )
-
-Note that ``Solver.solve`` defaults to ``grid_type="verbatim"`` where
-``qb.solve_ivp`` defaults to ``"combinatorial"``.
+If you supply arrays for several parameters or initial values, cubie runs
+every combination of the supplied values by default. See
+:doc:`/user_guide/batching` for the other options.
 
 Not supported
 -------------
 
 * ``dense_output`` and event functions have no cubie equivalent.
-* Solutions are saved on the regular ``save_every`` grid, not at
-  arbitrary ``t_eval`` points.
-# How on earth would the scipy user know what a closure variable is or a global constant, why would they care what a "parse-time"error is.
-* The right-hand side must be self-contained: closure variables and
-  global constants raise a parse-time error naming the symbol —
-  declare them in ``parameters`` instead.
+* cubie saves solutions at a regular interval set by ``save_every``, not
+  at arbitrary ``t_eval`` points.
