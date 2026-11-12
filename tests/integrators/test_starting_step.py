@@ -1,4 +1,4 @@
-"""Tests for the starting-step estimate device function."""
+"""Tests for the starting-step estimator."""
 
 import numpy as np
 import pytest
@@ -7,111 +7,29 @@ from numba_cuda_mlir.numba_cuda.np.numpy_support import from_dtype
 from cubie._cudasim_extensions import cuda
 from cubie.backend.jit import compile_kwargs
 from cubie.memory import default_memmgr
-from tests._utils import STARTING_STEP_CASES, swept_values
+from tests._utils import (
+    ESTIMATED_DT_CHAIN,
+    TORN_NO_OBSERVABLES,
+    UNSET_LINEAR_SOLVE,
+    swept_values,
+)
 
-
-def _device_starting_step(
-    single_integrator_run, system, precision, initial_state, driver_array
-):
-    """Return the device estimate at ``initial_state`` and ``t = 0``."""
-    starting_step_fn = single_integrator_run._starting_step.device_function
-    drivers_fn = None if driver_array is None else driver_array.drivers_fn
-    observables_fn = system.observables_fn
-    numba_precision = from_dtype(precision)
-
-    n_states = system.sizes.states
-    # Give each empty buffer one spare element, because we cannot copy
-    # a zero-length array to the device.
-    n_drivers = max(1, system.sizes.drivers)
-    n_observables = max(1, system.sizes.observables)
-    if driver_array is None:
-        coefficients = np.zeros((1, 1, 1), dtype=precision)
-    else:
-        coefficients = np.asarray(driver_array.coefficients, dtype=precision)
-
-    stream = default_memmgr.get_group_stream()
-    d_state = cuda.to_device(
-        np.asarray(initial_state, dtype=precision), stream=stream
-    )
-    d_params = cuda.to_device(
-        swept_values(system).astype(precision), stream=stream
-    )
-    d_coefficients = cuda.to_device(coefficients, stream=stream)
-    d_drivers = cuda.to_device(
-        np.zeros(n_drivers, dtype=precision), stream=stream
-    )
-    d_observables = cuda.to_device(
-        np.zeros(n_observables, dtype=precision), stream=stream
-    )
-    d_probe_state = cuda.to_device(
-        np.zeros(n_states, dtype=precision), stream=stream
-    )
-    d_probe_drivers = cuda.to_device(
-        np.zeros(n_drivers, dtype=precision), stream=stream
-    )
-    d_probe_observables = cuda.to_device(
-        np.zeros(n_observables, dtype=precision), stream=stream
-    )
-    d_probe_derivative = cuda.to_device(
-        np.zeros(n_states, dtype=precision), stream=stream
-    )
-    d_out = cuda.to_device(np.zeros(1, dtype=precision), stream=stream)
-
-    @cuda.jit(**compile_kwargs)
-    def kernel(
-        state,
-        parameters,
-        driver_coefficients,
-        drivers,
-        observables,
-        probe_state,
-        probe_drivers,
-        probe_observables,
-        probe_derivative,
-        out,
-    ):
-        if cuda.grid(1) > 0:
-            return
-        zero = numba_precision(0.0)
-        scratch = cuda.local.array(1, dtype=numba_precision)
-        if drivers_fn is not None:
-            drivers_fn(zero, driver_coefficients, drivers)
-        observables_fn(state, parameters, drivers, observables, zero)
-        out[0] = starting_step_fn(
-            state,
-            parameters,
-            driver_coefficients,
-            drivers,
-            observables,
-            probe_state,
-            probe_drivers,
-            probe_observables,
-            probe_derivative,
-            zero,
-            scratch,
-            scratch,
-        )
-
-    kernel[1, 1, stream](
-        d_state,
-        d_params,
-        d_coefficients,
-        d_drivers,
-        d_observables,
-        d_probe_state,
-        d_probe_drivers,
-        d_probe_observables,
-        d_probe_derivative,
-        d_out,
-    )
-    stream.synchronize()
-    return d_out.copy_to_host()[0]
+# We test the torn system for its algebraic row, which the estimate
+# holds over the Euler step and leaves out of the norms.
+TORN_ESTIMATED_DT = {
+    "system_type": "torn_driver",
+    "algorithm": "radau",
+    "step_controller": "pi",
+    **TORN_NO_OBSERVABLES,
+    **UNSET_LINEAR_SOLVE,
+    "dt": None,
+}
 
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    list(STARTING_STEP_CASES.values()),
-    ids=list(STARTING_STEP_CASES),
+    [ESTIMATED_DT_CHAIN, TORN_ESTIMATED_DT],
+    ids=["erk", "torn-radau"],
     indirect=True,
 )
 def test_starting_step_matches_reference(
@@ -125,28 +43,133 @@ def test_starting_step_matches_reference(
     cpu_driver_evaluator,
     tolerance,
 ):
-    """Check the device estimate against the CPU reference."""
-    device_estimate = _device_starting_step(
-        single_integrator_run, system, precision, initial_state, driver_array
-    )
+    """Check each run's device estimate against the CPU reference."""
+    estimator = single_integrator_run._starting_step
+    starting_step_fn = estimator.device_function
+    drivers_fn = None if driver_array is None else driver_array.drivers_fn
+    observables_fn = system.observables_fn
+    numba_precision = from_dtype(precision)
 
-    state = np.asarray(initial_state, dtype=precision)
-    params = system.parameters.defaults_array(precision)
+    # Start the second run at zero, where the estimate falls back to
+    # its fixed first guess. Start the third off the torn system's
+    # constraint, so the estimate has an algebraic residual to hold.
+    states = np.stack(
+        [
+            initial_state,
+            np.zeros_like(initial_state),
+            np.ones_like(initial_state),
+        ]
+    )
+    n_runs, n_states = states.shape
+    # Give each local array at least one element.
+    n_drivers = max(1, system.sizes.drivers)
+    n_observables = max(1, system.sizes.observables)
+    shared_elements = max(1, estimator.shared_buffer_size)
+    persistent_elements = max(1, estimator.persistent_local_buffer_size)
+    if driver_array is None:
+        coefficients = np.zeros((1, 1, 1), dtype=precision)
+    else:
+        coefficients = np.asarray(driver_array.coefficients, dtype=precision)
+
+    @cuda.jit(**compile_kwargs)
+    def kernel(run_states, parameters, driver_coefficients, estimates):
+        run = cuda.grid(1)
+        if run >= run_states.shape[0]:
+            return
+        zero = numba_precision(0.0)
+        state = run_states[run]
+        drivers = cuda.local.array(n_drivers, dtype=numba_precision)
+        observables = cuda.local.array(n_observables, dtype=numba_precision)
+        proposed_state = cuda.local.array(n_states, dtype=numba_precision)
+        proposed_drivers = cuda.local.array(n_drivers, dtype=numba_precision)
+        proposed_observables = cuda.local.array(
+            n_observables, dtype=numba_precision
+        )
+        error = cuda.local.array(n_states, dtype=numba_precision)
+        shared = cuda.local.array(shared_elements, dtype=numba_precision)
+        persistent = cuda.local.array(
+            persistent_elements, dtype=numba_precision
+        )
+        if drivers_fn is not None:
+            drivers_fn(zero, driver_coefficients, drivers)
+        observables_fn(state, parameters, drivers, observables, zero)
+        estimates[run] = starting_step_fn(
+            state,
+            proposed_state,
+            parameters,
+            driver_coefficients,
+            drivers,
+            proposed_drivers,
+            observables,
+            proposed_observables,
+            error,
+            zero,
+            shared,
+            persistent,
+        )
+
+    stream = default_memmgr.get_group_stream()
+    d_states = cuda.to_device(states, stream=stream)
+    d_parameters = cuda.to_device(
+        swept_values(system).astype(precision), stream=stream
+    )
+    d_coefficients = cuda.to_device(coefficients, stream=stream)
+    d_estimates = cuda.to_device(
+        np.zeros(n_runs, dtype=precision), stream=stream
+    )
+    kernel[1, n_runs, stream](
+        d_states, d_parameters, d_coefficients, d_estimates
+    )
+    estimates = d_estimates.copy_to_host(stream=stream)
+    stream.synchronize()
+
+    parameters = system.parameters.defaults_array(precision)
     t0 = precision(0.0)
     drivers = cpu_driver_evaluator(t0)
-    observables = cpu_system.observables(state, params, drivers, t0)
-    reference = cpu_step_controller.starting_step(
-        cpu_system,
-        cpu_driver_evaluator,
-        state,
-        params,
-        drivers,
-        observables,
-        t0,
+    reference = np.empty(n_runs, dtype=precision)
+    for run, state in enumerate(states):
+        observables = cpu_system.observables(state, parameters, drivers, t0)
+        reference[run] = cpu_step_controller.starting_step(
+            cpu_system,
+            cpu_driver_evaluator,
+            state,
+            parameters,
+            drivers,
+            observables,
+            t0,
+        )
+
+    np.testing.assert_allclose(
+        estimates, reference, rtol=tolerance.rel_tight, atol=0.0
     )
 
-    # We compare at the loose tolerance because the device evaluates
-    # sqrt and pow with approximate-function fastmath.
-    np.testing.assert_allclose(
-        device_estimate, reference, rtol=tolerance.rel_loose, atol=0.0
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [ESTIMATED_DT_CHAIN], indirect=True
+)
+def test_given_dt_replaces_the_estimate(single_integrator_run_mutable):
+    """The loop calls the estimate until the run is given a dt."""
+    run = single_integrator_run_mutable
+    estimator = run._starting_step
+    assert estimator.estimates_dt is True
+    assert run._loop.compile_settings.starting_step_fn is (
+        estimator.device_function
     )
+    run.update(dt=0.01)
+    assert estimator.estimates_dt is False
+    assert run._loop.compile_settings.starting_step_fn is None
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [ESTIMATED_DT_CHAIN], indirect=True
+)
+def test_initial_derivative_location_moves_the_buffer(
+    single_integrator_run_mutable, system
+):
+    """The location setting places the derivative buffer."""
+    run = single_integrator_run_mutable
+    estimator = run._starting_step
+    assert estimator.local_buffer_size == system.sizes.states
+    recognised = run.update(initial_derivative_location="shared")
+    assert "initial_derivative_location" in recognised
+    assert estimator.shared_buffer_size == system.sizes.states

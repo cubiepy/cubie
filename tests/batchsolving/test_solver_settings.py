@@ -32,6 +32,10 @@ from cubie.integrators.algorithms.base_algorithm_step import (
 from cubie.integrators.algorithms.ode_implicitstep import ImplicitStepConfig
 from cubie.integrators.dae_initialiser import DAEInitialiser
 from cubie.integrators.loops.ode_loop import ALL_LOOP_SETTINGS
+from cubie.integrators.starting_step import (
+    ALL_STARTING_STEP_PARAMETERS,
+    StartingStepEstimator,
+)
 from cubie.integrators.step_control import _CONTROLLER_REGISTRY
 from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
@@ -82,6 +86,7 @@ def test_record_matches_the_children_settings(system):
         set(ALL_ALGORITHM_STEP_PARAMETERS)
         | set(ALL_STEP_CONTROLLER_PARAMETERS)
         | set(ALL_LOOP_SETTINGS)
+        | set(ALL_STARTING_STEP_PARAMETERS)
         | set(ALL_OUTPUT_FUNCTION_PARAMETERS)
         | set(ALL_KERNEL_PARAMETERS)
         | set(ALL_MEMORY_MANAGER_PARAMETERS)
@@ -100,6 +105,7 @@ def test_record_matches_the_children_settings(system):
         )
         | set(BaseStepController.system_inputs(system, algorithm_order=1))
         | set(DAEInitialiser.system_inputs(system))
+        | set(StartingStepEstimator.system_inputs(system))
         | set(OutputFunctions.system_inputs(system))
     )
     solver_own = {
@@ -1006,6 +1012,7 @@ def test_compile_flags_reach_every_factory(solver_mutable):
         run._algo_step,
         run._step_controller,
         run._dae_initialiser,
+        run._starting_step,
     ):
         assert factory.compile_settings.unroll.unroll_stage == (True, 2)
         assert factory.compile_settings.jit_flags.lineinfo is True

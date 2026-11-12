@@ -328,22 +328,12 @@ SPECIFIC_ALGORITHM_COMBOS = {
     },
 }
 
-# Adaptive chains without dt for the starting-step tests. We include
-# the torn system for its algebraic row.
-STARTING_STEP_CASES = {
-    "erk": {
-        **MID_RUN_PARAMS,
-        **ALGORITHM_CONTROLLER_COMBOS["erk"],
-        "dt": None,
-    },
-    "torn-radau": {
-        "system_type": "torn_driver",
-        "algorithm": "radau",
-        "step_controller": "pi",
-        **TORN_NO_OBSERVABLES,
-        **UNSET_LINEAR_SOLVE,
-        "dt": None,
-    },
+# The adaptive ERK chain given no dt, so each run starts at its
+# estimated step.
+ESTIMATED_DT_CHAIN = {
+    **MID_RUN_PARAMS,
+    **ALGORITHM_CONTROLLER_COMBOS["erk"],
+    "dt": None,
 }
 
 STEP_CASES = [

@@ -12,13 +12,13 @@ import pytest
 from tests._utils import (
     ALGORITHM_CHAIN_CASES,
     ALGORITHM_CHAIN_SETS,
+    ESTIMATED_DT_CHAIN,
     MIXED_OUTPUTS_LAST,
     MIXED_OUTPUTS_LAST_SHORT_SCHEDULE,
     MIXED_OUTPUTS_WINDOWED,
     MIXED_OUTPUTS_WINDOWED_SHORT_SCHEDULE,
     LARGE_T0_SMALL_STEPS_F32,
     LARGE_T0_SMALL_STEPS_F64,
-    STARTING_STEP_CASES,
     TINY_DT_ADAPTIVE_CN,
     WARMUP_SAVE_BOUNDARY,
     assert_integration_outputs,
@@ -48,7 +48,8 @@ COUNTER_TOLERANCE = np.array([5, 5, 2, 2])
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    ALGORITHM_PARAM_SETS,
+    ALGORITHM_PARAM_SETS
+    + [pytest.param(ESTIMATED_DT_CHAIN, id="erk-estimated-dt")],
     indirect=True,
 )
 def test_loop(
@@ -82,34 +83,6 @@ def test_loop(
     np.testing.assert_array_less(
         excess, 1, err_msg=f"device:\n{counters}\nreference:\n{reference}",
     )
-
-
-@pytest.mark.parametrize(
-    "solver_settings_override",
-    [STARTING_STEP_CASES["erk"]],
-    ids=["erk"],
-    indirect=True,
-)
-def test_loop_starts_at_the_estimated_step(
-    device_loop_outputs,
-    cpu_loop_outputs,
-    output_functions,
-    tolerance,
-):
-    """Check a run without dt takes the reference's steps from its start."""
-    assert_integration_outputs(
-        reference=cpu_loop_outputs,
-        device=device_loop_outputs,
-        output_functions=output_functions,
-        rtol=tolerance.rel_loose,
-        atol=tolerance.abs_loose,
-    )
-    assert device_loop_outputs.status == 0
-
-    # Compare the attempted and rejected step counts per save.
-    counters = np.asarray(device_loop_outputs.counters, dtype=np.int64)
-    reference = np.asarray(cpu_loop_outputs["counters"], dtype=np.int64)
-    np.testing.assert_array_equal(counters[:, 2:], reference[:, 2:])
 
 
 # Add combos
