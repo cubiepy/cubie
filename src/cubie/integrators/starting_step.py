@@ -49,6 +49,10 @@ from cubie.CUDAFactory import (
     CUDAFactoryConfig,
     build_config,
 )
+from cubie.integrators.step_control.adaptive_step_controller import (
+    DEFAULT_DT_MAX,
+    DEFAULT_DT_MIN,
+)
 
 ALL_STARTING_STEP_PARAMETERS = (
     {"dt", "initial_derivative_location"}
@@ -109,8 +113,12 @@ class StartingStepConfig(CUDAFactoryConfig):
         default=False, validator=validators.instance_of(bool)
     )
     algorithm_order: int = field(default=1, validator=getype_validator(int, 1))
-    _dt_min: float = field(default=1e-9, validator=getype_validator(float, 0))
-    _dt_max: float = field(default=1.0, validator=getype_validator(float, 0))
+    _dt_min: float = field(
+        default=DEFAULT_DT_MIN, validator=getype_validator(float, 0)
+    )
+    _dt_max: float = field(
+        default=DEFAULT_DT_MAX, validator=getype_validator(float, 0)
+    )
     initial_derivative_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
