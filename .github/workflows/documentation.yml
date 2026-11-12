@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 env:
   SITE_BASE: /cubie/
@@ -103,9 +104,34 @@ jobs:
       github.event_name != 'pull_request'
       || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    concurrency:
-      group: gh-pages-deploy
-      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: tools
+          sparse-checkout: ci/tools
+      - uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: site
+      - uses: actions/setup-python@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: docs-site
+          path: build
+
+      - name: Publish the version folder
+        working-directory: site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: bash ../tools/ci/tools/docs_publish.sh deploy "$VERSION" ../build
+
+  remove-preview:
+    if: >
+      github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
@@ -117,56 +143,10 @@ jobs:
           path: site
       - uses: actions/setup-python@v6
 
-      - name: Replace the version folder
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: rm -rf "site/$VERSION"
-      - uses: actions/download-artifact@v8
-        with:
-          name: docs-site
-          path: site/${{ needs.build.outputs.version }}
-
-      - name: Rewrite the site root
-        run: python tools/ci/tools/docs_site.py index site "$SITE_BASE"
-
-      - name: Push to gh-pages
-        working-directory: site
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          if git diff --cached --quiet; then
-            echo "Nothing to deploy."
-            exit 0
-          fi
-          git commit -m "deploy $VERSION: ${{ github.sha }}"
-          git push origin gh-pages
-
-  remove-preview:
-    if: >
-      github.event.action == 'closed'
-      && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    concurrency:
-      group: gh-pages-deploy
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: gh-pages
-          path: site
       - name: Remove the preview folder
         working-directory: site
         env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           VERSION: pr-${{ github.event.pull_request.number }}
-        run: |
-          if [ ! -d "$VERSION" ]; then
-            exit 0
-          fi
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git rm -r -q "$VERSION"
-          git commit -m "remove preview $VERSION"
-          git push origin gh-pages
+        run: bash ../tools/ci/tools/docs_publish.sh remove "$VERSION"

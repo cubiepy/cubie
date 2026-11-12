@@ -72,8 +72,9 @@ def releases(site_dir: Path) -> list:
 def index(site_dir: Path, base: str) -> None:
     """Rewrite the root files of the site from its version folders.
 
-    Leave the root untouched while the site holds neither ``main`` nor
-    a release, so that a preview deploy never removes the current site.
+    Write the version list and the picker script on every deploy. Leave
+    the root pages untouched while the site holds neither ``main`` nor a
+    release, so that a preview deploy never removes the current site.
 
     Parameters
     ----------
@@ -84,6 +85,22 @@ def index(site_dir: Path, base: str) -> None:
     """
     released = releases(site_dir)
     has_main = (site_dir / "main").is_dir()
+
+    versions = []
+    if released:
+        versions.append({"name": released[0],
+                         "label": f"{released[0]} (latest)"})
+    if has_main:
+        versions.append({"name": "main", "label": "main (development)"})
+    versions.extend({"name": name, "label": name} for name in released[1:])
+    for entry in versions:
+        entry["url"] = f"{base}{entry['name']}/"
+    (site_dir / "versions.json").write_text(
+        json.dumps(versions, indent=2) + "\n", encoding="utf8"
+    )
+    shutil.copyfile(SWITCHER, site_dir / "version_switcher.js")
+    (site_dir / ".nojekyll").write_text("", encoding="utf8")
+
     if not released and not has_main:
         return
     default = released[0] if released else "main"
@@ -106,21 +123,6 @@ def index(site_dir: Path, base: str) -> None:
         else:
             entry.unlink()
 
-    versions = []
-    if released:
-        versions.append({"name": released[0],
-                         "label": f"{released[0]} (latest)"})
-    if has_main:
-        versions.append({"name": "main", "label": "main (development)"})
-    versions.extend({"name": name, "label": name} for name in released[1:])
-    for entry in versions:
-        entry["url"] = f"{base}{entry['name']}/"
-
-    (site_dir / "versions.json").write_text(
-        json.dumps(versions, indent=2) + "\n", encoding="utf8"
-    )
-    shutil.copyfile(SWITCHER, site_dir / "version_switcher.js")
-    (site_dir / ".nojekyll").write_text("", encoding="utf8")
     target = f"{base}{default}/"
     (site_dir / "index.html").write_text(
         "<!DOCTYPE html>\n"
