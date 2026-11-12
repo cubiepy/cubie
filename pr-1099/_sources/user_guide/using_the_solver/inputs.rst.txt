@@ -1,9 +1,8 @@
-Inputs and Parameter Sweeps
-===========================
+Batch Inputs
+============
 
-You give every solve two inputs: the initial values of the states, and the
-parameter values. You can provide these in a number of ways. Every function that
-ends up in a ``solve`` takes inputs the same way. All examples in this page
+Each run is defined by the initial values of its states and its parameter values. 
+You can provide these in a number of ways. All examples in this page
 will follow the same Lotka-Volterra system as the rest of the docs, defined
 here:
 
@@ -52,10 +51,11 @@ from the default state, or under default parameters, we could leave the whole
 ``initial_values`` or ``parameters`` arguments out completely. If you didn't
 set defaults when you built the system, you can set them on the system with
 ``system.set_default_parameters({"a": 0.2})`` for parameters and
-``system.set_initial_values({"y": 0.3})`` for states. If you include a
-constant value for a parameter or initial value that has a different
-default, the default doesn't change: Cubie presumes that arguments to
-``solve`` are intended for that run only.
+``system.set_initial_values({"y": 0.3})`` for states. 
+
+If you include a constant value for a parameter or initial value that 
+is different to the default, the default doesn't change. Cubie presumes 
+that input arguments to ``solve`` are intended for that run only.
 
 Arrays
 ~~~~~~
@@ -63,31 +63,29 @@ Arrays
 If you're looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead. Lay each
 array out as ``(n_variables, n_runs)``, with its rows ordered by variable
-name, for the states as well as the parameters. Cubie casts a host array
-to the system's ``precision`` datatype, so give it arrays in that datatype
-to skip the copy. Give an initial values array one row per state in your
-system. Give the parameters array either one row for every parameter in
-your system (a full-height parameter array), or one row per parameter that
-varies across the batch. Read ``solver.parameter_legend`` to see each row's
-parameter name.
+name. If the array is already in the same data type as ``solver.precision``,
+then you can also save an additional array copy. 
+
+Note: It may seem odd that the states array ends up in a different order 
+than the one you gave. When we tear DAE systems, or only select a few outputs,
+name-ordering makes it easier to reconstruct and index the resulting system.
 
 When you pass a dict, cubie compiles every parameter you give a single value
-directly into the GPU code to make it go faster. It does the same for a
-full-height parameters array: cubie scans each row, and compiles in every
-row that holds one value. The scan costs a few milliseconds per solve. To
-skip it, you have two options:
+directly into the GPU code to make it go faster. It does the same for an 
+array under the default ``fix_constant_parameters=True`` argument. This 
+will usually make the solve faster, but costs a few ms per solve call.
+To get around this, you can:
 
-- Pass ``fix_constant_parameters=False``. Cubie then gives every parameter
-  a row of the array as you passed it, which may slow down the solve itself
-  if you have a lot of constant parameters.
-- Pass an array with rows for only the parameters that vary, in name
-  order.
+- Pass ``fix_constant_parameters=False``. All parameters, even the constant 
+  ones, are part of the input array that gets passed to the GPU, and get loaded
+  from memory before use. The GPU can hold less runs at once (typically),
+  and the solve goes a little slower.
+- Tell the solver which parameters will be swept with 
+  ``solver.set_swept_parameters(names)``, where names is a list of parameter names.
+  After this you can pass an array with rows for those parameters onlt, saving
+  both the scan for constant parameters and the cost of keeping them in memory.
 
-To pass just the varying parameters, tell the solver which parameters to
-expect: call ``solver.set_swept_parameters`` with the parameter names you
-want to vary, or pass the same names to the ``swept_parameters`` argument
-when building the system. When you sweep a
-single parameter, you can pass its values as a 1D array:
+For the system above, we can pass the smaller parameters array like this:
 
 .. code-block:: python
 
@@ -126,9 +124,10 @@ Device arrays
 
 If you want to go *really* fast and you are comfortable with the CUDA
 environment, you can pass arrays on the GPU (device arrays) directly to cut
-out the few milliseconds of transfer time as well. Use the same layout and
-precision as host arrays. Pair them with ``on_device=True`` to keep an
-entire solve → post-process pipeline on the GPU (see :doc:`results`):
+out the few milliseconds of transfer time as well. Use the same layout as host
+arrays, and ensure they're the same datatype as ``solver.precision``.
+Pair them with ``on_device=True`` to keep an entire solve → post-process 
+pipeline on the GPU (see :doc:`results`), never bringing them back to the host.
 
 .. code-block:: python
 
@@ -165,13 +164,13 @@ solves every combination of the values you supply:
        duration=100.0,
    )
 
-Cubie solves :math:`500 \times 400 = 200000` IVPs here. It lays the runs
-out in C order over the combinations, with the last parameter varying
-fastest.
+Cubie builds every combination of parameters in this case; it creates a run
+for every ``b`` value combined with evey ``d`` value. This creates
+ :math:`500 \times 400 = 200000` IVPs in this case. 
 
 Verbatim grids
 ~~~~~~~~~~~~~~
-
+#the default should not differ between solve ivp and solver.solve. set both to combinatorial.
 With ``grid_type="verbatim"``, the default for ``Solver.solve``, cubie
 pairs your values run by run, so every array must have the same length:
 
@@ -186,7 +185,7 @@ pairs your values run by run, so every array must have the same length:
        duration=100.0,
    )
 
-Cubie gives run ``i`` the values ``b_values[i]`` and ``d_values[i]``.
+This creates 10,000 runs, one for each same-index pair of ``b`` and ``d`` values.
 
 Example: heatmap from a two-parameter sweep
 -------------------------------------------

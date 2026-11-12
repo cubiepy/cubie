@@ -5,6 +5,16 @@ Every call to :func:`~cubie.solve_ivp` or
 :meth:`~cubie.batchsolving.solver.Solver.solve` returns a
 :class:`~cubie.batchsolving.solveresult.SolveResult`.
 
+When integrating large batches, you end up with large data. Unless you're 
+checking the method against some known reference as a sanity check, you probably
+don't need the full time-domain series across the whole integration. To 
+cut down the output data, and speed up the solver, you can save only certain 
+variables, at only certain times, or you can never save the time-domain signals
+and calculate summary variables (like averages, or peak times) on the GPU
+while integrating.
+
+# This is api reference, mostly. it looks like each agent adding a results feature tacked on their bit of new detail without any narrative consideration.
+It should go: output types, summary metrics, selecting variables, result formats. 
 The ``SolveResult`` Object
 --------------------------
 

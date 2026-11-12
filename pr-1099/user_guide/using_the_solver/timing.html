@@ -62,7 +62,7 @@
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Using the solver</a><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="inputs.html">Inputs and Parameter Sweeps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Timing Parameters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
@@ -282,37 +282,9 @@
 control how the integrator advances through time, <strong>output timing</strong>
 parameters control when results are saved, and <strong>integration bounds</strong>
 define the overall time span.</p>
-<nav class="contents local" id="on-this-page">
-<p class="topic-title">On this page</p>
-<ul class="simple">
-<li><p><a class="reference internal" href="#step-size-parameters" id="id1">Step Size Parameters</a></p>
-<ul>
-<li><p><a class="reference internal" href="#default-behaviour" id="id2">Default Behaviour</a></p></li>
-<li><p><a class="reference internal" href="#derivation-rules" id="id3">Derivation Rules</a></p></li>
-<li><p><a class="reference internal" href="#update-behaviour" id="id4">Update Behaviour</a></p></li>
-</ul>
-</li>
-<li><p><a class="reference internal" href="#output-timing-parameters" id="id5">Output Timing Parameters</a></p>
-<ul>
-<li><p><a class="reference internal" href="#save-every" id="id6">save_every</a></p></li>
-<li><p><a class="reference internal" href="#summarise-every" id="id7">summarise_every</a></p></li>
-<li><p><a class="reference internal" href="#sample-summaries-every" id="id8">sample_summaries_every</a></p></li>
-<li><p><a class="reference internal" href="#summary-window-behaviour" id="id9">Summary Window Behaviour</a></p></li>
-<li><p><a class="reference internal" href="#relationship-between-output-parameters" id="id10">Relationship Between Output Parameters</a></p></li>
-</ul>
-</li>
-<li><p><a class="reference internal" href="#integration-bounds" id="id11">Integration Bounds</a></p>
-<ul>
-<li><p><a class="reference internal" href="#duration" id="id12">duration</a></p></li>
-<li><p><a class="reference internal" href="#t0" id="id13">t0</a></p></li>
-<li><p><a class="reference internal" href="#settling-time" id="id14">settling_time</a></p></li>
-</ul>
-</li>
-<li><p><a class="reference internal" href="#complete-example" id="id15">Complete Example</a></p></li>
-</ul>
-</nav>
+<p>#Ordering should be: integration bounds, output timing, step size.</p>
 <section id="step-size-parameters">
-<h2><a class="toc-backref" href="#id1" role="doc-backlink">Step Size Parameters</a><a class="headerlink" href="#step-size-parameters" title="Link to this heading"></a></h2>
+<h2>Step Size Parameters<a class="headerlink" href="#step-size-parameters" title="Link to this heading"></a></h2>
 <p>Adaptive controllers use three related parameters to control step sizes:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">dt</span></code>: Initial step size (starting point for adaptation)</p></li>
@@ -322,7 +294,7 @@ define the overall time span.</p>
 <p>Fixed-step controllers use only <code class="docutils literal notranslate"><span class="pre">dt</span></code>, which becomes the constant step
 size throughout integration.</p>
 <section id="default-behaviour">
-<h3><a class="toc-backref" href="#id2" role="doc-backlink">Default Behaviour</a><a class="headerlink" href="#default-behaviour" title="Link to this heading"></a></h3>
+<h3>Default Behaviour<a class="headerlink" href="#default-behaviour" title="Link to this heading"></a></h3>
 <p>When you don’t specify any step size parameters, CuBIE uses these defaults:</p>
 <table class="docutils align-default">
 <colgroup>
@@ -357,7 +329,7 @@ size throughout integration.</p>
 </table>
 </section>
 <section id="derivation-rules">
-<h3><a class="toc-backref" href="#id3" role="doc-backlink">Derivation Rules</a><a class="headerlink" href="#derivation-rules" title="Link to this heading"></a></h3>
+<h3>Derivation Rules<a class="headerlink" href="#derivation-rules" title="Link to this heading"></a></h3>
 <p>When you provide some parameters but not others, CuBIE derives the
 missing values. The rules differ for adaptive and fixed controllers:</p>
 <p><strong>Adaptive controllers:</strong></p>
@@ -415,7 +387,7 @@ value. If you provide any of them, the first non-None value in the order
 </div>
 </section>
 <section id="update-behaviour">
-<h3><a class="toc-backref" href="#id4" role="doc-backlink">Update Behaviour</a><a class="headerlink" href="#update-behaviour" title="Link to this heading"></a></h3>
+<h3>Update Behaviour<a class="headerlink" href="#update-behaviour" title="Link to this heading"></a></h3>
 <p>When you call <code class="docutils literal notranslate"><span class="pre">solver.update()</span></code> to change step parameters mid-session,
 CuBIE tracks which values you originally set versus which were derived:</p>
 <ul class="simple">
@@ -435,10 +407,10 @@ won’t be changed even if it would make more sense to adjust it.</p>
 </section>
 </section>
 <section id="output-timing-parameters">
-<h2><a class="toc-backref" href="#id5" role="doc-backlink">Output Timing Parameters</a><a class="headerlink" href="#output-timing-parameters" title="Link to this heading"></a></h2>
+<h2>Output Timing Parameters<a class="headerlink" href="#output-timing-parameters" title="Link to this heading"></a></h2>
 <p>Output timing controls how often CuBIE records results during integration.</p>
 <section id="save-every">
-<h3><a class="toc-backref" href="#id6" role="doc-backlink">save_every</a><a class="headerlink" href="#save-every" title="Link to this heading"></a></h3>
+<h3>save_every<a class="headerlink" href="#save-every" title="Link to this heading"></a></h3>
 <p>Time interval between saved state and observable snapshots. Each saved
 point includes the current time, state values, and observable values
 (depending on your <code class="docutils literal notranslate"><span class="pre">output_types</span></code> setting).</p>
@@ -459,7 +431,7 @@ integration (“save_last” mode).</p></li>
 </div>
 </section>
 <section id="summarise-every">
-<h3><a class="toc-backref" href="#id7" role="doc-backlink">summarise_every</a><a class="headerlink" href="#summarise-every" title="Link to this heading"></a></h3>
+<h3>summarise_every<a class="headerlink" href="#summarise-every" title="Link to this heading"></a></h3>
 <p>Length of each summary window. CuBIE uses <strong>fixed, non-overlapping windows</strong>
 for summary statistics. At the end of each window, metrics (mean, max, RMS,
 etc.) are computed from all samples taken during that window, written to
@@ -486,7 +458,7 @@ summary is calculated and saved at the end of the integration.</p></li>
 </div>
 </section>
 <section id="sample-summaries-every">
-<h3><a class="toc-backref" href="#id8" role="doc-backlink">sample_summaries_every</a><a class="headerlink" href="#sample-summaries-every" title="Link to this heading"></a></h3>
+<h3>sample_summaries_every<a class="headerlink" href="#sample-summaries-every" title="Link to this heading"></a></h3>
 <p>Sampling interval within each summary window. This controls how many
 samples contribute to each summary calculation. At each sample point,
 the current state/observable values are fed into the running accumulator
@@ -513,7 +485,7 @@ must fit inside <code class="docutils literal notranslate"><span class="pre">dur
 computational overhead.</p>
 </section>
 <section id="summary-window-behaviour">
-<h3><a class="toc-backref" href="#id9" role="doc-backlink">Summary Window Behaviour</a><a class="headerlink" href="#summary-window-behaviour" title="Link to this heading"></a></h3>
+<h3>Summary Window Behaviour<a class="headerlink" href="#summary-window-behaviour" title="Link to this heading"></a></h3>
 <p>The summary system uses fixed, non-overlapping windows:</p>
 <ol class="arabic simple">
 <li><p>At each <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code> interval, current values are sampled
@@ -534,7 +506,7 @@ S = sample taken, W = window closes (summary written, reset)
 </div>
 </section>
 <section id="relationship-between-output-parameters">
-<h3><a class="toc-backref" href="#id10" role="doc-backlink">Relationship Between Output Parameters</a><a class="headerlink" href="#relationship-between-output-parameters" title="Link to this heading"></a></h3>
+<h3>Relationship Between Output Parameters<a class="headerlink" href="#relationship-between-output-parameters" title="Link to this heading"></a></h3>
 <table class="docutils align-default">
 <colgroup>
 <col style="width: 30.0%" />
@@ -562,10 +534,10 @@ computing summaries over longer windows, or vice versa.</p>
 </section>
 </section>
 <section id="integration-bounds">
-<h2><a class="toc-backref" href="#id11" role="doc-backlink">Integration Bounds</a><a class="headerlink" href="#integration-bounds" title="Link to this heading"></a></h2>
+<h2>Integration Bounds<a class="headerlink" href="#integration-bounds" title="Link to this heading"></a></h2>
 <p>Three parameters define the time span of integration:</p>
 <section id="duration">
-<h3><a class="toc-backref" href="#id12" role="doc-backlink">duration</a><a class="headerlink" href="#duration" title="Link to this heading"></a></h3>
+<h3>duration<a class="headerlink" href="#duration" title="Link to this heading"></a></h3>
 <p>Total length of the recorded integration in simulation time units.
 This is the time span over which outputs are saved.</p>
 <ul class="simple">
@@ -577,7 +549,7 @@ This is the time span over which outputs are saved.</p>
 </div>
 </section>
 <section id="t0">
-<h3><a class="toc-backref" href="#id13" role="doc-backlink">t0</a><a class="headerlink" href="#t0" title="Link to this heading"></a></h3>
+<h3>t0<a class="headerlink" href="#t0" title="Link to this heading"></a></h3>
 <p>Starting time of the integration. Affects time-dependent drivers and
 the timestamps in output arrays.</p>
 <ul class="simple">
@@ -591,7 +563,7 @@ the timestamps in output arrays.</p>
 </div>
 </section>
 <section id="settling-time">
-<h3><a class="toc-backref" href="#id14" role="doc-backlink">settling_time</a><a class="headerlink" href="#settling-time" title="Link to this heading"></a></h3>
+<h3>settling_time<a class="headerlink" href="#settling-time" title="Link to this heading"></a></h3>
 <p>Lead-in period before recording begins. The integrator runs for this
 duration starting from <code class="docutils literal notranslate"><span class="pre">t0</span></code>, but no output is saved. This is useful
 for allowing transients to decay before collecting data.</p>
@@ -625,7 +597,7 @@ starts           starts                               ends
 </section>
 </section>
 <section id="complete-example">
-<h2><a class="toc-backref" href="#id15" role="doc-backlink">Complete Example</a><a class="headerlink" href="#complete-example" title="Link to this heading"></a></h2>
+<h2>Complete Example<a class="headerlink" href="#complete-example" title="Link to this heading"></a></h2>
 <p>This example shows all timing parameters working together:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
     <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">x0_array</span><span class="p">},</span>

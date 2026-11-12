@@ -21,7 +21,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Timing Parameters" href="timing.html" />
-    <link rel="prev" title="Inputs and Parameter Sweeps" href="inputs.html" /> 
+    <link rel="prev" title="Batch Inputs" href="inputs.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/version_switcher.js" data-version="pr-1099" defer></script>
 </head>
@@ -62,7 +62,7 @@
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Using the solver</a><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="inputs.html">Inputs and Parameter Sweeps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
@@ -281,8 +281,17 @@
 <p>Every call to <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> or
 <a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.solve" title="cubie.batchsolving.solver.Solver.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a> returns a
 <a class="reference internal" href="../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a>.</p>
-<section id="the-solveresult-object">
-<h2>The <code class="docutils literal notranslate"><span class="pre">SolveResult</span></code> Object<a class="headerlink" href="#the-solveresult-object" title="Link to this heading"></a></h2>
+<p>When integrating large batches, you end up with large data. Unless you’re
+checking the method against some known reference as a sanity check, you probably
+don’t need the full time-domain series across the whole integration. To
+cut down the output data, and speed up the solver, you can save only certain
+variables, at only certain times, or you can never save the time-domain signals
+and calculate summary variables (like averages, or peak times) on the GPU
+while integrating.</p>
+<p># This is api reference, mostly. it looks like each agent adding a results feature tacked on their bit of new detail without any narrative consideration.
+It should go: output types, summary metrics, selecting variables, result formats.
+The <code class="docutils literal notranslate"><span class="pre">SolveResult</span></code> Object
+————————–</p>
 <p>Key attributes:</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">time_domain_array</span></code></dt><dd><p>3-D NumPy array with shape <code class="docutils literal notranslate"><span class="pre">(n_time_points,</span> <span class="pre">n_variables,</span> <span class="pre">n_runs)</span></code>.</p>
@@ -322,7 +331,6 @@ job can be enqueued without a device-wide synchronisation.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">result.as_pandas</span></code> — returns a dict of pandas DataFrames.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">result.as_numpy_per_summary</span></code> — splits summaries by metric type.</p></li>
 </ul>
-</section>
 <section id="device-resident-results">
 <h2>Device-Resident Results<a class="headerlink" href="#device-resident-results" title="Link to this heading"></a></h2>
 <p>A normal solve copies the output arrays from the GPU to the host
@@ -540,7 +548,7 @@ hit a solver limit is flagged there:</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="inputs.html" class="btn btn-neutral float-left" title="Inputs and Parameter Sweeps" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="inputs.html" class="btn btn-neutral float-left" title="Batch Inputs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="timing.html" class="btn btn-neutral float-right" title="Timing Parameters" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

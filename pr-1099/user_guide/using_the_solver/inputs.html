@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Inputs and Parameter Sweeps &mdash; cubie 0.0.4 documentation</title>
+  <title>Batch Inputs &mdash; cubie 0.0.4 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
@@ -63,7 +63,7 @@
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Using the solver</a><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
-<li class="toctree-l3 current"><a class="current reference internal" href="#">Inputs and Parameter Sweeps</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
@@ -267,7 +267,7 @@
       <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="../index.html">User Manual</a></li>
           <li class="breadcrumb-item"><a href="index.html">Using the solver</a></li>
-      <li class="breadcrumb-item active">Inputs and Parameter Sweeps</li>
+      <li class="breadcrumb-item active">Batch Inputs</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../../_sources/user_guide/using_the_solver/inputs.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -277,11 +277,10 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="inputs-and-parameter-sweeps">
-<h1>Inputs and Parameter Sweeps<a class="headerlink" href="#inputs-and-parameter-sweeps" title="Link to this heading"></a></h1>
-<p>You give every solve two inputs: the initial values of the states, and the
-parameter values. You can provide these in a number of ways. Every function that
-ends up in a <code class="docutils literal notranslate"><span class="pre">solve</span></code> takes inputs the same way. All examples in this page
+  <section id="batch-inputs">
+<h1>Batch Inputs<a class="headerlink" href="#batch-inputs" title="Link to this heading"></a></h1>
+<p>Each run is defined by the initial values of its states and its parameter values.
+You can provide these in a number of ways. All examples in this page
 will follow the same Lotka-Volterra system as the rest of the docs, defined
 here:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_ODE_system</span>
@@ -322,40 +321,37 @@ from the default state, or under default parameters, we could leave the whole
 <code class="docutils literal notranslate"><span class="pre">initial_values</span></code> or <code class="docutils literal notranslate"><span class="pre">parameters</span></code> arguments out completely. If you didn’t
 set defaults when you built the system, you can set them on the system with
 <code class="docutils literal notranslate"><span class="pre">system.set_default_parameters({&quot;a&quot;:</span> <span class="pre">0.2})</span></code> for parameters and
-<code class="docutils literal notranslate"><span class="pre">system.set_initial_values({&quot;y&quot;:</span> <span class="pre">0.3})</span></code> for states. If you include a
-constant value for a parameter or initial value that has a different
-default, the default doesn’t change: Cubie presumes that arguments to
-<code class="docutils literal notranslate"><span class="pre">solve</span></code> are intended for that run only.</p>
+<code class="docutils literal notranslate"><span class="pre">system.set_initial_values({&quot;y&quot;:</span> <span class="pre">0.3})</span></code> for states.</p>
+<p>If you include a constant value for a parameter or initial value that
+is different to the default, the default doesn’t change. Cubie presumes
+that input arguments to <code class="docutils literal notranslate"><span class="pre">solve</span></code> are intended for that run only.</p>
 </section>
 <section id="arrays">
 <h3>Arrays<a class="headerlink" href="#arrays" title="Link to this heading"></a></h3>
 <p>If you’re looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead. Lay each
 array out as <code class="docutils literal notranslate"><span class="pre">(n_variables,</span> <span class="pre">n_runs)</span></code>, with its rows ordered by variable
-name, for the states as well as the parameters. Cubie casts a host array
-to the system’s <code class="docutils literal notranslate"><span class="pre">precision</span></code> datatype, so give it arrays in that datatype
-to skip the copy. Give an initial values array one row per state in your
-system. Give the parameters array either one row for every parameter in
-your system (a full-height parameter array), or one row per parameter that
-varies across the batch. Read <code class="docutils literal notranslate"><span class="pre">solver.parameter_legend</span></code> to see each row’s
-parameter name.</p>
+name. If the array is already in the same data type as <code class="docutils literal notranslate"><span class="pre">solver.precision</span></code>,
+then you can also save an additional array copy.</p>
+<p>Note: It may seem odd that the states array ends up in a different order
+than the one you gave. When we tear DAE systems, or only select a few outputs,
+name-ordering makes it easier to reconstruct and index the resulting system.</p>
 <p>When you pass a dict, cubie compiles every parameter you give a single value
-directly into the GPU code to make it go faster. It does the same for a
-full-height parameters array: cubie scans each row, and compiles in every
-row that holds one value. The scan costs a few milliseconds per solve. To
-skip it, you have two options:</p>
+directly into the GPU code to make it go faster. It does the same for an
+array under the default <code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=True</span></code> argument. This
+will usually make the solve faster, but costs a few ms per solve call.
+To get around this, you can:</p>
 <ul class="simple">
-<li><p>Pass <code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=False</span></code>. Cubie then gives every parameter
-a row of the array as you passed it, which may slow down the solve itself
-if you have a lot of constant parameters.</p></li>
-<li><p>Pass an array with rows for only the parameters that vary, in name
-order.</p></li>
+<li><p>Pass <code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=False</span></code>. All parameters, even the constant
+ones, are part of the input array that gets passed to the GPU, and get loaded
+from memory before use. The GPU can hold less runs at once (typically),
+and the solve goes a little slower.</p></li>
+<li><p>Tell the solver which parameters will be swept with
+<code class="docutils literal notranslate"><span class="pre">solver.set_swept_parameters(names)</span></code>, where names is a list of parameter names.
+After this you can pass an array with rows for those parameters onlt, saving
+both the scan for constant parameters and the cost of keeping them in memory.</p></li>
 </ul>
-<p>To pass just the varying parameters, tell the solver which parameters to
-expect: call <code class="docutils literal notranslate"><span class="pre">solver.set_swept_parameters</span></code> with the parameter names you
-want to vary, or pass the same names to the <code class="docutils literal notranslate"><span class="pre">swept_parameters</span></code> argument
-when building the system. When you sweep a
-single parameter, you can pass its values as a 1D array:</p>
+<p>For the system above, we can pass the smaller parameters array like this:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">inits</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
     <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">10000</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="mi">10000</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span>
 <span class="p">)</span>
@@ -389,9 +385,10 @@ probably don’t want to throw hundreds-high arrays around.</p>
 <h3>Device arrays<a class="headerlink" href="#device-arrays" title="Link to this heading"></a></h3>
 <p>If you want to go <em>really</em> fast and you are comfortable with the CUDA
 environment, you can pass arrays on the GPU (device arrays) directly to cut
-out the few milliseconds of transfer time as well. Use the same layout and
-precision as host arrays. Pair them with <code class="docutils literal notranslate"><span class="pre">on_device=True</span></code> to keep an
-entire solve → post-process pipeline on the GPU (see <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>):</p>
+out the few milliseconds of transfer time as well. Use the same layout as host
+arrays, and ensure they’re the same datatype as <code class="docutils literal notranslate"><span class="pre">solver.precision</span></code>.
+Pair them with <code class="docutils literal notranslate"><span class="pre">on_device=True</span></code> to keep an entire solve → post-process
+pipeline on the GPU (see <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>), never bringing them back to the host.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">numba_cuda_mlir</span><span class="w"> </span><span class="kn">import</span> <span class="n">cuda</span>
 
 <span class="n">d_inits</span> <span class="o">=</span> <span class="n">cuda</span><span class="o">.</span><span class="n">to_device</span><span class="p">(</span><span class="n">inits</span><span class="p">)</span>
@@ -423,13 +420,16 @@ solves every combination of the values you supply:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>Cubie solves <span class="math notranslate nohighlight">\(500 \times 400 = 200000\)</span> IVPs here. It lays the runs
-out in C order over the combinations, with the last parameter varying
-fastest.</p>
+<p>Cubie builds every combination of parameters in this case; it creates a run
+for every <code class="docutils literal notranslate"><span class="pre">b</span></code> value combined with evey <code class="docutils literal notranslate"><span class="pre">d</span></code> value. This creates</p>
+<blockquote>
+<div><p><span class="math notranslate nohighlight">\(500 \times 400 = 200000\)</span> IVPs in this case.</p>
+</div></blockquote>
 </section>
 <section id="verbatim-grids">
 <h3>Verbatim grids<a class="headerlink" href="#verbatim-grids" title="Link to this heading"></a></h3>
-<p>With <code class="docutils literal notranslate"><span class="pre">grid_type=&quot;verbatim&quot;</span></code>, the default for <code class="docutils literal notranslate"><span class="pre">Solver.solve</span></code>, cubie
+<p>#the default should not differ between solve ivp and solver.solve. set both to combinatorial.
+With <code class="docutils literal notranslate"><span class="pre">grid_type=&quot;verbatim&quot;</span></code>, the default for <code class="docutils literal notranslate"><span class="pre">Solver.solve</span></code>, cubie
 pairs your values run by run, so every array must have the same length:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
 <span class="n">b_values</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
@@ -441,7 +441,7 @@ pairs your values run by run, so every array must have the same length:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>Cubie gives run <code class="docutils literal notranslate"><span class="pre">i</span></code> the values <code class="docutils literal notranslate"><span class="pre">b_values[i]</span></code> and <code class="docutils literal notranslate"><span class="pre">d_values[i]</span></code>.</p>
+<p>This creates 10,000 runs, one for each same-index pair of <code class="docutils literal notranslate"><span class="pre">b</span></code> and <code class="docutils literal notranslate"><span class="pre">d</span></code> values.</p>
 </section>
 </section>
 <section id="example-heatmap-from-a-two-parameter-sweep">
