@@ -2,9 +2,9 @@ Glossary
 ========
 
 States
-   The variables that cubie solves for. Each state has a derivative
-   equation, :math:`\frac{dx}{dt}`, and an initial value, which sets the
-   starting point of the initial value problem.
+   The variables that cubie solves for. You give each state a derivative
+   equation, :math:`\frac{dx}{dt}`, and an initial value at which its run
+   starts.
 
 Parameters
    Inputs that cubie does not solve for. You choose them to set the
