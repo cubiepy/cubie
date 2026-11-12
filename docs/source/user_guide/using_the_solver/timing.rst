@@ -6,6 +6,23 @@ the overall time span, **output timing** parameters control when results
 are saved, and **step size** parameters control how the integrator advances
 through time.
 
+We use this system in the examples on this page:
+
+.. code-block:: python
+
+   import numpy as np
+   from cubie import Solver, create_ODE_system, solve_ivp
+
+   LV = create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+   )
+   b_values = np.linspace(0.01, 0.05, 10000)
+
 Integration Bounds
 ------------------
 
@@ -22,7 +39,10 @@ This is the time span over which outputs are saved.
 
 .. code-block:: python
 
-   solver.solve(..., duration=100.0)  # Integrate for 100 time units
+   # Integrate for 100 time units
+   result = solve_ivp(
+       LV, parameters={"b": b_values}, method="ode45", duration=100.0
+   )
 
 t0
 ~~
@@ -36,8 +56,14 @@ the timestamps in output arrays.
 .. code-block:: python
 
    # Start integration at t=5.0
-   solver.solve(..., t0=5.0, duration=10.0)
-   # Recorded output spans t=5.0 to t=15.0
+   result = solve_ivp(
+       LV,
+       parameters={"b": b_values},
+       method="ode45",
+       t0=5.0,
+       duration=10.0,
+   )
+   # Cubie records output from t=5.0 to t=15.0
 
 settling_time
 ~~~~~~~~~~~~~
@@ -52,9 +78,14 @@ for allowing transients to decay before collecting data.
 .. code-block:: python
 
    # Let the system settle for 50 time units, then record 100
-   solver.solve(..., settling_time=50.0, duration=100.0)
-   # Integration runs from t=0 to t=150
-   # Output spans t=50 to t=150
+   result = solve_ivp(
+       LV,
+       parameters={"b": b_values},
+       method="ode45",
+       settling_time=50.0,
+       duration=100.0,
+   )
+   # Cubie integrates from t=0 to t=150 and records from t=50 to t=150
 
 The total integration time is ``settling_time + duration``. The
 integration starts at ``t0`` and runs until ``t0 + settling_time + duration``.
@@ -95,12 +126,23 @@ point includes the current time, state values, and observable values
 .. code-block:: python
 
    # Save state every 0.1 seconds of simulation time
-   solver.solve(..., save_every=0.1, duration=10.0)
-   # Results in 101 saved points (including t=0)
+   result = solve_ivp(
+       LV,
+       parameters={"b": b_values},
+       method="ode45",
+       save_every=0.1,
+       duration=10.0,
+   )
+   # Cubie saves 101 points, including t=0
 
-   # No save_every specified: only initial and final states saved
-   solver.solve(..., duration=10.0, output_types=["state"])
-   # Results in 2 saved points
+   # Without save_every, cubie saves only the first and last points
+   result = solve_ivp(
+       LV,
+       parameters={"b": b_values},
+       method="ode45",
+       duration=10.0,
+       output_types=["state"],
+   )
 
 summarise_every
 ~~~~~~~~~~~~~~~
@@ -116,18 +158,25 @@ output, and the accumulator resets for the next window.
 
 .. code-block:: python
 
-   # 10 summary windows, each 1 second long
-   solver.solve(
-       ...,
+   # Summarise over 10 windows, each 1 second long
+   result = solve_ivp(
+       LV,
+       parameters={"b": b_values},
+       method="ode45",
        summarise_every=1.0,
        sample_summaries_every=0.1,
        duration=10.0,
        output_types=["mean"],
    )
 
-   # No summarise_every: one summary at the end of the integration
-   solver.solve(
-       ..., sample_summaries_every=0.1, duration=10.0, output_types=["mean"]
+   # Without summarise_every, cubie saves one summary at the end
+   result = solve_ivp(
+       LV,
+       parameters={"b": b_values},
+       method="ode45",
+       sample_summaries_every=0.1,
+       duration=10.0,
+       output_types=["mean"],
    )
 
 sample_summaries_every
@@ -148,12 +197,15 @@ current max, etc.).
 
 .. code-block:: python
 
-   # 100 samples per 1-second window
-   solver.solve(
-       ...,
+   # Take 100 samples in each 1-second window
+   result = solve_ivp(
+       LV,
+       parameters={"b": b_values},
+       method="ode45",
        sample_summaries_every=0.01,
        summarise_every=1.0,
-       output_types=["mean", "max"]
+       duration=10.0,
+       output_types=["mean", "max"],
    )
 
 Higher sampling rates give more accurate summaries but increase
@@ -253,41 +305,48 @@ missing values. The rules differ for adaptive and fixed controllers:
    * - You Provide
      - CuBIE Derives
    * - ``dt`` only
-     - ``dt_min = dt / 100``, ``dt_max = dt * 100``
+     - ``dt_min = dt / 1000``, ``dt_max = dt * 1000``
    * - ``dt_min`` only
-     - ``dt_max = 1.0`` (default), ``dt = sqrt(dt_min * dt_max)``
+     - ``dt_max = 1.0`` (default, or ``dt_min * 1000`` if ``dt_min``
+       is above it), ``dt = sqrt(dt_min * dt_max)``
    * - ``dt_max`` only
-     - ``dt_min = 1e-6`` (default), ``dt = sqrt(dt_min * dt_max)``
+     - ``dt_min = 1e-6`` (default, or ``dt_max / 1000`` if ``dt_max``
+       is below it), ``dt = sqrt(dt_min * dt_max)``
    * - ``dt_min`` and ``dt_max``
      - ``dt = sqrt(dt_min * dt_max)``
    * - ``dt`` and ``dt_min``
-     - ``dt_max = dt * 100``
+     - ``dt_max = dt * 1000``
    * - ``dt`` and ``dt_max``
-     - ``dt_min = dt / 100``
+     - ``dt_min = dt / 1000``
    * - All three
      - Nothing derived (all values used as given)
 
 **Fixed-step controllers:**
 
-Fixed controllers collapse ``dt``, ``dt_min``, and ``dt_max`` to a single
-value. If you provide any of them, the first non-None value in the order
-``dt``, ``dt_min``, ``dt_max`` is used as the step size.
+A fixed controller uses ``dt`` as its step if you give it. Otherwise it
+uses ``sqrt(dt_min * dt_max)`` if you give both bounds, the one bound if
+you give only one, and ``1e-3`` if you give none.
 
-Example usage:
+Build a ``Solver`` to read the step sizes cubie derives:
 
 .. code-block:: python
 
-   # Adaptive: provide dt, bounds derived automatically
-   solver.solve(..., dt=0.01)
-   # Results in: dt_min=0.0001, dt=0.01, dt_max=1.0
+   # Give an adaptive controller dt, and cubie derives the bounds
+   solver = Solver(LV, algorithm="ode45", dt=0.01)
+   print(solver.dt_min, solver.dt, solver.dt_max)
+   # cubie derives dt_min=1e-5 and dt_max=10.0
 
-   # Adaptive: provide bounds, initial dt computed
-   solver.solve(..., dt_min=1e-5, dt_max=0.1)
-   # Results in: dt_min=1e-5, dt=0.001, dt_max=0.1
+   # Give the bounds, and cubie computes the initial dt
+   solver = Solver(LV, algorithm="ode45", dt_min=1e-5, dt_max=0.1)
+   print(solver.dt_min, solver.dt, solver.dt_max)
+   # cubie computes dt=0.001
 
-   # Fixed: any of these sets dt=0.005
-   solver.solve(..., step_controller="fixed", dt=0.005)
-   solver.solve(..., step_controller="fixed", dt_min=0.005)
+   # Set a fixed step of dt=0.005 either way
+   solver = Solver(LV, algorithm="ode45", step_controller="fixed", dt=0.005)
+   solver = Solver(
+       LV, algorithm="ode45", step_controller="fixed", dt_min=0.005
+   )
+   print(solver.dt)
 
 Update Behaviour
 ~~~~~~~~~~~~~~~~
@@ -299,15 +358,11 @@ CuBIE tracks which values you originally set versus which were derived:
 - **Derived values** may be adjusted if they become inconsistent with
   your changes
 
-For example, if you originally provided only ``dt=0.01`` (so ``dt_min``
-and ``dt_max`` were derived), then later update ``dt=0.001``:
-
-- ``dt`` changes to ``0.001`` (your new value)
-- ``dt_min`` may be adjusted if ``0.001 < dt_min`` (derived value, can change)
-- ``dt_max`` stays at ``1.0`` (derived value, still valid)
-
-But if you originally provided ``dt_min=1e-4`` explicitly, that value
-won't be changed even if it would make more sense to adjust it.
+For example, if you give only ``dt=0.01``, cubie derives ``dt_min=1e-5``
+and ``dt_max=10.0``. If you then update ``dt=0.001``, cubie derives the
+bounds again from your new ``dt``, as ``1e-6`` and ``1.0``. If you had also
+given ``dt_min=1e-4`` yourself, cubie keeps it at ``1e-4`` and derives only
+``dt_max``.
 
 Complete Example
 ----------------
@@ -316,17 +371,6 @@ This example shows all timing parameters working together:
 
 .. code-block:: python
 
-   import numpy as np
-   from cubie import Solver, create_ODE_system
-
-   LV = create_ODE_system(
-       """
-       dx = a*x - b*x*y
-       dy = -c*y + d*x*y
-       """,
-       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
-       states={"x": 0.5, "y": 0.3},
-   )
    solver = Solver(LV, algorithm="ode45")
 
    result = solver.solve(
@@ -344,7 +388,7 @@ This example shows all timing parameters working together:
        sample_summaries_every=0.05,  # Sample for summaries every 0.05 units
 
        # Step size (adaptive controller)
-       dt=0.01,               # Start at 0.01, bounds derived as 1e-4 to 1.0
+       dt=0.01,               # Start at 0.01; cubie derives bounds of 1e-5 to 10.0
 
        # What to save
        output_types=["state", "mean", "max"],

@@ -45,8 +45,8 @@ Controlling the step size
 **dt** — the step size (fixed methods) or initial step size (adaptive).
     For fixed-step methods this is *the* step size.  For adaptive
     methods it seeds the first step, and if you give ``dt`` alone the
-    bounds are derived from it as ``dt_min = dt/100`` and
-    ``dt_max = dt*100``.
+    bounds are derived from it as ``dt_min = dt/1000`` and
+    ``dt_max = dt*1000``.
 
     - Default: ``1e-3`` (fixed); ``sqrt(dt_min * dt_max)`` (adaptive)
     - Type: ``float``, positive
