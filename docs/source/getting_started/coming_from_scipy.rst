@@ -9,7 +9,7 @@ what comes back.
 A direct port
 -------------
 
-The same function works in both libraries. SciPy passes the values in
+You can use the same function in both libraries. SciPy passes the values in
 ``args=`` to your function's extra arguments in order; cubie matches each
 extra argument to the entry with the same name in ``parameters=``.
 
@@ -56,29 +56,29 @@ Key changes:
 - Parameters by name: give the parameter values in a dict in
   ``parameters=``, keyed by your function's argument names, instead of in
   ``args=``.
-- Named starting values: give ``y0`` as a dict that names each state.
-  cubie sorts the state columns by name, so naming the states ``y1`` and
-  ``y2`` keeps SciPy's order.
+- Named starting values: give ``y0`` as a dict with an entry for each
+  state. cubie sorts the state columns by name, so name the states ``y1``
+  and ``y2`` to keep SciPy's order.
 - Time: instead of ``t_span``, give the total integration time as
   ``duration``, and a start time as ``t0`` if it isn't 0. Instead of
   ``t_eval``, give the time between saved points as ``save_every``.
   Without ``save_every``, cubie saves only the first and last points.
 - Tolerances: cubie's default ``rtol`` is ``1e-6``, where SciPy's is
-  ``1e-3``, so the two give different answers unless you pass the same
-  ``rtol`` to both.
-- Method names differ; see the table below.
-- Results come back in one array that holds every run in the batch, as
-  part of a ``SolveResult``; see :doc:`/user_guide/results`. Add
-  ``"time"`` to ``output_types`` to get the time points.
+  ``1e-3``, so you get different answers from the two unless you pass the
+  same ``rtol`` to both.
+- cubie uses different method names; see the table below.
+- cubie returns the results of every run in the batch in one array, inside
+  a ``SolveResult``; see :doc:`/user_guide/results`. Add ``"time"`` to
+  ``output_types`` to get the time points.
 
 What your function can contain
 ------------------------------
 
-SciPy calls your function, so anything Python allows works there. cubie
-reads your function and turns it into GPU code instead, so the function
-can only contain arithmetic, maths functions such as ``np.sin`` or
-``math.exp``, ``if``/``else``, and ``for`` loops over a fixed
-``range(...)``. You can't use:
+SciPy calls your function, so you can use anything Python allows in it.
+cubie reads your function and turns it into GPU code instead, so you can
+only use arithmetic, maths functions such as ``np.sin`` or ``math.exp``,
+``if``/``else``, and ``for`` loops over a fixed ``range(...)``. You can't
+use:
 
 - ``while`` loops or list comprehensions.
 - NumPy array functions such as ``np.array``. Return the derivatives as a
@@ -118,7 +118,7 @@ solving a batch in SciPy:
        for mu in mus
    ]
 
-In cubie the solve call takes all of the input values instead:
+In cubie, you pass all of the input values to one solve call instead:
 
 .. code-block:: python
    :caption: cubie
@@ -139,6 +139,6 @@ every combination of the supplied values by default. See
 Not supported
 -------------
 
-* ``dense_output`` and event functions have no cubie equivalent.
+* cubie has no equivalent of ``dense_output`` or event functions.
 * cubie saves solutions at a regular interval set by ``save_every``, not
   at arbitrary ``t_eval`` points.

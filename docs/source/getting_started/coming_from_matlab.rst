@@ -1,8 +1,8 @@
 Coming from MATLAB
 ==================
 
-Most of a MATLAB script only needs translating into Python, and then it
-works. The main difference is that cubie has a single solve function,
+You can run most of a MATLAB script in cubie once you translate it into
+Python. The main difference is that cubie has a single solve function,
 ``solve_ivp``, and takes the integration method as an argument, instead of
 one function per algorithm.
 
@@ -41,8 +41,8 @@ A direct port
 
 Key changes:
 
-- Python indexing: square brackets, and counting from 0 instead of 1, so
-  ``y(1)`` becomes ``y[0]``.
+- Python indexing: use square brackets and count from 0 instead of 1, so
+  you write ``y[0]`` where MATLAB has ``y(1)``.
 - Parameters as arguments: cubie can't capture variables from your script
   the way a MATLAB anonymous function does. Add each parameter as an
   argument of your function, and give its value in ``parameters=`` when you
@@ -53,14 +53,13 @@ Key changes:
   ``duration``, a start time as ``t0`` if it isn't 0, and the time between
   saved points as ``save_every``. Without ``save_every``, cubie saves only
   the first and last points.
-- The ``odeset`` options are keyword arguments of ``solve_ivp``:
-  ``RelTol`` and ``AbsTol`` become ``rtol`` and ``atol``, and ``MaxStep``
-  becomes ``dt_max``. See :doc:`/user_guide/optional_arguments`.
-- Results come back in one array that holds every run in the batch, as
-  part of a ``SolveResult``; see :doc:`/user_guide/results`. Add
-  ``"time"`` to ``output_types`` to get the time points. cubie sorts the
-  state columns by name, so naming the states ``y1`` and ``y2`` keeps
-  MATLAB's order.
+- Pass the ``odeset`` options as keyword arguments of ``solve_ivp``: write
+  ``rtol`` and ``atol`` for ``RelTol`` and ``AbsTol``, and ``dt_max`` for
+  ``MaxStep``. See :doc:`/user_guide/optional_arguments`.
+- cubie returns the results of every run in the batch in one array, inside
+  a ``SolveResult``; see :doc:`/user_guide/results`. Add ``"time"`` to
+  ``output_types`` to get the time points. cubie sorts the state columns by
+  name, so name the states ``y1`` and ``y2`` to keep MATLAB's order.
 
 Method names
 ------------
@@ -94,7 +93,7 @@ doing batch integration in MATLAB.
        results{i} = y;
    end
 
-In cubie the solve call takes all of the input values instead:
+In cubie, you pass all of the input values to one solve call instead:
 
 .. code-block:: python
 

@@ -13,19 +13,19 @@ If cubie cannot find a GPU, it raises an error such as
    missing, install the NVIDIA driver.
 2. Then either install a CUDA toolkit yourself, or reinstall cubie with a
    toolkit included: ``pip install cubie[cuda13]``, or
-   ``pip install cubie[cuda12]`` if ``nvidia-smi`` reports a CUDA version
-   below 13.
+   ``pip install cubie[cuda12]`` if you see a CUDA version below 13 in the
+   ``nvidia-smi`` output.
 
 Failed Runs
 -----------
 
 When a run fails, cubie stops integrating it, fills its output with NaN,
 and records why in ``result.status_messages``. Look up the failed run's
-index in that dict to see the status codes cubie set for it; a run can
-have more than one. In an adaptive solve, cubie retries a failed implicit
-solve with a smaller step, so the Newton and linear-solver codes usually
-appear together with ``STEP_TOO_SMALL``. In a fixed-step solve, any failed
-step ends the run.
+index in that dict to see the status codes cubie set for it; cubie can
+set more than one for a run. In an adaptive solve, cubie retries a failed
+implicit solve with a smaller step, so you will usually see the Newton and
+linear-solver codes together with ``STEP_TOO_SMALL``. In a fixed-step
+solve, cubie ends the run at the first failed step.
 
 ``STEP_TOO_SMALL``
 ~~~~~~~~~~~~~~~~~~
@@ -46,13 +46,13 @@ cubie needed a step smaller than ``dt_min`` to meet your tolerances.
 ``STAGNATION``
 ~~~~~~~~~~~~~~
 
-cubie's steps stopped moving time forward. Check the same things as for
+cubie took steps too small to move time forward. Check the same things as for
 ``STEP_TOO_SMALL``.
 
 ``MAX_NEWTON_ITERATIONS_EXCEEDED``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Newton iteration of an implicit method did not converge within
+cubie could not converge the Newton iteration of an implicit method within
 ``newton_max_iters`` iterations.
 
 - Choose a method that suits how stiff your problem is; see
@@ -63,8 +63,8 @@ The Newton iteration of an implicit method did not converge within
 ``NEWTON_DIVERGENCE``
 ~~~~~~~~~~~~~~~~~~~~~
 
-The Newton iteration of an implicit method moved away from the solution
-instead of towards it.
+cubie moved further from the solution with each Newton update of an
+implicit method, instead of closer.
 
 - Choose a method that suits how stiff your problem is; see
   :doc:`/user_guide/choosing_algorithms`.
@@ -74,8 +74,8 @@ instead of towards it.
 ``MAX_LINEAR_ITERATIONS_EXCEEDED``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-An iterative linear solver did not converge within ``krylov_max_iters``
-iterations. See :doc:`/user_guide/optional_arguments` for each of these
+cubie could not converge an iterative linear solve within
+``krylov_max_iters`` iterations. See :doc:`/user_guide/optional_arguments` for each of these
 settings.
 
 - Use the direct solver, ``linear_correction_type="lu"``.
@@ -85,7 +85,8 @@ settings.
 ``BICGSTAB_BREAKDOWN``
 ~~~~~~~~~~~~~~~~~~~~~~
 
-The BiCGSTAB linear solver broke down before it converged. Use a different
+cubie stopped a BiCGSTAB linear solve before it converged, because of a
+numerical breakdown in BiCGSTAB. Use a different
 ``linear_correction_type``, such as ``"lu"``; see
 :doc:`/user_guide/optional_arguments`.
 
@@ -93,8 +94,8 @@ The BiCGSTAB linear solver broke down before it converged. Use a different
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 cubie could not make the algebraic states of a DAE consistent with the
-equations at the start of the run, so the run ended at ``t0`` with your
-starting values. See :doc:`/user_guide/optional_arguments`.
+equations at the start of the run, so cubie ended the run at ``t0`` with
+your starting values. See :doc:`/user_guide/optional_arguments`.
 
 - Give starting values for the algebraic states that are closer to
   consistent.
