@@ -37,7 +37,7 @@ A direct port
        output_types=["state", "time"],
    )
    t = result.time[:, 0]
-   y = result.time_domain_array[:, :, 0]
+   y = result.state[:, :, 0]
 
 Key changes:
 

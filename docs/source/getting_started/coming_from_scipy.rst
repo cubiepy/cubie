@@ -49,7 +49,7 @@ extra argument to the entry with the same name in ``parameters=``.
        save_every=0.1,
        output_types=["state", "time"],
    )
-   t, y = result.time[:, 0], result.time_domain_array[:, :, 0].T
+   t, y = result.time[:, 0], result.state[:, :, 0].T
 
 Key changes:
 
