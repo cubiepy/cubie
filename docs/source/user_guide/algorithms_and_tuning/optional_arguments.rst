@@ -61,7 +61,7 @@ Controlling the step size
     - Defaults: ``dt_min=1e-9``, ``dt_max=1.0``
     - Type: ``float``, positive
 
-See :doc:`timing` for the full derivation rules, and for the output
+See :doc:`/user_guide/using_the_solver/timing` for the full derivation rules, and for the output
 timing options (``save_every``, ``summarise_every``,
 ``sample_summaries_every``, ``duration``, ``t0``, ``settling_time``).
 
@@ -70,7 +70,7 @@ Tuning the step controller
 
 Adaptive step-size control is handled by a controller you select with
 ``step_controller``: one of ``"fixed"``, ``"i"``, ``"pi"``, ``"pid"``,
-or ``"gustafsson"`` (see :doc:`choosing_algorithms`).  Each algorithm
+or ``"gustafsson"`` (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).  Each algorithm
 picks a sensible default, so treat everything in this section as
 expert tuning.
 
@@ -267,7 +267,7 @@ Choosing the method's coefficients
 ----------------------------------
 
 **tableau** — the Butcher tableau for multi-stage methods.
-    Selecting an algorithm by name (see :doc:`choosing_algorithms`)
+    Selecting an algorithm by name (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`)
     already picks a tableau.  The bare family names use these
     defaults:
 
@@ -286,7 +286,7 @@ Choosing what gets saved
     Any combination of the time-domain outputs ``"state"``,
     ``"observables"``, ``"time"``, and ``"iteration_counters"``, plus
     any of the 18 summary metric names (``"mean"``, ``"max"``,
-    ``"peaks"``, ...) — the full metric table is in :doc:`results`.
+    ``"peaks"``, ...) — the full metric table is in :doc:`/user_guide/using_the_solver/results`.
 
     - Default: ``["state"]``
 
@@ -314,4 +314,4 @@ options across the loop, algorithm, and solver configs)
     GPU architectures and never affect results.
 
 Memory-manager settings (VRAM proportion, stream groups) are covered in
-:doc:`memory`, and compilation caching in :doc:`caching`.
+:doc:`/user_guide/advanced/memory`, and compilation caching in :doc:`/user_guide/advanced/caching`.
