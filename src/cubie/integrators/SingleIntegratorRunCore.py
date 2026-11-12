@@ -128,9 +128,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         self._algo_step = self._new_step(settings)
         self._step_controller = self._new_controller(settings)
         self._dae_initialiser = self._new_initialiser(settings)
-        self._starting_step = StartingStepEstimator(
-            dt=settings.get("dt"), **self._starting_step_inputs()
-        )
+        self._starting_step = self._new_starting_step(settings)
         self._loop = self._new_loop(settings)
         self._register_loop_children()
         self.update_compile_settings(
@@ -196,10 +194,9 @@ class SingleIntegratorRunCore(CUDAFactory):
         recognised |= self._dae_initialiser.update(
             {**updates, **DAEInitialiser.system_inputs(system)}, silent=True
         )
-        starting_step_updates = self._starting_step_inputs()
-        if "dt" in updates:
-            starting_step_updates["dt"] = updates["dt"]
-        self._starting_step.update(starting_step_updates, silent=True)
+        recognised |= self._starting_step.update(
+            {**updates, **self._starting_step_inputs()}, silent=True
+        )
 
         self._register_loop_children()
         recognised |= self._loop.update(
@@ -278,20 +275,25 @@ class SingleIntegratorRunCore(CUDAFactory):
             }
         )
 
+    def _new_starting_step(
+        self, settings: Dict[str, Any]
+    ) -> StartingStepEstimator:
+        """Build the estimator from ``settings`` and its inputs."""
+        return StartingStepEstimator(
+            **{**settings, **self._starting_step_inputs()}
+        )
+
     def _starting_step_inputs(self) -> Dict[str, Any]:
         """Return what the estimator takes from the system and children."""
-        config = self.compile_settings
         controller = self._step_controller.products
         return dict(
             **StartingStepEstimator.system_inputs(self._system),
-            drivers_fn=config.drivers_fn,
-            is_adaptive=config.step_controller != "fixed",
+            drivers_fn=self.compile_settings.drivers_fn,
             algorithm_order=self._algo_step.algorithm_order,
+            is_adaptive=controller["is_adaptive"],
             dt_min=controller["dt_min"],
             dt_max=controller["dt_max"],
             norm_fn=controller["norm_fn"],
-            jit_flags=config.jit_flags,
-            unroll=config.unroll,
         )
 
     def _new_loop(self, settings: Dict[str, Any]) -> IVPLoop:
@@ -398,6 +400,7 @@ class SingleIntegratorRunCore(CUDAFactory):
             self._loop,
             self._output_functions,
             self._dae_initialiser,
+            self._starting_step,
             self._step_controller,
             self._algo_step,
         ):

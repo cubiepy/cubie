@@ -229,8 +229,7 @@ def resolve_step_bounds(
     -------
     dict
         ``dt`` for a fixed step; ``dt``, ``dt_min`` and ``dt_max``
-        for an adaptive one. An adaptive ``dt`` stays ``None`` when
-        not given.
+        for an adaptive one.
     """
     if not is_adaptive:
         # Fixed: dt, else the bounds' geometric mean, else a lone bound.

@@ -129,6 +129,9 @@ class SolverSettings(_CubieConfigBase):
     newton_target_iters: Optional[int] = None
     timestep_memory_location: Optional[str] = None
 
+    # -- Starting step ------------------------------------------------
+    initial_derivative_location: Optional[str] = None
+
     # -- Loop ---------------------------------------------------------
     save_every: Optional[float] = _optional()
     summarise_every: Optional[float] = _optional()
