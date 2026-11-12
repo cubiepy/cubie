@@ -41,7 +41,11 @@ for attempt in 1 2 3 4 5 6; do
     cp -r "$build_dir" "$version"
   fi
 
-  python "$tools/docs_site.py" index . "$SITE_BASE"
+  if [[ "$version" == pr-* ]]; then
+    python "$tools/docs_site.py" index . "$SITE_BASE" --preview
+  else
+    python "$tools/docs_site.py" index . "$SITE_BASE"
+  fi
   git add -A
   if git diff --cached --quiet; then
     echo "Nothing to publish."
