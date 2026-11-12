@@ -8,5 +8,10 @@
     "name": "main",
     "label": "main (development)",
     "url": "/cubie/main/"
+  },
+  {
+    "name": "v0.17.0",
+    "label": "v0.17.0",
+    "url": "/cubie/v0.17.0/"
   }
 ]
