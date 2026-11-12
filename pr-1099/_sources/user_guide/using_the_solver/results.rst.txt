@@ -5,116 +5,38 @@ Every call to :func:`~cubie.solve_ivp` or
 :meth:`~cubie.batchsolving.solver.Solver.solve` returns a
 :class:`~cubie.batchsolving.solveresult.SolveResult`.
 
-When integrating large batches, you end up with large data. Unless you're 
+When integrating large batches, you end up with large data. Unless you're
 checking the method against some known reference as a sanity check, you probably
-don't need the full time-domain series across the whole integration. To 
-cut down the output data, and speed up the solver, you can save only certain 
+don't need the full time-domain series across the whole integration. To
+cut down the output data, and speed up the solver, you can save only certain
 variables, at only certain times, or you can never save the time-domain signals
 and calculate summary variables (like averages, or peak times) on the GPU
 while integrating.
 
-# This is api reference, mostly. it looks like each agent adding a results feature tacked on their bit of new detail without any narrative consideration.
-It should go: output types, summary metrics, selecting variables, result formats. 
-The ``SolveResult`` Object
---------------------------
+We use the Lotka-Volterra system with one observable in the examples on
+this page:
 
-Key attributes:
+.. code-block:: python
 
-``time_domain_array``
-   3-D NumPy array with shape ``(n_time_points, n_variables, n_runs)``.
+   import numpy as np
+   from cubie import create_ODE_system, solve_ivp
 
-``summaries_array``
-   3-D NumPy array with shape ``(n_summary_windows, n_summaries,
-   n_runs)`` — one row per summary window.
+   LV = create_ODE_system(
+       """
+       predator_death_rate = c*y
+       dx = a*x - b*x*y
+       dy = -predator_death_rate + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       observables=["predator_death_rate"],
+   )
 
-``time``
-   1-D array of time values corresponding to the first axis of
-   ``time_domain_array``.
-
-``iteration_counters``
-   3-D integer array with shape ``(n_time_points, 4, n_runs)``.  The
-   four channels are, in order: Newton iterations, Krylov iterations,
-   accepted steps, and rejected steps since the previous save point.
-
-``status_codes`` / ``status_messages``
-   Per-run integration status.  ``status_codes`` is an ``int32`` array
-   of bit flags (one per run, ``0`` means success);
-   ``status_messages`` decodes each into a list of human-readable
-   flag names such as ``MAX_NEWTON_ITERATIONS_EXCEEDED``.
-
-``time_domain_legend``
-   Dictionary mapping column indices to variable names.
-
-``summaries_legend``
-   Dictionary mapping row indices to summary labels.
-
-``parameter_legend``
-   Dictionary showing which swept parameter lives in which array index.
-
-``fixed_parameter_values``
-   Values for each fixed parameter used in the solve.
-
-``stream``
-   The kernel's memory-manager stream the solve ran on — every
-   launch and transfer for a solver uses this one stream.  Work
-   queued on it executes in order after the solve, so a follow-up
-   job can be enqueued without a device-wide synchronisation.
-
-Convenience accessors:
-
-- ``result.as_numpy`` --- returns a dict of NumPy arrays.
-- ``result.as_pandas`` --- returns a dict of pandas DataFrames.
-- ``result.as_numpy_per_summary`` --- splits summaries by metric type.
-
-Device-Resident Results
------------------------
-
-A normal solve copies the output arrays from the GPU to the host
-before returning.  For workflows that never read the outputs on the
-host — benchmarking loops, or GPU-resident pipelines that feed solver
-output straight into further device work — ``on_device=True`` skips
-that copy and returns a
-:class:`~cubie.batchsolving.solveresult.DeviceSolveResult` of
-device-array handles::
-
-   result = solver.solve(y0, params, on_device=True)
-   result.stream.synchronize()      # results valid after this
-   device_state = result.state      # GPU array, no host copy made
-
-The result carries ``state``, ``observables``, ``state_summaries``,
-``observable_summaries``, ``iteration_counters``, ``status_codes``,
-``stream``, ``parameter_legend`` and ``fixed_parameter_values``;
-inactive outputs are ``None``.  The result is a pure
-handle container — it performs no stream or memory operations
-itself.  Points to note:
-
-- The solve does **not** synchronise before returning.  The handles
-  are safe to pass to work queued on ``result.stream`` immediately;
-  reading them from the host requires synchronising that stream
-  first, then copying (e.g. ``result.state.copy_to_host()``).  If
-  you want host results, a normal host solve is the better tool.
-- The handles are views of the solver's reusable output buffers: the
-  next ``solve()`` on the same solver overwrites them.
-- Host-side post-processing (output legends, NaN masking of failed
-  runs) is skipped.
-- The batch must fit in a single chunk.  A run that chunks along the
-  run axis raises ``ValueError`` — host arrays are the stitch target
-  for chunked transfers.
-- Device results need a live :class:`~cubie.Solver`;
-  :func:`~cubie.solve_ivp` closes its temporary solver before
-  returning, so it has no ``on_device`` option.
-
-Initial values and parameters may likewise be passed as device
-arrays (CuPy or Numba) in ``(n_variables, n_runs)`` layout, matching
-the system precision.  They are wired directly into the kernel with
-no host round-trip, which keeps a solve → post-process → solve
-pipeline entirely on the GPU.
-
-Output Types
+Output types
 ------------
 
-Control what is saved with the ``output_types`` list (or via
-``output_settings`` on the ``Solver``):
+Choose what cubie records with the ``output_types`` list. If you leave it
+out, cubie records ``["state"]``.
 
 ``"state"``
    Time-domain state trajectories.
@@ -123,32 +45,64 @@ Control what is saved with the ``output_types`` list (or via
    Time-domain observable trajectories.
 
 ``"time"``
-   Time point array.
+   The time of each saved point.
 
 ``"iteration_counters"``
-   Newton/Krylov iteration counts and accepted/rejected step counts
-   per save interval.
+   The solver's work between saved points: Newton iterations, Krylov
+   iterations, accepted steps and rejected steps.
 
-Any summary metric name (e.g. ``"mean"``, ``"max"``, ``"peaks"``) adds
-that metric to the output.
+Add any summary metric name, such as ``"mean"`` or ``"max"``, to record
+that metric; see `Summary metrics`_ below. Set how often cubie saves a
+time-domain point with ``save_every``; see :doc:`timing`.
 
-Time-Domain vs Summary Output
------------------------------
+.. code-block:: python
 
-Time-domain saves and summary metrics operate at independent cadences:
+   result = solve_ivp(
+       LV,
+       parameters={"b": np.linspace(0.01, 0.05, 10000)},
+       method="ode45",
+       duration=100.0,
+       save_every=1.0,
+       output_types=["state", "observables", "time", "iteration_counters"],
+   )
 
-- ``save_every`` controls how often state snapshots are written.
-- ``summarise_every`` controls how often a summary metric is
-  calculated and saved. If unset, one summary is calculated and saved
-  at the end of the integration.
-- ``sample_summaries_every`` controls how frequently measurements
-  used to calculate the summary metrics are taken.
+   counters = result.iteration_counters
+   newton_iters = counters[:, 0, :]    # per save point, per run
+   krylov_iters = counters[:, 1, :]
+   accepted_steps = counters[:, 2, :]
+   rejected_steps = counters[:, 3, :]
 
-Using summaries lets you extract statistics (mean, max, peaks, etc.)
-without ever writing the full trajectory to VRAM.
+Use the iteration counters to spot runs where an implicit algorithm is
+struggling. See :doc:`/theory/solvers` for background on the Newton
+solver.
 
-Built-in Summary Metrics
-------------------------
+Summary metrics
+---------------
+
+With summary metrics, you can extract statistics such as the mean, the
+maximum or the peaks of a variable without ever writing its full
+trajectory to VRAM.
+cubie updates each metric on the GPU as it integrates. Set how often cubie
+samples the variables with ``sample_summaries_every``, which you must set
+whenever you ask for summaries, and the length of each summary window
+with ``summarise_every``. If you leave ``summarise_every`` out, cubie calculates
+one summary over the whole integration. See :doc:`timing` for how the two
+intervals fit together.
+
+.. code-block:: python
+
+   result = solve_ivp(
+       LV,
+       parameters={"b": np.linspace(0.01, 0.05, 10000)},
+       method="ode45",
+       duration=100.0,
+       sample_summaries_every=0.5,
+       output_types=["mean", "max"],
+   )
+
+   per_summary = result.as_numpy_per_summary
+   mean_prey = per_summary["mean"][0, 0, :]   # window 0, x, every run
+   peak_prey = per_summary["max"][0, 0, :]
 
 .. list-table::
    :header-rows: 1
@@ -193,77 +147,109 @@ Built-in Summary Metrics
    * - ``"mean_std_rms"``
      - Mean, standard deviation, and RMS combined.
 
-Requesting a full set of constituent metrics that share running sums
-(for example ``["max", "min"]`` or ``["mean", "std", "rms"]``) is
-automatically computed using the matching combined metric internally,
-but each result is still reported under its requested name (``"max"``,
-``"min"``, and so on) — the fusion is a transparent performance
-optimisation, not a change to the reported legend.
+If you ask for a set of metrics that share running sums, such as
+``["max", "min"]`` or ``["mean", "std", "rms"]``, cubie calculates them
+together in one combined metric. You still get each result under the name
+you asked for.
 
-Selecting Variables to Save
----------------------------
+Selecting variables
+-------------------
 
-By default all states and observables are saved.  To reduce memory and
-improve speed, select only the variables you need:
+By default cubie saves and summarises every state and observable. To
+reduce memory and improve speed, name only the variables you need with
+``save_variables`` for the time-domain output and ``summarise_variables``
+for the summaries:
 
 .. code-block:: python
 
-   result = qb.solve_ivp(
-       system,
-       y0=y0,
-       parameters=params,
-       method="dormand-prince-54",
-       duration=10.0,
+   result = solve_ivp(
+       LV,
+       parameters={"b": np.linspace(0.01, 0.05, 10000)},
+       method="ode45",
+       duration=100.0,
+       save_every=1.0,
+       sample_summaries_every=0.5,
        save_variables=["x"],
        summarise_variables=["x", "y"],
        output_types=["state", "mean", "max"],
    )
 
-Iteration Counters and Run Status
----------------------------------
+If you leave ``summarise_variables`` out, cubie summarises the variables
+you save.
 
-Requesting ``"iteration_counters"`` in ``output_types`` records solver
-effort at every save point — useful for spotting runs where an
-implicit algorithm is struggling:
+Result formats
+--------------
+
+Cubie returns each output in the ``SolveResult`` as a NumPy array, indexed
+by time (or summary window) first, then variable, then run:
+
+``state`` and ``observables``
+   The state and observable trajectories.
+
+``time_domain_array``
+   The states followed by the observables, in one array. Read
+   ``time_domain_legend`` for the name of each column.
+
+``time``
+   The time of each saved point, one column per run.
+
+``summaries_array``
+   Every summary metric, one row per summary window. Read
+   ``summaries_legend`` for the name of each column, such as ``"x mean"``.
+
+``iteration_counters``
+   The solver work between saved points, as described above.
+
+``status_codes`` and ``status_messages``
+   One status word per run, ``0`` for success. Look up a failed run's
+   index in ``status_messages`` to see the names of its status codes; see
+   :doc:`/troubleshooting`.
+
+``parameter_legend`` and ``fixed_parameter_values``
+   Read ``parameter_legend`` for the parameter of each row of the swept
+   parameters array, and ``fixed_parameter_values`` for the value of
+   every parameter cubie compiled into the code.
+
+You can also convert the result:
+
+- ``result.as_numpy`` returns a dict of the arrays and legends.
+- ``result.as_numpy_per_summary`` returns the same, with the summaries
+  split into one array per metric.
+- ``result.as_pandas`` returns pandas DataFrames of the time-domain output
+  and the summaries.
+
+Device-resident results
+~~~~~~~~~~~~~~~~~~~~~~~
+
+In a normal solve, cubie copies the outputs from the GPU to the host
+before it returns. If you feed the outputs straight into more GPU work, pass
+``on_device=True`` to ``Solver.solve`` to skip that copy. You get a
+:class:`~cubie.batchsolving.solveresult.DeviceSolveResult` of device
+arrays instead:
 
 .. code-block:: python
 
-   counters = result.iteration_counters
-   newton_iters = counters[:, 0, :]    # per save point, per run
-   krylov_iters = counters[:, 1, :]
-   accepted_steps = counters[:, 2, :]
-   rejected_steps = counters[:, 3, :]
+   from cubie import Solver
 
-Separately, every result carries a per-run status word.  A run that
-hit a solver limit is flagged there:
-
-.. code-block:: python
-
-   failed = result.status_codes != 0
-   print(result.status_messages)  # e.g. ["MAX_NEWTON_ITERATIONS_EXCEEDED"]
-
-See :doc:`/theory/solvers` for background on the Newton solver.
-
-Example: Requesting Summaries
------------------------------
-
-.. code-block:: python
-
-   import cubie as qb
-   import numpy as np
-
-   # ... (system definition omitted for brevity)
-
-   result = qb.solve_ivp(
-       system,
-       y0=y0,
-       parameters=params,
-       method="dormand-prince-54",
-       duration=50.0,
-       output_types=["mean", "std"],
-       summarise_variables=["x"],
+   solver = Solver(LV, algorithm="ode45")
+   result = solver.solve(
+       parameters={"b": np.linspace(0.01, 0.05, 10000)},
+       duration=100.0,
+       on_device=True,
    )
+   result.stream.synchronize()      # the outputs are ready after this
+   device_state = result.state      # GPU array, no host copy made
 
-   per_summary = result.as_numpy_per_summary
-   print("Mean of x:", per_summary["mean"])
-   print("Std of x:", per_summary["std"])
+Keep these points in mind:
+
+- Cubie returns from the solve without waiting for the GPU. You can queue more work
+  on ``result.stream`` straight away; to read the outputs on the host,
+  synchronise that stream first and then copy them, for example with
+  ``result.state.copy_to_host()``.
+- Cubie overwrites the arrays on the next ``solve()`` on the same solver.
+- cubie skips the host-side work, so you get no output legends and no NaN
+  masking of failed runs.
+- Keep the batch small enough to fit on the GPU in one chunk; otherwise
+  cubie raises ``ValueError``.
+- ``solve_ivp`` closes its solver before it returns, so it has no
+  ``on_device`` option.

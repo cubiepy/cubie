@@ -23,7 +23,7 @@
     <link rel="next" title="Algorithms and tuning" href="../algorithms_and_tuning/index.html" />
     <link rel="prev" title="Timing Parameters" href="timing.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
-<script src="/cubie/version_switcher.js" data-version="pr-1099" defer></script>
+<script src="/cubie/pr-1099/_static/version_switcher.js" data-version="pr-1099" data-versions="/cubie/versions.json" defer></script>
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -332,8 +332,7 @@ none.</p></td>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">grid_type</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code> takes every combination of the supplied
-inputs; <code class="docutils literal notranslate"><span class="pre">&quot;verbatim&quot;</span></code> pairs them run-for-run. <strong>This default
-differs from</strong> <code class="docutils literal notranslate"><span class="pre">Solver.solve</span></code> <strong>below.</strong></p></td>
+inputs; <code class="docutils literal notranslate"><span class="pre">&quot;verbatim&quot;</span></code> pairs them run-for-run.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">time_logging_level</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
@@ -435,10 +434,9 @@ solver’s <code class="docutils literal notranslate"><span class="pre">blocksiz
 that setting was not given.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">grid_type</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;verbatim&quot;</span></code></p></td>
-<td><p><strong>Differs from</strong> <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code>’s default of
-<code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code> above — only relevant when dict inputs
-trigger grid construction.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code></p></td>
+<td><p>Same as <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code> above. Cubie only uses it when you pass
+dict inputs.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">on_device</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>

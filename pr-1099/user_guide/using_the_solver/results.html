@@ -23,7 +23,7 @@
     <link rel="next" title="Timing Parameters" href="timing.html" />
     <link rel="prev" title="Batch Inputs" href="inputs.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
-<script src="/cubie/version_switcher.js" data-version="pr-1099" defer></script>
+<script src="/cubie/pr-1099/_static/version_switcher.js" data-version="pr-1099" data-versions="/cubie/versions.json" defer></script>
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -288,126 +288,86 @@ cut down the output data, and speed up the solver, you can save only certain
 variables, at only certain times, or you can never save the time-domain signals
 and calculate summary variables (like averages, or peak times) on the GPU
 while integrating.</p>
-<p># This is api reference, mostly. it looks like each agent adding a results feature tacked on their bit of new detail without any narrative consideration.
-It should go: output types, summary metrics, selecting variables, result formats.
-The <code class="docutils literal notranslate"><span class="pre">SolveResult</span></code> Object
-————————–</p>
-<p>Key attributes:</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">time_domain_array</span></code></dt><dd><p>3-D NumPy array with shape <code class="docutils literal notranslate"><span class="pre">(n_time_points,</span> <span class="pre">n_variables,</span> <span class="pre">n_runs)</span></code>.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">summaries_array</span></code></dt><dd><p>3-D NumPy array with shape <code class="docutils literal notranslate"><span class="pre">(n_summary_windows,</span> <span class="pre">n_summaries,</span>
-<span class="pre">n_runs)</span></code> — one row per summary window.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">time</span></code></dt><dd><p>1-D array of time values corresponding to the first axis of
-<code class="docutils literal notranslate"><span class="pre">time_domain_array</span></code>.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">iteration_counters</span></code></dt><dd><p>3-D integer array with shape <code class="docutils literal notranslate"><span class="pre">(n_time_points,</span> <span class="pre">4,</span> <span class="pre">n_runs)</span></code>.  The
-four channels are, in order: Newton iterations, Krylov iterations,
-accepted steps, and rejected steps since the previous save point.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">status_codes</span></code> / <code class="docutils literal notranslate"><span class="pre">status_messages</span></code></dt><dd><p>Per-run integration status.  <code class="docutils literal notranslate"><span class="pre">status_codes</span></code> is an <code class="docutils literal notranslate"><span class="pre">int32</span></code> array
-of bit flags (one per run, <code class="docutils literal notranslate"><span class="pre">0</span></code> means success);
-<code class="docutils literal notranslate"><span class="pre">status_messages</span></code> decodes each into a list of human-readable
-flag names such as <code class="docutils literal notranslate"><span class="pre">MAX_NEWTON_ITERATIONS_EXCEEDED</span></code>.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">time_domain_legend</span></code></dt><dd><p>Dictionary mapping column indices to variable names.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">summaries_legend</span></code></dt><dd><p>Dictionary mapping row indices to summary labels.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code></dt><dd><p>Dictionary showing which swept parameter lives in which array index.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code></dt><dd><p>Values for each fixed parameter used in the solve.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">stream</span></code></dt><dd><p>The kernel’s memory-manager stream the solve ran on — every
-launch and transfer for a solver uses this one stream.  Work
-queued on it executes in order after the solve, so a follow-up
-job can be enqueued without a device-wide synchronisation.</p>
-</dd>
-</dl>
-<p>Convenience accessors:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">result.as_numpy</span></code> — returns a dict of NumPy arrays.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">result.as_pandas</span></code> — returns a dict of pandas DataFrames.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">result.as_numpy_per_summary</span></code> — splits summaries by metric type.</p></li>
-</ul>
-<section id="device-resident-results">
-<h2>Device-Resident Results<a class="headerlink" href="#device-resident-results" title="Link to this heading"></a></h2>
-<p>A normal solve copies the output arrays from the GPU to the host
-before returning.  For workflows that never read the outputs on the
-host — benchmarking loops, or GPU-resident pipelines that feed solver
-output straight into further device work — <code class="docutils literal notranslate"><span class="pre">on_device=True</span></code> skips
-that copy and returns a
-<code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceSolveResult</span></code> of
-device-array handles:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">y0</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">on_device</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">result</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>      <span class="c1"># results valid after this</span>
-<span class="n">device_state</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">state</span>      <span class="c1"># GPU array, no host copy made</span>
+<p>We use the Lotka-Volterra system with one observable in the examples on
+this page:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_ODE_system</span><span class="p">,</span> <span class="n">solve_ivp</span>
+
+<span class="n">LV</span> <span class="o">=</span> <span class="n">create_ODE_system</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    predator_death_rate = c*y</span>
+<span class="sd">    dx = a*x - b*x*y</span>
+<span class="sd">    dy = -predator_death_rate + d*x*y</span>
+<span class="sd">    """</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
+    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+    <span class="n">observables</span><span class="o">=</span><span class="p">[</span><span class="s2">"predator_death_rate"</span><span class="p">],</span>
+<span class="p">)</span>
 </pre></div>
 </div>
-<p>The result carries <code class="docutils literal notranslate"><span class="pre">state</span></code>, <code class="docutils literal notranslate"><span class="pre">observables</span></code>, <code class="docutils literal notranslate"><span class="pre">state_summaries</span></code>,
-<code class="docutils literal notranslate"><span class="pre">observable_summaries</span></code>, <code class="docutils literal notranslate"><span class="pre">iteration_counters</span></code>, <code class="docutils literal notranslate"><span class="pre">status_codes</span></code>,
-<code class="docutils literal notranslate"><span class="pre">stream</span></code>, <code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> and <code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code>;
-inactive outputs are <code class="docutils literal notranslate"><span class="pre">None</span></code>.  The result is a pure
-handle container — it performs no stream or memory operations
-itself.  Points to note:</p>
-<ul class="simple">
-<li><p>The solve does <strong>not</strong> synchronise before returning.  The handles
-are safe to pass to work queued on <code class="docutils literal notranslate"><span class="pre">result.stream</span></code> immediately;
-reading them from the host requires synchronising that stream
-first, then copying (e.g. <code class="docutils literal notranslate"><span class="pre">result.state.copy_to_host()</span></code>).  If
-you want host results, a normal host solve is the better tool.</p></li>
-<li><p>The handles are views of the solver’s reusable output buffers: the
-next <code class="docutils literal notranslate"><span class="pre">solve()</span></code> on the same solver overwrites them.</p></li>
-<li><p>Host-side post-processing (output legends, NaN masking of failed
-runs) is skipped.</p></li>
-<li><p>The batch must fit in a single chunk.  A run that chunks along the
-run axis raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> — host arrays are the stitch target
-for chunked transfers.</p></li>
-<li><p>Device results need a live <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code>;
-<code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> closes its temporary solver before
-returning, so it has no <code class="docutils literal notranslate"><span class="pre">on_device</span></code> option.</p></li>
-</ul>
-<p>Initial values and parameters may likewise be passed as device
-arrays (CuPy or Numba) in <code class="docutils literal notranslate"><span class="pre">(n_variables,</span> <span class="pre">n_runs)</span></code> layout, matching
-the system precision.  They are wired directly into the kernel with
-no host round-trip, which keeps a solve → post-process → solve
-pipeline entirely on the GPU.</p>
-</section>
 <section id="output-types">
-<h2>Output Types<a class="headerlink" href="#output-types" title="Link to this heading"></a></h2>
-<p>Control what is saved with the <code class="docutils literal notranslate"><span class="pre">output_types</span></code> list (or via
-<code class="docutils literal notranslate"><span class="pre">output_settings</span></code> on the <code class="docutils literal notranslate"><span class="pre">Solver</span></code>):</p>
+<h2>Output types<a class="headerlink" href="#output-types" title="Link to this heading"></a></h2>
+<p>Choose what cubie records with the <code class="docutils literal notranslate"><span class="pre">output_types</span></code> list. If you leave it
+out, cubie records <code class="docutils literal notranslate"><span class="pre">[&quot;state&quot;]</span></code>.</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">&quot;state&quot;</span></code></dt><dd><p>Time-domain state trajectories.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">&quot;observables&quot;</span></code></dt><dd><p>Time-domain observable trajectories.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code></dt><dd><p>Time point array.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code></dt><dd><p>The time of each saved point.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">&quot;iteration_counters&quot;</span></code></dt><dd><p>Newton/Krylov iteration counts and accepted/rejected step counts
-per save interval.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">&quot;iteration_counters&quot;</span></code></dt><dd><p>The solver’s work between saved points: Newton iterations, Krylov
+iterations, accepted steps and rejected steps.</p>
 </dd>
 </dl>
-<p>Any summary metric name (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;peaks&quot;</span></code>) adds
-that metric to the output.</p>
+<p>Add any summary metric name, such as <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code>, to record
+that metric; see <a class="reference internal" href="#summary-metrics">Summary metrics</a> below. Set how often cubie saves a
+time-domain point with <code class="docutils literal notranslate"><span class="pre">save_every</span></code>; see <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">solve_ivp</span><span class="p">(</span>
+    <span class="n">LV</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+    <span class="n">save_every</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"state"</span><span class="p">,</span> <span class="s2">"observables"</span><span class="p">,</span> <span class="s2">"time"</span><span class="p">,</span> <span class="s2">"iteration_counters"</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">counters</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">iteration_counters</span>
+<span class="n">newton_iters</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>    <span class="c1"># per save point, per run</span>
+<span class="n">krylov_iters</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span>
+<span class="n">accepted_steps</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">,</span> <span class="p">:]</span>
+<span class="n">rejected_steps</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">:]</span>
+</pre></div>
+</div>
+<p>Use the iteration counters to spot runs where an implicit algorithm is
+struggling. See <a class="reference internal" href="../../theory/solvers.html"><span class="doc">Nonlinear Solvers</span></a> for background on the Newton
+solver.</p>
 </section>
-<section id="time-domain-vs-summary-output">
-<h2>Time-Domain vs Summary Output<a class="headerlink" href="#time-domain-vs-summary-output" title="Link to this heading"></a></h2>
-<p>Time-domain saves and summary metrics operate at independent cadences:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">save_every</span></code> controls how often state snapshots are written.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">summarise_every</span></code> controls how often a summary metric is
-calculated and saved. If unset, one summary is calculated and saved
-at the end of the integration.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code> controls how frequently measurements
-used to calculate the summary metrics are taken.</p></li>
-</ul>
-<p>Using summaries lets you extract statistics (mean, max, peaks, etc.)
-without ever writing the full trajectory to VRAM.</p>
-</section>
-<section id="built-in-summary-metrics">
-<h2>Built-in Summary Metrics<a class="headerlink" href="#built-in-summary-metrics" title="Link to this heading"></a></h2>
+<section id="summary-metrics">
+<h2>Summary metrics<a class="headerlink" href="#summary-metrics" title="Link to this heading"></a></h2>
+<p>With summary metrics, you can extract statistics such as the mean, the
+maximum or the peaks of a variable without ever writing its full
+trajectory to VRAM.
+cubie updates each metric on the GPU as it integrates. Set how often cubie
+samples the variables with <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code>, which you must set
+whenever you ask for summaries, and the length of each summary window
+with <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code>. If you leave <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code> out, cubie calculates
+one summary over the whole integration. See <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> for how the two
+intervals fit together.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">solve_ivp</span><span class="p">(</span>
+    <span class="n">LV</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+    <span class="n">sample_summaries_every</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"mean"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="n">per_summary</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">as_numpy_per_summary</span>
+<span class="n">mean_prey</span> <span class="o">=</span> <span class="n">per_summary</span><span class="p">[</span><span class="s2">"mean"</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>   <span class="c1"># window 0, x, every run</span>
+<span class="n">peak_prey</span> <span class="o">=</span> <span class="n">per_summary</span><span class="p">[</span><span class="s2">"max"</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>
+</pre></div>
+</div>
 <table class="docutils align-default">
 <colgroup>
 <col style="width: 25.0%" />
@@ -475,72 +435,101 @@ without ever writing the full trajectory to VRAM.</p>
 </tr>
 </tbody>
 </table>
-<p>Requesting a full set of constituent metrics that share running sums
-(for example <code class="docutils literal notranslate"><span class="pre">[&quot;max&quot;,</span> <span class="pre">&quot;min&quot;]</span></code> or <code class="docutils literal notranslate"><span class="pre">[&quot;mean&quot;,</span> <span class="pre">&quot;std&quot;,</span> <span class="pre">&quot;rms&quot;]</span></code>) is
-automatically computed using the matching combined metric internally,
-but each result is still reported under its requested name (<code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;min&quot;</span></code>, and so on) — the fusion is a transparent performance
-optimisation, not a change to the reported legend.</p>
+<p>If you ask for a set of metrics that share running sums, such as
+<code class="docutils literal notranslate"><span class="pre">[&quot;max&quot;,</span> <span class="pre">&quot;min&quot;]</span></code> or <code class="docutils literal notranslate"><span class="pre">[&quot;mean&quot;,</span> <span class="pre">&quot;std&quot;,</span> <span class="pre">&quot;rms&quot;]</span></code>, cubie calculates them
+together in one combined metric. You still get each result under the name
+you asked for.</p>
 </section>
-<section id="selecting-variables-to-save">
-<h2>Selecting Variables to Save<a class="headerlink" href="#selecting-variables-to-save" title="Link to this heading"></a></h2>
-<p>By default all states and observables are saved.  To reduce memory and
-improve speed, select only the variables you need:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
-    <span class="n">system</span><span class="p">,</span>
-    <span class="n">y0</span><span class="o">=</span><span class="n">y0</span><span class="p">,</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-    <span class="n">method</span><span class="o">=</span><span class="s2">"dormand-prince-54"</span><span class="p">,</span>
-    <span class="n">duration</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+<section id="selecting-variables">
+<h2>Selecting variables<a class="headerlink" href="#selecting-variables" title="Link to this heading"></a></h2>
+<p>By default cubie saves and summarises every state and observable. To
+reduce memory and improve speed, name only the variables you need with
+<code class="docutils literal notranslate"><span class="pre">save_variables</span></code> for the time-domain output and <code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code>
+for the summaries:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">solve_ivp</span><span class="p">(</span>
+    <span class="n">LV</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)},</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+    <span class="n">save_every</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">sample_summaries_every</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
     <span class="n">save_variables</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span>
     <span class="n">summarise_variables</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">],</span>
     <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"state"</span><span class="p">,</span> <span class="s2">"mean"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">],</span>
 <span class="p">)</span>
 </pre></div>
 </div>
+<p>If you leave <code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code> out, cubie summarises the variables
+you save.</p>
 </section>
-<section id="iteration-counters-and-run-status">
-<h2>Iteration Counters and Run Status<a class="headerlink" href="#iteration-counters-and-run-status" title="Link to this heading"></a></h2>
-<p>Requesting <code class="docutils literal notranslate"><span class="pre">&quot;iteration_counters&quot;</span></code> in <code class="docutils literal notranslate"><span class="pre">output_types</span></code> records solver
-effort at every save point — useful for spotting runs where an
-implicit algorithm is struggling:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">counters</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">iteration_counters</span>
-<span class="n">newton_iters</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>    <span class="c1"># per save point, per run</span>
-<span class="n">krylov_iters</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span>
-<span class="n">accepted_steps</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">,</span> <span class="p">:]</span>
-<span class="n">rejected_steps</span> <span class="o">=</span> <span class="n">counters</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">,</span> <span class="p">:]</span>
-</pre></div>
-</div>
-<p>Separately, every result carries a per-run status word.  A run that
-hit a solver limit is flagged there:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">failed</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">status_codes</span> <span class="o">!=</span> <span class="mi">0</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">status_messages</span><span class="p">)</span>  <span class="c1"># e.g. ["MAX_NEWTON_ITERATIONS_EXCEEDED"]</span>
-</pre></div>
-</div>
-<p>See <a class="reference internal" href="../../theory/solvers.html"><span class="doc">Nonlinear Solvers</span></a> for background on the Newton solver.</p>
-</section>
-<section id="example-requesting-summaries">
-<h2>Example: Requesting Summaries<a class="headerlink" href="#example-requesting-summaries" title="Link to this heading"></a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qb</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<section id="result-formats">
+<h2>Result formats<a class="headerlink" href="#result-formats" title="Link to this heading"></a></h2>
+<p>Cubie returns each output in the <code class="docutils literal notranslate"><span class="pre">SolveResult</span></code> as a NumPy array, indexed
+by time (or summary window) first, then variable, then run:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">state</span></code> and <code class="docutils literal notranslate"><span class="pre">observables</span></code></dt><dd><p>The state and observable trajectories.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">time_domain_array</span></code></dt><dd><p>The states followed by the observables, in one array. Read
+<code class="docutils literal notranslate"><span class="pre">time_domain_legend</span></code> for the name of each column.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">time</span></code></dt><dd><p>The time of each saved point, one column per run.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">summaries_array</span></code></dt><dd><p>Every summary metric, one row per summary window. Read
+<code class="docutils literal notranslate"><span class="pre">summaries_legend</span></code> for the name of each column, such as <code class="docutils literal notranslate"><span class="pre">&quot;x</span> <span class="pre">mean&quot;</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">iteration_counters</span></code></dt><dd><p>The solver work between saved points, as described above.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">status_codes</span></code> and <code class="docutils literal notranslate"><span class="pre">status_messages</span></code></dt><dd><p>One status word per run, <code class="docutils literal notranslate"><span class="pre">0</span></code> for success. Look up a failed run’s
+index in <code class="docutils literal notranslate"><span class="pre">status_messages</span></code> to see the names of its status codes; see
+<a class="reference internal" href="../../troubleshooting.html"><span class="doc">Troubleshooting</span></a>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> and <code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code></dt><dd><p>Read <code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> for the parameter of each row of the swept
+parameters array, and <code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code> for the value of
+every parameter cubie compiled into the code.</p>
+</dd>
+</dl>
+<p>You can also convert the result:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">result.as_numpy</span></code> returns a dict of the arrays and legends.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">result.as_numpy_per_summary</span></code> returns the same, with the summaries
+split into one array per metric.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">result.as_pandas</span></code> returns pandas DataFrames of the time-domain output
+and the summaries.</p></li>
+</ul>
+<section id="device-resident-results">
+<h3>Device-resident results<a class="headerlink" href="#device-resident-results" title="Link to this heading"></a></h3>
+<p>In a normal solve, cubie copies the outputs from the GPU to the host
+before it returns. If you feed the outputs straight into more GPU work, pass
+<code class="docutils literal notranslate"><span class="pre">on_device=True</span></code> to <code class="docutils literal notranslate"><span class="pre">Solver.solve</span></code> to skip that copy. You get a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceSolveResult</span></code> of device
+arrays instead:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span>
 
-<span class="c1"># ... (system definition omitted for brevity)</span>
-
-<span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
-    <span class="n">system</span><span class="p">,</span>
-    <span class="n">y0</span><span class="o">=</span><span class="n">y0</span><span class="p">,</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-    <span class="n">method</span><span class="o">=</span><span class="s2">"dormand-prince-54"</span><span class="p">,</span>
-    <span class="n">duration</span><span class="o">=</span><span class="mf">50.0</span><span class="p">,</span>
-    <span class="n">output_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"mean"</span><span class="p">,</span> <span class="s2">"std"</span><span class="p">],</span>
-    <span class="n">summarise_variables</span><span class="o">=</span><span class="p">[</span><span class="s2">"x"</span><span class="p">],</span>
+<span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)},</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+    <span class="n">on_device</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
-
-<span class="n">per_summary</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">as_numpy_per_summary</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"Mean of x:"</span><span class="p">,</span> <span class="n">per_summary</span><span class="p">[</span><span class="s2">"mean"</span><span class="p">])</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"Std of x:"</span><span class="p">,</span> <span class="n">per_summary</span><span class="p">[</span><span class="s2">"std"</span><span class="p">])</span>
+<span class="n">result</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>      <span class="c1"># the outputs are ready after this</span>
+<span class="n">device_state</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">state</span>      <span class="c1"># GPU array, no host copy made</span>
 </pre></div>
 </div>
+<p>Keep these points in mind:</p>
+<ul class="simple">
+<li><p>Cubie returns from the solve without waiting for the GPU. You can queue more work
+on <code class="docutils literal notranslate"><span class="pre">result.stream</span></code> straight away; to read the outputs on the host,
+synchronise that stream first and then copy them, for example with
+<code class="docutils literal notranslate"><span class="pre">result.state.copy_to_host()</span></code>.</p></li>
+<li><p>Cubie overwrites the arrays on the next <code class="docutils literal notranslate"><span class="pre">solve()</span></code> on the same solver.</p></li>
+<li><p>cubie skips the host-side work, so you get no output legends and no NaN
+masking of failed runs.</p></li>
+<li><p>Keep the batch small enough to fit on the GPU in one chunk; otherwise
+cubie raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code> closes its solver before it returns, so it has no
+<code class="docutils literal notranslate"><span class="pre">on_device</span></code> option.</p></li>
+</ul>
+</section>
 </section>
 </section>
 

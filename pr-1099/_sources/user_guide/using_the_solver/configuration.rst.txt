@@ -47,8 +47,7 @@ single batch solve.
    * - ``grid_type``
      - ``"combinatorial"``
      - ``"combinatorial"`` takes every combination of the supplied
-       inputs; ``"verbatim"`` pairs them run-for-run. **This default
-       differs from** ``Solver.solve`` **below.**
+       inputs; ``"verbatim"`` pairs them run-for-run.
    * - ``time_logging_level``
      - ``None``
      - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``,
@@ -126,10 +125,9 @@ loose keyword arguments (see :ref:`kwarg-routing`).
        solver's ``blocksize`` setting, or lets the solver pick when
        that setting was not given.
    * - ``grid_type``
-     - ``"verbatim"``
-     - **Differs from** ``solve_ivp``'s default of
-       ``"combinatorial"`` above — only relevant when dict inputs
-       trigger grid construction.
+     - ``"combinatorial"``
+     - Same as ``solve_ivp`` above. Cubie only uses it when you pass
+       dict inputs.
    * - ``on_device``
      - ``False``
      - Return a
