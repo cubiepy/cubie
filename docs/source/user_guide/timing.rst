@@ -15,7 +15,8 @@ Step Size Parameters
 
 Adaptive controllers use three related parameters to control step sizes:
 
-- ``dt``: Initial step size (starting point for adaptation)
+- ``dt``: Initial step size (starting point for adaptation). Leave it
+  unset to have CuBIE estimate each run's first step.
 - ``dt_min``: Minimum allowable step size (floor)
 - ``dt_max``: Maximum allowable step size (ceiling)
 
@@ -42,7 +43,7 @@ When you don't specify any step size parameters, CuBIE uses these defaults:
      - ``1.0``
    * - Adaptive
      - ``dt``
-     - ``sqrt(dt_min * dt_max)`` = ``1e-3``
+     - Estimated per run (see `Starting Step Estimate`_)
    * - Fixed
      - ``dt``
      - ``1e-3``
@@ -62,17 +63,17 @@ missing values. The rules differ for adaptive and fixed controllers:
    * - You Provide
      - CuBIE Derives
    * - ``dt`` only
-     - ``dt_min = dt / 100``, ``dt_max = dt * 100``
+     - ``dt_min = dt / 1000``, ``dt_max = dt * 1000``
    * - ``dt_min`` only
-     - ``dt_max = 1.0`` (default), ``dt = sqrt(dt_min * dt_max)``
+     - ``dt_max = 1.0`` (default); CuBIE estimates ``dt`` per run
    * - ``dt_max`` only
-     - ``dt_min = 1e-6`` (default), ``dt = sqrt(dt_min * dt_max)``
+     - ``dt_min = 1e-6`` (default); CuBIE estimates ``dt`` per run
    * - ``dt_min`` and ``dt_max``
-     - ``dt = sqrt(dt_min * dt_max)``
+     - CuBIE estimates ``dt`` per run
    * - ``dt`` and ``dt_min``
-     - ``dt_max = dt * 100``
+     - ``dt_max = dt * 1000``
    * - ``dt`` and ``dt_max``
-     - ``dt_min = dt / 100``
+     - ``dt_min = dt / 1000``
    * - All three
      - Nothing derived (all values used as given)
 
@@ -88,15 +89,34 @@ Example usage:
 
    # Adaptive: provide dt, bounds derived automatically
    solver.solve(..., dt=0.01)
-   # Results in: dt_min=0.0001, dt=0.01, dt_max=1.0
+   # Results in: dt_min=1e-5, dt=0.01, dt_max=10.0
 
-   # Adaptive: provide bounds, initial dt computed
+   # Adaptive: provide bounds, CuBIE estimates each run's first step
    solver.solve(..., dt_min=1e-5, dt_max=0.1)
-   # Results in: dt_min=1e-5, dt=0.001, dt_max=0.1
+   # Results in: dt_min=1e-5, dt_max=0.1
 
    # Fixed: any of these sets dt=0.005
    solver.solve(..., step_controller="fixed", dt=0.005)
    solver.solve(..., step_controller="fixed", dt_min=0.005)
+
+Starting Step Estimate
+~~~~~~~~~~~~~~~~~~~~~~
+
+When you leave ``dt`` unset on an adaptive controller, CuBIE estimates
+each run's first step on the GPU before the integration starts. CuBIE
+scales the initial state and its derivative by your tolerances, as the
+step controller's error norm does, and takes one hundredth of the ratio
+of their norms as a first guess. It then takes one explicit Euler step
+of that size to measure how fast the derivative changes, and starts the
+run at the step whose estimated leading error term just meets your
+tolerances, up to 100 times the first guess. CuBIE keeps every estimate
+within ``dt_min`` and ``dt_max``, and starts a run whose derivative is
+not finite at ``dt_min``.
+
+CuBIE evaluates the right-hand side twice per run for the estimate. On
+a DAE system, CuBIE leaves the algebraic states out of the norms and
+holds them fixed over the Euler step, so it estimates the step from the
+differential states only.
 
 Update Behaviour
 ~~~~~~~~~~~~~~~~

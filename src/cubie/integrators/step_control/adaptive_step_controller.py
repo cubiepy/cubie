@@ -167,7 +167,7 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
 
     @property
     def dt(self) -> float:
-        """Return the initial step; the bounds' geometric mean if unset."""
+        """Return the given initial step, else the bounds' geometric mean."""
         if self._dt is not None:
             return self.precision(self._dt)
         return self.precision(sqrt(self._dt_min * self._dt_max))
@@ -176,6 +176,11 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
     def is_adaptive(self) -> bool:
         """Return ``True`` because the controller adapts step size."""
         return True
+
+    @property
+    def estimates_dt(self) -> bool:
+        """Return ``True`` when no initial step is given."""
+        return self._dt is None
 
     @property
     def min_step_shrink(self) -> float:
@@ -360,3 +365,9 @@ class BaseAdaptiveStepController(BaseStepController):
         """Return the integration algorithm order assumed by the controller."""
 
         return int(self.compile_settings.algorithm_order)
+
+    @property
+    def norm_fn(self) -> Callable:
+        """Return the error-norm device function."""
+
+        return self.compile_settings.norm_fn

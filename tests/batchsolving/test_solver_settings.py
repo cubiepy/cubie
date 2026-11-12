@@ -371,12 +371,6 @@ def test_adaptive_bounds_follow_a_lone_dt():
     assert bounds == {"dt": 0.01, "dt_min": 1e-5, "dt_max": 10.0}
 
 
-def test_adaptive_dt_is_the_geometric_mean_of_given_bounds():
-    """Bounds alone give dt as their geometric mean."""
-    bounds = resolve_step_bounds(None, 1e-4, 1e-2, True)
-    assert bounds["dt"] == pytest.approx(1e-3)
-
-
 def test_fixed_step_from_bounds():
     """A fixed step is the bounds' geometric mean or a lone bound."""
     assert resolve_step_bounds(None, 1e-4, 1e-2, False) == {

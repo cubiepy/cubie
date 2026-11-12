@@ -307,6 +307,10 @@ class ControllerCache(CUDADispatcherCache):
         Compiled CUDA device function, or ``-1`` before compilation.
     is_adaptive, dt, dt_min, dt_max, atol, rtol
         The controller's adaptivity, step bounds and tolerances.
+    estimates_dt
+        Whether to estimate each run's starting step.
+    norm_fn
+        Error-norm device function, or ``None`` for a fixed controller.
     """
 
     step_controller_fn: Union[Callable, int] = field(default=-1)
@@ -316,6 +320,8 @@ class ControllerCache(CUDADispatcherCache):
     dt_max: float = field(default=0.0)
     atol: Optional[ndarray] = field(default=None)
     rtol: Optional[ndarray] = field(default=None)
+    estimates_dt: bool = field(default=False)
+    norm_fn: Optional[Callable] = field(default=None, eq=False)
 
 
 @frozen
@@ -401,6 +407,11 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
     @abstractmethod
     def is_adaptive(self) -> bool:
         """Return ``True`` when the controller adapts its step size."""
+
+    @property
+    def estimates_dt(self) -> bool:
+        """Return whether to estimate each run's starting step."""
+        return False
 
 
 
@@ -555,6 +566,8 @@ class BaseStepController(CUDAFactory):
         cache.dt_max = self.dt_max
         cache.atol = self.atol
         cache.rtol = self.rtol
+        cache.estimates_dt = self.estimates_dt
+        cache.norm_fn = self.norm_fn
         return cache
 
     @abstractmethod
@@ -596,6 +609,18 @@ class BaseStepController(CUDAFactory):
         """Return ``True`` if the controller is adaptive."""
 
         return self.compile_settings.is_adaptive
+
+    @property
+    def estimates_dt(self) -> bool:
+        """Return whether to estimate each run's starting step."""
+
+        return self.compile_settings.estimates_dt
+
+    @property
+    def norm_fn(self) -> Optional[Callable]:
+        """Return the error-norm device function, ``None`` for fixed."""
+
+        return None
 
     @property
     def atol(self) -> ndarray:

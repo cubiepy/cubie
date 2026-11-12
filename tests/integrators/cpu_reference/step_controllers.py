@@ -39,8 +39,9 @@ class CPUAdaptiveController:
         )
         self.dt_min = precision(dt_min)
         self.dt_max = precision(dt_max)
-        # A user dt seeds the first step; the geometric mean of the
-        # bounds is only a fallback.
+        # Without a user dt, run_reference_loop sets an adaptive run's
+        # first step from starting_step.
+        self.estimates_dt = dt is None and self.kind != "fixed"
         if dt is not None:
             self.dt0 = precision(dt)
         else:
@@ -140,6 +141,104 @@ class CPUAdaptiveController:
             self._prev_nrm2 = errornorm
 
         return accept
+
+    def starting_step(
+        self,
+        evaluator,
+        driver_evaluator,
+        state: Array,
+        params: Array,
+        drivers: Array,
+        observables: Array,
+        time: float,
+    ) -> np.floating:
+        """Return the device loop's starting-step estimate at ``state``."""
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            return self._starting_step_impl(
+                evaluator,
+                driver_evaluator,
+                state,
+                params,
+                drivers,
+                observables,
+                time,
+            )
+
+    def _starting_step_impl(
+        self,
+        evaluator,
+        driver_evaluator,
+        state,
+        params,
+        drivers,
+        observables,
+        time,
+    ):
+        precision = self.precision
+        derivative, _ = evaluator.rhs(
+            state, params, drivers, observables, time
+        )
+        derivative = np.asarray(derivative, dtype=precision)
+        state_norm2 = self.error_norm(state, state, state)
+        derivative_norm2 = self.error_norm(state, state, derivative)
+        state_scale = precision(np.sqrt(state_norm2))
+        derivative_scale = precision(np.sqrt(derivative_norm2))
+
+        flat = (state_scale < precision(1e-5)) or (
+            derivative_scale < precision(1e-5)
+        )
+        if flat:
+            first_guess = precision(1e-6)
+        else:
+            first_guess = precision(
+                precision(0.01) * state_scale / derivative_scale
+            )
+        first_guess = precision(np.fmin(first_guess, self.dt_max))
+
+        # Hold the algebraic rows at their values over the Euler step.
+        probe_state = (state + first_guess * derivative).astype(precision)
+        if self.mass_flags is not None:
+            probe_state = np.where(self.mass_flags, probe_state, state)
+            probe_state = probe_state.astype(precision)
+        probe_time = precision(time + first_guess)
+        probe_drivers = driver_evaluator(probe_time)
+        probe_observables = evaluator.observables(
+            probe_state, params, probe_drivers, probe_time
+        )
+        probe_derivative, _ = evaluator.rhs(
+            probe_state, params, probe_drivers, probe_observables, probe_time
+        )
+        change = (
+            np.asarray(probe_derivative, dtype=precision) - derivative
+        ).astype(precision)
+        change_norm2 = self.error_norm(state, state, change)
+        curvature_scale = precision(np.sqrt(change_norm2) / first_guess)
+
+        largest_norm2 = precision(
+            np.fmax(derivative_norm2, curvature_scale * curvature_scale)
+        )
+        if largest_norm2 <= precision(1e-30):
+            order_step = precision(
+                np.fmax(precision(1e-6), first_guess * precision(1e-3))
+            )
+        else:
+            exponent = precision(0.5 / (self.order + 1))
+            order_step = precision(
+                (precision(1e-4) / largest_norm2) ** exponent
+            )
+        growth_cap = precision(precision(100.0) * first_guess)
+        estimate = precision(np.fmin(growth_cap, order_step))
+        if change_norm2 == precision(0.0):
+            estimate = growth_cap
+        estimate = self._clamp(estimate, self.dt_min, self.dt_max)
+
+        huge = np.finfo(precision).max
+        finite = (
+            derivative_norm2 <= huge
+            and change_norm2 <= huge
+            and curvature_scale <= huge
+        )
+        return estimate if finite else self.dt_min
 
     def _clamp(self, value, minimum, maximum):
         """Clamp with the device's fmax/fmin NaN handling and order."""

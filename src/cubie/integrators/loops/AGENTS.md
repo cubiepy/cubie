@@ -26,10 +26,11 @@ Run precision: `state`, `proposed_state`, `parameters`, `drivers`, `proposed_dri
 (size 1) and `proposed_counters` (size 2, Newton/Krylov). The controller returns the next
 step in `dt[0]` and its accept flag in `accept_step[0]`.
 
-`SingleIntegratorRunCore` registers the step, controller and `DAEInitialiser` as children
-`'algorithm'`, `'controller'` and `'initialiser'` (the last aliasing `algorithm_shared`)
-before `build()`, which fetches their `*_shared`/`*_persistent` allocators; `IVPLoop`
-never calls `get_child_allocators()` itself.
+`SingleIntegratorRunCore` registers the step, controller, `DAEInitialiser` and
+`StartingStepEstimator` as children `'algorithm'`, `'controller'`, `'initialiser'`
+(aliasing `algorithm_shared`) and `'starting_step'` before `build()`, which fetches their
+`*_shared`/`*_persistent` allocators; `IVPLoop` never calls `get_child_allocators()`
+itself.
 
 ## Consistent initialisation
 The loop calls `initialise_state_fn` once after seeding state and parameters and
@@ -37,6 +38,14 @@ evaluating drivers at t0, before the t0 observables and save. Non-DAE configurat
 a no-op returning 0. The initialiser's iteration counts land in the t0 counter row. A
 nonzero return (solver bits plus `DAE_INITIALISATION_FAILED`) is OR'd into `status` and
 sets `irrecoverable`: the run ends at the t0 save with the uncorrected values.
+
+## Starting step
+After the t0 save we set `dt_raw` to the value `starting_step_fn` returns, or to the
+compiled `dt` when `starting_step_fn` is `None` (fixed control, or a given `dt`). We
+pass `proposed_state`, `proposed_drivers`, `proposed_observables` and `error` to
+`starting_step_fn` as scratch, because every step writes them before it reads them on
+its first call. We can lend `error` because `n_error` equals `n_states` whenever the
+controller is adaptive.
 
 ## Output scheduling
 Each timing parameter has a `next_*` event time the step is clamped not to overshoot:

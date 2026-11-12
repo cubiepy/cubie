@@ -328,6 +328,24 @@ SPECIFIC_ALGORITHM_COMBOS = {
     },
 }
 
+# Adaptive chains without dt for the starting-step tests. We include
+# the torn system for its algebraic row.
+STARTING_STEP_CASES = {
+    "erk": {
+        **MID_RUN_PARAMS,
+        **ALGORITHM_CONTROLLER_COMBOS["erk"],
+        "dt": None,
+    },
+    "torn-radau": {
+        "system_type": "torn_driver",
+        "algorithm": "radau",
+        "step_controller": "pi",
+        **TORN_NO_OBSERVABLES,
+        **UNSET_LINEAR_SOLVE,
+        "dt": None,
+    },
+}
+
 STEP_CASES = [
     pytest.param(combo, id=name)
     for name, combo in ALGORITHM_CONTROLLER_COMBOS.items()
@@ -1462,7 +1480,7 @@ def _build_cpu_step_controller(
     kind = step_controller_settings["step_controller"].lower()
     controller = CPUAdaptiveController(
         kind=kind,
-        dt=step_controller_settings["dt"],
+        dt=step_controller_settings.get("dt"),
         dt_min=step_controller_settings["dt_min"],
         dt_max=step_controller_settings["dt_max"],
         atol=step_controller_settings["atol"],
@@ -1507,10 +1525,6 @@ def _get_algorithm_order(
         resolve_alias,
         resolve_supplied_tableau,
     )
-    from cubie.integrators.algorithms.generic_rosenbrock_w import (
-        GenericRosenbrockWStep,
-        DEFAULT_ROSENBROCK_TABLEAU,
-    )
 
     if isinstance(algorithm_name_or_tableau, str):
         algorithm_type, tableau = resolve_alias(algorithm_name_or_tableau)
@@ -1519,9 +1533,9 @@ def _get_algorithm_order(
             algorithm_name_or_tableau
         )
 
-    # For rosenbrock without explicit tableau, use default
-    if algorithm_type is GenericRosenbrockWStep and tableau is None:
-        tableau = DEFAULT_ROSENBROCK_TABLEAU
+    # A bare family name runs the family's default tableau.
+    if tableau is None:
+        tableau = algorithm_type.default_tableau
 
     # Extract order from tableau if available
     if tableau is not None and hasattr(tableau, "order"):
