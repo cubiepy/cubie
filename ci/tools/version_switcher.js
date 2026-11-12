@@ -1,9 +1,9 @@
 // Add a documentation version picker to the sidebar of every page.
 //
-// docs_site.py serves this file from the site root and loads it with a
-// data-version attribute naming the folder the page belongs to. We read
-// versions.json from the same folder as this script, so the picker lists
-// whatever versions the site holds when the page loads.
+// We publish this file at the site root, and give every page a script
+// tag for it with a data-version attribute naming the page's folder. We
+// read versions.json from the same folder as this script, so we list every
+// published version when the reader opens the page.
 (function () {
   const script = document.currentScript;
   const current = script.dataset.version;

@@ -1,11 +1,11 @@
 """Assemble the versioned documentation site on the ``gh-pages`` branch.
 
-The site holds one folder per documentation version: ``main`` for the
-development docs, ``vX.Y.Z`` for each release, and ``pr-N`` for the
-preview of pull request ``N``. The site root holds ``versions.json``,
-which lists the versions the picker offers, the picker script, and an
-``index.html`` that redirects to the latest release, or to ``main``
-before the first release is built.
+Run this module from the docs workflow. We publish one folder per
+documentation version: ``main`` for the development docs, ``vX.Y.Z`` for
+each release, and ``pr-N`` for the preview of pull request ``N``. At the
+site root we keep ``versions.json``, the list of versions the picker
+offers, the picker script, and an ``index.html`` that we point at the
+latest release, or at ``main`` before you build the first release.
 
 Usage
 -----
@@ -13,9 +13,9 @@ Usage
     Add the picker script and the site verification tag to every page
     of a fresh Sphinx build.
 ``python docs_site.py index SITE_DIR BASE``
-    Rewrite the root files of a ``gh-pages`` checkout from the version
-    folders it holds, and remove pages left at the root by unversioned
-    deploys.
+    Rewrite the root files of a ``gh-pages`` checkout from its version
+    folders, and remove root pages that are not part of the versioned
+    site.
 """
 
 import json
@@ -73,8 +73,9 @@ def index(site_dir: Path, base: str) -> None:
     """Rewrite the root files of the site from its version folders.
 
     Write the version list and the picker script on every deploy. Leave
-    the root pages untouched while the site holds neither ``main`` nor a
-    release, so that a preview deploy never removes the current site.
+    the root pages untouched until you have published ``main`` or a
+    release, so that publishing a preview never removes the current
+    site.
 
     Parameters
     ----------
@@ -105,8 +106,8 @@ def index(site_dir: Path, base: str) -> None:
         return
     default = released[0] if released else "main"
 
-    # Unversioned deploys put a whole build at the root; remove it once
-    # a versioned build can take its place.
+    # Remove every root page that isn't part of the versioned site, such
+    # as a whole build from an unversioned deploy.
     for entry in site_dir.iterdir():
         name = entry.name
         keep = (

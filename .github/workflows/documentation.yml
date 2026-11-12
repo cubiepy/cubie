@@ -1,16 +1,17 @@
 name: Docs
 
-# Each build deploys to its own folder of gh-pages: main for pushes to
-# main, vX.Y.Z for releases, and pr-N for pull-request previews. The site
-# root redirects to the latest release; see ci/tools/docs_site.py.
+# Deploy each build to its own folder of gh-pages: main for pushes to
+# main, vX.Y.Z for releases, and pr-N for pull-request previews. We point
+# the site root at the latest release; see ci/tools/docs_site.py.
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
     types: [ opened, synchronize, reopened, closed ]
-  # The release workflow calls this with the new tag, because releases
-  # made with GITHUB_TOKEN do not trigger other workflows.
+  # We call this from the release workflow with the new tag, because
+  # GitHub does not start other workflows for a release made with
+  # GITHUB_TOKEN.
   workflow_call:
     inputs:
       ref:
@@ -61,7 +62,8 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # Build the requested ref, but take the site tools from the commit
-      # running this workflow, so release builds get the current picker.
+      # running this workflow, so that we add the current picker to
+      # release builds.
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
@@ -98,8 +100,8 @@ jobs:
 
   deploy:
     needs: build
-    # Fork pull requests get a read-only token, so they build without
-    # deploying a preview.
+    # GitHub gives fork pull requests a read-only token, so we build them
+    # without deploying a preview.
     if: >
       github.event_name != 'pull_request'
       || github.event.pull_request.head.repo.full_name == github.repository

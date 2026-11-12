@@ -5,13 +5,15 @@
 # Usage: docs_publish.sh deploy VERSION BUILD_DIR
 #        docs_publish.sh remove VERSION
 #
-# SITE_BASE must hold the URL path of the site root, such as /cubie/,
-# GH_TOKEN a token that can read pull requests, and GH_REPO the repository.
+# Set SITE_BASE to the URL path of the site root, such as /cubie/,
+# GH_TOKEN to a token that can read pull requests, and GH_REPO to the
+# repository.
 #
-# Several workflow runs can publish at once, so we rebuild the commit on
-# the newest gh-pages and push again whenever another run pushed first.
-# We publish a pr-N folder only while pull request N is open, and check
-# before every attempt, so a preview never outlives its pull request.
+# We may publish from several workflow runs at once, so we rebuild the
+# commit on the newest gh-pages and push again whenever another run pushed
+# first. We publish a pr-N folder only while pull request N is open, and
+# check before every attempt, so that we never leave a preview online
+# after its pull request closes.
 set -euo pipefail
 
 action="$1"
