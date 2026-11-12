@@ -52,13 +52,12 @@ and Gustafsson to `max(..., 1e-16)`; the buffer is not pre-filled.
 
 ## Controller specifics
 - Step bounds are plain fields with `DEFAULT_*` defaults, and the config raises
-  `ValueError` on contradictory bounds. An adaptive controller with `dt` unset reports
-  `estimates_dt = True`, and the loop starts each run at the step that
-  `StartingStepEstimator` (`../starting_step.py`) estimates. The `dt` property then
-  returns the bounds' geometric mean, which the DAE initialiser's `"shampine"` mode uses
-  as its step.
-- `build()` also writes `estimates_dt` and `norm_fn` (the error norm, `None` for the
-  fixed controller) into `ControllerCache` for `StartingStepEstimator`.
+  `ValueError` on contradictory bounds. With `dt` unset, an adaptive controller's `dt`
+  property returns the bounds' geometric mean, which the DAE initialiser's `"shampine"`
+  mode uses as its step; the loop starts each run at the step that
+  `StartingStepEstimator` (`../starting_step.py`) estimates.
+- `build()` also writes `norm_fn` (the error norm, `None` for the fixed controller) into
+  `ControllerCache` for `StartingStepEstimator`.
 - Deadband: `deadband_min == deadband_max == 1.0` compiles the branch out; accepted gains
   inside the band snap to 1.0; rejected steps skip the band and retry on the
   current-error term alone (Gustafsson: basic gain).

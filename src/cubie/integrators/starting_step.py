@@ -38,6 +38,7 @@ from cubie._utils import (
     PrecisionDType,
     device_function_field,
     getype_validator,
+    opt_getype_validator,
 )
 from cubie.buffer_registry import buffer_registry
 from cubie.backend.intrinsics import unroll_if
@@ -74,9 +75,10 @@ class StartingStepConfig(CUDAFactoryConfig):
         Number of driver variables.
     mass_flags
         Per-state mass-diagonal flags, ``True`` for a differential row.
-    estimates_dt
-        Whether to compile the estimate. With ``False`` the factory
-        builds no device function.
+    dt
+        Initial step the user gave, or ``None`` when not given.
+    is_adaptive
+        Whether the step controller adapts the step.
     algorithm_order
         Order the step controller assumes for the algorithm.
     dt_min
@@ -102,7 +104,10 @@ class StartingStepConfig(CUDAFactoryConfig):
             validators.instance_of(tuple),
         ),
     )
-    estimates_dt: bool = field(
+    _dt: Optional[float] = field(
+        default=None, validator=opt_getype_validator(float, 0)
+    )
+    is_adaptive: bool = field(
         default=False, validator=validators.instance_of(bool)
     )
     algorithm_order: int = field(
@@ -122,6 +127,15 @@ class StartingStepConfig(CUDAFactoryConfig):
                 "mass_flags must carry one flag per state: got "
                 f"{len(self.mass_flags)} flags for n_states={self.n_states}."
             )
+
+    @property
+    def estimates_dt(self) -> bool:
+        """Return whether to estimate the starting step.
+
+        Return ``True`` for an adaptive controller given no initial
+        step.
+        """
+        return self.is_adaptive and self._dt is None
 
     @property
     def dt_min(self) -> float:
@@ -150,9 +164,12 @@ class StartingStepCache(CUDADispatcherCache):
     starting_step_fn
         Compiled device function that returns the starting step, or
         ``None`` when no estimate is compiled.
+    estimates_dt
+        Whether the build estimates each run's starting step.
     """
 
     starting_step_fn: Optional[Callable] = field(default=None, eq=False)
+    estimates_dt: bool = field(default=False)
 
 
 class StartingStepEstimator(CUDAFactory):
@@ -169,7 +186,7 @@ class StartingStepEstimator(CUDAFactory):
         are ignored.
     """
 
-    settings_keys = frozenset()
+    settings_keys = frozenset({"dt"})
 
     @classmethod
     def system_inputs(cls, system: Any) -> Dict[str, Any]:
@@ -216,7 +233,9 @@ class StartingStepEstimator(CUDAFactory):
         """
         config = self.compile_settings
         if not config.estimates_dt:
-            return StartingStepCache(starting_step_fn=None)
+            return StartingStepCache(
+                starting_step_fn=None, estimates_dt=False
+            )
 
         precision = config.numba_precision
         dxdt_fn = config.dxdt_fn
@@ -353,7 +372,9 @@ class StartingStepEstimator(CUDAFactory):
             return cuda.selp(finite, estimate, dt_min)
 
         # no cover: end
-        return StartingStepCache(starting_step_fn=starting_step_fn)
+        return StartingStepCache(
+            starting_step_fn=starting_step_fn, estimates_dt=True
+        )
 
     def _update(self, updates: Dict[str, Any], silent: bool) -> Set[str]:
         """Apply the estimator settings and resize its buffer.
@@ -381,5 +402,5 @@ class StartingStepEstimator(CUDAFactory):
 
     @property
     def estimates_dt(self) -> bool:
-        """Return whether the factory compiles an estimate."""
-        return self.compile_settings.estimates_dt
+        """Return whether the build estimates each run's starting step."""
+        return self.get_cached_output("estimates_dt")

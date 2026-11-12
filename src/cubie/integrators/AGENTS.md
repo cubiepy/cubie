@@ -26,7 +26,7 @@ each have their own `AGENTS.md`.
 | `norms.py` | CUDA factories for scaled vector norms (`ScaledNorm`, `TiledScaledNorm`, `TwoRefMaskedScaledNorm`) and DIRK/FIRK Newton correction terms; every config floors `atol` at `ATOL_FLOOR` per entry on the host with a `UserWarning`. |
 | `stage_predictors.py` | `DenseStagePredictor(CUDAFactory)`: in-place read-ahead of a persistent stage-increment vector that warm-starts the next step's Newton solves; step-size-ratio polynomials precomputed from the tableau. FIRK and DIRK own one as a buffer-registry child. |
 | `dae_initialiser.py` | `DAEInitialiser(CUDAFactory)`: one-shot consistent-initialisation solve at loop entry before the t0 save, a damped Newton over a direct LU. Always constructed by the core from the algorithm step's `settings_dict`; non-DAE systems and mode `"none"` compile a no-op with zero-size buffers. Modes: `"brown"` (default; corrects only the algebraic components), `"shampine"` (one backward-Euler solve of the initial dt), `"none"`. A failed solve commits nothing and returns the solver bits with `DAE_INITIALISATION_FAILED` set; the loop ends the run at the t0 save. |
-| `starting_step.py` | `StartingStepEstimator(CUDAFactory)`: compiles `starting_step_fn`, which the loop calls once after the t0 save when the adaptive controller has no `dt` (`estimates_dt`). `starting_step_fn` scales the state, `f(y0)` and the change in `f` over one explicit Euler step with the controller's `norm_fn`, which skips masked algebraic rows, and holds those rows fixed over the Euler step. It returns `(0.01/max(d1, d2))^(1/(algorithm_order+1))`, at most 100 times the first guess `0.01*d0/d1` and clamped to `[dt_min, dt_max]`, and returns `dt_min` when a norm is not finite. Without `estimates_dt` the factory builds `starting_step_fn = None` and the loop starts at `dt`. Registers `starting_derivative` (`n_states`, local; size 0 without `estimates_dt`). CPU reference: `CPUAdaptiveController.starting_step`. |
+| `starting_step.py` | `StartingStepEstimator(CUDAFactory)`: compiles `starting_step_fn`, which the loop calls once after the t0 save. The estimator takes the raw `dt` and `is_adaptive` and works out `estimates_dt` (adaptive with `dt` unset) itself, then publishes it as a product beside `starting_step_fn`. `starting_step_fn` scales the state, `f(y0)` and the change in `f` over one explicit Euler step with the controller's `norm_fn`, which skips masked algebraic rows, and holds those rows fixed over the Euler step. It returns `(0.01/max(d1, d2))^(1/(algorithm_order+1))`, at most 100 times the first guess `0.01*d0/d1` and clamped to `[dt_min, dt_max]`, and returns `dt_min` when a norm is not finite. Without `estimates_dt` the factory builds `starting_step_fn = None` and the loop starts at `dt`. Registers `starting_derivative` (`n_states`, local; size 0 without `estimates_dt`). CPU reference: `CPUAdaptiveController.starting_step`. |
 | `__init__.py` | Package API re-exports (`SingleIntegratorRun`, `IVPLoop`, algorithm/solver/controller classes, `get_algorithm_step`, `get_controller`); re-exports `CUBIE_RESULT_CODES` from `cubie.result_codes`. |
 
 ## Subdirectories
@@ -62,9 +62,9 @@ mass flags). Construction order:
 4. The controller named by `step_controller`, given the step's order.
 5. `DAEInitialiser` from the step's `settings_dict`. A no-op initialiser registers
    zero-size buffers.
-6. `StartingStepEstimator` from its system inputs, the drivers function, the step's
-   `algorithm_order` and the controller's `estimates_dt`, `dt_min`, `dt_max` and
-   `norm_fn` products.
+6. `StartingStepEstimator` from `dt`, its system inputs, the drivers function,
+   `is_adaptive`, the step's `algorithm_order` and the controller's `dt_min`, `dt_max`
+   and `norm_fn` products.
 7. `IVPLoop` from the loop keys plus `_loop_inputs()` (the children's products). We
    register the step, controller, initialiser and estimator under it and capture
    `loop_fn`.

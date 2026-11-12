@@ -178,11 +178,6 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         return True
 
     @property
-    def estimates_dt(self) -> bool:
-        """Return ``True`` when no initial step is given."""
-        return self._dt is None
-
-    @property
     def min_step_shrink(self) -> float:
         """Return the most the step may shrink per adjustment."""
         return self.precision(self._min_step_shrink)
