@@ -574,7 +574,7 @@ class Solver(DerivedValues):
         settling_time: float = 0.0,
         t0: float = 0.0,
         blocksize: Optional[int] = None,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
         fix_constant_parameters: bool = True,
@@ -810,7 +810,7 @@ class Solver(DerivedValues):
         parameters: Union[
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
     ) -> Tuple[ndarray, ndarray]:
         """Build state and parameter arrays to pass to :meth:`solve`.
 
@@ -829,7 +829,7 @@ class Solver(DerivedValues):
         grid_type
             Strategy for constructing the grid. ``"combinatorial"``
             produces all combinations while ``"verbatim"`` preserves
-            column-wise pairings. Default is ``"verbatim"``.
+            column-wise pairings. Default is ``"combinatorial"``.
 
         Returns
         -------
@@ -886,7 +886,7 @@ class Solver(DerivedValues):
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
         apply: bool = True,
         verbose: bool = True,
         auto_size: bool = True,
@@ -991,7 +991,7 @@ class Solver(DerivedValues):
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,
