@@ -47,8 +47,8 @@ Controlling the step size
     methods the solver takes it as the first step. If you give ``dt``
     alone, CuBIE sets ``dt_min = dt/1e6`` and ``dt_max = dt*1000``.
 
-    - Default: ``1e-3`` for fixed methods and ``sqrt(dt_min * dt_max)``
-      for adaptive methods.
+    - Default: ``1e-3`` for fixed methods. Adaptive methods estimate
+      each run's starting step with Hairer's method.
     - Type: ``float``, positive
 
 **dt_min** / **dt_max** — hard bounds on the adaptive step size.
