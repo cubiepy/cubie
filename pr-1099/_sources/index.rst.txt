@@ -44,3 +44,16 @@ GPU Requirements
 ~~~~~~~~~~~~~~~~
 
 cubie requires an NVIDIA GPU with compute capability 6.0 or higher and an up-to-date NVIDIA driver.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Contents
+
+   getting_started/index
+   user_guide/index
+   tutorials/index
+   troubleshooting
+   theory/index
+   developer_guide/index
+   API_reference/index
