@@ -65,16 +65,16 @@ Key changes:
   the first and last points.
 - Pass the ``odeset`` options as keyword arguments of ``solve_ivp``: write
   ``rtol`` and ``atol`` for ``RelTol`` and ``AbsTol``, and ``dt_max`` for
-  ``MaxStep``. See :doc:`/user_guide/optional_arguments`.
+  ``MaxStep``. See :doc:`/user_guide/algorithms_and_tuning/optional_arguments`.
 - cubie returns every run's results in one array, inside a
   ``SolveResult``. Index the array by time first, then state, then run; see
-  :doc:`/user_guide/results`. Add ``"time"`` to ``output_types`` to get
+  :doc:`/user_guide/using_the_solver/results`. Add ``"time"`` to ``output_types`` to get
   the time points. cubie sorts the
   state columns by name, so name the states ``y1`` and ``y2`` to keep
   MATLAB's order.
 - If you supply arrays for several parameters or initial values, cubie runs
   every combination of the supplied values by default. See
-  :doc:`/user_guide/batching` for the other options.
+  :doc:`/user_guide/using_the_solver/batching` for the other options.
 
 Method names
 ------------
@@ -88,7 +88,7 @@ MATLAB                cubie ``method=``
 ``ode23t``            ``"ode23t"``
 ``ode89``             ``"dop853"`` (closest high-order explicit)
 ``ode15s``            no direct equivalent; pick a stiff method from
-                      :doc:`/user_guide/choosing_algorithms`
+                      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`
 ===================== ==============================================
 
-See :doc:`/user_guide/choosing_algorithms` for every method cubie offers.
+See :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` for every method cubie offers.

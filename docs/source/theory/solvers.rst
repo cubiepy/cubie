@@ -104,5 +104,5 @@ step's integer return code:
    status     = code & 0xFFFF   # compare with IntegratorReturnCodes
 
 This allows post-solve analysis of solver effort without extra output
-buffers.  See :doc:`/user_guide/results` for how to access iteration
+buffers.  See :doc:`/user_guide/using_the_solver/results` for how to access iteration
 counters.

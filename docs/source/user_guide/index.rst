@@ -5,7 +5,7 @@ User Manual
    :maxdepth: 2
    :caption: Contents
 
-   defining_systems
-   using_the_solver
-   algorithms_and_tuning
-   advanced
+   defining_systems/index
+   using_the_solver/index
+   algorithms_and_tuning/index
+   advanced/index

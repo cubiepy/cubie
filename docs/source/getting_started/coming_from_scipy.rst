@@ -71,11 +71,11 @@ Key changes:
   Without ``save_every``, cubie saves only the first and last points.
 - cubie returns every run's results in one array, inside a
   ``SolveResult``. Index the array by time first, then state, then run; see
-  :doc:`/user_guide/results`. Add ``"time"`` to ``output_types`` to get
+  :doc:`/user_guide/using_the_solver/results`. Add ``"time"`` to ``output_types`` to get
   the time points.
 - If you supply arrays for several parameters or initial values, cubie runs
   every combination of the supplied values by default. See
-  :doc:`/user_guide/batching` for the other options.
+  :doc:`/user_guide/using_the_solver/batching` for the other options.
 
 .. note::
 
@@ -115,10 +115,10 @@ SciPy ``method=``     cubie ``method=``
 ``DOP853``            ``"dop853"``
 ``Radau``             ``"radau"``
 ``BDF``, ``LSODA``    no direct equivalent; pick a stiff method from
-                      :doc:`/user_guide/choosing_algorithms`
+                      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`
 ===================== ==============================================
 
-See :doc:`/user_guide/choosing_algorithms` for every method cubie offers.
+See :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` for every method cubie offers.
 
 Not supported
 -------------

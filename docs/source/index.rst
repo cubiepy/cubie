@@ -37,7 +37,7 @@ Optional Dependencies
 
 * Pandas: For DataFrame output support
 * Matplotlib: For plotting support. Only used to plot an interpolated driver function for sanity-checks (see
-  :doc:`Drivers </user_guide/drivers>`), but generally useful for visualizing results.
+  :doc:`Drivers </user_guide/defining_systems/drivers>`), but generally useful for visualizing results.
 * qtpy with a Qt binding: For the CellML variable editor (``show_gui``).
 
 GPU Requirements

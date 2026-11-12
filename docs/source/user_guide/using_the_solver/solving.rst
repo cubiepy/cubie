@@ -1,7 +1,7 @@
 Solving ODEs
 ============
 
-Once you have defined an ODE system (see :doc:`systems`), CuBIE provides
+Once you have defined an ODE system (see :doc:`/user_guide/defining_systems/systems`), CuBIE provides
 two ways to solve it: the convenience function
 :func:`~cubie.batchsolving.solver.solve_ivp` and the reusable
 :class:`~cubie.batchsolving.solver.Solver` class.
@@ -40,13 +40,13 @@ solve the Lotka--Volterra system for a single initial condition:
 
 ``result`` is a :class:`~cubie.batchsolving.solveresult.SolveResult` that
 holds the time-domain output, summaries, and metadata.  See
-:doc:`results` for how to inspect it.
+:doc:`/user_guide/using_the_solver/results` for how to inspect it.
 
 .. note::
 
    CuBIE is a *batch* solver---it is designed to solve many IVPs at once.
    A single-system call works, but the real performance gains come from
-   passing arrays of initial values or parameters.  See :doc:`batching`.
+   passing arrays of initial values or parameters.  See :doc:`/user_guide/using_the_solver/batching`.
 
 Changing Initial States
 -----------------------
@@ -195,7 +195,7 @@ cut out the few milliseconds of transfer time as well.
 Arrays are laid out ``(n_variables, n_runs)`` and must match the system
 precision. Device arrays (CuPy or Numba) are wired directly into the
 kernel; pair them with ``on_device=True`` to keep an entire solve →
-post-process pipeline on the GPU (see :doc:`results`).
+post-process pipeline on the GPU (see :doc:`/user_guide/using_the_solver/results`).
 
 The ``duration`` Parameter
 --------------------------
@@ -208,6 +208,6 @@ recording output, useful for discarding transients.
 Next Steps
 ----------
 
-- :doc:`batching` --- parameter sweeps and grid types.
-- :doc:`results` --- inspecting and post-processing solver output.
-- :doc:`choosing_algorithms` --- which algorithm to pick.
+- :doc:`/user_guide/using_the_solver/batching` --- parameter sweeps and grid types.
+- :doc:`/user_guide/using_the_solver/results` --- inspecting and post-processing solver output.
+- :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` --- which algorithm to pick.

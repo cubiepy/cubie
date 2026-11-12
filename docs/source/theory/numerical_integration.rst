@@ -3,7 +3,7 @@ Numerical Integration
 
 This page covers the mathematical foundations behind the ODE integration
 algorithms available in CuBIE. For a practical guide to choosing an
-algorithm, see :doc:`/user_guide/choosing_algorithms`.
+algorithm, see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`.
 
 Euler's Method
 --------------
@@ -131,5 +131,5 @@ lower-order solutions from the embedded pair.
 A *controller* uses this error to propose the next step size.  CuBIE
 supports PI, PID, and Gustafsson controllers, each offering different
 trade-offs between responsiveness and smoothness of the step-size
-sequence.  See :doc:`/user_guide/choosing_algorithms` for practical
+sequence.  See :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` for practical
 guidance.

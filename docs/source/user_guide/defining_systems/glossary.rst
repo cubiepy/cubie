@@ -22,4 +22,4 @@ Drivers
    Time-dependent inputs to the system, also called forcing terms. cubie
    gives every run in a batch the same driver samples. To vary a forcing term
    between runs, write it as a function of ``t`` with parameters; see
-   :doc:`drivers`.
+   :doc:`/user_guide/defining_systems/drivers`.

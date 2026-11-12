@@ -33,10 +33,10 @@ solve, cubie ends the run at the first failed step.
 cubie needed a step smaller than ``dt_min`` to meet your tolerances.
 
 - Lower ``dt_min`` if it is not much smaller than the fastest change in your system; see
-  :doc:`/user_guide/timing`.
+  :doc:`/user_guide/using_the_solver/timing`.
 - Choose a method that suits how stiff your problem is; see
-  :doc:`/user_guide/choosing_algorithms`.
-- Loosen ``rtol`` and ``atol``; see :doc:`/user_guide/optional_arguments`.
+  :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`.
+- Loosen ``rtol`` and ``atol``; see :doc:`/user_guide/algorithms_and_tuning/optional_arguments`.
 - Use double precision for tolerances much below ``1e-6``. In single
   precision, cubie works with about seven significant digits, so it cannot
   meet tighter tolerances. Pass ``precision=np.float64`` to
@@ -56,9 +56,9 @@ cubie could not converge the Newton iteration of an implicit method within
 ``newton_max_iters`` iterations.
 
 - Choose a method that suits how stiff your problem is; see
-  :doc:`/user_guide/choosing_algorithms`.
-- In a fixed-step solve, lower ``dt``; see :doc:`/user_guide/timing`.
-- Raise ``newton_max_iters``; see :doc:`/user_guide/optional_arguments`.
+  :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`.
+- In a fixed-step solve, lower ``dt``; see :doc:`/user_guide/using_the_solver/timing`.
+- Raise ``newton_max_iters``; see :doc:`/user_guide/algorithms_and_tuning/optional_arguments`.
 
 ``NEWTON_DIVERGENCE``
 ~~~~~~~~~~~~~~~~~~~~~
@@ -67,15 +67,15 @@ cubie moved further from the solution with each Newton update of an
 implicit method, instead of closer.
 
 - Choose a method that suits how stiff your problem is; see
-  :doc:`/user_guide/choosing_algorithms`.
-- In a fixed-step solve, lower ``dt``; see :doc:`/user_guide/timing`.
+  :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`.
+- In a fixed-step solve, lower ``dt``; see :doc:`/user_guide/using_the_solver/timing`.
 - Check that your equations and starting values are what you intended.
 
 ``MAX_LINEAR_ITERATIONS_EXCEEDED``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 cubie could not converge an iterative linear solve within
-``krylov_max_iters`` iterations. See :doc:`/user_guide/optional_arguments` for each of these
+``krylov_max_iters`` iterations. See :doc:`/user_guide/algorithms_and_tuning/optional_arguments` for each of these
 settings.
 
 - Use the direct solver, ``linear_correction_type="lu"``.
@@ -88,14 +88,14 @@ settings.
 cubie stopped a BiCGSTAB linear solve before it converged, because of a
 numerical breakdown in BiCGSTAB. Use a different
 ``linear_correction_type``, such as ``"lu"``; see
-:doc:`/user_guide/optional_arguments`.
+:doc:`/user_guide/algorithms_and_tuning/optional_arguments`.
 
 ``DAE_INITIALISATION_FAILED``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 cubie could not make the algebraic states of a DAE consistent with the
 equations at the start of the run, so cubie ended the run at ``t0`` with
-your starting values. See :doc:`/user_guide/optional_arguments`.
+your starting values. See :doc:`/user_guide/algorithms_and_tuning/optional_arguments`.
 
 - Give starting values for the algebraic states that are closer to
   consistent.
