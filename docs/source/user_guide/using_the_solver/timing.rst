@@ -1,121 +1,79 @@
 Timing Parameters
 =================
 
-CuBIE has three groups of timing parameters: **step size** parameters
-control how the integrator advances through time, **output timing**
-parameters control when results are saved, and **integration bounds**
-define the overall time span.
+CuBIE has three groups of timing parameters: **integration bounds** define
+the overall time span, **output timing** parameters control when results
+are saved, and **step size** parameters control how the integrator advances
+through time.
 
-#Ordering should be: integration bounds, output timing, step size.
+Integration Bounds
+------------------
 
+Three parameters define the time span of integration:
 
-Step Size Parameters
---------------------
+duration
+~~~~~~~~
 
-Adaptive controllers use three related parameters to control step sizes:
+Total length of the recorded integration in simulation time units.
+This is the time span over which outputs are saved.
 
-- ``dt``: Initial step size (starting point for adaptation)
-- ``dt_min``: Minimum allowable step size (floor)
-- ``dt_max``: Maximum allowable step size (ceiling)
-
-Fixed-step controllers use only ``dt``, which becomes the constant step
-size throughout integration.
-
-Default Behaviour
-~~~~~~~~~~~~~~~~~
-
-When you don't specify any step size parameters, CuBIE uses these defaults:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 25 55
-
-   * - Controller
-     - Parameter
-     - Default Value
-   * - Adaptive
-     - ``dt_min``
-     - ``1e-6``
-   * - Adaptive
-     - ``dt_max``
-     - ``1.0``
-   * - Adaptive
-     - ``dt``
-     - ``sqrt(dt_min * dt_max)`` = ``1e-3``
-   * - Fixed
-     - ``dt``
-     - ``1e-3``
-
-Derivation Rules
-~~~~~~~~~~~~~~~~
-
-When you provide some parameters but not others, CuBIE derives the
-missing values. The rules differ for adaptive and fixed controllers:
-
-**Adaptive controllers:**
-
-.. list-table::
-   :header-rows: 1
-   :widths: 35 65
-
-   * - You Provide
-     - CuBIE Derives
-   * - ``dt`` only
-     - ``dt_min = dt / 100``, ``dt_max = dt * 100``
-   * - ``dt_min`` only
-     - ``dt_max = 1.0`` (default), ``dt = sqrt(dt_min * dt_max)``
-   * - ``dt_max`` only
-     - ``dt_min = 1e-6`` (default), ``dt = sqrt(dt_min * dt_max)``
-   * - ``dt_min`` and ``dt_max``
-     - ``dt = sqrt(dt_min * dt_max)``
-   * - ``dt`` and ``dt_min``
-     - ``dt_max = dt * 100``
-   * - ``dt`` and ``dt_max``
-     - ``dt_min = dt / 100``
-   * - All three
-     - Nothing derived (all values used as given)
-
-**Fixed-step controllers:**
-
-Fixed controllers collapse ``dt``, ``dt_min``, and ``dt_max`` to a single
-value. If you provide any of them, the first non-None value in the order
-``dt``, ``dt_min``, ``dt_max`` is used as the step size.
-
-Example usage:
+- **Required**: Yes
+- **Type**: ``float`` (must be positive)
 
 .. code-block:: python
 
-   # Adaptive: provide dt, bounds derived automatically
-   solver.solve(..., dt=0.01)
-   # Results in: dt_min=0.0001, dt=0.01, dt_max=1.0
+   solver.solve(..., duration=100.0)  # Integrate for 100 time units
 
-   # Adaptive: provide bounds, initial dt computed
-   solver.solve(..., dt_min=1e-5, dt_max=0.1)
-   # Results in: dt_min=1e-5, dt=0.001, dt_max=0.1
+t0
+~~
 
-   # Fixed: any of these sets dt=0.005
-   solver.solve(..., step_controller="fixed", dt=0.005)
-   solver.solve(..., step_controller="fixed", dt_min=0.005)
+Starting time of the integration. Affects time-dependent drivers and
+the timestamps in output arrays.
 
-Update Behaviour
-~~~~~~~~~~~~~~~~
+- **Default**: ``0.0``
+- **Type**: ``float``
 
-When you call ``solver.update()`` to change step parameters mid-session,
-CuBIE tracks which values you originally set versus which were derived:
+.. code-block:: python
 
-- **User-set values** are preserved and never automatically adjusted
-- **Derived values** may be adjusted if they become inconsistent with
-  your changes
+   # Start integration at t=5.0
+   solver.solve(..., t0=5.0, duration=10.0)
+   # Recorded output spans t=5.0 to t=15.0
 
-For example, if you originally provided only ``dt=0.01`` (so ``dt_min``
-and ``dt_max`` were derived), then later update ``dt=0.001``:
+settling_time
+~~~~~~~~~~~~~
 
-- ``dt`` changes to ``0.001`` (your new value)
-- ``dt_min`` may be adjusted if ``0.001 < dt_min`` (derived value, can change)
-- ``dt_max`` stays at ``1.0`` (derived value, still valid)
+Lead-in period before recording begins. The integrator runs for this
+duration starting from ``t0``, but no output is saved. This is useful
+for allowing transients to decay before collecting data.
 
-But if you originally provided ``dt_min=1e-4`` explicitly, that value
-won't be changed even if it would make more sense to adjust it.
+- **Default**: ``0.0``
+- **Type**: ``float`` (non-negative)
+
+.. code-block:: python
+
+   # Let the system settle for 50 time units, then record 100
+   solver.solve(..., settling_time=50.0, duration=100.0)
+   # Integration runs from t=0 to t=150
+   # Output spans t=50 to t=150
+
+The total integration time is ``settling_time + duration``. The
+integration starts at ``t0`` and runs until ``t0 + settling_time + duration``.
+
+.. code-block:: text
+
+   Example: t0=5, settling_time=20, duration=50
+
+   t=5                 t=25                                    t=75
+   |                    |                                       |
+   |<-- settling_time ->|<------------ duration --------------->|
+   |       (20)         |                 (50)                  |
+   |                    |                                       |
+   +--------------------+---------------------------------------+
+   ^                    ^                                       ^
+   |                    |                                       |
+   Integration      Recording                            Integration
+   starts           starts                               ends
+   (no output)      (output saved)
 
 Output Timing Parameters
 ------------------------
@@ -243,74 +201,113 @@ Relationship Between Output Parameters
 These are independent: you can save states at high frequency while
 computing summaries over longer windows, or vice versa.
 
-Integration Bounds
-------------------
+Step Size Parameters
+--------------------
 
-Three parameters define the time span of integration:
+Adaptive controllers use three related parameters to control step sizes:
 
-duration
-~~~~~~~~
+- ``dt``: Initial step size (starting point for adaptation)
+- ``dt_min``: Minimum allowable step size (floor)
+- ``dt_max``: Maximum allowable step size (ceiling)
 
-Total length of the recorded integration in simulation time units.
-This is the time span over which outputs are saved.
+Fixed-step controllers use only ``dt``, which becomes the constant step
+size throughout integration.
 
-- **Required**: Yes
-- **Type**: ``float`` (must be positive)
+Default Behaviour
+~~~~~~~~~~~~~~~~~
+
+When you don't specify any step size parameters, CuBIE uses these defaults:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 25 55
+
+   * - Controller
+     - Parameter
+     - Default Value
+   * - Adaptive
+     - ``dt_min``
+     - ``1e-6``
+   * - Adaptive
+     - ``dt_max``
+     - ``1.0``
+   * - Adaptive
+     - ``dt``
+     - ``sqrt(dt_min * dt_max)`` = ``1e-3``
+   * - Fixed
+     - ``dt``
+     - ``1e-3``
+
+Derivation Rules
+~~~~~~~~~~~~~~~~
+
+When you provide some parameters but not others, CuBIE derives the
+missing values. The rules differ for adaptive and fixed controllers:
+
+**Adaptive controllers:**
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - You Provide
+     - CuBIE Derives
+   * - ``dt`` only
+     - ``dt_min = dt / 100``, ``dt_max = dt * 100``
+   * - ``dt_min`` only
+     - ``dt_max = 1.0`` (default), ``dt = sqrt(dt_min * dt_max)``
+   * - ``dt_max`` only
+     - ``dt_min = 1e-6`` (default), ``dt = sqrt(dt_min * dt_max)``
+   * - ``dt_min`` and ``dt_max``
+     - ``dt = sqrt(dt_min * dt_max)``
+   * - ``dt`` and ``dt_min``
+     - ``dt_max = dt * 100``
+   * - ``dt`` and ``dt_max``
+     - ``dt_min = dt / 100``
+   * - All three
+     - Nothing derived (all values used as given)
+
+**Fixed-step controllers:**
+
+Fixed controllers collapse ``dt``, ``dt_min``, and ``dt_max`` to a single
+value. If you provide any of them, the first non-None value in the order
+``dt``, ``dt_min``, ``dt_max`` is used as the step size.
+
+Example usage:
 
 .. code-block:: python
 
-   solver.solve(..., duration=100.0)  # Integrate for 100 time units
+   # Adaptive: provide dt, bounds derived automatically
+   solver.solve(..., dt=0.01)
+   # Results in: dt_min=0.0001, dt=0.01, dt_max=1.0
 
-t0
-~~
+   # Adaptive: provide bounds, initial dt computed
+   solver.solve(..., dt_min=1e-5, dt_max=0.1)
+   # Results in: dt_min=1e-5, dt=0.001, dt_max=0.1
 
-Starting time of the integration. Affects time-dependent drivers and
-the timestamps in output arrays.
+   # Fixed: any of these sets dt=0.005
+   solver.solve(..., step_controller="fixed", dt=0.005)
+   solver.solve(..., step_controller="fixed", dt_min=0.005)
 
-- **Default**: ``0.0``
-- **Type**: ``float``
+Update Behaviour
+~~~~~~~~~~~~~~~~
 
-.. code-block:: python
+When you call ``solver.update()`` to change step parameters mid-session,
+CuBIE tracks which values you originally set versus which were derived:
 
-   # Start integration at t=5.0
-   solver.solve(..., t0=5.0, duration=10.0)
-   # Recorded output spans t=5.0 to t=15.0
+- **User-set values** are preserved and never automatically adjusted
+- **Derived values** may be adjusted if they become inconsistent with
+  your changes
 
-settling_time
-~~~~~~~~~~~~~
+For example, if you originally provided only ``dt=0.01`` (so ``dt_min``
+and ``dt_max`` were derived), then later update ``dt=0.001``:
 
-Lead-in period before recording begins. The integrator runs for this
-duration starting from ``t0``, but no output is saved. This is useful
-for allowing transients to decay before collecting data.
+- ``dt`` changes to ``0.001`` (your new value)
+- ``dt_min`` may be adjusted if ``0.001 < dt_min`` (derived value, can change)
+- ``dt_max`` stays at ``1.0`` (derived value, still valid)
 
-- **Default**: ``0.0``
-- **Type**: ``float`` (non-negative)
-
-.. code-block:: python
-
-   # Let the system settle for 50 time units, then record 100
-   solver.solve(..., settling_time=50.0, duration=100.0)
-   # Integration runs from t=0 to t=150
-   # Output spans t=50 to t=150
-
-The total integration time is ``settling_time + duration``. The
-integration starts at ``t0`` and runs until ``t0 + settling_time + duration``.
-
-.. code-block:: text
-
-   Example: t0=5, settling_time=20, duration=50
-
-   t=5                 t=25                                    t=75
-   |                    |                                       |
-   |<-- settling_time ->|<------------ duration --------------->|
-   |       (20)         |                 (50)                  |
-   |                    |                                       |
-   +--------------------+---------------------------------------+
-   ^                    ^                                       ^
-   |                    |                                       |
-   Integration      Recording                            Integration
-   starts           starts                               ends
-   (no output)      (output saved)
+But if you originally provided ``dt_min=1e-4`` explicitly, that value
+won't be changed even if it would make more sense to adjust it.
 
 Complete Example
 ----------------
@@ -319,22 +316,35 @@ This example shows all timing parameters working together:
 
 .. code-block:: python
 
+   import numpy as np
+   from cubie import Solver, create_ODE_system
+
+   LV = create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+   )
+   solver = Solver(LV, algorithm="ode45")
+
    result = solver.solve(
-       initial_values={"x": x0_array},
-       parameters={"k": k_array},
+       initial_values={"x": np.linspace(0.1, 2.0, 100)},
+       parameters={"b": np.linspace(0.01, 0.05, 100)},
 
        # Integration bounds
        t0=0.0,
        settling_time=10.0,    # Discard first 10 time units
        duration=100.0,        # Record 100 time units after settling
 
-       # Step size (adaptive controller)
-       dt=0.01,               # Start at 0.01, bounds derived as 1e-4 to 1.0
-
        # Output timing
        save_every=0.1,        # Save states every 0.1 time units
        summarise_every=10.0,  # Compute summaries every 10 time units
        sample_summaries_every=0.05,  # Sample for summaries every 0.05 units
+
+       # Step size (adaptive controller)
+       dt=0.01,               # Start at 0.01, bounds derived as 1e-4 to 1.0
 
        # What to save
        output_types=["state", "mean", "max"],
