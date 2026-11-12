@@ -3,15 +3,13 @@ Inputs and Parameter Sweeps
 
 You give every solve two inputs: the initial values of the states, and the
 parameter values. You can provide these in a number of ways. Every function that
-ends up in a ``solve`` takes inputs the same way. All examples in this page 
-will follow the same Lotka-Volterra system as the rest of the docs, defined 
+ends up in a ``solve`` takes inputs the same way. All examples in this page
+will follow the same Lotka-Volterra system as the rest of the docs, defined
 here:
 
-#don't import functions you use later in this example, import them where they're used.
 .. code-block:: python
 
-   import numpy as np
-   from cubie import Solver, create_ODE_system, solve_ivp
+   from cubie import create_ODE_system
 
    LV = create_ODE_system(
        """
@@ -36,16 +34,19 @@ keyed by name:
 
 .. code-block:: python
 
+   import numpy as np
+   from cubie import Solver
+
    solver = Solver(LV, algorithm="ode45")
    result = solver.solve(
-       initial_values={"x": np.linspace(0.1, 2.0, 10000),},
+       initial_values={"x": np.linspace(0.1, 2.0, 10000)},
        parameters={"a": 0.2, "b": np.linspace(0.01, 0.05, 10000)},
        duration=100.0,
    )
 
 Give a single value for anything that is the same in every run, and a list
-or array of values for anything you want to vary. If you've already given 
-a default value when you created the system and you don't want to modify it, 
+or array of values for anything you want to vary. If you've already given
+a default value when you created the system and you don't want to modify it,
 you can leave it out, like ``y`` above. If we wanted to start all trajectories
 from the default state, or under default parameters, we could leave the whole
 ``initial_values`` or ``parameters`` arguments out completely. If you didn't
@@ -59,29 +60,33 @@ default, the default doesn't change: Cubie presumes that arguments to
 Arrays
 ~~~~~~
 
-# Is the "precision" thingrequired or does the input cast?
-#Is that variable name claim right? I think it only applies to parameters.
 If you're looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead. Lay each
-array out as ``(n_variables, n_runs)``, in the system's ``precision`` datatype, 
-with its rows ordered by variable name. Give an initial values array one row
-per state in your system. Give the parameters array either one row for
-every parameter in your system (a full-height parameter array), or one row
-per parameter that varies across the batch. Read
-``solver.parameter_legend`` to see each row's parameter name.
+array out as ``(n_variables, n_runs)``, with its rows ordered by variable
+name, for the states as well as the parameters. Cubie casts a host array
+to the system's ``precision`` datatype, so give it arrays in that datatype
+to skip the copy. Give an initial values array one row per state in your
+system. Give the parameters array either one row for every parameter in
+your system (a full-height parameter array), or one row per parameter that
+varies across the batch. Read ``solver.parameter_legend`` to see each row's
+parameter name.
 
-When you pass a dict, cubie compiles every constant parameter directly into 
-the GPU code to make it go faster. Passing a full parameters array can therefore
-slow the solve down. To get around this, you have two options:
-- pass the full array with the argument 'fix_constant_parameters=true`
-- use solver.set_swept_parameters(parameter_names) to tell the solver which 
-parameters will change, then pass only an array of the parameters that vary 
-over a batch in name order.
+When you pass a dict, cubie compiles every parameter you give a single value
+directly into the GPU code to make it go faster. It does the same for a
+full-height parameters array: cubie scans each row, and compiles in every
+row that holds one value. The scan costs a few milliseconds per solve. To
+skip it, you have two options:
 
-To pass just the varying parameters, you will need to tell the system which
-parameters to expect. To do this, call ``solver.set_swept_parameters`` with
-the parameter names you want to vary, or pass the same names to the
-``swept_parameters`` argument when building the system. When you sweep a
+- Pass ``fix_constant_parameters=False``. Cubie then gives every parameter
+  a row of the array as you passed it, which may slow down the solve itself
+  if you have a lot of constant parameters.
+- Pass an array with rows for only the parameters that vary, in name
+  order.
+
+To pass just the varying parameters, tell the solver which parameters to
+expect: call ``solver.set_swept_parameters`` with the parameter names you
+want to vary, or pass the same names to the ``swept_parameters`` argument
+when building the system. When you sweep a
 single parameter, you can pass its values as a 1D array:
 
 .. code-block:: python
@@ -99,8 +104,9 @@ single parameter, you can pass its values as a 1D array:
 ``solver.prepare_grid_arrays`` can generate arrays from dicts of variable
 names, to avoid doing it on every solve. It sets the swept parameters to
 the parameters in your dict and gives each of them a row, so if you give a
-parameter a single value, cubie fills its whole row with that value. To compile a value into the code instead, set it as the parameter's
-default and leave it out of the dict:
+parameter a single value, cubie fills its whole row with that value. To
+compile a value into the code instead, set it as the parameter's default and
+leave it out of the dict:
 
 .. code-block:: python
 
@@ -113,14 +119,7 @@ default and leave it out of the dict:
 
 Arrays of swept parameters only are intended as a convenience: some models
 have hundreds of parameters, and if you're only sweeping two of them you
-probably don't want to throw hundreds-high arrays around. If it ends up
-being easier to pass full-height parameter arrays because of how you
-generate the values, Cubie will spend a few ms scanning the array for
-values that are the same across every run, and it will remove those from
-the array it passes to the GPU and compile them into your code instead.
-You can save a few ms per solve by disabling this with
-``fix_constant_parameters=False``, but it may slow down the solve itself if
-you have a lot of constant parameters.
+probably don't want to throw hundreds-high arrays around.
 
 Device arrays
 ~~~~~~~~~~~~~
@@ -153,6 +152,8 @@ With ``grid_type="combinatorial"``, the default for ``solve_ivp``, cubie
 solves every combination of the values you supply:
 
 .. code-block:: python
+
+   from cubie import solve_ivp
 
    result = solve_ivp(
        LV,

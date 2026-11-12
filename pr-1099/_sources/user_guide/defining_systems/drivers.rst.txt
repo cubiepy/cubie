@@ -16,16 +16,15 @@ That system could be modelled in Cubie like this:
     import numpy as np
     from cubie import solve_ivp
 
-#Define this in string form, it will be clearer.
-    def cantilever(t, y, p):
-        reference = min(max(p.rhat * np.cos(p.omega_forcing * t), -p.clip), p.clip)
-        control = min(max(p.a * y.h + p.b, -p.clip), p.clip)
-        dx = y.v
-        dv = -y.x - p.delta * y.v + p.alpha * y.T + p.pz_sign * reference
-        dT = -p.beta * y.T + p.gamma * y.u * y.u
-        du = p.omega_l * (control - y.u)
-        dh = -p.omega_h * y.h + p.hpf_sign * y.v
-        return [dx, dv, dT, du, dh]
+    cantilever = """
+    reference = min(max(rhat*cos(omega_forcing*t), -clip), clip)
+    control = min(max(a*h + b, -clip), clip)
+    dx = v
+    dv = -x - delta*v + alpha*T + pz_sign*reference
+    dT = -beta*T + gamma*u**2
+    du = omega_l*(control - u)
+    dh = -omega_h*h + hpf_sign*v
+    """
 
     result = solve_ivp(
         cantilever,
@@ -57,7 +56,7 @@ both clipped to ``±clip``, like the hardware. We sweep the
 controller's gain ``a`` and offset ``b`` over 200 values each, so cubie
 solves all 40,000 combinations.
 
-``t`` appears in the system the same way you'd write it in math, and cubie does the 
+``t`` appears in the system the same way you'd write it in math, and cubie does the
 rest of the work. This is an easy way to set up and parametrize a forcing term, and see how your system responds to different versions of
 it.
 
