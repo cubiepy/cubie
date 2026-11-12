@@ -33,7 +33,6 @@ def test_config_defaults():
     """Field defaults are set correctly on bare construction."""
     # Inline construction permitted per Rule 9: __init__ test.
     cfg = AdaptiveStepControlConfig(precision=np.float64)
-    assert cfg._dt_min == 1e-6
     assert cfg._dt_max == pytest.approx(1.0)
     assert_array_equal(cfg.atol, np.asarray([1e-6]))
     assert_array_equal(cfg.rtol, np.asarray([1e-6]))

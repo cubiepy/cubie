@@ -43,14 +43,12 @@ Controlling the step size
 -------------------------
 
 **dt** — the step size (fixed methods) or initial step size (adaptive).
-    For fixed-step methods, ``dt`` is the step size. For adaptive
-    methods, ``dt`` is the first step, and if you give ``dt`` alone,
-    CuBIE sets ``dt_min = dt/1000`` and ``dt_max = dt*1000``. Leave
-    ``dt`` unset on an adaptive method to have CuBIE estimate each
-    run's first step on the GPU from its initial state, as
-    :doc:`timing` describes.
+    For fixed-step methods this is *the* step size.  For adaptive
+    methods the solver takes it as the first step. If you give ``dt``
+    alone, CuBIE sets ``dt_min = dt/1e6`` and ``dt_max = dt*1000``.
 
-    - Default: ``1e-3`` (fixed); estimated per run (adaptive)
+    - Default: ``1e-3`` for fixed methods and ``sqrt(dt_min * dt_max)``
+      for adaptive methods.
     - Type: ``float``, positive
 
 **dt_min** / **dt_max** — hard bounds on the adaptive step size.
@@ -60,10 +58,10 @@ Controlling the step size
     ``result.status_codes`` rather than silently continuing.
     Supplying ``dt_max < dt_min`` raises ``ValueError``.
 
-    - Defaults: ``dt_min=1e-6``, ``dt_max=1.0``
+    - Defaults: ``dt_min=1e-9``, ``dt_max=1.0``
     - Type: ``float``, positive
 
-See :doc:`timing` for the full derivation rules, and for the output
+See :doc:`/user_guide/using_the_solver/timing` for the full derivation rules, and for the output
 timing options (``save_every``, ``summarise_every``,
 ``sample_summaries_every``, ``duration``, ``t0``, ``settling_time``).
 
@@ -72,7 +70,7 @@ Tuning the step controller
 
 Adaptive step-size control is handled by a controller you select with
 ``step_controller``: one of ``"fixed"``, ``"i"``, ``"pi"``, ``"pid"``,
-or ``"gustafsson"`` (see :doc:`choosing_algorithms`).  Each algorithm
+or ``"gustafsson"`` (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).  Each algorithm
 picks a sensible default, so treat everything in this section as
 expert tuning.
 
@@ -269,7 +267,7 @@ Choosing the method's coefficients
 ----------------------------------
 
 **tableau** — the Butcher tableau for multi-stage methods.
-    Selecting an algorithm by name (see :doc:`choosing_algorithms`)
+    Selecting an algorithm by name (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`)
     already picks a tableau.  The bare family names use these
     defaults:
 
@@ -288,7 +286,7 @@ Choosing what gets saved
     Any combination of the time-domain outputs ``"state"``,
     ``"observables"``, ``"time"``, and ``"iteration_counters"``, plus
     any of the 18 summary metric names (``"mean"``, ``"max"``,
-    ``"peaks"``, ...) — the full metric table is in :doc:`results`.
+    ``"peaks"``, ...) — the full metric table is in :doc:`/user_guide/using_the_solver/results`.
 
     - Default: ``["state"]``
 
@@ -316,4 +314,4 @@ options across the loop, algorithm, and solver configs)
     GPU architectures and never affect results.
 
 Memory-manager settings (VRAM proportion, stream groups) are covered in
-:doc:`memory`, and compilation caching in :doc:`caching`.
+:doc:`/user_guide/advanced/memory`, and compilation caching in :doc:`/user_guide/advanced/caching`.

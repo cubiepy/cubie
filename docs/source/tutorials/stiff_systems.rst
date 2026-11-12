@@ -62,7 +62,7 @@ Radau is the big gun of the family, and its robustness costs
 iterations.  For mildly stiff problems, cheaper options include the
 linearly implicit Rosenbrock-W methods (``method="rosenbrock"``,
 which skip Newton iteration entirely), ``"crank_nicolson"``, and the
-DIRK family (:doc:`/user_guide/choosing_algorithms`).
+DIRK family (:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).
 
 Step 3: When the solver gives up
 --------------------------------
@@ -101,7 +101,7 @@ Two levers fix a ``STEP_TOO_SMALL`` exit:
    scales, pass a vector-valued ``atol`` with one entry per state
    (``atol=np.array([1e-6, 1e-2])``) rather than tightening every
    state to suit the smallest one.
-2. Lower ``dt_min`` (default ``1e-6``) when the dynamics genuinely
+2. Lower ``dt_min`` (default ``1e-9``) when the dynamics genuinely
    need steps smaller than the floor, for example when resolving a
    relaxation spike at high ``mu``.
 
@@ -159,7 +159,7 @@ easier to reason about when you know what accuracy you asked for.
 CuBIE fits a cubic spline through your samples so adaptive steppers
 can evaluate the forcing at any time point, not just your sample
 times.  Interpolation options (polynomial order, periodic wrapping,
-boundary conditions) are covered in :doc:`/user_guide/drivers`.
+boundary conditions) are covered in :doc:`/user_guide/defining_systems/drivers`.
 
 A sine wave is not really a sampled signal, though.  When the forcing
 has a closed form, you can write it directly into the equations using

@@ -26,7 +26,7 @@ single batch solve.
      - Effect
    * - ``method``
      - ``"euler"``
-     - Integration algorithm name (see :doc:`choosing_algorithms`).
+     - Integration algorithm name (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).
    * - ``duration``
      - ``1.0``
      - Total integration time.
@@ -47,8 +47,7 @@ single batch solve.
    * - ``grid_type``
      - ``"combinatorial"``
      - ``"combinatorial"`` takes every combination of the supplied
-       inputs; ``"verbatim"`` pairs them run-for-run. **This default
-       differs from** ``Solver.solve`` **below.**
+       inputs; ``"verbatim"`` pairs them run-for-run.
    * - ``time_logging_level``
      - ``None``
      - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``,
@@ -85,7 +84,7 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
    * - ``cache``
      - ``True``
      - Compiled-kernel disk caching; accepts ``bool``, a cache-mode
-       string, or a ``Path``. See :doc:`caching`.
+       string, or a ``Path``. See :doc:`/user_guide/advanced/caching`.
    * - ``auto_performance``
      - ``True``
      - Whether to use in-built heuristics for buffer locations in
@@ -99,7 +98,7 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
 ``step_control_settings``, ``algorithm_settings``, ``output_settings``,
 ``memory_settings``, and ``loop_settings`` are explicit dictionaries that
 override the per-group defaults; any of their keys may also be supplied as
-loose keyword arguments (see "Kwarg routing" below).
+loose keyword arguments (see :ref:`kwarg-routing`).
 
 ``Solver.solve()``
 ~~~~~~~~~~~~~~~~~~
@@ -126,22 +125,23 @@ loose keyword arguments (see "Kwarg routing" below).
        solver's ``blocksize`` setting, or lets the solver pick when
        that setting was not given.
    * - ``grid_type``
-     - ``"verbatim"``
-     - **Differs from** ``solve_ivp``'s default of
-       ``"combinatorial"`` above — only relevant when dict inputs
-       trigger grid construction.
+     - ``"combinatorial"``
+     - Same as ``solve_ivp`` above. Cubie only uses it when you pass
+       dict inputs.
    * - ``on_device``
      - ``False``
      - Return a
        :class:`~cubie.batchsolving.solveresult.DeviceSolveResult` of
        device-array handles with no device-to-host copy. See
-       :doc:`results`.
+       :doc:`/user_guide/using_the_solver/results`.
    * - ``nan_error_trajectories``
      - ``True``
      - Same behaviour as above; ignored when ``on_device=True``.
 
 Any other keyword argument is forwarded to :meth:`~cubie.Solver.update`,
 routing through the same six settings groups described next.
+
+.. _kwarg-routing:
 
 Kwarg routing
 -------------
@@ -164,34 +164,34 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
        ``max_step_growth``, ``integral_gain``, ``proportional_gain``,
        ``derivative_gain``, ``filter_coefficients``, ``deadband_min``,
        ``deadband_max``, ``newton_target_iters``
-     - :doc:`optional_arguments`
+     - :doc:`/user_guide/algorithms_and_tuning/optional_arguments`
    * - Algorithm
      - ``newton_atol``, ``newton_rtol``, ``newton_max_iters``,
        ``krylov_atol``, ``krylov_rtol``, ``krylov_max_iters``,
        ``krylov_residual_reduction``, ``krylov_residual_floor``,
        ``linear_correction_type``, ``preconditioner_type``,
        ``preconditioner_order``, ``use_smoothed_error``
-     - :doc:`optional_arguments`, :doc:`choosing_algorithms`
+     - :doc:`/user_guide/algorithms_and_tuning/optional_arguments`, :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`
    * - Output
      - ``output_types``, ``saved_state_indices``,
        ``saved_observable_indices``, ``summarised_state_indices``,
        ``summarised_observable_indices``
-     - :doc:`results`
+     - :doc:`/user_guide/using_the_solver/results`
    * - Timing / loop
      - ``save_every``, ``summarise_every``,
        ``sample_summaries_every``, ``save_last``, plus the
        per-buffer ``*_location`` placement overrides
-     - :doc:`timing`, :doc:`speed`
+     - :doc:`/user_guide/using_the_solver/timing`, :doc:`/user_guide/algorithms_and_tuning/speed`
    * - Memory
      - ``mem_proportion``, ``stream_group``
-     - :doc:`memory`
+     - :doc:`/user_guide/advanced/memory`
    * - Cache
      - ``cache`` (``True``/``False``, a cache-mode string, or a
        ``Path``)
-     - :doc:`caching`
+     - :doc:`/user_guide/advanced/caching`
    * - Kernel
      - ``max_registers``, ``blocksize``
-     - :doc:`speed`
+     - :doc:`/user_guide/algorithms_and_tuning/speed`
 
 A keyword argument that isn't a setting raises ``KeyError``. Give
 parameter values in the ``parameters`` argument of ``solve``.
@@ -205,13 +205,13 @@ Notes on selected parameters
     chosen algorithm's own default controller is used — fixed for
     schemes without an embedded error estimate, otherwise PI for
     explicit Runge–Kutta and Gustafsson for the implicit families.
-    See :doc:`choosing_algorithms` and the algorithm defaults table
+    See :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` and the algorithm defaults table
     in the API reference.
 
 **max_registers**
     Per-thread register cap forwarded to ``cuda.jit``. Default
     ``None`` leaves register allocation to ``ptxas``; capping trades
-    spill traffic for more resident warps. See :doc:`speed`.
+    spill traffic for more resident warps. See :doc:`/user_guide/algorithms_and_tuning/speed`.
 
 **blocksize**
     Threads per block for every launch; ``solve(blocksize=...)``
@@ -222,4 +222,4 @@ Notes on selected parameters
     allocations. Default ``None`` places the solver in the automatic
     pool, which shares the VRAM remaining after manually-proportioned
     solvers are accounted for equally between its members. See
-    :doc:`memory`.
+    :doc:`/user_guide/advanced/memory`.

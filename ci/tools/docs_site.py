@@ -1,0 +1,177 @@
+"""Assemble the versioned documentation site on the ``gh-pages`` branch.
+
+Run this module from the docs workflow. We publish one folder per
+documentation version: ``main`` for the development docs, ``vX.Y.Z`` for
+each release, and ``pr-N`` for the preview of pull request ``N``. At the
+site root we keep ``versions.json``, the list of versions the picker
+offers, the picker script, and an ``index.html`` that we point at the
+latest release, or at ``main`` before you build the first release.
+
+Usage
+-----
+``python docs_site.py inject BUILD_DIR VERSION BASE``
+    Add the picker script and the site verification tag to every page
+    of a fresh Sphinx build.
+``python docs_site.py index SITE_DIR BASE [--preview]``
+    Rewrite the root files of a ``gh-pages`` checkout from its version
+    folders, and remove root pages that are not part of the versioned
+    site. Pass ``--preview`` when you publish or remove a preview, so
+    that you leave the shared picker script at the root as it is.
+"""
+
+import json
+import re
+import shutil
+import sys
+from pathlib import Path
+
+RELEASE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+PREVIEW = re.compile(r"^pr-\d+$")
+VERIFICATION = (
+    '<meta name="google-site-verification" '
+    'content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />'
+)
+SWITCHER = Path(__file__).with_name("version_switcher.js")
+ROOT_FILES = {"index.html", "versions.json", "version_switcher.js",
+              ".nojekyll", "CNAME"}
+
+
+def inject(build_dir: Path, version: str, base: str) -> None:
+    """Add the picker script and verification tag to every built page.
+
+    Point the pages of ``main`` and of releases at the shared picker
+    script at the site root. Give a preview its own copy of the script, so
+    that you see the picker from the preview's branch without changing the
+    live one.
+
+    Parameters
+    ----------
+    build_dir
+        Output directory of ``sphinx-build``.
+    version
+        Folder name the build is deployed to, such as ``main``.
+    base
+        URL path of the site root, such as ``/cubie/``.
+    """
+    if PREVIEW.match(version):
+        static = build_dir / "_static"
+        static.mkdir(exist_ok=True)
+        shutil.copyfile(SWITCHER, static / "version_switcher.js")
+        script = f"{base}{version}/_static/version_switcher.js"
+    else:
+        script = f"{base}version_switcher.js"
+    tags = (
+        f"{VERIFICATION}\n"
+        f'<script src="{script}" data-version="{version}" '
+        f'data-versions="{base}versions.json" defer></script>\n'
+    )
+    for page in build_dir.rglob("*.html"):
+        text = page.read_text(encoding="utf8")
+        page.write_text(text.replace("</head>", tags + "</head>", 1),
+                        encoding="utf8")
+
+
+def releases(site_dir: Path) -> list:
+    """Return the release folder names, newest first."""
+    names = [p.name for p in site_dir.iterdir()
+             if p.is_dir() and RELEASE.match(p.name)]
+    return sorted(
+        names,
+        key=lambda name: tuple(int(n) for n in RELEASE.match(name).groups()),
+        reverse=True,
+    )
+
+
+def index(site_dir: Path, base: str, preview: bool = False) -> None:
+    """Rewrite the root files of the site from its version folders.
+
+    Write the version list and the picker script on every deploy. Leave
+    the root pages untouched until you have published ``main`` or a
+    release, so that publishing a preview never removes the current
+    site.
+
+    Parameters
+    ----------
+    site_dir
+        Checkout of the ``gh-pages`` branch.
+    base
+        URL path of the site root, such as ``/cubie/``.
+    preview
+        Leave the shared picker script at the root unchanged, unless
+        there is none there yet.
+    """
+    released = releases(site_dir)
+    has_main = (site_dir / "main").is_dir()
+
+    # List the releases newest first, then the development docs.
+    versions = [{"name": name, "label": name} for name in released]
+    if released:
+        versions[0]["label"] = f"{released[0]} (latest)"
+    if has_main:
+        versions.append({"name": "main", "label": "main (development)"})
+    for entry in versions:
+        entry["url"] = f"{base}{entry['name']}/"
+    (site_dir / "versions.json").write_text(
+        json.dumps(versions, indent=2) + "\n", encoding="utf8"
+    )
+    switcher = site_dir / "version_switcher.js"
+    if not preview or not switcher.exists():
+        shutil.copyfile(SWITCHER, switcher)
+    (site_dir / ".nojekyll").write_text("", encoding="utf8")
+
+    if not released and not has_main:
+        return
+    default = released[0] if released else "main"
+
+    # Remove every root page that isn't part of the versioned site, such
+    # as a whole build from an unversioned deploy.
+    for entry in site_dir.iterdir():
+        name = entry.name
+        keep = (
+            name == ".git"
+            or name in ROOT_FILES
+            or name == "main"
+            or RELEASE.match(name)
+            or PREVIEW.match(name)
+        )
+        if keep:
+            continue
+        if entry.is_dir():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+    target = f"{base}{default}/"
+    (site_dir / "index.html").write_text(
+        "<!DOCTYPE html>\n"
+        "<html>\n<head>\n"
+        '<meta charset="utf-8">\n'
+        f"{VERIFICATION}\n"
+        f'<meta http-equiv="refresh" content="0; url={target}">\n'
+        f'<link rel="canonical" href="{target}">\n'
+        "<title>cubie documentation</title>\n"
+        "</head>\n<body>\n"
+        f'<p>Redirecting to <a href="{target}">{target}</a>.</p>\n'
+        "</body>\n</html>\n",
+        encoding="utf8",
+    )
+
+
+def main(argv: list) -> int:
+    """Run the subcommand named in ``argv``; see the module docstring."""
+    if len(argv) == 4 and argv[0] == "inject":
+        inject(Path(argv[1]), argv[2], argv[3])
+        return 0
+    if len(argv) in (3, 4) and argv[0] == "index":
+        preview = argv[3:] == ["--preview"]
+        if len(argv) == 4 and not preview:
+            print(__doc__, file=sys.stderr)
+            return 2
+        index(Path(argv[1]), argv[2], preview)
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

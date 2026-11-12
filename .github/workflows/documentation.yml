@@ -1,47 +1,154 @@
 name: Docs
 
-on: 
+# Deploy each build to its own folder of gh-pages: main for pushes to
+# main, vX.Y.Z for releases, and pr-N for pull-request previews. We point
+# the site root at the latest release; see ci/tools/docs_site.py.
+on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+    types: [ opened, synchronize, reopened, closed ]
+  # We call this from the release workflow with the new tag, because
+  # GitHub does not start other workflows for a release made with
+  # GITHUB_TOKEN.
+  workflow_call:
+    inputs:
+      ref:
+        description: Release tag to build, such as v0.18.0.
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Release tag to build, such as v0.18.0. Leave empty to build main.
+        required: false
+        type: string
 
 permissions:
   contents: write
+  pull-requests: read
+
+env:
+  SITE_BASE: /cubie/
 
 jobs:
-  docs:
+  build:
+    if: github.event.action != 'closed'
     env:
-          NUMBA_ENABLE_CUDASIM: "1"        # GPU-less runner
+      NUMBA_ENABLE_CUDASIM: "1"        # GPU-less runner
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Choose the version folder
+        id: version
+        env:
+          REF: ${{ inputs.ref }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$REF" ]; then
+            if ! [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "ref must be a release tag such as v0.18.0, got '$REF'" >&2
+              exit 1
+            fi
+            version="$REF"
+          elif [ "$EVENT" = "pull_request" ]; then
+            version="pr-$PR_NUMBER"
+          else
+            version="main"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Build the requested ref, but take the site tools from the commit
+      # running this workflow, so that we add the current picker to
+      # release builds.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          path: src
+      - uses: actions/checkout@v7
+        with:
+          path: tools
+          sparse-checkout: ci/tools
       - uses: actions/setup-python@v6
 
-      - name: Set up virtual environment
-        run: python -m venv .venv
-
-      - name: Activate venv and install dependencies
+      - name: Install dependencies
+        working-directory: src
         run: |
+          python -m venv .venv
           source .venv/bin/activate
           pip install uv
           uv pip install sphinx sphinx_rtd_theme myst_parser .[dev-cuda13]
 
       - name: Sphinx build
+        working-directory: src
         run: |
           source .venv/bin/activate
           sphinx-build ./docs/source ./docs/build
 
-      - name: Inject Google Site Verification Meta Tag
-        run: |
-          META_TAG='<meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />'
-          find ./docs/build -name "*.html" -exec sed -i "s|</head>|$META_TAG\n</head>|g" {} +
+      - name: Add the version picker and verification tag
+        run: >
+          python tools/ci/tools/docs_site.py inject src/docs/build
+          "${{ steps.version.outputs.version }}" "$SITE_BASE"
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - uses: actions/upload-artifact@v7
         with:
-          publish_branch: gh-pages
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/build/
-          force_orphan: true
+          name: docs-site
+          path: src/docs/build/
+
+  deploy:
+    needs: build
+    # GitHub gives fork pull requests a read-only token, so we build them
+    # without deploying a preview.
+    if: >
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: tools
+          sparse-checkout: ci/tools
+      - uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: site
+      - uses: actions/setup-python@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: docs-site
+          path: build
+
+      - name: Publish the version folder
+        working-directory: site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: bash ../tools/ci/tools/docs_publish.sh deploy "$VERSION" ../build
+
+  remove-preview:
+    if: >
+      github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: tools
+          sparse-checkout: ci/tools
+      - uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: site
+      - uses: actions/setup-python@v6
+
+      - name: Remove the preview folder
+        working-directory: site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: pr-${{ github.event.pull_request.number }}
+        run: bash ../tools/ci/tools/docs_publish.sh remove "$VERSION"
