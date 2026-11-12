@@ -82,9 +82,10 @@ to identify them. In equation strings, it takes any variable with a
 ``d<name>`` equation as a state, and any other right-hand-side variable as
 a parameter. In a Python function, it takes the states from the keys of a
 returned dict, or names them ``y0``, ``y1`` and so on when you read them as
-``y[0]``, ``y[1]``. It adds each ``p.name`` you listed as a parameter. 
-If you don't provide default values, either by leaving a variable out or 
-by listing names instead of a dict, the defaults will be set to 0.
+``y[0]``, ``y[1]``. It adds each ``p.name`` you read in the function as a
+parameter. If you don't provide default values, either by leaving a
+variable out or by listing names instead of a dict, the defaults will be
+set to 0.
 
 You may want to record intermediate values that aren't states. To do this,
 you can declare them ``observables``:

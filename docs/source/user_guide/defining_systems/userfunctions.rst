@@ -13,14 +13,12 @@ Python functions
 ----------------
 
 cubie calls a plain Python function with symbols instead of numbers, and
-writes the expression it returns into your equations. Write your function by
-the same rules as a system function, using only arithmetic and the maths
-functions cubie knows.
-
-cubie inlines the contents of your function into the ODE system, so functions
-you provide in this form must follow the same rules as when you define a system.
-If your function branches on its argument or does something otherwise unsupported, 
-you can still use it if you provide it as a device function, see below.
+writes the expression it returns into your equations. Because cubie inlines
+the contents of your function into the ODE system, functions you provide in
+this form must follow the same rules as when you define a system. If your
+function branches on its argument or does something otherwise unsupported,
+you can still use it if you provide it as a device function; see
+:ref:`device-functions`.
 
 .. code-block:: python
 
@@ -47,6 +45,8 @@ you can still use it if you provide it as a device function, see below.
 Because cubie writes ``x ** 2`` straight into the equations, it can
 differentiate it for an implicit algorithm such as ``backwards_euler``
 without any help from you.
+
+.. _device-functions:
 
 CUDA device functions
 ---------------------
