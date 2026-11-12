@@ -1,3 +1,5 @@
+# This file should be called inputs. We start with the formats each input accepts, then go into grids.
+
 Batching and Parameter Sweeps
 =============================
 
