@@ -16,7 +16,7 @@ Usage
     Rewrite the root files of a ``gh-pages`` checkout from its version
     folders, and remove root pages that are not part of the versioned
     site. Pass ``--preview`` when you publish or remove a preview, so
-    that the shared picker script at the root stays as it is.
+    that you leave the shared picker script at the root as it is.
 """
 
 import json
@@ -39,9 +39,10 @@ ROOT_FILES = {"index.html", "versions.json", "version_switcher.js",
 def inject(build_dir: Path, version: str, base: str) -> None:
     """Add the picker script and verification tag to every built page.
 
-    Pages of ``main`` and of releases load the shared picker script at the
-    site root. A preview gets its own copy, so that it shows the picker
-    from its own branch without changing the live one.
+    Point the pages of ``main`` and of releases at the shared picker
+    script at the site root. Give a preview its own copy of the script, so
+    that you see the picker from the preview's branch without changing the
+    live one.
 
     Parameters
     ----------
@@ -96,8 +97,8 @@ def index(site_dir: Path, base: str, preview: bool = False) -> None:
     base
         URL path of the site root, such as ``/cubie/``.
     preview
-        Leave the shared picker script at the root unchanged, unless the
-        root has none yet.
+        Leave the shared picker script at the root unchanged, unless
+        there is none there yet.
     """
     released = releases(site_dir)
     has_main = (site_dir / "main").is_dir()
