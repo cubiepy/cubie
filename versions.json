@@ -1,5 +1,10 @@
 [
   {
+    "name": "v0.18.0",
+    "label": "v0.18.0 (latest)",
+    "url": "/cubie/v0.18.0/"
+  },
+  {
     "name": "main",
     "label": "main (development)",
     "url": "/cubie/main/"
