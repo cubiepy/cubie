@@ -68,7 +68,7 @@ statistic per window instead, which is handy for tracking slow drift.
 
 There are 18 built-in metrics, including ``"rms"``, ``"std"``,
 ``"peaks"``, and first/second-derivative extrema; the full table is
-in :doc:`/user_guide/results`.
+in :doc:`/user_guide/using_the_solver/results`.
 
 Step 3: Read the summaries
 --------------------------
@@ -130,7 +130,7 @@ When to use which output
   anything where each run reduces to features.  Memory per run drops
   from ``n_saves x n_variables`` values to a handful.
 - **Both at once** works too; the two records run at independent
-  cadences (see :doc:`/user_guide/timing`).
+  cadences (see :doc:`/user_guide/using_the_solver/timing`).
 
 The next tutorial, :doc:`stiff_systems`, covers systems that need
 implicit methods and time-dependent forcing.

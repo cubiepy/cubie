@@ -20,8 +20,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Creating a “System” of Differential Equations" href="systems.html" />
-    <link rel="prev" title="Tutorial 3: Stiff Systems, Implicit Methods, and Drivers" href="../tutorials/stiff_systems.html" /> 
+    <link rel="next" title="Defining systems" href="defining_systems/index.html" />
+    <link rel="prev" title="Coming from MATLAB" href="../getting_started/coming_from_matlab.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/version_switcher.js" data-version="main" data-versions="/cubie/versions.json" defer></script>
 </head>
@@ -47,33 +47,47 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting Started with Cubie</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting_started/index.html">Getting Started with Cubie</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/coming_from_scipy.html">Coming from SciPy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/coming_from_matlab.html">Coming from MATLAB</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">User Manual</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="defining_systems/index.html">Defining systems</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="defining_systems/systems.html">Creating a “System” of Differential Equations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="defining_systems/drivers.html">Drivers (Time-dependent functions)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="defining_systems/userfunctions.html">User functions and derivatives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="defining_systems/cellml.html">CellML Models</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="using_the_solver/index.html">Using the solver</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="using_the_solver/solving.html">Solving ODEs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="using_the_solver/inputs.html">Batch Inputs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="using_the_solver/results.html">Working with Results</a></li>
+<li class="toctree-l3"><a class="reference internal" href="using_the_solver/timing.html">Timing Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="using_the_solver/configuration.html">Configuration Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="algorithms_and_tuning/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="algorithms_and_tuning/speed.html">Making it Faster (basic)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/index.html">Advanced</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="advanced/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="advanced/caching.html">Caching and Recompilation</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/index.html">Tutorials</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">User Manual</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="systems.html">Creating a “System” of Differential Equations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="coming_from_scipy.html">Coming from SciPy</a></li>
-<li class="toctree-l2"><a class="reference internal" href="coming_from_matlab.html">Coming from MATLAB</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="batching.html">Batching and Parameter Sweeps</a></li>
-<li class="toctree-l2"><a class="reference internal" href="results.html">Working with Results</a></li>
-<li class="toctree-l2"><a class="reference internal" href="drivers.html">Drivers (Time-dependent functions)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l2"><a class="reference internal" href="choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l2"><a class="reference internal" href="optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="userfunctions.html">User functions and derivatives</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cellml.html">CellML Models</a></li>
-<li class="toctree-l2"><a class="reference internal" href="memory.html">GPU Memory Management</a></li>
-<li class="toctree-l2"><a class="reference internal" href="caching.html">Caching and Recompilation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="speed.html">Making it Faster (basic)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../theory/index.html">Theory</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../theory/numerical_integration.html">Numerical Integration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../theory/solvers.html">Nonlinear Solvers</a></li>
@@ -262,28 +276,32 @@
              
   <section id="user-manual">
 <h1>User Manual<a class="headerlink" href="#user-manual" title="Link to this heading"></a></h1>
-<p><cite>cubie</cite> provides GPU-accelerated tools for integrating large batches of initial
-value problems. The source code is available on <a class="reference external" href="https://github.com/ccam80/cubie">Github</a>.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="systems.html">Creating a “System” of Differential Equations</a></li>
-<li class="toctree-l1"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="coming_from_scipy.html">Coming from SciPy</a></li>
-<li class="toctree-l1"><a class="reference internal" href="coming_from_matlab.html">Coming from MATLAB</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="batching.html">Batching and Parameter Sweeps</a></li>
-<li class="toctree-l1"><a class="reference internal" href="results.html">Working with Results</a></li>
-<li class="toctree-l1"><a class="reference internal" href="drivers.html">Drivers (Time-dependent functions)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l1"><a class="reference internal" href="choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l1"><a class="reference internal" href="optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="userfunctions.html">User functions and derivatives</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cellml.html">CellML Models</a></li>
-<li class="toctree-l1"><a class="reference internal" href="memory.html">GPU Memory Management</a></li>
-<li class="toctree-l1"><a class="reference internal" href="caching.html">Caching and Recompilation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="speed.html">Making it Faster (basic)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1"><a class="reference internal" href="defining_systems/index.html">Defining systems</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="defining_systems/index.html#glossary">Glossary</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="using_the_solver/index.html">Using the solver</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="using_the_solver/solving.html">Solving ODEs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_the_solver/inputs.html">Batch Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_the_solver/results.html">Working with Results</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_the_solver/timing.html">Timing Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="using_the_solver/configuration.html">Configuration Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="algorithms_and_tuning/optional_arguments.html">Solver Options Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="algorithms_and_tuning/speed.html">Making it Faster (basic)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="advanced/index.html">Advanced</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="advanced/memory.html">GPU Memory Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="advanced/caching.html">Caching and Recompilation</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </section>
@@ -292,8 +310,8 @@ value problems. The source code is available on <a class="reference external" hr
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../tutorials/stiff_systems.html" class="btn btn-neutral float-left" title="Tutorial 3: Stiff Systems, Implicit Methods, and Drivers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="systems.html" class="btn btn-neutral float-right" title="Creating a “System” of Differential Equations" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../getting_started/coming_from_matlab.html" class="btn btn-neutral float-left" title="Coming from MATLAB" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="defining_systems/index.html" class="btn btn-neutral float-right" title="Defining systems" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
