@@ -7,8 +7,7 @@ you call in the equations to your function. You can do this in both
 Python-function and equation-string systems. If your function has the same name as
 one of the maths functions cubie knows, such as ``exp``, cubie uses yours.
 
-You can give cubie two kinds of function: a plain Python function, or a
-CUDA device function.
+You can give cubie a plain Python function or a CUDA device function.
 
 Python functions
 ----------------
@@ -16,9 +15,12 @@ Python functions
 cubie calls a plain Python function with symbols instead of numbers, and
 writes the expression it returns into your equations. Write your function by
 the same rules as a system function, using only arithmetic and the maths
-functions cubie knows. cubie can't evaluate a
-function that branches on its argument, such as ``if x > 0:``; write that
-one as a CUDA device function instead.
+functions cubie knows.
+
+cubie inlines the contents of your function into the ODE system, so functions
+you provide in this form must follow the same rules as when you define a system.
+If your function branches on its argument or does something otherwise unsupported, 
+you can still use it if you provide it as a device function, see below.
 
 .. code-block:: python
 

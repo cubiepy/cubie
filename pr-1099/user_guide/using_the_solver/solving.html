@@ -280,8 +280,10 @@
 <h1>Solving ODEs<a class="headerlink" href="#solving-odes" title="Link to this heading"></a></h1>
 <section id="quick-start-with-solve-ivp">
 <h2>Quick Start with <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code><a class="headerlink" href="#quick-start-with-solve-ivp" title="Link to this heading"></a></h2>
-<p>The fastest way to get results is <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>.  Here we
-solve the Lotka–Volterra system for a single initial condition:</p>
+<p># make this a batch, a single-run example is bizarre. call solve_ivp only, with string equations in the call. get rid of unnecessary castsa and 1-item lists
+The fastest way to get started is <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>. For a simple
+system, you can just write the equations straight into this call as strings.
+Here we solve the Lotka–Volterra system for a batch of parameter values:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qb</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -297,7 +299,6 @@ solve the Lotka–Volterra system for a single initial condition:</p>
     <span class="n">name</span><span class="o">=</span><span class="s2">"LotkaVolterra"</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># Make this more indicative of a real system, this uses np.array for some reason and also only a single run. the lead in to batching isn't required, no one is here because they wanted a single run.</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
     <span class="n">LV</span><span class="p">,</span>
     <span class="n">y0</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.3</span><span class="p">])},</span>
@@ -310,15 +311,9 @@ solve the Lotka–Volterra system for a single initial condition:</p>
 <p><code class="docutils literal notranslate"><span class="pre">result</span></code> is a <a class="reference internal" href="../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a> that
 holds the time-domain output, summaries, and metadata.  See
 <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a> for how to inspect it.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>CuBIE is a <em>batch</em> solver—it is designed to solve many IVPs at once.
-A single-system call works, but the real performance gains come from
-passing arrays of initial values or parameters.  See <a class="reference internal" href="batching.html"><span class="doc">Batching and Parameter Sweeps</span></a>.</p>
-</div>
-</section>
-<section id="changing-initial-states">
-<h2>Changing Initial States<a class="headerlink" href="#changing-initial-states" title="Link to this heading"></a></h2>
+<p># This section seems useless.
+Changing Initial States
+———————–</p>
 <p>Pass arrays for any states you want to vary across the batch:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
     <span class="n">LV</span><span class="p">,</span>
@@ -340,35 +335,50 @@ passing arrays of initial values or parameters.  See <a class="reference interna
 different parameter sets interactively), create a
 <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> once and call
 <a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.solve" title="cubie.batchsolving.solver.Solver.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a> repeatedly.  This avoids
-recompiling the CUDA kernel on every call:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"dormand-prince-54"</span><span class="p">)</span>
-
-<span class="n">result_a</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
-    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">]),</span> <span class="s2">"y"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.3</span><span class="p">])},</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">1000</span><span class="p">),</span>
-                <span class="s2">"d"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">)},</span>
-    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="n">result_b</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
-    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]),</span> <span class="s2">"y"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">])},</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">1000</span><span class="p">),</span>
-                <span class="s2">"d"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">)},</span>
-    <span class="n">duration</span><span class="o">=</span><span class="mf">200.0</span><span class="p">,</span>
-<span class="p">)</span>
+some overhead on each solve, and also saves you cluttering up your solve
+calls with definitions of the system every time:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span>
 </pre></div>
 </div>
-<p>The first call compiles the kernel; subsequent calls reuse it.</p>
-<p>Two further <code class="docutils literal notranslate"><span class="pre">Solver</span></code> methods are useful in interactive loops:
-<a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.update" title="cubie.batchsolving.solver.Solver.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> reconfigures a live
-solver (tolerances, algorithm, output settings) without rebuilding it
-from scratch, and
-<a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.prepare_grid_arrays" title="cubie.batchsolving.solver.Solver.prepare_grid_arrays"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepare_grid_arrays()</span></code></a> pre-builds the
-input grid once so repeated <code class="docutils literal notranslate"><span class="pre">solve</span></code> calls with the same batch layout
-skip grid construction.</p>
+<dl>
+<dt># Define the system first. fix the broken batches and casts again.</dt><dd><p>solver = qb.Solver(LV, algorithm=”dormand-prince-54”)</p>
+<dl>
+<dt>result_a = solver.solve(</dt><dd><p>initial_values={“x”: np.array([0.5]), “y”: np.array([0.3])},
+parameters={“b”: np.linspace(0.01, 0.05, 1000),</p>
+<blockquote>
+<div><p>“d”: np.full(1000, 0.01)},</p>
+</div></blockquote>
+<p>duration=100.0,</p>
+</dd>
+</dl>
+<p>)</p>
+<dl>
+<dt>result_b = solver.solve(</dt><dd><p>initial_values={“x”: np.array([1.0]), “y”: np.array([0.5])},
+parameters={“b”: np.linspace(0.01, 0.05, 1000),</p>
+<blockquote>
+<div><p>“d”: np.full(1000, 0.01)},</p>
+</div></blockquote>
+<p>duration=200.0,</p>
+</dd>
+</dl>
+<p>)</p>
+</dd>
+</dl>
+<p>The first call compiles the kernel; subsequent calls reuse it.
+In a large system with a complex algorithm (higher-order DIRK and FIRK
+algorithms are the worst culprits, with large cellml systems) this can
+take up to several minutes, so it is the only part of the cubie process
+that requires some patience. you can set “time_logging_level=verbose” to watch
+the steps in your terminal output. The lotka-volterra systema above compiles in
+less than a second, so this is a big-system problem only.</p>
+<p>If you want to change a setting in the live solver, you can pass it as a keyword argument
+to the solve method, or call solver.update.</p>
+<p>#include an example chaging one setting using solver.update, then callilng solve with asecond update.</p>
+<p id="parameter-inputs"># This looks like it’s got to choose whether to be part of “batching” or separate. I think we rename “batching” inputs.</p>
+<p>Configuration - have a paragraph here with links to the various config bits, including choosing algorithms, configuration, timing.</p>
 </section>
 <section id="dicts-and-arrays">
-<span id="parameter-inputs"></span><h2>Dicts and arrays<a class="headerlink" href="#dicts-and-arrays" title="Link to this heading"></a></h2>
+<h2>Dicts and arrays<a class="headerlink" href="#dicts-and-arrays" title="Link to this heading"></a></h2>
 <p>It’s probably simplest to provide a dict of parameter and initial
 values, like this:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>

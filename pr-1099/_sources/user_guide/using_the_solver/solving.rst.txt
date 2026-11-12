@@ -4,8 +4,10 @@ Solving ODEs
 Quick Start with ``solve_ivp``
 ------------------------------
 
-The fastest way to get results is :func:`~cubie.solve_ivp`.  Here we
-solve the Lotka--Volterra system for a single initial condition:
+# make this a batch, a single-run example is bizarre. call solve_ivp only, with string equations in the call. get rid of unnecessary castsa and 1-item lists
+The fastest way to get started is :func:`~cubie.solve_ivp`. For a simple
+system, you can just write the equations straight into this call as strings.
+Here we solve the Lotka--Volterra system for a batch of parameter values:
 
 .. code-block:: python
 
@@ -24,7 +26,6 @@ solve the Lotka--Volterra system for a single initial condition:
        name="LotkaVolterra",
    )
 
-   # Make this more indicative of a real system, this uses np.array for some reason and also only a single run. the lead in to batching isn't required, no one is here because they wanted a single run.
    result = qb.solve_ivp(
        LV,
        y0={"x": 1.0, "y": [0.3])},
@@ -37,12 +38,7 @@ solve the Lotka--Volterra system for a single initial condition:
 holds the time-domain output, summaries, and metadata.  See
 :doc:`/user_guide/using_the_solver/results` for how to inspect it.
 
-.. note::
-
-   CuBIE is a *batch* solver---it is designed to solve many IVPs at once.
-   A single-system call works, but the real performance gains come from
-   passing arrays of initial values or parameters.  See :doc:`/user_guide/using_the_solver/batching`.
-
+# This section seems useless.
 Changing Initial States
 -----------------------
 
@@ -70,10 +66,11 @@ If you plan to solve the same system multiple times (e.g. exploring
 different parameter sets interactively), create a
 :class:`~cubie.Solver` once and call
 :meth:`~cubie.batchsolving.solver.Solver.solve` repeatedly.  This avoids
-recompiling the CUDA kernel on every call:
+some overhead on each solve, and also saves you cluttering up your solve
+calls with definitions of the system every time:
 
 .. code-block:: python
-
+# Define the system first. fix the broken batches and casts again.
    solver = qb.Solver(LV, algorithm="dormand-prince-54")
 
    result_a = solver.solve(
@@ -90,17 +87,24 @@ recompiling the CUDA kernel on every call:
        duration=200.0,
    )
 
-The first call compiles the kernel; subsequent calls reuse it.
+The first call compiles the kernel; subsequent calls reuse it. 
+In a large system with a complex algorithm (higher-order DIRK and FIRK 
+algorithms are the worst culprits, with large cellml systems) this can 
+take up to several minutes, so it is the only part of the cubie process
+that requires some patience. you can set "time_logging_level=verbose" to watch
+the steps in your terminal output. The lotka-volterra systema above compiles in
+less than a second, so this is a big-system problem only.
 
-Two further ``Solver`` methods are useful in interactive loops:
-:meth:`~cubie.batchsolving.solver.Solver.update` reconfigures a live
-solver (tolerances, algorithm, output settings) without rebuilding it
-from scratch, and
-:meth:`~cubie.batchsolving.solver.Solver.prepare_grid_arrays` pre-builds the
-input grid once so repeated ``solve`` calls with the same batch layout
-skip grid construction.
+If you want to change a setting in the live solver, you can pass it as a keyword argument
+to the solve method, or call solver.update. 
+
+#include an example chaging one setting using solver.update, then callilng solve with asecond update.
 
 .. _parameter-inputs:
+
+# This looks like it's got to choose whether to be part of "batching" or separate. I think we rename "batching" inputs.
+
+Configuration - have a paragraph here with links to the various config bits, including choosing algorithms, configuration, timing.
 
 Dicts and arrays
 ----------------
