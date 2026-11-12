@@ -279,13 +279,13 @@ When you don't specify any step size parameters, CuBIE uses these defaults:
      - Default Value
    * - Adaptive
      - ``dt_min``
-     - ``1e-6``
+     - ``1e-9``
    * - Adaptive
      - ``dt_max``
      - ``1.0``
    * - Adaptive
      - ``dt``
-     - ``sqrt(dt_min * dt_max)`` = ``1e-3``
+     - ``sqrt(dt_min * dt_max)`` = ``3.2e-5``
    * - Fixed
      - ``dt``
      - ``1e-3``
@@ -305,27 +305,26 @@ missing values. The rules differ for adaptive and fixed controllers:
    * - You Provide
      - CuBIE Derives
    * - ``dt`` only
-     - ``dt_min = dt / 1000``, ``dt_max = dt * 1000``
+     - ``dt_min = dt / 1e6``, ``dt_max = dt * 1000``
    * - ``dt_min`` only
      - ``dt_max = 1.0`` (default, or ``dt_min * 1000`` if ``dt_min``
        is above it), ``dt = sqrt(dt_min * dt_max)``
    * - ``dt_max`` only
-     - ``dt_min = 1e-6`` (default, or ``dt_max / 1000`` if ``dt_max``
+     - ``dt_min = 1e-9`` (default, or ``dt_max / 1000`` if ``dt_max``
        is below it), ``dt = sqrt(dt_min * dt_max)``
    * - ``dt_min`` and ``dt_max``
      - ``dt = sqrt(dt_min * dt_max)``
    * - ``dt`` and ``dt_min``
      - ``dt_max = dt * 1000``
    * - ``dt`` and ``dt_max``
-     - ``dt_min = dt / 1000``
+     - ``dt_min = dt / 1e6``
    * - All three
      - Nothing derived (all values used as given)
 
 **Fixed-step controllers:**
 
-A fixed controller uses ``dt`` as its step if you give it. Otherwise it
-uses ``sqrt(dt_min * dt_max)`` if you give both bounds, the one bound if
-you give only one, and ``1e-3`` if you give none.
+A fixed controller uses ``dt`` as its step, or ``1e-3`` if you don't give
+one.
 
 Build a ``Solver`` to read the step sizes cubie derives:
 
@@ -334,18 +333,15 @@ Build a ``Solver`` to read the step sizes cubie derives:
    # Give an adaptive controller dt, and cubie derives the bounds
    solver = Solver(LV, algorithm="ode45", dt=0.01)
    print(solver.dt_min, solver.dt, solver.dt_max)
-   # cubie derives dt_min=1e-5 and dt_max=10.0
+   # cubie derives dt_min=1e-8 and dt_max=10.0
 
    # Give the bounds, and cubie computes the initial dt
    solver = Solver(LV, algorithm="ode45", dt_min=1e-5, dt_max=0.1)
    print(solver.dt_min, solver.dt, solver.dt_max)
    # cubie computes dt=0.001
 
-   # Set a fixed step of dt=0.005 either way
+   # Set a fixed step of dt=0.005
    solver = Solver(LV, algorithm="ode45", step_controller="fixed", dt=0.005)
-   solver = Solver(
-       LV, algorithm="ode45", step_controller="fixed", dt_min=0.005
-   )
    print(solver.dt)
 
 Update Behaviour
@@ -358,9 +354,9 @@ CuBIE tracks which values you originally set versus which were derived:
 - **Derived values** may be adjusted if they become inconsistent with
   your changes
 
-For example, if you give only ``dt=0.01``, cubie derives ``dt_min=1e-5``
+For example, if you give only ``dt=0.01``, cubie derives ``dt_min=1e-8``
 and ``dt_max=10.0``. If you then update ``dt=0.001``, cubie derives the
-bounds again from your new ``dt``, as ``1e-6`` and ``1.0``. If you had also
+bounds again from your new ``dt``, as ``1e-9`` and ``1.0``. If you had also
 given ``dt_min=1e-4`` yourself, cubie keeps it at ``1e-4`` and derives only
 ``dt_max``.
 
@@ -388,7 +384,7 @@ This example shows all timing parameters working together:
        sample_summaries_every=0.05,  # Sample for summaries every 0.05 units
 
        # Step size (adaptive controller)
-       dt=0.01,               # Start at 0.01; cubie derives bounds of 1e-5 to 10.0
+       dt=0.01,               # Start at 0.01; cubie derives bounds of 1e-8 to 10.0
 
        # What to save
        output_types=["state", "mean", "max"],

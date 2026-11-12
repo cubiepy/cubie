@@ -61,7 +61,10 @@ DEFAULT_TOLERANCE = float(
 """Controller tolerance used when none is given."""
 
 STEP_BOUND_DECADES = 3
-"""How many decades either side of dt to set the min and max step bounds."""
+"""How many decades from a bound or dt to set a missing step bound."""
+
+DT_MIN_DECADES = 6
+"""How many decades below a given dt to set a missing minimum step."""
 
 
 def given_or(given: Any, name: str, default: Any) -> Any:
@@ -241,10 +244,9 @@ def resolve_step_bounds(
                 dt = DEFAULT_FIXED_DT
         return {"dt": dt}
     factor = 10.0**STEP_BOUND_DECADES
-    # Missing bounds sit STEP_BOUND_DECADES either side of a given dt.
     if dt_min is None:
         if dt is not None:
-            dt_min = dt / factor
+            dt_min = dt / 10.0**DT_MIN_DECADES
         else:
             dt_min = DEFAULT_DT_MIN
             if dt_max is not None and dt_max < dt_min:

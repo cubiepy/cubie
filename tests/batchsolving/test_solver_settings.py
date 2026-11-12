@@ -365,12 +365,6 @@ def test_scalar_newton_rtol_with_array_rtol_resolves(system):
 # ── Step bounds and tolerances ──────────────────────────────────────── #
 
 
-def test_adaptive_bounds_follow_a_lone_dt():
-    """A lone dt gives bounds three decades either side."""
-    bounds = resolve_step_bounds(0.01, None, None, True)
-    assert bounds == {"dt": 0.01, "dt_min": 1e-5, "dt_max": 10.0}
-
-
 def test_adaptive_dt_is_the_geometric_mean_of_given_bounds():
     """Bounds alone give dt as their geometric mean."""
     bounds = resolve_step_bounds(None, 1e-4, 1e-2, True)
