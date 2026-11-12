@@ -1,5 +1,0 @@
-.sig-param::before {
-    display: inline;
-    content: "\A     "; /* newline before next param */
-    white-space: pre;
-}
