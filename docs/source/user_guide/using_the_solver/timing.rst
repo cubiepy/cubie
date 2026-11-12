@@ -6,9 +6,8 @@ control how the integrator advances through time, **output timing**
 parameters control when results are saved, and **integration bounds**
 define the overall time span.
 
-.. contents:: On this page
-   :local:
-   :depth: 2
+#Ordering should be: integration bounds, output timing, step size.
+
 
 Step Size Parameters
 --------------------
