@@ -7,10 +7,9 @@ States
    starts.
 
 Parameters
-   Inputs that cubie does not solve for. You choose them to set the
-   behaviour of the system, and you can batch over them, along with the
-   initial values, so that cubie solves many IVPs with different parameter
-   sets at once.
+   Inputs that cubie does not solve for, constant per individual run in a batch.
+   You can give these a default value, and include them when building a batch
+   to solve over to integrate one run under each parameter set.
 
 Observables
    Values that cubie does not solve for, but works out from the states and

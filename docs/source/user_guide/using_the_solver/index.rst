@@ -1,10 +1,15 @@
 Using the solver
 ================
 
-Read these pages to learn how to run a batch of solves: how to pass initial
-values and parameters, how to lay out a parameter sweep, how to read
-the results, how to set the integration and output times, and which
-keyword arguments you can pass to each entry point.
+Once you have defined an ODE system (see :doc:`/user_guide/defining_systems/systems`), CuBIE provides
+two ways to solve it: the convenience function
+:func:`~cubie.batchsolving.solver.solve_ivp` and the reusable
+:class:`~cubie.batchsolving.solver.Solver` class.
+
+Cubie can build the batches you want to solve over (see batching), and provides results in
+a number of formats (see results). You'll usually want to modify the timing parameters to
+suit your integration (see timing), and deeper configuration is achievable (see configuration).
+
 
 .. toctree::
    :maxdepth: 1

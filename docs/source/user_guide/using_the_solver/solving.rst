@@ -1,10 +1,6 @@
 Solving ODEs
 ============
 
-Once you have defined an ODE system (see :doc:`/user_guide/defining_systems/systems`), CuBIE provides
-two ways to solve it: the convenience function
-:func:`~cubie.batchsolving.solver.solve_ivp` and the reusable
-:class:`~cubie.batchsolving.solver.Solver` class.
 
 Quick Start with ``solve_ivp``
 ------------------------------
