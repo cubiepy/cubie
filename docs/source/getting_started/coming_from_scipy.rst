@@ -77,7 +77,16 @@ Key changes:
   every combination of the supplied values by default. See
   :doc:`/user_guide/batching` for the other options.
 
-Note: SciPy's default relative tolerance is 1e-3, and Cubie's is 1e-6. Results will not match unless these are the same. Even when the tolerances do match directly, there will be differences due to numerical precision (float32 vs float64) and due to the way that floating point math is carried out on GPUs vs CPUs. Even though the results do not match exactly, comparing each one to a much more accurate solution (solved to a much tighter tolerance) will show that Cubie's and SciPy's results are _equally wrong_. 
+.. note::
+
+   SciPy's default relative tolerance is 1e-3, and Cubie's is 1e-6. Results
+   will not match unless these are the same. Even when the tolerances do
+   match directly, there will be differences due to numerical precision
+   (float32 vs float64) and due to the way that floating point math is
+   carried out on GPUs vs CPUs. Even though the results do not match
+   exactly, comparing each one to a much more accurate solution (solved to a
+   much tighter tolerance) will show that Cubie's and SciPy's results are
+   *equally wrong*.
 
 What your function can contain
 ------------------------------

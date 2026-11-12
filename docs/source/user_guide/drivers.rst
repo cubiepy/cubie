@@ -8,73 +8,60 @@ and just allow you to use the symbol `t` in your equations, and it will be autom
 integration proceeds. If you can neatly express your variable as a function of time, this is the cleanest way to get a
 forcing term into your problem. As an example, we'll follow a self-actuated atomic force microscopy cantilever being shaken
 by a piezoelectric actuator under its base. In the real experiment, we measure how much the cantilever bends as a result,
-and feed some function of that measured signal back into the cantilevers actuator, a heater which causes it to bend. 
+and feed some function of that measured signal back into the cantilever's actuator, a heater which causes it to bend.
 That system could be modelled in Cubie like this:
 
-# The system looks wrong throughout, get the real ones from an early version here: "\\file\Usersc$\cca79\Home\My Documents\Work\MEMS\sims\CUDA_system\CuNODE\systems\thermal_cantilever_ax_b.py"
+.. code-block:: python
 
-.. code-block::
-    :linenos:
-
-    import cubie as qb
     import numpy as np
-
-    # Parameters
-    k = 0.1      # cantilever spring constant
-    c = 0.01     # cantilever damping coefficient
-    alpha = 0.5  # heater coupling coefficient (how much bend the heat caused)
-    beta = 0.1   # heater dissipation coefficient (how quickly the heat dissipates)
-
+    from cubie import solve_ivp
 
     def cantilever(t, y, p):
-        f = 1e4 * t + 1e5
-        base_wiggle = np.sin(2 * p.pi * f * t)
+        reference = min(max(p.rhat * np.cos(p.omega_forcing * t), -p.clip), p.clip)
+        control = min(max(p.a * y.h + p.b, -p.clip), p.clip)
         dx = y.v
-        dv = -p.k * y.x - p.c * y.v + p.alpha * y.T + base_wiggle
-        dT = (p.alpha * (p.feedback_strength * y.x + p.feedback_offset)
-              - p.beta * y.T)
-        di = p.feedback_strength * y.x + p.feedback_offset
-        return {"x": dx, "v": dv, "T": dT, "i": di}
+        dv = -y.x - p.delta * y.v + p.alpha * y.T + p.pz_sign * reference
+        dT = -p.beta * y.T + p.gamma * y.u * y.u
+        du = p.omega_l * (control - y.u)
+        dh = -p.omega_h * y.h + p.hpf_sign * y.v
+        return [dx, dv, dT, du, dh]
 
-    parameters = {
-        "k": 0.1,
-        "c": 0.01,
-        "alpha": 0.5,
-        "beta": 0.1,
-        "pi": np.pi,
-        "feedback_strength": 0.5,
-        "feedback_offset": 0.1,
-    }
-    initial_conditions = {
-        "x": 0,    # initial position
-        "v": 0,    # initial velocity
-        "T": 0,    # initial temperature
-        "i": 0,    # initial current
-    }
-
-    sys = qb.create_ODE_system(
+    result = solve_ivp(
         cantilever,
-        parameters=parameters,
-        states=initial_conditions,
-        name="MEMSCantilever",
+        y0={"x": 0.0, "v": 0.0, "T": 0.0, "u": 0.0, "h": 0.0},
+        parameters={
+            "alpha": 0.52,
+            "beta": 0.0133,
+            "gamma": 0.0624,
+            "delta": 0.012,
+            "omega_h": 1 / 114,
+            "omega_l": 2.0,
+            "pz_sign": 1.0,
+            "hpf_sign": -1.0,
+            "rhat": 0.01,
+            "clip": 1.0,
+            "omega_forcing": 1.0,
+            "a": np.linspace(0.0, 4.0, 200),
+            "b": np.linspace(-1.0, 1.0, 200),
+        },
+        method="ode45",
+        duration=500.0,
     )
 
-    result = qb.solve_ivp(
-        sys,
-        y0=initial_conditions,
-        parameters={
-            "feedback_strength": np.linspace(-1, 1, 200),
-            "feedback_offset": np.linspace(-1, 1, 200),
-        },
-        method="crank_nicolson",
-        duration=1e-3,
-    )
+Here ``x`` and ``v`` are the cantilever's deflection and velocity, ``T`` is
+the heater's temperature, ``u`` is the filtered control signal that drives
+the heater, and ``h`` is a high-pass-filtered copy of the deflection that
+the controller feeds back. The piezo reference and the control signal are
+both clipped to ``±clip``, like the hardware. The solve sweeps the
+controller's gain ``a`` and offset ``b`` over 200 values each, so cubie
+solves all 40,000 combinations.
 
 This is an easy way to set up and parametrize a forcing term, and see how your system responds to different versions of
 it.
 
 Measured/Arbitrary Values
-----------------
+-------------------------
+
 Sometimes, your forcing function might not be easily expressed as a function of time. You might have some measured data
 that you want to test, you might want to use a random signal, or you might just want to throw some numbers in and see what
 comes out. If your integrator is fixed-step and you can supply the value of the forcing term at each time step, this is
@@ -87,49 +74,35 @@ an example of how to do this:
 
 .. code-block:: python
 
-    import cubie as qb
     import numpy as np
+    from cubie import DriverSamples, solve_ivp
 
-    # Create a measured signal as a driver
-    t_driver = np.linspace(0, 1.0, 1000)
-    signal = np.sin(2 * np.pi * 5 * t_driver) * np.exp(-t_driver)
-    drive = qb.DriverSamples({"drive_signal": signal}, time=t_driver)
+    t_samples = np.linspace(0.0, 1.0, 1000)
+    signal = np.sin(2 * np.pi * 5 * t_samples) * np.exp(-t_samples)
+    drive = DriverSamples({"drive_signal": signal}, time=t_samples)
 
     def driven(t, y, p, d):
-        dx = -p.k * y.x + p.amplitude * d.drive_signal
-        return [dx]
+        return [-p.k * y.x + p.amplitude * d.drive_signal]
 
-    sys = qb.create_ODE_system(
+    result = solve_ivp(
         driven,
-        parameters={"k": 1.0, "amplitude": 1.0},
-        states={"x": 0.0},
-        drivers=["drive_signal"],
-        name="DrivenSystem",
-    )
-
-    result = qb.solve_ivp(
-        sys,
-        y0={"x": np.array([0.0])},
-        parameters={"amplitude": np.linspace(0.1, 2.0, 100)},
+        y0={"x": 0.0},
+        parameters={"k": 1.0, "amplitude": np.linspace(0.1, 2.0, 10000)},
         drivers=drive,
-        method="dormand-prince-54",
+        method="ode45",
         duration=1.0,
     )
 
-# awkward robot language, not voiced to a user at all. 
-Note how the driver appears: you declare it in ``drivers`` when you
-create the system, and read it by name inside the function body through
-the argument after the parameters, here ``d``. Keep the parameter
-argument ``p`` even when the system has no parameters.
+Read your driver by name from the argument after the parameters, here
+``d``. Keep the parameter argument ``p`` in your function even if your
+system has no parameters. Then pass your samples as ``drivers=`` when you
+solve. If you build the system yourself with ``create_ODE_system``, list
+the driver names there as well, with ``drivers=["drive_signal"]``.
 
 Sampled forcing data is defined using a ``DriverSamples`` object.
 It takes a ``dict`` of ``"[driver name]": [sampled data]`` pairs, with
 either the sample time vector given as ``time``, or a starting time
 and sample spacing given as ``t0`` and ``driver_sample_period``.
-# Way, way too early to be talking about solver.update, that's a dev-facing code distinction.
- It is
-a solver setting, so ``Solver`` and ``Solver.update`` accept it too,
-and a ``solve`` without ``drivers`` reuses the last ones given.
 
 Interpolation Options
 ---------------------
@@ -156,15 +129,19 @@ your samples:
    ``"periodic"`` when ``wrap=True`` and ``"clamped"`` when
    ``wrap=False``.
 
+Pass these settings to ``solve_ivp`` along with ``drivers=``. This solve
+reuses ``driven`` and ``drive`` from the example above, and runs past the
+end of the samples with wrapping turned off:
+
 .. code-block:: python
-# drive doesn't seem to be defined here
-    result = qb.solve_ivp(
-        sys,
-        y0={"x": np.array([0.0])},
-        parameters={"amplitude": np.linspace(0.1, 2.0, 100)},
+
+    result = solve_ivp(
+        driven,
+        y0={"x": 0.0},
+        parameters={"k": 1.0, "amplitude": np.linspace(0.1, 2.0, 10000)},
         drivers=drive,
         order=3,
-        wrap=True,
-        method="dormand-prince-54",
-        duration=1.0,
+        wrap=False,
+        method="ode45",
+        duration=2.0,
     )

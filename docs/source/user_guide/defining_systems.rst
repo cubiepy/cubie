@@ -9,6 +9,7 @@ own helper functions, or loaded from a CellML file.
    :maxdepth: 1
 
    systems
+   glossary
    drivers
    userfunctions
    cellml
