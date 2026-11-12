@@ -99,7 +99,7 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
 ``step_control_settings``, ``algorithm_settings``, ``output_settings``,
 ``memory_settings``, and ``loop_settings`` are explicit dictionaries that
 override the per-group defaults; any of their keys may also be supplied as
-loose keyword arguments (see "Kwarg routing" below).
+loose keyword arguments (see :ref:`kwarg-routing`).
 
 ``Solver.solve()``
 ~~~~~~~~~~~~~~~~~~
@@ -142,6 +142,8 @@ loose keyword arguments (see "Kwarg routing" below).
 
 Any other keyword argument is forwarded to :meth:`~cubie.Solver.update`,
 routing through the same six settings groups described next.
+
+.. _kwarg-routing:
 
 Kwarg routing
 -------------

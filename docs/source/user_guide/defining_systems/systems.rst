@@ -1,3 +1,6 @@
+Creating a "System" of Differential Equations
+=============================================
+
 From a Python function
 ----------------------
 

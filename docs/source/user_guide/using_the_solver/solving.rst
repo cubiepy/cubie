@@ -1,7 +1,6 @@
 Solving ODEs
 ============
 
-
 Quick Start with ``solve_ivp``
 ------------------------------
 
