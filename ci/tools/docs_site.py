@@ -12,10 +12,11 @@ Usage
 ``python docs_site.py inject BUILD_DIR VERSION BASE``
     Add the picker script and the site verification tag to every page
     of a fresh Sphinx build.
-``python docs_site.py index SITE_DIR BASE``
+``python docs_site.py index SITE_DIR BASE [--preview]``
     Rewrite the root files of a ``gh-pages`` checkout from its version
     folders, and remove root pages that are not part of the versioned
-    site.
+    site. Pass ``--preview`` when you publish or remove a preview, so
+    that the shared picker script at the root stays as it is.
 """
 
 import json
@@ -38,6 +39,10 @@ ROOT_FILES = {"index.html", "versions.json", "version_switcher.js",
 def inject(build_dir: Path, version: str, base: str) -> None:
     """Add the picker script and verification tag to every built page.
 
+    Pages of ``main`` and of releases load the shared picker script at the
+    site root. A preview gets its own copy, so that it shows the picker
+    from its own branch without changing the live one.
+
     Parameters
     ----------
     build_dir
@@ -47,10 +52,17 @@ def inject(build_dir: Path, version: str, base: str) -> None:
     base
         URL path of the site root, such as ``/cubie/``.
     """
+    if PREVIEW.match(version):
+        static = build_dir / "_static"
+        static.mkdir(exist_ok=True)
+        shutil.copyfile(SWITCHER, static / "version_switcher.js")
+        script = f"{base}{version}/_static/version_switcher.js"
+    else:
+        script = f"{base}version_switcher.js"
     tags = (
         f"{VERIFICATION}\n"
-        f'<script src="{base}version_switcher.js" '
-        f'data-version="{version}" defer></script>\n'
+        f'<script src="{script}" data-version="{version}" '
+        f'data-versions="{base}versions.json" defer></script>\n'
     )
     for page in build_dir.rglob("*.html"):
         text = page.read_text(encoding="utf8")
@@ -69,7 +81,7 @@ def releases(site_dir: Path) -> list:
     )
 
 
-def index(site_dir: Path, base: str) -> None:
+def index(site_dir: Path, base: str, preview: bool = False) -> None:
     """Rewrite the root files of the site from its version folders.
 
     Write the version list and the picker script on every deploy. Leave
@@ -83,23 +95,27 @@ def index(site_dir: Path, base: str) -> None:
         Checkout of the ``gh-pages`` branch.
     base
         URL path of the site root, such as ``/cubie/``.
+    preview
+        Leave the shared picker script at the root unchanged, unless the
+        root has none yet.
     """
     released = releases(site_dir)
     has_main = (site_dir / "main").is_dir()
 
-    versions = []
+    # List the releases newest first, then the development docs.
+    versions = [{"name": name, "label": name} for name in released]
     if released:
-        versions.append({"name": released[0],
-                         "label": f"{released[0]} (latest)"})
+        versions[0]["label"] = f"{released[0]} (latest)"
     if has_main:
         versions.append({"name": "main", "label": "main (development)"})
-    versions.extend({"name": name, "label": name} for name in released[1:])
     for entry in versions:
         entry["url"] = f"{base}{entry['name']}/"
     (site_dir / "versions.json").write_text(
         json.dumps(versions, indent=2) + "\n", encoding="utf8"
     )
-    shutil.copyfile(SWITCHER, site_dir / "version_switcher.js")
+    switcher = site_dir / "version_switcher.js"
+    if not preview or not switcher.exists():
+        shutil.copyfile(SWITCHER, switcher)
     (site_dir / ".nojekyll").write_text("", encoding="utf8")
 
     if not released and not has_main:
@@ -145,8 +161,12 @@ def main(argv: list) -> int:
     if len(argv) == 4 and argv[0] == "inject":
         inject(Path(argv[1]), argv[2], argv[3])
         return 0
-    if len(argv) == 3 and argv[0] == "index":
-        index(Path(argv[1]), argv[2])
+    if len(argv) in (3, 4) and argv[0] == "index":
+        preview = argv[3:] == ["--preview"]
+        if len(argv) == 4 and not preview:
+            print(__doc__, file=sys.stderr)
+            return 2
+        index(Path(argv[1]), argv[2], preview)
         return 0
     print(__doc__, file=sys.stderr)
     return 2

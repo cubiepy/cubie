@@ -1,14 +1,14 @@
-// Add a documentation version picker to the sidebar of every page.
+// Add a documentation version picker to the top-right corner of every page.
 //
-// We publish this file at the site root, and give every page a script
-// tag for it with a data-version attribute naming the page's folder. We
-// read versions.json from the same folder as this script, so we list every
-// published version when the reader opens the page.
+// docs_site.py gives every page a script tag for this file, with a
+// data-version attribute naming the page's folder and a data-versions
+// attribute pointing at versions.json at the site root. We read that list
+// when the reader opens the page, so we offer every published version.
 (function () {
   const script = document.currentScript;
   const current = script.dataset.version;
-  const siteRoot = new URL(".", script.src).pathname;
-  const versionsUrl = new URL("versions.json", script.src);
+  const versionsUrl = new URL(script.dataset.versions, location.href);
+  const siteRoot = new URL(".", versionsUrl).pathname;
 
   async function pageExists(url) {
     try {
@@ -40,12 +40,13 @@
     const select = document.createElement("select");
     select.setAttribute("aria-label", "Documentation version");
     select.style.cssText =
-      "margin-top: 8px; width: 100%; padding: 2px; border-radius: 4px;";
+      "margin-right: 12px; padding: 2px 4px; border-radius: 4px;";
 
-    // A pull-request preview is not listed, so show it as its own entry.
+    // We don't list previews in versions.json, so add the one the reader
+    // is on below the development docs.
     const entries = versions.slice();
     if (!entries.some((entry) => entry.name === current)) {
-      entries.unshift({ name: current, label: current, url: prefix });
+      entries.push({ name: current, label: current, url: prefix });
     }
     for (const entry of entries) {
       const option = document.createElement("option");
@@ -60,9 +61,15 @@
       location.href = (await pageExists(target)) ? target : select.value;
     });
 
-    const anchor = document.querySelector(".wy-side-nav-search");
-    if (anchor) {
-      anchor.appendChild(select);
+    // Put the picker beside "View page source" at the top right of the
+    // page, or pin it to the corner of the window on pages without one.
+    const aside = document.querySelector(".wy-breadcrumbs-aside");
+    if (aside) {
+      aside.insertBefore(select, aside.firstChild);
+    } else {
+      select.style.cssText +=
+        "position: fixed; top: 8px; right: 12px; z-index: 300;";
+      document.body.appendChild(select);
     }
   }
 
