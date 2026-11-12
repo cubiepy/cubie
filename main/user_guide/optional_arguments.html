@@ -304,11 +304,11 @@ non-negative.</p>
 <h2>Controlling the step size<a class="headerlink" href="#controlling-the-step-size" title="Link to this heading"></a></h2>
 <dl class="simple">
 <dt><strong>dt</strong> — the step size (fixed methods) or initial step size (adaptive).</dt><dd><p>For fixed-step methods this is <em>the</em> step size.  For adaptive
-methods it seeds the first step, and if you give <code class="docutils literal notranslate"><span class="pre">dt</span></code> alone the
-bounds are derived from it as <code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt/100</span></code> and
-<code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt*100</span></code>.</p>
+methods the solver takes it as the first step. If you give <code class="docutils literal notranslate"><span class="pre">dt</span></code>
+alone, CuBIE sets <code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt/1e6</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt*1000</span></code>.</p>
 <ul class="simple">
-<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> (fixed); <code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code> (adaptive)</p></li>
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> for fixed methods and <code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code>
+for adaptive methods.</p></li>
 <li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code>, positive</p></li>
 </ul>
 </dd>
@@ -318,7 +318,7 @@ still too large at <code class="docutils literal notranslate"><span class="pre">
 <code class="docutils literal notranslate"><span class="pre">result.status_codes</span></code> rather than silently continuing.
 Supplying <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">&lt;</span> <span class="pre">dt_min</span></code> raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p>
 <ul class="simple">
-<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">dt_min=1e-6</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max=1.0</span></code></p></li>
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">dt_min=1e-9</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max=1.0</span></code></p></li>
 <li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code>, positive</p></li>
 </ul>
 </dd>

@@ -324,7 +324,7 @@ size throughout integration.</p>
 <tbody>
 <tr class="row-even"><td><p>Adaptive</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1e-9</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Adaptive</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span></code></p></td>
@@ -332,7 +332,7 @@ size throughout integration.</p>
 </tr>
 <tr class="row-even"><td><p>Adaptive</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code> = <code class="docutils literal notranslate"><span class="pre">1e-3</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code> = <code class="docutils literal notranslate"><span class="pre">3.2e-5</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Fixed</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code></p></td>
@@ -358,22 +358,22 @@ missing values. The rules differ for adaptive and fixed controllers:</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> only</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">100</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">*</span> <span class="pre">100</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">1e6</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">*</span> <span class="pre">1000</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code> only</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">1.0</span></code> (default), <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span></code> only</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">1e-6</span></code> (default), <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">1e-9</span></code> (default), <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">*</span> <span class="pre">100</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">*</span> <span class="pre">1000</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">100</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">/</span> <span class="pre">1e6</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>All three</p></td>
 <td><p>Nothing derived (all values used as given)</p></td>

@@ -5,6 +5,11 @@
     "url": "/cubie/v0.18.0/"
   },
   {
+    "name": "main",
+    "label": "main (development)",
+    "url": "/cubie/main/"
+  },
+  {
     "name": "v0.17.0",
     "label": "v0.17.0",
     "url": "/cubie/v0.17.0/"
@@ -143,10 +148,5 @@
     "name": "v0.1.0",
     "label": "v0.1.0",
     "url": "/cubie/v0.1.0/"
-  },
-  {
-    "name": "main",
-    "label": "main (development)",
-    "url": "/cubie/main/"
   }
 ]

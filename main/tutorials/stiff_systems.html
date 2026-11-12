@@ -352,7 +352,7 @@ problem can deliver.  If your states span different magnitude
 scales, pass a vector-valued <code class="docutils literal notranslate"><span class="pre">atol</span></code> with one entry per state
 (<code class="docutils literal notranslate"><span class="pre">atol=np.array([1e-6,</span> <span class="pre">1e-2])</span></code>) rather than tightening every
 state to suit the smallest one.</p></li>
-<li><p>Lower <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> (default <code class="docutils literal notranslate"><span class="pre">1e-6</span></code>) when the dynamics genuinely
+<li><p>Lower <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> (default <code class="docutils literal notranslate"><span class="pre">1e-9</span></code>) when the dynamics genuinely
 need steps smaller than the floor, for example when resolving a
 relaxation spike at high <code class="docutils literal notranslate"><span class="pre">mu</span></code>.</p></li>
 </ol>
