@@ -75,7 +75,7 @@ Key changes:
   the time points.
 - If you supply arrays for several parameters or initial values, cubie runs
   every combination of the supplied values by default. See
-  :doc:`/user_guide/using_the_solver/batching` for the other options.
+  :doc:`/user_guide/using_the_solver/inputs` for the other options.
 
 .. note::
 

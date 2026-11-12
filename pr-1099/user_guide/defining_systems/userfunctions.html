@@ -62,7 +62,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../using_the_solver/index.html">Using the solver</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/solving.html">Solving ODEs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/inputs.html">Inputs and Parameter Sweeps</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/timing.html">Timing Parameters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Configuration Reference</a></li>
@@ -287,13 +287,12 @@ one of the maths functions cubie knows, such as <code class="docutils literal no
 <section id="python-functions">
 <h2>Python functions<a class="headerlink" href="#python-functions" title="Link to this heading"></a></h2>
 <p>cubie calls a plain Python function with symbols instead of numbers, and
-writes the expression it returns into your equations. Write your function by
-the same rules as a system function, using only arithmetic and the maths
-functions cubie knows.</p>
-<p>cubie inlines the contents of your function into the ODE system, so functions
-you provide in this form must follow the same rules as when you define a system.
-If your function branches on its argument or does something otherwise unsupported,
-you can still use it if you provide it as a device function, see below.</p>
+writes the expression it returns into your equations. Because cubie inlines
+the contents of your function into the ODE system, functions you provide in
+this form must follow the same rules as when you define a system. If your
+function branches on its argument or does something otherwise unsupported,
+you can still use it if you provide it as a device function; see
+<a class="reference internal" href="#device-functions"><span class="std std-ref">CUDA device functions</span></a>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_ODE_system</span><span class="p">,</span> <span class="n">solve_ivp</span>
 
@@ -320,7 +319,7 @@ differentiate it for an implicit algorithm such as <code class="docutils literal
 without any help from you.</p>
 </section>
 <section id="cuda-device-functions">
-<h2>CUDA device functions<a class="headerlink" href="#cuda-device-functions" title="Link to this heading"></a></h2>
+<span id="device-functions"></span><h2>CUDA device functions<a class="headerlink" href="#cuda-device-functions" title="Link to this heading"></a></h2>
 <p>Write a CUDA device function with <code class="docutils literal notranslate"><span class="pre">&#64;cuda.jit(device=True)</span></code>, importing
 <code class="docutils literal notranslate"><span class="pre">cuda</span></code> from <code class="docutils literal notranslate"><span class="pre">numba_cuda_mlir</span></code>, the CUDA backend that pip installs with
 cubie. cubie calls your device function directly from the GPU code.</p>

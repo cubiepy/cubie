@@ -62,7 +62,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../using_the_solver/index.html">Using the solver</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/solving.html">Solving ODEs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/inputs.html">Inputs and Parameter Sweeps</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/timing.html">Timing Parameters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Configuration Reference</a></li>
@@ -354,9 +354,10 @@ to identify them. In equation strings, it takes any variable with a
 <code class="docutils literal notranslate"><span class="pre">d&lt;name&gt;</span></code> equation as a state, and any other right-hand-side variable as
 a parameter. In a Python function, it takes the states from the keys of a
 returned dict, or names them <code class="docutils literal notranslate"><span class="pre">y0</span></code>, <code class="docutils literal notranslate"><span class="pre">y1</span></code> and so on when you read them as
-<code class="docutils literal notranslate"><span class="pre">y[0]</span></code>, <code class="docutils literal notranslate"><span class="pre">y[1]</span></code>. It adds each <code class="docutils literal notranslate"><span class="pre">p.name</span></code> you listed as a parameter.
-If you don’t provide default values, either by leaving a variable out or
-by listing names instead of a dict, the defaults will be set to 0.</p>
+<code class="docutils literal notranslate"><span class="pre">y[0]</span></code>, <code class="docutils literal notranslate"><span class="pre">y[1]</span></code>. It adds each <code class="docutils literal notranslate"><span class="pre">p.name</span></code> you read in the function as a
+parameter. If you don’t provide default values, either by leaving a
+variable out or by listing names instead of a dict, the defaults will be
+set to 0.</p>
 <p>You may want to record intermediate values that aren’t states. To do this,
 you can declare them <code class="docutils literal notranslate"><span class="pre">observables</span></code>:</p>
 <div class="literal-block-wrapper docutils container" id="id3">

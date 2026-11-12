@@ -20,7 +20,7 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Batching and Parameter Sweeps" href="batching.html" />
+    <link rel="next" title="Inputs and Parameter Sweeps" href="inputs.html" />
     <link rel="prev" title="Using the solver" href="index.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/version_switcher.js" data-version="pr-1099" defer></script>
@@ -62,7 +62,7 @@
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Using the solver</a><ul class="current">
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Solving ODEs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="batching.html">Batching and Parameter Sweeps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="inputs.html">Inputs and Parameter Sweeps</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
 <li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
@@ -280,197 +280,105 @@
 <h1>Solving ODEs<a class="headerlink" href="#solving-odes" title="Link to this heading"></a></h1>
 <section id="quick-start-with-solve-ivp">
 <h2>Quick Start with <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code><a class="headerlink" href="#quick-start-with-solve-ivp" title="Link to this heading"></a></h2>
-<p># make this a batch, a single-run example is bizarre. call solve_ivp only, with string equations in the call. get rid of unnecessary castsa and 1-item lists
-The fastest way to get started is <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>. For a simple
+<p>The fastest way to get started is <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>. For a simple
 system, you can just write the equations straight into this call as strings.
 Here we solve the Lotka–Volterra system for a batch of parameter values:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qb</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">solve_ivp</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">lotka_volterra</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
-    <span class="n">dx</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">a</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">x</span> <span class="o">-</span> <span class="n">p</span><span class="o">.</span><span class="n">b</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">x</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">y</span>
-    <span class="n">dy</span> <span class="o">=</span> <span class="o">-</span><span class="n">p</span><span class="o">.</span><span class="n">c</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">y</span> <span class="o">+</span> <span class="n">p</span><span class="o">.</span><span class="n">d</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">x</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">y</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">dx</span><span class="p">,</span> <span class="n">dy</span><span class="p">]</span>
-
-<span class="n">LV</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">create_ODE_system</span><span class="p">(</span>
-    <span class="n">lotka_volterra</span><span class="p">,</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
-    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
-    <span class="n">name</span><span class="o">=</span><span class="s2">"LotkaVolterra"</span><span class="p">,</span>
-<span class="p">)</span>
-
-<span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
-    <span class="n">LV</span><span class="p">,</span>
-    <span class="n">y0</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.3</span><span class="p">])},</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.02</span><span class="p">]),</span> <span class="s2">"d"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.01</span><span class="p">])},</span>
-    <span class="n">method</span><span class="o">=</span><span class="s2">"dormand-prince-54"</span><span class="p">,</span>
-    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">result</span></code> is a <a class="reference internal" href="../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a> that
-holds the time-domain output, summaries, and metadata.  See
-<a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a> for how to inspect it.</p>
-<p># This section seems useless.
-Changing Initial States
-———————–</p>
-<p>Pass arrays for any states you want to vary across the batch:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">solve_ivp</span><span class="p">(</span>
-    <span class="n">LV</span><span class="p">,</span>
-    <span class="n">y0</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">"x"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">500</span><span class="p">),</span>
-        <span class="s2">"y"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.3</span><span class="p">]),</span>  <span class="c1"># same for all runs</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">solve_ivp</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    dx = a*x - b*x*y</span>
+<span class="sd">    dy = -c*y + d*x*y</span>
+<span class="sd">    """</span><span class="p">,</span>
+    <span class="n">y0</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
+        <span class="s2">"c"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span>
+        <span class="s2">"d"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.005</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
     <span class="p">},</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.02</span><span class="p">]),</span> <span class="s2">"d"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.01</span><span class="p">])},</span>
-    <span class="n">method</span><span class="o">=</span><span class="s2">"dormand-prince-54"</span><span class="p">,</span>
+    <span class="n">method</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span>
     <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>States provided as length-1 arrays are broadcast to all runs.</p>
+<p>Cubie solves every combination of the 100 values of <code class="docutils literal notranslate"><span class="pre">b</span></code> and the 100
+values of <code class="docutils literal notranslate"><span class="pre">d</span></code>: 10,000 runs in all. <code class="docutils literal notranslate"><span class="pre">result</span></code> is a
+<a class="reference internal" href="../../API_reference/batchsolving/solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a>, from which you can
+read the time-domain output, summaries, and metadata. See <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a> for how to
+inspect it, and <a class="reference internal" href="inputs.html"><span class="doc">Inputs and Parameter Sweeps</span></a> for every way to give cubie your values.</p>
 </section>
 <section id="the-solver-class">
 <h2>The <code class="docutils literal notranslate"><span class="pre">Solver</span></code> Class<a class="headerlink" href="#the-solver-class" title="Link to this heading"></a></h2>
 <p>If you plan to solve the same system multiple times (e.g. exploring
-different parameter sets interactively), create a
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> once and call
-<a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.solve" title="cubie.batchsolving.solver.Solver.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a> repeatedly.  This avoids
-some overhead on each solve, and also saves you cluttering up your solve
+different parameter sets interactively), build the system once, create a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> for it and call
+<a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.solve" title="cubie.batchsolving.solver.Solver.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a> repeatedly. You avoid
+some overhead on each solve this way, and you don’t clutter up your solve
 calls with definitions of the system every time:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span>
-</pre></div>
-</div>
-<dl>
-<dt># Define the system first. fix the broken batches and casts again.</dt><dd><p>solver = qb.Solver(LV, algorithm=”dormand-prince-54”)</p>
-<dl>
-<dt>result_a = solver.solve(</dt><dd><p>initial_values={“x”: np.array([0.5]), “y”: np.array([0.3])},
-parameters={“b”: np.linspace(0.01, 0.05, 1000),</p>
-<blockquote>
-<div><p>“d”: np.full(1000, 0.01)},</p>
-</div></blockquote>
-<p>duration=100.0,</p>
-</dd>
-</dl>
-<p>)</p>
-<dl>
-<dt>result_b = solver.solve(</dt><dd><p>initial_values={“x”: np.array([1.0]), “y”: np.array([0.5])},
-parameters={“b”: np.linspace(0.01, 0.05, 1000),</p>
-<blockquote>
-<div><p>“d”: np.full(1000, 0.01)},</p>
-</div></blockquote>
-<p>duration=200.0,</p>
-</dd>
-</dl>
-<p>)</p>
-</dd>
-</dl>
-<p>The first call compiles the kernel; subsequent calls reuse it.
-In a large system with a complex algorithm (higher-order DIRK and FIRK
-algorithms are the worst culprits, with large cellml systems) this can
-take up to several minutes, so it is the only part of the cubie process
-that requires some patience. you can set “time_logging_level=verbose” to watch
-the steps in your terminal output. The lotka-volterra systema above compiles in
-less than a second, so this is a big-system problem only.</p>
-<p>If you want to change a setting in the live solver, you can pass it as a keyword argument
-to the solve method, or call solver.update.</p>
-<p>#include an example chaging one setting using solver.update, then callilng solve with asecond update.</p>
-<p id="parameter-inputs"># This looks like it’s got to choose whether to be part of “batching” or separate. I think we rename “batching” inputs.</p>
-<p>Configuration - have a paragraph here with links to the various config bits, including choosing algorithms, configuration, timing.</p>
-</section>
-<section id="dicts-and-arrays">
-<h2>Dicts and arrays<a class="headerlink" href="#dicts-and-arrays" title="Link to this heading"></a></h2>
-<p>It’s probably simplest to provide a dict of parameter and initial
-values, like this:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
-    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"y0"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">1000</span><span class="p">),</span> <span class="s2">"y1"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
-    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"x0"</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)},</span>
-    <span class="n">duration</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>Cubie compiles <code class="docutils literal notranslate"><span class="pre">x0</span></code> above into the code, because it holds one value,
-and gives <code class="docutils literal notranslate"><span class="pre">x1</span></code> a row of the parameters array. If you set default
-values for the states or parameters, you can leave them out of the dicts
-and they will use their default values. You can leave either dict out
-entirely, too. If
-you didn’t set defaults when you built the system, you can set them on
-the system with <code class="docutils literal notranslate"><span class="pre">system.set_default_parameters({&quot;x0&quot;:</span> <span class="pre">0.4})</span></code> for
-parameters and <code class="docutils literal notranslate"><span class="pre">system.set_initial_values({&quot;y1&quot;:</span> <span class="pre">0.3})</span></code> for states.
-If you include a constant value for a parameter or initial value that
-has a different default, the default doesn’t change: Cubie presumes
-that arguments to <code class="docutils literal notranslate"><span class="pre">solve</span></code> are intended for that run only. Pass
-<code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=False</span></code> to give every constant value in the
-dict a row instead; see below.
-<code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code>, <code class="docutils literal notranslate"><span class="pre">Solver.compile</span></code>, <code class="docutils literal notranslate"><span class="pre">Solver.calibrate</span></code> and
-<code class="docutils literal notranslate"><span class="pre">Solver.optimize</span></code> treat their inputs the same way.</p>
-<p>If you’re looking for something faster (by ~tens of ms per solve) or are
-generating values programmatically, you can pass arrays instead.
-Initial values arrays have one row per state in your system. The
-parameters array can either have one row for every parameter in your
-system (a full-height parameter array), or one row per parameter that
-will vary across a batch only. In
-both cases, rows should be ordered by parameter names.
-<code class="docutils literal notranslate"><span class="pre">solver.parameter_legend</span></code> labels each row with its parameter’s name.
-To pass just the varying parameters, you will need to tell the system which
-parameters to expect. To do this, call <code class="docutils literal notranslate"><span class="pre">solver.set_swept_parameters</span></code>
-with a set of the parameter names you want to vary, or pass the same set
-to the <code class="docutils literal notranslate"><span class="pre">swept_parameters</span></code> argument when building the system.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">system</span> <span class="o">=</span> <span class="n">create_ODE_system</span><span class="p">(</span>
-    <span class="n">dxdt</span><span class="p">,</span> <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"x0"</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span> <span class="n">swept_parameters</span><span class="o">=</span><span class="p">[</span><span class="s2">"x1"</span><span class="p">]</span>
-<span class="p">)</span>
-<span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
-<span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">inits</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span><span class="p">,</span> <span class="n">create_ODE_system</span>
 
-<span class="c1"># or, on an existing solver</span>
-<span class="n">solver</span><span class="o">.</span><span class="n">set_swept_parameters</span><span class="p">([</span><span class="s2">"x1"</span><span class="p">])</span>
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">solver.prepare_grid_arrays</span></code> can generate arrays from a dict of symbol
-names, to avoid doing it on every solve. It sets the swept parameters to
-the parameters in your dict and gives each of them a row, so if you give
-a parameter a single value, it occupies a full row with that value in
-every run. To compile a value into the code instead, set it as the
-parameter’s default and leave it out of the dict:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">system</span><span class="o">.</span><span class="n">set_default_parameters</span><span class="p">({</span><span class="s2">"x0"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">})</span>
-<span class="n">inits</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">prepare_grid_arrays</span><span class="p">(</span>
-    <span class="p">{</span><span class="s2">"y0"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)},</span>
-    <span class="p">{</span><span class="s2">"x1"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">logspace</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)},</span>
+<span class="n">LV</span> <span class="o">=</span> <span class="n">create_ODE_system</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    dx = a*x - b*x*y</span>
+<span class="sd">    dy = -c*y + d*x*y</span>
+<span class="sd">    """</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
+    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"LotkaVolterra"</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">result</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">inits</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+<span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">)</span>
+<span class="n">b_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+
+<span class="n">result_a</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">b_values</span><span class="p">},</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">result_b</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+    <span class="n">initial_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">},</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">b_values</span><span class="p">},</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">200.0</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
-<p>Arrays of swept parameters only are intended as a convenience: some
-models have hundreds of parameters, and if you’re only sweeping two of
-them you probably don’t want to throw hundreds-high arrays around. If it
-ends up being easier to pass full-height parameter arrays because of how
-you generate the values, Cubie will spend a few ms scanning the array
-for values that are the same across every run, and it will remove those
-from the array it passes to the GPU and compile them into your code
-instead. You can save a few ms per solve by disabling this with
-<code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=False</span></code>, but it may slow down the solve itself
-if you have a lot of constant parameters.</p>
-<p>If you want to go <em>really</em> fast and you are comfortable with the CUDA
-environment, you can pass arrays on the GPU (device arrays) directly to
-cut out the few milliseconds of transfer time as well.</p>
-<p>Arrays are laid out <code class="docutils literal notranslate"><span class="pre">(n_variables,</span> <span class="pre">n_runs)</span></code> and must match the system
-precision. Device arrays (CuPy or Numba) are wired directly into the
-kernel; pair them with <code class="docutils literal notranslate"><span class="pre">on_device=True</span></code> to keep an entire solve →
-post-process pipeline on the GPU (see <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>).</p>
+<p>Cubie compiles the kernel on the first call, and reuses it on later calls.
+In a large
+system with a complex algorithm (higher-order DIRK and FIRK algorithms are
+the worst culprits, with large CellML systems) this can take up to several
+minutes, so it is the only part of the cubie process that requires some
+patience. You can set <code class="docutils literal notranslate"><span class="pre">time_logging_level=&quot;verbose&quot;</span></code> to watch the steps
+in your terminal output. Cubie compiles the Lotka–Volterra system above in
+about a second, so this is a big-system problem only.</p>
+<p>If you want to change a setting in the live solver, you can pass it as a
+keyword argument to the <code class="docutils literal notranslate"><span class="pre">solve</span></code> method, or call
+<a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.update" title="cubie.batchsolving.solver.Solver.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>. Here we tighten <code class="docutils literal notranslate"><span class="pre">rtol</span></code>
+with <code class="docutils literal notranslate"><span class="pre">update</span></code>, then pass a tighter <code class="docutils literal notranslate"><span class="pre">atol</span></code> to <code class="docutils literal notranslate"><span class="pre">solve</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">rtol</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">)</span>
+<span class="n">result_c</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">b_values</span><span class="p">},</span>
+    <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+    <span class="n">atol</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Cubie keeps both settings for later solves on this solver.</p>
 </section>
-<section id="the-duration-parameter">
-<h2>The <code class="docutils literal notranslate"><span class="pre">duration</span></code> Parameter<a class="headerlink" href="#the-duration-parameter" title="Link to this heading"></a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">duration</span></code> sets the total integration time.  You can also specify
-<code class="docutils literal notranslate"><span class="pre">t0</span></code> (default 0) and <code class="docutils literal notranslate"><span class="pre">settling_time</span></code>.  When <code class="docutils literal notranslate"><span class="pre">settling_time</span></code> is
-non-zero, the solver integrates for that period <em>before</em> it starts
-recording output, useful for discarding transients.</p>
-</section>
-<section id="next-steps">
-<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><a class="reference internal" href="batching.html"><span class="doc">Batching and Parameter Sweeps</span></a> — parameter sweeps and grid types.</p></li>
-<li><p><a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a> — inspecting and post-processing solver output.</p></li>
-<li><p><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a> — which algorithm to pick.</p></li>
-</ul>
+<section id="configuring-a-solve">
+<h2>Configuring a solve<a class="headerlink" href="#configuring-a-solve" title="Link to this heading"></a></h2>
+<p>Set how long cubie integrates for with <code class="docutils literal notranslate"><span class="pre">duration</span></code>, when it starts with
+<code class="docutils literal notranslate"><span class="pre">t0</span></code>, and how long it integrates before it starts recording with
+<code class="docutils literal notranslate"><span class="pre">settling_time</span></code>; see <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> for these and for how often cubie
+saves output. To
+choose an integration algorithm and its step controller, see
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>. Every other
+setting, from tolerances to output selection, is a keyword argument; see
+<a class="reference internal" href="configuration.html"><span class="doc">Configuration Reference</span></a> for where each one goes and
+<a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html"><span class="doc">Solver Options Reference</span></a> for what each
+one does.</p>
 </section>
 </section>
 
@@ -479,7 +387,7 @@ recording output, useful for discarding transients.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="index.html" class="btn btn-neutral float-left" title="Using the solver" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="batching.html" class="btn btn-neutral float-right" title="Batching and Parameter Sweeps" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="inputs.html" class="btn btn-neutral float-right" title="Inputs and Parameter Sweeps" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

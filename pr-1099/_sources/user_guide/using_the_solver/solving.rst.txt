@@ -4,209 +4,111 @@ Solving ODEs
 Quick Start with ``solve_ivp``
 ------------------------------
 
-# make this a batch, a single-run example is bizarre. call solve_ivp only, with string equations in the call. get rid of unnecessary castsa and 1-item lists
 The fastest way to get started is :func:`~cubie.solve_ivp`. For a simple
 system, you can just write the equations straight into this call as strings.
 Here we solve the Lotka--Volterra system for a batch of parameter values:
 
 .. code-block:: python
 
-   import cubie as qb
    import numpy as np
+   from cubie import solve_ivp
 
-   def lotka_volterra(t, y, p):
-       dx = p.a * y.x - p.b * y.x * y.y
-       dy = -p.c * y.y + p.d * y.x * y.y
-       return [dx, dy]
-
-   LV = qb.create_ODE_system(
-       lotka_volterra,
-       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
-       states={"x": 0.5, "y": 0.3},
-       name="LotkaVolterra",
-   )
-
-   result = qb.solve_ivp(
-       LV,
-       y0={"x": 1.0, "y": [0.3])},
-       parameters={"b": np.array([0.02]), "d": np.array([0.01])},
-       method="dormand-prince-54",
-       duration=100.0,
-   )
-
-``result`` is a :class:`~cubie.batchsolving.solveresult.SolveResult` that
-holds the time-domain output, summaries, and metadata.  See
-:doc:`/user_guide/using_the_solver/results` for how to inspect it.
-
-# This section seems useless.
-Changing Initial States
------------------------
-
-Pass arrays for any states you want to vary across the batch:
-
-.. code-block:: python
-
-   result = qb.solve_ivp(
-       LV,
-       y0={
-           "x": np.linspace(0.1, 2.0, 500),
-           "y": np.array([0.3]),  # same for all runs
+   result = solve_ivp(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       y0={"x": 0.5, "y": 0.3},
+       parameters={
+           "a": 0.1,
+           "b": np.linspace(0.01, 0.05, 100),
+           "c": 0.3,
+           "d": np.linspace(0.005, 0.02, 100),
        },
-       parameters={"b": np.array([0.02]), "d": np.array([0.01])},
-       method="dormand-prince-54",
+       method="ode45",
        duration=100.0,
    )
 
-States provided as length-1 arrays are broadcast to all runs.
+Cubie solves every combination of the 100 values of ``b`` and the 100
+values of ``d``: 10,000 runs in all. ``result`` is a
+:class:`~cubie.batchsolving.solveresult.SolveResult`, from which you can
+read the time-domain output, summaries, and metadata. See :doc:`results` for how to
+inspect it, and :doc:`inputs` for every way to give cubie your values.
 
 The ``Solver`` Class
 --------------------
 
 If you plan to solve the same system multiple times (e.g. exploring
-different parameter sets interactively), create a
-:class:`~cubie.Solver` once and call
-:meth:`~cubie.batchsolving.solver.Solver.solve` repeatedly.  This avoids
-some overhead on each solve, and also saves you cluttering up your solve
+different parameter sets interactively), build the system once, create a
+:class:`~cubie.Solver` for it and call
+:meth:`~cubie.batchsolving.solver.Solver.solve` repeatedly. You avoid
+some overhead on each solve this way, and you don't clutter up your solve
 calls with definitions of the system every time:
 
 .. code-block:: python
-# Define the system first. fix the broken batches and casts again.
-   solver = qb.Solver(LV, algorithm="dormand-prince-54")
+
+   import numpy as np
+   from cubie import Solver, create_ODE_system
+
+   LV = create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       name="LotkaVolterra",
+   )
+   solver = Solver(LV, algorithm="ode45")
+   b_values = np.linspace(0.01, 0.05, 10000)
 
    result_a = solver.solve(
-       initial_values={"x": np.array([0.5]), "y": np.array([0.3])},
-       parameters={"b": np.linspace(0.01, 0.05, 1000),
-                   "d": np.full(1000, 0.01)},
+       initial_values={"x": 0.5, "y": 0.3},
+       parameters={"b": b_values},
        duration=100.0,
    )
 
    result_b = solver.solve(
-       initial_values={"x": np.array([1.0]), "y": np.array([0.5])},
-       parameters={"b": np.linspace(0.01, 0.05, 1000),
-                   "d": np.full(1000, 0.01)},
+       initial_values={"x": 1.0, "y": 0.5},
+       parameters={"b": b_values},
        duration=200.0,
    )
 
-The first call compiles the kernel; subsequent calls reuse it. 
-In a large system with a complex algorithm (higher-order DIRK and FIRK 
-algorithms are the worst culprits, with large cellml systems) this can 
-take up to several minutes, so it is the only part of the cubie process
-that requires some patience. you can set "time_logging_level=verbose" to watch
-the steps in your terminal output. The lotka-volterra systema above compiles in
-less than a second, so this is a big-system problem only.
+Cubie compiles the kernel on the first call, and reuses it on later calls.
+In a large
+system with a complex algorithm (higher-order DIRK and FIRK algorithms are
+the worst culprits, with large CellML systems) this can take up to several
+minutes, so it is the only part of the cubie process that requires some
+patience. You can set ``time_logging_level="verbose"`` to watch the steps
+in your terminal output. Cubie compiles the Lotka--Volterra system above in
+about a second, so this is a big-system problem only.
 
-If you want to change a setting in the live solver, you can pass it as a keyword argument
-to the solve method, or call solver.update. 
-
-#include an example chaging one setting using solver.update, then callilng solve with asecond update.
-
-.. _parameter-inputs:
-
-# This looks like it's got to choose whether to be part of "batching" or separate. I think we rename "batching" inputs.
-
-Configuration - have a paragraph here with links to the various config bits, including choosing algorithms, configuration, timing.
-
-Dicts and arrays
-----------------
-
-It's probably simplest to provide a dict of parameter and initial
-values, like this:
+If you want to change a setting in the live solver, you can pass it as a
+keyword argument to the ``solve`` method, or call
+:meth:`~cubie.batchsolving.solver.Solver.update`. Here we tighten ``rtol``
+with ``update``, then pass a tighter ``atol`` to ``solve``:
 
 .. code-block:: python
 
-    solver.solve(
-        initial_values={"y0": np.linspace(1, 100, 1000), "y1": 0.3},
-        parameters={"x0": 0.4, "x1": np.logspace(1, 3, 1000)},
-        duration=1.0,
-    )
+   solver.update(rtol=1e-8)
+   result_c = solver.solve(
+       parameters={"b": b_values},
+       duration=100.0,
+       atol=1e-10,
+   )
 
-Cubie compiles ``x0`` above into the code, because it holds one value,
-and gives ``x1`` a row of the parameters array. If you set default
-values for the states or parameters, you can leave them out of the dicts
-and they will use their default values. You can leave either dict out
-entirely, too. If
-you didn't set defaults when you built the system, you can set them on
-the system with ``system.set_default_parameters({"x0": 0.4})`` for
-parameters and ``system.set_initial_values({"y1": 0.3})`` for states.
-If you include a constant value for a parameter or initial value that
-has a different default, the default doesn't change: Cubie presumes
-that arguments to ``solve`` are intended for that run only. Pass
-``fix_constant_parameters=False`` to give every constant value in the
-dict a row instead; see below.
-``solve_ivp``, ``Solver.compile``, ``Solver.calibrate`` and
-``Solver.optimize`` treat their inputs the same way.
+Cubie keeps both settings for later solves on this solver.
 
-If you're looking for something faster (by ~tens of ms per solve) or are
-generating values programmatically, you can pass arrays instead.
-Initial values arrays have one row per state in your system. The
-parameters array can either have one row for every parameter in your
-system (a full-height parameter array), or one row per parameter that
-will vary across a batch only. In
-both cases, rows should be ordered by parameter names.
-``solver.parameter_legend`` labels each row with its parameter's name.
-To pass just the varying parameters, you will need to tell the system which
-parameters to expect. To do this, call ``solver.set_swept_parameters``
-with a set of the parameter names you want to vary, or pass the same set
-to the ``swept_parameters`` argument when building the system.
+Configuring a solve
+-------------------
 
-.. code-block:: python
-
-    system = create_ODE_system(
-        dxdt, parameters={"x0": 0.4, "x1": 1.0}, swept_parameters=["x1"]
-    )
-    solver = Solver(system)
-    solver.solve(inits, np.logspace(1, 3, 1000)[np.newaxis, :])
-
-    # or, on an existing solver
-    solver.set_swept_parameters(["x1"])
-
-``solver.prepare_grid_arrays`` can generate arrays from a dict of symbol
-names, to avoid doing it on every solve. It sets the swept parameters to
-the parameters in your dict and gives each of them a row, so if you give
-a parameter a single value, it occupies a full row with that value in
-every run. To compile a value into the code instead, set it as the
-parameter's default and leave it out of the dict:
-
-.. code-block:: python
-
-    system.set_default_parameters({"x0": 0.5})
-    inits, params = solver.prepare_grid_arrays(
-        {"y0": np.linspace(1, 100, 1000)},
-        {"x1": np.logspace(1, 3, 1000)},
-    )
-    result = solver.solve(inits, params)
-
-Arrays of swept parameters only are intended as a convenience: some
-models have hundreds of parameters, and if you're only sweeping two of
-them you probably don't want to throw hundreds-high arrays around. If it
-ends up being easier to pass full-height parameter arrays because of how
-you generate the values, Cubie will spend a few ms scanning the array
-for values that are the same across every run, and it will remove those
-from the array it passes to the GPU and compile them into your code
-instead. You can save a few ms per solve by disabling this with
-``fix_constant_parameters=False``, but it may slow down the solve itself
-if you have a lot of constant parameters.
-
-If you want to go *really* fast and you are comfortable with the CUDA
-environment, you can pass arrays on the GPU (device arrays) directly to
-cut out the few milliseconds of transfer time as well.
-
-Arrays are laid out ``(n_variables, n_runs)`` and must match the system
-precision. Device arrays (CuPy or Numba) are wired directly into the
-kernel; pair them with ``on_device=True`` to keep an entire solve →
-post-process pipeline on the GPU (see :doc:`/user_guide/using_the_solver/results`).
-
-The ``duration`` Parameter
---------------------------
-
-``duration`` sets the total integration time.  You can also specify
-``t0`` (default 0) and ``settling_time``.  When ``settling_time`` is
-non-zero, the solver integrates for that period *before* it starts
-recording output, useful for discarding transients.
-
-Next Steps
-----------
-
-- :doc:`/user_guide/using_the_solver/batching` --- parameter sweeps and grid types.
-- :doc:`/user_guide/using_the_solver/results` --- inspecting and post-processing solver output.
-- :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` --- which algorithm to pick.
+Set how long cubie integrates for with ``duration``, when it starts with
+``t0``, and how long it integrates before it starts recording with
+``settling_time``; see :doc:`timing` for these and for how often cubie
+saves output. To
+choose an integration algorithm and its step controller, see
+:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`. Every other
+setting, from tolerances to output selection, is a keyword argument; see
+:doc:`configuration` for where each one goes and
+:doc:`/user_guide/algorithms_and_tuning/optional_arguments` for what each
+one does.
