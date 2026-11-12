@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.1](https://github.com/cubiepy/cubie/compare/v0.18.0...v0.18.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* a 1D parameters array is one run per value when one parameter is swept ([#1096](https://github.com/cubiepy/cubie/issues/1096)) ([7b5f0f5](https://github.com/cubiepy/cubie/commit/7b5f0f588071d680fe1686451a0e5e9acbaf7074))
+* docs version picker placement and order ([#1106](https://github.com/cubiepy/cubie/issues/1106)) ([bd1321d](https://github.com/cubiepy/cubie/commit/bd1321d1a33ae12bf56a37b471c76f8d09118939))
+* dt_min defaults to 1e-9, or dt / 1e6 when dt is given ([#1098](https://github.com/cubiepy/cubie/issues/1098)) ([cd73728](https://github.com/cubiepy/cubie/commit/cd73728991a330be05c611ecac13d7071b04d110))
+* versioned docs site with a version picker ([#1103](https://github.com/cubiepy/cubie/issues/1103)) ([ca3d4ae](https://github.com/cubiepy/cubie/commit/ca3d4ae4dc0ac6ec59314d96c281b1c3e2b1566a))
+
+
+### Documentation
+
+* user guide restructured and rewritten up to solving/configuration ([#1099](https://github.com/cubiepy/cubie/issues/1099)) ([517d6e5](https://github.com/cubiepy/cubie/commit/517d6e5641428e100ac7928d94b1863c7b481ec8))
+
 ## [0.18.0](https://github.com/cubiepy/cubie/compare/v0.17.0...v0.18.0) (2026-11-10)
 
 
