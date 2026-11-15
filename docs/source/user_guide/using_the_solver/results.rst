@@ -10,7 +10,7 @@ checking the method against some known reference as a sanity check, you probably
 don't need the full time-domain series across the whole integration. To
 cut down the output data, and speed up the solver, you can save only certain
 variables, at only certain times, or you can never save the time-domain signals
-and calculate summary variables (like averages, or peak times) on the GPU
+and instead calculate summary variables (like averages, or peak times) on the GPU
 while integrating.
 
 We use the Lotka-Volterra system with one observable in the examples on
@@ -147,10 +147,6 @@ intervals fit together.
    * - ``"mean_std_rms"``
      - Mean, standard deviation, and RMS combined.
 
-If you ask for a set of metrics that share running sums, such as
-``["max", "min"]`` or ``["mean", "std", "rms"]``, cubie calculates them
-together in one combined metric. You still get each result under the name
-you asked for.
 
 Selecting variables
 -------------------
