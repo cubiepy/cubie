@@ -118,7 +118,7 @@ def _execute_step_twice(
     shared_bytes = precision(0).itemsize * shared_elems
     persistent_len = max(1, step_object.persistent_local_buffer_size)
     numba_precision = from_dtype(precision)
-    dt_value = precision(solver_settings["dt"])
+    dt_value = precision(solver_settings["fixed_step"])
 
     d_state = cuda.to_device(state)
     d_params = cuda.to_device(params)
@@ -306,7 +306,7 @@ def _execute_cpu_step_twice(
 ) -> DualStepResult:
     """Run the CPU reference step twice with shared cache reuse."""
 
-    dt = solver_settings["dt"]
+    dt = solver_settings["fixed_step"]
     precision = cpu_system.precision
 
     state = np.asarray(step_inputs["state"], dtype=precision)

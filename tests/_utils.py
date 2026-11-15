@@ -110,7 +110,7 @@ class MockMemoryManager(MemoryManager):
 # --------------------------------------------------------------------------- #
 
 MID_RUN_PARAMS = {
-    "dt": 0.001,
+    "fixed_step": 0.001,
     "save_every": 0.02,
     "summarise_every": 0.1,
     "sample_summaries_every": 0.02,
@@ -267,7 +267,6 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "algorithm": "l_stable_sdirk_4",
         "step_controller": "pi",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "dirk-kvaerno3-fixed": {
@@ -287,21 +286,18 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "algorithm": "radau",
         "step_controller": "pi",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "firk-radau-iia-3": {
         "algorithm": "radau_iia_3",
         "step_controller": "gustafsson",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "firk-radau-iia-9": {
         "algorithm": "radau_iia_9",
         "step_controller": "gustafsson",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "firk-gauss-legendre-4": {
@@ -311,7 +307,6 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "algorithm": "firk_gauss_legendre_4",
         "step_controller": "gustafsson",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     # Specific Rosenbrock-W tableaus
@@ -326,14 +321,6 @@ SPECIFIC_ALGORITHM_COMBOS = {
     "rosenbrock-rodas4-fixed": {
         "algorithm": "rodas4", "step_controller": "fixed",
     },
-}
-
-# We leave dt out of the adaptive ERK chain so that the loop estimates
-# each run's starting step.
-ESTIMATED_DT_CHAIN = {
-    **MID_RUN_PARAMS,
-    **ALGORITHM_CONTROLLER_COMBOS["erk"],
-    "dt": None,
 }
 
 STEP_CASES = [
@@ -1409,6 +1396,7 @@ NON_SOLVER_SETTINGS = {
     "fix_singularities",
     "voltage_variable",
     "system_sweep",
+    "fixed_step",
 }
 
 
@@ -1916,6 +1904,91 @@ def run_controller_device_step(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
         int(status[0]),
     )
+
+
+@lru_cache(maxsize=None)
+def _starting_step_kernel(starting_step_fn):
+    @cuda.jit(**compile_kwargs)
+    def kernel(
+        state,
+        proposed_state,
+        parameters,
+        driver_coefficients,
+        drivers,
+        proposed_drivers,
+        observables,
+        proposed_observables,
+        error,
+        scalars,
+        shared,
+        persistent,
+        estimate,
+    ):
+        estimate[0] = starting_step_fn(
+            state,
+            proposed_state,
+            parameters,
+            driver_coefficients,
+            drivers,
+            proposed_drivers,
+            observables,
+            proposed_observables,
+            error,
+            scalars[0],
+            scalars[1],
+            shared,
+            persistent,
+        )
+
+    return kernel
+
+
+def run_starting_step_device(
+    estimator,
+    precision,
+    state,
+    parameters,
+    driver_coefficients,
+    drivers,
+    observables,
+    time,
+    fallback_step,
+):
+    """Return the estimator's device estimate at ``state``.
+
+    Pass ``drivers`` and ``observables`` evaluated at ``time``.
+    """
+    stream = default_memmgr.get_group_stream()
+
+    def staged(values):
+        return cuda.to_device(
+            np.asarray(values, dtype=precision), stream=stream
+        )
+
+    def scratch(length):
+        return staged(np.zeros(length))
+
+    n_states = len(state)
+    d_estimate = scratch(1)
+    kernel = _starting_step_kernel(estimator.device_function)
+    kernel[1, 1, stream](
+        staged(state),
+        scratch(n_states),
+        staged(parameters),
+        staged(driver_coefficients),
+        staged(drivers),
+        scratch(len(drivers)),
+        staged(observables),
+        scratch(len(observables)),
+        scratch(n_states),
+        staged([time, fallback_step]),
+        scratch(estimator.shared_buffer_size),
+        scratch(estimator.persistent_local_buffer_size),
+        d_estimate,
+    )
+    estimate = d_estimate.copy_to_host(stream=stream)
+    stream.synchronize()
+    return precision(estimate[0])
 
 
 @lru_cache(maxsize=None)

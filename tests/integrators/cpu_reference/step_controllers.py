@@ -31,6 +31,10 @@ class CPUAdaptiveController:
         deadband_min: float = 1.0,
         deadband_max: float = 1.0,
         mass_flags=None,
+        starting_step_state_fraction: float = 0.01,
+        starting_step_zero_norm: float = 1e-5,
+        starting_step_target: float = 0.01,
+        starting_step_max_growth: float = 100.0,
     ) -> None:
         self.kind = kind.lower()
         # Rows with a zero mass diagonal stay out of the error norm.
@@ -61,6 +65,12 @@ class CPUAdaptiveController:
         self.deadband_min = precision(deadband_min)
         self.deadband_max = precision(deadband_max)
         self.unity_gain = precision(1.0)
+        self.starting_step_state_fraction = precision(
+            starting_step_state_fraction
+        )
+        self.starting_step_zero_norm = precision(starting_step_zero_norm)
+        self.starting_step_target = precision(starting_step_target)
+        self.starting_step_max_growth = precision(starting_step_max_growth)
         self._deadband_disabled = (self.deadband_min == self.unity_gain) and (
             self.deadband_max == self.unity_gain
         )
@@ -161,16 +171,27 @@ class CPUAdaptiveController:
         state_norm2 = self.error_norm(state, state, state)
         derivative_norm2 = self.error_norm(state, state, derivative)
 
-        # Silence numpy: we divide by the zero norms of a system at rest.
+        if self.mass_flags is None:
+            n_rows = len(state)
+        else:
+            n_rows = max(1, int(np.sum(self.mass_flags)))
+        zero_norm2 = precision(self.starting_step_zero_norm**2 / n_rows)
+        inverse_target_norm2 = precision(
+            n_rows / self.starting_step_target**2
+        )
+        exponent = precision(-0.5 / (self.order + 1))
+
+        # Silence numpy: we raise zero to a negative power for a system
+        # at rest.
         with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-            zero_norm2 = precision(1e-5**2)
-            if state_norm2 < zero_norm2 or derivative_norm2 < zero_norm2:
-                first_guess = precision(1e-6)
+            if state_norm2 <= zero_norm2 or derivative_norm2 <= zero_norm2:
+                first_guess = self.dt0
             else:
                 first_guess = precision(
-                    precision(0.01) * np.sqrt(state_norm2 / derivative_norm2)
+                    self.starting_step_state_fraction
+                    * np.sqrt(state_norm2 / derivative_norm2)
                 )
-            first_guess = self._clamp(first_guess, self.dt_min, self.dt_max)
+            first_guess = precision(np.fmin(first_guess, self.dt_max))
 
             # Hold the algebraic rows over the Euler step.
             euler_state = (state + first_guess * derivative).astype(precision)
@@ -188,20 +209,22 @@ class CPUAdaptiveController:
             change = (
                 np.asarray(end_derivative, dtype=precision) - derivative
             ).astype(precision)
-            # Divide twice, not once by the square: the result is
-            # rounding-sensitive.
+            # Multiply by the reciprocal twice, as the device does: the
+            # result is rounding-sensitive.
+            inverse_guess = precision(precision(1.0) / first_guess)
             second_derivative_norm2 = precision(
                 self.error_norm(state, state, change)
-                / first_guess
-                / first_guess
+                * inverse_guess
+                * inverse_guess
             )
 
             largest_norm2 = np.fmax(derivative_norm2, second_derivative_norm2)
-            exponent = precision(0.5 / (self.order + 1))
             second_guess = precision(
-                (precision(0.01**2) / largest_norm2) ** exponent
+                precision(largest_norm2 * inverse_target_norm2) ** exponent
             )
-            estimate = np.fmin(precision(100.0) * first_guess, second_guess)
+            estimate = np.fmin(
+                self.starting_step_max_growth * first_guess, second_guess
+            )
             return self._clamp(estimate, self.dt_min, self.dt_max)
 
     def _clamp(self, value, minimum, maximum):

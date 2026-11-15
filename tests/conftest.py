@@ -690,7 +690,8 @@ def solver_settings(solver_settings_override, system, precision):
         "duration": np.float64(0.2),
         "warmup": np.float64(0.0),
         "t0": np.float64(0.0),
-        "dt": precision(0.01),
+        "dt": None,
+        "fixed_step": precision(0.01),
         "dt_min": precision(1e-7),
         "dt_max": precision(1.0),
         "save_every": precision(0.02),
@@ -757,6 +758,7 @@ def solver_settings(solver_settings_override, system, precision):
         "duration",
         "warmup",
         "dt",
+        "fixed_step",
         "dt_min",
         "dt_max",
         "save_every",
@@ -793,6 +795,11 @@ def solver_settings(solver_settings_override, system, precision):
                     defaults[key] = precision(value)
             else:
                 defaults[key] = value
+
+    # Give a fixed chain fixed_step when its set names no dt. Leave an
+    # adaptive chain's dt unset so that the loop estimates it.
+    if defaults["dt"] is None and defaults["step_controller"] == "fixed":
+        defaults["dt"] = defaults["fixed_step"]
 
     # An unset order resolves to the preconditioner type's default.
     if "preconditioner_order" not in defaults:
