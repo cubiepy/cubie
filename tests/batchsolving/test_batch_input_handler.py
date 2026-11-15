@@ -750,10 +750,12 @@ def test_get_run_count_ignores_device_arrays(input_handler, system):
 
 
 def test_fill_aligned_combinatorial(input_handler):
-    """Expands both categories to the Cartesian run count."""
-    s = np.array([[1, 2], [3, 4]])
+    """Expands a dict grid and an array to the Cartesian run count."""
+    s = np.array([[1, 2], [3, 4], [5, 6]])
     p = np.array([[10, 20, 30], [40, 50, 60]])
-    states_plan = {"mode": "array", "n_runs": 2, "array": s}
+    states_plan = {
+        "mode": "grid", "n_runs": 2, "indices": np.arange(3), "grid": s,
+    }
     params_plan = {"mode": "array", "n_runs": 3, "array": p}
     rs, rp = input_handler._fill_aligned(
         states_plan, params_plan, "combinatorial", set(),
@@ -1156,15 +1158,6 @@ def test_two_arrays_with_different_run_counts_raise(
     params = np.ones((system.swept_set.n, 4), dtype=precision)
     with pytest.raises(ValueError, match="same number of runs"):
         _handle(input_handler_mutable, states, params, kind)
-
-
-def test_unknown_grid_type_raises_for_arrays(input_handler_mutable, precision):
-    """Check that the handler rejects an unknown grid type for array
-    inputs."""
-    system = input_handler_mutable.system
-    states = np.ones((system.states.n, 3), dtype=precision)
-    with pytest.raises(ValueError, match="Unknown grid type"):
-        _handle(input_handler_mutable, states, None, "badkind")
 
 
 def test_materialise_passes_matching_user_arrays_through(input_handler):

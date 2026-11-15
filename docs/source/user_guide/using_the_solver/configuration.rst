@@ -48,8 +48,7 @@ single batch solve.
      - ``"combinatorial"``
      - Pass ``"combinatorial"`` to solve every combination of the
        values in dict inputs, or ``"verbatim"`` to pair them
-       run-for-run. Cubie pairs array inputs run-for-run under either
-       setting.
+       run-for-run.
    * - ``time_logging_level``
      - ``None``
      - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``,

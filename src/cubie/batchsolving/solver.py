@@ -268,8 +268,7 @@ def solve_ivp(
     grid_type
         Pass ``"combinatorial"`` to solve every combination of the
         values in dict inputs, or ``"verbatim"`` to pair them run for
-        run. The solver pairs the columns of two arrays run for run
-        whichever you pass.
+        run.
     time_logging_level : str or None, default='default'
         Time logging verbosity level. Options are 'silent', 'default',
         'verbose', 'debug', None, or 'None' to disable timing.

@@ -600,17 +600,14 @@ class BatchInputHandler:
         Raises
         ------
         ValueError
-            If ``kind`` is not ``"combinatorial"`` or ``"verbatim"``,
-            or if neither input is a dict and the two inputs have
+            If neither input is a dict and the two inputs have
             different numbers of runs with more than one run each.
 
         Notes
         -----
-        Pass arrays when you have already built the runs. The handler
-        pairs the columns of two arrays run for run whatever ``kind``
-        you pass, and uses ``None`` or a single-run input in every run.
-        It combines a dict input with the other input according to
-        ``kind``.
+        Pass both inputs as arrays if you don't need them to be
+        interpreted or combined. To generate a Cartesian product, pass
+        dict inputs with ``kind="combinatorial"``.
 
         Device arrays are used as prebuilt (variable, run) grids with
         no processing; they must already match the system precision
@@ -812,20 +809,7 @@ class BatchInputHandler:
         tuple
             The (state, run) and (swept parameter, run) arrays.
 
-        Raises
-        ------
-        ValueError
-            If ``kind`` is not ``"combinatorial"`` or ``"verbatim"``.
         """
-        if kind not in ("combinatorial", "verbatim"):
-            raise ValueError(
-                f"Unknown grid type '{kind}'. Use 'combinatorial' or "
-                f"'verbatim'."
-            )
-        # We treat arrays as runs the caller has already built, so we
-        # pair them run for run and apply kind to dict inputs only.
-        if not (isinstance(states, dict) or isinstance(params, dict)):
-            kind = "verbatim"
         swept_set = self.system.swept_set
         state_set = self.system.states
 
@@ -1182,10 +1166,12 @@ class BatchInputHandler:
     ) -> tuple[ndarray, ndarray]:
         """Materialise both categories at their aligned run count.
 
-        Combinatorial results hold every pairing: state columns vary
-        slowly, parameter columns vary quickly. Verbatim columns pair
-        directly, broadcasting a single-run category. Each category
-        is written straight into a policy-backed destination.
+        Cross the categories when ``kind`` is ``"combinatorial"`` and
+        either category came from a dict, varying the state columns
+        slowly and the parameter columns quickly. Otherwise pair the
+        columns run for run and use a single-run category in every
+        run. Write each category straight into a policy-backed
+        destination.
 
         Parameters
         ----------
@@ -1210,12 +1196,13 @@ class BatchInputHandler:
         Raises
         ------
         ValueError
-            Raised when ``kind`` is ``"verbatim"`` and the run counts
+            Raised when the columns are paired and the run counts
             cannot be paired, or ``kind`` is unknown.
         """
         n_states = states_plan["n_runs"]
         n_params = params_plan["n_runs"]
-        if kind == "combinatorial":
+        from_dict = "grid" in (states_plan["mode"], params_plan["mode"])
+        if kind == "combinatorial" and from_dict:
             states_array = self._fill_category(
                 states_plan, state_set, backed,
                 repeats=n_params, tiles=1,
@@ -1225,16 +1212,19 @@ class BatchInputHandler:
                 repeats=1, tiles=n_states,
             )
             return states_array, params_array
-        elif kind == "verbatim":
+        elif kind in ("combinatorial", "verbatim"):
             if n_states == 1 and n_params > 1:
                 states_reps, params_reps = n_params, 1
             elif n_params == 1 and n_states > 1:
                 states_reps, params_reps = 1, n_states
             elif n_states != n_params:
                 raise ValueError(
-                    "For 'verbatim', both grids must have the same number "
-                    "of runs, or one grid must have exactly 1 run so it "
-                    "can be broadcast to match the other."
+                    f"Cubie pairs array inputs and verbatim grids run for "
+                    f"run, so they need the same number of runs, or one "
+                    f"of them needs exactly 1 run. Got {n_states} state "
+                    f"runs and {n_params} parameter runs. Pass dicts "
+                    f"with grid_type='combinatorial' to combine every "
+                    f"value with every other."
                 )
             else:
                 states_reps, params_reps = 1, 1

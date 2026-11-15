@@ -123,10 +123,10 @@ staged through the pinned pool; results keep the disk backing until close, and
 `BatchInputHandler` builds `(variable, run)` arrays with the module-level grid builders:
 `combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). Every entry point
 (`solve_ivp`, `Solver.solve`, `Solver.prepare_grid_arrays`, `Solver.calibrate`,
-`Solver.optimize`) defaults to `"combinatorial"`. `BatchInputHandler._build_arrays` uses
-the grid type only when an input is a dict. It pairs two array inputs run for run under
-either grid type, uses a missing or single-run input in every run, and raises when two
-arrays have different run counts above one.
+`Solver.optimize`) defaults to `"combinatorial"`. `BatchInputHandler._fill_aligned` crosses
+the inputs only when the grid type is `"combinatorial"` and one of them is a dict. It pairs
+two array inputs run for run under either grid type, uses a missing or single-run input
+in every run, and raises when two arrays have different run counts above one.
 
 For states and observables, `None` = all, `[]` = none, labels plus index kwargs = union.
 `SystemInterface.merge_variable_labels_and_idxs` pops `save_variables`/
