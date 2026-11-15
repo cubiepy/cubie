@@ -123,8 +123,8 @@ staged through the pinned pool; results keep the disk backing until close, and
 `BatchInputHandler` builds `(variable, run)` arrays with the module-level grid builders:
 `combinatorial` (cartesian product) or `verbatim` (zipped run-for-run). Every entry point
 (`solve_ivp`, `Solver.solve`, `Solver.prepare_grid_arrays`, `Solver.calibrate`,
-`Solver.optimize`) defaults to `"combinatorial"`. The grid type applies only when an input
-is a dict. `BatchInputHandler._build_arrays` pairs two array inputs run for run under
+`Solver.optimize`) defaults to `"combinatorial"`. `BatchInputHandler._build_arrays` uses
+the grid type only when an input is a dict. It pairs two array inputs run for run under
 either grid type, uses a missing or single-run input in every run, and raises when two
 arrays have different run counts above one.
 

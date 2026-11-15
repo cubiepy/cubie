@@ -583,9 +583,9 @@ class BatchInputHandler:
             ``None``, a dict of parameter values, or a host or device
             array; see :meth:`set_swept_parameters`.
         kind
-            Strategy for building runs from dict inputs.
-            ``"combinatorial"`` builds every combination of the values,
-            and ``"verbatim"`` pairs them run for run.
+            Pass ``"combinatorial"`` to build every combination of the
+            values in dict inputs, or ``"verbatim"`` to pair them run
+            for run.
         fix_constant_parameters
             Compile in every dict entry and every row of a full-height
             parameter array that holds one value. Pass ``False`` to
@@ -805,7 +805,7 @@ class BatchInputHandler:
             The swept parameters' values from
             :meth:`set_swept_parameters`.
         kind
-            Strategy for building runs when either input is a dict.
+            Grid type to use when either input is a dict.
 
         Returns
         -------
@@ -822,8 +822,8 @@ class BatchInputHandler:
                 f"Unknown grid type '{kind}'. Use 'combinatorial' or "
                 f"'verbatim'."
             )
-        # Arrays hold runs the caller has already built, so we pair
-        # them run for run and apply kind to dict inputs only.
+        # We treat arrays as runs the caller has already built, so we
+        # pair them run for run and apply kind to dict inputs only.
         if not (isinstance(states, dict) or isinstance(params, dict)):
             kind = "verbatim"
         swept_set = self.system.swept_set

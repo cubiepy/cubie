@@ -266,10 +266,10 @@ def solve_ivp(
         When both ``summarise_variables`` and index parameters are provided,
         their union is used.
     grid_type
-        Strategy for building runs from dict inputs.
-        ``"combinatorial"`` builds every combination of the values, and
-        ``"verbatim"`` pairs them run for run. The solver pairs the
-        columns of two arrays run for run whatever you pass here.
+        Pass ``"combinatorial"`` to solve every combination of the
+        values in dict inputs, or ``"verbatim"`` to pair them run for
+        run. The solver pairs the columns of two arrays run for run
+        whichever you pass.
     time_logging_level : str or None, default='default'
         Time logging verbosity level. Options are 'silent', 'default',
         'verbose', 'debug', None, or 'None' to disable timing.
@@ -829,10 +829,9 @@ class Solver(DerivedValues):
             leave out uses its default value, so set a value as the
             default to compile it in.
         grid_type
-            Strategy for building runs from dict inputs.
-            ``"combinatorial"`` builds every combination of the values,
-            and ``"verbatim"`` pairs them run for run. Default is
-            ``"combinatorial"``.
+            Pass ``"combinatorial"`` to build every combination of the
+            values in dict inputs, or ``"verbatim"`` to pair them run
+            for run. Default is ``"combinatorial"``.
 
         Returns
         -------
