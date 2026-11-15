@@ -542,8 +542,10 @@
 <span class="sd">        When both ``summarise_variables`` and index parameters are provided,</span>
 <span class="sd">        their union is used.</span>
 <span class="sd">    grid_type</span>
-<span class="sd">        ``"verbatim"`` pairs each input vector while ``"combinatorial"``</span>
-<span class="sd">        produces every combination of provided values.</span>
+<span class="sd">        Strategy for building runs from dict inputs.</span>
+<span class="sd">        ``"combinatorial"`` builds every combination of the values, and</span>
+<span class="sd">        ``"verbatim"`` pairs them run for run. The solver pairs the</span>
+<span class="sd">        columns of two arrays run for run whatever you pass here.</span>
 <span class="sd">    time_logging_level : str or None, default='default'</span>
 <span class="sd">        Time logging verbosity level. Options are 'silent', 'default',</span>
 <span class="sd">        'verbose', 'debug', None, or 'None' to disable timing.</span>
@@ -1138,9 +1140,10 @@
 <span class="sd">            leave out uses its default value, so set a value as the</span>
 <span class="sd">            default to compile it in.</span>
 <span class="sd">        grid_type</span>
-<span class="sd">            Strategy for constructing the grid. ``"combinatorial"``</span>
-<span class="sd">            produces all combinations while ``"verbatim"`` preserves</span>
-<span class="sd">            column-wise pairings. Default is ``"combinatorial"``.</span>
+<span class="sd">            Strategy for building runs from dict inputs.</span>
+<span class="sd">            ``"combinatorial"`` builds every combination of the values,</span>
+<span class="sd">            and ``"verbatim"`` pairs them run for run. Default is</span>
+<span class="sd">            ``"combinatorial"``.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>

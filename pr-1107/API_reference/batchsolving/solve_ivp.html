@@ -329,8 +329,10 @@ calculations. <code class="docutils literal notranslate"><span class="pre">None<
 are saved. An empty list <code class="docutils literal notranslate"><span class="pre">[]</span></code> explicitly summarises no variables.
 When both <code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code> and index parameters are provided,
 their union is used.</p></li>
-<li><p><strong>grid_type</strong> – <code class="docutils literal notranslate"><span class="pre">&quot;verbatim&quot;</span></code> pairs each input vector while <code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code>
-produces every combination of provided values.</p></li>
+<li><p><strong>grid_type</strong> – Strategy for building runs from dict inputs.
+<code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code> builds every combination of the values, and
+<code class="docutils literal notranslate"><span class="pre">&quot;verbatim&quot;</span></code> pairs them run for run. The solver pairs the
+columns of two arrays run for run whatever you pass here.</p></li>
 <li><p><strong>time_logging_level</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em> or </em><em>None</em><em>, </em><em>default='default'</em>) – Time logging verbosity level. Options are ‘silent’, ‘default’,
 ‘verbose’, ‘debug’, None, or ‘None’ to disable timing.</p></li>
 <li><p><strong>nan_error_trajectories</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>default=True</em>) – When <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), trajectories with nonzero solver status
