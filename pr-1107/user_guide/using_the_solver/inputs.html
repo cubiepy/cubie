@@ -333,11 +333,6 @@ generating values programmatically, you can pass arrays instead. Lay each
 array out as <code class="docutils literal notranslate"><span class="pre">(n_variables,</span> <span class="pre">n_runs)</span></code>, with its rows ordered by variable
 name. If the array is already in the same data type as <code class="docutils literal notranslate"><span class="pre">solver.precision</span></code>,
 then you can also save an additional array copy.</p>
-<p>Cubie pairs the columns of two arrays run for run, whatever <code class="docutils literal notranslate"><span class="pre">grid_type</span></code>
-you pass. Give both arrays the same number of runs, or give one of them a
-single run (or leave it out) to use those values in every run. To combine
-every value of one input with every value of the other, pass dicts, or
-build the arrays with <code class="docutils literal notranslate"><span class="pre">solver.prepare_grid_arrays</span></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>It may seem odd that the states array ends up in a different order
