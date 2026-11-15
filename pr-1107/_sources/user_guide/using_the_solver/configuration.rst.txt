@@ -46,9 +46,10 @@ single batch solve.
        ``save_variables``.
    * - ``grid_type``
      - ``"combinatorial"``
-     - ``"combinatorial"`` takes every combination of the values in
-       dict inputs; ``"verbatim"`` pairs them run-for-run. Cubie pairs
-       array inputs run-for-run under either setting.
+     - Pass ``"combinatorial"`` to solve every combination of the
+       values in dict inputs, or ``"verbatim"`` to pair them
+       run-for-run. Cubie pairs array inputs run-for-run under either
+       setting.
    * - ``time_logging_level``
      - ``None``
      - Timing verbosity: ``'default'``, ``'verbose'``, ``'debug'``,
