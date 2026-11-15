@@ -48,13 +48,10 @@ Optional arguments:
 CellML parsing is handled by ``cellmlmanip``, which ships vendored
 inside CuBIE — no extra install is needed.
 
-Known Caveats
--------------
+Limitations
+-----------
 
-- Only ODE-based CellML models are supported: CuBIE extracts the
-  differential equations as states, so a DAE or algebraic-only model
-  has nothing to integrate.
-- Some CellML 2.0 features may not be fully handled by ``cellmlmanip``.
-- Large CellML models (hundreds of states) may take noticeable time to
-  parse and differentiate on first use; subsequent loads of the same
-  file and settings come from an on-disk cache.
+- ``cellmlmanip`` may not handle every CellML 2.0 feature.
+- cubie may take a few seconds to parse and differentiate a large CellML
+  model (hundreds of states) the first time you load it. After that,
+  cubie loads the same file and settings from an on-disk cache.

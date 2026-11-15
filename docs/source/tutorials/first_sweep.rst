@@ -170,7 +170,7 @@ Where to go next
 ----------------
 
 - Sweep initial values too by passing arrays in ``y0`` exactly like
-  parameters (:doc:`/user_guide/batching`).
+  parameters (:doc:`/user_guide/using_the_solver/inputs`).
 - Record statistics (mean, peaks, ...) instead of full trajectories
   to save memory: :doc:`extracting_summaries`.
 - :doc:`stiff_systems` covers implicit methods for systems that
