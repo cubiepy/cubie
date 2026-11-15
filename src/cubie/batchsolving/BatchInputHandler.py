@@ -1167,10 +1167,10 @@ class BatchInputHandler:
         """Materialise both categories at their aligned run count.
 
         Cross the categories when ``kind`` is ``"combinatorial"`` and
-        either category came from a dict, varying the state columns
-        slowly and the parameter columns quickly. Otherwise pair the
-        columns run for run and use a single-run category in every
-        run. Write each category straight into a policy-backed
+        the caller gave either of them as a dict, varying the state
+        columns slowly and the parameter columns quickly. Otherwise
+        pair the columns run for run and use a single-run category in
+        every run. Write each category straight into a policy-backed
         destination.
 
         Parameters
@@ -1196,8 +1196,8 @@ class BatchInputHandler:
         Raises
         ------
         ValueError
-            Raised when the columns are paired and the run counts
-            cannot be paired, or ``kind`` is unknown.
+            If the method pairs two categories whose run counts differ
+            with more than one run each, or ``kind`` is unknown.
         """
         n_states = states_plan["n_runs"]
         n_params = params_plan["n_runs"]
