@@ -131,6 +131,10 @@ class SolverSettings(_CubieConfigBase):
 
     # -- Starting step ------------------------------------------------
     initial_derivative_location: Optional[str] = None
+    starting_step_state_fraction: Optional[float] = None
+    starting_step_zero_norm: Optional[float] = None
+    starting_step_target: Optional[float] = None
+    starting_step_max_growth: Optional[float] = None
 
     # -- Loop ---------------------------------------------------------
     save_every: Optional[float] = _optional()

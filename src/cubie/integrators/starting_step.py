@@ -37,6 +37,7 @@ from cubie._utils import (
     clamp_factory,
     device_function_field,
     getype_validator,
+    gttype_validator,
     opt_getype_validator,
 )
 from cubie.backend.intrinsics import unroll_if
@@ -49,13 +50,16 @@ from cubie.CUDAFactory import (
     CUDAFactoryConfig,
     build_config,
 )
-from cubie.integrators.step_control.adaptive_step_controller import (
-    DEFAULT_DT_MAX,
-    DEFAULT_DT_MIN,
-)
 
 ALL_STARTING_STEP_PARAMETERS = (
-    {"dt", "initial_derivative_location"}
+    {
+        "dt",
+        "initial_derivative_location",
+        "starting_step_state_fraction",
+        "starting_step_zero_norm",
+        "starting_step_target",
+        "starting_step_max_growth",
+    }
     | ALL_UNROLL_PARAMETERS
     | ALL_JIT_PARAMETERS
 )
@@ -72,10 +76,6 @@ class StartingStepConfig(CUDAFactoryConfig):
         Number of state variables.
     mass_flags
         Per-state mass-diagonal flags, ``True`` for a differential row.
-    n_drivers
-        Number of driver variables.
-    dt
-        Initial step the user gave, or ``None`` when not given.
     is_adaptive
         Whether the step controller adapts the step.
     algorithm_order
@@ -84,6 +84,21 @@ class StartingStepConfig(CUDAFactoryConfig):
         Lower bound on the estimate.
     dt_max
         Upper bound on the estimate.
+    n_drivers
+        Number of driver variables.
+    dt
+        Initial step the user gave, or ``None`` when not given.
+    starting_step_state_fraction
+        Fraction of the state's norm to change the state by over the
+        first guess.
+    starting_step_zero_norm
+        Norm at or below which to treat the state or its derivative as
+        zero.
+    starting_step_target
+        Target for the largest derivative norm times the estimate
+        raised to the order plus one.
+    starting_step_max_growth
+        Largest ratio of the estimate to the first guess.
     initial_derivative_location
         Memory location (``'local'`` or ``'shared'``) of the buffer for
         the derivative at the initial state.
@@ -105,19 +120,25 @@ class StartingStepConfig(CUDAFactoryConfig):
             validators.instance_of(tuple),
         ),
     )
+    is_adaptive: bool = field(validator=validators.instance_of(bool))
+    algorithm_order: int = field(validator=getype_validator(int, 1))
+    _dt_min: float = field(validator=getype_validator(float, 0))
+    _dt_max: float = field(validator=getype_validator(float, 0))
     n_drivers: int = field(default=0, validator=getype_validator(int, 0))
     _dt: Optional[float] = field(
         default=None, validator=opt_getype_validator(float, 0)
     )
-    is_adaptive: bool = field(
-        default=False, validator=validators.instance_of(bool)
+    _starting_step_state_fraction: float = field(
+        default=0.01, validator=gttype_validator(float, 0)
     )
-    algorithm_order: int = field(default=1, validator=getype_validator(int, 1))
-    _dt_min: float = field(
-        default=DEFAULT_DT_MIN, validator=getype_validator(float, 0)
+    _starting_step_zero_norm: float = field(
+        default=1e-5, validator=getype_validator(float, 0)
     )
-    _dt_max: float = field(
-        default=DEFAULT_DT_MAX, validator=getype_validator(float, 0)
+    _starting_step_target: float = field(
+        default=0.01, validator=gttype_validator(float, 0)
+    )
+    _starting_step_max_growth: float = field(
+        default=100.0, validator=getype_validator(float, 1)
     )
     initial_derivative_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
@@ -134,9 +155,14 @@ class StartingStepConfig(CUDAFactoryConfig):
 
     @property
     def initial_derivative_size(self) -> int:
-        """Return the derivative buffer's length, or zero when the
-        estimator compiles no estimate."""
+        """Return the derivative buffer's length, or zero when no
+        estimate is required."""
         return self.n_states if self.estimates_dt else 0
+
+    @property
+    def n_differential(self) -> int:
+        """Return the number of rows the error norm averages over."""
+        return max(1, sum(self.mass_flags))
 
     @property
     def dt_min(self) -> float:
@@ -148,6 +174,26 @@ class StartingStepConfig(CUDAFactoryConfig):
         """Return the upper bound on the estimate."""
         return self.precision(self._dt_max)
 
+    @property
+    def starting_step_state_fraction(self) -> float:
+        """Return the state fraction of the first guess."""
+        return self.precision(self._starting_step_state_fraction)
+
+    @property
+    def starting_step_zero_norm(self) -> float:
+        """Return the norm at or below which a vector counts as zero."""
+        return self.precision(self._starting_step_zero_norm)
+
+    @property
+    def starting_step_target(self) -> float:
+        """Return the target of the second guess."""
+        return self.precision(self._starting_step_target)
+
+    @property
+    def starting_step_max_growth(self) -> float:
+        """Return the cap on the estimate, in first guesses."""
+        return self.precision(self._starting_step_max_growth)
+
 
 @define
 class StartingStepCache(CUDADispatcherCache):
@@ -157,9 +203,9 @@ class StartingStepCache(CUDADispatcherCache):
     ----------
     starting_step_fn
         Compiled device function that returns the starting step, or
-        ``None`` when the estimator compiled no estimate.
+        ``None`` when no estimate is required.
     estimates_dt
-        Whether the estimator compiled an estimate.
+        Whether the run starts at an estimated step.
     """
 
     starting_step_fn: Optional[Callable] = field(default=None, eq=False)
@@ -208,7 +254,7 @@ class StartingStepEstimator(CUDAFactory):
             StartingStepConfig,
             required={
                 "precision": precision,
-                "n_states": int(n_states),
+                "n_states": n_states,
                 "mass_flags": mass_flags,
             },
             **kwargs,
@@ -254,14 +300,21 @@ class StartingStepEstimator(CUDAFactory):
 
         dt_min = config.dt_min
         dt_max = config.dt_max
-        # We square each of Hairer's norm thresholds and halve his order
-        # exponent, because norm_fn returns a mean square.
-        guess_fraction = precision(0.01)
-        zero_norm2 = precision(1e-5**2)
-        zero_norm_guess = precision(1e-6)
-        target_norm2 = precision(0.01**2)
-        guess_growth = precision(100.0)
-        half_inverse_order = precision(0.5 / (config.algorithm_order + 1))
+        one = precision(1.0)
+        guess_fraction = precision(config.starting_step_state_fraction)
+        guess_growth = precision(config.starting_step_max_growth)
+        # Hairer compares each threshold with the root of a sum of
+        # squares, and norm_fn returns a mean square. Square each
+        # threshold, divide it by the row count and halve the order
+        # exponent to compensate.
+        n_rows = config.n_differential
+        zero_norm2 = precision(config.starting_step_zero_norm**2 / n_rows)
+        inverse_target_norm2 = precision(
+            n_rows / config.starting_step_target**2
+        )
+        negative_half_inverse_order = precision(
+            -0.5 / (config.algorithm_order + 1)
+        )
 
         alloc_derivative = buffer_registry.get_allocator(
             "initial_derivative", self
@@ -280,10 +333,14 @@ class StartingStepEstimator(CUDAFactory):
             proposed_observables,
             error,
             time_scalar,
+            fallback_step,
             shared,
             persistent_local,
         ):
             """Return the starting step estimated at ``state``.
+
+            Take ``fallback_step`` as the first guess for a zero state
+            or a zero derivative.
 
             Overwrite ``proposed_state``, ``proposed_drivers``,
             ``proposed_observables`` and ``error``.
@@ -300,19 +357,19 @@ class StartingStepEstimator(CUDAFactory):
             state_norm2 = norm_fn(state, state, state)
             derivative_norm2 = norm_fn(derivative, state, state)
 
-            # Guess the step that changes the state by 1% of its norm.
-            # We guess 1e-6 for a zero state or a zero derivative.
-            no_scale = (state_norm2 < zero_norm2) | (
-                derivative_norm2 < zero_norm2
+            # Guess the step that changes the state by guess_fraction
+            # of its norm.
+            no_scale = (state_norm2 <= zero_norm2) | (
+                derivative_norm2 <= zero_norm2
             )
             first_guess = cuda.selp(
                 no_scale,
-                zero_norm_guess,
+                fallback_step,
                 precision(
                     guess_fraction * math_sqrt(state_norm2 / derivative_norm2)
                 ),
             )
-            first_guess = clamp(first_guess, dt_min, dt_max)
+            first_guess = fmin(first_guess, dt_max)
 
             # Take one explicit Euler step of the first guess. Hold the
             # algebraic rows, because dxdt_fn returns their residuals.
@@ -325,7 +382,7 @@ class StartingStepEstimator(CUDAFactory):
                         differential[i], euler_value, state[i]
                     )
 
-            end_time = precision(time_scalar + first_guess)
+            end_time = time_scalar + first_guess
             if has_drivers:
                 drivers_fn(end_time, driver_coefficients, proposed_drivers)
             observables_fn(
@@ -347,19 +404,20 @@ class StartingStepEstimator(CUDAFactory):
                 error[i] = error[i] - derivative[i]
 
             # Estimate the second derivative from the derivative's change
-            # per unit step. We divide by the first guess twice so that
-            # we never square a very small guess.
+            # per unit step.
+            inverse_guess = one / first_guess
             second_derivative_norm2 = (
-                norm_fn(error, state, state) / first_guess / first_guess
+                norm_fn(error, state, state) * inverse_guess * inverse_guess
             )
 
-            # Solve h^(order + 1) * norm = 0.01 for the second guess h,
-            # with the larger of the two derivative norms. For a system
-            # at rest we divide by zero here and rely on fmin to return
-            # its first operand.
+            # Solve h^(order + 1) * norm = target for the second guess h,
+            # with the larger of the two derivative norms. Let fmin
+            # return the grown first guess for a system at rest, where
+            # the second guess is infinite.
             largest_norm2 = fmax(derivative_norm2, second_derivative_norm2)
             second_guess = precision(
-                (target_norm2 / largest_norm2) ** half_inverse_order
+                (largest_norm2 * inverse_target_norm2)
+                ** negative_half_inverse_order
             )
             estimate = fmin(guess_growth * first_guess, second_guess)
             return clamp(estimate, dt_min, dt_max)
@@ -396,5 +454,5 @@ class StartingStepEstimator(CUDAFactory):
 
     @property
     def estimates_dt(self) -> bool:
-        """Return whether the estimator compiled an estimate."""
+        """Return whether the run starts at an estimated step."""
         return self.get_cached_output("estimates_dt")

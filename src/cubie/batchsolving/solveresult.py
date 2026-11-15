@@ -157,7 +157,7 @@ class SolveSpec:
     Attributes
     ----------
     dt
-        Fixed step size, or ``None`` for adaptive controllers.
+        First step, or ``None`` when each run estimates it.
     dt_min
         Minimum time step size.
     dt_max

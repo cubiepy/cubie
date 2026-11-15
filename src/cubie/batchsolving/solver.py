@@ -1491,7 +1491,7 @@ class Solver(DerivedValues):
     # Pass-through properties for solve_info components
     @property
     def dt(self) -> Optional[float]:
-        """Return the fixed-step size or ``None`` for adaptive controllers."""
+        """Return the first step, or ``None`` when each run estimates it."""
         return self.kernel.dt
 
     @property
