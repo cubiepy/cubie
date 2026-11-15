@@ -266,8 +266,9 @@ def solve_ivp(
         When both ``summarise_variables`` and index parameters are provided,
         their union is used.
     grid_type
-        ``"verbatim"`` pairs each input vector while ``"combinatorial"``
-        produces every combination of provided values.
+        Pass ``"combinatorial"`` to solve every combination of the
+        values in dict inputs, or ``"verbatim"`` to pair them run for
+        run.
     time_logging_level : str or None, default='default'
         Time logging verbosity level. Options are 'silent', 'default',
         'verbose', 'debug', None, or 'None' to disable timing.
@@ -574,7 +575,7 @@ class Solver(DerivedValues):
         settling_time: float = 0.0,
         t0: float = 0.0,
         blocksize: Optional[int] = None,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
         nan_error_trajectories: bool = True,
         on_device: bool = False,
         fix_constant_parameters: bool = True,
@@ -810,7 +811,7 @@ class Solver(DerivedValues):
         parameters: Union[
             None, ndarray, Dict[str, Union[float, ndarray]]
         ] = None,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
     ) -> Tuple[ndarray, ndarray]:
         """Build state and parameter arrays to pass to :meth:`solve`.
 
@@ -827,9 +828,9 @@ class Solver(DerivedValues):
             leave out uses its default value, so set a value as the
             default to compile it in.
         grid_type
-            Strategy for constructing the grid. ``"combinatorial"``
-            produces all combinations while ``"verbatim"`` preserves
-            column-wise pairings. Default is ``"verbatim"``.
+            Pass ``"combinatorial"`` to build every combination of the
+            values in dict inputs, or ``"verbatim"`` to pair them run
+            for run. Default is ``"combinatorial"``.
 
         Returns
         -------
@@ -886,7 +887,7 @@ class Solver(DerivedValues):
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
         apply: bool = True,
         verbose: bool = True,
         auto_size: bool = True,
@@ -991,7 +992,7 @@ class Solver(DerivedValues):
         duration: float = 1.0,
         settling_time: float = 0.0,
         t0: float = 0.0,
-        grid_type: str = "verbatim",
+        grid_type: str = "combinatorial",
         apply: bool = True,
         verbose: bool = True,
         force: bool = False,

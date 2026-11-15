@@ -58,7 +58,7 @@ independent paths, materialising each at its aligned run count:
    validates it and builds a compact grid without allocating any
    full-size array
 2. ``_fill_aligned()`` computes the aligned run count for the
-   specified ``kind`` strategy, allocates each category's final
+   specified ``kind`` strategy, allocates each input's final
    backing through the memory manager's host policy, and assembles
    defaults, swept values, and expansions directly into it
 3. Results are cast to system precision
@@ -583,8 +583,9 @@ class BatchInputHandler:
             ``None``, a dict of parameter values, or a host or device
             array; see :meth:`set_swept_parameters`.
         kind
-            Strategy for grid assembly. ``"combinatorial"`` expands
-            all combinations while ``"verbatim"`` preserves pairings.
+            Pass ``"combinatorial"`` to build every combination of the
+            values in dict inputs, or ``"verbatim"`` to pair them run
+            for run.
         fix_constant_parameters
             Compile in every dict entry and every row of a full-height
             parameter array that holds one value. Pass ``False`` to
@@ -596,12 +597,17 @@ class BatchInputHandler:
             ``(inits, params)``: the (state, run) and (swept parameter,
             run) arrays for the system as it is now compiled.
 
+        Raises
+        ------
+        ValueError
+            If neither input is a dict and the two inputs have
+            different numbers of runs with more than one run each.
+
         Notes
         -----
-        Pass both inputs as arrays to give each as a complete grid.
-        With ``kind="combinatorial"`` the handler takes the Cartesian
-        product of both grids. Set ``kind`` to ``"verbatim"`` when you
-        have already paired the runs in your arrays.
+        Pass both inputs as arrays if you don't need them to be
+        interpreted or combined. To generate a Cartesian product, pass
+        dict inputs with ``kind="combinatorial"``.
 
         Device arrays are used as prebuilt (variable, run) grids with
         no processing; they must already match the system precision
@@ -796,12 +802,13 @@ class BatchInputHandler:
             The swept parameters' values from
             :meth:`set_swept_parameters`.
         kind
-            Strategy for grid assembly.
+            Grid type to use when either input is a dict.
 
         Returns
         -------
         tuple
             The (state, run) and (swept parameter, run) arrays.
+
         """
         swept_set = self.system.swept_set
         state_set = self.system.states
@@ -813,7 +820,7 @@ class BatchInputHandler:
             return device_result
 
         fast_result = self._fast_return_arrays(
-            states, params, kind, swept_set, state_set
+            states, params, swept_set, state_set
         )
         if fast_result is not None:
             return fast_result
@@ -844,7 +851,7 @@ class BatchInputHandler:
         arr
             Device array to validate.
         values_object
-            System values object for the input category.
+            The states or swept parameters the array must match.
         label
             Human-readable input name used in error messages.
 
@@ -1052,7 +1059,7 @@ class BatchInputHandler:
         values_object: ValuedSet,
         kind: str,
     ) -> dict:
-        """Classify a single input category without materialising runs.
+        """Classify one input without materialising runs.
 
         Parameters
         ----------
@@ -1060,7 +1067,7 @@ class BatchInputHandler:
             Input as None (use defaults), dict (expand to grid),
             or array-like (sanitize).
         values_object
-            Variable set for this category (params or states).
+            Variable set for this input (states or swept parameters).
         kind
             Grid type: "combinatorial" or "verbatim".
 
@@ -1157,19 +1164,20 @@ class BatchInputHandler:
         swept_set: ValuedSet,
         state_set: ValuedSet,
     ) -> tuple[ndarray, ndarray]:
-        """Materialise both categories at their aligned run count.
+        """Build the state and parameter arrays at a shared run count.
 
-        Combinatorial results hold every pairing: state columns vary
-        slowly, parameter columns vary quickly. Verbatim columns pair
-        directly, broadcasting a single-run category. Each category
-        is written straight into a policy-backed destination.
+        Generate a Cartesian product when ``kind`` is
+        ``"combinatorial"`` and at least one input is a dict, varying
+        the parameters most quickly. Otherwise, pair the columns run
+        for run, using a single-run input in every run. Write each
+        array straight into a policy-backed destination.
 
         Parameters
         ----------
         states_plan
-            Plan for the states category.
+            Plan for the initial values.
         params_plan
-            Plan for the params category.
+            Plan for the swept parameter values.
         kind
             Grid type: "combinatorial" or "verbatim".
         backed
@@ -1187,31 +1195,35 @@ class BatchInputHandler:
         Raises
         ------
         ValueError
-            Raised when ``kind`` is ``"verbatim"`` and the run counts
-            cannot be paired, or ``kind`` is unknown.
+            If the method pairs two inputs whose run counts differ
+            with more than one run each, or ``kind`` is unknown.
         """
         n_states = states_plan["n_runs"]
         n_params = params_plan["n_runs"]
-        if kind == "combinatorial":
-            states_array = self._fill_category(
+        from_dict = "grid" in (states_plan["mode"], params_plan["mode"])
+        if kind == "combinatorial" and from_dict:
+            states_array = self._fill_input(
                 states_plan, state_set, backed,
                 repeats=n_params, tiles=1,
             )
-            params_array = self._fill_category(
+            params_array = self._fill_input(
                 params_plan, swept_set, backed,
                 repeats=1, tiles=n_states,
             )
             return states_array, params_array
-        elif kind == "verbatim":
+        elif kind in ("combinatorial", "verbatim"):
             if n_states == 1 and n_params > 1:
                 states_reps, params_reps = n_params, 1
             elif n_params == 1 and n_states > 1:
                 states_reps, params_reps = 1, n_states
             elif n_states != n_params:
                 raise ValueError(
-                    "For 'verbatim', both grids must have the same number "
-                    "of runs, or one grid must have exactly 1 run so it "
-                    "can be broadcast to match the other."
+                    f"Cubie pairs array inputs and verbatim grids run for "
+                    f"run, so they need the same number of runs, or one "
+                    f"of them needs exactly 1 run. Got {n_states} state "
+                    f"runs and {n_params} parameter runs. Pass dicts "
+                    f"with grid_type='combinatorial' to combine every "
+                    f"value with every other."
                 )
             else:
                 states_reps, params_reps = 1, 1
@@ -1219,14 +1231,14 @@ class BatchInputHandler:
             if states_plan["mode"] == "array" and states_reps == 1:
                 states_array = states_plan["array"]
             else:
-                states_array = self._fill_category(
+                states_array = self._fill_input(
                     states_plan, state_set, backed,
                     repeats=states_reps, tiles=1,
                 )
             if params_plan["mode"] == "array" and params_reps == 1:
                 params_array = params_plan["array"]
             else:
-                params_array = self._fill_category(
+                params_array = self._fill_input(
                     params_plan, swept_set, backed,
                     repeats=params_reps, tiles=1,
                 )
@@ -1236,7 +1248,7 @@ class BatchInputHandler:
             f"'verbatim'."
         )
 
-    def _fill_category(
+    def _fill_input(
         self,
         plan: dict,
         values_object: ValuedSet,
@@ -1244,14 +1256,14 @@ class BatchInputHandler:
         repeats: int,
         tiles: int,
     ) -> ndarray:
-        """Materialise one category into its final backing.
+        """Materialise one input into its final backing.
 
         Parameters
         ----------
         plan
             Plan from :meth:`_plan_single_input`.
         values_object
-            Variable set for this category.
+            Variable set for this input.
         backed
             Identity set recording destination arrays this call
             allocated.
@@ -1293,7 +1305,7 @@ class BatchInputHandler:
     def _final_array(
         self, n_rows: int, n_runs: int, backed: set
     ) -> ndarray:
-        """Allocate the final backing for one assembled category."""
+        """Allocate the final backing for one assembled input."""
         if n_rows == 0 or n_runs == 0:
             return np_empty((n_rows, n_runs), dtype=self.precision)
         nbytes = n_rows * n_runs * np_dtype(self.precision).itemsize
@@ -1476,7 +1488,6 @@ class BatchInputHandler:
         self,
         states: Optional[Union[ArrayLike, Dict]],
         params: Optional[Union[ArrayLike, Dict]],
-        kind: str,
         swept_set: ValuedSet,
         state_set: ValuedSet,
     ) -> Optional[Tuple[ndarray, ndarray]]:
@@ -1507,69 +1518,41 @@ class BatchInputHandler:
         states_small = self._is_1d_or_none(states)
         params_small = self._is_1d_or_none(params)
 
+        # We treat a missing or 1D input as one run and use it in every
+        # column of the other input.
         if states_ok and params_small:
             backed = set()
             n_runs = states_runs if states_runs is not None else 1
-            column = None
-            if params is not None:
-                column = self._sanitise_arraylike(params, params_values)
-            if kind == "combinatorial":
-                # The column broadcasts to n_runs, squaring the pairing.
-                total = n_runs * n_runs
-                states_array = self._final_array(
-                    states.shape[0], total, backed
-                )
-                view = states_array.reshape(
-                    states.shape[0], n_runs, n_runs
-                )
-                view[:] = states[:, :, np_newaxis]
-            else:
-                total = n_runs
-                states_array = states
-            if column is None:
+            if params is None:
                 params_array = self._fill_defaults(
-                    params_values, total, backed
+                    params_values, n_runs, backed
                 )
             else:
+                column = self._sanitise_arraylike(params, params_values)
                 params_array = self._final_array(
-                    column.shape[0], total, backed
+                    column.shape[0], n_runs, backed
                 )
                 params_array[:] = column
             return self._cast_to_precision(
-                states_array, params_array, states_input, params_input,
+                states, params_array, states_input, params_input,
                 backed,
             )
 
         if params_ok and states_small:
             backed = set()
             n_runs = params_runs if params_runs is not None else 1
-            column = None
-            if states is not None:
-                column = self._sanitise_arraylike(states, state_set)
-            if kind == "combinatorial":
-                # Mirror branch: the params grid cycles whole.
-                total = n_runs * n_runs
-                params_array = self._final_array(
-                    params.shape[0], total, backed
-                )
-                view = params_array.reshape(
-                    params.shape[0], n_runs, n_runs
-                )
-                view[:] = params[:, np_newaxis, :]
-            else:
-                total = n_runs
-                params_array = params
-            if column is None:
+            if states is None:
                 states_array = self._fill_defaults(
-                    state_set, total, backed
+                    state_set, n_runs, backed
                 )
             else:
+                column = self._sanitise_arraylike(states, state_set)
                 states_array = self._final_array(
-                    column.shape[0], total, backed
+                    column.shape[0], n_runs, backed
                 )
                 states_array[:] = column
             return self._cast_to_precision(
-                states_array, params_array, states_input, params_input,
+                states_array, params, states_input, params_input,
                 backed,
             )
 
