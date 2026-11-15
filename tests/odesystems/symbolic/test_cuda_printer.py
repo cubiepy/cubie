@@ -381,7 +381,6 @@ def _check_sqrt_rhs_analytic(precision):
         y0={"x": 4.0},
         method="tsit5",
         duration=1.0,
-        dt=0.01,
         save_every=0.1,
         output_types=["state", "time"],
     )

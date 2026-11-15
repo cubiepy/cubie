@@ -5,6 +5,7 @@ import pytest
 
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
+    IRRECOVERABLE,
     TORN_NO_OBSERVABLES,
     UNSET_LINEAR_SOLVE,
     run_starting_step_device,
@@ -33,6 +34,8 @@ TORN_RADAU = {
         # Start at ones, off the torn system's constraint, to give
         # the algebraic row a residual to hold.
         pytest.param(TORN_RADAU, np.ones_like, id="torn-off-constraint"),
+        # Clamp the estimate with narrow step bounds.
+        pytest.param(IRRECOVERABLE, np.copy, id="narrow-bounds"),
     ],
     indirect=["solver_settings_override"],
 )
@@ -47,7 +50,8 @@ def test_starting_step_matches_reference(
     cpu_driver_evaluator,
     tolerance,
 ):
-    """Check the device estimate against the CPU reference."""
+    """Check the device estimate against the reference and bounds."""
+    controller = single_integrator_run._step_controller
     state = start_state(initial_state)
     parameters = system.parameters.defaults_array(precision)
     t0 = precision(0.0)
@@ -63,7 +67,7 @@ def test_starting_step_matches_reference(
         drivers,
         observables,
         t0,
-        single_integrator_run._step_controller.dt,
+        controller.dt,
     )
     reference = cpu_step_controller.starting_step(
         cpu_system,
@@ -78,6 +82,7 @@ def test_starting_step_matches_reference(
     np.testing.assert_allclose(
         estimate, reference, rtol=tolerance.rel_tight, atol=0.0
     )
+    assert controller.dt_min <= estimate <= controller.dt_max
 
 
 @pytest.mark.parametrize(

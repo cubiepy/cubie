@@ -20,6 +20,7 @@ Published Objects
     Time a solver's candidates.
 """
 
+from math import sqrt
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from attrs import define
@@ -473,7 +474,9 @@ def _ramp_start(solver: Any, given: float) -> float:
     """Return the shortest duration to time: at least one save or
     summary sample and at least one step, or ``given`` when the
     sample interval rejects anything shorter."""
-    step = solver.dt_min if solver.dt is None else solver.dt
+    step = solver.dt
+    if step is None:
+        step = sqrt(solver.dt_min * solver.dt_max)
     trial = max(_duration_floor(solver, given), float(step))
     trial = min(trial, given)
     if trial < given and not _fits_sample_interval(solver, trial):

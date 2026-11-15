@@ -2461,6 +2461,7 @@ RECOVERED_TRANSIENT = {
     "algorithm": "rodas3p",
     "step_controller": "pid",
     "duration": 1.0,
+    # Start at dt_max so that the first step's linear solve fails.
     "dt": 1.0,
     "dt_min": 1e-9,
     "dt_max": 1.0,
@@ -2494,7 +2495,6 @@ IRRECOVERABLE = {
     "min_step_shrink": 0.2,
     "max_step_growth": 8.0,
     "duration": 1.0,
-    "dt": 0.5,
     "dt_min": 0.4,
     "dt_max": 0.5,
     "atol": 1e-13,
@@ -2539,7 +2539,6 @@ IMPOSSIBLE_TOLERANCE = {
     "step_controller": "pid",
     "atol": 1e-13,
     "rtol": 1e-13,
-    "dt": 0.01,
     "dt_min": 1e-6,
     "dt_max": 0.1,
     "duration": 0.2,
@@ -2776,7 +2775,6 @@ TINY_DT_ADAPTIVE_CN = {
     'step_controller': 'PI',
     'output_types': ['state', 'time'],
     'dt_min': 1e-9,
-    'dt': 5e-7,
     'dt_max': 1e-6,
 }
 

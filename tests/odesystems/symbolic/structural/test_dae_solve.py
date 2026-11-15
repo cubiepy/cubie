@@ -536,7 +536,6 @@ TRANSAMP_RADAU_ADAPTIVE = {
     "preconditioner_type": None,
     "dae_initialisation": "brown",
     "step_controller": None,
-    "dt": 1e-4,
     "dt_min": 1e-8,
     "dt_max": 1e-2,
     "inexact_newton": False,
