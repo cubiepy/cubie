@@ -669,7 +669,6 @@ def test_fast_return_right_sized_matching(input_handler, system, precision):
     result = input_handler._fast_return_arrays(
         states,
         params,
-        "verbatim",
         input_handler.system.swept_set,
         input_handler.system.states,
     )
@@ -683,7 +682,7 @@ def test_fast_return_none_when_no_path(input_handler, system):
     state_names = list(system.initial_values.names)
     # Dict input => no fast path
     result = input_handler._fast_return_arrays(
-        {state_names[0]: [1, 2]}, {}, "combinatorial",
+        {state_names[0]: [1, 2]}, {},
         input_handler.system.swept_set,
         input_handler.system.states,
     )
@@ -695,7 +694,7 @@ def test_fast_return_states_ok_params_small(input_handler, system, precision):
     n_s = system.sizes.states
     states = np.ones((n_s, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, None, "verbatim", input_handler.system.swept_set, input_handler.system.states
+        states, None, input_handler.system.swept_set, input_handler.system.states
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -706,7 +705,7 @@ def test_fast_return_params_ok_states_small(input_handler, system, precision):
     n_p = system.sizes.swept_parameters
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        None, params, "verbatim", input_handler.system.swept_set, input_handler.system.states
+        None, params, input_handler.system.swept_set, input_handler.system.states
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -1033,7 +1032,7 @@ def test_fast_return_empty_params_none_marks_params_ok(no_param_system):
     n_s = handler.system.states.n
     states = np.ones((n_s, 4), dtype=handler.precision)
     result = handler._fast_return_arrays(
-        states, None, "verbatim", handler.system.swept_set, handler.system.states
+        states, None, handler.system.swept_set, handler.system.states
     )
     assert result is not None
     assert result[1].shape == (0, 4)
@@ -1051,7 +1050,6 @@ def test_fast_return_states_ok_params_provided_1d_broadcasts(
     result = input_handler._fast_return_arrays(
         states,
         params,
-        "verbatim",
         input_handler.system.swept_set,
         input_handler.system.states,
     )
@@ -1072,13 +1070,55 @@ def test_fast_return_params_ok_states_provided_1d_broadcasts(
     result = input_handler._fast_return_arrays(
         states,
         params,
-        "verbatim",
         input_handler.system.swept_set,
         input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape[1] == 3
     assert result[1].shape[1] == 3
+
+
+@pytest.mark.parametrize("kind", ["combinatorial", "verbatim"])
+@pytest.mark.parametrize("single", ["none", "1d"])
+@pytest.mark.parametrize("array_side", ["states", "params"])
+def test_array_with_single_run_input_keeps_array_run_count(
+    input_handler_mutable, precision, kind, single, array_side
+):
+    """A 2D array paired with a missing or 1D input gives one run per
+    array column for every grid type."""
+    system = input_handler_mutable.system
+    n_runs = 3
+    if array_side == "states":
+        array_set, single_set = system.states, system.swept_set
+    else:
+        array_set, single_set = system.swept_set, system.states
+    array = np.arange(array_set.n * n_runs, dtype=precision).reshape(
+        array_set.n, n_runs
+    )
+    single_input = None
+    if single == "1d":
+        single_input = np.arange(single_set.n, dtype=precision) + 100
+    if array_side == "states":
+        inits, params, _, _ = _handle(
+            input_handler_mutable, array, single_input, kind
+        )
+        array_out, single_out = inits, params
+    else:
+        inits, params, _, _ = _handle(
+            input_handler_mutable, single_input, array, kind
+        )
+        array_out, single_out = params, inits
+    column = single_input
+    if single_input is None:
+        # Read the defaults after the call, which sets the sweep.
+        single_set = (
+            system.swept_set if array_side == "states" else system.states
+        )
+        column = single_set.defaults_array(precision)
+    assert_array_equal(array_out, array)
+    assert_array_equal(
+        single_out, np.repeat(column[:, np.newaxis], n_runs, axis=1)
+    )
 
 
 def test_materialise_passes_matching_user_arrays_through(input_handler):

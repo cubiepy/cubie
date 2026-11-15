@@ -813,7 +813,7 @@ class BatchInputHandler:
             return device_result
 
         fast_result = self._fast_return_arrays(
-            states, params, kind, swept_set, state_set
+            states, params, swept_set, state_set
         )
         if fast_result is not None:
             return fast_result
@@ -1476,7 +1476,6 @@ class BatchInputHandler:
         self,
         states: Optional[Union[ArrayLike, Dict]],
         params: Optional[Union[ArrayLike, Dict]],
-        kind: str,
         swept_set: ValuedSet,
         state_set: ValuedSet,
     ) -> Optional[Tuple[ndarray, ndarray]]:
@@ -1507,69 +1506,41 @@ class BatchInputHandler:
         states_small = self._is_1d_or_none(states)
         params_small = self._is_1d_or_none(params)
 
+        # A missing or 1D input is a single run, so every grid type
+        # pairs it with each column of the other input.
         if states_ok and params_small:
             backed = set()
             n_runs = states_runs if states_runs is not None else 1
-            column = None
-            if params is not None:
-                column = self._sanitise_arraylike(params, params_values)
-            if kind == "combinatorial":
-                # The column broadcasts to n_runs, squaring the pairing.
-                total = n_runs * n_runs
-                states_array = self._final_array(
-                    states.shape[0], total, backed
-                )
-                view = states_array.reshape(
-                    states.shape[0], n_runs, n_runs
-                )
-                view[:] = states[:, :, np_newaxis]
-            else:
-                total = n_runs
-                states_array = states
-            if column is None:
+            if params is None:
                 params_array = self._fill_defaults(
-                    params_values, total, backed
+                    params_values, n_runs, backed
                 )
             else:
+                column = self._sanitise_arraylike(params, params_values)
                 params_array = self._final_array(
-                    column.shape[0], total, backed
+                    column.shape[0], n_runs, backed
                 )
                 params_array[:] = column
             return self._cast_to_precision(
-                states_array, params_array, states_input, params_input,
+                states, params_array, states_input, params_input,
                 backed,
             )
 
         if params_ok and states_small:
             backed = set()
             n_runs = params_runs if params_runs is not None else 1
-            column = None
-            if states is not None:
-                column = self._sanitise_arraylike(states, state_set)
-            if kind == "combinatorial":
-                # Mirror branch: the params grid cycles whole.
-                total = n_runs * n_runs
-                params_array = self._final_array(
-                    params.shape[0], total, backed
-                )
-                view = params_array.reshape(
-                    params.shape[0], n_runs, n_runs
-                )
-                view[:] = params[:, np_newaxis, :]
-            else:
-                total = n_runs
-                params_array = params
-            if column is None:
+            if states is None:
                 states_array = self._fill_defaults(
-                    state_set, total, backed
+                    state_set, n_runs, backed
                 )
             else:
+                column = self._sanitise_arraylike(states, state_set)
                 states_array = self._final_array(
-                    column.shape[0], total, backed
+                    column.shape[0], n_runs, backed
                 )
                 states_array[:] = column
             return self._cast_to_precision(
-                states_array, params_array, states_input, params_input,
+                states_array, params, states_input, params_input,
                 backed,
             )
 
