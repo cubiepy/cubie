@@ -1506,8 +1506,8 @@ class BatchInputHandler:
         states_small = self._is_1d_or_none(states)
         params_small = self._is_1d_or_none(params)
 
-        # A missing or 1D input is a single run, so every grid type
-        # pairs it with each column of the other input.
+        # We treat a missing or 1D input as one run, so under either
+        # grid type we pair it with every column of the other input.
         if states_ok and params_small:
             backed = set()
             n_runs = states_runs if states_runs is not None else 1

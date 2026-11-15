@@ -1084,8 +1084,8 @@ def test_fast_return_params_ok_states_provided_1d_broadcasts(
 def test_array_with_single_run_input_keeps_array_run_count(
     input_handler_mutable, precision, kind, single, array_side
 ):
-    """A 2D array paired with a missing or 1D input gives one run per
-    array column for every grid type."""
+    """Check that the handler gives one run per array column when it
+    pairs a 2D array with a missing or 1D input."""
     system = input_handler_mutable.system
     n_runs = 3
     if array_side == "states":
@@ -1110,7 +1110,8 @@ def test_array_with_single_run_input_keeps_array_run_count(
         array_out, single_out = params, inits
     column = single_input
     if single_input is None:
-        # Read the defaults after the call, which sets the sweep.
+        # Read the defaults after the call, because the handler sets
+        # the swept parameters.
         single_set = (
             system.swept_set if array_side == "states" else system.states
         )
