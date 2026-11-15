@@ -531,24 +531,24 @@ def test_sanitise_returns_none_for_empty(input_handler, system):
     assert result is None
 
 
-def assemble_single_category(handler, input_data, values_object, kind):
+def assemble_single_input(handler, input_data, values_object, kind):
     """Classify one input and fill it into a (variable, run) array.
 
     ``_plan_single_input`` describes the array to build and
-    ``_fill_category`` fills values and defaults into it, as
-    ``__call__`` does per category. Prebuilt arrays pass through.
+    ``_fill_input`` fills values and defaults into it, as
+    ``__call__`` does per input. Prebuilt arrays pass through.
     """
     plan = handler._plan_single_input(input_data, values_object, kind)
     if plan["mode"] == "array":
         return plan["array"]
-    return handler._fill_category(
+    return handler._fill_input(
         plan, values_object, set(), repeats=1, tiles=1
     )
 
 
 def test_process_none_returns_defaults(input_handler, system):
     """Returns single-column defaults when input is None."""
-    result = assemble_single_category(
+    result = assemble_single_input(
         input_handler, None, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (system.sizes.states, 1)
@@ -560,7 +560,7 @@ def test_process_none_returns_defaults(input_handler, system):
 def test_process_dict_combinatorial(input_handler, system):
     """Processes dict: wraps scalars, generates grid, extends defaults."""
     state_names = list(system.initial_values.names)
-    result = assemble_single_category(
+    result = assemble_single_input(
         input_handler,
         {state_names[0]: [1.0, 2.0], state_names[1]: [3.0, 4.0]},
         system.initial_values,
@@ -576,7 +576,7 @@ def test_process_arraylike(input_handler, system):
     """Plans array-like input: sanitises to 2D and carries it whole."""
     n = system.sizes.states
     arr = np.ones((n, 3))
-    result = assemble_single_category(
+    result = assemble_single_input(
         input_handler, arr, system.initial_values, kind="combinatorial"
     )
     assert result.shape == (n, 3)
@@ -586,7 +586,7 @@ def test_process_empty_sanitised_returns_defaults(input_handler, system):
     """Returns defaults when sanitised result is None."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = assemble_single_category(
+        result = assemble_single_input(
             input_handler,
             np.array([]).reshape(0, 0),
             system.initial_values,
@@ -897,7 +897,7 @@ def test_process_empty_values_none_input(system):
     # The empty-set case needs a system with no parameters, which the
     # no_param_system tests below cover. Here we check the non-empty
     # set's path.
-    result = assemble_single_category(
+    result = assemble_single_input(
         handler, None, system.initial_values, kind="combinatorial"
     )
     # Non-empty values_object + None -> defaults column
@@ -939,7 +939,7 @@ def test_process_empty_values_object_empty_input_returns_zero_rows(
     """Empty (non-None) input against an empty variable set returns a
     (0, 1) array instead of raising."""
     handler = BatchInputHandler.from_system(no_param_system)
-    result = assemble_single_category(
+    result = assemble_single_input(
         handler, empty_params, handler.system.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)
@@ -950,7 +950,7 @@ def test_process_empty_values_object_none_input_returns_zero_rows(
 ):
     """None input against an empty variable set also returns (0, 1)."""
     handler = BatchInputHandler.from_system(no_param_system)
-    result = assemble_single_category(
+    result = assemble_single_input(
         handler, None, handler.system.parameters, kind="combinatorial"
     )
     assert result.shape == (0, 1)

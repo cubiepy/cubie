@@ -58,7 +58,7 @@ independent paths, materialising each at its aligned run count:
    validates it and builds a compact grid without allocating any
    full-size array
 2. ``_fill_aligned()`` computes the aligned run count for the
-   specified ``kind`` strategy, allocates each category's final
+   specified ``kind`` strategy, allocates each input's final
    backing through the memory manager's host policy, and assembles
    defaults, swept values, and expansions directly into it
 3. Results are cast to system precision
@@ -851,7 +851,7 @@ class BatchInputHandler:
         arr
             Device array to validate.
         values_object
-            System values object for the input category.
+            The states or swept parameters the array must match.
         label
             Human-readable input name used in error messages.
 
@@ -1059,7 +1059,7 @@ class BatchInputHandler:
         values_object: ValuedSet,
         kind: str,
     ) -> dict:
-        """Classify a single input category without materialising runs.
+        """Classify one input without materialising runs.
 
         Parameters
         ----------
@@ -1067,7 +1067,7 @@ class BatchInputHandler:
             Input as None (use defaults), dict (expand to grid),
             or array-like (sanitize).
         values_object
-            Variable set for this category (params or states).
+            Variable set for this input (states or swept parameters).
         kind
             Grid type: "combinatorial" or "verbatim".
 
@@ -1164,21 +1164,20 @@ class BatchInputHandler:
         swept_set: ValuedSet,
         state_set: ValuedSet,
     ) -> tuple[ndarray, ndarray]:
-        """Materialise both categories at their aligned run count.
+        """Build the state and parameter arrays at a shared run count.
 
-        Cross the categories when ``kind`` is ``"combinatorial"`` and
-        the caller gave either of them as a dict, varying the state
-        columns slowly and the parameter columns quickly. Otherwise
-        pair the columns run for run and use a single-run category in
-        every run. Write each category straight into a policy-backed
-        destination.
+        Generate a Cartesian product when ``kind`` is
+        ``"combinatorial"`` and at least one input is a dict, varying
+        the parameters most quickly. Otherwise, pair the columns run
+        for run, using a single-run input in every run. Write each
+        array straight into a policy-backed destination.
 
         Parameters
         ----------
         states_plan
-            Plan for the states category.
+            Plan for the initial values.
         params_plan
-            Plan for the params category.
+            Plan for the swept parameter values.
         kind
             Grid type: "combinatorial" or "verbatim".
         backed
@@ -1196,18 +1195,18 @@ class BatchInputHandler:
         Raises
         ------
         ValueError
-            If the method pairs two categories whose run counts differ
+            If the method pairs two inputs whose run counts differ
             with more than one run each, or ``kind`` is unknown.
         """
         n_states = states_plan["n_runs"]
         n_params = params_plan["n_runs"]
         from_dict = "grid" in (states_plan["mode"], params_plan["mode"])
         if kind == "combinatorial" and from_dict:
-            states_array = self._fill_category(
+            states_array = self._fill_input(
                 states_plan, state_set, backed,
                 repeats=n_params, tiles=1,
             )
-            params_array = self._fill_category(
+            params_array = self._fill_input(
                 params_plan, swept_set, backed,
                 repeats=1, tiles=n_states,
             )
@@ -1232,14 +1231,14 @@ class BatchInputHandler:
             if states_plan["mode"] == "array" and states_reps == 1:
                 states_array = states_plan["array"]
             else:
-                states_array = self._fill_category(
+                states_array = self._fill_input(
                     states_plan, state_set, backed,
                     repeats=states_reps, tiles=1,
                 )
             if params_plan["mode"] == "array" and params_reps == 1:
                 params_array = params_plan["array"]
             else:
-                params_array = self._fill_category(
+                params_array = self._fill_input(
                     params_plan, swept_set, backed,
                     repeats=params_reps, tiles=1,
                 )
@@ -1249,7 +1248,7 @@ class BatchInputHandler:
             f"'verbatim'."
         )
 
-    def _fill_category(
+    def _fill_input(
         self,
         plan: dict,
         values_object: ValuedSet,
@@ -1257,14 +1256,14 @@ class BatchInputHandler:
         repeats: int,
         tiles: int,
     ) -> ndarray:
-        """Materialise one category into its final backing.
+        """Materialise one input into its final backing.
 
         Parameters
         ----------
         plan
             Plan from :meth:`_plan_single_input`.
         values_object
-            Variable set for this category.
+            Variable set for this input.
         backed
             Identity set recording destination arrays this call
             allocated.
@@ -1306,7 +1305,7 @@ class BatchInputHandler:
     def _final_array(
         self, n_rows: int, n_runs: int, backed: set
     ) -> ndarray:
-        """Allocate the final backing for one assembled category."""
+        """Allocate the final backing for one assembled input."""
         if n_rows == 0 or n_runs == 0:
             return np_empty((n_rows, n_runs), dtype=self.precision)
         nbytes = n_rows * n_runs * np_dtype(self.precision).itemsize
