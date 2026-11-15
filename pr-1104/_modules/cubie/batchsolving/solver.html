@@ -542,8 +542,9 @@
 <span class="sd">        When both ``summarise_variables`` and index parameters are provided,</span>
 <span class="sd">        their union is used.</span>
 <span class="sd">    grid_type</span>
-<span class="sd">        ``"verbatim"`` pairs each input vector while ``"combinatorial"``</span>
-<span class="sd">        produces every combination of provided values.</span>
+<span class="sd">        Pass ``"combinatorial"`` to solve every combination of the</span>
+<span class="sd">        values in dict inputs, or ``"verbatim"`` to pair them run for</span>
+<span class="sd">        run.</span>
 <span class="sd">    time_logging_level : str or None, default='default'</span>
 <span class="sd">        Time logging verbosity level. Options are 'silent', 'default',</span>
 <span class="sd">        'verbose', 'debug', None, or 'None' to disable timing.</span>
@@ -873,7 +874,7 @@
         <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">blocksize</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"verbatim"</span><span class="p">,</span>
+        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"combinatorial"</span><span class="p">,</span>
         <span class="n">nan_error_trajectories</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">on_device</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">fix_constant_parameters</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -1121,7 +1122,7 @@
         <span class="n">parameters</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
             <span class="kc">None</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]</span>
         <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"verbatim"</span><span class="p">,</span>
+        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"combinatorial"</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Build state and parameter arrays to pass to :meth:`solve`.</span>
 
@@ -1138,9 +1139,9 @@
 <span class="sd">            leave out uses its default value, so set a value as the</span>
 <span class="sd">            default to compile it in.</span>
 <span class="sd">        grid_type</span>
-<span class="sd">            Strategy for constructing the grid. ``"combinatorial"``</span>
-<span class="sd">            produces all combinations while ``"verbatim"`` preserves</span>
-<span class="sd">            column-wise pairings. Default is ``"verbatim"``.</span>
+<span class="sd">            Pass ``"combinatorial"`` to build every combination of the</span>
+<span class="sd">            values in dict inputs, or ``"verbatim"`` to pair them run</span>
+<span class="sd">            for run. Default is ``"combinatorial"``.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1203,7 +1204,7 @@
         <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
         <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"verbatim"</span><span class="p">,</span>
+        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"combinatorial"</span><span class="p">,</span>
         <span class="n">apply</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">auto_size</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -1311,7 +1312,7 @@
         <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
         <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"verbatim"</span><span class="p">,</span>
+        <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"combinatorial"</span><span class="p">,</span>
         <span class="n">apply</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -1824,7 +1825,7 @@
     <span class="c1"># Pass-through properties for solve_info components</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the fixed-step size or ``None`` for adaptive controllers."""</span>
+<span class="w">        </span><span class="sd">"""Return the first step, or ``None`` when each run estimates it."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">dt</span>
 
     <span class="nd">@property</span>

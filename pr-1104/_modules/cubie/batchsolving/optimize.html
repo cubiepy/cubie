@@ -768,7 +768,8 @@
 <span class="w">    </span><span class="sd">"""Return the shortest duration to time: at least one save or</span>
 <span class="sd">    summary sample and at least one step, or ``given`` when the</span>
 <span class="sd">    sample interval rejects anything shorter."""</span>
-    <span class="n">trial</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">_duration_floor</span><span class="p">(</span><span class="n">solver</span><span class="p">,</span> <span class="n">given</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">dt</span><span class="p">))</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt_min</span> <span class="k">if</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt</span>
+    <span class="n">trial</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">_duration_floor</span><span class="p">(</span><span class="n">solver</span><span class="p">,</span> <span class="n">given</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">step</span><span class="p">))</span>
     <span class="n">trial</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">trial</span><span class="p">,</span> <span class="n">given</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">trial</span> <span class="o">&lt;</span> <span class="n">given</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_fits_sample_interval</span><span class="p">(</span><span class="n">solver</span><span class="p">,</span> <span class="n">trial</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">given</span>
@@ -839,7 +840,7 @@
     <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
     <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
     <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-    <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"verbatim"</span><span class="p">,</span>
+    <span class="n">grid_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"combinatorial"</span><span class="p">,</span>
     <span class="n">apply</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>

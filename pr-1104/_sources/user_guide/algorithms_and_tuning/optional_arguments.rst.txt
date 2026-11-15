@@ -61,6 +61,20 @@ Controlling the step size
     - Defaults: ``dt_min=1e-9``, ``dt_max=1.0``
     - Type: ``float``, positive
 
+**starting_step_state_fraction** / **starting_step_zero_norm** /
+**starting_step_target** / **starting_step_max_growth** — constants of
+the starting-step estimate.
+    CuBIE first guesses the step that changes the state by
+    ``starting_step_state_fraction`` of its norm, or the geometric mean
+    of ``dt_min`` and ``dt_max`` when the state or its derivative has a
+    norm of ``starting_step_zero_norm`` or less. CuBIE returns at most
+    ``starting_step_max_growth`` first guesses. Lower
+    ``starting_step_target`` for a smaller estimate.
+
+    - Defaults: ``starting_step_state_fraction=0.01``,
+      ``starting_step_zero_norm=1e-5``, ``starting_step_target=0.01``,
+      ``starting_step_max_growth=100``
+
 See :doc:`/user_guide/using_the_solver/timing` for the full derivation rules, and for the output
 timing options (``save_every``, ``summarise_every``,
 ``sample_summaries_every``, ``duration``, ``t0``, ``settling_time``).

@@ -1972,8 +1972,8 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Current integrator step size when available."""</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">single_integrator</span><span class="o">.</span><span class="n">dt</span> <span class="ow">or</span> <span class="kc">None</span>
+<span class="w">        </span><span class="sd">"""Return the first step, or ``None`` when each run estimates it."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">single_integrator</span><span class="o">.</span><span class="n">dt</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">warmup</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
