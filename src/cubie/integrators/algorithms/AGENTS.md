@@ -7,7 +7,8 @@ Step-function factories: each is a `CUDAFactory` subclass (`BaseAlgorithmStep`) 
 JIT-compiles one device function advancing a single ODE/SDE step. Tableau methods pair
 with a `*_tableaus.py` module of Butcher coefficients. Covers explicit Euler, explicit
 / diagonally-implicit / fully-implicit Runge-Kutta (ERK/DIRK/FIRK), Rosenbrock-W,
-backward Euler (plain + predictor-corrector), and Crank-Nicolson. Implicit methods own
+backward Euler (plain + predictor-corrector), Crank-Nicolson, and variable-step BDF.
+Implicit methods own
 a `NewtonKrylov` or `LinearSolver` from `../matrix_free_solvers/`. `get_algorithm_step()`
 resolves a name or `ButcherTableau` to the right factory.
 
@@ -36,6 +37,8 @@ resolves a name or `ButcherTableau` to the right factory.
 | `backwards_euler.py` | `BackwardsEulerStep` + config: single-stage implicit, order 1, fixed-step; persistent `increment_cache` warm-starts Newton. |
 | `backwards_euler_predict_correct.py` | `BackwardsEulerPCStep`: subclass adding an explicit forward-Euler predictor before the Newton corrector. |
 | `crank_nicolson.py` | `CrankNicolsonStep` + config: order-2 adaptive implicit; two implicit solves per step (CN + backward Euler), the difference giving the embedded error estimate. |
+| `generic_bdf.py` | `BDFStep` + `BDFStepConfig`: variable-step BDF of fixed maximum order; owns a `StepHistory` (`../step_history.py`) and runs one Newton solve per step. |
+| `generic_bdf_tableaus.py` | `BDFTableau` (backward Euler's one-stage arrays; `order` is the maximum order; `ratio_limits`, `history_length`) + `bdf1`–`bdf5` (default `bdf2`); `zero_stable_ratio_limit` (largest constant step ratio keeping an order zero-stable, bisected on the recurrence's parasitic roots). |
 
 ## Device step contract (`IVPLoop` must match)
 - Signature, identical for every algorithm: `(state, proposed_state, parameters,
@@ -60,7 +63,7 @@ resolves a name or `ButcherTableau` to the right factory.
 - `get_algorithm_step(precision, settings, **kwargs)` requires `settings["algorithm"]`:
   a name (resolved through `_TABLEAU_REGISTRY_BY_ALGORITHM` by `resolve_alias`) or a
   `ButcherTableau` instance (dispatched by type in `resolve_supplied_tableau`). The bare
-  family names `"erk"`, `"dirk"`, `"firk"`, `"rosenbrock"` use the class's
+  family names `"erk"`, `"dirk"`, `"firk"`, `"rosenbrock"`, `"bdf"` use the class's
   `default_tableau`; `"euler"`, `"backwards_euler"`, `"backwards_euler_pc"` and
   `"crank_nicolson"` have no tableau.
 - `AlgorithmDefaults` holds one flat settings dict per family (controller and solver
@@ -95,7 +98,8 @@ resolves a name or `ButcherTableau` to the right factory.
 ## Explicit and implicit steps
 - Explicit (`ODEExplicitStep`, no solver): `ExplicitEulerStep`, `ERKStep`.
 - Implicit (`ODEImplicitStep`, owns a solver): `BackwardsEulerStep`,
-  `BackwardsEulerPCStep`, `CrankNicolsonStep`, `DIRKStep`, `FIRKStep` use Newton-Krylov;
+  `BackwardsEulerPCStep`, `CrankNicolsonStep`, `DIRKStep`, `FIRKStep`, `BDFStep` use
+  Newton-Krylov;
   `GenericRosenbrockWStep` is linearly implicit with a `LinearSolver` and no Newton
   iteration (`is_linear = True`).
 
@@ -137,6 +141,21 @@ earlier stage's row). `predictor_fn` arrives through compile settings;
 - The RHS comes from the generated `apply_mass`: DIRK and Rosenbrock-W `M @ raw_error`
   (DIRK at the final stage state, time and drivers, into `error_rhs`); FIRK
   `M @ (sum_i w_i*K_i) - gamma*h*f(y_n)` at the step-start state.
+
+## BDF (multistep)
+- The past states live in the step's `StepHistory` child (persistent `history_values`,
+  `history_intervals`, int32 `history_count`); the loop, controllers and solver arrays
+  carry no history. The history commits lazily: each step pushes `state` when
+  `accepted_flag` reports the last proposal accepted, so rejections never reach it.
+- Each step runs the largest order `q` <= `tableau.order` with `q + 1` stored states
+  whose step ratios are within `ratio_limits`; none qualifying restarts at order one
+  with an explicit Euler predictor (warp-voted `dxdt_fn` call). A step longer than
+  order one's limit times the last interval merges that interval into the one
+  before it (one spare slot keeps the full order after a merge).
+- The corrector reuses the backward Euler helpers: `base_state` is the history sum,
+  `h` is `dt / alpha_0`, `a_ij = 1`. The estimate scales the Newton correction from
+  the predictor's increment, so `algorithm_order` is the maximum order.
+- Tableau `defaults` cap `max_step_growth` at the order's ratio limit.
 
 ## DIRK stage data
 `stage_rhs` holds `k_i = M^-1 @ f(Y_i)`: implicit stages store `stage_increment / dt`;
