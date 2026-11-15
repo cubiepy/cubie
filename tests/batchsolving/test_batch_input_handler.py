@@ -694,7 +694,10 @@ def test_fast_return_states_ok_params_small(input_handler, system, precision):
     n_s = system.sizes.states
     states = np.ones((n_s, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        states, None, input_handler.system.swept_set, input_handler.system.states
+        states,
+        None,
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -705,7 +708,10 @@ def test_fast_return_params_ok_states_small(input_handler, system, precision):
     n_p = system.sizes.swept_parameters
     params = np.ones((n_p, 3), dtype=precision)
     result = input_handler._fast_return_arrays(
-        None, params, input_handler.system.swept_set, input_handler.system.states
+        None,
+        params,
+        input_handler.system.swept_set,
+        input_handler.system.states,
     )
     assert result is not None
     assert result[0].shape[1] == result[1].shape[1]
@@ -1120,6 +1126,45 @@ def test_array_with_single_run_input_keeps_array_run_count(
     assert_array_equal(
         single_out, np.repeat(column[:, np.newaxis], n_runs, axis=1)
     )
+
+
+@pytest.mark.parametrize("kind", ["combinatorial", "verbatim"])
+def test_two_arrays_pair_run_for_run(input_handler_mutable, precision, kind):
+    """Check that the handler pairs the columns of two arrays with equal
+    run counts under either grid type."""
+    system = input_handler_mutable.system
+    n_runs = 3
+    states = np.arange(system.states.n * n_runs, dtype=precision).reshape(
+        system.states.n, n_runs
+    )
+    params = np.arange(
+        system.swept_set.n * n_runs, dtype=precision
+    ).reshape(system.swept_set.n, n_runs) + 100
+    inits, built, _, _ = _handle(input_handler_mutable, states, params, kind)
+    assert_array_equal(inits, states)
+    assert_array_equal(built, params)
+
+
+@pytest.mark.parametrize("kind", ["combinatorial", "verbatim"])
+def test_two_arrays_with_different_run_counts_raise(
+    input_handler_mutable, precision, kind
+):
+    """Check that the handler raises for two arrays with different run
+    counts above one under either grid type."""
+    system = input_handler_mutable.system
+    states = np.ones((system.states.n, 2), dtype=precision)
+    params = np.ones((system.swept_set.n, 4), dtype=precision)
+    with pytest.raises(ValueError, match="same number of runs"):
+        _handle(input_handler_mutable, states, params, kind)
+
+
+def test_unknown_grid_type_raises_for_arrays(input_handler_mutable, precision):
+    """Check that the handler rejects an unknown grid type for array
+    inputs."""
+    system = input_handler_mutable.system
+    states = np.ones((system.states.n, 3), dtype=precision)
+    with pytest.raises(ValueError, match="Unknown grid type"):
+        _handle(input_handler_mutable, states, None, "badkind")
 
 
 def test_materialise_passes_matching_user_arrays_through(input_handler):

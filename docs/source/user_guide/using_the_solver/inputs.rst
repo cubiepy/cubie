@@ -66,6 +66,12 @@ array out as ``(n_variables, n_runs)``, with its rows ordered by variable
 name. If the array is already in the same data type as ``solver.precision``,
 then you can also save an additional array copy.
 
+Cubie pairs the columns of two arrays run for run, whatever ``grid_type``
+you pass. Give both arrays the same number of runs, or give one of them a
+single run (or leave it out) to use those values in every run. To combine
+every value of one input with every value of the other, pass dicts, or
+build the arrays with ``solver.prepare_grid_arrays``.
+
 .. note::
 
    It may seem odd that the states array ends up in a different order

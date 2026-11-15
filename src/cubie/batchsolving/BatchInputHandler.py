@@ -583,8 +583,9 @@ class BatchInputHandler:
             ``None``, a dict of parameter values, or a host or device
             array; see :meth:`set_swept_parameters`.
         kind
-            Strategy for grid assembly. ``"combinatorial"`` expands
-            all combinations while ``"verbatim"`` preserves pairings.
+            Strategy for building runs from dict inputs.
+            ``"combinatorial"`` builds every combination of the values,
+            and ``"verbatim"`` pairs them run for run.
         fix_constant_parameters
             Compile in every dict entry and every row of a full-height
             parameter array that holds one value. Pass ``False`` to
@@ -596,12 +597,20 @@ class BatchInputHandler:
             ``(inits, params)``: the (state, run) and (swept parameter,
             run) arrays for the system as it is now compiled.
 
+        Raises
+        ------
+        ValueError
+            If ``kind`` is not ``"combinatorial"`` or ``"verbatim"``,
+            or if neither input is a dict and the two inputs have
+            different numbers of runs with more than one run each.
+
         Notes
         -----
-        Pass both inputs as arrays to give each as a complete grid.
-        With ``kind="combinatorial"`` the handler takes the Cartesian
-        product of both grids. Set ``kind`` to ``"verbatim"`` when you
-        have already paired the runs in your arrays.
+        Pass arrays when you have already built the runs. The handler
+        pairs the columns of two arrays run for run whatever ``kind``
+        you pass, and uses ``None`` or a single-run input in every run.
+        It combines a dict input with the other input according to
+        ``kind``.
 
         Device arrays are used as prebuilt (variable, run) grids with
         no processing; they must already match the system precision
@@ -796,13 +805,27 @@ class BatchInputHandler:
             The swept parameters' values from
             :meth:`set_swept_parameters`.
         kind
-            Strategy for grid assembly.
+            Strategy for building runs when either input is a dict.
 
         Returns
         -------
         tuple
             The (state, run) and (swept parameter, run) arrays.
+
+        Raises
+        ------
+        ValueError
+            If ``kind`` is not ``"combinatorial"`` or ``"verbatim"``.
         """
+        if kind not in ("combinatorial", "verbatim"):
+            raise ValueError(
+                f"Unknown grid type '{kind}'. Use 'combinatorial' or "
+                f"'verbatim'."
+            )
+        # Arrays hold runs the caller has already built, so we pair
+        # them run for run and apply kind to dict inputs only.
+        if not (isinstance(states, dict) or isinstance(params, dict)):
+            kind = "verbatim"
         swept_set = self.system.swept_set
         state_set = self.system.states
 
@@ -1506,8 +1529,8 @@ class BatchInputHandler:
         states_small = self._is_1d_or_none(states)
         params_small = self._is_1d_or_none(params)
 
-        # We treat a missing or 1D input as one run, so under either
-        # grid type we pair it with every column of the other input.
+        # We treat a missing or 1D input as one run and use it in every
+        # column of the other input.
         if states_ok and params_small:
             backed = set()
             n_runs = states_runs if states_runs is not None else 1
