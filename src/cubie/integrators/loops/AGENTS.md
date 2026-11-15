@@ -40,14 +40,11 @@ nonzero return (solver bits plus `DAE_INITIALISATION_FAILED`) is OR'd into `stat
 sets `irrecoverable`: the run ends at the t0 save with the uncorrected values.
 
 ## Starting step
-After the t0 save we set `dt_raw` to the value `starting_step_fn` returns, or to the
-compiled `dt` when `starting_step_fn` is `None` (fixed control, or a given `dt`).
-Call `starting_step_fn` with the step function's buffers in the step's order: `(state,
-proposed_state, parameters, driver_coefficients, drivers_buffer, proposed_drivers,
-observables, proposed_observables, error, time_scalar, shared, persistent_local)`. We
-pass `proposed_state`, `proposed_drivers`, `proposed_observables` and `error` as
-scratch, because every step writes them before it reads them on its first call. We can
-lend `error` because `n_error` equals `n_states` whenever the controller is adaptive.
+After the t0 save the loop starts at the value `starting_step_fn` returns, or at the
+compiled `dt` when `starting_step_fn` is `None`. `starting_step_fn` overwrites the
+proposal buffers and `error`, which the first step writes before it reads.
+`starting_step_fn` also takes the compiled `dt` as its first guess for a zero state or
+derivative.
 
 ## Output scheduling
 Each timing parameter has a `next_*` event time the step is clamped not to overshoot:
