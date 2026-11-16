@@ -79,16 +79,16 @@ You can also access the logger programmatically:
 Precision Trade-offs
 --------------------
 
-CuBIE supports ``float32`` and ``float64``. Single-precision
-(``float32``) arithmetic gives about 7 significant figures, and
-double-precision (``float64``) arithmetic gives about 15. Recent
-consumer GPUs, such as the RTX series, do single-precision arithmetic
-32 to 64 times faster than double-precision arithmetic. A ``float64``
-value also takes twice the memory of a ``float32`` value, so fewer
-systems fit on the GPU at once. If you solve to a tight relative
-tolerance (about ``5e-7`` or below), ``float64`` can run faster than
-``float32``. At looser tolerances, ``float64`` runs about 2 to 35
-times slower, depending on the system and algorithm.
+CuBIE supports ``float32`` and ``float64``. In single precision
+(``float32``) you get about 7 significant figures, and in double
+precision (``float64``) about 15. On recent consumer GPUs, such as the
+RTX series, single-precision arithmetic is 32 to 64 times faster than
+double-precision arithmetic. A ``float64`` value is also twice the size
+of a ``float32`` value, so you can run fewer systems on the GPU at once.
+If you solve to a tight relative tolerance (about ``5e-7`` or below), a
+``float64`` solve can be faster than a ``float32`` one. At looser
+tolerances, a ``float64`` solve is about 2 to 35 times slower, depending
+on the system and algorithm.
 
 Buffer Location Tuning
 ----------------------

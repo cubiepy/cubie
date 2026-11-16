@@ -25,8 +25,7 @@ Decision Guide
        methods are fast.
    * - Very stiff
      - FIRK
-     - FIRK algorithms like ``radau_iia_5`` handle extreme stiffness
-       well.
+     - Use FIRK algorithms like ``radau_iia_5`` for extreme stiffness.
 
 The bare family names ``erk``, ``dirk``, ``firk``, and ``rosenbrock``
 are also accepted and select each family's default tableau

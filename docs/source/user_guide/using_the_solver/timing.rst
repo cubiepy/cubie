@@ -251,18 +251,19 @@ Fixed-step controllers use only ``dt``, which becomes the constant step
 size throughout integration.
 
 If you use a fixed-step controller, set ``dt`` 10 to 100 times smaller
-than the sharpest corner your system produces. If you use an adaptive
-controller, set ``dt_max`` shorter than any quasi-periodic cycle your
-system produces, so that the solver can't step straight over a cycle and
-land back near where it started. If runs fail with ``STEP_TOO_SMALL`` in
-their status codes and ``dt_min`` is not much smaller than the sharpest
-feature your system produces, decrease ``dt_min``. If ``dt_min`` is
-already very small, try an algorithm that handles stiff systems better
-(see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).
-When you give an adaptive controller no ``dt``, cubie estimates a
-starting step for each run, so you only need to set ``dt`` if you run
-many short integrations and a starting step that is too small or too
-large adds noticeably to their runtime.
+than the sharpest corner in your system's solution. If you use an
+adaptive controller, set ``dt_max`` shorter than any quasi-periodic
+cycle in the solution, so that cubie can't step straight over a cycle
+and land back near where it started. If cubie reports
+``STEP_TOO_SMALL`` in a run's status code and ``dt_min`` is not much
+smaller than the sharpest feature in the solution, decrease ``dt_min``.
+If ``dt_min`` is already very small, try an algorithm designed for
+stiff systems (see
+:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`). When you
+give an adaptive controller no ``dt``, cubie estimates a starting step
+for each run. You only need to set ``dt`` if you run many short
+integrations and you know a starting step that suits them better than
+cubie's estimate.
 
 Default Behaviour
 ~~~~~~~~~~~~~~~~~
