@@ -304,7 +304,7 @@ single batch solve.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">method</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;euler&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;tsit5&quot;</span></code></p></td>
 <td><p>Integration algorithm name (see <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">duration</span></code></p></td>
@@ -366,7 +366,7 @@ output.</p></td>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">algorithm</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;euler&quot;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;tsit5&quot;</span></code></p></td>
 <td><p>Integration algorithm name or a supplied
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ButcherTableau</span></code>.</p></td>
 </tr>
@@ -527,7 +527,7 @@ parameter values in the <code class="docutils literal notranslate"><span class="
 <dt><strong>step_controller</strong></dt><dd><p>Selects the step-size controller by name: <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pid&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code>. When omitted, the
 chosen algorithm’s own default controller is used — fixed for
-schemes without an embedded error estimate, otherwise PI for
+schemes without an embedded error estimate, otherwise integral for
 explicit Runge–Kutta and Gustafsson for the implicit families.
 See <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a> and the algorithm defaults table
 in the API reference.</p>
