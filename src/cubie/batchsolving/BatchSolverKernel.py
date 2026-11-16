@@ -1591,8 +1591,8 @@ class BatchSolverKernel(CUDAFactory):
 
     @property
     def dt(self) -> Optional[float]:
-        """Current integrator step size when available."""
-        return self.single_integrator.dt or None
+        """Return the first step, or ``None`` when each run estimates it."""
+        return self.single_integrator.dt
 
     @property
     def warmup(self) -> float:

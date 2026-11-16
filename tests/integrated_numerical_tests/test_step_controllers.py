@@ -192,8 +192,8 @@ class TestControllerNumerical:
         n_states = system.sizes.states
         dtype = precision
         cpu_controller = cpu_step_controller
-        current_dt_cpu = float(step_controller.dt)
-        current_dt_gpu = float(step_controller.dt)
+        current_dt_cpu = float(cpu_controller.dt)
+        current_dt_gpu = float(cpu_controller.dt)
         local_mem = np.zeros(
             step_controller.persistent_local_buffer_size,
             dtype=dtype,
@@ -349,8 +349,8 @@ class TestControllerEquivalence:
         gpu_trace = ControllerTrace()
         cpu_trace = ControllerTrace()
 
-        current_dt_device = dtype(step_controller.dt)
-        current_dt_cpu = dtype(step_controller.dt)
+        current_dt_device = dtype(cpu_step_controller.dt)
+        current_dt_cpu = dtype(cpu_step_controller.dt)
         # The device trace starts from a zeroed persistent buffer, so
         # the CPU reference must start from cleared history too.
         cpu_step_controller._prev_dt = dtype(0)

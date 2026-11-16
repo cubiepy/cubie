@@ -432,6 +432,7 @@ class IVPLoop(CUDAFactory):
         drivers_fn = config.drivers_fn
         observables_fn = config.observables_fn
         initialise_state_fn = config.initialise_state_fn
+        starting_step_fn = config.starting_step_fn
 
         flags = config.compile_flags
         save_obs_bool = flags.save_observables
@@ -477,9 +478,15 @@ class IVPLoop(CUDAFactory):
         alloc_initialiser_persistent = getalloc(
             "initialiser_persistent", self, zero=True
         )
+        alloc_starting_step_shared = getalloc(
+            "starting_step_shared", self, zero=True
+        )
+        alloc_starting_step_persistent = getalloc(
+            "starting_step_persistent", self, zero=True
+        )
 
         # Timing values
-        initial_dt = precision(config.dt)
+        initial_dt = config.dt
         typed_zero = precision(0.0)
         save_every = config.save_every
         sample_summaries_every = config.sample_summaries_every
@@ -633,6 +640,12 @@ class IVPLoop(CUDAFactory):
             initialiser_persistent = alloc_initialiser_persistent(
                 shared_scratch, persistent_local
             )
+            starting_step_shared = alloc_starting_step_shared(
+                shared_scratch, persistent_local
+            )
+            starting_step_persistent = alloc_starting_step_persistent(
+                shared_scratch, persistent_local
+            )
             # --------------------------------------------------------------- #
 
             first_step_flag = True
@@ -670,7 +683,6 @@ class IVPLoop(CUDAFactory):
                 parameters_buffer,
                 drivers_buffer,
                 t_prec,
-                initial_dt,
                 initialiser_shared,
                 initialiser_persistent,
                 proposed_counters,
@@ -734,8 +746,27 @@ class IVPLoop(CUDAFactory):
 
             status = int32(success | init_status)
             iteration_status = int32(0)
-            dt[0] = initial_dt
-            dt_raw = initial_dt
+            # Estimate this run's starting step. Use the proposal and
+            # error buffers as scratch: the first step writes them before
+            # it reads them.
+            if starting_step_fn is None:
+                dt_raw = initial_dt
+            else:
+                dt_raw = starting_step_fn(
+                    state_buffer,
+                    state_proposal_buffer,
+                    parameters_buffer,
+                    driver_coefficients,
+                    drivers_buffer,
+                    drivers_proposal_buffer,
+                    observables_buffer,
+                    observables_proposal_buffer,
+                    error,
+                    t_prec,
+                    starting_step_shared,
+                    starting_step_persistent,
+                )
+            dt[0] = dt_raw
             accept_step[0] = int32(0)
             # Time an unclamped step would reach.
             t_next64 = t + float64(dt_raw)

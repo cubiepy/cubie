@@ -3,6 +3,9 @@
 import numpy as np
 
 from cubie._utils import PrecisionDType
+from cubie.integrators.step_control.adaptive_step_controller import (
+    default_starting_step,
+)
 
 from .cpu_utils import Array
 
@@ -31,6 +34,10 @@ class CPUAdaptiveController:
         deadband_min: float = 1.0,
         deadband_max: float = 1.0,
         mass_flags=None,
+        starting_step_state_fraction: float = 0.01,
+        starting_step_zero_norm: float = 1e-5,
+        starting_step_target: float = 0.01,
+        starting_step_max_growth: float = 100.0,
     ) -> None:
         self.kind = kind.lower()
         # Rows with a zero mass diagonal stay out of the error norm.
@@ -39,12 +46,13 @@ class CPUAdaptiveController:
         )
         self.dt_min = precision(dt_min)
         self.dt_max = precision(dt_max)
-        # A user dt seeds the first step; the geometric mean of the
-        # bounds is only a fallback.
+        # Without a user dt, run_reference_loop sets an adaptive run's
+        # first step from starting_step.
+        self.estimates_dt = dt is None and self.kind != "fixed"
         if dt is not None:
             self.dt0 = precision(dt)
         else:
-            self.dt0 = precision(np.sqrt(dt_min * dt_max))
+            self.dt0 = precision(default_starting_step(dt_min, dt_max))
         self.dt = self.dt0
         self.atol = precision(atol)
         self.rtol = precision(rtol)
@@ -60,6 +68,12 @@ class CPUAdaptiveController:
         self.deadband_min = precision(deadband_min)
         self.deadband_max = precision(deadband_max)
         self.unity_gain = precision(1.0)
+        self.starting_step_state_fraction = precision(
+            starting_step_state_fraction
+        )
+        self.starting_step_zero_norm = precision(starting_step_zero_norm)
+        self.starting_step_target = precision(starting_step_target)
+        self.starting_step_max_growth = precision(starting_step_max_growth)
         self._deadband_disabled = (self.deadband_min == self.unity_gain) and (
             self.deadband_max == self.unity_gain
         )
@@ -140,6 +154,77 @@ class CPUAdaptiveController:
             self._prev_nrm2 = errornorm
 
         return accept
+
+    def starting_step(
+        self,
+        evaluator,
+        driver_evaluator,
+        state: Array,
+        params: Array,
+        drivers: Array,
+        observables: Array,
+        time: float,
+    ) -> np.floating:
+        """Return the starting-step estimate at ``state``."""
+        precision = self.precision
+        derivative, _ = evaluator.rhs(
+            state, params, drivers, observables, time
+        )
+        derivative = np.asarray(derivative, dtype=precision)
+        state_norm2 = self.error_norm(state, state, state)
+        derivative_norm2 = self.error_norm(state, state, derivative)
+
+        zero_norm2 = precision(self.starting_step_zero_norm**2)
+        inverse_target_norm2 = precision(
+            1.0 / self.starting_step_target**2
+        )
+        exponent = precision(-0.5 / (self.order + 1))
+
+        # Silence numpy: we raise zero to a negative power for a system
+        # at rest.
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            if state_norm2 <= zero_norm2 or derivative_norm2 <= zero_norm2:
+                first_guess = self.dt0
+            else:
+                first_guess = precision(
+                    self.starting_step_state_fraction
+                    * np.sqrt(state_norm2 / derivative_norm2)
+                )
+            first_guess = precision(np.fmin(first_guess, self.dt_max))
+
+            # Hold the algebraic rows over the Euler step.
+            euler_state = (state + first_guess * derivative).astype(precision)
+            if self.mass_flags is not None:
+                euler_state = np.where(self.mass_flags, euler_state, state)
+                euler_state = euler_state.astype(precision)
+            end_time = precision(time + first_guess)
+            end_drivers = driver_evaluator(end_time)
+            end_observables = evaluator.observables(
+                euler_state, params, end_drivers, end_time
+            )
+            end_derivative, _ = evaluator.rhs(
+                euler_state, params, end_drivers, end_observables, end_time
+            )
+            change = (
+                np.asarray(end_derivative, dtype=precision) - derivative
+            ).astype(precision)
+            # Multiply by the reciprocal twice, as the device does: the
+            # result is rounding-sensitive.
+            inverse_guess = precision(precision(1.0) / first_guess)
+            second_derivative_norm2 = precision(
+                self.error_norm(state, state, change)
+                * inverse_guess
+                * inverse_guess
+            )
+
+            largest_norm2 = np.fmax(derivative_norm2, second_derivative_norm2)
+            second_guess = precision(
+                precision(largest_norm2 * inverse_target_norm2) ** exponent
+            )
+            estimate = np.fmin(
+                self.starting_step_max_growth * first_guess, second_guess
+            )
+            return self._clamp(estimate, self.dt_min, self.dt_max)
 
     def _clamp(self, value, minimum, maximum):
         """Clamp with the device's fmax/fmin NaN handling and order."""

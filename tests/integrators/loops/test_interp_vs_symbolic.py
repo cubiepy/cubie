@@ -17,7 +17,11 @@ from tests._utils import (
     "solver_settings_override",
     [
         TIME_DRIVER_SETTINGS,
-        {**DRIVER_DERIVATIVE_SETTINGS, "algorithm": "rosenbrock"},
+        {
+            **DRIVER_DERIVATIVE_SETTINGS,
+            "algorithm": "rosenbrock",
+            "dt": 0.01,
+        },
     ],
     indirect=True,
 )

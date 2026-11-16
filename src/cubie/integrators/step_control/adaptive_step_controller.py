@@ -90,6 +90,11 @@ DEFAULT_DT_MAX = 1.0
 """Maximum step when none is given."""
 
 
+def default_starting_step(dt_min: float, dt_max: float) -> float:
+    """Return the geometric mean of the step bounds."""
+    return float(sqrt(dt_min * dt_max))
+
+
 @frozen
 class AdaptiveStepControlConfig(BaseStepControllerConfig):
     """Configuration for adaptive step controllers.
@@ -166,11 +171,11 @@ class AdaptiveStepControlConfig(BaseStepControllerConfig):
         return self.precision(self._dt_max)
 
     @property
-    def dt(self) -> float:
-        """Return the initial step; the bounds' geometric mean if unset."""
-        if self._dt is not None:
-            return self.precision(self._dt)
-        return self.precision(sqrt(self._dt_min * self._dt_max))
+    def dt(self) -> Optional[float]:
+        """Return the given initial step, or ``None`` when not given."""
+        if self._dt is None:
+            return None
+        return self.precision(self._dt)
 
     @property
     def is_adaptive(self) -> bool:
@@ -360,3 +365,9 @@ class BaseAdaptiveStepController(BaseStepController):
         """Return the integration algorithm order assumed by the controller."""
 
         return int(self.compile_settings.algorithm_order)
+
+    @property
+    def norm_fn(self) -> Callable:
+        """Return the error-norm device function."""
+
+        return self.compile_settings.norm_fn

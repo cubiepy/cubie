@@ -60,9 +60,11 @@ updating a PR.
 - Type hints on function/method **signatures** only (PEP484) — no inline variable annotations, no
   `from __future__ import annotations` (min Python 3.11). numpydoc docstrings on public API.
 - Write comments as the programmer explaining the code to a colleague, in the imperative
-  ("Place driver derivatives after drivers in the buffer") or as narrative ("We sort first so
-  the cache key is stable"). Comment only where the code is hard to read, and say why when the
-  reason is not visible in the code.
+  ("Place driver derivatives after drivers in the buffer") or as a plain statement of what the
+  code relies on ("The norm function returns a mean square, so square the threshold"). Never
+  narrate the implementation's own process ("when the estimator compiles a step"); describe
+  the situation as the reader of the code sees it. Comment only where the code is hard to
+  read, and say why when the reason is not visible in the code.
 - Write docstrings in the numpydoc imperative, describing what the code does for its caller:
   "Return the names as a sorted tuple." and "Raise ValueError if a name repeats.", not "We sort
   the names". When a docstring tells the user how to use the code, address the user directly:

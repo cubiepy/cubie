@@ -1248,11 +1248,14 @@ def test_child_products_carry_their_declared_fields(
     controller = run._step_controller.products
     assert {
         "step_controller_fn", "is_adaptive", "dt", "dt_min", "dt_max",
-        "atol", "rtol",
+        "atol", "rtol", "norm_fn",
     } <= set(controller)
     assert controller["is_adaptive"] == run._step_controller.is_adaptive
     assert controller["dt"] == run._step_controller.dt
     assert "initialise_state_fn" in run._dae_initialiser.products
+    assert {"starting_step_fn", "estimates_dt"} <= set(
+        run._starting_step.products
+    )
     assert run.products["loop_fn"] is run._loop.products["loop_fn"]
     interpolator = solverkernel.driver_interpolator.products
     assert interpolator["coefficients_shape"] == (

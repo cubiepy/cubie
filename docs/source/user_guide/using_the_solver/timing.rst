@@ -285,10 +285,14 @@ When you don't specify any step size parameters, CuBIE uses these defaults:
      - ``1.0``
    * - Adaptive
      - ``dt``
-     - ``sqrt(dt_min * dt_max)`` = ``3.2e-5``
+     - Estimated for each run
    * - Fixed
      - ``dt``
      - ``1e-3``
+
+When you give an adaptive controller no ``dt``, CuBIE estimates each
+run's starting step with Hairer's method, which is the best choice in
+most cases.
 
 Derivation Rules
 ~~~~~~~~~~~~~~~~
@@ -308,12 +312,12 @@ missing values. The rules differ for adaptive and fixed controllers:
      - ``dt_min = dt / 1e6``, ``dt_max = dt * 1000``
    * - ``dt_min`` only
      - ``dt_max = 1.0`` (default, or ``dt_min * 1000`` if ``dt_min``
-       is above it), ``dt = sqrt(dt_min * dt_max)``
+       is above it)
    * - ``dt_max`` only
      - ``dt_min = 1e-9`` (default, or ``dt_max / 1000`` if ``dt_max``
-       is below it), ``dt = sqrt(dt_min * dt_max)``
+       is below it)
    * - ``dt_min`` and ``dt_max``
-     - ``dt = sqrt(dt_min * dt_max)``
+     - Nothing derived
    * - ``dt`` and ``dt_min``
      - ``dt_max = dt * 1000``
    * - ``dt`` and ``dt_max``
@@ -335,10 +339,9 @@ Build a ``Solver`` to read the step sizes cubie derives:
    print(solver.dt_min, solver.dt, solver.dt_max)
    # cubie derives dt_min=1e-8 and dt_max=10.0
 
-   # Give the bounds, and cubie computes the initial dt
+   # Give the bounds, and cubie estimates each run's starting step
    solver = Solver(LV, algorithm="ode45", dt_min=1e-5, dt_max=0.1)
-   print(solver.dt_min, solver.dt, solver.dt_max)
-   # cubie computes dt=0.001
+   print(solver.dt_min, solver.dt_max)
 
    # Set a fixed step of dt=0.005
    solver = Solver(LV, algorithm="ode45", step_controller="fixed", dt=0.005)

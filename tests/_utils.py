@@ -109,12 +109,18 @@ class MockMemoryManager(MemoryManager):
 #                      Standard Parameter Sets                                #
 # --------------------------------------------------------------------------- #
 
+# Use this set in tests that read a step setting back from
+# solver_settings. Leave every other chain on the Solver's defaults.
+ALL_EXPLICIT_SETTINGS = {
+    "dt": 0.01,
+    "dt_min": 1e-7,
+    "dt_max": 1.0,
+}
+
 MID_RUN_PARAMS = {
-    "dt": 0.001,
     "save_every": 0.02,
     "summarise_every": 0.1,
     "sample_summaries_every": 0.02,
-    "dt_max": 0.5,
     "output_types": [
         "state", "time", "observables", "mean", "iteration_counters",
     ],
@@ -267,7 +273,6 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "algorithm": "l_stable_sdirk_4",
         "step_controller": "pi",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "dirk-kvaerno3-fixed": {
@@ -287,21 +292,18 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "algorithm": "radau",
         "step_controller": "pi",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "firk-radau-iia-3": {
         "algorithm": "radau_iia_3",
         "step_controller": "gustafsson",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "firk-radau-iia-9": {
         "algorithm": "radau_iia_9",
         "step_controller": "gustafsson",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     "firk-gauss-legendre-4": {
@@ -311,7 +313,6 @@ SPECIFIC_ALGORITHM_COMBOS = {
         "algorithm": "firk_gauss_legendre_4",
         "step_controller": "gustafsson",
         "dt_min": 1e-6,
-        "dt": 1e-3,
         "dt_max": 0.5,
     },
     # Specific Rosenbrock-W tableaus
@@ -1460,11 +1461,13 @@ def _build_cpu_step_controller(
     if gains is not None:
         step_controller_settings.update(gains)
     kind = step_controller_settings["step_controller"].lower()
+    # Use a fixed controller's step for both of its bounds.
+    fixed_dt = step_controller_settings.get("dt")
     controller = CPUAdaptiveController(
         kind=kind,
-        dt=step_controller_settings["dt"],
-        dt_min=step_controller_settings["dt_min"],
-        dt_max=step_controller_settings["dt_max"],
+        dt=step_controller_settings.get("dt"),
+        dt_min=step_controller_settings.get("dt_min", fixed_dt),
+        dt_max=step_controller_settings.get("dt_max", fixed_dt),
         atol=step_controller_settings["atol"],
         rtol=step_controller_settings["rtol"],
         order=step_controller_settings["algorithm_order"],
@@ -1507,10 +1510,6 @@ def _get_algorithm_order(
         resolve_alias,
         resolve_supplied_tableau,
     )
-    from cubie.integrators.algorithms.generic_rosenbrock_w import (
-        GenericRosenbrockWStep,
-        DEFAULT_ROSENBROCK_TABLEAU,
-    )
 
     if isinstance(algorithm_name_or_tableau, str):
         algorithm_type, tableau = resolve_alias(algorithm_name_or_tableau)
@@ -1519,9 +1518,9 @@ def _get_algorithm_order(
             algorithm_name_or_tableau
         )
 
-    # For rosenbrock without explicit tableau, use default
-    if algorithm_type is GenericRosenbrockWStep and tableau is None:
-        tableau = DEFAULT_ROSENBROCK_TABLEAU
+    # A bare family name runs the family's default tableau.
+    if tableau is None:
+        tableau = algorithm_type.default_tableau
 
     # Extract order from tableau if available
     if tableau is not None and hasattr(tableau, "order"):
@@ -1912,6 +1911,89 @@ def run_controller_device_step(
         precision(dt[0]), int(accept[0]), persistent_local.copy(),
         int(status[0]),
     )
+
+
+@lru_cache(maxsize=None)
+def _starting_step_kernel(starting_step_fn):
+    @cuda.jit(**compile_kwargs)
+    def kernel(
+        state,
+        proposed_state,
+        parameters,
+        driver_coefficients,
+        drivers,
+        proposed_drivers,
+        observables,
+        proposed_observables,
+        error,
+        scalars,
+        shared,
+        persistent,
+        estimate,
+    ):
+        estimate[0] = starting_step_fn(
+            state,
+            proposed_state,
+            parameters,
+            driver_coefficients,
+            drivers,
+            proposed_drivers,
+            observables,
+            proposed_observables,
+            error,
+            scalars[0],
+            shared,
+            persistent,
+        )
+
+    return kernel
+
+
+def run_starting_step_device(
+    estimator,
+    precision,
+    state,
+    parameters,
+    driver_coefficients,
+    drivers,
+    observables,
+    time,
+):
+    """Return the estimator's device estimate at ``state``.
+
+    Pass ``drivers`` and ``observables`` evaluated at ``time``.
+    """
+    stream = default_memmgr.get_group_stream()
+
+    def staged(values):
+        return cuda.to_device(
+            np.asarray(values, dtype=precision), stream=stream
+        )
+
+    def scratch(length):
+        return staged(np.zeros(length))
+
+    n_states = len(state)
+    d_estimate = scratch(1)
+    kernel = _starting_step_kernel(estimator.device_function)
+    kernel[1, 1, stream](
+        staged(state),
+        scratch(n_states),
+        staged(parameters),
+        staged(driver_coefficients),
+        staged(drivers),
+        scratch(len(drivers)),
+        staged(observables),
+        scratch(len(observables)),
+        scratch(n_states),
+        staged([time]),
+        scratch(estimator.shared_buffer_size),
+        scratch(estimator.persistent_local_buffer_size),
+        d_estimate,
+    )
+    estimate = d_estimate.copy_to_host(stream=stream)
+    stream.synchronize()
+    return precision(estimate[0])
 
 
 @lru_cache(maxsize=None)
@@ -2384,6 +2466,7 @@ RECOVERED_TRANSIENT = {
     "algorithm": "rodas3p",
     "step_controller": "pid",
     "duration": 1.0,
+    # Start at dt_max so that the first step's linear solve fails.
     "dt": 1.0,
     "dt_min": 1e-9,
     "dt_max": 1.0,
@@ -2417,7 +2500,6 @@ IRRECOVERABLE = {
     "min_step_shrink": 0.2,
     "max_step_growth": 8.0,
     "duration": 1.0,
-    "dt": 0.5,
     "dt_min": 0.4,
     "dt_max": 0.5,
     "atol": 1e-13,
@@ -2462,7 +2544,6 @@ IMPOSSIBLE_TOLERANCE = {
     "step_controller": "pid",
     "atol": 1e-13,
     "rtol": 1e-13,
-    "dt": 0.01,
     "dt_min": 1e-6,
     "dt_max": 0.1,
     "duration": 0.2,
@@ -2699,7 +2780,6 @@ TINY_DT_ADAPTIVE_CN = {
     'step_controller': 'PI',
     'output_types': ['state', 'time'],
     'dt_min': 1e-9,
-    'dt': 5e-7,
     'dt_max': 1e-6,
 }
 
