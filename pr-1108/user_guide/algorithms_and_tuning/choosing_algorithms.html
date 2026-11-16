@@ -281,7 +281,7 @@
 <p>CuBIE ships several integration algorithm families.  This page helps you
 pick the right one.  Pass the algorithm name as <code class="docutils literal notranslate"><span class="pre">method=</span></code> to
 <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> or <code class="docutils literal notranslate"><span class="pre">algorithm=</span></code> to <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code>;
-names are case-insensitive. Without a name, CuBIE uses <code class="docutils literal notranslate"><span class="pre">tsit5</span></code>.</p>
+names are case-insensitive.</p>
 <section id="decision-guide">
 <h2>Decision Guide<a class="headerlink" href="#decision-guide" title="Link to this heading"></a></h2>
 <table class="docutils align-default">
@@ -299,7 +299,7 @@ names are case-insensitive. Without a name, CuBIE uses <code class="docutils lit
 <tbody>
 <tr class="row-even"><td><p>Non-stiff</p></td>
 <td><p>ERK</p></td>
-<td><p>Fast per step; <code class="docutils literal notranslate"><span class="pre">tsit5</span></code>, the default, suits most problems.</p></td>
+<td><p>Fast per step.</p></td>
 </tr>
 <tr class="row-odd"><td><p>Mildly stiff</p></td>
 <td><p>DIRK or Rosenbrock-W</p></td>
@@ -317,7 +317,7 @@ names are case-insensitive. Without a name, CuBIE uses <code class="docutils lit
 </table>
 <p>The bare family names <code class="docutils literal notranslate"><span class="pre">erk</span></code>, <code class="docutils literal notranslate"><span class="pre">dirk</span></code>, <code class="docutils literal notranslate"><span class="pre">firk</span></code>, and <code class="docutils literal notranslate"><span class="pre">rosenbrock</span></code>
 are also accepted and select each family’s default tableau
-(<code class="docutils literal notranslate"><span class="pre">dormand-prince-54</span></code>, <code class="docutils literal notranslate"><span class="pre">l_stable_dirk_3</span></code>, <code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_2</span></code>,
+(<code class="docutils literal notranslate"><span class="pre">tsit5</span></code>, <code class="docutils literal notranslate"><span class="pre">l_stable_dirk_3</span></code>, <code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_2</span></code>,
 and <code class="docutils literal notranslate"><span class="pre">ros3p</span></code> respectively).</p>
 </section>
 <section id="adaptive-or-fixed">

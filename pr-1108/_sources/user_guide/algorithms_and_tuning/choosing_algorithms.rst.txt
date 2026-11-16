@@ -4,7 +4,7 @@ Choosing an Algorithm
 CuBIE ships several integration algorithm families.  This page helps you
 pick the right one.  Pass the algorithm name as ``method=`` to
 :func:`~cubie.solve_ivp` or ``algorithm=`` to :class:`~cubie.Solver`;
-names are case-insensitive. Without a name, CuBIE uses ``tsit5``.
+names are case-insensitive.
 
 Decision Guide
 --------------
@@ -18,7 +18,7 @@ Decision Guide
      - Notes
    * - Non-stiff
      - ERK
-     - Fast per step; ``tsit5``, the default, suits most problems.
+     - Fast per step.
    * - Mildly stiff
      - DIRK or Rosenbrock-W
      - DIRK is robust; Rosenbrock-W avoids Newton iteration.
@@ -31,7 +31,7 @@ Decision Guide
 
 The bare family names ``erk``, ``dirk``, ``firk``, and ``rosenbrock``
 are also accepted and select each family's default tableau
-(``dormand-prince-54``, ``l_stable_dirk_3``, ``firk_gauss_legendre_2``,
+(``tsit5``, ``l_stable_dirk_3``, ``firk_gauss_legendre_2``,
 and ``ros3p`` respectively).
 
 Adaptive or fixed?
