@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Configuration Reference &mdash; cubie 0.0.4 documentation</title>
+  <title>Solver Options &mdash; cubie 0.0.4 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
@@ -65,18 +65,11 @@
 <li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l3 current"><a class="current reference internal" href="#">Configuration Reference</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html">Controlling accuracy</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#controlling-the-step-size">Controlling the step size</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#tuning-the-step-controller">Tuning the step controller</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#tuning-the-implicit-stiff-solvers">Tuning the implicit (stiff) solvers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#choosing-the-method-s-coefficients">Choosing the method’s coefficients</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#choosing-what-gets-saved">Choosing what gets saved</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#gpu-tuning-advanced">GPU tuning (advanced)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
@@ -279,7 +272,7 @@
       <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="../index.html">User Manual</a></li>
           <li class="breadcrumb-item"><a href="index.html">Using the solver</a></li>
-      <li class="breadcrumb-item active">Configuration Reference</li>
+      <li class="breadcrumb-item active">Solver Options</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../../_sources/user_guide/using_the_solver/configuration.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -289,25 +282,28 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p>#On a deeper read of this page it seems like it is either useless or poorly impelemented - I like the idea of linking each param to its deep dive page, but is this just a duplication of api ref? where does the optional arguments page live, and why? where is the distinction between the two?</p>
-<section id="configuration-reference">
-<h1>Configuration Reference<a class="headerlink" href="#configuration-reference" title="Link to this heading"></a></h1>
-<p>This page lists every argument you can give a solve. The first section
-covers the named arguments of <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>,
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code>. The second
-lists the options you can add to any of them as keyword arguments, with
-a link to the page that explains each one.</p>
-<section id="named-arguments">
-<h2>Named arguments<a class="headerlink" href="#named-arguments" title="Link to this heading"></a></h2>
-<section id="solve-ivp">
-<h3><code class="docutils literal notranslate"><span class="pre">solve_ivp()</span></code><a class="headerlink" href="#solve-ivp" title="Link to this heading"></a></h3>
-<p><code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> builds a <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> and runs a
-single batch solve.</p>
+  <section id="solver-options">
+<h1>Solver Options<a class="headerlink" href="#solver-options" title="Link to this heading"></a></h1>
+<p>Pass any option on this page as a keyword argument to
+<code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>, to <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code>, or to
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code>. A solver
+keeps the options you give it for later solves. If you leave an option
+out, or pass <code class="docutils literal notranslate"><span class="pre">None</span></code>, cubie uses its default, and if you misspell an
+option, cubie raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p>
+<p>You can also collect options in a dict and pass it as
+<code class="docutils literal notranslate"><span class="pre">step_control_settings</span></code>, <code class="docutils literal notranslate"><span class="pre">algorithm_settings</span></code>, <code class="docutils literal notranslate"><span class="pre">system_settings</span></code>,
+<code class="docutils literal notranslate"><span class="pre">output_settings</span></code>, <code class="docutils literal notranslate"><span class="pre">memory_settings</span></code> or <code class="docutils literal notranslate"><span class="pre">loop_settings</span></code>, and cubie
+treats each key as a keyword argument.</p>
+<section id="arguments-of-one-solve">
+<h2>Arguments of one solve<a class="headerlink" href="#arguments-of-one-solve" title="Link to this heading"></a></h2>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code> and <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> also take
+these arguments, which describe a single solve. The solver doesn’t keep
+them for later solves.</p>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 20.0%" />
+<col style="width: 25.0%" />
 <col style="width: 15.0%" />
-<col style="width: 65.0%" />
+<col style="width: 60.0%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Argument</p></th>
@@ -316,7 +312,7 @@ single batch solve.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">y0</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">initial_values</span></code> (<code class="docutils literal notranslate"><span class="pre">y0</span></code> in <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code>)</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
 <td><p>Initial values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
 <code class="docutils literal notranslate"><span class="pre">None</span></code> starts every run from the system’s default initial
@@ -325,322 +321,523 @@ values.</p></td>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">parameters</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
 <td><p>Parameter values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> runs every run under the system’s default parameters.</p></td>
+<code class="docutils literal notranslate"><span class="pre">None</span></code> uses the system’s default parameters for every run.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">drivers</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">DriverSamples</span></code> of forcing
-data (see <a class="reference internal" href="../defining_systems/drivers.html"><span class="doc">Drivers (Time-dependent functions)</span></a>).</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">method</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;tsit5&quot;</span></code></p></td>
-<td><p>Integration algorithm name (see <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>).</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">duration</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">1.0</span></code></p></td>
-<td><p>Total integration time.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">settling_time</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">0.0</span></code></p></td>
-<td><p>Warm-up period before outputs are recorded.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">t0</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">0.0</span></code></p></td>
-<td><p>Initial integration time.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">save_variables</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>State/observable names to save; <code class="docutils literal notranslate"><span class="pre">None</span></code> saves all, <code class="docutils literal notranslate"><span class="pre">[]</span></code> saves
-none.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>State/observable names to summarise; <code class="docutils literal notranslate"><span class="pre">None</span></code> mirrors
-<code class="docutils literal notranslate"><span class="pre">save_variables</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">grid_type</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">grid_type</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code></p></td>
 <td><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code> to solve every combination of the
 values in dict inputs, or <code class="docutils literal notranslate"><span class="pre">&quot;verbatim&quot;</span></code> to pair them
-run-for-run.</p></td>
+run-for-run (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">time_logging_level</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>Timing verbosity: <code class="docutils literal notranslate"><span class="pre">'default'</span></code>, <code class="docutils literal notranslate"><span class="pre">'verbose'</span></code>, <code class="docutils literal notranslate"><span class="pre">'debug'</span></code>,
-<code class="docutils literal notranslate"><span class="pre">'silent'</span></code> (record GPU events, print nothing), or
-<code class="docutils literal notranslate"><span class="pre">None</span></code>/<code class="docutils literal notranslate"><span class="pre">'None'</span></code> to disable.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nan_error_trajectories</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
-<td><p>Trajectories with a nonzero status code are NaN-masked in the
-output.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fix_constant_parameters</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fix_constant_parameters</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
 <td><p>Compile parameters that have one value across the batch into the
 code (see <a class="reference internal" href="inputs.html#parameter-inputs"><span class="std std-ref">Input formats</span></a>).</p></td>
 </tr>
-</tbody>
-</table>
-<p><code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code> passes every other keyword argument to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code>.</p>
-</section>
-<section id="solver-init">
-<h3><code class="docutils literal notranslate"><span class="pre">Solver.__init__()</span></code><a class="headerlink" href="#solver-init" title="Link to this heading"></a></h3>
-<table class="docutils align-default">
-<colgroup>
-<col style="width: 20.0%" />
-<col style="width: 15.0%" />
-<col style="width: 65.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Argument</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Effect</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">algorithm</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;tsit5&quot;</span></code></p></td>
-<td><p>Integration algorithm name or a supplied
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ButcherTableau</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">lineinfo</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>Compiles every kernel and device function with source-line
-correlation data for profilers such as Nsight Compute. <code class="docutils literal notranslate"><span class="pre">None</span></code>
-defers to the <code class="docutils literal notranslate"><span class="pre">CUBIE_LINEINFO</span></code> environment variable (default
-off); an explicit argument always wins. Updating it later
-triggers a full rebuild.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">auto_performance</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
-<td><p>Whether to use in-built heuristics for buffer locations in
-memory, loop unrolling, block size and resident blocks per SM.
-Does not override manual <code class="docutils literal notranslate"><span class="pre">unroll_*</span></code>, <code class="docutils literal notranslate"><span class="pre">*_location</span></code> or
-<code class="docutils literal notranslate"><span class="pre">blocksize</span></code> arguments.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">time_logging_level</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>Same options as above.</p></td>
-</tr>
-</tbody>
-</table>
-<p>You can also collect options in a dict and pass it as
-<code class="docutils literal notranslate"><span class="pre">step_control_settings</span></code>, <code class="docutils literal notranslate"><span class="pre">algorithm_settings</span></code>, <code class="docutils literal notranslate"><span class="pre">system_settings</span></code>,
-<code class="docutils literal notranslate"><span class="pre">output_settings</span></code>, <code class="docutils literal notranslate"><span class="pre">memory_settings</span></code> or <code class="docutils literal notranslate"><span class="pre">loop_settings</span></code>. Cubie
-treats each key of the dict as if you had passed it as a keyword
-argument.</p>
-</section>
-<section id="solver-solve">
-<h3><code class="docutils literal notranslate"><span class="pre">Solver.solve()</span></code><a class="headerlink" href="#solver-solve" title="Link to this heading"></a></h3>
-<table class="docutils align-default">
-<colgroup>
-<col style="width: 20.0%" />
-<col style="width: 15.0%" />
-<col style="width: 65.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Argument</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Effect</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">initial_values</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>Initial values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> starts every run from the system’s default initial
-values.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">parameters</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>Parameter values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> runs every run under the system’s default parameters.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">drivers</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">DriverSamples</span></code> to use in
-place of the solver’s forcing data.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">duration</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">duration</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">1.0</span></code></p></td>
-<td><p>Total integration time.</p></td>
+<td><p>Length of the recorded integration (see <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">settling_time</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">settling_time</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">0.0</span></code></p></td>
-<td><p>Warm-up period before outputs are recorded.</p></td>
+<td><p>Time to integrate before cubie starts recording (see
+<a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">t0</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">t0</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">0.0</span></code></p></td>
-<td><p>Initial integration time.</p></td>
+<td><p>Time at the start of the integration (see <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a>).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">blocksize</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
-<td><p>CUDA threads per block for this launch; <code class="docutils literal notranslate"><span class="pre">None</span></code> uses the
-solver’s <code class="docutils literal notranslate"><span class="pre">blocksize</span></code> setting, or lets the solver pick when
-that setting was not given.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">grid_type</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code></p></td>
-<td><p>Same as <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code> above. Cubie only uses it when you pass
-dict inputs.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nan_error_trajectories</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nan_error_trajectories</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
-<td><p>Same behaviour as above; ignored when <code class="docutils literal notranslate"><span class="pre">on_device=True</span></code>.</p></td>
+<td><p>Overwrite the output of every run with a nonzero status code
+with NaN (see <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">on_device</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">on_device</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">False</span></code></p></td>
-<td><p>Return a
-<code class="xref py py-class docutils literal notranslate"><span class="pre">DeviceSolveResult</span></code> of
-device-array handles with no device-to-host copy. See
-<a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fix_constant_parameters</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p></td>
-<td><p>Same as <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code> above.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">solve</span></code> only. Return the outputs as device arrays, with no
+copy to the host (see <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>).</p></td>
 </tr>
 </tbody>
 </table>
-<p><code class="docutils literal notranslate"><span class="pre">solve</span></code> passes every other keyword argument to
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code>, and the solver keeps it for later solves.</p>
 </section>
-</section>
-<section id="keyword-options">
-<span id="kwarg-routing"></span><h2>Keyword options<a class="headerlink" href="#keyword-options" title="Link to this heading"></a></h2>
-<p>You can pass any option below as a keyword argument to
-<code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code>,
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code>:</p>
-<table class="docutils align-default">
-<colgroup>
-<col style="width: 18.0%" />
-<col style="width: 52.0%" />
-<col style="width: 30.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Options for</p></th>
-<th class="head"><p>Parameters</p></th>
-<th class="head"><p>Explained in</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Algorithm choice</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">tableau</span></code></p></td>
-<td><p><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Step control</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">step_controller</span></code>, <code class="docutils literal notranslate"><span class="pre">dt</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max</span></code>,
-<code class="docutils literal notranslate"><span class="pre">atol</span></code>, <code class="docutils literal notranslate"><span class="pre">rtol</span></code>, <code class="docutils literal notranslate"><span class="pre">safety</span></code>, <code class="docutils literal notranslate"><span class="pre">min_step_shrink</span></code>,
-<code class="docutils literal notranslate"><span class="pre">max_step_growth</span></code>, <code class="docutils literal notranslate"><span class="pre">integral_gain</span></code>, <code class="docutils literal notranslate"><span class="pre">proportional_gain</span></code>,
-<code class="docutils literal notranslate"><span class="pre">derivative_gain</span></code>, <code class="docutils literal notranslate"><span class="pre">filter_coefficients</span></code>, <code class="docutils literal notranslate"><span class="pre">deadband_min</span></code>,
-<code class="docutils literal notranslate"><span class="pre">deadband_max</span></code>, <code class="docutils literal notranslate"><span class="pre">newton_target_iters</span></code></p></td>
-<td><p><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a></p></td>
-</tr>
-<tr class="row-even"><td><p>Starting step</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">starting_step_state_fraction</span></code>, <code class="docutils literal notranslate"><span class="pre">starting_step_zero_norm</span></code>,
-<code class="docutils literal notranslate"><span class="pre">starting_step_target</span></code>, <code class="docutils literal notranslate"><span class="pre">starting_step_max_growth</span></code></p></td>
-<td><p><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Implicit solvers</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">newton_atol</span></code>, <code class="docutils literal notranslate"><span class="pre">newton_rtol</span></code>, <code class="docutils literal notranslate"><span class="pre">newton_max_iters</span></code>,
-<code class="docutils literal notranslate"><span class="pre">krylov_atol</span></code>, <code class="docutils literal notranslate"><span class="pre">krylov_rtol</span></code>, <code class="docutils literal notranslate"><span class="pre">krylov_max_iters</span></code>,
-<code class="docutils literal notranslate"><span class="pre">krylov_residual_reduction</span></code>, <code class="docutils literal notranslate"><span class="pre">krylov_residual_floor</span></code>,
-<code class="docutils literal notranslate"><span class="pre">linear_correction_type</span></code>, <code class="docutils literal notranslate"><span class="pre">preconditioner_type</span></code>,
-<code class="docutils literal notranslate"><span class="pre">preconditioner_order</span></code>, <code class="docutils literal notranslate"><span class="pre">use_smoothed_error</span></code>,
-<code class="docutils literal notranslate"><span class="pre">dae_initialisation</span></code></p></td>
-<td><p><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a>, <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a></p></td>
-</tr>
-<tr class="row-even"><td><p>Implicit solvers</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">inexact_newton</span></code>, <code class="docutils literal notranslate"><span class="pre">prefactored</span></code></p></td>
-<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">ImplicitStepConfig</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p>Implicit solvers</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">attempt_dense_prediction</span></code>, <code class="docutils literal notranslate"><span class="pre">error_atol</span></code>, <code class="docutils literal notranslate"><span class="pre">error_rtol</span></code>,
-<code class="docutils literal notranslate"><span class="pre">error_max_iters</span></code>, <code class="docutils literal notranslate"><span class="pre">error_residual_floor</span></code>,
-<code class="docutils literal notranslate"><span class="pre">error_residual_reduction</span></code></p></td>
-<td><p>—</p></td>
-</tr>
-<tr class="row-even"><td><p>Output</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">output_types</span></code>, <code class="docutils literal notranslate"><span class="pre">save_variables</span></code>, <code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code>,
-<code class="docutils literal notranslate"><span class="pre">saved_state_indices</span></code>, <code class="docutils literal notranslate"><span class="pre">saved_observable_indices</span></code>,
-<code class="docutils literal notranslate"><span class="pre">summarised_state_indices</span></code>, <code class="docutils literal notranslate"><span class="pre">summarised_observable_indices</span></code></p></td>
-<td><p><a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Output timing</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">save_every</span></code>, <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code>, <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code></p></td>
-<td><p><a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a></p></td>
-</tr>
-<tr class="row-even"><td><p>Drivers</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">drivers</span></code>, <code class="docutils literal notranslate"><span class="pre">order</span></code>, <code class="docutils literal notranslate"><span class="pre">wrap</span></code>, <code class="docutils literal notranslate"><span class="pre">boundary_condition</span></code></p></td>
-<td><p><a class="reference internal" href="../defining_systems/drivers.html"><span class="doc">Drivers (Time-dependent functions)</span></a></p></td>
-</tr>
-<tr class="row-odd"><td><p>System</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">precision</span></code></p></td>
-<td><p><a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a></p></td>
-</tr>
-<tr class="row-even"><td><p>System</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">operation_ordering</span></code></p></td>
-<td><p>—</p></td>
-</tr>
-<tr class="row-odd"><td><p>Memory</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">mem_proportion</span></code>, <code class="docutils literal notranslate"><span class="pre">stream_group</span></code>, <code class="docutils literal notranslate"><span class="pre">memory_manager</span></code></p></td>
-<td><p><a class="reference internal" href="../advanced/memory.html"><span class="doc">GPU Memory Management</span></a></p></td>
-</tr>
-<tr class="row-even"><td><p>Cache</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">cache_enabled</span></code>, <code class="docutils literal notranslate"><span class="pre">cache_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">max_cache_entries</span></code></p></td>
-<td><p><a class="reference internal" href="../advanced/caching.html"><span class="doc">Caching and Recompilation</span></a></p></td>
-</tr>
-<tr class="row-odd"><td><p>Kernel</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">max_registers</span></code>, <code class="docutils literal notranslate"><span class="pre">blocksize</span></code></p></td>
-<td><p>The notes below</p></td>
-</tr>
-<tr class="row-even"><td><p>Kernel</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">kernel_name</span></code></p></td>
-<td><p>—</p></td>
-</tr>
-<tr class="row-odd"><td><p>Performance</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">unroll_stage</span></code>, <code class="docutils literal notranslate"><span class="pre">unroll_step_element</span></code>,
-<code class="docutils literal notranslate"><span class="pre">unroll_accumulator</span></code>, <code class="docutils literal notranslate"><span class="pre">unroll_solver_element</span></code>,
-<code class="docutils literal notranslate"><span class="pre">unroll_norms</span></code>, <code class="docutils literal notranslate"><span class="pre">unroll_other_small</span></code>,
-<code class="docutils literal notranslate"><span class="pre">unroll_newton_exits</span></code>, <code class="docutils literal notranslate"><span class="pre">unroll_krylov_exits</span></code>, and the
-per-buffer <code class="docutils literal notranslate"><span class="pre">*_location</span></code> placement options</p></td>
-<td><p><a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a></p></td>
-</tr>
-<tr class="row-even"><td><p>Compiler flags</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">nsz</span></code>, <code class="docutils literal notranslate"><span class="pre">contract</span></code>, <code class="docutils literal notranslate"><span class="pre">arcp</span></code>, <code class="docutils literal notranslate"><span class="pre">afn</span></code>, <code class="docutils literal notranslate"><span class="pre">reassoc</span></code>, <code class="docutils literal notranslate"><span class="pre">ftz</span></code>,
-<code class="docutils literal notranslate"><span class="pre">lto</span></code></p></td>
-<td><p>—</p></td>
-</tr>
-</tbody>
-</table>
-<p>A keyword argument that isn’t an option raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. Give
-parameter values in the <code class="docutils literal notranslate"><span class="pre">parameters</span></code> argument of <code class="docutils literal notranslate"><span class="pre">solve</span></code>.</p>
-</section>
-<section id="notes-on-selected-parameters">
-<h2>Notes on selected parameters<a class="headerlink" href="#notes-on-selected-parameters" title="Link to this heading"></a></h2>
+<section id="choosing-the-algorithm">
+<h2>Choosing the algorithm<a class="headerlink" href="#choosing-the-algorithm" title="Link to this heading"></a></h2>
 <dl class="simple">
-<dt><strong>step_controller</strong></dt><dd><p>Selects the step-size controller by name: <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pid&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code>. When you leave it out,
-cubie uses the chosen algorithm’s own default controller: fixed
-for schemes without an embedded error estimate, otherwise integral
-for explicit Runge–Kutta, PI for DIRK and Gustafsson for FIRK and
-Rosenbrock-W. See
-<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a> and
-the algorithm defaults table in the API reference.</p>
+<dt><strong>algorithm</strong> — the integration algorithm.</dt><dd><p>Pass an algorithm name (see
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>) or a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ButcherTableau</span></code>.
+<code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code> calls this option <code class="docutils literal notranslate"><span class="pre">method</span></code>.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;tsit5&quot;</span></code></p></li>
+</ul>
 </dd>
-<dt><strong>max_registers</strong></dt><dd><p>Per-thread register cap forwarded to <code class="docutils literal notranslate"><span class="pre">cuda.jit</span></code>. Default
-<code class="docutils literal notranslate"><span class="pre">None</span></code> leaves register allocation to <code class="docutils literal notranslate"><span class="pre">ptxas</span></code>; capping trades
-spill traffic for more resident warps. See <a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a>.</p>
+<dt><strong>tableau</strong> — the Butcher tableau for a bare family name.</dt><dd><p>If you select an algorithm with <code class="docutils literal notranslate"><span class="pre">erk</span></code>, <code class="docutils literal notranslate"><span class="pre">dirk</span></code>, <code class="docutils literal notranslate"><span class="pre">firk</span></code> or
+<code class="docutils literal notranslate"><span class="pre">rosenbrock</span></code>, pass a tableau of that family here to use it in
+place of the family’s default tableau.</p>
+<ul class="simple">
+<li><p>Default: the family’s default tableau</p></li>
+</ul>
 </dd>
-<dt><strong>blocksize</strong></dt><dd><p>Threads per block for every launch; <code class="docutils literal notranslate"><span class="pre">solve(blocksize=...)</span></code>
-overrides one launch. Unset, the solver picks a block size itself.</p>
+</dl>
+</section>
+<section id="controlling-accuracy">
+<h2>Controlling accuracy<a class="headerlink" href="#controlling-accuracy" title="Link to this heading"></a></h2>
+<p>Adaptive algorithms choose their own step size to keep the estimated
+error of each step below <code class="docutils literal notranslate"><span class="pre">atol</span> <span class="pre">+</span> <span class="pre">rtol</span> <span class="pre">*</span> <span class="pre">|value|</span></code> for every state.</p>
+<dl class="simple">
+<dt><strong>atol</strong> — absolute error tolerance.</dt><dd><p>This tolerance sets the error you accept when a state is near zero.
+Pass a scalar for every state, or an array with one tolerance per
+state.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></li>
+</ul>
 </dd>
-<dt><strong>mem_proportion</strong></dt><dd><p>Proportion of VRAM (0.0–1.0) reserved for this solver’s
-allocations. Default <code class="docutils literal notranslate"><span class="pre">None</span></code> places the solver in the automatic
-pool, which shares the VRAM remaining after manually-proportioned
-solvers are accounted for equally between its members. See
-<a class="reference internal" href="../advanced/memory.html"><span class="doc">GPU Memory Management</span></a>.</p>
+<dt><strong>rtol</strong> — relative error tolerance.</dt><dd><p>This tolerance scales with the size of the state: <code class="docutils literal notranslate"><span class="pre">rtol=1e-6</span></code>
+asks for roughly six correct digits. Pass a scalar or an array with
+one tolerance per state.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></li>
+</ul>
+</dd>
+</dl>
+<p>On DAE systems, cubie measures the error of the differential states
+only.</p>
+</section>
+<section id="controlling-the-step-size">
+<h2>Controlling the step size<a class="headerlink" href="#controlling-the-step-size" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> explains how <code class="docutils literal notranslate"><span class="pre">dt</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> work
+together, and how cubie fills in the ones you leave out.</p>
+<dl class="simple">
+<dt><strong>dt</strong> — the fixed step, or the first step of an adaptive algorithm.</dt><dd><p>If you give an adaptive algorithm no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie estimates a
+starting step for each run.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> for fixed-step algorithms; an estimate for each
+run for adaptive algorithms</p></li>
+</ul>
+</dd>
+<dt><strong>dt_min</strong> / <strong>dt_max</strong> — bounds on the adaptive step size.</dt><dd><p>If the error is still too large at <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>, cubie stops the run
+and sets <code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> in its status code.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">dt_min=1e-9</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_max=1.0</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>starting_step_state_fraction</strong> / <strong>starting_step_zero_norm</strong> / <strong>starting_step_target</strong> / <strong>starting_step_max_growth</strong> — the constants cubie uses to estimate the starting step.</dt><dd><p>Cubie first guesses the step that changes the state by
+<code class="docutils literal notranslate"><span class="pre">starting_step_state_fraction</span></code> of its norm, or the geometric mean
+of <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> when the state or its derivative has a
+norm of <code class="docutils literal notranslate"><span class="pre">starting_step_zero_norm</span></code> or less. Cubie returns at most
+<code class="docutils literal notranslate"><span class="pre">starting_step_max_growth</span></code> first guesses. Lower
+<code class="docutils literal notranslate"><span class="pre">starting_step_target</span></code> for a smaller estimate.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">starting_step_state_fraction=0.01</span></code>,
+<code class="docutils literal notranslate"><span class="pre">starting_step_zero_norm=1e-5</span></code>, <code class="docutils literal notranslate"><span class="pre">starting_step_target=0.01</span></code>,
+<code class="docutils literal notranslate"><span class="pre">starting_step_max_growth=100</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="tuning-the-step-controller">
+<h2>Tuning the step controller<a class="headerlink" href="#tuning-the-step-controller" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>step_controller</strong> — the step-size controller.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pid&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code>
+(see <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html#choosing-a-controller"><span class="std std-ref">Choosing a Controller</span></a>).</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code> for algorithms without an error estimate;
+otherwise <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code> for ERK, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code> for DIRK and
+<code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code> for FIRK and Rosenbrock-W. Some tableaus choose
+their own.</p></li>
+</ul>
+</dd>
+</dl>
+<p>Each algorithm family also sets its own defaults for the options below,
+so treat them as expert tuning.</p>
+<p><strong>min_step_shrink</strong> / <strong>max_step_growth</strong> — bounds on how much one step can change the step size.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">min_step_shrink=0.3</span></code>, <code class="docutils literal notranslate"><span class="pre">max_step_growth=2.0</span></code></p></li>
+</ul>
+</div></blockquote>
+<dl class="simple">
+<dt><strong>safety</strong> — a factor on every proposed step.</dt><dd><p>Cubie multiplies each proposed step by this factor. Values below
+1.0 aim slightly below the step the error estimate suggests, so you
+get fewer rejected steps at a small cost in speed.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">0.9</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>deadband_min</strong> / <strong>deadband_max</strong> — a band of step ratios that cubie ignores.</dt><dd><p>If the proposed change in step size falls inside this band, cubie
+keeps the current step. Set both to 1.0 to turn the band off.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">deadband_min=1.0</span></code>, <code class="docutils literal notranslate"><span class="pre">deadband_max=1.0</span></code> (off)</p></li>
+</ul>
+</dd>
+<dt><strong>integral_gain</strong> / <strong>proportional_gain</strong> / <strong>derivative_gain</strong> — the gains of the <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code> controllers.</dt><dd><p><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html#choosing-a-controller"><span class="std std-ref">Choosing a Controller</span></a> explains what each gain does. Cubie
+divides each gain by <code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">+</span> <span class="pre">1</span></code>. If you pass a gain without a
+<code class="docutils literal notranslate"><span class="pre">step_controller</span></code>, cubie selects the fastest of <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and
+<code class="docutils literal notranslate"><span class="pre">pid</span></code> that uses it.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">integral_gain=1.0</span></code> for <code class="docutils literal notranslate"><span class="pre">i</span></code> and <code class="docutils literal notranslate"><span class="pre">0.3</span></code> for <code class="docutils literal notranslate"><span class="pre">pi</span></code>
+and <code class="docutils literal notranslate"><span class="pre">pid</span></code>; <code class="docutils literal notranslate"><span class="pre">proportional_gain=0.4</span></code>; <code class="docutils literal notranslate"><span class="pre">derivative_gain=0.0</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>filter_coefficients</strong> — the exponents of the step law.</dt><dd><p>Pass a <code class="docutils literal notranslate"><span class="pre">(beta1,</span> <span class="pre">beta2,</span> <span class="pre">beta3)</span></code> triple for the step law
+<code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">*</span> <span class="pre">error^-beta1</span> <span class="pre">*</span> <span class="pre">error_prev^-beta2</span> <span class="pre">*</span> <span class="pre">error_prev2^-beta3</span></code>, or
+the name of a published controller: <code class="docutils literal notranslate"><span class="pre">&quot;basic&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;PI42&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;PI33&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;PI34&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;H211PI&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;H312PID&quot;</span></code>. Cubie
+divides the exponents by <code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">+</span> <span class="pre">1</span></code>. You can’t combine
+<code class="docutils literal notranslate"><span class="pre">filter_coefficients</span></code> with the gains.</p>
+<ul class="simple">
+<li><p>Default: the gains above, which equal <code class="docutils literal notranslate"><span class="pre">&quot;PI34&quot;</span></code> for <code class="docutils literal notranslate"><span class="pre">pi</span></code> and
+<code class="docutils literal notranslate"><span class="pre">pid</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>newton_target_iters</strong> — the Newton iteration count the <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller aims for.</dt><dd><p>The <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller shrinks the step when the implicit
+solver works harder than this. It doesn’t limit the number of
+Newton iterations.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">20</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="tuning-the-implicit-solvers">
+<h2>Tuning the implicit solvers<a class="headerlink" href="#tuning-the-implicit-solvers" title="Link to this heading"></a></h2>
+<p>Implicit algorithms (backward Euler, Crank–Nicolson, DIRK, FIRK) solve
+a nonlinear system at every step with Newton’s method, and solve a
+linear system for each Newton update. Rosenbrock-W algorithms solve
+only the linear systems, so the Newton options don’t apply to them.</p>
+<p>Newton options:</p>
+<dl class="simple">
+<dt><strong>newton_atol</strong> / <strong>newton_rtol</strong> — Newton convergence tolerances.</dt><dd><p>Cubie accepts a Newton solve when the estimated error of the update
+drops below one percent of these tolerances.</p>
+<ul class="simple">
+<li><p>Default: the step controller’s <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code> divided by
+10</p></li>
+</ul>
+</dd>
+<dt><strong>newton_max_iters</strong> — the Newton iteration limit.</dt><dd><p>If a step doesn’t converge within this many iterations, cubie
+rejects it and, under an adaptive controller, retries it with a
+smaller step.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">8</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>inexact_newton</strong> — freeze the Newton matrix at the start of each step.</dt><dd><p>Cubie evaluates the Jacobian once per step instead of once per
+Newton iteration. Rosenbrock-W algorithms ignore this option.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code> for DIRK and FIRK, except the tableaus that the
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>
+tables list as using exact Newton; <code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise</p></li>
+</ul>
+</dd>
+<dt><strong>prefactored</strong> — keep the LU factors from the start of each step.</dt><dd><p>With <code class="docutils literal notranslate"><span class="pre">inexact_newton</span></code> and <code class="docutils literal notranslate"><span class="pre">linear_correction_type=&quot;lu&quot;</span></code>, cubie
+factorises the frozen matrix once per step for each distinct value
+on the tableau’s diagonal, and reuses the factors in every solve.
+With <code class="docutils literal notranslate"><span class="pre">False</span></code>, cubie factorises the frozen matrix in each solve.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>attempt_dense_prediction</strong> — warm-start each Newton solve.</dt><dd><p>DIRK and FIRK algorithms start each step’s Newton solves from a
+prediction made from the previous step’s stages. Cubie ignores
+this option for tableaus that can’t support the prediction.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>, or <code class="docutils literal notranslate"><span class="pre">False</span></code> for adaptive DIRK tableaus</p></li>
+</ul>
+</dd>
+</dl>
+<p>Linear solver options:</p>
+<dl>
+<dt><strong>linear_correction_type</strong> — the linear solver.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> factorises the matrix and solves it directly. It is
+faster for stiff problems and slower for easy ones.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;steepest_descent&quot;</span></code> are iterative
+solvers. <code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> is usually the fastest, but the
+least robust.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;bicgstab&quot;</span></code> is an iterative solver that applies the Jacobian
+twice in each iteration, where the other iterative solvers apply it
+once.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> for DIRK, FIRK, Rosenbrock-W and every DAE;
+<code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> otherwise</p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>krylov_atol</strong> / <strong>krylov_rtol</strong> — the tolerances that weight the iterative linear solver’s stopping test.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: the step controller’s <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code></p></li>
+</ul>
+</div></blockquote>
+<p><strong>krylov_max_iters</strong> — the linear iteration limit for each Newton update.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">ceil(1.5</span> <span class="pre">*</span> <span class="pre">solver</span> <span class="pre">width)</span></code></p></li>
+</ul>
+</div></blockquote>
+<dl class="simple">
+<dt><strong>krylov_residual_reduction</strong> / <strong>krylov_residual_floor</strong> — the stopping test of the iterative linear solver.</dt><dd><p>Cubie stops each linear solve once its weighted residual falls
+below <code class="docutils literal notranslate"><span class="pre">floor</span> <span class="pre">+</span> <span class="pre">reduction</span> <span class="pre">*</span> <span class="pre">||b||</span></code>, where <code class="docutils literal notranslate"><span class="pre">||b||</span></code> is the weighted
+right-hand side at the start of the solve. The relative term stops
+cubie solving the early Newton updates more accurately than it
+needs to.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">krylov_residual_reduction</span></code> is the smallest <code class="docutils literal notranslate"><span class="pre">rtol</span></code>
+of an adaptive controller, or machine epsilon for a fixed one;
+<code class="docutils literal notranslate"><span class="pre">krylov_residual_floor</span></code> is the square root of machine epsilon</p></li>
+</ul>
+</dd>
+<dt><strong>preconditioner_type</strong> — the preconditioner.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>. With no
+preconditioner, cubie is fastest on easy systems. Between
+<code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code>, the faster one depends on the
+system and algorithm. Cubie rejects <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code> on DAE systems.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>preconditioner_order</strong> — the number of terms in the preconditioner’s series.</dt><dd><p>Each term costs one Jacobian product each time cubie applies the
+preconditioner, and saves linear iterations only while the series
+converges, so use a low order on a system with large off-diagonal
+Jacobian entries. <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code> needs at least one term; on
+<code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code>, order zero is a plain diagonal solve.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">2</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">0</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code></p></li>
+</ul>
+</dd>
+</dl>
+<p>Error smoothing options:</p>
+<dl class="simple">
+<dt><strong>use_smoothed_error</strong> — smooth the error estimate.</dt><dd><p>If the tableau supports it, cubie adds one linear solve per step
+that filters stiff components out of the error estimate. The
+larger steps that you get usually outweigh the cost of the extra
+solve. Cubie warns and leaves smoothing off for a tableau that
+can’t smooth its estimate.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>, or <code class="docutils literal notranslate"><span class="pre">True</span></code> for Radau IIA tableaus</p></li>
+</ul>
+</dd>
+<dt><strong>error_atol</strong> / <strong>error_rtol</strong> / <strong>error_max_iters</strong> / <strong>error_residual_reduction</strong> / <strong>error_residual_floor</strong> — the settings of the smoothing solve.</dt><dd><p>These options set the same quantities as their <code class="docutils literal notranslate"><span class="pre">krylov_</span></code>
+counterparts, for the linear solve that <code class="docutils literal notranslate"><span class="pre">use_smoothed_error</span></code>
+adds.</p>
+<ul class="simple">
+<li><p>Default: the value of the matching <code class="docutils literal notranslate"><span class="pre">krylov_</span></code> option</p></li>
+</ul>
+</dd>
+</dl>
+<p>DAE options:</p>
+<dl class="simple">
+<dt><strong>dae_initialisation</strong> — make a DAE’s initial values consistent.</dt><dd><p>Cubie solves for consistent algebraic states at the start of every
+run, before the first step and the <code class="docutils literal notranslate"><span class="pre">t=0</span></code> output, starting from
+the initial values you gave. <code class="docutils literal notranslate"><span class="pre">&quot;brown&quot;</span></code> holds the differential
+states and solves for the algebraic ones. <code class="docutils literal notranslate"><span class="pre">&quot;shampine&quot;</span></code> takes one
+backward Euler step of the starting step size, which can move every
+state by up to <code class="docutils literal notranslate"><span class="pre">O(dt)</span></code>. <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> skips the solve. If the solve
+fails, cubie ends the run at the <code class="docutils literal notranslate"><span class="pre">t=0</span></code> save and sets
+<code class="docutils literal notranslate"><span class="pre">DAE_INITIALISATION_FAILED</span></code> in its status code. Cubie ignores
+this option on systems that aren’t DAEs.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;brown&quot;</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="choosing-what-gets-saved">
+<h2>Choosing what gets saved<a class="headerlink" href="#choosing-what-gets-saved" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a> explains each of these options.</p>
+<dl class="simple">
+<dt><strong>output_types</strong> — what to record.</dt><dd><p>Pass any combination of <code class="docutils literal notranslate"><span class="pre">&quot;state&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;observables&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;iteration_counters&quot;</span></code> and the summary metric names.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">[&quot;state&quot;]</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>save_variables</strong> / <strong>summarise_variables</strong> — the variables to save and summarise, by name.</dt><dd><p>You can also select variables by index with
+<code class="docutils literal notranslate"><span class="pre">saved_state_indices</span></code>, <code class="docutils literal notranslate"><span class="pre">saved_observable_indices</span></code>,
+<code class="docutils literal notranslate"><span class="pre">summarised_state_indices</span></code> and <code class="docutils literal notranslate"><span class="pre">summarised_observable_indices</span></code>.</p>
+<ul class="simple">
+<li><p>Default: every state and observable; <code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code>
+follows <code class="docutils literal notranslate"><span class="pre">save_variables</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>save_every</strong> / <strong>summarise_every</strong> / <strong>sample_summaries_every</strong> — how often to save, summarise and sample.</dt><dd><p><a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> explains each interval.</p>
+<ul class="simple">
+<li><p>Defaults: without <code class="docutils literal notranslate"><span class="pre">save_every</span></code>, cubie saves the first and last
+points; without <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code>, it summarises once at the
+end. You must give <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code> if you ask for any
+summary.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="drivers">
+<h2>Drivers<a class="headerlink" href="#drivers" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="../defining_systems/drivers.html"><span class="doc">Drivers (Time-dependent functions)</span></a> explains each of these
+options.</p>
+<p><strong>drivers</strong> — the forcing data, as a <code class="xref py py-class docutils literal notranslate"><span class="pre">DriverSamples</span></code>.</p>
+<p><strong>order</strong> — the polynomial order of the spline cubie fits to the samples.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">3</span></code></p></li>
+</ul>
+</div></blockquote>
+<p><strong>wrap</strong> — repeat the samples outside their time range.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+</ul>
+</div></blockquote>
+<p><strong>boundary_condition</strong> — the end condition of the spline fit.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;periodic&quot;</span></code> with <code class="docutils literal notranslate"><span class="pre">wrap=True</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;clamped&quot;</span></code> with
+<code class="docutils literal notranslate"><span class="pre">wrap=False</span></code></p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="precision-and-compilation">
+<h2>Precision and compilation<a class="headerlink" href="#precision-and-compilation" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>precision</strong> — the floating-point type of the solve.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">numpy.float32</span></code> or <code class="docutils literal notranslate"><span class="pre">numpy.float64</span></code>.
+<a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> compares them.</p>
+<ul class="simple">
+<li><p>Default: the precision you built the system with, <code class="docutils literal notranslate"><span class="pre">float32</span></code>
+unless you set it</p></li>
+</ul>
+</dd>
+<dt><strong>operation_ordering</strong> — the order of the operations in your system’s generated code.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;liveness_auto&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;kahn&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;greedy&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;dfs&quot;</span></code>.</p>
+<ul class="simple">
+<li><p>Default: the <code class="docutils literal notranslate"><span class="pre">CUBIE_OPERATION_ORDERING</span></code> environment variable,
+or <code class="docutils literal notranslate"><span class="pre">&quot;liveness_auto&quot;</span></code> if you haven’t set it</p></li>
+</ul>
+</dd>
+<dt><strong>lineinfo</strong> — compile source-line data for profilers such as Nsight Compute.</dt><dd><p>Changing it rebuilds every kernel.</p>
+<ul class="simple">
+<li><p>Default: the <code class="docutils literal notranslate"><span class="pre">CUBIE_LINEINFO</span></code> environment variable, or off if
+you haven’t set it</p></li>
+</ul>
+</dd>
+<dt><strong>nsz</strong> / <strong>contract</strong> / <strong>arcp</strong> / <strong>afn</strong> / <strong>reassoc</strong> / <strong>ftz</strong> — the compiler’s fast-math flags.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">nsz</span></code> ignores the sign of zero, <code class="docutils literal notranslate"><span class="pre">contract</span></code> fuses multiplies and
+adds, <code class="docutils literal notranslate"><span class="pre">arcp</span></code> approximates division by a reciprocal, <code class="docutils literal notranslate"><span class="pre">afn</span></code> uses
+approximate <code class="docutils literal notranslate"><span class="pre">log</span></code>, <code class="docutils literal notranslate"><span class="pre">exp</span></code> and <code class="docutils literal notranslate"><span class="pre">pow</span></code>, <code class="docutils literal notranslate"><span class="pre">reassoc</span></code> lets the
+compiler regroup chains of additions and multiplications, and
+<code class="docutils literal notranslate"><span class="pre">ftz</span></code> flushes subnormal numbers to zero.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">reassoc=False</span></code>; every other flag <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>lto</strong> — optimise across device functions when cubie links the kernel.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+</ul>
+</div></blockquote>
+<p><strong>kernel_name</strong> — the name of the compiled kernel in profiler output.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: the algorithm name followed by the system name; cubie
+appends <code class="docutils literal notranslate"><span class="pre">_ltoon</span></code> or <code class="docutils literal notranslate"><span class="pre">_ltooff</span></code> to either</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="performance">
+<h2>Performance<a class="headerlink" href="#performance" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> explains when these
+options matter.</p>
+<dl class="simple">
+<dt><strong>auto_performance</strong> — choose buffer locations, loop unrolling and the launch shape for your system and GPU.</dt><dd><p>Cubie never overrides a <code class="docutils literal notranslate"><span class="pre">*_location</span></code>, <code class="docutils literal notranslate"><span class="pre">unroll_*</span></code> or
+<code class="docutils literal notranslate"><span class="pre">blocksize</span></code> option that you set.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>blocksize</strong> — the number of threads in each CUDA block.</dt><dd><p>Pass it to <code class="docutils literal notranslate"><span class="pre">solve</span></code> to set it for one launch.</p>
+<ul class="simple">
+<li><p>Default: chosen by cubie</p></li>
+</ul>
+</dd>
+<dt><strong>max_registers</strong> — the register limit for each thread.</dt><dd><p>A lower limit lets more threads run at once, but spills more values
+to memory.</p>
+<ul class="simple">
+<li><p>Default: no limit</p></li>
+</ul>
+</dd>
+<dt><strong>unroll_stage</strong> / <strong>unroll_step_element</strong> / <strong>unroll_accumulator</strong> / <strong>unroll_solver_element</strong> / <strong>unroll_norms</strong> / <strong>unroll_other_small</strong> / <strong>unroll_newton_exits</strong> / <strong>unroll_krylov_exits</strong> — loop unrolling for each group of loops.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">True</span></code> to unroll the loops fully, <code class="docutils literal notranslate"><span class="pre">False</span></code> to leave them to
+the compiler, <code class="docutils literal notranslate"><span class="pre">UnrollChoice.ROLLED</span></code> (from <code class="docutils literal notranslate"><span class="pre">cubie.CUDAFactory</span></code>)
+to keep them rolled, or <code class="docutils literal notranslate"><span class="pre">(True,</span> <span class="pre">k)</span></code> to unroll them <code class="docutils literal notranslate"><span class="pre">k</span></code> times.
+The groups are the loops over tableau stages, over the elements of
+the state in each step, over the stage accumulator, over the
+elements in the solvers, over norms, over small fills, saves and
+counters, over Newton iterations, and over linear-solver
+iterations.</p>
+<ul class="simple">
+<li><p>Default: chosen by cubie under <code class="docutils literal notranslate"><span class="pre">auto_performance</span></code>; otherwise
+<code class="docutils literal notranslate"><span class="pre">True</span></code>, and <code class="docutils literal notranslate"><span class="pre">UnrollChoice.ROLLED</span></code> for
+<code class="docutils literal notranslate"><span class="pre">unroll_krylov_exits</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>*_location</strong> options (<code class="docutils literal notranslate"><span class="pre">state_location</span></code>, <code class="docutils literal notranslate"><span class="pre">timestep_memory_location</span></code> and about forty more) — where each working buffer lives.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code> for per-thread memory or <code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code> for
+per-block memory. Buffer locations don’t change the results.</p>
+<ul class="simple">
+<li><p>Default: chosen by cubie under <code class="docutils literal notranslate"><span class="pre">auto_performance</span></code>; otherwise
+<code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="memory-and-caching">
+<h2>Memory and caching<a class="headerlink" href="#memory-and-caching" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="../advanced/memory.html"><span class="doc">GPU Memory Management</span></a> and
+<a class="reference internal" href="../advanced/caching.html"><span class="doc">Caching and Recompilation</span></a> explain these options.</p>
+<dl class="simple">
+<dt><strong>mem_proportion</strong> — the share of VRAM this solver may use.</dt><dd><p>Pass a number between 0.0 and 1.0. With <code class="docutils literal notranslate"><span class="pre">None</span></code>, the solver joins
+the automatic pool, which shares the VRAM left after every solver
+with a set proportion equally between its members.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
+</ul>
+</dd>
+<dt><strong>stream_group</strong> — the name of the stream group the solver runs on.</dt><dd><p>Solvers in the same group share one CUDA stream.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;solver&quot;</span></code></p></li>
+</ul>
+</dd>
+</dl>
+<p><strong>memory_manager</strong> — the <a class="reference internal" href="../../API_reference/memory/memory_manager.html#cubie.memory.mem_manager.MemoryManager" title="cubie.memory.mem_manager.MemoryManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryManager</span></code></a> that allocates the solver’s memory.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">cubie.default_memmgr</span></code></p></li>
+</ul>
+</div></blockquote>
+<p><strong>cache_enabled</strong> — read compiled kernels from the disk cache and save new ones to it.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+</ul>
+</div></blockquote>
+<p><strong>cache_dir</strong> — the directory of the compiled-kernel cache.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Default: the <code class="docutils literal notranslate"><span class="pre">CUBIE_KERNEL_CACHE_DIR</span></code> environment variable, or
+the shared cache root if you haven’t set it</p></li>
+</ul>
+</div></blockquote>
+<dl class="simple">
+<dt><strong>max_cache_entries</strong> — the number of compiled kernels cubie keeps in each cache directory before it removes the least recently used one.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">0</span></code> keeps every kernel.</p>
+<ul class="simple">
+<li><p>Default: the <code class="docutils literal notranslate"><span class="pre">CUBIE_MAX_CACHE_ENTRIES</span></code> environment variable, or
+<code class="docutils literal notranslate"><span class="pre">0</span></code> if you haven’t set it</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="logging">
+<h2>Logging<a class="headerlink" href="#logging" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><strong>time_logging_level</strong> — how much timing information cubie prints.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;verbose&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;debug&quot;</span></code> to print more
+detail, <code class="docutils literal notranslate"><span class="pre">&quot;silent&quot;</span></code> to record GPU timings without printing them,
+or <code class="docutils literal notranslate"><span class="pre">None</span></code> to turn timing off.</p>
+<ul class="simple">
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
+</ul>
 </dd>
 </dl>
 </section>

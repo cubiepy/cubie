@@ -21,7 +21,7 @@
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="next" title="Advanced" href="../advanced/index.html" />
-    <link rel="prev" title="Controlling accuracy" href="optional_arguments.html" /> 
+    <link rel="prev" title="Choosing an Algorithm" href="choosing_algorithms.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/pr-1109/_static/version_switcher.js" data-version="pr-1109" data-versions="/cubie/versions.json" defer></script>
 </head>
@@ -65,18 +65,11 @@
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Algorithms and tuning</a><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html">Controlling accuracy</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#controlling-the-step-size">Controlling the step size</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#tuning-the-step-controller">Tuning the step controller</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#tuning-the-implicit-stiff-solvers">Tuning the implicit (stiff) solvers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#choosing-the-method-s-coefficients">Choosing the method’s coefficients</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#choosing-what-gets-saved">Choosing what gets saved</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#gpu-tuning-advanced">GPU tuning (advanced)</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">TL/DR</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#parallelism">Parallelism</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#memory">Memory</a></li>
@@ -289,7 +282,7 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p># A lot of this
+  <p># A lot of this is wrong, but I haven’t really gotten into it.
 Making it Faster (basic)
 ========================</p>
 <section id="tl-dr">
@@ -363,16 +356,16 @@ table to stdout.</p>
 </section>
 <section id="precision-trade-offs">
 <h1>Precision Trade-offs<a class="headerlink" href="#precision-trade-offs" title="Link to this heading"></a></h1>
-<p>CuBIE supports <code class="docutils literal notranslate"><span class="pre">float32</span></code> and <code class="docutils literal notranslate"><span class="pre">float64</span></code>. Single-precision
-(<code class="docutils literal notranslate"><span class="pre">float32</span></code>) arithmetic gives about 7 significant figures, and
-double-precision (<code class="docutils literal notranslate"><span class="pre">float64</span></code>) arithmetic gives about 15. Recent
-consumer GPUs, such as the RTX series, do single-precision arithmetic
-32 to 64 times faster than double-precision arithmetic. A <code class="docutils literal notranslate"><span class="pre">float64</span></code>
-value also takes twice the memory of a <code class="docutils literal notranslate"><span class="pre">float32</span></code> value, so fewer
-systems fit on the GPU at once. If you solve to a tight relative
-tolerance (about <code class="docutils literal notranslate"><span class="pre">5e-7</span></code> or below), <code class="docutils literal notranslate"><span class="pre">float64</span></code> can run faster than
-<code class="docutils literal notranslate"><span class="pre">float32</span></code>. At looser tolerances, <code class="docutils literal notranslate"><span class="pre">float64</span></code> runs about 2 to 35
-times slower, depending on the system and algorithm.</p>
+<p>CuBIE supports <code class="docutils literal notranslate"><span class="pre">float32</span></code> and <code class="docutils literal notranslate"><span class="pre">float64</span></code>. In single precision
+(<code class="docutils literal notranslate"><span class="pre">float32</span></code>) you get about 7 significant figures, and in double
+precision (<code class="docutils literal notranslate"><span class="pre">float64</span></code>) about 15. On recent consumer GPUs, such as the
+RTX series, single-precision arithmetic is 32 to 64 times faster than
+double-precision arithmetic. A <code class="docutils literal notranslate"><span class="pre">float64</span></code> value is also twice the size
+of a <code class="docutils literal notranslate"><span class="pre">float32</span></code> value, so you can run fewer systems on the GPU at once.
+If you solve to a tight relative tolerance (about <code class="docutils literal notranslate"><span class="pre">5e-7</span></code> or below), a
+<code class="docutils literal notranslate"><span class="pre">float64</span></code> solve can be faster than a <code class="docutils literal notranslate"><span class="pre">float32</span></code> one. At looser
+tolerances, a <code class="docutils literal notranslate"><span class="pre">float64</span></code> solve is about 2 to 35 times slower, depending
+on the system and algorithm.</p>
 </section>
 <section id="buffer-location-tuning">
 <h1>Buffer Location Tuning<a class="headerlink" href="#buffer-location-tuning" title="Link to this heading"></a></h1>
@@ -382,9 +375,9 @@ shared memory, which is slower than registers to read and write from
 but does not slow down under load.  Shared memory is a limited
 resource.  With <code class="docutils literal notranslate"><span class="pre">auto_performance=True</span></code> (the default) CuBIE picks
 buffer locations, loop unrolling and how many threads run at once on
-your GPU from your system’s size and your GPU; you can override any
-buffer through <code class="docutils literal notranslate"><span class="pre">optional_arguments</span></code>.  See <a class="reference internal" href="optional_arguments.html"><span class="doc">Controlling accuracy</span></a>
-for details.</p>
+your GPU from your system’s size and your GPU. You can set any
+buffer’s location yourself with its <code class="docutils literal notranslate"><span class="pre">*_location</span></code> option; see
+<a class="reference internal" href="../using_the_solver/configuration.html"><span class="doc">Solver Options</span></a>.</p>
 </section>
 <section id="reusing-solvers">
 <h1>Reusing Solvers<a class="headerlink" href="#reusing-solvers" title="Link to this heading"></a></h1>
@@ -406,7 +399,7 @@ object means that subsequent calls to <code class="xref py py-meth docutils lite
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="optional_arguments.html" class="btn btn-neutral float-left" title="Controlling accuracy" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="choosing_algorithms.html" class="btn btn-neutral float-left" title="Choosing an Algorithm" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="../advanced/index.html" class="btn btn-neutral float-right" title="Advanced" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

@@ -20,7 +20,7 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Configuration Reference" href="configuration.html" />
+    <link rel="next" title="Solver Options" href="configuration.html" />
     <link rel="prev" title="Working with Results" href="results.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/pr-1109/_static/version_switcher.js" data-version="pr-1109" data-versions="/cubie/versions.json" defer></script>
@@ -65,18 +65,11 @@
 <li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html">Controlling accuracy</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#controlling-the-step-size">Controlling the step size</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#tuning-the-step-controller">Tuning the step controller</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#tuning-the-implicit-stiff-solvers">Tuning the implicit (stiff) solvers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#choosing-the-method-s-coefficients">Choosing the method’s coefficients</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#choosing-what-gets-saved">Choosing what gets saved</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html#gpu-tuning-advanced">GPU tuning (advanced)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
@@ -522,18 +515,19 @@ reverse.</p>
 <p>Fixed-step controllers use only <code class="docutils literal notranslate"><span class="pre">dt</span></code>, which becomes the constant step
 size throughout integration.</p>
 <p>If you use a fixed-step controller, set <code class="docutils literal notranslate"><span class="pre">dt</span></code> 10 to 100 times smaller
-than the sharpest corner your system produces. If you use an adaptive
-controller, set <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> shorter than any quasi-periodic cycle your
-system produces, so that the solver can’t step straight over a cycle and
-land back near where it started. If runs fail with <code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> in
-their status codes and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is not much smaller than the sharpest
-feature your system produces, decrease <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>. If <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is
-already very small, try an algorithm that handles stiff systems better
-(see <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>).
-When you give an adaptive controller no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie estimates a
-starting step for each run, so you only need to set <code class="docutils literal notranslate"><span class="pre">dt</span></code> if you run
-many short integrations and a starting step that is too small or too
-large adds noticeably to their runtime.</p>
+than the sharpest corner in your system’s solution. If you use an
+adaptive controller, set <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> shorter than any quasi-periodic
+cycle in the solution, so that cubie can’t step straight over a cycle
+and land back near where it started. If cubie reports
+<code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> in a run’s status code and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is not much
+smaller than the sharpest feature in the solution, decrease <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is already very small, try an algorithm designed for
+stiff systems (see
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>). When you
+give an adaptive controller no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie estimates a starting step
+for each run. You only need to set <code class="docutils literal notranslate"><span class="pre">dt</span></code> if you run many short
+integrations and you know a starting step that suits them better than
+cubie’s estimate.</p>
 <section id="default-behaviour">
 <h3>Default Behaviour<a class="headerlink" href="#default-behaviour" title="Link to this heading"></a></h3>
 <p>When you don’t specify any step size parameters, CuBIE uses these defaults:</p>
@@ -690,7 +684,7 @@ given <code class="docutils literal notranslate"><span class="pre">dt_min=1e-4</
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="results.html" class="btn btn-neutral float-left" title="Working with Results" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="configuration.html" class="btn btn-neutral float-right" title="Configuration Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="configuration.html" class="btn btn-neutral float-right" title="Solver Options" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

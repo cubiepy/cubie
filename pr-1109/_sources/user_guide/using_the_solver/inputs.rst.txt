@@ -76,9 +76,9 @@ cubie makes one fewer copy of it.
 When you pass a dict, cubie compiles every parameter you give a single
 value directly into the GPU code to make it go faster. Under the default
 ``fix_constant_parameters=True``, it does the same for each row of an
-array that holds the same value in every run. This usually makes the
-solve faster, but costs a few ms per solve call. To get around this, you
-can:
+array that has the same value in every run. You usually get a faster
+solve, but each solve call takes a few ms longer. To get around this,
+you can:
 
 - Pass ``fix_constant_parameters=False``. All parameters, even the constant
   ones, are part of the input array that gets passed to the GPU, and get loaded

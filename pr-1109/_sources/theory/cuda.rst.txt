@@ -82,6 +82,7 @@ SM, reducing *occupancy*.
 
 You can inspect buffer allocations through the
 :doc:`/developer_guide/buffer_registry` and tune buffer locations
-(shared vs local) through ``optional_arguments``.  CuBIE also reports
+(shared vs local) with the ``*_location`` options in
+:doc:`/user_guide/using_the_solver/configuration`.  CuBIE also reports
 occupancy and memory usage through the
 :class:`~cubie.time_logger.TimeLogger`.

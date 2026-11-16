@@ -65,18 +65,11 @@
 <li class="toctree-l3"><a class="reference internal" href="user_guide/using_the_solver/inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="user_guide/using_the_solver/results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="user_guide/using_the_solver/timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/using_the_solver/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="user_guide/using_the_solver/configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="user_guide/algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html">Controlling accuracy</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html#controlling-the-step-size">Controlling the step size</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html#tuning-the-step-controller">Tuning the step controller</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html#tuning-the-implicit-stiff-solvers">Tuning the implicit (stiff) solvers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html#choosing-the-method-s-coefficients">Choosing the method’s coefficients</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html#choosing-what-gets-saved">Choosing what gets saved</a></li>
-<li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html#gpu-tuning-advanced">GPU tuning (advanced)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/speed.html">TL/DR</a></li>
 <li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
 <li class="toctree-l3"><a class="reference internal" href="user_guide/algorithms_and_tuning/speed.html#memory">Memory</a></li>
@@ -321,7 +314,7 @@ solve, cubie ends the run at the first failed step.</p>
 <a class="reference internal" href="user_guide/using_the_solver/timing.html"><span class="doc">Timing Parameters</span></a>.</p></li>
 <li><p>Choose a method that suits how stiff your problem is; see
 <a class="reference internal" href="user_guide/algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>.</p></li>
-<li><p>Loosen <code class="docutils literal notranslate"><span class="pre">rtol</span></code> and <code class="docutils literal notranslate"><span class="pre">atol</span></code>; see <a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a>.</p></li>
+<li><p>Loosen <code class="docutils literal notranslate"><span class="pre">rtol</span></code> and <code class="docutils literal notranslate"><span class="pre">atol</span></code>; see <a class="reference internal" href="user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a>.</p></li>
 <li><p>Use double precision for tolerances much below <code class="docutils literal notranslate"><span class="pre">1e-6</span></code>. In single
 precision, cubie works with about seven significant digits, so it cannot
 meet tighter tolerances. Pass <code class="docutils literal notranslate"><span class="pre">precision=np.float64</span></code> to
@@ -342,7 +335,7 @@ directly.</p></li>
 <li><p>Choose a method that suits how stiff your problem is; see
 <a class="reference internal" href="user_guide/algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>.</p></li>
 <li><p>In a fixed-step solve, lower <code class="docutils literal notranslate"><span class="pre">dt</span></code>; see <a class="reference internal" href="user_guide/using_the_solver/timing.html"><span class="doc">Timing Parameters</span></a>.</p></li>
-<li><p>Raise <code class="docutils literal notranslate"><span class="pre">newton_max_iters</span></code>; see <a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a>.</p></li>
+<li><p>Raise <code class="docutils literal notranslate"><span class="pre">newton_max_iters</span></code>; see <a class="reference internal" href="user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a>.</p></li>
 </ul>
 </section>
 <section id="newton-divergence">
@@ -359,7 +352,7 @@ implicit method, instead of closer.</p>
 <section id="max-linear-iterations-exceeded">
 <h3><code class="docutils literal notranslate"><span class="pre">MAX_LINEAR_ITERATIONS_EXCEEDED</span></code><a class="headerlink" href="#max-linear-iterations-exceeded" title="Link to this heading"></a></h3>
 <p>cubie could not converge an iterative linear solve within
-<code class="docutils literal notranslate"><span class="pre">krylov_max_iters</span></code> iterations. See <a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a> for each of these
+<code class="docutils literal notranslate"><span class="pre">krylov_max_iters</span></code> iterations. See <a class="reference internal" href="user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a> for each of these
 settings.</p>
 <ul class="simple">
 <li><p>Use the direct solver, <code class="docutils literal notranslate"><span class="pre">linear_correction_type=&quot;lu&quot;</span></code>.</p></li>
@@ -372,13 +365,13 @@ settings.</p>
 <p>cubie stopped a BiCGSTAB linear solve before it converged, because of a
 numerical breakdown in BiCGSTAB. Use a different
 <code class="docutils literal notranslate"><span class="pre">linear_correction_type</span></code>, such as <code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code>; see
-<a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a>.</p>
+<a class="reference internal" href="user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a>.</p>
 </section>
 <section id="dae-initialisation-failed">
 <h3><code class="docutils literal notranslate"><span class="pre">DAE_INITIALISATION_FAILED</span></code><a class="headerlink" href="#dae-initialisation-failed" title="Link to this heading"></a></h3>
 <p>cubie could not make the algebraic states of a DAE consistent with the
 equations at the start of the run, so cubie ended the run at <code class="docutils literal notranslate"><span class="pre">t0</span></code> with
-your starting values. See <a class="reference internal" href="user_guide/algorithms_and_tuning/optional_arguments.html"><span class="doc">Controlling accuracy</span></a>.</p>
+your starting values. See <a class="reference internal" href="user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a>.</p>
 <ul class="simple">
 <li><p>Give starting values for the algebraic states that are closer to
 consistent.</p></li>

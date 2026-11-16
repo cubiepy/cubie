@@ -20,7 +20,7 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Controlling accuracy" href="optional_arguments.html" />
+    <link rel="next" title="TL/DR" href="speed.html" />
     <link rel="prev" title="Algorithms and tuning" href="index.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/pr-1109/_static/version_switcher.js" data-version="pr-1109" data-versions="/cubie/versions.json" defer></script>
@@ -65,18 +65,11 @@
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Algorithms and tuning</a><ul class="current">
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html">Controlling accuracy</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#controlling-the-step-size">Controlling the step size</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#tuning-the-step-controller">Tuning the step controller</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#tuning-the-implicit-stiff-solvers">Tuning the implicit (stiff) solvers</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#choosing-the-method-s-coefficients">Choosing the method’s coefficients</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#choosing-what-gets-saved">Choosing what gets saved</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html#gpu-tuning-advanced">GPU tuning (advanced)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="speed.html">TL/DR</a></li>
 <li class="toctree-l3"><a class="reference internal" href="speed.html#parallelism">Parallelism</a></li>
 <li class="toctree-l3"><a class="reference internal" href="speed.html#memory">Memory</a></li>
@@ -321,8 +314,7 @@ methods are fast.</p></td>
 </tr>
 <tr class="row-even"><td><p>Very stiff</p></td>
 <td><p>FIRK</p></td>
-<td><p>FIRK algorithms like <code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> handle extreme stiffness
-well.</p></td>
+<td><p>Use FIRK algorithms like <code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> for extreme stiffness.</p></td>
 </tr>
 </tbody>
 </table>
@@ -703,7 +695,7 @@ about 20 ms unless you pass <code class="docutils literal notranslate"><span cla
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="index.html" class="btn btn-neutral float-left" title="Algorithms and tuning" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="optional_arguments.html" class="btn btn-neutral float-right" title="Controlling accuracy" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="speed.html" class="btn btn-neutral float-right" title="TL/DR" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
