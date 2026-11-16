@@ -296,9 +296,9 @@ option, cubie raises <code class="docutils literal notranslate"><span class="pre
 treats each key as a keyword argument.</p>
 <section id="arguments-of-one-solve">
 <h2>Arguments of one solve<a class="headerlink" href="#arguments-of-one-solve" title="Link to this heading"></a></h2>
-<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code> and <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> also take
-these arguments, which describe a single solve. The solver doesn’t keep
-them for later solves.</p>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code> and <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> also take the
+arguments below. Give them to each solve that needs them, because the
+solver doesn’t keep them for later solves.</p>
 <table class="docutils align-default">
 <colgroup>
 <col style="width: 25.0%" />
@@ -315,13 +315,14 @@ them for later solves.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">initial_values</span></code> (<code class="docutils literal notranslate"><span class="pre">y0</span></code> in <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code>)</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
 <td><p>Initial values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> starts every run from the system’s default initial
-values.</p></td>
+Pass <code class="docutils literal notranslate"><span class="pre">None</span></code> to start every run from the system’s default
+initial values.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">parameters</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
 <td><p>Parameter values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> uses the system’s default parameters for every run.</p></td>
+Pass <code class="docutils literal notranslate"><span class="pre">None</span></code> to use the system’s default parameters for every
+run.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">grid_type</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;combinatorial&quot;</span></code></p></td>
@@ -382,18 +383,19 @@ place of the family’s default tableau.</p>
 </section>
 <section id="controlling-accuracy">
 <h2>Controlling accuracy<a class="headerlink" href="#controlling-accuracy" title="Link to this heading"></a></h2>
-<p>Adaptive algorithms choose their own step size to keep the estimated
-error of each step below <code class="docutils literal notranslate"><span class="pre">atol</span> <span class="pre">+</span> <span class="pre">rtol</span> <span class="pre">*</span> <span class="pre">|value|</span></code> for every state.</p>
+<p>With an adaptive algorithm, cubie chooses each step size to keep the
+estimated error of the step below <code class="docutils literal notranslate"><span class="pre">atol</span> <span class="pre">+</span> <span class="pre">rtol</span> <span class="pre">*</span> <span class="pre">|value|</span></code> for every
+state.</p>
 <dl class="simple">
-<dt><strong>atol</strong> — absolute error tolerance.</dt><dd><p>This tolerance sets the error you accept when a state is near zero.
+<dt><strong>atol</strong> — absolute error tolerance.</dt><dd><p>Use it to set the error you accept when a state is near zero.
 Pass a scalar for every state, or an array with one tolerance per
 state.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></li>
 </ul>
 </dd>
-<dt><strong>rtol</strong> — relative error tolerance.</dt><dd><p>This tolerance scales with the size of the state: <code class="docutils literal notranslate"><span class="pre">rtol=1e-6</span></code>
-asks for roughly six correct digits. Pass a scalar or an array with
+<dt><strong>rtol</strong> — relative error tolerance.</dt><dd><p>Cubie scales it by the size of the state, so <code class="docutils literal notranslate"><span class="pre">rtol=1e-6</span></code> gives
+you roughly six correct digits. Pass a scalar or an array with
 one tolerance per state.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-6</span></code></p></li>
@@ -405,7 +407,7 @@ only.</p>
 </section>
 <section id="controlling-the-step-size">
 <h2>Controlling the step size<a class="headerlink" href="#controlling-the-step-size" title="Link to this heading"></a></h2>
-<p><a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> explains how <code class="docutils literal notranslate"><span class="pre">dt</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> work
+<p>See <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> for how <code class="docutils literal notranslate"><span class="pre">dt</span></code>, <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> work
 together, and how cubie fills in the ones you leave out.</p>
 <dl class="simple">
 <dt><strong>dt</strong> — the fixed step, or the first step of an adaptive algorithm.</dt><dd><p>If you give an adaptive algorithm no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie estimates a
@@ -443,34 +445,35 @@ norm of <code class="docutils literal notranslate"><span class="pre">starting_st
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code> for algorithms without an error estimate;
 otherwise <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code> for ERK, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code> for DIRK and
-<code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code> for FIRK and Rosenbrock-W. Some tableaus choose
-their own.</p></li>
+<code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code> for FIRK and Rosenbrock-W. Cubie uses a
+different default for some tableaus.</p></li>
 </ul>
 </dd>
 </dl>
-<p>Each algorithm family also sets its own defaults for the options below,
-so treat them as expert tuning.</p>
-<p><strong>min_step_shrink</strong> / <strong>max_step_growth</strong> — bounds on how much one step can change the step size.</p>
+<p>Cubie sets its own defaults for the options below for each algorithm
+family, so treat them as expert tuning.</p>
+<p><strong>min_step_shrink</strong> / <strong>max_step_growth</strong> — bounds on how much cubie changes the step size from one step to the next.</p>
 <blockquote>
 <div><ul class="simple">
 <li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">min_step_shrink=0.3</span></code>, <code class="docutils literal notranslate"><span class="pre">max_step_growth=2.0</span></code></p></li>
 </ul>
 </div></blockquote>
 <dl class="simple">
-<dt><strong>safety</strong> — a factor on every proposed step.</dt><dd><p>Cubie multiplies each proposed step by this factor. Values below
-1.0 aim slightly below the step the error estimate suggests, so you
-get fewer rejected steps at a small cost in speed.</p>
+<dt><strong>safety</strong> — a factor on every proposed step.</dt><dd><p>Cubie multiplies each proposed step by this factor. With a value
+below 1.0, cubie takes slightly smaller steps than its error
+estimate allows, so you get fewer rejected steps at a small cost in
+speed.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">0.9</span></code></p></li>
 </ul>
 </dd>
-<dt><strong>deadband_min</strong> / <strong>deadband_max</strong> — a band of step ratios that cubie ignores.</dt><dd><p>If the proposed change in step size falls inside this band, cubie
+<dt><strong>deadband_min</strong> / <strong>deadband_max</strong> — a band of step ratios that cubie ignores.</dt><dd><p>If cubie would change the step size by a ratio inside this band, it
 keeps the current step. Set both to 1.0 to turn the band off.</p>
 <ul class="simple">
 <li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">deadband_min=1.0</span></code>, <code class="docutils literal notranslate"><span class="pre">deadband_max=1.0</span></code> (off)</p></li>
 </ul>
 </dd>
-<dt><strong>integral_gain</strong> / <strong>proportional_gain</strong> / <strong>derivative_gain</strong> — the gains of the <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code> controllers.</dt><dd><p><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html#choosing-a-controller"><span class="std std-ref">Choosing a Controller</span></a> explains what each gain does. Cubie
+<dt><strong>integral_gain</strong> / <strong>proportional_gain</strong> / <strong>derivative_gain</strong> — the gains of the <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code> controllers.</dt><dd><p>See <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html#choosing-a-controller"><span class="std std-ref">Choosing a Controller</span></a> for what each gain does. Cubie
 divides each gain by <code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">+</span> <span class="pre">1</span></code>. If you pass a gain without a
 <code class="docutils literal notranslate"><span class="pre">step_controller</span></code>, cubie selects the fastest of <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and
 <code class="docutils literal notranslate"><span class="pre">pid</span></code> that uses it.</p>
@@ -490,9 +493,9 @@ divides the exponents by <code class="docutils literal notranslate"><span class=
 <code class="docutils literal notranslate"><span class="pre">pid</span></code></p></li>
 </ul>
 </dd>
-<dt><strong>newton_target_iters</strong> — the Newton iteration count the <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller aims for.</dt><dd><p>The <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller shrinks the step when the implicit
-solver works harder than this. It doesn’t limit the number of
-Newton iterations.</p>
+<dt><strong>newton_target_iters</strong> — the Newton iteration count the <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller aims for.</dt><dd><p>With the <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller, cubie shrinks the step when the
+Newton solve takes more iterations than this. Cubie doesn’t stop
+the Newton solve at this count.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">20</span></code></p></li>
 </ul>
@@ -501,10 +504,11 @@ Newton iterations.</p>
 </section>
 <section id="tuning-the-implicit-solvers">
 <h2>Tuning the implicit solvers<a class="headerlink" href="#tuning-the-implicit-solvers" title="Link to this heading"></a></h2>
-<p>Implicit algorithms (backward Euler, Crank–Nicolson, DIRK, FIRK) solve
-a nonlinear system at every step with Newton’s method, and solve a
-linear system for each Newton update. Rosenbrock-W algorithms solve
-only the linear systems, so the Newton options don’t apply to them.</p>
+<p>For implicit algorithms (backward Euler, Crank–Nicolson, DIRK, FIRK),
+cubie solves a nonlinear system at every step with Newton’s method, and
+a linear system for each Newton update. For Rosenbrock-W algorithms,
+cubie solves only the linear systems, so the Newton options don’t apply
+to them.</p>
 <p>Newton options:</p>
 <dl class="simple">
 <dt><strong>newton_atol</strong> / <strong>newton_rtol</strong> — Newton convergence tolerances.</dt><dd><p>Cubie accepts a Newton solve when the estimated error of the update
@@ -514,19 +518,21 @@ drops below one percent of these tolerances.</p>
 10</p></li>
 </ul>
 </dd>
-<dt><strong>newton_max_iters</strong> — the Newton iteration limit.</dt><dd><p>If a step doesn’t converge within this many iterations, cubie
-rejects it and, under an adaptive controller, retries it with a
-smaller step.</p>
+<dt><strong>newton_max_iters</strong> — the Newton iteration limit.</dt><dd><p>If the Newton solve doesn’t converge within this many iterations,
+cubie rejects the step and, under an adaptive controller, retries it
+with a smaller step.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">8</span></code></p></li>
 </ul>
 </dd>
 <dt><strong>inexact_newton</strong> — freeze the Newton matrix at the start of each step.</dt><dd><p>Cubie evaluates the Jacobian once per step instead of once per
-Newton iteration. Rosenbrock-W algorithms ignore this option.</p>
+Newton iteration. Cubie ignores this option for Rosenbrock-W
+algorithms.</p>
 <ul class="simple">
-<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code> for DIRK and FIRK, except the tableaus that the
-<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>
-tables list as using exact Newton; <code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise</p></li>
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code> for DIRK and FIRK, except the tableaus marked
+as defaulting to exact Newton in
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>;
+<code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise</p></li>
 </ul>
 </dd>
 <dt><strong>prefactored</strong> — keep the LU factors from the start of each step.</dt><dd><p>With <code class="docutils literal notranslate"><span class="pre">inexact_newton</span></code> and <code class="docutils literal notranslate"><span class="pre">linear_correction_type=&quot;lu&quot;</span></code>, cubie
@@ -537,9 +543,10 @@ With <code class="docutils literal notranslate"><span class="pre">False</span></
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
 </ul>
 </dd>
-<dt><strong>attempt_dense_prediction</strong> — warm-start each Newton solve.</dt><dd><p>DIRK and FIRK algorithms start each step’s Newton solves from a
-prediction made from the previous step’s stages. Cubie ignores
-this option for tableaus that can’t support the prediction.</p>
+<dt><strong>attempt_dense_prediction</strong> — warm-start each Newton solve.</dt><dd><p>For DIRK and FIRK algorithms, cubie starts each step’s Newton
+solves from a prediction it makes from the previous step’s stages.
+Cubie ignores this option for tableaus that can’t support the
+prediction.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code>, or <code class="docutils literal notranslate"><span class="pre">False</span></code> for adaptive DIRK tableaus</p></li>
 </ul>
@@ -547,21 +554,20 @@ this option for tableaus that can’t support the prediction.</p>
 </dl>
 <p>Linear solver options:</p>
 <dl>
-<dt><strong>linear_correction_type</strong> — the linear solver.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> factorises the matrix and solves it directly. It is
-faster for stiff problems and slower for easy ones.</p>
-<p><code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;steepest_descent&quot;</span></code> are iterative
-solvers. <code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> is usually the fastest, but the
-least robust.</p>
-<p><code class="docutils literal notranslate"><span class="pre">&quot;bicgstab&quot;</span></code> is an iterative solver that applies the Jacobian
-twice in each iteration, where the other iterative solvers apply it
-once.</p>
+<dt><strong>linear_correction_type</strong> — the linear solver.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> to factorise the matrix and solve it directly, which
+is faster for stiff problems and slower for easy ones.</p>
+<p><code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;steepest_descent&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;bicgstab&quot;</span></code>
+are iterative solvers. <code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> is usually the
+fastest, but the least robust. With <code class="docutils literal notranslate"><span class="pre">&quot;bicgstab&quot;</span></code>, cubie applies
+the Jacobian twice in each iteration, where it applies it once with
+the other iterative solvers.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> for DIRK, FIRK, Rosenbrock-W and every DAE;
 <code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> otherwise</p></li>
 </ul>
 </dd>
 </dl>
-<p><strong>krylov_atol</strong> / <strong>krylov_rtol</strong> — the tolerances that weight the iterative linear solver’s stopping test.</p>
+<p><strong>krylov_atol</strong> / <strong>krylov_rtol</strong> — the tolerances cubie uses to weight the iterative linear solver’s stopping test.</p>
 <blockquote>
 <div><ul class="simple">
 <li><p>Default: the step controller’s <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code></p></li>
@@ -576,8 +582,8 @@ once.</p>
 <dl class="simple">
 <dt><strong>krylov_residual_reduction</strong> / <strong>krylov_residual_floor</strong> — the stopping test of the iterative linear solver.</dt><dd><p>Cubie stops each linear solve once its weighted residual falls
 below <code class="docutils literal notranslate"><span class="pre">floor</span> <span class="pre">+</span> <span class="pre">reduction</span> <span class="pre">*</span> <span class="pre">||b||</span></code>, where <code class="docutils literal notranslate"><span class="pre">||b||</span></code> is the weighted
-right-hand side at the start of the solve. The relative term stops
-cubie solving the early Newton updates more accurately than it
+right-hand side at the start of the solve. With the relative term,
+cubie doesn’t solve the early Newton updates more accurately than it
 needs to.</p>
 <ul class="simple">
 <li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">krylov_residual_reduction</span></code> is the smallest <code class="docutils literal notranslate"><span class="pre">rtol</span></code>
@@ -593,11 +599,12 @@ system and algorithm. Cubie rejects <code class="docutils literal notranslate"><
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code></p></li>
 </ul>
 </dd>
-<dt><strong>preconditioner_order</strong> — the number of terms in the preconditioner’s series.</dt><dd><p>Each term costs one Jacobian product each time cubie applies the
-preconditioner, and saves linear iterations only while the series
-converges, so use a low order on a system with large off-diagonal
-Jacobian entries. <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code> needs at least one term; on
-<code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code>, order zero is a plain diagonal solve.</p>
+<dt><strong>preconditioner_order</strong> — the number of terms in the preconditioner’s series.</dt><dd><p>Cubie computes one Jacobian product per term each time it applies
+the preconditioner. You save linear iterations with extra terms
+only while the series converges, so use a low order on a system
+with large off-diagonal Jacobian entries. Give <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code> at
+least one term. With <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code> at order zero, cubie does a plain
+diagonal solve.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">2</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">0</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code></p></li>
 </ul>
@@ -605,18 +612,16 @@ Jacobian entries. <code class="docutils literal notranslate"><span class="pre">&
 </dl>
 <p>Error smoothing options:</p>
 <dl class="simple">
-<dt><strong>use_smoothed_error</strong> — smooth the error estimate.</dt><dd><p>If the tableau supports it, cubie adds one linear solve per step
-that filters stiff components out of the error estimate. The
-larger steps that you get usually outweigh the cost of the extra
-solve. Cubie warns and leaves smoothing off for a tableau that
+<dt><strong>use_smoothed_error</strong> — smooth the error estimate.</dt><dd><p>If the tableau supports it, cubie adds one linear solve per step to
+filter stiff components out of the error estimate. You usually gain
+more from the larger steps than you lose to the extra solve. Cubie warns and leaves smoothing off for a tableau that
 can’t smooth its estimate.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">False</span></code>, or <code class="docutils literal notranslate"><span class="pre">True</span></code> for Radau IIA tableaus</p></li>
 </ul>
 </dd>
-<dt><strong>error_atol</strong> / <strong>error_rtol</strong> / <strong>error_max_iters</strong> / <strong>error_residual_reduction</strong> / <strong>error_residual_floor</strong> — the settings of the smoothing solve.</dt><dd><p>These options set the same quantities as their <code class="docutils literal notranslate"><span class="pre">krylov_</span></code>
-counterparts, for the linear solve that <code class="docutils literal notranslate"><span class="pre">use_smoothed_error</span></code>
-adds.</p>
+<dt><strong>error_atol</strong> / <strong>error_rtol</strong> / <strong>error_max_iters</strong> / <strong>error_residual_reduction</strong> / <strong>error_residual_floor</strong> — the settings of the smoothing solve.</dt><dd><p>Use these options like their <code class="docutils literal notranslate"><span class="pre">krylov_</span></code> counterparts, for the
+linear solve that <code class="docutils literal notranslate"><span class="pre">use_smoothed_error</span></code> adds.</p>
 <ul class="simple">
 <li><p>Default: the value of the matching <code class="docutils literal notranslate"><span class="pre">krylov_</span></code> option</p></li>
 </ul>
@@ -626,11 +631,11 @@ adds.</p>
 <dl class="simple">
 <dt><strong>dae_initialisation</strong> — make a DAE’s initial values consistent.</dt><dd><p>Cubie solves for consistent algebraic states at the start of every
 run, before the first step and the <code class="docutils literal notranslate"><span class="pre">t=0</span></code> output, starting from
-the initial values you gave. <code class="docutils literal notranslate"><span class="pre">&quot;brown&quot;</span></code> holds the differential
-states and solves for the algebraic ones. <code class="docutils literal notranslate"><span class="pre">&quot;shampine&quot;</span></code> takes one
-backward Euler step of the starting step size, which can move every
-state by up to <code class="docutils literal notranslate"><span class="pre">O(dt)</span></code>. <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> skips the solve. If the solve
-fails, cubie ends the run at the <code class="docutils literal notranslate"><span class="pre">t=0</span></code> save and sets
+the initial values you gave. With <code class="docutils literal notranslate"><span class="pre">&quot;brown&quot;</span></code>, cubie holds the
+differential states and solves for the algebraic ones. With
+<code class="docutils literal notranslate"><span class="pre">&quot;shampine&quot;</span></code>, cubie takes one backward Euler step of the starting
+step size, which can move every state by up to <code class="docutils literal notranslate"><span class="pre">O(dt)</span></code>. With
+<code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>, cubie skips the solve. If the solve fails, cubie ends the run at the <code class="docutils literal notranslate"><span class="pre">t=0</span></code> save and sets
 <code class="docutils literal notranslate"><span class="pre">DAE_INITIALISATION_FAILED</span></code> in its status code. Cubie ignores
 this option on systems that aren’t DAEs.</p>
 <ul class="simple">
@@ -641,7 +646,7 @@ this option on systems that aren’t DAEs.</p>
 </section>
 <section id="choosing-what-gets-saved">
 <h2>Choosing what gets saved<a class="headerlink" href="#choosing-what-gets-saved" title="Link to this heading"></a></h2>
-<p><a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a> explains each of these options.</p>
+<p>See <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a> for each of these options.</p>
 <dl class="simple">
 <dt><strong>output_types</strong> — what to record.</dt><dd><p>Pass any combination of <code class="docutils literal notranslate"><span class="pre">&quot;state&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;observables&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;time&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">&quot;iteration_counters&quot;</span></code> and the summary metric names.</p>
@@ -653,11 +658,11 @@ this option on systems that aren’t DAEs.</p>
 <code class="docutils literal notranslate"><span class="pre">saved_state_indices</span></code>, <code class="docutils literal notranslate"><span class="pre">saved_observable_indices</span></code>,
 <code class="docutils literal notranslate"><span class="pre">summarised_state_indices</span></code> and <code class="docutils literal notranslate"><span class="pre">summarised_observable_indices</span></code>.</p>
 <ul class="simple">
-<li><p>Default: every state and observable; <code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code>
-follows <code class="docutils literal notranslate"><span class="pre">save_variables</span></code></p></li>
+<li><p>Default: every state and observable; without
+<code class="docutils literal notranslate"><span class="pre">summarise_variables</span></code>, cubie summarises the saved variables</p></li>
 </ul>
 </dd>
-<dt><strong>save_every</strong> / <strong>summarise_every</strong> / <strong>sample_summaries_every</strong> — how often to save, summarise and sample.</dt><dd><p><a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> explains each interval.</p>
+<dt><strong>save_every</strong> / <strong>summarise_every</strong> / <strong>sample_summaries_every</strong> — how often to save, summarise and sample.</dt><dd><p>See <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> for each interval.</p>
 <ul class="simple">
 <li><p>Defaults: without <code class="docutils literal notranslate"><span class="pre">save_every</span></code>, cubie saves the first and last
 points; without <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code>, it summarises once at the
@@ -669,7 +674,7 @@ summary.</p></li>
 </section>
 <section id="drivers">
 <h2>Drivers<a class="headerlink" href="#drivers" title="Link to this heading"></a></h2>
-<p><a class="reference internal" href="../defining_systems/drivers.html"><span class="doc">Drivers (Time-dependent functions)</span></a> explains each of these
+<p>See <a class="reference internal" href="../defining_systems/drivers.html"><span class="doc">Drivers (Time-dependent functions)</span></a> for each of these
 options.</p>
 <p><strong>drivers</strong> — the forcing data, as a <code class="xref py py-class docutils literal notranslate"><span class="pre">DriverSamples</span></code>.</p>
 <p><strong>order</strong> — the polynomial order of the spline cubie fits to the samples.</p>
@@ -696,7 +701,8 @@ options.</p>
 <h2>Precision and compilation<a class="headerlink" href="#precision-and-compilation" title="Link to this heading"></a></h2>
 <dl class="simple">
 <dt><strong>precision</strong> — the floating-point type of the solve.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">numpy.float32</span></code> or <code class="docutils literal notranslate"><span class="pre">numpy.float64</span></code>.
-<a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> compares them.</p>
+See <a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> for how they
+compare.</p>
 <ul class="simple">
 <li><p>Default: the precision you built the system with, <code class="docutils literal notranslate"><span class="pre">float32</span></code>
 unless you set it</p></li>
@@ -708,17 +714,18 @@ unless you set it</p></li>
 or <code class="docutils literal notranslate"><span class="pre">&quot;liveness_auto&quot;</span></code> if you haven’t set it</p></li>
 </ul>
 </dd>
-<dt><strong>lineinfo</strong> — compile source-line data for profilers such as Nsight Compute.</dt><dd><p>Changing it rebuilds every kernel.</p>
+<dt><strong>lineinfo</strong> — compile source-line data for profilers such as Nsight Compute.</dt><dd><p>If you change it, cubie rebuilds every kernel.</p>
 <ul class="simple">
 <li><p>Default: the <code class="docutils literal notranslate"><span class="pre">CUBIE_LINEINFO</span></code> environment variable, or off if
 you haven’t set it</p></li>
 </ul>
 </dd>
-<dt><strong>nsz</strong> / <strong>contract</strong> / <strong>arcp</strong> / <strong>afn</strong> / <strong>reassoc</strong> / <strong>ftz</strong> — the compiler’s fast-math flags.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">nsz</span></code> ignores the sign of zero, <code class="docutils literal notranslate"><span class="pre">contract</span></code> fuses multiplies and
-adds, <code class="docutils literal notranslate"><span class="pre">arcp</span></code> approximates division by a reciprocal, <code class="docutils literal notranslate"><span class="pre">afn</span></code> uses
-approximate <code class="docutils literal notranslate"><span class="pre">log</span></code>, <code class="docutils literal notranslate"><span class="pre">exp</span></code> and <code class="docutils literal notranslate"><span class="pre">pow</span></code>, <code class="docutils literal notranslate"><span class="pre">reassoc</span></code> lets the
-compiler regroup chains of additions and multiplications, and
-<code class="docutils literal notranslate"><span class="pre">ftz</span></code> flushes subnormal numbers to zero.</p>
+<dt><strong>nsz</strong> / <strong>contract</strong> / <strong>arcp</strong> / <strong>afn</strong> / <strong>reassoc</strong> / <strong>ftz</strong> — the compiler’s fast-math flags.</dt><dd><p>Set <code class="docutils literal notranslate"><span class="pre">nsz</span></code> to let the compiler ignore the sign of zero,
+<code class="docutils literal notranslate"><span class="pre">contract</span></code> to let it fuse multiplies and adds, <code class="docutils literal notranslate"><span class="pre">arcp</span></code> to let it
+replace a division with a multiplication by the reciprocal, <code class="docutils literal notranslate"><span class="pre">afn</span></code>
+to let it use approximate <code class="docutils literal notranslate"><span class="pre">log</span></code>, <code class="docutils literal notranslate"><span class="pre">exp</span></code> and <code class="docutils literal notranslate"><span class="pre">pow</span></code>, <code class="docutils literal notranslate"><span class="pre">reassoc</span></code>
+to let it regroup chains of additions and multiplications, and
+<code class="docutils literal notranslate"><span class="pre">ftz</span></code> to let it flush subnormal numbers to zero.</p>
 <ul class="simple">
 <li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">reassoc=False</span></code>; every other flag <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
 </ul>
@@ -740,7 +747,7 @@ appends <code class="docutils literal notranslate"><span class="pre">_ltoon</spa
 </section>
 <section id="performance">
 <h2>Performance<a class="headerlink" href="#performance" title="Link to this heading"></a></h2>
-<p><a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> explains when these
+<p>See <a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> for when these
 options matter.</p>
 <dl class="simple">
 <dt><strong>auto_performance</strong> — choose buffer locations, loop unrolling and the launch shape for your system and GPU.</dt><dd><p>Cubie never overrides a <code class="docutils literal notranslate"><span class="pre">*_location</span></code>, <code class="docutils literal notranslate"><span class="pre">unroll_*</span></code> or
@@ -754,8 +761,8 @@ options matter.</p>
 <li><p>Default: chosen by cubie</p></li>
 </ul>
 </dd>
-<dt><strong>max_registers</strong> — the register limit for each thread.</dt><dd><p>A lower limit lets more threads run at once, but spills more values
-to memory.</p>
+<dt><strong>max_registers</strong> — the register limit for each thread.</dt><dd><p>With a lower limit, you can run more threads at once, but the
+compiler spills more values to memory.</p>
 <ul class="simple">
 <li><p>Default: no limit</p></li>
 </ul>
@@ -775,7 +782,8 @@ iterations.</p>
 </ul>
 </dd>
 <dt><strong>*_location</strong> options (<code class="docutils literal notranslate"><span class="pre">state_location</span></code>, <code class="docutils literal notranslate"><span class="pre">timestep_memory_location</span></code> and about forty more) — where each working buffer lives.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code> for per-thread memory or <code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code> for
-per-block memory. Buffer locations don’t change the results.</p>
+per-block memory. Cubie computes the same results with either
+location.</p>
 <ul class="simple">
 <li><p>Default: chosen by cubie under <code class="docutils literal notranslate"><span class="pre">auto_performance</span></code>; otherwise
 <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code></p></li>
@@ -785,23 +793,24 @@ per-block memory. Buffer locations don’t change the results.</p>
 </section>
 <section id="memory-and-caching">
 <h2>Memory and caching<a class="headerlink" href="#memory-and-caching" title="Link to this heading"></a></h2>
-<p><a class="reference internal" href="../advanced/memory.html"><span class="doc">GPU Memory Management</span></a> and
-<a class="reference internal" href="../advanced/caching.html"><span class="doc">Caching and Recompilation</span></a> explain these options.</p>
+<p>See <a class="reference internal" href="../advanced/memory.html"><span class="doc">GPU Memory Management</span></a> and
+<a class="reference internal" href="../advanced/caching.html"><span class="doc">Caching and Recompilation</span></a> for these options.</p>
 <dl class="simple">
-<dt><strong>mem_proportion</strong> — the share of VRAM this solver may use.</dt><dd><p>Pass a number between 0.0 and 1.0. With <code class="docutils literal notranslate"><span class="pre">None</span></code>, the solver joins
-the automatic pool, which shares the VRAM left after every solver
-with a set proportion equally between its members.</p>
+<dt><strong>mem_proportion</strong> — the share of VRAM this solver may use.</dt><dd><p>Pass a number between 0.0 and 1.0. With <code class="docutils literal notranslate"><span class="pre">None</span></code>, cubie puts the
+solver in the automatic pool, and divides the VRAM left after every
+solver with a set proportion equally between the solvers in that
+pool.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
 </ul>
 </dd>
-<dt><strong>stream_group</strong> — the name of the stream group the solver runs on.</dt><dd><p>Solvers in the same group share one CUDA stream.</p>
+<dt><strong>stream_group</strong> — the name of the stream group the solver runs on.</dt><dd><p>Cubie runs every solver in a group on one CUDA stream.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;solver&quot;</span></code></p></li>
 </ul>
 </dd>
 </dl>
-<p><strong>memory_manager</strong> — the <a class="reference internal" href="../../API_reference/memory/memory_manager.html#cubie.memory.mem_manager.MemoryManager" title="cubie.memory.mem_manager.MemoryManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryManager</span></code></a> that allocates the solver’s memory.</p>
+<p><strong>memory_manager</strong> — the <a class="reference internal" href="../../API_reference/memory/memory_manager.html#cubie.memory.mem_manager.MemoryManager" title="cubie.memory.mem_manager.MemoryManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">MemoryManager</span></code></a> cubie allocates the solver’s memory with.</p>
 <blockquote>
 <div><ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">cubie.default_memmgr</span></code></p></li>
@@ -821,7 +830,7 @@ the shared cache root if you haven’t set it</p></li>
 </ul>
 </div></blockquote>
 <dl class="simple">
-<dt><strong>max_cache_entries</strong> — the number of compiled kernels cubie keeps in each cache directory before it removes the least recently used one.</dt><dd><p><code class="docutils literal notranslate"><span class="pre">0</span></code> keeps every kernel.</p>
+<dt><strong>max_cache_entries</strong> — the number of compiled kernels cubie keeps in each cache directory before it removes the least recently used one.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">0</span></code> to keep every kernel.</p>
 <ul class="simple">
 <li><p>Default: the <code class="docutils literal notranslate"><span class="pre">CUBIE_MAX_CACHE_ENTRIES</span></code> environment variable, or
 <code class="docutils literal notranslate"><span class="pre">0</span></code> if you haven’t set it</p></li>
