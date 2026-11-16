@@ -351,7 +351,7 @@ Supplying <code class="docutils literal notranslate"><span class="pre">dt_max</s
 <li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code>, positive</p></li>
 </ul>
 </dd>
-<dt><strong>starting_step_state_fraction</strong> / <strong>starting_step_zero_norm</strong> / <strong>starting_step_target</strong> / <strong>starting_step_max_growth</strong> — the constants cubie uses to estimate the starting step.</dt><dd><p>CuBIE first guesses the step that changes the state by
+<dt><strong>starting_step_state_fraction</strong> / <strong>starting_step_zero_norm</strong> / <strong>starting_step_target</strong> / <strong>starting_step_max_growth</strong> — constants of the starting-step estimate.</dt><dd><p>CuBIE first guesses the step that changes the state by
 <code class="docutils literal notranslate"><span class="pre">starting_step_state_fraction</span></code> of its norm, or the geometric mean
 of <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> when the state or its derivative has a
 norm of <code class="docutils literal notranslate"><span class="pre">starting_step_zero_norm</span></code> or less. CuBIE returns at most
@@ -618,7 +618,7 @@ selection unless you specify them separately.</p></li>
 <section id="gpu-tuning-advanced">
 <h1>GPU tuning (advanced)<a class="headerlink" href="#gpu-tuning-advanced" title="Link to this heading"></a></h1>
 <dl class="simple">
-<dt><strong>Buffer location options</strong> (<code class="docutils literal notranslate"><span class="pre">state_location</span></code>, <code class="docutils literal notranslate"><span class="pre">timestep_memory_location</span></code>, and about forty more <code class="docutils literal notranslate"><span class="pre">*_location</span></code> options)</dt><dd><p>Each working buffer can live in <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code> (per-thread) or
+<dt><strong>Buffer location options</strong> (<code class="docutils literal notranslate"><span class="pre">state_location</span></code>, <code class="docutils literal notranslate"><span class="pre">timestep_memory_location</span></code>, and about forty more <code class="docutils literal notranslate"><span class="pre">*_location</span></code> options across the loop, algorithm, and solver configs)</dt><dd><p>Each working buffer can live in <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code> (per-thread) or
 <code class="docutils literal notranslate"><span class="pre">&quot;shared&quot;</span></code> (per-block) GPU memory.  Everything defaults to
 <code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code>, which profiling shows is the right choice on typical
 hardware — these exist for performance experiments on specific

@@ -522,19 +522,18 @@ reverse.</p>
 <p>Fixed-step controllers use only <code class="docutils literal notranslate"><span class="pre">dt</span></code>, which becomes the constant step
 size throughout integration.</p>
 <p>If you use a fixed-step controller, set <code class="docutils literal notranslate"><span class="pre">dt</span></code> 10 to 100 times smaller
-than the sharpest corner in your system’s solution. If you use an
-adaptive controller, set <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> shorter than any quasi-periodic
-cycle in the solution, so that cubie can’t step straight over a cycle
-and land back near where it started. If cubie reports
-<code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> in a run’s status code and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is not much
-smaller than the sharpest feature in the solution, decrease <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>.
-If <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is already very small, try an algorithm designed for
-stiff systems (see
-<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>). When you
-give an adaptive controller no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie estimates a starting step
-for each run. You only need to set <code class="docutils literal notranslate"><span class="pre">dt</span></code> if you run many short
-integrations and you know a starting step that suits them better than
-cubie’s estimate.</p>
+than the sharpest corner your system produces. If you use an adaptive
+controller, set <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> shorter than any quasi-periodic cycle your
+system produces, so that the solver can’t step straight over a cycle and
+land back near where it started. If runs fail with <code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> in
+their status codes and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is not much smaller than the sharpest
+feature your system produces, decrease <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>. If <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is
+already very small, try an algorithm that handles stiff systems better
+(see <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>).
+When you give an adaptive controller no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie estimates a
+starting step for each run, so you only need to set <code class="docutils literal notranslate"><span class="pre">dt</span></code> if you run
+many short integrations and a starting step that is too small or too
+large adds noticeably to their runtime.</p>
 <section id="default-behaviour">
 <h3>Default Behaviour<a class="headerlink" href="#default-behaviour" title="Link to this heading"></a></h3>
 <p>When you don’t specify any step size parameters, CuBIE uses these defaults:</p>

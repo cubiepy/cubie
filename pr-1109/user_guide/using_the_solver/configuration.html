@@ -292,11 +292,11 @@
   <p>#On a deeper read of this page it seems like it is either useless or poorly impelemented - I like the idea of linking each param to its deep dive page, but is this just a duplication of api ref? where does the optional arguments page live, and why? where is the distinction between the two?</p>
 <section id="configuration-reference">
 <h1>Configuration Reference<a class="headerlink" href="#configuration-reference" title="Link to this heading"></a></h1>
-<p>You can give a solve the named arguments of <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>,
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code>, listed in the
-first section below. You can also add any of the keyword options in the
-second section to any of those calls. Follow the link beside each
-keyword option to read what it does.</p>
+<p>This page lists every argument you can give a solve. The first section
+covers the named arguments of <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code>,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code>. The second
+lists the options you can add to any of them as keyword arguments, with
+a link to the page that explains each one.</p>
 <section id="named-arguments">
 <h2>Named arguments<a class="headerlink" href="#named-arguments" title="Link to this heading"></a></h2>
 <section id="solve-ivp">
@@ -325,7 +325,7 @@ values.</p></td>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">parameters</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
 <td><p>Parameter values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> uses the system’s default parameters for every run.</p></td>
+<code class="docutils literal notranslate"><span class="pre">None</span></code> runs every run under the system’s default parameters.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">drivers</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
@@ -456,7 +456,7 @@ values.</p></td>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">parameters</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
 <td><p>Parameter values, as a dict or an array (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> uses the system’s default parameters for every run.</p></td>
+<code class="docutils literal notranslate"><span class="pre">None</span></code> runs every run under the system’s default parameters.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">drivers</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">None</span></code></p></td>
@@ -614,9 +614,8 @@ per-buffer <code class="docutils literal notranslate"><span class="pre">*_locati
 </tr>
 </tbody>
 </table>
-<p>If you pass a keyword argument that isn’t an option, cubie raises
-<code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. Give parameter values in the <code class="docutils literal notranslate"><span class="pre">parameters</span></code> argument of
-<code class="docutils literal notranslate"><span class="pre">solve</span></code>.</p>
+<p>A keyword argument that isn’t an option raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. Give
+parameter values in the <code class="docutils literal notranslate"><span class="pre">parameters</span></code> argument of <code class="docutils literal notranslate"><span class="pre">solve</span></code>.</p>
 </section>
 <section id="notes-on-selected-parameters">
 <h2>Notes on selected parameters<a class="headerlink" href="#notes-on-selected-parameters" title="Link to this heading"></a></h2>

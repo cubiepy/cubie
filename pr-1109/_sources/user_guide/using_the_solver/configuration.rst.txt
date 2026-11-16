@@ -3,11 +3,11 @@
 Configuration Reference
 ========================
 
-You can give a solve the named arguments of :func:`~cubie.solve_ivp`,
-:class:`~cubie.Solver` and :meth:`~cubie.Solver.solve`, listed in the
-first section below. You can also add any of the keyword options in the
-second section to any of those calls. Follow the link beside each
-keyword option to read what it does.
+This page lists every argument you can give a solve. The first section
+covers the named arguments of :func:`~cubie.solve_ivp`,
+:class:`~cubie.Solver` and :meth:`~cubie.Solver.solve`. The second
+lists the options you can add to any of them as keyword arguments, with
+a link to the page that explains each one.
 
 Named arguments
 ---------------
@@ -33,7 +33,7 @@ single batch solve.
    * - ``parameters``
      - ``None``
      - Parameter values, as a dict or an array (see :doc:`inputs`).
-       ``None`` uses the system's default parameters for every run.
+       ``None`` runs every run under the system's default parameters.
    * - ``drivers``
      - ``None``
      - A :class:`~cubie.array_interpolator.DriverSamples` of forcing
@@ -135,7 +135,7 @@ argument.
    * - ``parameters``
      - ``None``
      - Parameter values, as a dict or an array (see :doc:`inputs`).
-       ``None`` uses the system's default parameters for every run.
+       ``None`` runs every run under the system's default parameters.
    * - ``drivers``
      - ``None``
      - A :class:`~cubie.array_interpolator.DriverSamples` to use in
@@ -261,9 +261,8 @@ You can pass any option below as a keyword argument to
        ``lto``
      - —
 
-If you pass a keyword argument that isn't an option, cubie raises
-``KeyError``. Give parameter values in the ``parameters`` argument of
-``solve``.
+A keyword argument that isn't an option raises ``KeyError``. Give
+parameter values in the ``parameters`` argument of ``solve``.
 
 Notes on selected parameters
 ----------------------------
