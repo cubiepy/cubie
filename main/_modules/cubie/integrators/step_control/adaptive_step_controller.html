@@ -365,6 +365,11 @@
 <span class="sd">"""Maximum step when none is given."""</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">default_starting_step</span><span class="p">(</span><span class="n">dt_min</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">dt_max</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the geometric mean of the step bounds."""</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">sqrt</span><span class="p">(</span><span class="n">dt_min</span> <span class="o">*</span> <span class="n">dt_max</span><span class="p">))</span>
+
+
 <div class="viewcode-block" id="AdaptiveStepControlConfig">
 <a class="viewcode-back" href="../../../../API_reference/integrators/step_control/adaptive_step_control_config.html#cubie.integrators.step_control.adaptive_step_controller.AdaptiveStepControlConfig">[docs]</a>
 <span class="nd">@frozen</span>
@@ -446,11 +451,11 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt_max</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the initial step; the bounds' geometric mean if unset."""</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt_min</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dt_max</span><span class="p">))</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the given initial step, or ``None`` when not given."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dt</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">precision</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dt</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">is_adaptive</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -651,7 +656,13 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">algorithm_order</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the integration algorithm order assumed by the controller."""</span>
 
-        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">algorithm_order</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">algorithm_order</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">norm_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the error-norm device function."""</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">norm_fn</span></div>
 
 </pre></div>
 

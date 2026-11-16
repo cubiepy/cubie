@@ -585,9 +585,8 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the fixed step size for fixed controllers."""</span>
-        <span class="n">controller</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_controller</span>
-        <span class="k">return</span> <span class="n">controller</span><span class="o">.</span><span class="n">dt</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">controller</span><span class="p">,</span> <span class="s2">"dt"</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+<span class="w">        </span><span class="sd">"""Return the first step, or ``None`` when each run estimates it."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_controller</span><span class="o">.</span><span class="n">dt</span>
 
     <span class="c1"># ------------------------------------------------------------------</span>
     <span class="c1"># Algorithm step properties</span>

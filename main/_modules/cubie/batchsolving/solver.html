@@ -1825,7 +1825,7 @@
     <span class="c1"># Pass-through properties for solve_info components</span>
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the fixed-step size or ``None`` for adaptive controllers."""</span>
+<span class="w">        </span><span class="sd">"""Return the first step, or ``None`` when each run estimates it."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel</span><span class="o">.</span><span class="n">dt</span>
 
     <span class="nd">@property</span>

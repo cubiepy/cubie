@@ -558,7 +558,7 @@ size throughout integration.</p>
 </tr>
 <tr class="row-even"><td><p>Adaptive</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code> = <code class="docutils literal notranslate"><span class="pre">3.2e-5</span></code></p></td>
+<td><p>Estimated for each run</p></td>
 </tr>
 <tr class="row-odd"><td><p>Fixed</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code></p></td>
@@ -566,6 +566,9 @@ size throughout integration.</p>
 </tr>
 </tbody>
 </table>
+<p>When you give an adaptive controller no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, CuBIE estimates each
+run’s starting step with Hairer’s method, which is the best choice in
+most cases.</p>
 </section>
 <section id="derivation-rules">
 <h3>Derivation Rules<a class="headerlink" href="#derivation-rules" title="Link to this heading"></a></h3>
@@ -588,14 +591,14 @@ missing values. The rules differ for adaptive and fixed controllers:</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code> only</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">1.0</span></code> (default, or <code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">*</span> <span class="pre">1000</span></code> if <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>
-is above it), <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
+is above it)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span></code> only</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">1e-9</span></code> (default, or <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">/</span> <span class="pre">1000</span></code> if <code class="docutils literal notranslate"><span class="pre">dt_max</span></code>
-is below it), <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
+is below it)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">=</span> <span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code></p></td>
+<td><p>Nothing derived</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dt</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt</span> <span class="pre">*</span> <span class="pre">1000</span></code></p></td>
@@ -617,10 +620,9 @@ one.</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">dt_min</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt_max</span><span class="p">)</span>
 <span class="c1"># cubie derives dt_min=1e-8 and dt_max=10.0</span>
 
-<span class="c1"># Give the bounds, and cubie computes the initial dt</span>
+<span class="c1"># Give the bounds, and cubie estimates each run's starting step</span>
 <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span> <span class="n">dt_min</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">dt_max</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">dt_min</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt_max</span><span class="p">)</span>
-<span class="c1"># cubie computes dt=0.001</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">dt_min</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt_max</span><span class="p">)</span>
 
 <span class="c1"># Set a fixed step of dt=0.005</span>
 <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span> <span class="n">step_controller</span><span class="o">=</span><span class="s2">"fixed"</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.005</span><span class="p">)</span>

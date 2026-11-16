@@ -322,8 +322,8 @@ non-negative.</p>
 methods the solver takes it as the first step. If you give <code class="docutils literal notranslate"><span class="pre">dt</span></code>
 alone, CuBIE sets <code class="docutils literal notranslate"><span class="pre">dt_min</span> <span class="pre">=</span> <span class="pre">dt/1e6</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span> <span class="pre">=</span> <span class="pre">dt*1000</span></code>.</p>
 <ul class="simple">
-<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> for fixed methods and <code class="docutils literal notranslate"><span class="pre">sqrt(dt_min</span> <span class="pre">*</span> <span class="pre">dt_max)</span></code>
-for adaptive methods.</p></li>
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> for fixed methods. For adaptive methods, CuBIE
+estimates each run’s starting step with Hairer’s method.</p></li>
 <li><p>Type: <code class="docutils literal notranslate"><span class="pre">float</span></code>, positive</p></li>
 </ul>
 </dd>
@@ -338,6 +338,22 @@ Supplying <code class="docutils literal notranslate"><span class="pre">dt_max</s
 </ul>
 </dd>
 </dl>
+<p><strong>starting_step_state_fraction</strong> / <strong>starting_step_zero_norm</strong> /
+<strong>starting_step_target</strong> / <strong>starting_step_max_growth</strong> — constants of
+the starting-step estimate.</p>
+<blockquote>
+<div><p>CuBIE first guesses the step that changes the state by
+<code class="docutils literal notranslate"><span class="pre">starting_step_state_fraction</span></code> of its norm, or the geometric mean
+of <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> when the state or its derivative has a
+norm of <code class="docutils literal notranslate"><span class="pre">starting_step_zero_norm</span></code> or less. CuBIE returns at most
+<code class="docutils literal notranslate"><span class="pre">starting_step_max_growth</span></code> first guesses. Lower
+<code class="docutils literal notranslate"><span class="pre">starting_step_target</span></code> for a smaller estimate.</p>
+<ul class="simple">
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">starting_step_state_fraction=0.01</span></code>,
+<code class="docutils literal notranslate"><span class="pre">starting_step_zero_norm=1e-5</span></code>, <code class="docutils literal notranslate"><span class="pre">starting_step_target=0.01</span></code>,
+<code class="docutils literal notranslate"><span class="pre">starting_step_max_growth=100</span></code></p></li>
+</ul>
+</div></blockquote>
 <p>See <a class="reference internal" href="../using_the_solver/timing.html"><span class="doc">Timing Parameters</span></a> for the full derivation rules, and for the output
 timing options (<code class="docutils literal notranslate"><span class="pre">save_every</span></code>, <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code>,
 <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code>, <code class="docutils literal notranslate"><span class="pre">duration</span></code>, <code class="docutils literal notranslate"><span class="pre">t0</span></code>, <code class="docutils literal notranslate"><span class="pre">settling_time</span></code>).</p>
