@@ -4,6 +4,7 @@ import gc
 
 import numpy as np
 import pytest
+from tests._utils import ALL_EXPLICIT_SETTINGS
 
 from cubie.batchsolving.comparison import (
     SUCCESS_TIER_FRACTION,
@@ -141,6 +142,9 @@ def _device_grid(solver, simple_initial_values, simple_parameters):
     )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_runner_isolates_candidates_and_restores_the_solver(
     solver_mutable, simple_initial_values, simple_parameters
 ):

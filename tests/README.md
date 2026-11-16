@@ -176,8 +176,8 @@ Two tiers of run configuration are defined in `tests/_utils.py`:
 
 | Name | Definition | Use case |
 |------|-----------|----------|
-| **SHORT_RUN** | Default `solver_settings` (no override) — duration=0.2, fixed_step=0.01 | Quick smoke tests, attribute checks |
-| **MID_RUN** | `MID_RUN_PARAMS` — fixed_step=0.001, finer save intervals | Numerical behaviour / drift over an integration duration |
+| **SHORT_RUN** | Default `solver_settings` (no override) — duration=0.2, the Solver's default step | Quick smoke tests, attribute checks |
+| **MID_RUN** | `MID_RUN_PARAMS` — finer save intervals | Numerical behaviour / drift over an integration duration |
 
 **SHORT_RUN is the default.** Use it for everything that does not require
 running a solve: property forwarding, attribute checks, construction,

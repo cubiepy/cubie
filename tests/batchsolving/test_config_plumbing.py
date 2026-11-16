@@ -5,6 +5,7 @@ through the solver hierarchy when update() is called.
 """
 
 import pytest
+from tests._utils import ALL_EXPLICIT_SETTINGS
 
 from cubie.batchsolving.BatchSolverConfig import ActiveOutputs
 
@@ -626,6 +627,9 @@ def assert_summary_metrics_config(output_functions, settings, tolerance):
         )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 @pytest.mark.parametrize(
     "algorithm,controller",
     [

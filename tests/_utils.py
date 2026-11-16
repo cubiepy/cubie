@@ -109,12 +109,18 @@ class MockMemoryManager(MemoryManager):
 #                      Standard Parameter Sets                                #
 # --------------------------------------------------------------------------- #
 
+# Use this set in tests that read a step setting back from
+# solver_settings. Leave every other chain on the Solver's defaults.
+ALL_EXPLICIT_SETTINGS = {
+    "dt": 0.01,
+    "dt_min": 1e-7,
+    "dt_max": 1.0,
+}
+
 MID_RUN_PARAMS = {
-    "fixed_step": 0.001,
     "save_every": 0.02,
     "summarise_every": 0.1,
     "sample_summaries_every": 0.02,
-    "dt_max": 0.5,
     "output_types": [
         "state", "time", "observables", "mean", "iteration_counters",
     ],
@@ -1396,7 +1402,6 @@ NON_SOLVER_SETTINGS = {
     "fix_singularities",
     "voltage_variable",
     "system_sweep",
-    "fixed_step",
 }
 
 
@@ -1456,11 +1461,13 @@ def _build_cpu_step_controller(
     if gains is not None:
         step_controller_settings.update(gains)
     kind = step_controller_settings["step_controller"].lower()
+    # Use a fixed controller's step for both of its bounds.
+    fixed_dt = step_controller_settings.get("dt")
     controller = CPUAdaptiveController(
         kind=kind,
         dt=step_controller_settings.get("dt"),
-        dt_min=step_controller_settings["dt_min"],
-        dt_max=step_controller_settings["dt_max"],
+        dt_min=step_controller_settings.get("dt_min", fixed_dt),
+        dt_max=step_controller_settings.get("dt_max", fixed_dt),
         atol=step_controller_settings["atol"],
         rtol=step_controller_settings["rtol"],
         order=step_controller_settings["algorithm_order"],

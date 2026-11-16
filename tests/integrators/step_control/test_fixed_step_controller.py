@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from tests._utils import ALL_EXPLICIT_SETTINGS
 
 from cubie.integrators.step_control.fixed_step_controller import (
     FixedStepControlConfig,
@@ -114,6 +115,9 @@ def test_build_returns_controller_cache(step_controller):
     assert callable(df)
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_dt_matches_solver_settings(step_controller, solver_settings):
     """Controller dt matches the dt from solver_settings."""
     expected = solver_settings["precision"](solver_settings["dt"])

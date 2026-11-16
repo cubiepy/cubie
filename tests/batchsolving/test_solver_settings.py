@@ -48,6 +48,7 @@ from cubie.outputhandling.output_functions import (
 )
 from cubie.time_logger import default_timelogger
 from tests._utils import (
+    ALL_EXPLICIT_SETTINGS,
     LARGE_DIRK,
     SUMMARY_ONLY_LAST,
     TORN_NO_OBSERVABLES,
@@ -582,6 +583,9 @@ def test_empty_output_types_raise(system):
 # ── Solver ──────────────────────────────────────────────────────────── #
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_settings_dict_is_the_given_settings(solver, solver_settings):
     """The solver reports what it was given, not what it derived."""
     settings = solver.settings_dict()
@@ -604,6 +608,9 @@ def test_settings_dict_for_a_new_process_leaves_the_memory_manager(solver):
     }
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_is_given_reads_the_record(solver, solver_settings):
     """``Solver.is_given`` reports the record's givenness."""
     assert solver.is_given("dt") is True

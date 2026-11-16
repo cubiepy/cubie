@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 
 from tests._utils import (
+    ALL_EXPLICIT_SETTINGS,
     ALGORITHM_CHAIN_SETS,
     FLOAT64_PRECISION,
     _build_solver_instance,
@@ -166,6 +167,9 @@ def test_output_properties(solver):
     assert isinstance(solver.output_types, Iterable)
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_solve_info_property(
     precision,
     solver,
@@ -1488,6 +1492,9 @@ def test_solve_ivp_raw_equations_reject_array_parameters(bad_parameters):
         )
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_solver_with_different_algorithms(solver, system, solver_settings):
     """Test solver with different algorithms.
 
@@ -1512,6 +1519,9 @@ def test_solver_with_different_algorithms(solver, system, solver_settings):
     assert other_solver.kernel.algorithm == "backwards_euler_pc"
 
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_solver_output_types(system, solver_settings):
     """Test solver with different output types."""
     output_types_list = [

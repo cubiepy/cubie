@@ -24,6 +24,7 @@ from cubie.integrators.step_control.adaptive_PID_controller import (
     PIDStepControlConfig,
 )
 from tests._utils import (
+    ALL_EXPLICIT_SETTINGS,
     ALGORITHM_CHAIN_SETS,
     DEVICE_SOLVE_SETTINGS,
     SPECIFIC_ALGORITHM_COMBOS,
@@ -105,7 +106,7 @@ def test_fixed_value_change_replaces_the_step_device_functions(
 
 @pytest.mark.parametrize(
     "solver_settings_override",
-    [ALGORITHM_CHAIN_SETS["erk"]],
+    [{**ALGORITHM_CHAIN_SETS["erk"], **ALL_EXPLICIT_SETTINGS}],
     indirect=True,
 )
 def test_construction_explicit_settings(
@@ -361,6 +362,9 @@ def test_errorless_euler_with_fixed_no_warning(system):
 
 # ── update ──────────────────────────────────────────────────────────────── #
 
+@pytest.mark.parametrize(
+    "solver_settings_override", [ALL_EXPLICIT_SETTINGS], indirect=True
+)
 def test_update_routes_to_children(
     single_integrator_run_mutable,
     solver_settings,
