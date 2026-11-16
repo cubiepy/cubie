@@ -299,7 +299,7 @@ names are case-insensitive.</p>
 <tbody>
 <tr class="row-even"><td><p>Non-stiff</p></td>
 <td><p>ERK</p></td>
-<td><p>Fast per step; <code class="docutils literal notranslate"><span class="pre">dormand-prince-54</span></code> is a good default.</p></td>
+<td><p>Fast per step.</p></td>
 </tr>
 <tr class="row-odd"><td><p>Mildly stiff</p></td>
 <td><p>DIRK or Rosenbrock-W</p></td>
@@ -317,7 +317,7 @@ names are case-insensitive.</p>
 </table>
 <p>The bare family names <code class="docutils literal notranslate"><span class="pre">erk</span></code>, <code class="docutils literal notranslate"><span class="pre">dirk</span></code>, <code class="docutils literal notranslate"><span class="pre">firk</span></code>, and <code class="docutils literal notranslate"><span class="pre">rosenbrock</span></code>
 are also accepted and select each family’s default tableau
-(<code class="docutils literal notranslate"><span class="pre">dormand-prince-54</span></code>, <code class="docutils literal notranslate"><span class="pre">l_stable_dirk_3</span></code>, <code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_2</span></code>,
+(<code class="docutils literal notranslate"><span class="pre">tsit5</span></code>, <code class="docutils literal notranslate"><span class="pre">l_stable_dirk_3</span></code>, <code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_2</span></code>,
 and <code class="docutils literal notranslate"><span class="pre">ros3p</span></code> respectively).</p>
 </section>
 <section id="adaptive-or-fixed">
@@ -380,13 +380,14 @@ signal to adapt on.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dormand-prince-54</span></code> / <code class="docutils literal notranslate"><span class="pre">dopri54</span></code> / <code class="docutils literal notranslate"><span class="pre">rk45</span></code> / <code class="docutils literal notranslate"><span class="pre">ode45</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
-<td><p>Industry standard; good default and the ERK family default.</p></td>
+<td><p>Industry standard.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tsit5</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
 <td><p>Tsitouras 5(4); often slightly more efficient than
-Dormand–Prince.</p></td>
+Dormand–Prince. The default algorithm and the ERK family
+default.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vern7</span></code></p></td>
 <td><p>7(6)</p></td>

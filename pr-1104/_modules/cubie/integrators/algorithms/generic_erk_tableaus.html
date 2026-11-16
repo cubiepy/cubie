@@ -293,7 +293,7 @@
 <span class="sd">Module-Level Constants</span>
 <span class="sd">----------------------</span>
 <span class="sd">:data:`DEFAULT_ERK_TABLEAU`</span>
-<span class="sd">    Alias for :data:`DORMAND_PRINCE_54_TABLEAU`.</span>
+<span class="sd">    Alias for :data:`TSITOURAS_54_TABLEAU`.</span>
 
 <span class="sd">:data:`ERK_TABLEAU_REGISTRY`</span>
 <span class="sd">    Mapping from human-readable identifiers (e.g. ``'rk45'``,</span>
@@ -1039,7 +1039,7 @@
     <span class="n">defaults</span><span class="o">=</span><span class="p">{</span><span class="s2">"step_controller"</span><span class="p">:</span> <span class="s2">"gustafsson"</span><span class="p">},</span>
 <span class="p">)</span>
 
-<span class="n">DEFAULT_ERK_TABLEAU</span> <span class="o">=</span> <span class="n">DORMAND_PRINCE_54_TABLEAU</span>
+<span class="n">DEFAULT_ERK_TABLEAU</span> <span class="o">=</span> <span class="n">TSITOURAS_54_TABLEAU</span>
 <span class="sd">"""Default tableau used when constructing generic ERK integrators."""</span>
 
 <span class="n">ERK_TABLEAU_REGISTRY</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ERKTableau</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>

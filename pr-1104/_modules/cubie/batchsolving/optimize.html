@@ -294,7 +294,6 @@
 <span class="sd">    Time a solver's candidates.</span>
 <span class="sd">"""</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">math</span><span class="w"> </span><span class="kn">import</span> <span class="n">sqrt</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">attrs</span><span class="w"> </span><span class="kn">import</span> <span class="n">define</span>
@@ -303,6 +302,9 @@
     <span class="n">DeviceHardware</span><span class="p">,</span>
     <span class="n">device_hardware</span><span class="p">,</span>
     <span class="n">kernel_resources</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie.integrators.step_control.adaptive_step_controller</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">default_starting_step</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">cubie.batchsolving.comparison</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">TIMED_WAVES_FLOOR</span><span class="p">,</span>
@@ -771,7 +773,7 @@
 <span class="sd">    sample interval rejects anything shorter."""</span>
     <span class="n">step</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt</span>
     <span class="k">if</span> <span class="n">step</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">step</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">dt_min</span> <span class="o">*</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt_max</span><span class="p">)</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="n">default_starting_step</span><span class="p">(</span><span class="n">solver</span><span class="o">.</span><span class="n">dt_min</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">dt_max</span><span class="p">)</span>
     <span class="n">trial</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">_duration_floor</span><span class="p">(</span><span class="n">solver</span><span class="p">,</span> <span class="n">given</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">step</span><span class="p">))</span>
     <span class="n">trial</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">trial</span><span class="p">,</span> <span class="n">given</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">trial</span> <span class="o">&lt;</span> <span class="n">given</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_fits_sample_interval</span><span class="p">(</span><span class="n">solver</span><span class="p">,</span> <span class="n">trial</span><span class="p">):</span>

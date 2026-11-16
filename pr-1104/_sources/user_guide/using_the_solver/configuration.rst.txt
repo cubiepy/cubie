@@ -25,7 +25,7 @@ single batch solve.
      - Default
      - Effect
    * - ``method``
-     - ``"euler"``
+     - ``"tsit5"``
      - Integration algorithm name (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).
    * - ``duration``
      - ``1.0``
@@ -72,7 +72,7 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
      - Default
      - Effect
    * - ``algorithm``
-     - ``"euler"``
+     - ``"tsit5"``
      - Integration algorithm name or a supplied
        :class:`~cubie.integrators.algorithms.ButcherTableau`.
    * - ``lineinfo``
@@ -204,7 +204,7 @@ Notes on selected parameters
     Selects the step-size controller by name: ``"fixed"``, ``"i"``,
     ``"pi"``, ``"pid"``, or ``"gustafsson"``. When omitted, the
     chosen algorithm's own default controller is used — fixed for
-    schemes without an embedded error estimate, otherwise PI for
+    schemes without an embedded error estimate, otherwise integral for
     explicit Runge–Kutta and Gustafsson for the implicit families.
     See :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` and the algorithm defaults table
     in the API reference.

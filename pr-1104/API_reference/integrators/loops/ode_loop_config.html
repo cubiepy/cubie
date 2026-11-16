@@ -317,7 +317,8 @@ consistent DAE starting point; a no-op on non-DAE
 configurations.</p></li>
 <li><p><strong>starting_step_fn</strong> (<em>Callable</em><em> | </em><em>None</em>) – Device function returning each run’s starting step, or
 <code class="docutils literal notranslate"><span class="pre">None</span></code> to start every run at <code class="docutils literal notranslate"><span class="pre">dt</span></code>.</p></li>
-<li><p><strong>dt</strong> – Initial timestep prior to controller feedback.</p></li>
+<li><p><strong>dt</strong> – Initial timestep prior to controller feedback, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when
+<code class="docutils literal notranslate"><span class="pre">starting_step_fn</span></code> estimates it.</p></li>
 <li><p><strong>is_adaptive</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em> | </em><em>None</em>) – Whether the loop operates with an adaptive controller.</p></li>
 <li><p><strong>state_location</strong> – Memory location for the corresponding buffer (<code class="docutils literal notranslate"><span class="pre">'local'</span></code> or
 <code class="docutils literal notranslate"><span class="pre">'shared'</span></code>).</p></li>
@@ -377,8 +378,8 @@ configurations.</p></li>
 
 <dl class="py property">
 <dt class="sig sig-object py">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dt</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></dt>
-<dd><p>Return the initial timestep.</p>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dt</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></dt>
+<dd><p>Return the initial timestep, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when not given.</p>
 </dd></dl>
 
 <dl class="py attribute">

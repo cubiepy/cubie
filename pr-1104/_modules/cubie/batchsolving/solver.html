@@ -471,7 +471,7 @@
     <span class="n">y0</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">parameters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ndarray</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">drivers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DriverSamples</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"euler"</span><span class="p">,</span>
+    <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"tsit5"</span><span class="p">,</span>
     <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
     <span class="n">settling_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
     <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
@@ -520,7 +520,7 @@
 <span class="sd">        The :class:`~cubie.array_interpolator.DriverSamples` to</span>
 <span class="sd">        interpolate during integration.</span>
 <span class="sd">    method</span>
-<span class="sd">        Integration algorithm to use. Default is ``"euler"``.</span>
+<span class="sd">        Integration algorithm to use. Default is ``"tsit5"``.</span>
 <span class="sd">    duration</span>
 <span class="sd">        Total integration time. Default is ``1.0``.</span>
 <span class="sd">    settling_time</span>
@@ -636,7 +636,7 @@
 <span class="sd">    system</span>
 <span class="sd">        System model containing the ODEs to integrate.</span>
 <span class="sd">    algorithm</span>
-<span class="sd">        Integration algorithm to use. Defaults to ``"euler"``.</span>
+<span class="sd">        Integration algorithm to use. Defaults to ``"tsit5"``.</span>
 <span class="sd">    lineinfo</span>
 <span class="sd">        Compile all kernels and device functions with source-line</span>
 <span class="sd">        correlation data for profilers such as Nsight Compute. ``None``</span>

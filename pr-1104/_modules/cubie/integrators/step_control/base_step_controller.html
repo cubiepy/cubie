@@ -674,8 +674,8 @@
 
     <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the initial step size used when integration starts."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the initial step size, or ``None`` when not given."""</span>
 
     <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
@@ -888,8 +888,8 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">dt_max</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the initial step size."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dt</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the initial step size, or ``None`` when not given."""</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_settings</span><span class="o">.</span><span class="n">dt</span>
 
