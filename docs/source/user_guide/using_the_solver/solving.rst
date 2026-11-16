@@ -102,7 +102,7 @@ Cubie keeps both settings for later solves on this solver.
 Configuring a solve
 -------------------
 
-To set the integration time and save cadence,  see :doc:`timing`. To
+To set the integration time and save cadence, see :doc:`timing`. To
 choose an integration algorithm and its step controller, see
 :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`. Every other
 setting, from tolerances to output selection, is a keyword argument; see

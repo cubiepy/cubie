@@ -34,7 +34,7 @@ duration
 Total length of the recorded integration in simulation time units.
 This is the time span over which outputs are saved.
 
-- **Required**: Yes
+- **Default**: ``1.0``
 - **Type**: ``float``
 
 .. code-block:: python
@@ -234,25 +234,9 @@ This differs from sliding-window approaches where windows overlap.
 
    S = sample taken, W = window closes (summary written, reset)
 
-# What does this relationship section do? it looks like pure duplication with no benefit to the reader.
-Relationship Between Output Parameters
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-
-   * - Parameter
-     - Purpose
-   * - ``save_every``
-     - Interval for storing full state/observable snapshots
-   * - ``sample_summaries_every``
-     - Interval for sampling values into summary accumulators
-   * - ``summarise_every``
-     - Window length; summaries computed and reset at this interval
-
-These are independent: you can save states at high frequency while
-computing summaries over longer windows, or vice versa.
+You can set ``save_every`` independently of the summary intervals, so
+you can save states often while you summarise over long windows, or the
+reverse.
 
 Step Size Parameters
 --------------------
@@ -266,17 +250,19 @@ Adaptive controllers use three related parameters to control step sizes:
 Fixed-step controllers use only ``dt``, which becomes the constant step
 size throughout integration.
 
-In practice, if you're using a fixed step controller, try to set fixed step
-size that is 10 or 100 times smaller than the "sharpest corner" your system
-produces. If using an adaptive controller, then set dt_max so that it is 
-shorter than any quasi-periodic cycles your system produces, so that it can't
-jump straight over one and back to a state that's near where it started. If
-solves are failing due to a STEP_TOO_SMALL (find the right name) error, then 
-decrease dt_min if it is not much smaller than the sharpest feature your system
-produces. If it's already very small, then try a different algorithm that is
-more tolerant of stiff systems. `dt` is set by Hairer's method if unset, so
-you should only really need to change it if you're doing a lot of short integrations
-and you want to reduce the cost of a slow or fast start on overall runtime.
+If you use a fixed-step controller, set ``dt`` 10 to 100 times smaller
+than the sharpest corner your system produces. If you use an adaptive
+controller, set ``dt_max`` shorter than any quasi-periodic cycle your
+system produces, so that the solver can't step straight over a cycle and
+land back near where it started. If runs fail with ``STEP_TOO_SMALL`` in
+their status codes and ``dt_min`` is not much smaller than the sharpest
+feature your system produces, decrease ``dt_min``. If ``dt_min`` is
+already very small, try an algorithm that handles stiff systems better
+(see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).
+When you give an adaptive controller no ``dt``, cubie estimates a
+starting step for each run, so you only need to set ``dt`` if you run
+many short integrations and a starting step that is too small or too
+large adds noticeably to their runtime.
 
 Default Behaviour
 ~~~~~~~~~~~~~~~~~

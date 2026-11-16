@@ -206,10 +206,11 @@ by time (or summary window) first, then variable, then run:
    :doc:`/troubleshooting`.
 
 ``parameter_legend`` and ``fixed_parameter_values``
-   Parameters are sorted by name in the grid, and can confuse when comparing
-   one grid's result to another. ``parameter_legend`` shows the indices of 
-   parameter values in the arrays, and ``fixed_parameter_values`` contains
-   the value of each non-varying parameter that the batch was made under.
+   Cubie sorts the swept parameters by name, so the rows of one batch's
+   parameters array may not line up with another's. Read
+   ``parameter_legend`` for the name of the parameter in each row, and
+   ``fixed_parameter_values`` for the value of each parameter that cubie
+   held constant across the batch.
 
 You can also convert the result:
 

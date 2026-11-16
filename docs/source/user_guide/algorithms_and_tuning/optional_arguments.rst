@@ -62,9 +62,7 @@ Controlling the step size
     - Defaults: ``dt_min=1e-9``, ``dt_max=1.0``
     - Type: ``float``, positive
 
-**starting_step_state_fraction** / **starting_step_zero_norm** /
-**starting_step_target** / **starting_step_max_growth** — constants of
-the starting-step estimate.
+**starting_step_state_fraction** / **starting_step_zero_norm** / **starting_step_target** / **starting_step_max_growth** — constants of the starting-step estimate.
     CuBIE first guesses the step that changes the state by
     ``starting_step_state_fraction`` of its norm, or the geometric mean
     of ``dt_min`` and ``dt_max`` when the state or its derivative has a
@@ -286,7 +284,7 @@ Choosing the method's coefficients
     already picks a tableau.  The bare family names use these
     defaults:
 
-    - ERK: ``dormand-prince-54`` (adaptive)
+    - ERK: ``tsit5`` (adaptive)
     - DIRK: ``l_stable_dirk_3`` (fixed-step)
     - FIRK: ``firk_gauss_legendre_2`` (fixed-step)
     - Rosenbrock-W: ``ros3p`` (adaptive)
@@ -319,9 +317,7 @@ Choosing what gets saved
 GPU tuning (advanced)
 ---------------------
 
-**Buffer location options** (``state_location``,
-``timestep_memory_location``, and about forty more ``*_location``
-options across the loop, algorithm, and solver configs)
+**Buffer location options** (``state_location``, ``timestep_memory_location``, and about forty more ``*_location`` options across the loop, algorithm, and solver configs)
     Each working buffer can live in ``"local"`` (per-thread) or
     ``"shared"`` (per-block) GPU memory.  Everything defaults to
     ``"local"``, which profiling shows is the right choice on typical

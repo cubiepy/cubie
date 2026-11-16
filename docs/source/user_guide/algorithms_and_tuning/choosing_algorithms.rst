@@ -21,14 +21,17 @@ Decision Guide
      - Fast per step.
    * - Mildly stiff
      - DIRK or Rosenbrock-W
-     - DIRK is robust but slower to compile and run; Rosenbrock-W methods are fast.
+     - DIRK is robust but slower to compile and run; Rosenbrock-W
+       methods are fast.
    * - Very stiff
      - FIRK
-     - FIRK algorithms like ``radau_iia_5`` handles extreme stiffness well.
-  
+     - FIRK algorithms like ``radau_iia_5`` handle extreme stiffness
+       well.
+
 The bare family names ``erk``, ``dirk``, ``firk``, and ``rosenbrock``
 are also accepted and select each family's default tableau
- #these need updated
+(``tsit5``, ``l_stable_dirk_3``, ``firk_gauss_legendre_2``,
+and ``ros3p`` respectively).
 
 Adaptive or fixed?
 ------------------
@@ -238,9 +241,8 @@ Choosing a Controller
 ---------------------
 
 Adaptive algorithms use an error controller to adjust the step size.
-Select one by name with ``step_controller`` inside
-``step_control_settings``; the registered names are ``"fixed"``,
-``"i"``, ``"pi"``, ``"pid"``, and ``"gustafsson"``.
+Select one by name with the ``step_controller`` keyword argument:
+``"fixed"``, ``"i"``, ``"pi"``, ``"pid"``, or ``"gustafsson"``.
 
 **fixed**
    Constant step size; no error control.  Used automatically for
@@ -278,15 +280,15 @@ Select one by name with ``step_controller`` inside
 
 Each algorithm family picks a default controller (``i`` for ERK,
 ``pi`` for DIRK, ``gustafsson`` for FIRK and Rosenbrock, ``fixed``
-without an error estimate); some tableaus override it.  To override:
+without an error estimate); some tableaus override it.  To choose a
+different controller, pass its name:
 
 .. code-block:: python
 
-# This uses the grouped settings system, which we haven't really described. just pass the step controller kwarg directly. 
    solver = qb.Solver(
        LV,
        algorithm="dormand-prince-54",
-       step_control_settings={"step_controller": "gustafsson"},
+       step_controller="gustafsson",
    )
 
 Automatic calibration
@@ -312,15 +314,15 @@ few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
 and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
-count.  The batch timed is resized so that it runs for about 20 ms 
-where achievable. Setting ``auto_size=False`` times your exact batch
-instead.  Candidates whose trajectory failure rate is within 5% of 
-the best are ranked by time, then higher-failure results follow ranked
-by time, with their failure rates shown.  By default the winning 
-configuration is applied to the solver in place. Passing ``apply=False`` 
-returns the results of the race without modifying the solver.
+count.  Cubie resizes the batch it times so that a solve takes about
+20 ms where it can; pass ``auto_size=False`` to time your exact batch
+instead.  Cubie ranks the candidates whose trajectory failure rate is
+within 5% of the best by time, then ranks the rest by time after them
+and shows their failure rates.  By default cubie applies the winning
+configuration to the solver in place; pass ``apply=False`` to get the
+results of the race without modifying the solver.
 
-Solver.calibrate() compiles a large number of kernels; allow half an
+``calibrate`` compiles a large number of kernels, so allow half an
 hour for a bigger system.
 
 With the algorithm settled, :meth:`Solver.optimize
@@ -338,8 +340,9 @@ fastest configuration for your system:
    )
    print(report.summary())
 
-Settings you gave explicitly, or ones that were set by  an earlier
-``optimize``, stay fixed unless ``force=True``. Like calibrate(),
-the fastest configuration is applied in place unless ``apply=False``,
-and batches are autosized for a 20ms runtime unless auto_size=False. 
+``optimize`` leaves the settings you gave explicitly, and the ones an
+earlier ``optimize`` set, unchanged unless you pass ``force=True``.
+Like ``calibrate``, it applies the fastest configuration in place
+unless you pass ``apply=False``, and it resizes the batch to take
+about 20 ms unless you pass ``auto_size=False``.
 

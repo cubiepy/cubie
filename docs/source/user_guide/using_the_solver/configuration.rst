@@ -2,17 +2,15 @@
 
 Configuration Reference
 ========================
-#This is machine language. users don't use words like entry-point, index, loose keyword arguments, routed, they definitely don't know or care about an underlying settings group.
 
-This page is the single index of every entry-point keyword argument for a
-solve: the explicit parameters of :func:`~cubie.solve_ivp` and
-:class:`~cubie.Solver` (:meth:`~cubie.Solver.__init__` and
-:meth:`~cubie.Solver.solve`), plus how the remaining loose keyword arguments
-are routed to the six underlying settings groups. Deep-dive pages for each
-group are linked at the end of each section.
+This page lists every argument you can give a solve. The first section
+covers the named arguments of :func:`~cubie.solve_ivp`,
+:class:`~cubie.Solver` and :meth:`~cubie.Solver.solve`. The second
+lists the options you can add to any of them as keyword arguments, with
+a link to the page that explains each one.
 
-Entry-point signatures
------------------------
+Named arguments
+---------------
 
 ``solve_ivp()``
 ~~~~~~~~~~~~~~~
@@ -27,6 +25,19 @@ single batch solve.
    * - Argument
      - Default
      - Effect
+   * - ``y0``
+     - ``None``
+     - Initial values, as a dict or an array (see :doc:`inputs`).
+       ``None`` starts every run from the system's default initial
+       values.
+   * - ``parameters``
+     - ``None``
+     - Parameter values, as a dict or an array (see :doc:`inputs`).
+       ``None`` runs every run under the system's default parameters.
+   * - ``drivers``
+     - ``None``
+     - A :class:`~cubie.array_interpolator.DriverSamples` of forcing
+       data (see :doc:`/user_guide/defining_systems/drivers`).
    * - ``method``
      - ``"tsit5"``
      - Integration algorithm name (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).
@@ -61,8 +72,13 @@ single batch solve.
      - ``True``
      - Trajectories with a nonzero status code are NaN-masked in the
        output.
+   * - ``fix_constant_parameters``
+     - ``True``
+     - Compile parameters that have one value across the batch into the
+       code (see :ref:`parameter-inputs`).
 
-Any other keyword argument is forwarded to :class:`~cubie.Solver`.
+``solve_ivp`` passes every other keyword argument to
+:class:`~cubie.Solver`.
 
 ``Solver.__init__()``
 ~~~~~~~~~~~~~~~~~~~~~
@@ -85,10 +101,6 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
        defers to the ``CUBIE_LINEINFO`` environment variable (default
        off); an explicit argument always wins. Updating it later
        triggers a full rebuild.
-   * - ``cache``
-     - ``True``
-     - Compiled-kernel disk caching; accepts ``bool``, a cache-mode
-       string, or a ``Path``. See :doc:`/user_guide/advanced/caching`.
    * - ``auto_performance``
      - ``True``
      - Whether to use in-built heuristics for buffer locations in
@@ -99,10 +111,11 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
      - ``None``
      - Same options as above.
 
-``step_control_settings``, ``algorithm_settings``, ``output_settings``,
-``memory_settings``, and ``loop_settings`` are explicit dictionaries that
-override the per-group defaults; any of their keys may also be supplied as
-loose keyword arguments (see :ref:`kwarg-routing`).
+You can also collect options in a dict and pass it as
+``step_control_settings``, ``algorithm_settings``, ``system_settings``,
+``output_settings``, ``memory_settings`` or ``loop_settings``. Cubie
+treats each key of the dict as if you had passed it as a keyword
+argument.
 
 ``Solver.solve()``
 ~~~~~~~~~~~~~~~~~~
@@ -110,10 +123,23 @@ loose keyword arguments (see :ref:`kwarg-routing`).
 .. list-table::
    :header-rows: 1
    :widths: 20 15 65
-# This looks incomplete, incorrect, and potentially unhelpful. How do we select what appears in this list vs keyword args?
+
    * - Argument
      - Default
      - Effect
+   * - ``initial_values``
+     - ``None``
+     - Initial values, as a dict or an array (see :doc:`inputs`).
+       ``None`` starts every run from the system's default initial
+       values.
+   * - ``parameters``
+     - ``None``
+     - Parameter values, as a dict or an array (see :doc:`inputs`).
+       ``None`` runs every run under the system's default parameters.
+   * - ``drivers``
+     - ``None``
+     - A :class:`~cubie.array_interpolator.DriverSamples` to use in
+       place of the solver's forcing data.
    * - ``duration``
      - ``1.0``
      - Total integration time.
@@ -132,36 +158,41 @@ loose keyword arguments (see :ref:`kwarg-routing`).
      - ``"combinatorial"``
      - Same as ``solve_ivp`` above. Cubie only uses it when you pass
        dict inputs.
+   * - ``nan_error_trajectories``
+     - ``True``
+     - Same behaviour as above; ignored when ``on_device=True``.
    * - ``on_device``
      - ``False``
      - Return a
        :class:`~cubie.batchsolving.solveresult.DeviceSolveResult` of
        device-array handles with no device-to-host copy. See
        :doc:`/user_guide/using_the_solver/results`.
-   * - ``nan_error_trajectories``
+   * - ``fix_constant_parameters``
      - ``True``
-     - Same behaviour as above; ignored when ``on_device=True``.
+     - Same as ``solve_ivp`` above.
 
-Any other keyword argument is forwarded to :meth:`~cubie.Solver.update`,
-routing through the same six settings groups described next.
+``solve`` passes every other keyword argument to
+:meth:`~cubie.Solver.update`, and the solver keeps it for later solves.
 
 .. _kwarg-routing:
 
-Kwarg routing
--------------
+Keyword options
+---------------
 
-Beyond the explicit parameters above, ``Solver`` accepts loose
-keyword arguments and sorts them into settings groups. Any parameter
-below may be passed directly to :func:`~cubie.solve_ivp`,
-:class:`~cubie.Solver`, or :meth:`~cubie.Solver.update`:
+You can pass any option below as a keyword argument to
+:func:`~cubie.solve_ivp`, :class:`~cubie.Solver`,
+:meth:`~cubie.Solver.solve` or :meth:`~cubie.Solver.update`:
 
 .. list-table::
    :header-rows: 1
    :widths: 18 52 30
-# Is this complete?
-   * - Group
+
+   * - Options for
      - Parameters
-     - Deep-dive page
+     - Explained in
+   * - Algorithm choice
+     - ``tableau``
+     - :doc:`/user_guide/algorithms_and_tuning/optional_arguments`
    * - Step control
      - ``step_controller``, ``dt``, ``dt_min``, ``dt_max``,
        ``atol``, ``rtol``, ``safety``, ``min_step_shrink``,
@@ -169,35 +200,68 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
        ``derivative_gain``, ``filter_coefficients``, ``deadband_min``,
        ``deadband_max``, ``newton_target_iters``
      - :doc:`/user_guide/algorithms_and_tuning/optional_arguments`
-   * - Algorithm
+   * - Starting step
+     - ``starting_step_state_fraction``, ``starting_step_zero_norm``,
+       ``starting_step_target``, ``starting_step_max_growth``
+     - :doc:`/user_guide/algorithms_and_tuning/optional_arguments`
+   * - Implicit solvers
      - ``newton_atol``, ``newton_rtol``, ``newton_max_iters``,
        ``krylov_atol``, ``krylov_rtol``, ``krylov_max_iters``,
        ``krylov_residual_reduction``, ``krylov_residual_floor``,
        ``linear_correction_type``, ``preconditioner_type``,
-       ``preconditioner_order``, ``use_smoothed_error``
+       ``preconditioner_order``, ``use_smoothed_error``,
+       ``dae_initialisation``
      - :doc:`/user_guide/algorithms_and_tuning/optional_arguments`, :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`
+   * - Implicit solvers
+     - ``inexact_newton``, ``prefactored``
+     - :class:`~cubie.integrators.algorithms.ImplicitStepConfig`
+   * - Implicit solvers
+     - ``attempt_dense_prediction``, ``error_atol``, ``error_rtol``,
+       ``error_max_iters``, ``error_residual_floor``,
+       ``error_residual_reduction``
+     - —
    * - Output
-     - ``output_types``, ``saved_state_indices``,
-       ``saved_observable_indices``, ``summarised_state_indices``,
-       ``summarised_observable_indices``
+     - ``output_types``, ``save_variables``, ``summarise_variables``,
+       ``saved_state_indices``, ``saved_observable_indices``,
+       ``summarised_state_indices``, ``summarised_observable_indices``
      - :doc:`/user_guide/using_the_solver/results`
-   * - Timing / loop
-     - ``save_every``, ``summarise_every``,
-       ``sample_summaries_every``, ``save_last``, plus the
-       per-buffer ``*_location`` placement overrides
-     - :doc:`/user_guide/using_the_solver/timing`, :doc:`/user_guide/algorithms_and_tuning/speed`
+   * - Output timing
+     - ``save_every``, ``summarise_every``, ``sample_summaries_every``
+     - :doc:`/user_guide/using_the_solver/timing`
+   * - Drivers
+     - ``drivers``, ``order``, ``wrap``, ``boundary_condition``
+     - :doc:`/user_guide/defining_systems/drivers`
+   * - System
+     - ``precision``
+     - :doc:`/user_guide/algorithms_and_tuning/speed`
+   * - System
+     - ``operation_ordering``
+     - —
    * - Memory
-     - ``mem_proportion``, ``stream_group``
+     - ``mem_proportion``, ``stream_group``, ``memory_manager``
      - :doc:`/user_guide/advanced/memory`
    * - Cache
-     - ``cache`` (``True``/``False``, a cache-mode string, or a
-       ``Path``)
+     - ``cache_enabled``, ``cache_dir``, ``max_cache_entries``
      - :doc:`/user_guide/advanced/caching`
    * - Kernel
      - ``max_registers``, ``blocksize``
+     - The notes below
+   * - Kernel
+     - ``kernel_name``
+     - —
+   * - Performance
+     - ``unroll_stage``, ``unroll_step_element``,
+       ``unroll_accumulator``, ``unroll_solver_element``,
+       ``unroll_norms``, ``unroll_other_small``,
+       ``unroll_newton_exits``, ``unroll_krylov_exits``, and the
+       per-buffer ``*_location`` placement options
      - :doc:`/user_guide/algorithms_and_tuning/speed`
+   * - Compiler flags
+     - ``nsz``, ``contract``, ``arcp``, ``afn``, ``reassoc``, ``ftz``,
+       ``lto``
+     - —
 
-A keyword argument that isn't a setting raises ``KeyError``. Give
+A keyword argument that isn't an option raises ``KeyError``. Give
 parameter values in the ``parameters`` argument of ``solve``.
 
 Notes on selected parameters
@@ -205,12 +269,13 @@ Notes on selected parameters
 
 **step_controller**
     Selects the step-size controller by name: ``"fixed"``, ``"i"``,
-    ``"pi"``, ``"pid"``, or ``"gustafsson"``. When omitted, the
-    chosen algorithm's own default controller is used — fixed for
-    schemes without an embedded error estimate, otherwise integral for
-    explicit Runge–Kutta and Gustafsson for the implicit families.
-    See :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` and the algorithm defaults table
-    in the API reference.
+    ``"pi"``, ``"pid"``, or ``"gustafsson"``. When you leave it out,
+    cubie uses the chosen algorithm's own default controller: fixed
+    for schemes without an embedded error estimate, otherwise integral
+    for explicit Runge–Kutta, PI for DIRK and Gustafsson for FIRK and
+    Rosenbrock-W. See
+    :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` and
+    the algorithm defaults table in the API reference.
 
 **max_registers**
     Per-thread register cap forwarded to ``cuda.jit``. Default
