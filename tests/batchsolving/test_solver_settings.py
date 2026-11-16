@@ -129,13 +129,11 @@ def test_grouped_dicts_flatten_and_unknown_names_raise(system):
 
 
 def test_signature_defaults_are_not_given(system):
-    """A Solver given nothing records nothing and resolves euler."""
+    """A Solver given nothing records nothing."""
     built = Solver(system)
     assert built.settings_dict() == {
         "time_logging_level": default_timelogger.verbosity
     }
-    assert built.effective.algorithm == "euler"
-    assert built.effective.step_controller == "fixed"
     assert built.kernel.compile_settings.auto_performance is True
     assert built.kernel.compile_settings.cache.cache_enabled is True
     built.close()

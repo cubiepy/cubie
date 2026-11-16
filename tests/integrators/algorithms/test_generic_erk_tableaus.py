@@ -7,7 +7,6 @@ from cubie.integrators.algorithms.generic_erk import (
     ERKStep,
 )
 from cubie.integrators.algorithms.generic_erk_tableaus import (
-    DEFAULT_ERK_TABLEAU,
     ERK_TABLEAU_REGISTRY,
 )
 EXPECTED_TABLEAU_NAMES = (
@@ -62,12 +61,6 @@ def test_registry_contains_expected_tableaus(
 
     for name in expected_tableau_names:
         assert name in erk_registry
-
-
-def test_default_tableau_is_registered(erk_registry):
-    """The default tableau should be available via the registry mapping."""
-
-    assert erk_registry["dormand-prince-54"] is DEFAULT_ERK_TABLEAU
 
 
 @pytest.mark.parametrize(

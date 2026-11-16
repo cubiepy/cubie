@@ -197,7 +197,7 @@ class ERKStep(ODEExplicitStep):
         tableau
             Explicit Runge--Kutta tableau describing the coefficients used by
             the integrator. Defaults to :data:`DEFAULT_ERK_TABLEAU`
-            (Dormand-Prince 5(4)).
+            (Tsitouras 5(4)).
         n_drivers
             Number of driver variables in the system.
         **kwargs
@@ -221,7 +221,7 @@ class ERKStep(ODEExplicitStep):
 
         Examples
         --------
-        Create an ERK step with the default Dormand-Prince tableau:
+        Create an ERK step with the default Tsitouras tableau:
 
         >>> from cubie.integrators.algorithms.generic_erk import ERKStep
         >>> import numpy as np

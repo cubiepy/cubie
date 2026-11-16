@@ -18,7 +18,7 @@ Published Classes
 Module-Level Constants
 ----------------------
 :data:`DEFAULT_ERK_TABLEAU`
-    Alias for :data:`DORMAND_PRINCE_54_TABLEAU`.
+    Alias for :data:`TSITOURAS_54_TABLEAU`.
 
 :data:`ERK_TABLEAU_REGISTRY`
     Mapping from human-readable identifiers (e.g. ``'rk45'``,
@@ -761,7 +761,7 @@ VERNER_76_TABLEAU = ERKTableau(
     defaults={"step_controller": "gustafsson"},
 )
 
-DEFAULT_ERK_TABLEAU = DORMAND_PRINCE_54_TABLEAU
+DEFAULT_ERK_TABLEAU = TSITOURAS_54_TABLEAU
 """Default tableau used when constructing generic ERK integrators."""
 
 ERK_TABLEAU_REGISTRY: Dict[str, ERKTableau] = {

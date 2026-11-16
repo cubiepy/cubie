@@ -18,7 +18,7 @@ Decision Guide
      - Notes
    * - Non-stiff
      - ERK
-     - Fast per step; ``dormand-prince-54`` is a good default.
+     - Fast per step.
    * - Mildly stiff
      - DIRK or Rosenbrock-W
      - DIRK is robust; Rosenbrock-W avoids Newton iteration.
@@ -31,7 +31,7 @@ Decision Guide
 
 The bare family names ``erk``, ``dirk``, ``firk``, and ``rosenbrock``
 are also accepted and select each family's default tableau
-(``dormand-prince-54``, ``l_stable_dirk_3``, ``firk_gauss_legendre_2``,
+(``tsit5``, ``l_stable_dirk_3``, ``firk_gauss_legendre_2``,
 and ``ros3p`` respectively).
 
 Adaptive or fixed?
@@ -84,12 +84,13 @@ Available Algorithms
    * - ``dormand-prince-54`` / ``dopri54`` / ``rk45`` / ``ode45``
      - 5(4)
      - Yes
-     - Industry standard; good default and the ERK family default.
+     - Industry standard.
    * - ``tsit5``
      - 5(4)
      - Yes
      - Tsitouras 5(4); often slightly more efficient than
-       Dormand--Prince.
+       Dormand--Prince. The default algorithm and the ERK family
+       default.
    * - ``vern7``
      - 7(6)
      - Yes

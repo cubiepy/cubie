@@ -54,7 +54,7 @@ class IntegratorRunSettings(CUDAFactoryConfig):
     """
 
     algorithm: str = field(
-        default="euler",
+        default="tsit5",
         converter=str.lower,
         validator=validators.instance_of(str),
     )

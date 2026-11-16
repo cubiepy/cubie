@@ -75,7 +75,7 @@ same family.
      - 2
      - Gustafsson predictive: step-ratio clamp 0.2–8.0
    * - ``erk``
-     - ``dormand-prince-54`` (explicit, seven stages)
+     - ``tsit5`` (explicit, seven stages)
      - 5(4)
      - Integral: ``integral_gain=1.2``, step-ratio clamp 0.2–10.0
    * - ``dirk``
