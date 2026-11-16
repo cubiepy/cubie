@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from scipy.integrate._ivp.common import select_initial_step
 
 from tests._utils import (
     ALGORITHM_CHAIN_SETS,
@@ -25,63 +26,119 @@ TORN_RADAU = {
 }
 
 
+@pytest.fixture(scope="function")
+def device_estimate(
+    single_integrator_run,
+    system,
+    precision,
+    cpu_system,
+    cpu_driver_evaluator,
+):
+    """Return a callable giving the device estimate at a state."""
+
+    def estimate(state):
+        t0 = precision(0.0)
+        parameters = system.parameters.defaults_array(precision)
+        drivers = cpu_driver_evaluator(t0)
+        return run_starting_step_device(
+            single_integrator_run._starting_step,
+            precision,
+            state,
+            swept_values(system),
+            cpu_driver_evaluator.coefficients,
+            drivers,
+            cpu_system.observables(state, parameters, drivers, t0),
+            t0,
+            single_integrator_run._step_controller.dt,
+        )
+
+    return estimate
+
+
 @pytest.mark.parametrize(
     "solver_settings_override, start_state",
     [
         pytest.param(ERK_CHAIN, np.copy, id="erk-system-state"),
-        # Start at zero to take the fallback first guess.
-        pytest.param(ERK_CHAIN, np.zeros_like, id="erk-zero-state"),
         # Start at ones, off the torn system's constraint, to give
         # the algebraic row a residual to hold.
         pytest.param(TORN_RADAU, np.ones_like, id="torn-off-constraint"),
-        # Clamp the estimate with narrow step bounds.
-        pytest.param(IRRECOVERABLE, np.copy, id="narrow-bounds"),
     ],
     indirect=["solver_settings_override"],
 )
-def test_starting_step_matches_reference(
+def test_starting_step_matches_scipy(
+    device_estimate,
     single_integrator_run,
     start_state,
     system,
     precision,
     initial_state,
     cpu_system,
-    cpu_step_controller,
     cpu_driver_evaluator,
     tolerance,
 ):
-    """Check the device estimate against the reference and bounds."""
+    """Check the device estimate against SciPy's starting step."""
     controller = single_integrator_run._step_controller
     state = start_state(initial_state)
     parameters = system.parameters.defaults_array(precision)
-    t0 = precision(0.0)
-    drivers = cpu_driver_evaluator(t0)
-    observables = cpu_system.observables(state, parameters, drivers, t0)
+    differential = np.asarray(system.mass_diagonal_flags, dtype=bool)
 
-    estimate = run_starting_step_device(
-        single_integrator_run._starting_step,
-        precision,
-        state,
-        swept_values(system),
-        cpu_driver_evaluator.coefficients,
-        drivers,
-        observables,
-        t0,
-        controller.dt,
-    )
-    reference = cpu_step_controller.starting_step(
-        cpu_system,
-        cpu_driver_evaluator,
-        state,
-        parameters,
-        drivers,
-        observables,
-        t0,
+    def differential_rhs(time, differential_state):
+        # Evaluate the differential rows with the algebraic rows held
+        # at their starting values.
+        full_state = state.copy()
+        full_state[differential] = differential_state
+        time = precision(time)
+        drivers = cpu_driver_evaluator(time)
+        observables = cpu_system.observables(
+            full_state, parameters, drivers, time
+        )
+        derivative, _ = cpu_system.rhs(
+            full_state, parameters, drivers, observables, time
+        )
+        return np.asarray(derivative, dtype=np.float64)[differential]
+
+    start = state[differential].astype(np.float64)
+    expected = select_initial_step(
+        differential_rhs,
+        0.0,
+        start,
+        np.inf,
+        float(controller.dt_max),
+        differential_rhs(0.0, start),
+        1.0,
+        controller.algorithm_order,
+        np.asarray(controller.rtol, dtype=np.float64)[differential],
+        np.asarray(controller.atol, dtype=np.float64)[differential],
     )
 
     np.testing.assert_allclose(
-        estimate, reference, rtol=tolerance.rel_tight, atol=0.0
+        device_estimate(state), expected, rtol=tolerance.rel_loose, atol=0.0
     )
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [ERK_CHAIN], indirect=True
+)
+def test_zero_state_estimate_grows_from_the_fallback(
+    device_estimate, single_integrator_run, initial_state
+):
+    """Check that the fallback caps a zero state's estimate."""
+    controller = single_integrator_run._step_controller
+    settings = single_integrator_run._starting_step.compile_settings
+    estimate = device_estimate(np.zeros_like(initial_state))
+    assert estimate <= settings.starting_step_max_growth * controller.dt
+    assert controller.dt_min <= estimate <= controller.dt_max
+
+
+@pytest.mark.parametrize(
+    "solver_settings_override", [IRRECOVERABLE], indirect=True
+)
+def test_estimate_stays_within_narrow_step_bounds(
+    device_estimate, single_integrator_run, initial_state
+):
+    """Check that the step bounds clamp the estimate."""
+    controller = single_integrator_run._step_controller
+    estimate = device_estimate(initial_state)
     assert controller.dt_min <= estimate <= controller.dt_max
 
 

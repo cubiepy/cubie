@@ -171,13 +171,9 @@ class CPUAdaptiveController:
         state_norm2 = self.error_norm(state, state, state)
         derivative_norm2 = self.error_norm(state, state, derivative)
 
-        if self.mass_flags is None:
-            n_rows = len(state)
-        else:
-            n_rows = max(1, int(np.sum(self.mass_flags)))
-        zero_norm2 = precision(self.starting_step_zero_norm**2 / n_rows)
+        zero_norm2 = precision(self.starting_step_zero_norm**2)
         inverse_target_norm2 = precision(
-            n_rows / self.starting_step_target**2
+            1.0 / self.starting_step_target**2
         )
         exponent = precision(-0.5 / (self.order + 1))
 

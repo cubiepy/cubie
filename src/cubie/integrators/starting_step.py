@@ -7,6 +7,11 @@ explicit Euler step, and returns a step from those three norms and the
 algorithm's order. On a mass-matrix system the function reads the
 differential rows only.
 
+The function judges an RMS norm against Hairer's thresholds, as SciPy's
+``select_initial_step`` does. Hairer's Fortran judges the root of a sum
+of squares, so the thresholds are a factor of ``sqrt(n)`` off the
+Fortran's.
+
 Published Classes
 -----------------
 :class:`StartingStepConfig`
@@ -160,11 +165,6 @@ class StartingStepConfig(CUDAFactoryConfig):
         return self.n_states if self.estimates_dt else 0
 
     @property
-    def n_differential(self) -> int:
-        """Return the number of rows the error norm averages over."""
-        return max(1, sum(self.mass_flags))
-
-    @property
     def dt_min(self) -> float:
         """Return the lower bound on the estimate."""
         return self.precision(self._dt_min)
@@ -303,14 +303,11 @@ class StartingStepEstimator(CUDAFactory):
         one = precision(1.0)
         guess_fraction = precision(config.starting_step_state_fraction)
         guess_growth = precision(config.starting_step_max_growth)
-        # Hairer compares each threshold with the root of a sum of
-        # squares, and norm_fn returns a mean square. Square each
-        # threshold, divide it by the row count and halve the order
-        # exponent to compensate.
-        n_rows = config.n_differential
-        zero_norm2 = precision(config.starting_step_zero_norm**2 / n_rows)
+        # norm_fn returns a mean square, so square each threshold and
+        # halve the order exponent to compensate.
+        zero_norm2 = precision(config.starting_step_zero_norm**2)
         inverse_target_norm2 = precision(
-            n_rows / config.starting_step_target**2
+            1.0 / config.starting_step_target**2
         )
         negative_half_inverse_order = precision(
             -0.5 / (config.algorithm_order + 1)
