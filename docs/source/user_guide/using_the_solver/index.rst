@@ -10,7 +10,7 @@ solve it: the convenience function
 Cubie can build the batches you want to solve over (see :doc:`inputs`),
 and provides results in a number of formats (see :doc:`results`). You'll
 usually want to modify the timing parameters to suit your integration (see
-:doc:`timing`), and deeper configuration is achievable (see
+:doc:`timing`), and you can set every other option of the solver (see
 :doc:`configuration`).
 
 .. toctree::

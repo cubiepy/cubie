@@ -1,4 +1,4 @@
-# A lot of this
+# A lot of this is wrong, but I haven't really gotten into it.
 Making it Faster (basic)
 ========================
 
@@ -99,9 +99,9 @@ shared memory, which is slower than registers to read and write from
 but does not slow down under load.  Shared memory is a limited
 resource.  With ``auto_performance=True`` (the default) CuBIE picks
 buffer locations, loop unrolling and how many threads run at once on
-your GPU from your system's size and your GPU; you can override any
-buffer through ``optional_arguments``.  See :doc:`/user_guide/algorithms_and_tuning/optional_arguments`
-for details.
+your GPU from your system's size and your GPU. You can set any
+buffer's location yourself with its ``*_location`` option; see
+:doc:`/user_guide/using_the_solver/configuration`.
 
 Reusing Solvers
 ---------------
