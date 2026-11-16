@@ -16,9 +16,9 @@ treats each key as a keyword argument.
 Arguments of one solve
 ----------------------
 
-:meth:`~cubie.Solver.solve` and :func:`~cubie.solve_ivp` also take
-these arguments, which describe a single solve. The solver doesn't keep
-them for later solves.
+:meth:`~cubie.Solver.solve` and :func:`~cubie.solve_ivp` also take the
+arguments below. Give them to each solve that needs them, because the
+solver doesn't keep them for later solves.
 
 .. list-table::
    :header-rows: 1
@@ -30,12 +30,13 @@ them for later solves.
    * - ``initial_values`` (``y0`` in ``solve_ivp``)
      - ``None``
      - Initial values, as a dict or an array (see :doc:`inputs`).
-       ``None`` starts every run from the system's default initial
-       values.
+       Pass ``None`` to start every run from the system's default
+       initial values.
    * - ``parameters``
      - ``None``
      - Parameter values, as a dict or an array (see :doc:`inputs`).
-       ``None`` uses the system's default parameters for every run.
+       Pass ``None`` to use the system's default parameters for every
+       run.
    * - ``grid_type``
      - ``"combinatorial"``
      - Pass ``"combinatorial"`` to solve every combination of the
@@ -85,19 +86,20 @@ Choosing the algorithm
 Controlling accuracy
 --------------------
 
-Adaptive algorithms choose their own step size to keep the estimated
-error of each step below ``atol + rtol * |value|`` for every state.
+With an adaptive algorithm, cubie chooses each step size to keep the
+estimated error of the step below ``atol + rtol * |value|`` for every
+state.
 
 **atol** — absolute error tolerance.
-    This tolerance sets the error you accept when a state is near zero.
+    Use it to set the error you accept when a state is near zero.
     Pass a scalar for every state, or an array with one tolerance per
     state.
 
     - Default: ``1e-6``
 
 **rtol** — relative error tolerance.
-    This tolerance scales with the size of the state: ``rtol=1e-6``
-    asks for roughly six correct digits. Pass a scalar or an array with
+    Cubie scales it by the size of the state, so ``rtol=1e-6`` gives
+    you roughly six correct digits. Pass a scalar or an array with
     one tolerance per state.
 
     - Default: ``1e-6``
@@ -108,7 +110,7 @@ only.
 Controlling the step size
 -------------------------
 
-:doc:`timing` explains how ``dt``, ``dt_min`` and ``dt_max`` work
+See :doc:`timing` for how ``dt``, ``dt_min`` and ``dt_max`` work
 together, and how cubie fills in the ones you leave out.
 
 **dt** — the fixed step, or the first step of an adaptive algorithm.
@@ -145,31 +147,32 @@ Tuning the step controller
 
     - Default: ``"fixed"`` for algorithms without an error estimate;
       otherwise ``"i"`` for ERK, ``"pi"`` for DIRK and
-      ``"gustafsson"`` for FIRK and Rosenbrock-W. Some tableaus choose
-      their own.
+      ``"gustafsson"`` for FIRK and Rosenbrock-W. Cubie uses a
+      different default for some tableaus.
 
-Each algorithm family also sets its own defaults for the options below,
-so treat them as expert tuning.
+Cubie sets its own defaults for the options below for each algorithm
+family, so treat them as expert tuning.
 
-**min_step_shrink** / **max_step_growth** — bounds on how much one step can change the step size.
+**min_step_shrink** / **max_step_growth** — bounds on how much cubie changes the step size from one step to the next.
 
     - Defaults: ``min_step_shrink=0.3``, ``max_step_growth=2.0``
 
 **safety** — a factor on every proposed step.
-    Cubie multiplies each proposed step by this factor. Values below
-    1.0 aim slightly below the step the error estimate suggests, so you
-    get fewer rejected steps at a small cost in speed.
+    Cubie multiplies each proposed step by this factor. With a value
+    below 1.0, cubie takes slightly smaller steps than its error
+    estimate allows, so you get fewer rejected steps at a small cost in
+    speed.
 
     - Default: ``0.9``
 
 **deadband_min** / **deadband_max** — a band of step ratios that cubie ignores.
-    If the proposed change in step size falls inside this band, cubie
+    If cubie would change the step size by a ratio inside this band, it
     keeps the current step. Set both to 1.0 to turn the band off.
 
     - Defaults: ``deadband_min=1.0``, ``deadband_max=1.0`` (off)
 
 **integral_gain** / **proportional_gain** / **derivative_gain** — the gains of the ``i``, ``pi`` and ``pid`` controllers.
-    :ref:`choosing-a-controller` explains what each gain does. Cubie
+    See :ref:`choosing-a-controller` for what each gain does. Cubie
     divides each gain by ``order + 1``. If you pass a gain without a
     ``step_controller``, cubie selects the fastest of ``i``, ``pi`` and
     ``pid`` that uses it.
@@ -189,19 +192,20 @@ so treat them as expert tuning.
       ``pid``
 
 **newton_target_iters** — the Newton iteration count the ``gustafsson`` controller aims for.
-    The ``gustafsson`` controller shrinks the step when the implicit
-    solver works harder than this. It doesn't limit the number of
-    Newton iterations.
+    With the ``gustafsson`` controller, cubie shrinks the step when the
+    Newton solve takes more iterations than this. Cubie doesn't stop
+    the Newton solve at this count.
 
     - Default: ``20``
 
 Tuning the implicit solvers
 ---------------------------
 
-Implicit algorithms (backward Euler, Crank--Nicolson, DIRK, FIRK) solve
-a nonlinear system at every step with Newton's method, and solve a
-linear system for each Newton update. Rosenbrock-W algorithms solve
-only the linear systems, so the Newton options don't apply to them.
+For implicit algorithms (backward Euler, Crank--Nicolson, DIRK, FIRK),
+cubie solves a nonlinear system at every step with Newton's method, and
+a linear system for each Newton update. For Rosenbrock-W algorithms,
+cubie solves only the linear systems, so the Newton options don't apply
+to them.
 
 Newton options:
 
@@ -213,19 +217,21 @@ Newton options:
       10
 
 **newton_max_iters** — the Newton iteration limit.
-    If a step doesn't converge within this many iterations, cubie
-    rejects it and, under an adaptive controller, retries it with a
-    smaller step.
+    If the Newton solve doesn't converge within this many iterations,
+    cubie rejects the step and, under an adaptive controller, retries it
+    with a smaller step.
 
     - Default: ``8``
 
 **inexact_newton** — freeze the Newton matrix at the start of each step.
     Cubie evaluates the Jacobian once per step instead of once per
-    Newton iteration. Rosenbrock-W algorithms ignore this option.
+    Newton iteration. Cubie ignores this option for Rosenbrock-W
+    algorithms.
 
-    - Default: ``True`` for DIRK and FIRK, except the tableaus that the
-      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`
-      tables list as using exact Newton; ``False`` otherwise
+    - Default: ``True`` for DIRK and FIRK, except the tableaus marked
+      as defaulting to exact Newton in
+      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`;
+      ``False`` otherwise
 
 **prefactored** — keep the LU factors from the start of each step.
     With ``inexact_newton`` and ``linear_correction_type="lu"``, cubie
@@ -236,30 +242,29 @@ Newton options:
     - Default: ``True``
 
 **attempt_dense_prediction** — warm-start each Newton solve.
-    DIRK and FIRK algorithms start each step's Newton solves from a
-    prediction made from the previous step's stages. Cubie ignores
-    this option for tableaus that can't support the prediction.
+    For DIRK and FIRK algorithms, cubie starts each step's Newton
+    solves from a prediction it makes from the previous step's stages.
+    Cubie ignores this option for tableaus that can't support the
+    prediction.
 
     - Default: ``True``, or ``False`` for adaptive DIRK tableaus
 
 Linear solver options:
 
 **linear_correction_type** — the linear solver.
-    ``"lu"`` factorises the matrix and solves it directly. It is
-    faster for stiff problems and slower for easy ones.
+    Pass ``"lu"`` to factorise the matrix and solve it directly, which
+    is faster for stiff problems and slower for easy ones.
 
-    ``"minimal_residual"`` and ``"steepest_descent"`` are iterative
-    solvers. ``"minimal_residual"`` is usually the fastest, but the
-    least robust.
-
-    ``"bicgstab"`` is an iterative solver that applies the Jacobian
-    twice in each iteration, where the other iterative solvers apply it
-    once.
+    ``"minimal_residual"``, ``"steepest_descent"`` and ``"bicgstab"``
+    are iterative solvers. ``"minimal_residual"`` is usually the
+    fastest, but the least robust. With ``"bicgstab"``, cubie applies
+    the Jacobian twice in each iteration, where it applies it once with
+    the other iterative solvers.
 
     - Default: ``"lu"`` for DIRK, FIRK, Rosenbrock-W and every DAE;
       ``"minimal_residual"`` otherwise
 
-**krylov_atol** / **krylov_rtol** — the tolerances that weight the iterative linear solver's stopping test.
+**krylov_atol** / **krylov_rtol** — the tolerances cubie uses to weight the iterative linear solver's stopping test.
 
     - Default: the step controller's ``atol`` and ``rtol``
 
@@ -270,8 +275,8 @@ Linear solver options:
 **krylov_residual_reduction** / **krylov_residual_floor** — the stopping test of the iterative linear solver.
     Cubie stops each linear solve once its weighted residual falls
     below ``floor + reduction * ||b||``, where ``||b||`` is the weighted
-    right-hand side at the start of the solve. The relative term stops
-    cubie solving the early Newton updates more accurately than it
+    right-hand side at the start of the solve. With the relative term,
+    cubie doesn't solve the early Newton updates more accurately than it
     needs to.
 
     - Defaults: ``krylov_residual_reduction`` is the smallest ``rtol``
@@ -287,29 +292,28 @@ Linear solver options:
     - Default: ``"jacobi"``
 
 **preconditioner_order** — the number of terms in the preconditioner's series.
-    Each term costs one Jacobian product each time cubie applies the
-    preconditioner, and saves linear iterations only while the series
-    converges, so use a low order on a system with large off-diagonal
-    Jacobian entries. ``"neumann"`` needs at least one term; on
-    ``"jacobi"``, order zero is a plain diagonal solve.
+    Cubie computes one Jacobian product per term each time it applies
+    the preconditioner. You save linear iterations with extra terms
+    only while the series converges, so use a low order on a system
+    with large off-diagonal Jacobian entries. Give ``"neumann"`` at
+    least one term. With ``"jacobi"`` at order zero, cubie does a plain
+    diagonal solve.
 
     - Default: ``2`` for ``"neumann"``, ``0`` for ``"jacobi"``
 
 Error smoothing options:
 
 **use_smoothed_error** — smooth the error estimate.
-    If the tableau supports it, cubie adds one linear solve per step
-    that filters stiff components out of the error estimate. The
-    larger steps that you get usually outweigh the cost of the extra
-    solve. Cubie warns and leaves smoothing off for a tableau that
+    If the tableau supports it, cubie adds one linear solve per step to
+    filter stiff components out of the error estimate. You usually gain
+    more from the larger steps than you lose to the extra solve. Cubie warns and leaves smoothing off for a tableau that
     can't smooth its estimate.
 
     - Default: ``False``, or ``True`` for Radau IIA tableaus
 
 **error_atol** / **error_rtol** / **error_max_iters** / **error_residual_reduction** / **error_residual_floor** — the settings of the smoothing solve.
-    These options set the same quantities as their ``krylov_``
-    counterparts, for the linear solve that ``use_smoothed_error``
-    adds.
+    Use these options like their ``krylov_`` counterparts, for the
+    linear solve that ``use_smoothed_error`` adds.
 
     - Default: the value of the matching ``krylov_`` option
 
@@ -318,11 +322,11 @@ DAE options:
 **dae_initialisation** — make a DAE's initial values consistent.
     Cubie solves for consistent algebraic states at the start of every
     run, before the first step and the ``t=0`` output, starting from
-    the initial values you gave. ``"brown"`` holds the differential
-    states and solves for the algebraic ones. ``"shampine"`` takes one
-    backward Euler step of the starting step size, which can move every
-    state by up to ``O(dt)``. ``"none"`` skips the solve. If the solve
-    fails, cubie ends the run at the ``t=0`` save and sets
+    the initial values you gave. With ``"brown"``, cubie holds the
+    differential states and solves for the algebraic ones. With
+    ``"shampine"``, cubie takes one backward Euler step of the starting
+    step size, which can move every state by up to ``O(dt)``. With
+    ``"none"``, cubie skips the solve. If the solve fails, cubie ends the run at the ``t=0`` save and sets
     ``DAE_INITIALISATION_FAILED`` in its status code. Cubie ignores
     this option on systems that aren't DAEs.
 
@@ -331,7 +335,7 @@ DAE options:
 Choosing what gets saved
 ------------------------
 
-:doc:`results` explains each of these options.
+See :doc:`results` for each of these options.
 
 **output_types** — what to record.
     Pass any combination of ``"state"``, ``"observables"``, ``"time"``,
@@ -344,11 +348,11 @@ Choosing what gets saved
     ``saved_state_indices``, ``saved_observable_indices``,
     ``summarised_state_indices`` and ``summarised_observable_indices``.
 
-    - Default: every state and observable; ``summarise_variables``
-      follows ``save_variables``
+    - Default: every state and observable; without
+      ``summarise_variables``, cubie summarises the saved variables
 
 **save_every** / **summarise_every** / **sample_summaries_every** — how often to save, summarise and sample.
-    :doc:`timing` explains each interval.
+    See :doc:`timing` for each interval.
 
     - Defaults: without ``save_every``, cubie saves the first and last
       points; without ``summarise_every``, it summarises once at the
@@ -358,7 +362,7 @@ Choosing what gets saved
 Drivers
 -------
 
-:doc:`/user_guide/defining_systems/drivers` explains each of these
+See :doc:`/user_guide/defining_systems/drivers` for each of these
 options.
 
 **drivers** — the forcing data, as a :class:`~cubie.array_interpolator.DriverSamples`.
@@ -381,7 +385,8 @@ Precision and compilation
 
 **precision** — the floating-point type of the solve.
     Pass ``numpy.float32`` or ``numpy.float64``.
-    :doc:`/user_guide/algorithms_and_tuning/speed` compares them.
+    See :doc:`/user_guide/algorithms_and_tuning/speed` for how they
+    compare.
 
     - Default: the precision you built the system with, ``float32``
       unless you set it
@@ -393,17 +398,18 @@ Precision and compilation
       or ``"liveness_auto"`` if you haven't set it
 
 **lineinfo** — compile source-line data for profilers such as Nsight Compute.
-    Changing it rebuilds every kernel.
+    If you change it, cubie rebuilds every kernel.
 
     - Default: the ``CUBIE_LINEINFO`` environment variable, or off if
       you haven't set it
 
 **nsz** / **contract** / **arcp** / **afn** / **reassoc** / **ftz** — the compiler's fast-math flags.
-    ``nsz`` ignores the sign of zero, ``contract`` fuses multiplies and
-    adds, ``arcp`` approximates division by a reciprocal, ``afn`` uses
-    approximate ``log``, ``exp`` and ``pow``, ``reassoc`` lets the
-    compiler regroup chains of additions and multiplications, and
-    ``ftz`` flushes subnormal numbers to zero.
+    Set ``nsz`` to let the compiler ignore the sign of zero,
+    ``contract`` to let it fuse multiplies and adds, ``arcp`` to let it
+    replace a division with a multiplication by the reciprocal, ``afn``
+    to let it use approximate ``log``, ``exp`` and ``pow``, ``reassoc``
+    to let it regroup chains of additions and multiplications, and
+    ``ftz`` to let it flush subnormal numbers to zero.
 
     - Defaults: ``reassoc=False``; every other flag ``True``
 
@@ -419,7 +425,7 @@ Precision and compilation
 Performance
 -----------
 
-:doc:`/user_guide/algorithms_and_tuning/speed` explains when these
+See :doc:`/user_guide/algorithms_and_tuning/speed` for when these
 options matter.
 
 **auto_performance** — choose buffer locations, loop unrolling and the launch shape for your system and GPU.
@@ -434,8 +440,8 @@ options matter.
     - Default: chosen by cubie
 
 **max_registers** — the register limit for each thread.
-    A lower limit lets more threads run at once, but spills more values
-    to memory.
+    With a lower limit, you can run more threads at once, but the
+    compiler spills more values to memory.
 
     - Default: no limit
 
@@ -455,7 +461,8 @@ options matter.
 
 **\*_location** options (``state_location``, ``timestep_memory_location`` and about forty more) — where each working buffer lives.
     Pass ``"local"`` for per-thread memory or ``"shared"`` for
-    per-block memory. Buffer locations don't change the results.
+    per-block memory. Cubie computes the same results with either
+    location.
 
     - Default: chosen by cubie under ``auto_performance``; otherwise
       ``"local"``
@@ -463,22 +470,23 @@ options matter.
 Memory and caching
 ------------------
 
-:doc:`/user_guide/advanced/memory` and
-:doc:`/user_guide/advanced/caching` explain these options.
+See :doc:`/user_guide/advanced/memory` and
+:doc:`/user_guide/advanced/caching` for these options.
 
 **mem_proportion** — the share of VRAM this solver may use.
-    Pass a number between 0.0 and 1.0. With ``None``, the solver joins
-    the automatic pool, which shares the VRAM left after every solver
-    with a set proportion equally between its members.
+    Pass a number between 0.0 and 1.0. With ``None``, cubie puts the
+    solver in the automatic pool, and divides the VRAM left after every
+    solver with a set proportion equally between the solvers in that
+    pool.
 
     - Default: ``None``
 
 **stream_group** — the name of the stream group the solver runs on.
-    Solvers in the same group share one CUDA stream.
+    Cubie runs every solver in a group on one CUDA stream.
 
     - Default: ``"solver"``
 
-**memory_manager** — the :class:`~cubie.memory.mem_manager.MemoryManager` that allocates the solver's memory.
+**memory_manager** — the :class:`~cubie.memory.mem_manager.MemoryManager` cubie allocates the solver's memory with.
 
     - Default: ``cubie.default_memmgr``
 
@@ -492,7 +500,7 @@ Memory and caching
       the shared cache root if you haven't set it
 
 **max_cache_entries** — the number of compiled kernels cubie keeps in each cache directory before it removes the least recently used one.
-    ``0`` keeps every kernel.
+    Pass ``0`` to keep every kernel.
 
     - Default: the ``CUBIE_MAX_CACHE_ENTRIES`` environment variable, or
       ``0`` if you haven't set it
