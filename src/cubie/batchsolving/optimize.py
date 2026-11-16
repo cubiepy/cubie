@@ -20,7 +20,6 @@ Published Objects
     Time a solver's candidates.
 """
 
-from math import sqrt
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from attrs import define
@@ -29,6 +28,9 @@ from cubie.backend.utils import (
     DeviceHardware,
     device_hardware,
     kernel_resources,
+)
+from cubie.integrators.step_control.adaptive_step_controller import (
+    default_starting_step,
 )
 from cubie.batchsolving.comparison import (
     TIMED_WAVES_FLOOR,
@@ -476,7 +478,7 @@ def _ramp_start(solver: Any, given: float) -> float:
     sample interval rejects anything shorter."""
     step = solver.dt
     if step is None:
-        step = sqrt(solver.dt_min * solver.dt_max)
+        step = default_starting_step(solver.dt_min, solver.dt_max)
     trial = max(_duration_floor(solver, given), float(step))
     trial = min(trial, given)
     if trial < given and not _fits_sample_interval(solver, trial):

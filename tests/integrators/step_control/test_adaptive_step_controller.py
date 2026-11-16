@@ -11,7 +11,6 @@ from cubie.integrators.step_control.adaptive_I_controller import (
 import pytest
 
 from tests._utils import CONTROLLER_TOLERANCE_SETS
-from numpy import sqrt
 from numpy.testing import assert_array_equal
 
 from cubie.integrators.norms import ATOL_FLOOR, TwoRefMaskedScaledNorm
@@ -20,6 +19,7 @@ from cubie.integrators.step_control.adaptive_PID_controller import (
 )
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
+    default_starting_step,
 )
 from cubie.integrators.step_control.base_step_controller import (
     ALL_STEP_CONTROLLER_PARAMETERS,
@@ -203,13 +203,19 @@ def test_config_dt_max_property_normal_path():
     assert cfg.dt_max == pytest.approx(np.float64(2.0))
 
 
-def test_controller_derives_dt_from_bounds():
-    """Controller derives dt as sqrt(dt_min * dt_max) when not provided."""
+def test_controller_dt_is_none_when_not_given():
+    """A controller given no dt reports none."""
     ctrl = AdaptiveIController(
         precision=np.float64, n_states=3, dt_min=1e-4, dt_max=1.0
     )
-    expected = np.float64(sqrt(1e-4 * 1.0))
-    assert ctrl.dt == pytest.approx(expected)
+    assert ctrl.dt is None
+
+
+def test_default_starting_step_is_the_bounds_geometric_mean():
+    """The default step squared is the product of the bounds."""
+    dt_min, dt_max = 1e-4, 0.25
+    step = default_starting_step(dt_min, dt_max)
+    assert step * step == pytest.approx(dt_min * dt_max)
 
 
 def test_config_is_adaptive():
@@ -341,14 +347,12 @@ def test_persistent_local_buffer_size_is_int(step_controller):
 
 
 def test_resolve_adaptive_bounds_only():
-    """dt_min + dt_max pass through; dt = sqrt(dt_min*dt_max) when not set."""
+    """dt_min and dt_max pass through."""
     ctrl = AdaptiveIController(
         precision=np.float64, dt_min=1e-4, dt_max=1.0,
     )
     assert ctrl.dt_min == pytest.approx(np.float64(1e-4))
     assert ctrl.dt_max == pytest.approx(np.float64(1.0))
-    expected_dt = np.float64(sqrt(1e-4 * 1.0))
-    assert ctrl.dt == pytest.approx(expected_dt)
 
 
 def test_resolve_adaptive_dt_plus_dt_min():

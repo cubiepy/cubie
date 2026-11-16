@@ -47,6 +47,9 @@ from cubie._utils import (
 )
 from cubie.backend.intrinsics import unroll_if
 from cubie.buffer_registry import buffer_registry
+from cubie.integrators.step_control.adaptive_step_controller import (
+    default_starting_step,
+)
 from cubie.CUDAFactory import (
     ALL_JIT_PARAMETERS,
     ALL_UNROLL_PARAMETERS,
@@ -175,6 +178,13 @@ class StartingStepConfig(CUDAFactoryConfig):
         return self.precision(self._dt_max)
 
     @property
+    def fallback_step(self) -> float:
+        """Return the first guess for a zero state or derivative."""
+        return self.precision(
+            default_starting_step(self._dt_min, self._dt_max)
+        )
+
+    @property
     def starting_step_state_fraction(self) -> float:
         """Return the state fraction of the first guess."""
         return self.precision(self._starting_step_state_fraction)
@@ -300,6 +310,7 @@ class StartingStepEstimator(CUDAFactory):
 
         dt_min = config.dt_min
         dt_max = config.dt_max
+        fallback_step = config.fallback_step
         one = precision(1.0)
         guess_fraction = precision(config.starting_step_state_fraction)
         guess_growth = precision(config.starting_step_max_growth)
@@ -330,14 +341,10 @@ class StartingStepEstimator(CUDAFactory):
             proposed_observables,
             error,
             time_scalar,
-            fallback_step,
             shared,
             persistent_local,
         ):
             """Return the starting step estimated at ``state``.
-
-            Take ``fallback_step`` as the first guess for a zero state
-            or a zero derivative.
 
             Overwrite ``proposed_state``, ``proposed_drivers``,
             ``proposed_observables`` and ``error``.

@@ -486,7 +486,7 @@ class IVPLoop(CUDAFactory):
         )
 
         # Timing values
-        initial_dt = precision(config.dt)
+        initial_dt = config.dt
         typed_zero = precision(0.0)
         save_every = config.save_every
         sample_summaries_every = config.sample_summaries_every
@@ -683,7 +683,6 @@ class IVPLoop(CUDAFactory):
                 parameters_buffer,
                 drivers_buffer,
                 t_prec,
-                initial_dt,
                 initialiser_shared,
                 initialiser_persistent,
                 proposed_counters,
@@ -747,11 +746,12 @@ class IVPLoop(CUDAFactory):
 
             status = int32(success | init_status)
             iteration_status = int32(0)
-            dt_raw = initial_dt
             # Estimate this run's starting step. Use the proposal and
             # error buffers as scratch: the first step writes them before
             # it reads them.
-            if starting_step_fn is not None:
+            if starting_step_fn is None:
+                dt_raw = initial_dt
+            else:
                 dt_raw = starting_step_fn(
                     state_buffer,
                     state_proposal_buffer,
@@ -763,7 +763,6 @@ class IVPLoop(CUDAFactory):
                     observables_proposal_buffer,
                     error,
                     t_prec,
-                    initial_dt,
                     starting_step_shared,
                     starting_step_persistent,
                 )

@@ -102,7 +102,8 @@ class ODELoopConfig(CUDAFactoryConfig):
         Device function returning each run's starting step, or
         ``None`` to start every run at ``dt``.
     dt
-        Initial timestep prior to controller feedback.
+        Initial timestep prior to controller feedback, or ``None`` when
+        ``starting_step_fn`` estimates it.
     is_adaptive
         Whether the loop operates with an adaptive controller.
     state_location, proposed_state_location, parameters_location, \
@@ -299,6 +300,8 @@ class ODELoopConfig(CUDAFactoryConfig):
         return self.precision(self._sample_summaries_every)
 
     @property
-    def dt(self) -> float:
-        """Return the initial timestep."""
+    def dt(self) -> Optional[float]:
+        """Return the initial timestep, or ``None`` when not given."""
+        if self._dt is None:
+            return None
         return self.precision(self._dt)

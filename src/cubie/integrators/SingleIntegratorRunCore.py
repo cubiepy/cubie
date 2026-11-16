@@ -192,7 +192,7 @@ class SingleIntegratorRunCore(CUDAFactory):
         )
 
         recognised |= self._dae_initialiser.update(
-            {**updates, **DAEInitialiser.system_inputs(system)}, silent=True
+            {**updates, **self._initialiser_inputs()}, silent=True
         )
         recognised |= self._starting_step.update(
             {**updates, **self._starting_step_inputs()}, silent=True
@@ -271,8 +271,17 @@ class SingleIntegratorRunCore(CUDAFactory):
             **{
                 **self._algo_step.settings_dict,
                 **settings,
-                **DAEInitialiser.system_inputs(self._system),
+                **self._initialiser_inputs(),
             }
+        )
+
+    def _initialiser_inputs(self) -> Dict[str, Any]:
+        """Return the initialiser's system and controller inputs."""
+        controller = self._step_controller.products
+        return dict(
+            **DAEInitialiser.system_inputs(self._system),
+            dt_min=controller["dt_min"],
+            dt_max=controller["dt_max"],
         )
 
     def _new_starting_step(

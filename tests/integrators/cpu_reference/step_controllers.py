@@ -3,6 +3,9 @@
 import numpy as np
 
 from cubie._utils import PrecisionDType
+from cubie.integrators.step_control.adaptive_step_controller import (
+    default_starting_step,
+)
 
 from .cpu_utils import Array
 
@@ -49,7 +52,7 @@ class CPUAdaptiveController:
         if dt is not None:
             self.dt0 = precision(dt)
         else:
-            self.dt0 = precision(np.sqrt(dt_min * dt_max))
+            self.dt0 = precision(default_starting_step(dt_min, dt_max))
         self.dt = self.dt0
         self.atol = precision(atol)
         self.rtol = precision(rtol)

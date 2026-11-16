@@ -397,8 +397,8 @@ class BaseStepControllerConfig(CUDAFactoryConfig, ABC):
 
     @property
     @abstractmethod
-    def dt(self) -> float:
-        """Return the initial step size used when integration starts."""
+    def dt(self) -> Optional[float]:
+        """Return the initial step size, or ``None`` when not given."""
 
     @property
     @abstractmethod
@@ -590,8 +590,8 @@ class BaseStepController(CUDAFactory):
         return self.compile_settings.dt_max
 
     @property
-    def dt(self) -> float:
-        """Return the initial step size."""
+    def dt(self) -> Optional[float]:
+        """Return the initial step size, or ``None`` when not given."""
 
         return self.compile_settings.dt
 

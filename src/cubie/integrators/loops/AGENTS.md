@@ -41,10 +41,9 @@ sets `irrecoverable`: the run ends at the t0 save with the uncorrected values.
 
 ## Starting step
 After the t0 save the loop starts at the value `starting_step_fn` returns, or at the
-compiled `dt` when `starting_step_fn` is `None`. `starting_step_fn` overwrites the
-proposal buffers and `error`, which the first step writes before it reads.
-`starting_step_fn` also takes the compiled `dt` as its first guess for a zero state or
-derivative.
+compiled `dt` when `starting_step_fn` is `None`. The compiled `dt` is `None` when
+`starting_step_fn` estimates it. `starting_step_fn` overwrites the proposal buffers and
+`error`, which the first step writes before it reads.
 
 ## Output scheduling
 Each timing parameter has a `next_*` event time the step is clamped not to overshoot:

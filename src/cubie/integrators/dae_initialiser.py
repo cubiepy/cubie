@@ -40,6 +40,7 @@ from cubie.CUDAFactory import (
 from cubie._utils import (
     device_function_field,
     getype_validator,
+    opt_getype_validator,
     is_device_validator,
     PrecisionDType,
 )
@@ -51,6 +52,9 @@ from cubie.integrators.algorithms.ode_implicitstep import (
     ODEImplicitStep,
 )
 from cubie.integrators.norms import DIRKCorrectionNorm
+from cubie.integrators.step_control.adaptive_step_controller import (
+    default_starting_step,
+)
 from cubie.result_codes import CUBIE_RESULT_CODES
 
 DAE_INITIALISATION_MODES = ("brown", "shampine", "none")
@@ -83,6 +87,12 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
         disables the pass.
     increment_location
         Memory location for the Newton increment buffer.
+    dt
+        Initial step the user gave, or ``None`` when not given.
+    dt_min
+        Lower step bound.
+    dt_max
+        Upper step bound.
     get_solver_helper_fn
         Callable with the ``get_solver_helper`` contract serving
         helper device functions.
@@ -109,6 +119,15 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
     increment_location: str = field(
         default="local", validator=validators.in_(["local", "shared"])
     )
+    _dt: Optional[float] = field(
+        default=None, validator=opt_getype_validator(float, 0)
+    )
+    _dt_min: Optional[float] = field(
+        default=None, validator=opt_getype_validator(float, 0)
+    )
+    _dt_max: Optional[float] = field(
+        default=None, validator=opt_getype_validator(float, 0)
+    )
     get_solver_helper_fn: Optional[Callable] = field(
         default=None,
         validator=validators.optional(validators.is_callable()),
@@ -125,6 +144,15 @@ class DAEInitialiserConfig(CUDAFactoryConfig):
                 "mass_flags must carry one flag per state: got "
                 f"{len(self.mass_flags)} flags for n_states={self.n_states}."
             )
+
+    @property
+    def initial_step(self) -> float:
+        """Return the given ``dt``, else the bounds' geometric mean."""
+        if self._dt is not None:
+            return self.precision(self._dt)
+        return self.precision(
+            default_starting_step(self._dt_min, self._dt_max)
+        )
 
     @property
     def is_noop(self) -> bool:
@@ -174,6 +202,7 @@ class DAEInitialiser(CUDAFactory):
         {
             "dae_initialisation",
             "increment_location",
+            "dt",
             "newton_atol",
             "newton_rtol",
             "krylov_atol",
@@ -314,7 +343,6 @@ class DAEInitialiser(CUDAFactory):
                 parameters,
                 drivers,
                 t,
-                h,
                 shared_scratch,
                 persistent_scratch,
                 counters,
@@ -332,6 +360,7 @@ class DAEInitialiser(CUDAFactory):
         linear_solver_fn = config.krylov_linear_solver_fn
         norm_fn = config.newton_norm_fn
         numba_precision = config.numba_precision
+        h = numba_precision(config.initial_step)
         n = int32(config.n_states)
         unroll_solver_element = config.unroll.unroll_solver_element
         unroll_newton_exits = config.unroll.unroll_newton_exits
@@ -369,7 +398,6 @@ class DAEInitialiser(CUDAFactory):
             parameters,
             drivers,
             t,
-            h,
             shared_scratch,
             persistent_scratch,
             counters,

@@ -298,8 +298,6 @@ class SingleIntegratorRun(SingleIntegratorRunCore):
     @property
     def dt(self) -> Optional[float]:
         """Return the first step, or ``None`` when each run estimates it."""
-        if self._starting_step.estimates_dt:
-            return None
         return self._step_controller.dt
 
     # ------------------------------------------------------------------

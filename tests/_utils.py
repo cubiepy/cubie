@@ -1935,7 +1935,6 @@ def _starting_step_kernel(starting_step_fn):
             proposed_observables,
             error,
             scalars[0],
-            scalars[1],
             shared,
             persistent,
         )
@@ -1952,7 +1951,6 @@ def run_starting_step_device(
     drivers,
     observables,
     time,
-    fallback_step,
 ):
     """Return the estimator's device estimate at ``state``.
 
@@ -1981,7 +1979,7 @@ def run_starting_step_device(
         staged(observables),
         scratch(len(observables)),
         scratch(n_states),
-        staged([time, fallback_step]),
+        staged([time]),
         scratch(estimator.shared_buffer_size),
         scratch(estimator.persistent_local_buffer_size),
         d_estimate,

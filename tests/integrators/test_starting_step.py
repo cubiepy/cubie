@@ -49,7 +49,6 @@ def device_estimate(
             drivers,
             cpu_system.observables(state, parameters, drivers, t0),
             t0,
-            single_integrator_run._step_controller.dt,
         )
 
     return estimate
@@ -126,7 +125,9 @@ def test_zero_state_estimate_grows_from_the_fallback(
     controller = single_integrator_run._step_controller
     settings = single_integrator_run._starting_step.compile_settings
     estimate = device_estimate(np.zeros_like(initial_state))
-    assert estimate <= settings.starting_step_max_growth * controller.dt
+    assert estimate <= (
+        settings.starting_step_max_growth * settings.fallback_step
+    )
     assert controller.dt_min <= estimate <= controller.dt_max
 
 
