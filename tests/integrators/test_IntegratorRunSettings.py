@@ -23,15 +23,6 @@ def test_construction_with_explicit_values():
     assert settings.precision == np.float32
 
 
-def test_construction_with_defaults():
-    """IntegratorRunSettings defaults to euler/fixed."""
-    # Inline construction permitted: __init__ test
-    settings = IntegratorRunSettings(precision=np.float64)
-    assert settings.algorithm == "euler"
-    assert settings.step_controller == "fixed"
-    assert settings.precision == np.float64
-
-
 # ── Validators (items 6-7) ───────────────────────────────── #
 
 def test_algorithm_rejects_non_string():

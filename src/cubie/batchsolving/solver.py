@@ -195,7 +195,7 @@ def solve_ivp(
     y0: Optional[Union[ndarray, Dict[str, ndarray]]] = None,
     parameters: Optional[Union[ndarray, Dict[str, ndarray]]] = None,
     drivers: Optional[DriverSamples] = None,
-    method: str = "euler",
+    method: str = "tsit5",
     duration: float = 1.0,
     settling_time: float = 0.0,
     t0: float = 0.0,
@@ -244,7 +244,7 @@ def solve_ivp(
         The :class:`~cubie.array_interpolator.DriverSamples` to
         interpolate during integration.
     method
-        Integration algorithm to use. Default is ``"euler"``.
+        Integration algorithm to use. Default is ``"tsit5"``.
     duration
         Total integration time. Default is ``1.0``.
     settling_time
@@ -357,7 +357,7 @@ class Solver(DerivedValues):
     system
         System model containing the ODEs to integrate.
     algorithm
-        Integration algorithm to use. Defaults to ``"euler"``.
+        Integration algorithm to use. Defaults to ``"tsit5"``.
     lineinfo
         Compile all kernels and device functions with source-line
         correlation data for profilers such as Nsight Compute. ``None``

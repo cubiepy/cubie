@@ -25,7 +25,7 @@ single batch solve.
      - Default
      - Effect
    * - ``method``
-     - ``"euler"``
+     - ``"tsit5"``
      - Integration algorithm name (see :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`).
    * - ``duration``
      - ``1.0``
@@ -72,7 +72,7 @@ Any other keyword argument is forwarded to :class:`~cubie.Solver`.
      - Default
      - Effect
    * - ``algorithm``
-     - ``"euler"``
+     - ``"tsit5"``
      - Integration algorithm name or a supplied
        :class:`~cubie.integrators.algorithms.ButcherTableau`.
    * - ``lineinfo``

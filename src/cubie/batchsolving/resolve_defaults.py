@@ -616,7 +616,7 @@ def resolve(given: Any, system: Any, interface: Any) -> EffectiveSettings:
     sizes = system.sizes
     has_mass = system.mass is not None
 
-    algorithm = given_or(given, "algorithm", "euler")
+    algorithm = given_or(given, "algorithm", "tsit5")
     facts = algorithm_facts(algorithm, given.tableau)
     resolved["algorithm"] = algorithm
 

@@ -14,7 +14,7 @@ coefficients.
 
 The default :class:`ERKStep` configuration uses
 :data:`cubie.integrators.algorithms.generic_erk.DEFAULT_ERK_TABLEAU`, the
-Dormand--Prince 5(4) pair. The ``"dopri54"`` alias mirrors the longer
+Tsitouras 5(4) pair. The ``"dopri54"`` alias mirrors the longer
 ``"dormand-prince-54"`` key so existing controller presets continue to work.
 
 Available aliases
