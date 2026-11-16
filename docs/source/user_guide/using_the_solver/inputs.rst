@@ -53,7 +53,7 @@ set defaults when you built the system, you can set them on the system with
 ``system.set_default_parameters({"a": 0.2})`` for parameters and
 ``system.set_initial_values({"y": 0.3})`` for states.
 
-If you include a constant value for a parameter or initial value that
+If you include a single value for a parameter or initial value that
 is different to the default, the default doesn't change. Cubie presumes
 that input arguments to ``solve`` are intended for that run only.
 
@@ -64,7 +64,7 @@ If you're looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead. Lay each
 array out as ``(n_variables, n_runs)``, with its rows ordered by variable
 name. If the array is already in the same data type as ``solver.precision``,
-then you can also save an additional array copy.
+cubie will do one less array copy internally.
 
 .. note::
 
@@ -73,11 +73,11 @@ then you can also save an additional array copy.
    outputs, name-ordering makes it easier to reconstruct and index the
    resulting system.
 
-When you pass a dict, cubie compiles every parameter you give a single value
+When you pass a dict, cubie compiles every non-varying parameter 
 directly into the GPU code to make it go faster. It does the same for an
-array under the default ``fix_constant_parameters=True`` argument. This
-will usually make the solve faster, but costs a few ms per solve call.
-To get around this, you can:
+array (when every value in a row has the same value) under the default 
+``fix_constant_parameters=True`` argument. This will usually make the solve 
+faster, but costs a few ms per solve call. To get around this, you can:
 
 - Pass ``fix_constant_parameters=False``. All parameters, even the constant
   ones, are part of the input array that gets passed to the GPU, and get loaded

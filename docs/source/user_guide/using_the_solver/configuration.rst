@@ -1,5 +1,8 @@
+#On a deeper read of this page it seems like it is either useless or poorly impelemented - I like the idea of linking each param to its deep dive page, but is this just a duplication of api ref? where does the optional arguments page live, and why? where is the distinction between the two?
+
 Configuration Reference
 ========================
+#This is machine language. users don't use words like entry-point, index, loose keyword arguments, routed, they definitely don't know or care about an underlying settings group.
 
 This page is the single index of every entry-point keyword argument for a
 solve: the explicit parameters of :func:`~cubie.solve_ivp` and
@@ -107,7 +110,7 @@ loose keyword arguments (see :ref:`kwarg-routing`).
 .. list-table::
    :header-rows: 1
    :widths: 20 15 65
-
+# This looks incomplete, incorrect, and potentially unhelpful. How do we select what appears in this list vs keyword args?
    * - Argument
      - Default
      - Effect
@@ -155,7 +158,7 @@ below may be passed directly to :func:`~cubie.solve_ivp`,
 .. list-table::
    :header-rows: 1
    :widths: 18 52 30
-
+# Is this complete?
    * - Group
      - Parameters
      - Deep-dive page

@@ -21,18 +21,14 @@ Decision Guide
      - Fast per step.
    * - Mildly stiff
      - DIRK or Rosenbrock-W
-     - DIRK is robust; Rosenbrock-W avoids Newton iteration.
+     - DIRK is robust but slower to compile and run; Rosenbrock-W methods are fast.
    * - Very stiff
      - FIRK
-     - ``radau_iia_5`` handles extreme stiffness well.
-   * - Fixed step required
-     - ``euler`` or any non-adaptive tableau
-     - Forward Euler for explicit, ``backwards_euler`` for implicit.
-
+     - FIRK algorithms like ``radau_iia_5`` handles extreme stiffness well.
+  
 The bare family names ``erk``, ``dirk``, ``firk``, and ``rosenbrock``
 are also accepted and select each family's default tableau
-(``tsit5``, ``l_stable_dirk_3``, ``firk_gauss_legendre_2``,
-and ``ros3p`` respectively).
+ #these need updated
 
 Adaptive or fixed?
 ------------------
@@ -256,8 +252,8 @@ Select one by name with ``step_controller`` inside
    more efficient code when you don't need the additional gain terms.
    After every step they compare the estimated error with the
    tolerance (``atol + rtol * max(|this_state|, |last_state|)``) and
-   propose a next-step size to bring the ratio of error/tolerance to
-   1.  Each gain term acts on the current error and a subset of
+   propose a next-step size to bring the ratio of error/tolerance
+   to 1.  Each gain term acts on the current error and a subset of
    previous errors:
 
    - ``integral_gain`` multiplies by the error/tolerance ratio of the
@@ -286,6 +282,7 @@ without an error estimate); some tableaus override it.  To override:
 
 .. code-block:: python
 
+# This uses the grouped settings system, which we haven't really described. just pass the step controller kwarg directly. 
    solver = qb.Solver(
        LV,
        algorithm="dormand-prince-54",
@@ -295,7 +292,7 @@ without an error estimate); some tableaus override it.  To override:
 Automatic calibration
 ---------------------
 
-The fastest algorithm order, linear solver, preconditioner, and
+The fastest algorithm order, linear solver type, preconditioner, and
 Newton variant depend on the system.  Given a representative batch,
 the solver can measure them directly:
 
@@ -315,12 +312,16 @@ few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
 and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
-count.  The batch timed is sized for 20 ms solves; ``auto_size=False``
-times your exact batch.  Candidates whose success rate is within 5% of the best are
-ranked on time; the rest follow, ranked on time, with their failure
-rates shown.  By default the winning configuration is applied to the
-solver in place; pass ``apply=False`` to get the race results without
-modifying the solver.
+count.  The batch timed is resized so that it runs for about 20 ms 
+where achievable. Setting ``auto_size=False`` times your exact batch
+instead.  Candidates whose trajectory failure rate is within 5% of 
+the best are ranked by time, then higher-failure results follow ranked
+by time, with their failure rates shown.  By default the winning 
+configuration is applied to the solver in place. Passing ``apply=False`` 
+returns the results of the race without modifying the solver.
+
+Solver.calibrate() compiles a large number of kernels; allow half an
+hour for a bigger system.
 
 With the algorithm settled, :meth:`Solver.optimize
 <cubie.batchsolving.solver.Solver.optimize>` tries a few different
@@ -337,14 +338,8 @@ fastest configuration for your system:
    )
    print(report.summary())
 
-Settings you gave, or an earlier ``optimize`` applied, stay fixed
-unless ``force=True``. The fastest configuration is applied in place;
-``apply=False`` only reports.
+Settings you gave explicitly, or ones that were set by  an earlier
+``optimize``, stay fixed unless ``force=True``. Like calibrate(),
+the fastest configuration is applied in place unless ``apply=False``,
+and batches are autosized for a 20ms runtime unless auto_size=False. 
 
-By default ``optimize`` times a batch that takes about 20 ms to
-integrate, larger or smaller than yours. Pass ``auto_size=False`` to
-optimise on your exact batch and duration, for a batch whose parameter
-sets behave very differently and that you will run repeatedly.
-
-For the mathematical background behind these algorithms, see
-:doc:`/theory/numerical_integration`.

@@ -1,3 +1,4 @@
+#This looks wildly empty given the amount of optional arguments which exist, timing parts are already explained elsewhere, it doesn't have much to do with algorithms and tuning.
 Solver Options Reference
 ========================
 

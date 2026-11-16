@@ -206,9 +206,10 @@ by time (or summary window) first, then variable, then run:
    :doc:`/troubleshooting`.
 
 ``parameter_legend`` and ``fixed_parameter_values``
-   Read ``parameter_legend`` for the parameter of each row of the swept
-   parameters array, and ``fixed_parameter_values`` for the value of
-   every parameter cubie compiled into the code.
+   Parameters are sorted by name in the grid, and can confuse when comparing
+   one grid's result to another. ``parameter_legend`` shows the indices of 
+   parameter values in the arrays, and ``fixed_parameter_values`` contains
+   the value of each non-varying parameter that the batch was made under.
 
 You can also convert the result:
 
