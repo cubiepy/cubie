@@ -21,13 +21,11 @@ Decision Guide
      - Fast per step.
    * - Mildly stiff
      - DIRK or Rosenbrock-W
-     - DIRK is robust; Rosenbrock-W avoids Newton iteration.
+     - DIRK is robust but slower to compile and run; Rosenbrock-W
+       methods are fast.
    * - Very stiff
      - FIRK
-     - ``radau_iia_5`` handles extreme stiffness well.
-   * - Fixed step required
-     - ``euler`` or any non-adaptive tableau
-     - Forward Euler for explicit, ``backwards_euler`` for implicit.
+     - Use FIRK algorithms like ``radau_iia_5`` for extreme stiffness.
 
 The bare family names ``erk``, ``dirk``, ``firk``, and ``rosenbrock``
 are also accepted and select each family's default tableau
@@ -242,9 +240,8 @@ Choosing a Controller
 ---------------------
 
 Adaptive algorithms use an error controller to adjust the step size.
-Select one by name with ``step_controller`` inside
-``step_control_settings``; the registered names are ``"fixed"``,
-``"i"``, ``"pi"``, ``"pid"``, and ``"gustafsson"``.
+Select one by name with the ``step_controller`` keyword argument:
+``"fixed"``, ``"i"``, ``"pi"``, ``"pid"``, or ``"gustafsson"``.
 
 **fixed**
    Constant step size; no error control.  Used automatically for
@@ -256,8 +253,8 @@ Select one by name with ``step_controller`` inside
    more efficient code when you don't need the additional gain terms.
    After every step they compare the estimated error with the
    tolerance (``atol + rtol * max(|this_state|, |last_state|)``) and
-   propose a next-step size to bring the ratio of error/tolerance to
-   1.  Each gain term acts on the current error and a subset of
+   propose a next-step size to bring the ratio of error/tolerance
+   to 1.  Each gain term acts on the current error and a subset of
    previous errors:
 
    - ``integral_gain`` multiplies by the error/tolerance ratio of the
@@ -282,20 +279,21 @@ Select one by name with ``step_controller`` inside
 
 Each algorithm family picks a default controller (``i`` for ERK,
 ``pi`` for DIRK, ``gustafsson`` for FIRK and Rosenbrock, ``fixed``
-without an error estimate); some tableaus override it.  To override:
+without an error estimate); some tableaus override it.  To choose a
+different controller, pass its name:
 
 .. code-block:: python
 
    solver = qb.Solver(
        LV,
        algorithm="dormand-prince-54",
-       step_control_settings={"step_controller": "gustafsson"},
+       step_controller="gustafsson",
    )
 
 Automatic calibration
 ---------------------
 
-The fastest algorithm order, linear solver, preconditioner, and
+The fastest algorithm order, linear solver type, preconditioner, and
 Newton variant depend on the system.  Given a representative batch,
 the solver can measure them directly:
 
@@ -315,12 +313,18 @@ few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
 and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
-count.  The batch timed is sized for 20 ms solves; ``auto_size=False``
-times your exact batch.  Candidates whose success rate is within 5% of the best are
-ranked on time; the rest follow, ranked on time, with their failure
-rates shown.  By default the winning configuration is applied to the
-solver in place; pass ``apply=False`` to get the race results without
+count.  Cubie resizes the batch it times so that a solve takes about
+20 ms where it can; pass ``auto_size=False`` to time your exact batch
+instead.  Cubie ranks candidates whose trajectories succeed (runs that
+don't end in a step-size or convergence error) at a rate at least 95%
+of the best candidate's rate by time.  Candidates below that threshold
+are ranked afterward, also by time, with their failure rates shown.
+By default cubie applies the winning configuration to the solver in
+place; pass ``apply=False`` to get the results of the race without
 modifying the solver.
+
+``calibrate`` compiles a large number of kernels, so allow half an
+hour for a bigger system.
 
 With the algorithm settled, :meth:`Solver.optimize
 <cubie.batchsolving.solver.Solver.optimize>` tries a few different
@@ -337,14 +341,9 @@ fastest configuration for your system:
    )
    print(report.summary())
 
-Settings you gave, or an earlier ``optimize`` applied, stay fixed
-unless ``force=True``. The fastest configuration is applied in place;
-``apply=False`` only reports.
+``optimize`` leaves the settings you gave explicitly, and the ones an
+earlier ``optimize`` set, unchanged unless you pass ``force=True``.
+Like ``calibrate``, it applies the fastest configuration in place
+unless you pass ``apply=False``, and it resizes the batch to take
+about 20 ms unless you pass ``auto_size=False``.
 
-By default ``optimize`` times a batch that takes about 20 ms to
-integrate, larger or smaller than yours. Pass ``auto_size=False`` to
-optimise on your exact batch and duration, for a batch whose parameter
-sets behave very differently and that you will run repeatedly.
-
-For the mathematical background behind these algorithms, see
-:doc:`/theory/numerical_integration`.

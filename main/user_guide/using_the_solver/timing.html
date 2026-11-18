@@ -20,7 +20,7 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Configuration Reference" href="configuration.html" />
+    <link rel="next" title="Solver Options" href="configuration.html" />
     <link rel="prev" title="Working with Results" href="results.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/version_switcher.js" data-version="main" data-versions="/cubie/versions.json" defer></script>
@@ -65,13 +65,19 @@
 <li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#fixed-parameters">Fixed parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#precision-trade-offs">Precision Trade-offs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -305,8 +311,8 @@ through time.</p>
 <p>Total length of the recorded integration in simulation time units.
 This is the time span over which outputs are saved.</p>
 <ul class="simple">
-<li><p><strong>Required</strong>: Yes</p></li>
-<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code> (must be positive)</p></li>
+<li><p><strong>Default</strong>: <code class="docutils literal notranslate"><span class="pre">1.0</span></code></p></li>
+<li><p><strong>Type</strong>: <code class="docutils literal notranslate"><span class="pre">float</span></code></p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Integrate for 100 time units</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">solve_ivp</span><span class="p">(</span>
@@ -493,33 +499,9 @@ t=0.0   t=0.25  t=0.5   t=0.75  t=1.0   t=1.25  ...
 S = sample taken, W = window closes (summary written, reset)
 </pre></div>
 </div>
-</section>
-<section id="relationship-between-output-parameters">
-<h3>Relationship Between Output Parameters<a class="headerlink" href="#relationship-between-output-parameters" title="Link to this heading"></a></h3>
-<table class="docutils align-default">
-<colgroup>
-<col style="width: 30.0%" />
-<col style="width: 70.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Parameter</p></th>
-<th class="head"><p>Purpose</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">save_every</span></code></p></td>
-<td><p>Interval for storing full state/observable snapshots</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code></p></td>
-<td><p>Interval for sampling values into summary accumulators</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">summarise_every</span></code></p></td>
-<td><p>Window length; summaries computed and reset at this interval</p></td>
-</tr>
-</tbody>
-</table>
-<p>These are independent: you can save states at high frequency while
-computing summaries over longer windows, or vice versa.</p>
+<p>You can set <code class="docutils literal notranslate"><span class="pre">save_every</span></code> independently of the summary intervals, so
+you can save states often while you summarise over long windows, or the
+reverse.</p>
 </section>
 </section>
 <section id="step-size-parameters">
@@ -532,6 +514,20 @@ computing summaries over longer windows, or vice versa.</p>
 </ul>
 <p>Fixed-step controllers use only <code class="docutils literal notranslate"><span class="pre">dt</span></code>, which becomes the constant step
 size throughout integration.</p>
+<p>If you use a fixed-step controller, set <code class="docutils literal notranslate"><span class="pre">dt</span></code> 10 to 100 times smaller
+than the sharpest corner in your system’s solution. If you use an
+adaptive controller, set <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> shorter than any quasi-periodic
+cycle in the solution, so that cubie can’t step straight over a cycle
+and land back near where it started. If cubie reports
+<code class="docutils literal notranslate"><span class="pre">STEP_TOO_SMALL</span></code> in a run’s status code and <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is not much
+smaller than the sharpest feature in the solution, decrease <code class="docutils literal notranslate"><span class="pre">dt_min</span></code>.
+If <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> is already very small, try an algorithm designed for
+stiff systems (see
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>). When you
+give an adaptive controller no <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie estimates a starting step
+for each run. You only need to set <code class="docutils literal notranslate"><span class="pre">dt</span></code> if you run many short
+integrations and you know a starting step that suits them better than
+cubie’s estimate.</p>
 <section id="default-behaviour">
 <h3>Default Behaviour<a class="headerlink" href="#default-behaviour" title="Link to this heading"></a></h3>
 <p>When you don’t specify any step size parameters, CuBIE uses these defaults:</p>
@@ -688,7 +684,7 @@ given <code class="docutils literal notranslate"><span class="pre">dt_min=1e-4</
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="results.html" class="btn btn-neutral float-left" title="Working with Results" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="configuration.html" class="btn btn-neutral float-right" title="Configuration Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="configuration.html" class="btn btn-neutral float-right" title="Solver Options" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

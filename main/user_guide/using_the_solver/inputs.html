@@ -66,13 +66,19 @@
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#fixed-parameters">Fixed parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#precision-trade-offs">Precision Trade-offs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -322,7 +328,7 @@ from the default state, or under default parameters, we could leave the whole
 set defaults when you built the system, you can set them on the system with
 <code class="docutils literal notranslate"><span class="pre">system.set_default_parameters({&quot;a&quot;:</span> <span class="pre">0.2})</span></code> for parameters and
 <code class="docutils literal notranslate"><span class="pre">system.set_initial_values({&quot;y&quot;:</span> <span class="pre">0.3})</span></code> for states.</p>
-<p>If you include a constant value for a parameter or initial value that
+<p>If you include a single value for a parameter or initial value that
 is different to the default, the default doesn’t change. Cubie presumes
 that input arguments to <code class="docutils literal notranslate"><span class="pre">solve</span></code> are intended for that run only.</p>
 </section>
@@ -332,7 +338,7 @@ that input arguments to <code class="docutils literal notranslate"><span class="
 generating values programmatically, you can pass arrays instead. Lay each
 array out as <code class="docutils literal notranslate"><span class="pre">(n_variables,</span> <span class="pre">n_runs)</span></code>, with its rows ordered by variable
 name. If the array is already in the same data type as <code class="docutils literal notranslate"><span class="pre">solver.precision</span></code>,
-then you can also save an additional array copy.</p>
+cubie makes one fewer copy of it.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>It may seem odd that the states array ends up in a different order
@@ -340,11 +346,12 @@ than the one you gave. When we tear DAE systems, or only select a few
 outputs, name-ordering makes it easier to reconstruct and index the
 resulting system.</p>
 </div>
-<p>When you pass a dict, cubie compiles every parameter you give a single value
-directly into the GPU code to make it go faster. It does the same for an
-array under the default <code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=True</span></code> argument. This
-will usually make the solve faster, but costs a few ms per solve call.
-To get around this, you can:</p>
+<p>When you pass a dict, cubie compiles every parameter you give a single
+value directly into the GPU code to make it go faster. Under the default
+<code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=True</span></code>, it does the same for each row of an
+array that has the same value in every run. You usually get a faster
+solve, but each solve call takes a few ms longer. To get around this,
+you can:</p>
 <ul class="simple">
 <li><p>Pass <code class="docutils literal notranslate"><span class="pre">fix_constant_parameters=False</span></code>. All parameters, even the constant
 ones, are part of the input array that gets passed to the GPU, and get loaded

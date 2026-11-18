@@ -113,9 +113,7 @@ carries every nonzero gain given.
 No family enables a step-freeze deadband by default; pass
 ``deadband_min``/``deadband_max`` to hold ``dt`` for gains inside a
 band. Every value can be overridden per solve — see
-:doc:`/user_guide/using_the_solver/configuration` for how kwargs reach the controller
-and :doc:`/user_guide/algorithms_and_tuning/optional_arguments` for the full parameter
-list.
+:doc:`/user_guide/using_the_solver/configuration` for the full parameter list.
 
 Implicit solver defaults
 ~~~~~~~~~~~~~~~~~~~~~~~~

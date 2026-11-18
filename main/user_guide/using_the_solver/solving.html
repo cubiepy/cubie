@@ -65,13 +65,19 @@
 <li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#fixed-parameters">Fixed parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#precision-trade-offs">Precision Trade-offs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -369,16 +375,11 @@ with <code class="docutils literal notranslate"><span class="pre">update</span><
 </section>
 <section id="configuring-a-solve">
 <h2>Configuring a solve<a class="headerlink" href="#configuring-a-solve" title="Link to this heading"></a></h2>
-<p>Set how long cubie integrates for with <code class="docutils literal notranslate"><span class="pre">duration</span></code>, when it starts with
-<code class="docutils literal notranslate"><span class="pre">t0</span></code>, and how long it integrates before it starts recording with
-<code class="docutils literal notranslate"><span class="pre">settling_time</span></code>; see <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a> for these and for how often cubie
-saves output. To
+<p>To set the integration time and save cadence, see <a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a>. To
 choose an integration algorithm and its step controller, see
 <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>. Every other
 setting, from tolerances to output selection, is a keyword argument; see
-<a class="reference internal" href="configuration.html"><span class="doc">Configuration Reference</span></a> for where each one goes and
-<a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html"><span class="doc">Solver Options Reference</span></a> for what each
-one does.</p>
+<a class="reference internal" href="configuration.html"><span class="doc">Solver Options</span></a> for what each one does.</p>
 </section>
 </section>
 

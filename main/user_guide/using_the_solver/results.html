@@ -65,13 +65,19 @@
 <li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#fixed-parameters">Fixed parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#precision-trade-offs">Precision Trade-offs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -483,9 +489,11 @@ by time (or summary window) first, then variable, then run:</p>
 index in <code class="docutils literal notranslate"><span class="pre">status_messages</span></code> to see the names of its status codes; see
 <a class="reference internal" href="../../troubleshooting.html"><span class="doc">Troubleshooting</span></a>.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> and <code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code></dt><dd><p>Read <code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> for the parameter of each row of the swept
-parameters array, and <code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code> for the value of
-every parameter cubie compiled into the code.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> and <code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code></dt><dd><p>Cubie sorts the swept parameters by name, so the same row number can
+belong to different parameters in two batches. Read
+<code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> for the name of the parameter in each row, and
+<code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code> for the value of each parameter that cubie
+held constant across the batch.</p>
 </dd>
 </dl>
 <p>You can also convert the result:</p>

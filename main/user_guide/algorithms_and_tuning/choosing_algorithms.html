@@ -20,7 +20,7 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Solver Options Reference" href="optional_arguments.html" />
+    <link rel="next" title="TL/DR" href="speed.html" />
     <link rel="prev" title="Algorithms and tuning" href="index.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/version_switcher.js" data-version="main" data-versions="/cubie/versions.json" defer></script>
@@ -65,13 +65,19 @@
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Algorithms and tuning</a><ul class="current">
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html">TL/DR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html#parallelism">Parallelism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html#memory">Memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html#fixed-parameters">Fixed parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html#precision-trade-offs">Precision Trade-offs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -303,15 +309,12 @@ names are case-insensitive.</p>
 </tr>
 <tr class="row-odd"><td><p>Mildly stiff</p></td>
 <td><p>DIRK or Rosenbrock-W</p></td>
-<td><p>DIRK is robust; Rosenbrock-W avoids Newton iteration.</p></td>
+<td><p>DIRK is robust but slower to compile and run; Rosenbrock-W
+methods are fast.</p></td>
 </tr>
 <tr class="row-even"><td><p>Very stiff</p></td>
 <td><p>FIRK</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> handles extreme stiffness well.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Fixed step required</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">euler</span></code> or any non-adaptive tableau</p></td>
-<td><p>Forward Euler for explicit, <code class="docutils literal notranslate"><span class="pre">backwards_euler</span></code> for implicit.</p></td>
+<td><p>Use FIRK algorithms like <code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> for extreme stiffness.</p></td>
 </tr>
 </tbody>
 </table>
@@ -591,9 +594,8 @@ provides the embedded error estimate.</p></td>
 <section id="choosing-a-controller">
 <span id="id1"></span><h2>Choosing a Controller<a class="headerlink" href="#choosing-a-controller" title="Link to this heading"></a></h2>
 <p>Adaptive algorithms use an error controller to adjust the step size.
-Select one by name with <code class="docutils literal notranslate"><span class="pre">step_controller</span></code> inside
-<code class="docutils literal notranslate"><span class="pre">step_control_settings</span></code>; the registered names are <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pid&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code>.</p>
+Select one by name with the <code class="docutils literal notranslate"><span class="pre">step_controller</span></code> keyword argument:
+<code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pid&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code>.</p>
 <dl>
 <dt><strong>fixed</strong></dt><dd><p>Constant step size; no error control.  Used automatically for
 methods without an error estimate.</p>
@@ -603,8 +605,8 @@ controller, but the <code class="docutils literal notranslate"><span class="pre"
 more efficient code when you don’t need the additional gain terms.
 After every step they compare the estimated error with the
 tolerance (<code class="docutils literal notranslate"><span class="pre">atol</span> <span class="pre">+</span> <span class="pre">rtol</span> <span class="pre">*</span> <span class="pre">max(|this_state|,</span> <span class="pre">|last_state|)</span></code>) and
-propose a next-step size to bring the ratio of error/tolerance to
-1.  Each gain term acts on the current error and a subset of
+propose a next-step size to bring the ratio of error/tolerance
+to 1.  Each gain term acts on the current error and a subset of
 previous errors:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">integral_gain</span></code> multiplies by the error/tolerance ratio of the
@@ -629,18 +631,19 @@ rejections are frequent.</p>
 </dl>
 <p>Each algorithm family picks a default controller (<code class="docutils literal notranslate"><span class="pre">i</span></code> for ERK,
 <code class="docutils literal notranslate"><span class="pre">pi</span></code> for DIRK, <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> for FIRK and Rosenbrock, <code class="docutils literal notranslate"><span class="pre">fixed</span></code>
-without an error estimate); some tableaus override it.  To override:</p>
+without an error estimate); some tableaus override it.  To choose a
+different controller, pass its name:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">Solver</span><span class="p">(</span>
     <span class="n">LV</span><span class="p">,</span>
     <span class="n">algorithm</span><span class="o">=</span><span class="s2">"dormand-prince-54"</span><span class="p">,</span>
-    <span class="n">step_control_settings</span><span class="o">=</span><span class="p">{</span><span class="s2">"step_controller"</span><span class="p">:</span> <span class="s2">"gustafsson"</span><span class="p">},</span>
+    <span class="n">step_controller</span><span class="o">=</span><span class="s2">"gustafsson"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
 </section>
 <section id="automatic-calibration">
 <h2>Automatic calibration<a class="headerlink" href="#automatic-calibration" title="Link to this heading"></a></h2>
-<p>The fastest algorithm order, linear solver, preconditioner, and
+<p>The fastest algorithm order, linear solver type, preconditioner, and
 Newton variant depend on the system.  Given a representative batch,
 the solver can measure them directly:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ros3p"</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
@@ -658,12 +661,17 @@ few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
 and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
-count.  The batch timed is sized for 20 ms solves; <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code>
-times your exact batch.  Candidates whose success rate is within 5% of the best are
-ranked on time; the rest follow, ranked on time, with their failure
-rates shown.  By default the winning configuration is applied to the
-solver in place; pass <code class="docutils literal notranslate"><span class="pre">apply=False</span></code> to get the race results without
+count.  Cubie resizes the batch it times so that a solve takes about
+20 ms where it can; pass <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code> to time your exact batch
+instead.  Cubie ranks candidates whose trajectories succeed (runs that
+don’t end in a step-size or convergence error) at a rate at least 95%
+of the best candidate’s rate by time.  Candidates below that threshold
+are ranked afterward, also by time, with their failure rates shown.
+By default cubie applies the winning configuration to the solver in
+place; pass <code class="docutils literal notranslate"><span class="pre">apply=False</span></code> to get the results of the race without
 modifying the solver.</p>
+<p><code class="docutils literal notranslate"><span class="pre">calibrate</span></code> compiles a large number of kernels, so allow half an
+hour for a bigger system.</p>
 <p>With the algorithm settled, <a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.optimize" title="cubie.batchsolving.solver.Solver.optimize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Solver.optimize</span></code></a> tries a few different
 configurations of where buffers sit in memory, which loops get
 unrolled, and how many threads run at once on the GPU to find the
@@ -676,15 +684,11 @@ fastest configuration for your system:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">summary</span><span class="p">())</span>
 </pre></div>
 </div>
-<p>Settings you gave, or an earlier <code class="docutils literal notranslate"><span class="pre">optimize</span></code> applied, stay fixed
-unless <code class="docutils literal notranslate"><span class="pre">force=True</span></code>. The fastest configuration is applied in place;
-<code class="docutils literal notranslate"><span class="pre">apply=False</span></code> only reports.</p>
-<p>By default <code class="docutils literal notranslate"><span class="pre">optimize</span></code> times a batch that takes about 20 ms to
-integrate, larger or smaller than yours. Pass <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code> to
-optimise on your exact batch and duration, for a batch whose parameter
-sets behave very differently and that you will run repeatedly.</p>
-<p>For the mathematical background behind these algorithms, see
-<a class="reference internal" href="../../theory/numerical_integration.html"><span class="doc">Numerical Integration</span></a>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">optimize</span></code> leaves the settings you gave explicitly, and the ones an
+earlier <code class="docutils literal notranslate"><span class="pre">optimize</span></code> set, unchanged unless you pass <code class="docutils literal notranslate"><span class="pre">force=True</span></code>.
+Like <code class="docutils literal notranslate"><span class="pre">calibrate</span></code>, it applies the fastest configuration in place
+unless you pass <code class="docutils literal notranslate"><span class="pre">apply=False</span></code>, and it resizes the batch to take
+about 20 ms unless you pass <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code>.</p>
 </section>
 </section>
 
@@ -693,7 +697,7 @@ sets behave very differently and that you will run repeatedly.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="index.html" class="btn btn-neutral float-left" title="Algorithms and tuning" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="optional_arguments.html" class="btn btn-neutral float-right" title="Solver Options Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="speed.html" class="btn btn-neutral float-right" title="TL/DR" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

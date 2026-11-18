@@ -65,13 +65,19 @@
 <li class="toctree-l3"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l3"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="configuration.html">Solver Options</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/optional_arguments.html">Solver Options Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">Making it Faster (basic)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#fixed-parameters">Fixed parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#precision-trade-offs">Precision Trade-offs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -285,15 +291,15 @@ solve it: the convenience function
 <p>Cubie can build the batches you want to solve over (see <a class="reference internal" href="inputs.html"><span class="doc">Batch Inputs</span></a>),
 and provides results in a number of formats (see <a class="reference internal" href="results.html"><span class="doc">Working with Results</span></a>). You’ll
 usually want to modify the timing parameters to suit your integration (see
-<a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a>), and deeper configuration is achievable (see
-<a class="reference internal" href="configuration.html"><span class="doc">Configuration Reference</span></a>).</p>
+<a class="reference internal" href="timing.html"><span class="doc">Timing Parameters</span></a>), and you can set every other option of the solver (see
+<a class="reference internal" href="configuration.html"><span class="doc">Solver Options</span></a>).</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="solving.html">Solving ODEs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="inputs.html">Batch Inputs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="results.html">Working with Results</a></li>
 <li class="toctree-l1"><a class="reference internal" href="timing.html">Timing Parameters</a></li>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="configuration.html">Solver Options</a></li>
 </ul>
 </div>
 </section>
