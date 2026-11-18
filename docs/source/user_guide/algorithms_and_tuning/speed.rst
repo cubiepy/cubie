@@ -1,3 +1,4 @@
+# A lot of this is wrong, but I haven't really gotten into it.
 Making it Faster (basic)
 ========================
 
@@ -78,11 +79,16 @@ You can also access the logger programmatically:
 Precision Trade-offs
 --------------------
 
-CuBIE supports ``float32`` and ``float64``.  Single precision uses half
-the memory per value, allowing larger batches and faster memory transfers.
-However, it provides roughly 7 decimal digits of accuracy versus 15 for
-double precision.  For problems where tolerances tighter than ~1e-6 are
-needed, use ``float64``.
+CuBIE supports ``float32`` and ``float64``. In single precision
+(``float32``) you get about 7 significant figures, and in double
+precision (``float64``) about 15. On recent consumer GPUs, such as the
+RTX series, single-precision arithmetic is 32 to 64 times faster than
+double-precision arithmetic. A ``float64`` value is also twice the size
+of a ``float32`` value, so you can run fewer systems on the GPU at once.
+If you solve to a tight relative tolerance (about ``5e-7`` or below), a
+``float64`` solve can be faster than a ``float32`` one. At looser
+tolerances, a ``float64`` solve is about 2 to 35 times slower, depending
+on the system and algorithm.
 
 Buffer Location Tuning
 ----------------------
@@ -93,9 +99,9 @@ shared memory, which is slower than registers to read and write from
 but does not slow down under load.  Shared memory is a limited
 resource.  With ``auto_performance=True`` (the default) CuBIE picks
 buffer locations, loop unrolling and how many threads run at once on
-your GPU from your system's size and your GPU; you can override any
-buffer through ``optional_arguments``.  See :doc:`/user_guide/algorithms_and_tuning/optional_arguments`
-for details.
+your GPU from your system's size and your GPU. You can set any
+buffer's location yourself with its ``*_location`` option; see
+:doc:`/user_guide/using_the_solver/configuration`.
 
 Reusing Solvers
 ---------------

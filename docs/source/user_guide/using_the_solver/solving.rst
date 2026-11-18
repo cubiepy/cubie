@@ -102,13 +102,8 @@ Cubie keeps both settings for later solves on this solver.
 Configuring a solve
 -------------------
 
-Set how long cubie integrates for with ``duration``, when it starts with
-``t0``, and how long it integrates before it starts recording with
-``settling_time``; see :doc:`timing` for these and for how often cubie
-saves output. To
+To set the integration time and save cadence, see :doc:`timing`. To
 choose an integration algorithm and its step controller, see
 :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`. Every other
 setting, from tolerances to output selection, is a keyword argument; see
-:doc:`configuration` for where each one goes and
-:doc:`/user_guide/algorithms_and_tuning/optional_arguments` for what each
-one does.
+:doc:`configuration` for what each one does.

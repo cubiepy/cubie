@@ -34,8 +34,8 @@ duration
 Total length of the recorded integration in simulation time units.
 This is the time span over which outputs are saved.
 
-- **Required**: Yes
-- **Type**: ``float`` (must be positive)
+- **Default**: ``1.0``
+- **Type**: ``float``
 
 .. code-block:: python
 
@@ -234,24 +234,9 @@ This differs from sliding-window approaches where windows overlap.
 
    S = sample taken, W = window closes (summary written, reset)
 
-Relationship Between Output Parameters
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. list-table::
-   :header-rows: 1
-   :widths: 30 70
-
-   * - Parameter
-     - Purpose
-   * - ``save_every``
-     - Interval for storing full state/observable snapshots
-   * - ``sample_summaries_every``
-     - Interval for sampling values into summary accumulators
-   * - ``summarise_every``
-     - Window length; summaries computed and reset at this interval
-
-These are independent: you can save states at high frequency while
-computing summaries over longer windows, or vice versa.
+You can set ``save_every`` independently of the summary intervals, so
+you can save states often while you summarise over long windows, or the
+reverse.
 
 Step Size Parameters
 --------------------
@@ -264,6 +249,21 @@ Adaptive controllers use three related parameters to control step sizes:
 
 Fixed-step controllers use only ``dt``, which becomes the constant step
 size throughout integration.
+
+If you use a fixed-step controller, set ``dt`` 10 to 100 times smaller
+than the sharpest corner in your system's solution. If you use an
+adaptive controller, set ``dt_max`` shorter than any quasi-periodic
+cycle in the solution, so that cubie can't step straight over a cycle
+and land back near where it started. If cubie reports
+``STEP_TOO_SMALL`` in a run's status code and ``dt_min`` is not much
+smaller than the sharpest feature in the solution, decrease ``dt_min``.
+If ``dt_min`` is already very small, try an algorithm designed for
+stiff systems (see
+:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`). When you
+give an adaptive controller no ``dt``, cubie estimates a starting step
+for each run. You only need to set ``dt`` if you run many short
+integrations and you know a starting step that suits them better than
+cubie's estimate.
 
 Default Behaviour
 ~~~~~~~~~~~~~~~~~

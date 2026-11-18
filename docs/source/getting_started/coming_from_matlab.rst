@@ -65,7 +65,7 @@ Key changes:
   the first and last points.
 - Pass the ``odeset`` options as keyword arguments of ``solve_ivp``: write
   ``rtol`` and ``atol`` for ``RelTol`` and ``AbsTol``, and ``dt_max`` for
-  ``MaxStep``. See :doc:`/user_guide/algorithms_and_tuning/optional_arguments`.
+  ``MaxStep``. See :doc:`/user_guide/using_the_solver/configuration`.
 - cubie returns every run's results in one array, inside a
   ``SolveResult``. Index the array by time first, then state, then run; see
   :doc:`/user_guide/using_the_solver/results`. Add ``"time"`` to ``output_types`` to get

@@ -206,9 +206,11 @@ by time (or summary window) first, then variable, then run:
    :doc:`/troubleshooting`.
 
 ``parameter_legend`` and ``fixed_parameter_values``
-   Read ``parameter_legend`` for the parameter of each row of the swept
-   parameters array, and ``fixed_parameter_values`` for the value of
-   every parameter cubie compiled into the code.
+   Cubie sorts the swept parameters by name, so the same row number can
+   belong to different parameters in two batches. Read
+   ``parameter_legend`` for the name of the parameter in each row, and
+   ``fixed_parameter_values`` for the value of each parameter that cubie
+   held constant across the batch.
 
 You can also convert the result:
 
