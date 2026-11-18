@@ -315,11 +315,13 @@ and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
 count.  Cubie resizes the batch it times so that a solve takes about
 20 ms where it can; pass ``auto_size=False`` to time your exact batch
-instead.  Cubie ranks the candidates whose trajectory failure rate is
-within 5% of the best by time, then ranks the rest by time after them
-and shows their failure rates.  By default cubie applies the winning
-configuration to the solver in place; pass ``apply=False`` to get the
-results of the race without modifying the solver.
+instead.  Cubie ranks candidates whose trajectories succeed (runs that
+don't end in a step-size or convergence error) at a rate at least 95%
+of the best candidate's rate by time.  Candidates below that threshold
+are ranked afterward, also by time, with their failure rates shown.
+By default cubie applies the winning configuration to the solver in
+place; pass ``apply=False`` to get the results of the race without
+modifying the solver.
 
 ``calibrate`` compiles a large number of kernels, so allow half an
 hour for a bigger system.
