@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Time and score reduced-precision trial settings on Lorenz and Fabbri.
+r"""Time and score reduced-precision trial settings on Lorenz and Fabbri.
 
 The script builds one ``Solver`` per configuration and applies each arm,
 a dict of solver settings, over it. In ``measure`` mode it times every
@@ -11,8 +11,10 @@ Nsight Compute capture.
 
 Usage::
 
-    python benchmarks/precision_trials.py measure lorenz_tsit5         --arms '[{}, {"low_precision_norms": true}]'
-    ncu --profile-from-start off ... python benchmarks/precision_trials.py         census fabbri_radau5
+    python benchmarks/precision_trials.py measure lorenz_tsit5 \
+        --arms '[{}, {"low_precision_norms": true}]'
+    ncu --profile-from-start off ... python \
+        benchmarks/precision_trials.py census fabbri_radau5
 """
 
 import argparse
