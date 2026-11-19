@@ -181,7 +181,8 @@ def flag_histogram(codes):
     histogram = {}
     for member in CUBIE_RESULT_CODES:
         if member.value and np.count_nonzero(flags & member.value):
-            histogram[member.name] = int(np.count_nonzero(flags & member.value))
+            fired = flags & member.value
+            histogram[member.name] = int(np.count_nonzero(fired))
     return histogram
 
 

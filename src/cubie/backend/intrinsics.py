@@ -10,6 +10,19 @@ Published Objects
     in :mod:`cubie.backend._mlir_cubie_extensions` consumes the call.
 :data:`UnrollFlag`
     One ``(unroll, count)`` pair, the ``flag`` argument.
+:func:`bf16x2_pack`, :func:`bf16x2_high`, :func:`bf16x2_low`
+    Round two float32 to a bfloat16 pair in one ``uint32``, and read
+    either half back as a float32.
+:func:`bf16x2_fma`
+    Lane-wise bfloat16 fused multiply-add of three pairs.
+:func:`bf16x2_insert_high`, :func:`bf16x2_insert_low`
+    Replace one half of a bfloat16 pair.
+:func:`float_bits`, :func:`bits_float`, :func:`multiply_high`
+    Reinterpret float32 bits as int32 and back; the high word of an
+    int32 product.
+:func:`fast_reciprocal`
+    A float32 reciprocal from a bit-pattern estimate and two Newton
+    steps, with no hardware reciprocal.
 """
 
 from typing import Optional, Tuple
@@ -59,7 +72,6 @@ _INLINE_ASM_TYPES = {
     types.float32: _ir.F32Type.get,
     types.int32: lambda: _ir.IntegerType.get_signless(32),
     types.uint32: lambda: _ir.IntegerType.get_signless(32),
-    types.uint16: lambda: _ir.IntegerType.get_signless(16),
 }
 
 
@@ -152,16 +164,6 @@ def bf16x2_insert_high(packed, value):
     )
 
 
-def bf16_bits(value):
-    """Return ``value`` rounded to bfloat16 as 16 raw bits."""
-    return np.uint16(_bfloat16_bits(value))
-
-
-def bf16_value(bits):
-    """Return the bfloat16 held in 16 raw ``bits`` as a float32."""
-    return _bfloat16_value(bits)
-
-
 def multiply_high(a, b):
     """Return the high 32 bits of the 64-bit product of two int32."""
     return np.int32((int(a) * int(b)) >> 32)
@@ -189,10 +191,11 @@ def fast_reciprocal(value):
     ``value``. Inside that range the relative error is under 3e-4.
     """
     value = np.float32(value)
-    magnitude = min(max(abs(value), RECIPROCAL_SMALLEST), RECIPROCAL_LARGEST)
-    bits = (
-        RECIPROCAL_ESTIMATE_MAGIC - int(np.float32(magnitude).view(np.int32))
-    ) & 0xFFFFFFFF
+    magnitude = min(
+        max(abs(value), RECIPROCAL_SMALLEST), RECIPROCAL_LARGEST
+    )
+    magnitude_bits = int(np.float32(magnitude).view(np.int32))
+    bits = (RECIPROCAL_ESTIMATE_MAGIC - magnitude_bits) & 0xFFFFFFFF
     estimate = np.uint32(bits).view(np.float32)
     for _ in range(2):
         error = np.float32(magnitude * estimate - np.float32(1.0))
@@ -228,17 +231,6 @@ _inline_asm_intrinsic(
 )
 # The packed conversion runs on the arithmetic pipe; the scalar
 # cvt.rn.bf16.f32 runs on the slower conversion unit.
-_inline_asm_intrinsic(
-    bf16_bits, types.uint16, (types.float32,),
-    "{.reg .b32 pair; .reg .b16 high;"
-    " cvt.rn.bf16x2.f32 pair, 0f00000000, $1;"
-    " mov.b32 {$0, high}, pair;}",
-    "=h,f",
-)
-_inline_asm_intrinsic(
-    bf16_value, types.float32, (types.uint16,),
-    "{.reg .b32 w; cvt.u32.u16 w, $1; shl.b32 $0, w, 16;}", "=f,h",
-)
 _inline_asm_intrinsic(
     bf16x2_insert_low, types.uint32, (types.uint32, types.float32),
     "{.reg .b32 pair; cvt.rn.bf16x2.f32 pair, 0f00000000, $2;"

@@ -65,7 +65,7 @@ def log_bits_constant(value: float) -> int:
 
 
 def power_scale(power: float) -> int:
-    """Return ``power`` as the fixed-point factor :func:`scaled_power` takes.
+    """Return ``power`` as a fixed-point factor for :func:`scaled_power`.
 
     Raise ValueError unless ``abs(power) < 0.5``, the range a 32-bit
     factor holds.
