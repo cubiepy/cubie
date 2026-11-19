@@ -10,9 +10,27 @@
 ![PyPI Downloads](https://img.shields.io/pypi/dm/cubie)
 
 
-CuBIE performs numerical integration in parallel on NVIDIA GPUs. It provides a ~10000x* 
-speedup over functions like MATLAB's `ode45` and SciPy's `solve_ivp` for parallel batch integrations, 
-while offering a similar interface to make it easy to switch from those environments.
+CuBIE solves batches of ODEs and DAEs on NVIDIA GPUs, from thousands to
+millions of trajectories at a time. Write your system as equations in
+Python and call `solve_ivp` as you would in SciPy or MATLAB. CuBIE compiles
+the system and the solver into a GPU kernel and integrates every trajectory
+in parallel, so a sweep that would tie up your CPU for a year finishes over
+lunch.
+
+![How long a batch of integrations feels in MATLAB or SciPy and in CuBIE](https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/readme/vibe-o-meter.png)
+
+On large batches, CuBIE runs around 10,000 times faster than SciPy's
+`solve_ivp` or MATLAB's `ode45`, even when they spread the batch across 20
+CPU workers. The speedup grows with the size of the batch, from a few times
+for a handful of trajectories to around 10,000 times for hundreds of
+thousands or millions.
+
+![CuBIE's speedup over SciPy and MATLAB against the number of trajectories](https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/readme/all_multiple.png)
+
+<sub>CuBIE timed from host arrays to host arrays on an RTX 4070 SUPER, against
+SciPy and MATLAB on an i7-12700 with 20 workers, analytic Jacobians for the
+implicit solvers, and numba-compiled right-hand sides for SciPy. Every run
+uses rtol = atol = 1e-5.</sub>
 
 Under the hood, cubie uses [`numba-cuda-mlir`](https://github.com/NVIDIA/numba-cuda-mlir) to compile
 python integration algorithms and your provided ODE/DAE systems into GPU code
@@ -26,21 +44,36 @@ onto it at once.
 
 ## Capabilities
 
-- Define systems of ODE/DAEs as either Python functions, strings, SymPy symbolic
+### Solve huge batches
+
+- Sweep every combination of your parameter and initial values, or pair them
+  run for run, in a single call.
+- Calculate summary metrics on the GPU (mean, standard deviation, RMS,
+  minimum, maximum, peaks, and extrema of the first and second derivatives)
+  and discard the trajectories, so you keep only what you need and fit more
+  runs into each solve.
+- Save only the states and observables you choose.
+- Solve batches bigger than your GPU or your computer's RAM: CuBIE divides
+  them into chunks that fit.
+- Pay the compile time once per configuration: CuBIE caches compiled solvers
+  between sessions.
+- Get results as NumPy arrays or pandas DataFrames.
+
+### Bring your model
+
+- Define ODE and DAE systems as equation strings, Python functions, SymPy
   expressions, or CellML 1.0/1.1 models.
-- Use fixed- or adaptive-step explicit Runge-Kutta, diagonally implicit
-  Runge-Kutta, fully implicit Runge-Kutta, and Rosenbrock-W methods.
-- Structurally simplify DAEs with alias elimination, index reduction, and
-  tearing before generating solver code (logic taken almost verbatim from
-  [ModelingToolkit.jl](https://github.com/SciML/ModelingToolkit.jl)).
-- Supply time-dependent forcing terms as functions or sampled (measured) arrays.
-- Save selected states or algebraic variables (observables) to reduce result size
-- Discard trajectories and calculate summary metrics on the GPU to keep only the 
-relevant information and allow larger solves.
-- Automatically divide large solves into chunks that can fit into your GPU, and arrays
-that can fit into your computers RAM, to allow REALLY large solves.
-- Cache solvers between sessions, so you only pay the compile time once per config.
-- Build combinatorial grids of parameters/initial conditions to solve over.
+- Force your system with functions of time in its equations, or with sampled
+  (measured) signals.
+- Structurally simplify DAEs with alias elimination, index reduction and
+  tearing before CuBIE generates solver code (logic taken almost verbatim
+  from [ModelingToolkit.jl](https://github.com/SciML/ModelingToolkit.jl)).
+
+### Choose your solver
+
+- Integrate with explicit Runge-Kutta (Tsit5 by default), diagonally
+  implicit Runge-Kutta, fully implicit Runge-Kutta, and Rosenbrock-W
+  methods, with fixed or adaptive steps.
 
 ## Installation
 
@@ -70,12 +103,9 @@ system = create_ODE_system(
 
 result = solve_ivp(
     system,
-    y0={"x": np.linspace(1.0, 2.0, 1024), "v": [0.0]},
+    y0={"x": np.linspace(1.0, 2.0, 1024)},
     parameters={"mu": np.linspace(1.0, 3.0, 1024)},
-    method="rk45",
     duration=20.0,
-    atol=1e-6,
-    rtol=1e-3,
 )
 ```
 
@@ -123,8 +153,3 @@ MIT (`LICENSE`); third-party notices in `THIRD_PARTY_LICENSES`.
 
 Pull requests are welcome. Please open an issue before starting a major change
 so that the design can be discussed first.
-
-
-_____
-
-\* One million runs of the example above, on an RTX 4070 SUPER with an i7-12700: 29 ms in cubie, 47 minutes in SciPy (98,000×) and 2.7 minutes in MATLAB (5,500×). Using multiprocessing/parfor to run the integrations in parallel on the CPU, SciPy drops to 6 minutes (12,000×) and MATLAB to 1 minute (2,200×). Rough numbers from one machine.
