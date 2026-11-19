@@ -37,10 +37,10 @@ from cubie._utils import (
 )
 from cubie.integrators.norms import TwoRefMaskedScaledNorm
 from cubie._cudasim_extensions import cuda
+from cubie.backend.intrinsics import bits_float, float_bits, multiply_high
 from cubie.backend.jit import compile_kwargs
-from math import exp2 as math_exp2, log2 as math_log2
-from numba_cuda_mlir.types import float32
-from numpy import float32 as np_float32, log2
+from numba_cuda_mlir.types import int32
+from numpy import float32 as np_float32, int32 as np_int32
 from cubie.integrators.step_control.base_step_controller import (
     BaseStepController,
     BaseStepControllerConfig,
@@ -48,33 +48,58 @@ from cubie.integrators.step_control.base_step_controller import (
 )
 
 
-def log_bits_constant(value: float) -> float:
-    """Return the base-2 logarithm of ``value`` as a float32."""
-    return np_float32(log2(value))
+ONE_BITS = 0x3F800000
+"""The bits of float32 1.0."""
+
+LARGEST_FINITE_BITS = 0x7F7FFFFF
+"""The bits of the largest finite float32."""
 
 
-def power_scale(power: float) -> float:
-    """Return ``power`` as the float32 factor :func:`scaled_power` takes."""
-    return np_float32(power)
+def log_bits_constant(value: float) -> int:
+    """Return the bits of float32 ``value`` less the bits of 1.0.
+
+    The difference approximates ``2**23 * log2(value)`` with an error
+    under 0.09 in the base-2 logarithm.
+    """
+    return int(np_float32(value).view(np_int32)) - ONE_BITS
+
+
+def power_scale(power: float) -> int:
+    """Return ``power`` as the fixed-point factor :func:`scaled_power` takes.
+
+    Raise ValueError unless ``abs(power) < 0.5``, the range a 32-bit
+    factor holds.
+    """
+    if not abs(power) < 0.5:
+        raise ValueError(f"power {power} is outside (-0.5, 0.5)")
+    return int(round(power * 2.0**32))
 
 
 # no cover: start
 @cuda.jit(device=True, inline=True, **compile_kwargs)
 def log_bits(value):
-    """Return the approximate base-2 logarithm of a positive float32."""
-    return math_log2(value)
+    """Return the bits of a positive float32 less the bits of 1.0."""
+    return int32(float_bits(value) - int32(ONE_BITS))
 
 
 @cuda.jit(device=True, inline=True, **compile_kwargs)
 def scaled_power(logarithm, scale):
-    """Return the logarithm of ``2**logarithm`` raised to ``scale``."""
-    return logarithm * scale
+    """Return ``logarithm`` times the fixed-point factor ``scale``."""
+    return multiply_high(logarithm, int32(scale))
 
 
 @cuda.jit(device=True, inline=True, **compile_kwargs)
 def gain_from_log_bits(logarithm):
-    """Return ``2**logarithm`` with the logarithm clamped to [-64, 64]."""
-    return math_exp2(min(max(logarithm, float32(-64.0)), float32(64.0)))
+    """Return the positive float32 whose log bits are ``logarithm``.
+
+    Logarithms past the float32 range give zero or the largest
+    finite float32.
+    """
+    bits = min(
+        max(int32(logarithm + int32(ONE_BITS)), int32(0)),
+        int32(LARGEST_FINITE_BITS),
+    )
+    return bits_float(bits)
 
 
 # no cover: end

@@ -39,6 +39,7 @@ from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
     BaseAdaptiveStepController,
+    float_bits,
     gain_from_log_bits,
     log_bits,
     log_bits_constant,
@@ -154,6 +155,8 @@ class GustafssonController(BaseAdaptiveStepController):
         )
         log_safety = log_bits_constant(safety)
         error_scale = power_scale(-float(expo))
+        squared_error_scale = power_scale(-2.0 * float(expo))
+        previous_error_scale = power_scale(float(expo))
 
         # step sizes and norms can be approximate - fastmath is fine
         # no cover: start
@@ -227,12 +230,11 @@ class GustafssonController(BaseAdaptiveStepController):
                 )
                 # Products and quotients are sums and differences of
                 # log bits; the 1.0 offsets of dt and dt_prev cancel.
-                log_ratio = log_error + log_error - log_bits(err_prev)
                 gain_gus = gain_from_log_bits(
                     log_safety
-                    + log_bits(current_dt)
-                    - log_bits(dt_prev)
-                    + scaled_power(log_ratio, error_scale)
+                    + (float_bits(current_dt) - float_bits(dt_prev))
+                    + scaled_power(log_error, squared_error_scale)
+                    + scaled_power(log_bits(err_prev), previous_error_scale)
                 )
             else:
                 gain_basic = precision(fac * (nrm2 ** (-expo)))

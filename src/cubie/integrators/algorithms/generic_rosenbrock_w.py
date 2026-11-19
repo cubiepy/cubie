@@ -349,8 +349,9 @@ class GenericRosenbrockWStep(ODEImplicitStep):
         buffer_registry.update_buffer(
             "cached_auxiliaries",
             self,
-            size=cached_auxiliary_count,
-            dtype=self._cached_auxiliaries_dtype(self.uses_direct_solver),
+            **self._cached_auxiliaries_layout(
+                cached_auxiliary_count, self.uses_direct_solver
+            ),
         )
 
         time_derivative = get_fn("time_derivative_rhs")

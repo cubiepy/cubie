@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, Optional, Set, Tuple
 from warnings import warn
 
 from attrs import field, frozen, validators
-from numpy import ndarray, uint16 as np_uint16
+from numpy import ndarray, uint32 as np_uint32
 
 from cubie._utils import (
     device_function_field,
@@ -642,17 +642,19 @@ class ODEImplicitStep(BaseAlgorithmStep):
             )
         }
 
-    def _cached_auxiliaries_dtype(self, holds_factors: bool) -> type:
-        """Return the element type of ``cached_auxiliaries``.
+    def _cached_auxiliaries_layout(
+        self, count: int, holds_factors: bool
+    ) -> dict:
+        """Return the ``cached_auxiliaries`` size and element type.
 
-        Prefactored LU factors stored as bfloat16 sit in 16-bit
-        elements; every other cache holds run-precision values.
+        Prefactored LU factors stored as bfloat16 sit two to a 32-bit
+        word; every other cache holds ``count`` run-precision values.
         """
         if holds_factors and self._factor_request_kwargs()[
             "low_precision_factors"
         ]:
-            return np_uint16
-        return self.compile_settings.precision
+            return {"size": (count + 1) // 2, "dtype": np_uint32}
+        return {"size": count, "dtype": self.compile_settings.precision}
 
     # Stage data for prefactored-LU requests on tableau-less steps.
     _PREFACTOR_STAGE_DATA = None
@@ -800,11 +802,11 @@ class ODEImplicitStep(BaseAlgorithmStep):
         buffer_registry.update_buffer(
             "cached_auxiliaries",
             self,
-            size=cached_count,
-            dtype=self._cached_auxiliaries_dtype(
+            **self._cached_auxiliaries_layout(
+                cached_count,
                 self.uses_cached_solve
                 and self.uses_direct_solver
-                and config.prefactored
+                and config.prefactored,
             ),
         )
         self.update_compile_settings(

@@ -840,13 +840,32 @@ def _system_pattern_structure(
     )
 
 
-BFLOAT16_FACTORS = {"cached_aux": ("bf16_value", "bf16_bits")}
-"""Load and store wrappers of a ``cached_aux`` held as bfloat16 bits."""
+class PairedBfloat16Storage:
+    """Print factor slots as bfloat16 pairs in 32-bit words.
+
+    Slot ``k`` sits in word ``k // 2``: even slots in the low half,
+    odd slots in the high half.
+    """
+
+    @staticmethod
+    def load(name: str, index: int) -> str:
+        """Return the text reading slot ``index`` as a float32."""
+        lane = "bf16x2_high" if index % 2 else "bf16x2_low"
+        return f"{lane}({name}[{index // 2}])"
+
+    @staticmethod
+    def store(name: str, index: int, value: str) -> str:
+        """Return the line writing ``value`` into slot ``index``."""
+        insert = "bf16x2_insert_high" if index % 2 else "bf16x2_insert_low"
+        word = f"{name}[{index // 2}]"
+        return f"{word} = {insert}({word}, {value})"
 
 
 def _factor_storage(low_precision_factors: bool):
     """Return the printer's stored-array map for the factor storage."""
-    return BFLOAT16_FACTORS if low_precision_factors else None
+    if low_precision_factors:
+        return {"cached_aux": PairedBfloat16Storage}
+    return None
 
 
 def _finalise_prepare_body(

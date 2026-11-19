@@ -208,6 +208,7 @@ class SolverSettings(_CubieConfigBase):
     low_precision_controller: Optional[bool] = None
     low_precision_predictor: Optional[bool] = None
     low_precision_factors: Optional[bool] = None
+    low_precision_rhs: Optional[bool] = None
 
     def is_given(self, name: str) -> bool:
         """Return whether ``name`` was given."""

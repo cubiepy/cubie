@@ -489,18 +489,23 @@ class SymbolicODE(BaseODE):
         if self.gen_file.fn_hash != source_hash:
             self.gen_file = ODEFile(self.name, source_hash)
 
+        low_rhs = self.compile_settings.uses_reduced_precision(
+            "low_precision_rhs"
+        )
+        dxdt_name = "dxdt_low_precision_factory" if low_rhs else "dxdt_factory"
         dxdt_code = None
-        if not self.gen_file.function_is_cached("dxdt_factory"):
+        if not self.gen_file.function_is_cached(dxdt_name):
             dxdt_code = generate_dxdt_fac_code(
                 self.equations,
                 self.layout,
-                "dxdt_factory",
+                dxdt_name,
                 operation_ordering=(
                     self.compile_settings.operation_ordering
                 ),
+                reciprocal="fast_reciprocal" if low_rhs else None,
             )
         dxdt_factory, _ = self.gen_file.import_function(
-            "dxdt_factory",
+            dxdt_name,
             dxdt_code,
             injections=self._device_function_injections(),
         )

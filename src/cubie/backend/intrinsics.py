@@ -138,6 +138,20 @@ def bf16x2_fma(a, b, c):
     return bf16x2_pack(lanes[0], lanes[1])
 
 
+def bf16x2_insert_low(packed, value):
+    """Return ``packed`` with its low bfloat16 replaced by ``value``."""
+    return np.uint32(
+        (int(packed) & 0xFFFF0000) | int(_bfloat16_bits(value))
+    )
+
+
+def bf16x2_insert_high(packed, value):
+    """Return ``packed`` with its high bfloat16 replaced by ``value``."""
+    return np.uint32(
+        (int(packed) & 0x0000FFFF) | (int(_bfloat16_bits(value)) << 16)
+    )
+
+
 def bf16_bits(value):
     """Return ``value`` rounded to bfloat16 as 16 raw bits."""
     return np.uint16(_bfloat16_bits(value))
@@ -146,6 +160,34 @@ def bf16_bits(value):
 def bf16_value(bits):
     """Return the bfloat16 held in 16 raw ``bits`` as a float32."""
     return _bfloat16_value(bits)
+
+
+def multiply_high(a, b):
+    """Return the high 32 bits of the 64-bit product of two int32."""
+    return np.int32((int(a) * int(b)) >> 32)
+
+
+RECIPROCAL_ESTIMATE_MAGIC = 0x7EF311C3
+"""Bits that, less a positive float32, estimate its reciprocal.
+
+The estimate's relative error is under 12.5%; each Newton step squares
+it.
+"""
+
+
+def fast_reciprocal(value):
+    """Return ``1 / value`` from a bit estimate and two Newton steps.
+
+    The relative error is under 3e-4 for normal positive and negative
+    ``value``.
+    """
+    value = np.float32(value)
+    bits = (RECIPROCAL_ESTIMATE_MAGIC - int(value.view(np.int32))) & 0xFFFFFFFF
+    estimate = np.uint32(bits).view(np.float32)
+    for _ in range(2):
+        error = np.float32(value * estimate - np.float32(1.0))
+        estimate = np.float32(estimate - estimate * error)
+    return estimate
 
 
 def float_bits(value):
@@ -186,6 +228,36 @@ _inline_asm_intrinsic(
 _inline_asm_intrinsic(
     bf16_value, types.float32, (types.uint16,),
     "{.reg .b32 w; cvt.u32.u16 w, $1; shl.b32 $0, w, 16;}", "=f,h",
+)
+_inline_asm_intrinsic(
+    bf16x2_insert_low, types.uint32, (types.uint32, types.float32),
+    "{.reg .b32 pair; cvt.rn.bf16x2.f32 pair, 0f00000000, $2;"
+    " prmt.b32 $0, pair, $1, 0x7610;}",
+    "=r,r,f",
+)
+_inline_asm_intrinsic(
+    bf16x2_insert_high, types.uint32, (types.uint32, types.float32),
+    "{.reg .b32 pair; cvt.rn.bf16x2.f32 pair, $2, 0f00000000;"
+    " prmt.b32 $0, $1, pair, 0x7610;}",
+    "=r,r,f",
+)
+_inline_asm_intrinsic(
+    multiply_high, types.int32, (types.int32, types.int32),
+    "mul.hi.s32 $0, $1, $2;", "=r,r,r",
+)
+_inline_asm_intrinsic(
+    fast_reciprocal, types.float32, (types.float32,),
+    "{.reg .b32 bits; .reg .f32 estimate, error, negative;"
+    " mov.b32 bits, $1;"
+    " sub.s32 bits, 0x7EF311C3, bits;"
+    " mov.b32 estimate, bits;"
+    " fma.rn.ftz.f32 error, $1, estimate, 0fBF800000;"
+    " neg.f32 negative, error;"
+    " fma.rn.ftz.f32 estimate, negative, estimate, estimate;"
+    " fma.rn.ftz.f32 error, $1, estimate, 0fBF800000;"
+    " neg.f32 negative, error;"
+    " fma.rn.ftz.f32 $0, negative, estimate, estimate;}",
+    "=f,f",
 )
 _inline_asm_intrinsic(
     float_bits, types.int32, (types.float32,), "mov.b32 $0, $1;", "=r,f",

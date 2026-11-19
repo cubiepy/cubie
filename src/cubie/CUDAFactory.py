@@ -557,6 +557,10 @@ class ReducedPrecisionFlags(FrozenSettings):
         pairs.
     low_precision_factors
         Store prefactored LU factors as bfloat16.
+    low_precision_rhs
+        Evaluate the generated ``dxdt`` divisions with a bit-pattern
+        reciprocal estimate and two Newton steps instead of the
+        hardware reciprocal.
     """
 
     low_precision_time: bool = _reduced_precision_field()
@@ -564,6 +568,7 @@ class ReducedPrecisionFlags(FrozenSettings):
     low_precision_controller: bool = _reduced_precision_field()
     low_precision_predictor: bool = _reduced_precision_field()
     low_precision_factors: bool = _reduced_precision_field()
+    low_precision_rhs: bool = _reduced_precision_field()
 
 
 ALL_UNROLL_PARAMETERS = frozenset(

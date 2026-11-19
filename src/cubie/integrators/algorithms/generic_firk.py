@@ -485,9 +485,9 @@ class FIRKStep(ODEImplicitStep):
         buffer_registry.update_buffer(
             "cached_auxiliaries",
             self,
-            size=cached_count,
-            dtype=self._cached_auxiliaries_dtype(
-                self.uses_cached_solve and self.uses_direct_solver
+            **self._cached_auxiliaries_layout(
+                cached_count,
+                self.uses_cached_solve and self.uses_direct_solver,
             ),
         )
 

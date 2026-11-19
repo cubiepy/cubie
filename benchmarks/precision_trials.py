@@ -98,6 +98,18 @@ CONFIGS = {
         build=build_lorenz, grid=lorenz_grid, tols=LORENZ_TOLS,
         solver=dict(algorithm="tsit5"), duration=64.0,
     ),
+    "lorenz_rk4_fixed": dict(
+        build=build_lorenz, grid=lorenz_grid,
+        tols={"atol": 1e-6, "rtol": 1e-6},
+        solver=dict(algorithm="classical-rk4", step_controller="fixed",
+                    dt=1e-3),
+        duration=16.0, save_every=0.25,
+    ),
+    "lorenz_tsit5_late": dict(
+        build=build_lorenz, grid=lorenz_grid, tols=LORENZ_TOLS,
+        solver=dict(algorithm="tsit5"), duration=64.0, save_every=4.0,
+        t0=1.0e4,
+    ),
     "lorenz_kvaerno3": dict(
         build=build_lorenz, grid=lorenz_grid, tols=LORENZ_TOLS,
         solver=dict(algorithm="kvaerno3", linear_correction_type="lu"),
@@ -133,7 +145,7 @@ def build_solver(name, settings=None):
     kwargs.update(entry["solver"])
     kwargs.update(
         output_types=["state", "iteration_counters"],
-        save_every=entry["duration"],
+        save_every=entry.get("save_every", entry["duration"]),
         time_logging_level="silent",
     )
     kwargs.update(settings or {})
@@ -149,7 +161,8 @@ def solve(solver, entry, n_runs):
             initial_values=inits,
             parameters=params,
             duration=entry["duration"],
-            save_every=entry["duration"],
+            t0=entry.get("t0", 0.0),
+            save_every=entry.get("save_every", entry["duration"]),
         )
 
 
@@ -254,7 +267,8 @@ def run_measure(name, arms, n_runs, rounds, target_ms):
     ]
     report = {"config": name, "arms": []}
     with ComparisonRunner(
-        solver, inits, params, duration=entry["duration"]
+        solver, inits, params, duration=entry["duration"],
+        t0=entry.get("t0", 0.0),
     ) as runner:
         accepted = runner.compile(candidates)
         runner.warm()
@@ -263,9 +277,11 @@ def run_measure(name, arms, n_runs, rounds, target_ms):
             measured = runner.solve_ms(None)
             runner.fit_batch(measured, target_ms, grow=True, shrink=True)
         timings = {candidate.label: [] for candidate in accepted}
+        round_best = {candidate.label: [] for candidate in accepted}
         for _ in range(rounds):
             for timing in runner.time(accepted):
                 timings[timing.candidate.label].extend(timing.times_ms)
+                round_best[timing.candidate.label].append(timing.best_ms)
         batch = runner.runs
         waves = {}
         for candidate in accepted:
@@ -301,12 +317,19 @@ def run_measure(name, arms, n_runs, rounds, target_ms):
         totals = counters.sum(axis=0)
         base_totals = base_counters.sum(axis=0)
         times = timings[candidate.label]
+        paired = 100.0 * (
+            np.asarray(round_best[candidate.label])
+            / np.asarray(round_best[accepted[0].label])
+            - 1.0
+        )
         blocks_per_sm, wave_count = waves[candidate.label]
         arm = {
             "settings": candidate.settings,
             "best_ms": min(times),
             "median_ms": float(np.median(times)),
             "times_ms": times,
+            "paired_delta_pct": paired.tolist(),
+            "median_paired_delta_pct": float(np.median(paired)),
             "blocks_per_sm": blocks_per_sm,
             "waves": wave_count,
             "registers": resources.registers_per_thread,
@@ -341,10 +364,11 @@ def print_report(report):
     base = arms[0]["best_ms"]
     print(f"== {report['config']}  runs={report['runs_timed']}")
     for arm in arms:
-        delta = 100.0 * (arm["best_ms"] / base - 1.0)
+        paired = arm["paired_delta_pct"]
         print(
             f"  {json.dumps(arm['settings']):48s} best {arm['best_ms']:9.3f}"
-            f" ms ({delta:+6.2f}%) median {arm['median_ms']:9.3f}"
+            f" ms paired delta {arm['median_paired_delta_pct']:+6.2f}%"
+            f" [{min(paired):+.2f}, {max(paired):+.2f}]"
             f" waves {arm['waves']:.2f} regs {arm['registers']}"
             f" local {arm['local_bytes']}"
         )

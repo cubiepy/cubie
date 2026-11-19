@@ -1,7 +1,7 @@
 """Render engine IR as Numba-CUDA source."""
 
 from fractions import Fraction
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from cubie.odesystems.symbolic.engine.expr import (
     _POW_CHAIN_LIMIT,
@@ -112,8 +112,12 @@ class IRPrinter:
     nonfloat_functions
         Aliased call names printed without a precision cast.
     stored_arrays
-        Mapping from array name to the ``(load, store)`` function names
-        its element reads and writes are wrapped in.
+        Mapping from array name to a codec whose ``load(name, index)``
+        returns the text reading element ``index`` and whose
+        ``store(name, index, value)`` returns the line writing it.
+    reciprocal
+        Name of a device function printed as ``x*reciprocal(y)`` in
+        place of ``x/y``; ``None`` prints divisions.
     """
 
     def __init__(
@@ -121,12 +125,14 @@ class IRPrinter:
         symbol_map: Optional[Dict[str, Expr]] = None,
         function_aliases: Optional[Dict[str, str]] = None,
         nonfloat_functions: Optional[Iterable[str]] = None,
-        stored_arrays: Optional[Dict[str, Tuple[str, str]]] = None,
+        stored_arrays: Optional[Dict[str, Any]] = None,
+        reciprocal: Optional[str] = None,
     ) -> None:
         self.symbol_map = symbol_map or {}
         self.function_aliases = function_aliases or {}
         self.nonfloat_functions = frozenset(nonfloat_functions or ())
         self.stored_arrays = stored_arrays or {}
+        self.reciprocal = reciprocal
 
     # -- public API -------------------------------------------------
 
@@ -134,7 +140,8 @@ class IRPrinter:
         """Return ``lhs = rhs`` as one source line."""
         value = self._print(rhs, _PREC_TERNARY)
         if isinstance(lhs, Arr) and lhs.name in self.stored_arrays:
-            value = f"{self.stored_arrays[lhs.name][1]}({value})"
+            codec = self.stored_arrays[lhs.name]
+            return codec.store(lhs.name, lhs.index, value)
         return f"{self._atom_target(lhs)} = {value}"
 
     def expression(self, node: Expr) -> str:
@@ -176,10 +183,10 @@ class IRPrinter:
                 return self._render(mapped)
             return node.name, _PREC_ATOM
         if isinstance(node, Arr):
-            text = f"{node.name}[{node.index}]"
             if node.name in self.stored_arrays:
-                text = f"{self.stored_arrays[node.name][0]}({text})"
-            return text, _PREC_ATOM
+                codec = self.stored_arrays[node.name]
+                return codec.load(node.name, node.index), _PREC_ATOM
+            return f"{node.name}[{node.index}]", _PREC_ATOM
         if isinstance(node, Add):
             return self._render_add(node)
         if isinstance(node, Mul):
@@ -261,6 +268,11 @@ class IRPrinter:
             self._print(f, _PREC_UNARY) for f in denominator
         ]
         denom_text = "*".join(denom_parts)
+        if self.reciprocal is not None:
+            inverse = f"{self.reciprocal}({denom_text})"
+            if not numerator:
+                return inverse, _PREC_ATOM
+            return f"{numer_text}*{inverse}", _PREC_MUL
         if len(denominator) > 1:
             denom_text = f"({denom_text})"
         return f"{numer_text}/{denom_text}", _PREC_MUL
@@ -285,6 +297,9 @@ class IRPrinter:
             if integer is not None:
                 if integer < 0:
                     positive = _pow_or_base(node.base, -integer)
+                    if self.reciprocal is not None:
+                        inner = self._print(positive, _PREC_TERNARY)
+                        return f"{self.reciprocal}({inner})", _PREC_ATOM
                     denom = self._print(positive, _PREC_UNARY)
                     return (
                         f"(precision(1)/{denom})",
@@ -449,7 +464,8 @@ def print_cuda_multiple(
     symbol_map: Optional[Dict[str, Expr]] = None,
     function_aliases: Optional[Dict[str, str]] = None,
     nonfloat_functions: Optional[Iterable[str]] = None,
-    stored_arrays: Optional[Dict[str, Tuple[str, str]]] = None,
+    stored_arrays: Optional[Dict[str, Any]] = None,
+    reciprocal: Optional[str] = None,
 ) -> List[str]:
     """Render assignment pairs as CUDA-compatible source lines.
 
@@ -464,8 +480,12 @@ def print_cuda_multiple(
     nonfloat_functions
         Aliased call names printed without a precision cast.
     stored_arrays
-        Mapping from array name to the ``(load, store)`` function names
-        its element reads and writes are wrapped in.
+        Mapping from array name to a codec whose ``load(name, index)``
+        returns the text reading element ``index`` and whose
+        ``store(name, index, value)`` returns the line writing it.
+    reciprocal
+        Name of a device function printed as ``x*reciprocal(y)`` in
+        place of ``x/y``; ``None`` prints divisions.
 
     Returns
     -------
@@ -481,6 +501,7 @@ def print_cuda_multiple(
         function_aliases=function_aliases,
         nonfloat_functions=nonfloat_functions,
         stored_arrays=stored_arrays,
+        reciprocal=reciprocal,
     )
     return [
         printer.assignment(_coerce_node(lhs), _coerce_node(rhs))
