@@ -261,7 +261,12 @@ class LuSolve(SolverHelperRole):
     stacked_capable = True
     prefactor_capable = True
     factory_args = SCALAR_FACTORY_ARGS
-    folded_args = ("operator_beta", "operator_gamma", "a_ij")
+    folded_args = (
+        "operator_beta",
+        "operator_gamma",
+        "a_ij",
+        "low_precision_factors",
+    )
 
     @classmethod
     def uses_cache_selection(cls, variant):
@@ -280,6 +285,7 @@ class LuSolve(SolverHelperRole):
             "operator_gamma": request.operator_gamma,
             "stage_coefficients": request.stage_coefficients,
             "stage_nodes": request.stage_nodes,
+            "low_precision_factors": request.low_precision_factors,
         }
 
     @classmethod
@@ -298,6 +304,7 @@ class LuSolve(SolverHelperRole):
             beta=request.operator_beta,
             gamma=request.operator_gamma,
             a_ij=request.a_ij,
+            low_precision_factors=request.low_precision_factors,
         )
         return code
 
@@ -313,7 +320,11 @@ class LuPrepareBlocks(SolverHelperRole):
     jacobian_carrying = True
     is_prepare_helper = True
     factory_args = SCALAR_FACTORY_ARGS
-    folded_args = ("operator_beta", "operator_gamma")
+    folded_args = (
+        "operator_beta",
+        "operator_gamma",
+        "low_precision_factors",
+    )
 
     @classmethod
     def legal_variants(cls):
@@ -342,6 +353,7 @@ class LuPrepareBlocks(SolverHelperRole):
             jacobian=system_jacobian(system),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
+            low_precision_factors=request.low_precision_factors,
         )
         return code
 
@@ -352,7 +364,11 @@ class LuSmoothingSolve(SolverHelperRole):
     name = "lu_smoothing_solve"
     jacobian_carrying = True
     factory_args = SCALAR_FACTORY_ARGS
-    folded_args = ("operator_beta", "operator_gamma")
+    folded_args = (
+        "operator_beta",
+        "operator_gamma",
+        "low_precision_factors",
+    )
 
     @classmethod
     def legal_variants(cls):
@@ -373,6 +389,7 @@ class LuSmoothingSolve(SolverHelperRole):
             "operator_gamma": request.operator_gamma,
             "stage_coefficients": request.stage_coefficients,
             "stage_nodes": request.stage_nodes,
+            "low_precision_factors": request.low_precision_factors,
         }
 
     @classmethod
@@ -388,6 +405,7 @@ class LuSmoothingSolve(SolverHelperRole):
             jacobian=system_jacobian(system),
             beta=request.operator_beta,
             gamma=request.operator_gamma,
+            low_precision_factors=request.low_precision_factors,
         )
         return code
 

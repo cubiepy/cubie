@@ -40,6 +40,11 @@ from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
     BaseAdaptiveStepController,
     gain_converter,
+    gain_from_log_bits,
+    log_bits,
+    log_bits_constant,
+    power_scale,
+    scaled_power,
 )
 from cubie.integrators.step_control.adaptive_PI_controller import (
     PIStepControlConfig,
@@ -147,6 +152,13 @@ class AdaptivePIDController(BaseAdaptiveStepController):
         deadband_disabled = (deadband_min == typed_one) and (
             deadband_max == typed_one
         )
+        log_gains = self.compile_settings.uses_reduced_precision(
+            "low_precision_controller"
+        )
+        log_safety = log_bits_constant(safety)
+        current_scale = power_scale(-expo1)
+        previous_scale = power_scale(-expo2)
+        before_previous_scale = power_scale(-expo3)
         precision = self.compile_settings.numba_precision
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
@@ -213,13 +225,26 @@ class AdaptivePIDController(BaseAdaptiveStepController):
                 err_prev_prev if err_prev_prev > typed_zero else err_prev_safe
             )
 
-            gain_current = precision(nrm2 ** (-expo1))
-            gain_new = precision(
-                safety
-                * gain_current
-                * (err_prev_safe ** (-expo2))
-                * (err_prev_prev_safe ** (-expo3))
-            )
+            if log_gains:
+                log_current = log_safety + scaled_power(
+                    log_bits(nrm2), current_scale
+                )
+                safe_current = gain_from_log_bits(log_current)
+                gain_new = gain_from_log_bits(
+                    log_current
+                    + scaled_power(log_bits(err_prev_safe), previous_scale)
+                    + scaled_power(
+                        log_bits(err_prev_prev_safe), before_previous_scale
+                    )
+                )
+            else:
+                gain_current = precision(nrm2 ** (-expo1))
+                safe_current = safety * gain_current
+                gain_new = precision(
+                    safe_current
+                    * (err_prev_safe ** (-expo2))
+                    * (err_prev_prev_safe ** (-expo3))
+                )
             gain = clamp(gain_new, min_step_shrink, max_step_growth)
             if not deadband_disabled:
                 within_deadband = (gain >= deadband_min) and (
@@ -228,7 +253,7 @@ class AdaptivePIDController(BaseAdaptiveStepController):
                 gain = cuda.selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry on the current error alone.
-            gain_reject = max(min_step_shrink, safety * gain_current)
+            gain_reject = max(min_step_shrink, safe_current)
             gain = cuda.selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size

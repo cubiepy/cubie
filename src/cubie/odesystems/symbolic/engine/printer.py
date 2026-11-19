@@ -111,6 +111,9 @@ class IRPrinter:
         (printable) name.
     nonfloat_functions
         Aliased call names printed without a precision cast.
+    stored_arrays
+        Mapping from array name to the ``(load, store)`` function names
+        its element reads and writes are wrapped in.
     """
 
     def __init__(
@@ -118,16 +121,21 @@ class IRPrinter:
         symbol_map: Optional[Dict[str, Expr]] = None,
         function_aliases: Optional[Dict[str, str]] = None,
         nonfloat_functions: Optional[Iterable[str]] = None,
+        stored_arrays: Optional[Dict[str, Tuple[str, str]]] = None,
     ) -> None:
         self.symbol_map = symbol_map or {}
         self.function_aliases = function_aliases or {}
         self.nonfloat_functions = frozenset(nonfloat_functions or ())
+        self.stored_arrays = stored_arrays or {}
 
     # -- public API -------------------------------------------------
 
     def assignment(self, lhs: Expr, rhs: Expr) -> str:
         """Return ``lhs = rhs`` as one source line."""
-        return f"{self._atom_target(lhs)} = {self._print(rhs, _PREC_TERNARY)}"
+        value = self._print(rhs, _PREC_TERNARY)
+        if isinstance(lhs, Arr) and lhs.name in self.stored_arrays:
+            value = f"{self.stored_arrays[lhs.name][1]}({value})"
+        return f"{self._atom_target(lhs)} = {value}"
 
     def expression(self, node: Expr) -> str:
         """Return the source text for ``node``."""
@@ -168,7 +176,10 @@ class IRPrinter:
                 return self._render(mapped)
             return node.name, _PREC_ATOM
         if isinstance(node, Arr):
-            return f"{node.name}[{node.index}]", _PREC_ATOM
+            text = f"{node.name}[{node.index}]"
+            if node.name in self.stored_arrays:
+                text = f"{self.stored_arrays[node.name][0]}({text})"
+            return text, _PREC_ATOM
         if isinstance(node, Add):
             return self._render_add(node)
         if isinstance(node, Mul):
@@ -438,6 +449,7 @@ def print_cuda_multiple(
     symbol_map: Optional[Dict[str, Expr]] = None,
     function_aliases: Optional[Dict[str, str]] = None,
     nonfloat_functions: Optional[Iterable[str]] = None,
+    stored_arrays: Optional[Dict[str, Tuple[str, str]]] = None,
 ) -> List[str]:
     """Render assignment pairs as CUDA-compatible source lines.
 
@@ -451,6 +463,9 @@ def print_cuda_multiple(
         Renamed-user-function to printable-name mapping.
     nonfloat_functions
         Aliased call names printed without a precision cast.
+    stored_arrays
+        Mapping from array name to the ``(load, store)`` function names
+        its element reads and writes are wrapped in.
 
     Returns
     -------
@@ -465,6 +480,7 @@ def print_cuda_multiple(
         symbol_map=_coerce_symbol_map(symbol_map),
         function_aliases=function_aliases,
         nonfloat_functions=nonfloat_functions,
+        stored_arrays=stored_arrays,
     )
     return [
         printer.assignment(_coerce_node(lhs), _coerce_node(rhs))

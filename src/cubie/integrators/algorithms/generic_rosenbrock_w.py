@@ -308,6 +308,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
                 stage_coefficients=config.tableau.stage_coefficients,
                 stage_nodes=config.tableau.stage_nodes,
                 **request_kwargs,
+                **self._factor_request_kwargs(),
             )
             prepare_jacobian = lu_result.prepare_jac
             cached_auxiliary_count = lu_result.cached_auxiliary_count
@@ -349,6 +350,7 @@ class GenericRosenbrockWStep(ODEImplicitStep):
             "cached_auxiliaries",
             self,
             size=cached_auxiliary_count,
+            dtype=self._cached_auxiliaries_dtype(self.uses_direct_solver),
         )
 
         time_derivative = get_fn("time_derivative_rhs")

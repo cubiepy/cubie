@@ -39,6 +39,11 @@ from cubie.integrators.step_control.adaptive_I_controller import (
 )
 from cubie.integrators.step_control.adaptive_step_controller import (
     BaseAdaptiveStepController,
+    gain_from_log_bits,
+    log_bits,
+    log_bits_constant,
+    power_scale,
+    scaled_power,
     gain_converter,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES
@@ -133,6 +138,12 @@ class AdaptivePIController(BaseAdaptiveStepController):
         deadband_disabled = (deadband_min == typed_one) and (
             deadband_max == typed_one
         )
+        log_gains = self.compile_settings.uses_reduced_precision(
+            "low_precision_controller"
+        )
+        log_safety = log_bits_constant(safety)
+        current_scale = power_scale(-expo1)
+        history_scale = power_scale(-expo2)
         precision = self.compile_settings.numba_precision
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
@@ -193,11 +204,22 @@ class AdaptivePIController(BaseAdaptiveStepController):
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)
 
-            gain_current = precision(nrm2 ** (-expo1))
             # Handle uninitialized err_prev by using current error as fallback
             err_source = err_prev if err_prev > typed_zero else nrm2
-            gain_history = precision(err_source ** (-expo2))
-            gain_new = safety * gain_current * gain_history
+            if log_gains:
+                log_current = log_safety + scaled_power(
+                    log_bits(nrm2), current_scale
+                )
+                safe_current = gain_from_log_bits(log_current)
+                gain_new = gain_from_log_bits(
+                    log_current
+                    + scaled_power(log_bits(err_source), history_scale)
+                )
+            else:
+                gain_current = precision(nrm2 ** (-expo1))
+                gain_history = precision(err_source ** (-expo2))
+                safe_current = safety * gain_current
+                gain_new = safe_current * gain_history
             gain = clamp(gain_new, min_step_shrink, max_step_growth)
             if not deadband_disabled:
                 within_deadband = (gain >= deadband_min) and (
@@ -206,7 +228,7 @@ class AdaptivePIController(BaseAdaptiveStepController):
                 gain = cuda.selp(within_deadband, typed_one, gain)
 
             # Rejected steps retry on the current error alone.
-            gain_reject = max(min_step_shrink, safety * gain_current)
+            gain_reject = max(min_step_shrink, safe_current)
             gain = cuda.selp(accept, gain, gain_reject)
 
             # A truncated step's error norm carries no step-size

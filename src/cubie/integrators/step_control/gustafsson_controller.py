@@ -37,8 +37,13 @@ from attrs import field, frozen
 
 from cubie.buffer_registry import buffer_registry
 from cubie.integrators.step_control.adaptive_step_controller import (
-    BaseAdaptiveStepController,
     AdaptiveStepControlConfig,
+    BaseAdaptiveStepController,
+    gain_from_log_bits,
+    log_bits,
+    log_bits_constant,
+    power_scale,
+    scaled_power,
 )
 from cubie._utils import (
     PrecisionDType,
@@ -144,6 +149,11 @@ class GustafssonController(BaseAdaptiveStepController):
         )
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
+        log_gains = self.compile_settings.uses_reduced_precision(
+            "low_precision_controller"
+        )
+        log_safety = log_bits_constant(safety)
+        error_scale = power_scale(-float(expo))
 
         # step sizes and norms can be approximate - fastmath is fine
         # no cover: start
@@ -210,12 +220,27 @@ class GustafssonController(BaseAdaptiveStepController):
             denom = precision(niters + 2 * newton_target_iters)
             tmp = gain_numerator / denom
             fac = safety if safety < tmp else tmp
-            gain_basic = precision(fac * (nrm2 ** (-expo)))
+            if log_gains:
+                log_error = log_bits(nrm2)
+                gain_basic = gain_from_log_bits(
+                    log_bits(fac) + scaled_power(log_error, error_scale)
+                )
+                # Products and quotients are sums and differences of
+                # log bits; the 1.0 offsets of dt and dt_prev cancel.
+                log_ratio = log_error + log_error - log_bits(err_prev)
+                gain_gus = gain_from_log_bits(
+                    log_safety
+                    + log_bits(current_dt)
+                    - log_bits(dt_prev)
+                    + scaled_power(log_ratio, error_scale)
+                )
+            else:
+                gain_basic = precision(fac * (nrm2 ** (-expo)))
 
-            ratio = nrm2 * nrm2 / err_prev
-            gain_gus = precision(
-                safety * (dt[0] / dt_prev) * (ratio**-expo)
-            )
+                ratio = nrm2 * nrm2 / err_prev
+                gain_gus = precision(
+                    safety * (dt[0] / dt_prev) * (ratio**-expo)
+                )
             gain = gain_gus if gain_gus < gain_basic else gain_basic
             gain = (
                 gain

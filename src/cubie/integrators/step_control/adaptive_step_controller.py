@@ -36,11 +36,48 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.integrators.norms import TwoRefMaskedScaledNorm
+from cubie._cudasim_extensions import cuda
+from cubie.backend.jit import compile_kwargs
+from math import exp2 as math_exp2, log2 as math_log2
+from numba_cuda_mlir.types import float32
+from numpy import float32 as np_float32, log2
 from cubie.integrators.step_control.base_step_controller import (
     BaseStepController,
     BaseStepControllerConfig,
     ControllerCache,
 )
+
+
+def log_bits_constant(value: float) -> float:
+    """Return the base-2 logarithm of ``value`` as a float32."""
+    return np_float32(log2(value))
+
+
+def power_scale(power: float) -> float:
+    """Return ``power`` as the float32 factor :func:`scaled_power` takes."""
+    return np_float32(power)
+
+
+# no cover: start
+@cuda.jit(device=True, inline=True, **compile_kwargs)
+def log_bits(value):
+    """Return the approximate base-2 logarithm of a positive float32."""
+    return math_log2(value)
+
+
+@cuda.jit(device=True, inline=True, **compile_kwargs)
+def scaled_power(logarithm, scale):
+    """Return the logarithm of ``2**logarithm`` raised to ``scale``."""
+    return logarithm * scale
+
+
+@cuda.jit(device=True, inline=True, **compile_kwargs)
+def gain_from_log_bits(logarithm):
+    """Return ``2**logarithm`` with the logarithm clamped to [-64, 64]."""
+    return math_exp2(min(max(logarithm, float32(-64.0)), float32(64.0)))
+
+
+# no cover: end
 
 
 class OrderDependentGain:
@@ -234,6 +271,7 @@ class BaseAdaptiveStepController(BaseStepController):
             mass_flags=config.mass_flags,
             jit_flags=config.jit_flags,
             unroll=config.unroll,
+            reduced_precision=config.reduced_precision,
         )
         self.update_compile_settings(
             {"norm_fn": self.norm.device_function},

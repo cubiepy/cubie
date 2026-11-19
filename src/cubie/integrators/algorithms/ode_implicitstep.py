@@ -29,14 +29,18 @@ from typing import Any, Callable, Dict, Optional, Set, Tuple
 from warnings import warn
 
 from attrs import field, frozen, validators
-from numpy import ndarray
+from numpy import ndarray, uint16 as np_uint16
 
 from cubie._utils import (
     device_function_field,
     inrangetype_validator,
 )
 from cubie.buffer_registry import buffer_registry
-from cubie.CUDAFactory import ALL_JIT_PARAMETERS, ALL_UNROLL_PARAMETERS
+from cubie.CUDAFactory import (
+    ALL_JIT_PARAMETERS,
+    ALL_REDUCED_PRECISION_PARAMETERS,
+    ALL_UNROLL_PARAMETERS,
+)
 from cubie.odesystems.solver_helpers import OperationCounts
 from cubie.integrators.algorithms.base_algorithm_step import (
     BaseAlgorithmStep,
@@ -239,6 +243,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "jit_flags",
             *ALL_UNROLL_PARAMETERS,
             *ALL_JIT_PARAMETERS,
+            *ALL_REDUCED_PRECISION_PARAMETERS,
             "linear_correction_type",
             "krylov_atol",
             "krylov_rtol",
@@ -275,6 +280,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "jit_flags",
             *ALL_UNROLL_PARAMETERS,
             *ALL_JIT_PARAMETERS,
+            *ALL_REDUCED_PRECISION_PARAMETERS,
             "newton_atol",
             "newton_rtol",
             "newton_max_iters",
@@ -626,6 +632,28 @@ class ODEImplicitStep(BaseAlgorithmStep):
             "unroll_other_small": linear_config.unroll.unroll_other_small,
         }
 
+    def _factor_request_kwargs(self) -> dict:
+        """Return the prefactored-LU request fields from the step settings."""
+        return {
+            "low_precision_factors": (
+                self.compile_settings.uses_reduced_precision(
+                    "low_precision_factors"
+                )
+            )
+        }
+
+    def _cached_auxiliaries_dtype(self, holds_factors: bool) -> type:
+        """Return the element type of ``cached_auxiliaries``.
+
+        Prefactored LU factors stored as bfloat16 sit in 16-bit
+        elements; every other cache holds run-precision values.
+        """
+        if holds_factors and self._factor_request_kwargs()[
+            "low_precision_factors"
+        ]:
+            return np_uint16
+        return self.compile_settings.precision
+
     # Stage data for prefactored-LU requests on tableau-less steps.
     _PREFACTOR_STAGE_DATA = None
     # Diagonal baked into direct solves on tableau-less steps.
@@ -674,6 +702,7 @@ class ODEImplicitStep(BaseAlgorithmStep):
                     stage_coefficients=coefficients,
                     stage_nodes=nodes,
                     **request_kwargs,
+                    **self._factor_request_kwargs(),
                 )
             else:
                 lu_result = get_fn(
@@ -769,7 +798,14 @@ class ODEImplicitStep(BaseAlgorithmStep):
             counts["preconditioner"] = preconditioner_result.operation_count
 
         buffer_registry.update_buffer(
-            "cached_auxiliaries", self, size=cached_count
+            "cached_auxiliaries",
+            self,
+            size=cached_count,
+            dtype=self._cached_auxiliaries_dtype(
+                self.uses_cached_solve
+                and self.uses_direct_solver
+                and config.prefactored
+            ),
         )
         self.update_compile_settings(
             {

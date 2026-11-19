@@ -52,6 +52,7 @@ from cubie.integrators.step_control.adaptive_step_controller import (
 )
 from cubie.CUDAFactory import (
     ALL_JIT_PARAMETERS,
+    ALL_REDUCED_PRECISION_PARAMETERS,
     ALL_UNROLL_PARAMETERS,
     CUDADispatcherCache,
     CUDAFactory,
@@ -70,6 +71,7 @@ ALL_STARTING_STEP_PARAMETERS = (
     }
     | ALL_UNROLL_PARAMETERS
     | ALL_JIT_PARAMETERS
+    | ALL_REDUCED_PRECISION_PARAMETERS
 )
 """:class:`StartingStepEstimator` takes these settings from the Solver."""
 

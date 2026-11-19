@@ -81,6 +81,7 @@ from numpy import (
     array_equal,
     asarray,
     dtype as np_dtype,
+    float32 as np_float32,
     generic as np_generic,
     ndarray as np_ndarray,
 )
@@ -530,10 +531,50 @@ class UnrollFlags(FrozenSettings):
     )
 
 
+def _reduced_precision_field():
+    return field(default=False, validator=attrs_validators.instance_of(bool))
+
+
+@frozen
+class ReducedPrecisionFlags(FrozenSettings):
+    """Switches that move chosen device-code values below run precision.
+
+    Every flag defaults to ``False``, which compiles the run-precision
+    code. The flags apply to float32 runs; other precisions ignore them.
+
+    Attributes
+    ----------
+    low_precision_time
+        Hold the loop's time as an unevaluated float32 sum (a head and
+        a tail) instead of a float64.
+    low_precision_norms
+        Reduce scaled norms in packed bfloat16 pairs.
+    low_precision_controller
+        Compute step-size gains from base-2 exponents and mantissas
+        instead of ``pow``.
+    low_precision_predictor
+        Apply the dense stage predictor's matrix in packed bfloat16
+        pairs.
+    low_precision_factors
+        Store prefactored LU factors as bfloat16.
+    """
+
+    low_precision_time: bool = _reduced_precision_field()
+    low_precision_norms: bool = _reduced_precision_field()
+    low_precision_controller: bool = _reduced_precision_field()
+    low_precision_predictor: bool = _reduced_precision_field()
+    low_precision_factors: bool = _reduced_precision_field()
+
+
 ALL_UNROLL_PARAMETERS = frozenset(
     fld.name for fld in fields(UnrollFlags)
 )
 """Loose keyword names of the :class:`UnrollFlags` fields."""
+
+ALL_REDUCED_PRECISION_PARAMETERS = frozenset(
+    fld.name for fld in fields(ReducedPrecisionFlags)
+)
+"""Loose keyword names of the :class:`ReducedPrecisionFlags` fields."""
 
 ALL_JIT_PARAMETERS = frozenset(
     fld.name for fld in fields(JITFlags)
@@ -736,6 +777,11 @@ class CUDAFactoryConfig(_CubieConfigBase):
         validator=attrs_validators.instance_of(UnrollFlags),
         kw_only=True,
     )
+    reduced_precision: ReducedPrecisionFlags = field(
+        factory=ReducedPrecisionFlags,
+        validator=attrs_validators.instance_of(ReducedPrecisionFlags),
+        kw_only=True,
+    )
 
     def __attrs_post_init__(self):
         super().__attrs_post_init__()
@@ -750,6 +796,15 @@ class CUDAFactoryConfig(_CubieConfigBase):
         """Return the Numba dtype associated with ``precision``."""
 
         return from_dtype(np_dtype(self.precision))
+
+    def uses_reduced_precision(self, name: str) -> bool:
+        """Return whether the reduced-precision flag ``name`` is on.
+
+        A flag is on only for float32 runs.
+        """
+        return self.precision == np_float32 and getattr(
+            self.reduced_precision, name
+        )
 
 
 @define

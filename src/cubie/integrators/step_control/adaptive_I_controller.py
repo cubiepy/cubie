@@ -31,6 +31,11 @@ from cubie.integrators.step_control.adaptive_step_controller import (
     AdaptiveStepControlConfig,
     BaseAdaptiveStepController,
     gain_converter,
+    gain_from_log_bits,
+    log_bits,
+    log_bits_constant,
+    power_scale,
+    scaled_power,
 )
 from cubie.result_codes import CUBIE_RESULT_CODES
 
@@ -115,6 +120,11 @@ class AdaptiveIController(BaseAdaptiveStepController):
         )
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
+        log_gains = self.compile_settings.uses_reduced_precision(
+            "low_precision_controller"
+        )
+        log_safety = log_bits_constant(safety)
+        current_scale = power_scale(-order_exponent)
 
         precision = self.compile_settings.numba_precision
         # step sizes and norms can be approximate - fastmath is fine
@@ -170,7 +180,12 @@ class AdaptiveIController(BaseAdaptiveStepController):
             accept = nrm2 <= typed_one
             accept_out[0] = int32(1) if accept else int32(0)
 
-            gaintmp = precision(safety * nrm2 ** (-order_exponent))
+            if log_gains:
+                gaintmp = gain_from_log_bits(
+                    log_safety + scaled_power(log_bits(nrm2), current_scale)
+                )
+            else:
+                gaintmp = precision(safety * nrm2 ** (-order_exponent))
             gain = clamp(gaintmp, min_step_shrink, max_step_growth)
             if not deadband_disabled:
                 within_deadband = (
