@@ -110,11 +110,11 @@ result = solve_ivp(
 ```
 
 CuBIE integrates all 1,048,576 combinations of the 1,024 initial values of
-`x` and the 1,024 values of `mu`, starting `v` from its default of 0.0. On
-the first solve, CuBIE spends about 2 s compiling the CUDA kernels and
-caches them on disk. In later sessions, CuBIE loads the cached kernels and
-finishes the first solve in about 0.1 s. CuBIE then finishes each repeat
-solve in 30 to 45 ms on an RTX 4070 SUPER.
+`x` and the 1,024 values of `mu`, starting `v` from its default of 0.0.
+On an RTX 4070 SUPER, CuBIE spends about 2 s compiling the CUDA kernels for
+your first solve and caches them on disk. In a later session, CuBIE loads
+the cached kernels and finishes your first solve in about 0.1 s. CuBIE
+finishes every repeat solve in 30 to 45 ms.
 
 ## Documentation
 
