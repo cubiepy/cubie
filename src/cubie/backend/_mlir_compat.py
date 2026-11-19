@@ -60,8 +60,8 @@ from numba_cuda_mlir.typing import math as _tmath
 # ------------------------------------------------------------------ #
 
 
-# The pull request closed when upstream lowered Boolean/integer
-# comparisons; Boolean/Float comparisons still have no lowering.
+# numba-cuda-mlir lowers Boolean/integer comparisons but not
+# Boolean/Float ones.
 
 
 def apply_mixed_bool_number() -> None:
