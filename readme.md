@@ -13,24 +13,24 @@
 CuBIE solves batches of ODEs and DAEs on NVIDIA GPUs, from thousands to
 millions of trajectories at a time. Write your system as equations in
 Python and call `solve_ivp` as you would in SciPy or MATLAB. CuBIE compiles
-the system and the solver into a GPU kernel and integrates every trajectory
-in parallel, so a sweep that would tie up your CPU for a year finishes over
-lunch.
+the system and the solver into a GPU kernel, integrates every trajectory in
+parallel, and finishes over lunch a batch that would keep your CPU busy for
+a year.
 
 ![How long a batch of integrations feels in MATLAB or SciPy and in CuBIE](https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/readme/vibe-o-meter.png)
 
 On large batches, CuBIE runs around 10,000 times faster than SciPy's
-`solve_ivp` or MATLAB's `ode45`, even when they spread the batch across 20
-CPU workers. The speedup grows with the size of the batch, from a few times
-for a handful of trajectories to around 10,000 times for hundreds of
-thousands or millions.
+`solve_ivp` or MATLAB's `ode45`, even when you spread the CPU runs across
+20 workers. CuBIE pulls further ahead as the batch grows: it runs a few
+times faster for a handful of trajectories, and around 10,000 times faster
+for hundreds of thousands or millions.
 
 ![CuBIE's speedup over SciPy and MATLAB against the number of trajectories](https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/readme/all_multiple.png)
 
-<sub>CuBIE timed from host arrays to host arrays on an RTX 4070 SUPER, against
-SciPy and MATLAB on an i7-12700 with 20 workers, analytic Jacobians for the
-implicit solvers, and numba-compiled right-hand sides for SciPy. Every run
-uses rtol = atol = 1e-5.</sub>
+<sub>We timed CuBIE from host arrays to host arrays on an RTX 4070 SUPER, and
+SciPy and MATLAB on an i7-12700 with 20 workers. We gave the implicit CPU
+solvers analytic Jacobians and compiled SciPy's right-hand sides with numba.
+We ran everything at rtol = atol = 1e-5.</sub>
 
 Under the hood, cubie uses [`numba-cuda-mlir`](https://github.com/NVIDIA/numba-cuda-mlir) to compile
 python integration algorithms and your provided ODE/DAE systems into GPU code
@@ -66,8 +66,8 @@ onto it at once.
 - Force your system with functions of time in its equations, or with sampled
   (measured) signals.
 - Structurally simplify DAEs with alias elimination, index reduction and
-  tearing before CuBIE generates solver code (logic taken almost verbatim
-  from [ModelingToolkit.jl](https://github.com/SciML/ModelingToolkit.jl)).
+  tearing before CuBIE generates solver code. CuBIE ports this logic almost
+  verbatim from [ModelingToolkit.jl](https://github.com/SciML/ModelingToolkit.jl).
 
 ### Choose your solver
 
