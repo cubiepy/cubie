@@ -258,13 +258,27 @@ def describe(deviation):
     }
 
 
+def solver_settings(arm):
+    """Return the solver settings of ``arm``, without its launch keys.
+
+    Pin an arm's launch with the keys ``_blocksize`` and
+    ``_resident_blocks``.
+    """
+    return {key: value for key, value in arm.items() if key[0] != "_"}
+
+
 def run_measure(name, arms, n_runs, rounds, target_ms):
     """Time every arm and score its cost against the first arm."""
     solver, entry = build_solver(name)
     tols = entry["tols"]
     inits, params = entry["grid"](solver, n_runs)
     candidates = [
-        Candidate(label=json.dumps(arm, sort_keys=True), settings=arm)
+        Candidate(
+            label=json.dumps(arm, sort_keys=True),
+            settings=solver_settings(arm),
+            blocksize=arm.get("_blocksize"),
+            resident_blocks=arm.get("_resident_blocks"),
+        )
         for arm in arms
     ]
     report = {"config": name, "arms": []}
@@ -288,7 +302,7 @@ def run_measure(name, arms, n_runs, rounds, target_ms):
         waves = {}
         for candidate in accepted:
             runner.select(candidate)
-            waves[candidate.label] = runner.geometry(None)
+            waves[candidate.label] = runner.geometry(candidate.blocksize)
     report["runs_timed"] = batch
 
     # Score every arm on the same grid, plus a tolerance/10 reference.
@@ -302,7 +316,8 @@ def run_measure(name, arms, n_runs, rounds, target_ms):
     rows = []
     for candidate in accepted:
         solver.update(
-            {key: None for arm in arms for key in arm}, silent=True
+            {key: None for arm in arms for key in solver_settings(arm)},
+            silent=True,
         )
         solver.update(candidate.settings, silent=True)
         state, counters, codes = end_state_and_counters(
@@ -326,7 +341,8 @@ def run_measure(name, arms, n_runs, rounds, target_ms):
         )
         blocks_per_sm, wave_count = waves[candidate.label]
         arm = {
-            "settings": candidate.settings,
+            "settings": json.loads(candidate.label),
+            "blocksize": candidate.blocksize,
             "best_ms": min(times),
             "median_ms": float(np.median(times)),
             "times_ms": times,
