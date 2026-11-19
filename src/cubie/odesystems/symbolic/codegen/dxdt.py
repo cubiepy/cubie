@@ -118,8 +118,8 @@ def generate_dxdt_lines(
     cse
         Whether to apply common subexpression elimination before emission.
     reciprocal
-        Device function printed in place of divisions; ``None`` prints
-        divisions.
+        Name of a device function to print divisions as products with;
+        pass ``None`` to print divisions.
 
     Returns
     -------
@@ -257,8 +257,8 @@ def generate_dxdt_fac_code(
     cse
         Whether to apply common subexpression elimination before emission.
     reciprocal
-        Device function printed in place of divisions; ``None`` prints
-        divisions.
+        Name of a device function to print divisions as products with;
+        pass ``None`` to print divisions.
 
     Returns
     -------

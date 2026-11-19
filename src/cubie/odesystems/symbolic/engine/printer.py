@@ -116,8 +116,8 @@ class IRPrinter:
         returns the text reading element ``index`` and whose
         ``store(name, index, value)`` returns the line writing it.
     reciprocal
-        Name of a device function printed as ``x*reciprocal(y)`` in
-        place of ``x/y``; ``None`` prints divisions.
+        Name of a device function to print ``x/y`` as
+        ``x*reciprocal(y)``; pass ``None`` to print divisions.
     """
 
     def __init__(
@@ -484,8 +484,8 @@ def print_cuda_multiple(
         returns the text reading element ``index`` and whose
         ``store(name, index, value)`` returns the line writing it.
     reciprocal
-        Name of a device function printed as ``x*reciprocal(y)`` in
-        place of ``x/y``; ``None`` prints divisions.
+        Name of a device function to print ``x/y`` as
+        ``x*reciprocal(y)``; pass ``None`` to print divisions.
 
     Returns
     -------

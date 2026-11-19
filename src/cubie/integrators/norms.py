@@ -39,11 +39,12 @@ PACKED_ABS_MASK = 0x7FFF7FFF
 """Mask clearing both sign bits of a bfloat16 pair."""
 
 PACKED_RECIPROCAL_MAGIC = 0x7EF37EF3
-"""Bits that, less a positive bfloat16 pair, estimate its reciprocals.
+"""Constant whose difference with a positive bfloat16 pair is the bits
+of estimates of both reciprocals.
 
-Hardware-independent: the constant minimises the largest relative
-error of the estimate over every positive normal bfloat16, found by
-exhaustive search; that error is 5.1%.
+We found the constant by exhaustive search over every positive normal
+bfloat16, as the value with the smallest largest relative error of the
+estimate, which is 5.1%. It does not depend on the hardware.
 """
 
 PACKED_NEGATIVE_ZERO = 0x80008000
@@ -66,8 +67,8 @@ def packed_squared_ratios(
 ):
     """Return ``accumulator`` plus both lanes' squared scaled ratios.
 
-    Every argument is a bfloat16 pair; ``reference_pair`` holds the
-    magnitudes the tolerances scale with.
+    Pass every argument as a bfloat16 pair, with the reference
+    magnitudes of the two entries in ``reference_pair``.
     """
     tolerance = bf16x2_fma(rtol_pair, reference_pair, atol_pair)
     inverse = uint32(uint32(PACKED_RECIPROCAL_MAGIC) - tolerance)
@@ -522,7 +523,7 @@ class DIRKCorrectionNorm(CorrectionNorm):
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)
         def reference_value(stage_increment, stage_base, step_start, a_ij, i):
-            """Return the magnitude the tolerance of entry ``i`` scales."""
+            """Return the reference magnitude of entry ``i``."""
             stage_value = stage_base[i] + a_ij * stage_increment[i]
             return max(abs(stage_value), abs(step_start[i]))
 
@@ -636,8 +637,8 @@ class FIRKCorrectionNorm(CorrectionNorm):
     def _packed_stage_norm(self, inv_n) -> Callable:
         """Compile the coupled correction norm over bfloat16 pairs.
 
-        Pairs run over the stage-major solver vector, so each pair
-        takes its tolerances from the states its two entries hold.
+        Pair consecutive entries of the stage-major solver vector and
+        scale each entry by the tolerances of its own state.
         """
         config = self.compile_settings
         n = config.solver_width
@@ -664,7 +665,7 @@ class FIRKCorrectionNorm(CorrectionNorm):
         # no cover: start
         @cuda.jit(device=True, inline=True, **self.jit_kwargs)
         def reference_value(stage_increment, stage_base, step_start, index):
-            """Return the magnitude the tolerance of entry ``index`` scales."""
+            """Return the reference magnitude of entry ``index``."""
             stage_index = index // state_n
             state_index = index - stage_index * state_n
             stage_value = stage_base[state_index]

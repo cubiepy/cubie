@@ -58,8 +58,7 @@ LARGEST_FINITE_BITS = 0x7F7FFFFF
 def log_bits_constant(value: float) -> int:
     """Return the bits of float32 ``value`` less the bits of 1.0.
 
-    The difference approximates ``2**23 * log2(value)`` with an error
-    under 0.09 in the base-2 logarithm.
+    Divided by ``2**23``, the result is within 0.09 of ``log2(value)``.
     """
     return int(np_float32(value).view(np_int32)) - ONE_BITS
 
@@ -67,8 +66,8 @@ def log_bits_constant(value: float) -> int:
 def power_scale(power: float) -> int:
     """Return ``power`` as a fixed-point factor for :func:`scaled_power`.
 
-    Raise ValueError unless ``abs(power) < 0.5``, the range a 32-bit
-    factor holds.
+    Raise ValueError unless ``abs(power) < 0.5``, because we store
+    ``power * 2**32`` in an int32.
     """
     if not abs(power) < 0.5:
         raise ValueError(f"power {power} is outside (-0.5, 0.5)")
@@ -92,8 +91,8 @@ def scaled_power(logarithm, scale):
 def gain_from_log_bits(logarithm):
     """Return the positive float32 whose log bits are ``logarithm``.
 
-    Logarithms past the float32 range give zero or the largest
-    finite float32.
+    Return zero or the largest finite float32 for a logarithm past the
+    float32 range.
     """
     bits = min(
         max(int32(logarithm + int32(ONE_BITS)), int32(0)),

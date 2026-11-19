@@ -11,18 +11,22 @@ Published Objects
 :data:`UnrollFlag`
     One ``(unroll, count)`` pair, the ``flag`` argument.
 :func:`bf16x2_pack`, :func:`bf16x2_high`, :func:`bf16x2_low`
-    Round two float32 to a bfloat16 pair in one ``uint32``, and read
-    either half back as a float32.
+    Round two float32 values to a bfloat16 pair in one ``uint32``, and
+    read either half back as a float32.
 :func:`bf16x2_fma`
-    Lane-wise bfloat16 fused multiply-add of three pairs.
+    Multiply and add three bfloat16 pairs lane by lane.
 :func:`bf16x2_insert_high`, :func:`bf16x2_insert_low`
     Replace one half of a bfloat16 pair.
-:func:`float_bits`, :func:`bits_float`, :func:`multiply_high`
-    Reinterpret float32 bits as int32 and back; the high word of an
-    int32 product.
+:func:`float_bits`, :func:`bits_float`
+    Reinterpret the bits of a float32 as an int32, and back.
+:func:`multiply_high`
+    Return the high word of the product of two int32 values.
 :func:`fast_reciprocal`
-    A float32 reciprocal from a bit-pattern estimate and two Newton
-    steps, with no hardware reciprocal.
+    Return a float32 reciprocal without the hardware reciprocal.
+
+Each inline-PTX intrinsic has a NumPy body that returns the same bits
+as the device, which the CUDA simulator runs. The bfloat16 pair
+instructions need compute capability 8.0 or higher.
 """
 
 from typing import Optional, Tuple
@@ -114,7 +118,7 @@ def _bfloat16_value(bits) -> np.float32:
 def bf16x2_pack(high, low):
     """Return ``high`` and ``low`` rounded to bfloat16 in one word.
 
-    ``high`` takes bits 16-31 and ``low`` bits 0-15.
+    Return ``high`` in bits 16-31 and ``low`` in bits 0-15.
     """
     return np.uint32(
         (int(_bfloat16_bits(high)) << 16) | int(_bfloat16_bits(low))
@@ -135,10 +139,11 @@ def bf16x2_fma(a, b, c):
     """Return the lane-wise bfloat16 ``a * b + c`` of three packed words."""
     lanes = []
     for unpack in (bf16x2_high, bf16x2_low):
-        # The float64 product and sum are exact for bfloat16 operands.
+        # Compute in float64, which holds the product and sum of
+        # bfloat16 operands exactly.
         exact = float(unpack(a)) * float(unpack(b)) + float(unpack(c))
         # Round to float32 towards odd, so that the bfloat16 rounding
-        # below rounds once from the exact value.
+        # below rounds once from the exact value as the hardware does.
         nearest = np.float32(exact)
         if float(nearest) != exact and np.isfinite(nearest):
             if abs(float(nearest)) > abs(exact):
@@ -170,10 +175,11 @@ def multiply_high(a, b):
 
 
 RECIPROCAL_ESTIMATE_MAGIC = 0x7EF311C3
-"""Bits that, less a positive float32, estimate its reciprocal.
+"""Constant whose difference with the bits of a positive float32 is the
+bits of an estimate of its reciprocal.
 
-The estimate's relative error is under 12.5%; each Newton step squares
-it.
+The estimate is within 12.5% of the reciprocal. After ``k`` Newton
+steps the relative error is at most ``0.125 ** (2 ** k)``.
 """
 
 RECIPROCAL_SMALLEST = np.float32(2.0**-126)
@@ -186,9 +192,10 @@ RECIPROCAL_LARGEST = np.float32(2.0**126)
 def fast_reciprocal(value):
     """Return ``1 / value`` from a bit estimate and two Newton steps.
 
-    The magnitude is clamped to ``[2**-126, 2**126]`` first, so zero
-    gives ``2**126`` and infinity ``2**-126``, each with the sign of
-    ``value``. Inside that range the relative error is under 3e-4.
+    Clamp the magnitude of ``value`` to ``[2**-126, 2**126]`` first, so
+    return ``2**126`` for zero and ``2**-126`` for infinity, each with
+    the sign of ``value``. Inside that range, return a value within
+    3e-4 of the reciprocal.
     """
     value = np.float32(value)
     magnitude = min(
@@ -229,8 +236,9 @@ _inline_asm_intrinsic(
     bf16x2_fma, types.uint32, (types.uint32, types.uint32, types.uint32),
     "fma.rn.bf16x2 $0, $1, $2, $3;", "=r,r,r,r",
 )
-# The packed conversion runs on the arithmetic pipe; the scalar
-# cvt.rn.bf16.f32 runs on the slower conversion unit.
+# Convert with the packed instruction: the hardware issues it on the
+# arithmetic pipe, and the scalar cvt.rn.bf16.f32 on the slower
+# conversion unit.
 _inline_asm_intrinsic(
     bf16x2_insert_low, types.uint32, (types.uint32, types.float32),
     "{.reg .b32 pair; cvt.rn.bf16x2.f32 pair, 0f00000000, $2;"

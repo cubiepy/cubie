@@ -843,7 +843,7 @@ def _system_pattern_structure(
 class PairedBfloat16Storage:
     """Print factor slots as bfloat16 pairs in 32-bit words.
 
-    Slot ``k`` sits in word ``k // 2``: even slots in the low half,
+    Store slot ``k`` in word ``k // 2``, even slots in the low half and
     odd slots in the high half.
     """
 

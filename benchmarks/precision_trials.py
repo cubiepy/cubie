@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 """Time and score reduced-precision trial settings on Lorenz and Fabbri.
 
-Each configuration builds one ``Solver``; each arm is a dict of solver
-settings applied over it. ``measure`` times every arm with the
-``ComparisonRunner`` protocol and scores its cost against the first
-arm: status flags, step and Newton counters, and the end-state
-deviation in units of the scaled tolerance. ``census`` runs one solve
-between ``cuda.profile_start`` and ``cuda.profile_stop`` for an Nsight
-Compute capture.
+The script builds one ``Solver`` per configuration and applies each arm,
+a dict of solver settings, over it. In ``measure`` mode it times every
+arm with the ``ComparisonRunner`` protocol and compares each arm with the
+first: status flags, step and Newton counters, and the end-state
+deviation in units of the scaled tolerance. In ``census`` mode it runs
+one solve between ``cuda.profile_start`` and ``cuda.profile_stop`` for an
+Nsight Compute capture.
 
 Usage::
 
-    python benchmarks/precision_trials.py measure lorenz_tsit5 \
-        --arms '[{}, {"lowp_norm": true}]'
-    ncu --profile-from-start off ... python benchmarks/precision_trials.py \
-        census fabbri_radau5
+    python benchmarks/precision_trials.py measure lorenz_tsit5         --arms '[{}, {"low_precision_norms": true}]'
+    ncu --profile-from-start off ... python benchmarks/precision_trials.py         census fabbri_radau5
 """
 
 import argparse
@@ -168,7 +166,8 @@ def solve(solver, entry, n_runs):
 
 def end_state_and_counters(result):
     """Return the last saved state, the counters and the status codes."""
-    # Copy: the result's buffers return to the solver for its next solve.
+    # Copy the arrays, because the solver reuses the result's buffers in
+    # its next solve.
     state = np.array(result.time_domain_array[-1], copy=True)
     counters = np.array(result.iteration_counters, copy=True)
     codes = np.array(result.status_codes, copy=True).ravel()

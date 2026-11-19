@@ -537,10 +537,11 @@ def _reduced_precision_field():
 
 @frozen
 class ReducedPrecisionFlags(FrozenSettings):
-    """Switches that move chosen device-code values below run precision.
+    """Select device code that computes chosen values below run precision.
 
-    Every flag defaults to ``False``, which compiles the run-precision
-    code. The flags apply to float32 runs; other precisions ignore them.
+    Set a flag to ``True`` to compile its reduced-precision code. Every
+    flag defaults to ``False``, and the flags have no effect at
+    precisions other than float32.
 
     Attributes
     ----------
@@ -550,8 +551,8 @@ class ReducedPrecisionFlags(FrozenSettings):
     low_precision_norms
         Reduce scaled norms in packed bfloat16 pairs.
     low_precision_controller
-        Compute step-size gains from base-2 exponents and mantissas
-        instead of ``pow``.
+        Compute step-size gains from the bits of the float32 inputs,
+        read as base-2 logarithms, instead of ``pow``.
     low_precision_predictor
         Apply the dense stage predictor's matrix in packed bfloat16
         pairs.
@@ -805,7 +806,7 @@ class CUDAFactoryConfig(_CubieConfigBase):
     def uses_reduced_precision(self, name: str) -> bool:
         """Return whether the reduced-precision flag ``name`` is on.
 
-        A flag is on only for float32 runs.
+        Return ``False`` for every precision but float32.
         """
         return self.precision == np_float32 and getattr(
             self.reduced_precision, name

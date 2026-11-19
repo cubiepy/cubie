@@ -133,7 +133,7 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   `_controller`, `_predictor`, `_factors`, `_rhs`; loose keys in
   `ALL_REDUCED_PRECISION_PARAMETERS`, all default `False`). A `build()` reads one through
   `config.uses_reduced_precision(name)`, which is `False` for any precision but float32.
-  `benchmarks/precision_trials.py` times and scores them.
+  Time and score them with `benchmarks/precision_trials.py`.
 - `build()` writes the sizes, flags and device functions a parent reads into the
   cache; parents read children's `products` at update time to feed siblings.
 - **Settings resolve at the `Solver`:** `batchsolving/solver_settings.py` records the

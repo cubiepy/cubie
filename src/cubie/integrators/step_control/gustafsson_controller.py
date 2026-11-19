@@ -228,8 +228,9 @@ class GustafssonController(BaseAdaptiveStepController):
                 gain_basic = gain_from_log_bits(
                     log_bits(fac) + scaled_power(log_error, error_scale)
                 )
-                # Products and quotients are sums and differences of
-                # log bits; the 1.0 offsets of dt and dt_prev cancel.
+                # Multiply and divide by adding and subtracting log bits.
+                # We subtract the raw bits of dt_prev from those of dt,
+                # so that difference needs no 1.0 offset.
                 gain_gus = gain_from_log_bits(
                     log_safety
                     + (float_bits(current_dt) - float_bits(dt_prev))

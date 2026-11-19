@@ -647,8 +647,10 @@ class ODEImplicitStep(BaseAlgorithmStep):
     ) -> dict:
         """Return the ``cached_auxiliaries`` size and element type.
 
-        Prefactored LU factors stored as bfloat16 sit two to a 32-bit
-        word; every other cache holds ``count`` run-precision values.
+        Return ``(count + 1) // 2`` ``uint32`` words when
+        ``holds_factors`` is set and the step stores its prefactored LU
+        factors as bfloat16 pairs, and ``count`` run-precision elements
+        otherwise.
         """
         if holds_factors and self._factor_request_kwargs()[
             "low_precision_factors"

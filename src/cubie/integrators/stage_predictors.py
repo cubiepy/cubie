@@ -594,8 +594,8 @@ class DenseStagePredictor(CUDAFactory):
     def _packed_predictor(self, alloc_transform, alloc_previous_values):
         """Compile the read-ahead with bfloat16 pairs of states.
 
-        The matrix-vector product runs on two states per packed
-        operation; an odd last state runs in run precision.
+        Multiply two states per packed operation, and the last state in
+        run precision when the state count is odd.
         """
         config = self.compile_settings
         typed_zero = config.numba_precision(0.0)
