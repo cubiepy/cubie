@@ -9,6 +9,7 @@ Modified numba-cuda-mlir source: (c) NVIDIA CORPORATION; Apache 2.0.
 """
 
 import ast
+import contextvars
 import copy
 import functools
 import inspect
@@ -21,25 +22,16 @@ from numba_cuda_mlir import descriptor as _descriptor
 from numba_cuda_mlir import lowering_utilities
 from numba_cuda_mlir import mlir_compiler as _mlir_compiler
 from numba_cuda_mlir import mlir_lowering as _ml
-from numba_cuda_mlir import mlir_optimization as _mlir_optimization
-from numba_cuda_mlir._mlir.dialects import arith
 from numba_cuda_mlir.ast_transforms import (
-    ASTTransformPass,
     apply_ast_transforms,
 )
 from numba_cuda_mlir.ast_transforms import common as _ast_common
+from numba_cuda_mlir.ast_transforms import consteval as _ast_consteval
 from numba_cuda_mlir.extending import register_typed_planner
 from numba_cuda_mlir.lowering import builtins as _lbuiltins
-from numba_cuda_mlir.lowering import cuda as _lcuda
 from numba_cuda_mlir.lowering import math as _lmath
 from numba_cuda_mlir.lowering import numpy as _lnumpy
 from numba_cuda_mlir.numba_cuda import types
-from numba_cuda_mlir.numba_cuda.core import (
-    analysis as _nb_analysis,
-)
-from numba_cuda_mlir.numba_cuda.core import (
-    controlflow as _nb_controlflow,
-)
 from numba_cuda_mlir.numba_cuda.core import (
     errors as _nb_errors,
 )
@@ -58,6 +50,8 @@ from numba_cuda_mlir.numba_cuda.core import (
 from numba_cuda_mlir.numba_cuda.core import (
     untyped_passes as _nb_untyped_passes,
 )
+from numba_cuda_mlir.numba_cuda import typing as _nb_typing
+from numba_cuda_mlir.numba_cuda.typing import templates as _nb_templates
 from numba_cuda_mlir.numba_cuda.typing.templates import signature
 from numba_cuda_mlir.typing import math as _tmath
 
@@ -66,8 +60,12 @@ from numba_cuda_mlir.typing import math as _tmath
 # ------------------------------------------------------------------ #
 
 
+# The pull request closed when upstream lowered Boolean/integer
+# comparisons; Boolean/Float comparisons still have no lowering.
+
+
 def apply_mixed_bool_number() -> None:
-    """Register mixed Boolean/Number comparisons; ``!=`` unordered."""
+    """Register Boolean/Float comparisons in both operand orders."""
     for op, cg in (
         (operator.ne, _lmath.ne_cg),
         (operator.eq, _lmath.eq_cg),
@@ -76,15 +74,8 @@ def apply_mixed_bool_number() -> None:
         (operator.gt, _lmath.gt_cg),
         (operator.ge, _lmath.ge_cg),
     ):
-        _lmath.registry.lower(op, types.Boolean, types.Number)(cg)
-        _lmath.registry.lower(op, types.Number, types.Boolean)(cg)
-    # _operator_mapping is cached; its dict is the mapping in use.
-    _lmath._operator_mapping()[operator.ne] = _lmath.OpForType(
-        _lmath._make_fcmp(arith.CmpFPredicate.UNE),
-        _lmath._make_icmp(arith.CmpIPredicate.ne),
-        _lmath._make_icmp(arith.CmpIPredicate.ne),
-        None,
-    )
+        _lmath.registry.lower(op, types.Boolean, types.Float)(cg)
+        _lmath.registry.lower(op, types.Float, types.Boolean)(cg)
 
 
 apply_mixed_bool_number()
@@ -511,91 +502,6 @@ apply_perf_ssa_restricted_sweeps()
 
 
 # ------------------------------------------------------------------ #
-# frontend-set-copies-pr                                             #
-# ------------------------------------------------------------------ #
-
-
-def _analysis_compute_dead_maps(cfg, blocks, live_map, var_def_map):
-    """End-of-life maps from the block-entry ``live_map``."""
-    escaping_dead_map = defaultdict(set)
-    internal_dead_map = defaultdict(set)
-    exit_dead_map = defaultdict(set)
-
-    for offset, ir_block in blocks.items():
-        cur_live_set = live_map[offset] | var_def_map[offset]
-        outgoing_live_map = dict(
-            (out_blk, live_map[out_blk])
-            for out_blk, _data in cfg.successors(offset)
-        )
-        terminator_liveset = set(
-            v.name for v in ir_block.terminator.list_vars()
-        )
-        combined_liveset = functools.reduce(
-            operator.or_, outgoing_live_map.values(), set()
-        )
-        combined_liveset |= terminator_liveset
-        internal_set = cur_live_set - combined_liveset
-        internal_dead_map[offset] = internal_set
-        escaping_live_set = cur_live_set - internal_set
-        for out_blk, new_live_set in outgoing_live_map.items():
-            new_live_set = new_live_set | var_def_map[out_blk]
-            escaping_dead_map[out_blk] |= escaping_live_set - new_live_set
-        if not outgoing_live_map:
-            exit_dead_map[offset] = terminator_liveset
-
-    all_vars = set().union(*live_map.values())
-    internal_dead_vars = set().union(*internal_dead_map.values())
-    escaping_dead_vars = set().union(*escaping_dead_map.values())
-    exit_dead_vars = set().union(*exit_dead_map.values())
-    dead_vars = internal_dead_vars | escaping_dead_vars | exit_dead_vars
-    missing_vars = all_vars - dead_vars
-    if missing_vars:
-        if not cfg.exit_points():
-            pass
-        else:
-            msg = "liveness info missing for vars: {0}".format(missing_vars)
-            raise RuntimeError(msg)
-
-    combined = dict(
-        (k, internal_dead_map[k] | escaping_dead_map[k]) for k in blocks
-    )
-
-    return _nb_analysis._dead_maps_result(
-        internal=internal_dead_map,
-        escaping=escaping_dead_map,
-        combined=combined,
-    )
-
-
-def _ir_utils_fixup_var_define_in_scope(blocks):
-    """Define every referenced ir.Var in every scope the blocks use."""
-    used_var = {}
-    for blk in blocks.values():
-        for inst in blk.body:
-            for var in inst.list_vars():
-                used_var[var] = inst
-    scopes = {id(blk.scope): blk.scope for blk in blocks.values()}
-    for scope in scopes.values():
-        for var in used_var.keys():
-            if var.name not in scope.localvars:
-                scope.localvars.define(var.name, var)
-
-
-def apply_frontend_set_copies() -> None:
-    """Build dead maps and scope repairs without set copies."""
-    _nb_analysis.compute_dead_maps = _analysis_compute_dead_maps
-    _nb_ir_utils.fixup_var_define_in_scope = (
-        _ir_utils_fixup_var_define_in_scope
-    )
-    _nb_untyped_passes.fixup_var_define_in_scope = (
-        _ir_utils_fixup_var_define_in_scope
-    )
-
-
-apply_frontend_set_copies()
-
-
-# ------------------------------------------------------------------ #
 # perf-inline-callee-ir-cache                                        #
 # ------------------------------------------------------------------ #
 
@@ -847,251 +753,153 @@ apply_perf_inline_callee_ir_cache()
 
 
 # ------------------------------------------------------------------ #
-# ssa-iterative-def-search-pr                                        #
-# ------------------------------------------------------------------ #
-
-
-def _find_def_from_top(self, states, label, loc):
-    """Find definition reaching the top of the block at ``label``,
-    inserting phi nodes where necessary.
-
-    Runs on an explicit worklist so the search depth does not grow
-    with the CFG. Each ``pending`` item is a ``(phinode, pred, loc)``
-    triple whose resolved incoming definition is appended to
-    ``phinode``; predecessors are pushed in reverse so phi nodes are
-    created, and fresh variables numbered, in depth-first order.
-    """
-    pending = []
-    result = self._walk_def_chain(states, label, loc, True, pending)
-    while pending:
-        phinode, pred, philoc = pending.pop()
-        incoming_def = self._walk_def_chain(
-            states,
-            pred,
-            philoc,
-            False,
-            pending,
-        )
-        _nb_ssa._logger.debug("incoming_def %s", incoming_def)
-        phinode.value.incoming_values.append(incoming_def.target)
-        phinode.value.incoming_blocks.append(pred)
-    return result
-
-
-def _walk_def_chain(self, states, label, loc, from_top, pending):
-    """Walk a single def-search chain.
-
-    Alternates between the *from_bottom* step (take the last
-    definition in the block, if any) and the *from_top* step (insert
-    a phi node, or hop to the immediate dominator).  A phi node is
-    registered in ``defmap`` before its predecessors are resolved,
-    so a chain revisiting the block terminates there; resolution of
-    the phi's incoming values is deferred onto ``pending``.
-    """
-    cfg = states["cfg"]
-    defmap = states["defmap"]
-    phimap = states["phimap"]
-    phi_locations = states["phi_locations"]
-
-    while True:
-        if not from_top:
-            _nb_ssa._logger.debug("find_def_from_bottom label %r", label)
-            defs = defmap[label]
-            if defs:
-                return defs[-1]
-            from_top = True
-
-        _nb_ssa._logger.debug("find_def_from_top label %r", label)
-        if label in phi_locations:
-            scope = states["scope"]
-            loc = states["block"].loc
-            # fresh variable
-            freshvar = scope.redefine(states["varname"], loc=loc)
-            # insert phi
-            phinode = _nb_ir.Assign(
-                target=freshvar,
-                value=_nb_ir.Expr.phi(loc=loc),
-                loc=loc,
-            )
-            _nb_ssa._logger.debug("insert phi node %s at %s", phinode, label)
-            defmap[label].insert(0, phinode)
-            phimap[label].append(phinode)
-            # Defer the search for the phi's incoming values;
-            # reversed so they resolve in predecessor order.
-            preds = [pred for pred, _ in cfg.predecessors(label)]
-            for pred in reversed(preds):
-                pending.append((phinode, pred, loc))
-            return phinode
-        else:
-            idom = cfg.immediate_dominators()[label]
-            if idom == label:
-                # We have searched to the top of the idom tree.
-                # Since we still cannot find a definition,
-                # we will warn.
-                _nb_ssa._warn_about_uninitialized_variable(
-                    states["varname"], loc
-                )
-                return _nb_ssa.UndefinedVariable
-            _nb_ssa._logger.debug("idom %s from label %s", idom, label)
-            label = idom
-            from_top = False
-
-
-def apply_ssa_iterative_def_search() -> None:
-    """Search SSA reaching definitions on an explicit worklist."""
-    fixer = _nb_ssa._FixSSAVars
-    fixer._find_def_from_top = _find_def_from_top
-    fixer._walk_def_chain = _walk_def_chain
-
-
-apply_ssa_iterative_def_search()
-
-
-# ------------------------------------------------------------------ #
-# topo-order-iterative-pr                                            #
-# ------------------------------------------------------------------ #
-
-
-def topo_sort(self, nodes, reverse=False):
-    """
-    Iterate over the *nodes* in topological order (ignoring back edges).
-    The sort isn't guaranteed to be stable.
-    """
-    nodes = set(nodes)
-    if not nodes:
-        return
-    it = self._topo_order
-    if reverse:
-        it = reversed(it)
-    for n in it:
-        if n in nodes:
-            yield n
-
-
-def _find_topo_order(self):
-    succs = self._succs
-    back_edges = self._back_edges
-    post_order = []
-    seen = set()
-
-    # Successors pushed in reverse so the stack visits them in
-    # iteration order.
-    def visit(node):
-        if node not in seen:
-            seen.add(node)
-            stack.append((post_order.append, node))
-            forward = [
-                dest for dest in succs[node] if (node, dest) not in back_edges
-            ]
-            stack.extend((visit, dest) for dest in reversed(forward))
-
-    stack = [(visit, self._entry_point)]
-    while stack:
-        cb, node = stack.pop()
-        cb(node)
-
-    post_order.reverse()
-    return post_order
-
-
-def apply_topo_order_iterative() -> None:
-    """Compute CFGraph topological order without recursion."""
-    graph = _nb_controlflow.CFGraph
-    graph.topo_sort = topo_sort
-    graph._find_topo_order = _find_topo_order
-
-
-apply_topo_order_iterative()
-
-
-# ------------------------------------------------------------------ #
-# empty-body-repair-pr                                               #
-# ------------------------------------------------------------------ #
-
-
-class EmptyBodyRepairer(ast.NodeTransformer):
-    """Fill empty statement bodies with ``pass``."""
-
-    def __init__(self):
-        self.modified = False
-
-    def visit_Module(self, node: ast.Module) -> ast.Module:
-        return super().generic_visit(node)
-
-    def generic_visit(self, node: ast.AST) -> ast.AST:
-        node = super().generic_visit(node)
-        body = getattr(node, "body", None)
-        if isinstance(body, list) and not body:
-            node.body = [ast.copy_location(ast.Pass(), node)]
-            self.modified = True
-        return node
-
-
-def repair_empty_bodies(tree: ast.Module) -> tuple[ast.Module, bool]:
-    """Insert ``pass`` into every empty statement body."""
-    repairer = EmptyBodyRepairer()
-    new_tree = repairer.visit(tree)
-    ast.fix_missing_locations(new_tree)
-    return new_tree, repairer.modified
-
-
-class EmptyBodyRepairPass(ASTTransformPass):
-    """Pipeline pass filling bodies emptied by earlier passes."""
-
-    @property
-    def name(self) -> str:
-        return "EmptyBodyRepair"
-
-    def transform(self, tree, context):
-        return repair_empty_bodies(tree)
-
-
-def apply_empty_body_repair() -> None:
-    """Append the empty-body repair pass to the transform pipeline."""
-    stock_create_default_pipeline = _ast_transforms.create_default_pipeline
-
-    def create_default_pipeline():
-        pipeline = stock_create_default_pipeline()
-        pipeline.add_pass(EmptyBodyRepairPass())
-        return pipeline
-
-    _ast_transforms.create_default_pipeline = create_default_pipeline
-
-
-apply_empty_body_repair()
-
-
-# ------------------------------------------------------------------ #
 # inlined-callee-ast-transforms-pr                                   #
 # ------------------------------------------------------------------ #
 
-_INLINEE_PARAMETER = object()
+
+@classmethod
+def _consteval_is_consteval_call(cls, node):
+    """Check if a node is a call to consteval or literally."""
+    if not isinstance(node, ast.Call):
+        return False
+    if isinstance(node.func, ast.Name):
+        return node.func.id in cls.CONSTEVAL_NAMES
+    elif isinstance(node.func, ast.Attribute):
+        return node.func.attr in cls.CONSTEVAL_NAMES
+    return False
 
 
-def transform_inline_callee(pyfunc, targetoptions):
-    """Apply AST transforms to an inlinee under the caller's options.
+def reads_parameters(func):
+    """Return whether a consteval in ``func`` names one of its parameters.
 
-    Parameters resolve to a placeholder.
+    We look inside ``consteval(...)`` arguments and ``with consteval():``
+    bodies, because the consteval pass reads parameter types nowhere else.
+    """
+    tree = _ast_common.get_function_ast(func)
+    if tree is None:
+        return False
+
+    is_consteval = _ast_consteval.ConstevalTransformer._is_consteval_call
+    parameters = set(inspect.signature(func).parameters)
+    for node in ast.walk(tree):
+        if is_consteval(node):
+            scanned = node.args
+        elif isinstance(node, ast.With) and any(
+            is_consteval(i.context_expr) for i in node.items
+        ):
+            scanned = node.body
+        else:
+            continue
+        for part in scanned:
+            if any(
+                isinstance(n, ast.Name) and n.id in parameters
+                for n in ast.walk(part)
+            ):
+                return True
+    return False
+
+
+def transform_inline_callee(pyfunc, targetoptions, argtypes=None):
+    """Apply AST transforms to an inlinee under the caller's options and
+    its call's argument types.
+
+    Without ``argtypes`` we return None if a consteval in the inlinee
+    names one of its parameters, because the transform then needs the
+    argument types.
     """
     if not targetoptions.get("experimental_ast_transforms", False):
         return pyfunc
+    if argtypes is None and reads_parameters(pyfunc):
+        return None
 
-    argtypes = (_INLINEE_PARAMETER,) * len(
-        inspect.signature(pyfunc).parameters
-    )
     transformed, _ = apply_ast_transforms(pyfunc, targetoptions, argtypes)
     return transformed
 
 
-def _inline_worker_transform_inlinee(self, function):
-    """Apply the configured target-specific transform to an inlinee."""
+# While InlineInlinables partially types a caller, it stores a function
+# here. MLIRDispatcher.get_call_template asks that function for a call's
+# signature, which it gets by typing the callee's transformed IR instead
+# of compiling the callee.
+inlinee_typer = contextvars.ContextVar("inlinee_typer", default=None)
+
+
+class InlineeNeedsArgTypes(Exception):
+    """Raised inside an inlinee's untyped run to ask the enclosing
+    InlineInlinables to type the call and inline the callee again."""
+
+
+def _inline_worker_inline_function(
+    self, caller_ir, block, i, function, arg_typs=None
+):
+    """Inline ``function`` into ``caller_ir`` at statement ``i`` of
+    ``block``.
+
+    We run the function's untyped passes with ``arg_typs`` as its
+    argument types. A call without ``arg_typs`` takes its callee IR from
+    the pipeline's callee IR cache (perf-inline-callee-ir-cache).
+    """
+    if arg_typs is None:
+        callee_ir = self._fresh_callee_ir(function)
+    else:
+        callee_ir = self.run_untyped_passes(function, arg_typs=arg_typs)
+    freevars = function.__code__.co_freevars
+    return self.inline_ir(
+        caller_ir,
+        block,
+        i,
+        callee_ir,
+        freevars,
+        arg_typs=arg_typs,
+        preserve_ir=False,
+    )
+
+
+def _inline_worker_type_callee(self, function, arg_typs):
+    """Run the untyped passes over a callee in SSA form and type it for
+    arg_typs.
+
+    Returns
+    -------
+    tuple
+        The callee's IR and its ``type_inference_stage`` results.
+    """
+    from numba_cuda_mlir.numba_cuda.core.typed_passes import (
+        type_inference_stage,
+    )
+
+    callee_ir = self.run_untyped_passes(
+        function, enable_ssa=True, arg_typs=arg_typs
+    )
+    typing = type_inference_stage(
+        self.typingctx, self.targetctx, callee_ir, arg_typs, None
+    )
+    return callee_ir, typing
+
+
+def _inline_worker_transform_inlinee(self, function, arg_typs=None):
+    """Transform an inlinee with the compiling function's inlinee
+    transform.
+
+    Without a configured transform we return ``function`` unchanged.
+    Otherwise we return what the transform returns: ``function`` itself
+    when there is nothing to change, a new function when there is, or
+    None when ``arg_typs`` is None and the transform needs the call's
+    argument types.
+    """
     if self.inlinee_transform is None:
         return function
-    return self.inlinee_transform(function, self.targetoptions)
+    return self.inlinee_transform(function, self.targetoptions, arg_typs)
 
 
-def _inline_worker_run_untyped_passes(self, func, enable_ssa=False):
-    """Run the untyped passes over ``func`` and return its Numba IR."""
+def _inline_worker_run_untyped_passes(
+    self, func, enable_ssa=False, arg_typs=None
+):
+    """Run the untyped passes over ``func`` and return its Numba IR.
+
+    Without ``arg_typs`` we type every argument as pyobject.
+    InlineInlinables reads pyobject arguments as the sign that it is
+    running inside such an inline.
+    """
     from numba_cuda_mlir.numba_cuda.core.compiler import (
         StateDict,
         _CompileStatus,
@@ -1124,8 +932,11 @@ def _inline_worker_run_untyped_passes(self, func, enable_ssa=False):
         state.metadata["inlinee_transform"] = self.inlinee_transform
 
     ExtractByteCode().run_pass(state)
-    # Placeholder args for the object-mode lifting path.
-    state.args = len(state.bc.func_id.pysig.parameters) * (types.pyobject,)
+    if arg_typs is not None:
+        state.args = tuple(arg_typs)
+    else:
+        # Placeholder args for the object-mode lifting path.
+        state.args = len(state.bc.func_id.pysig.parameters) * (types.pyobject,)
 
     pm = self._compiler_pipeline(state)
 
@@ -1151,6 +962,8 @@ def _inline_inlinables_run_pass(self, state):
         targetoptions=state.metadata.get("targetoptions"),
         inlinee_transform=state.metadata.get("inlinee_transform"),
     )
+    # We type the caller at most once in this run, in _call_argtypes.
+    state.typemap = None
 
     modified = False
     # use a work list, look for call sites via `ir.Expr.op == call`
@@ -1174,6 +987,10 @@ def _inline_inlinables_run_pass(self, state):
                         modified = True
                         break  # because block structure changed
 
+    # reset type inference now we are done with the partial results
+    state.typemap = None
+    state.calltypes = None
+
     if modified:
         # clean up unconditional branches that appear due to inlined
         # functions introducing blocks
@@ -1193,15 +1010,14 @@ def _inline_inlinables_run_pass(self, state):
     return True
 
 
-def _inline_inlinables_do_work(
-    self, state, work_list, block, i, expr, inline_worker
-):
-    from numba_cuda_mlir.numba_cuda.compiler import run_frontend
-    from numba_cuda_mlir.numba_cuda.core.options import InlineOptions
+def _inline_inlinables_callee(self, func_ir, expr):
+    """Return the object that a call expression calls.
 
-    to_inline = None
+    We return False when the call has no definition we can follow, or
+    when it calls a closure, which another pass inlines.
+    """
     try:
-        to_inline = state.func_ir.get_definition(expr.func)
+        to_inline = func_ir.get_definition(expr.func)
     except Exception:
         if self._DEBUG:
             print("Cannot find definition for %s" % expr.func)
@@ -1211,15 +1027,21 @@ def _inline_inlinables_do_work(
         return False
 
     if getattr(to_inline, "op", False) == "getattr":
-        val = _nb_untyped_passes.resolve_func_from_module(
-            state.func_ir, to_inline
-        )
-    else:
-        # getattr on an ir.Expr looks in _kws and may fail.
-        try:
-            val = getattr(to_inline, "value", False)
-        except Exception:
-            raise _nb_untyped_passes.GuardException
+        return _nb_untyped_passes.resolve_func_from_module(func_ir, to_inline)
+    # getattr on an ir.Expr looks in _kws and may fail.
+    try:
+        return getattr(to_inline, "value", False)
+    except Exception:
+        raise _nb_untyped_passes.GuardException
+
+
+def _inline_inlinables_do_work(
+    self, state, work_list, block, i, expr, inline_worker
+):
+    from numba_cuda_mlir.numba_cuda.compiler import run_frontend
+    from numba_cuda_mlir.numba_cuda.core.options import InlineOptions
+
+    val = self._callee(state.func_ir, expr)
 
     if val:
         # Dispatcher-like values carry the jit kwargs in targetoptions.
@@ -1237,12 +1059,8 @@ def _inline_inlinables_do_work(
                             expr, state.func_ir, py_func_ir
                         )
                     if do_inline:
-                        pyfunc = inline_worker.transform_inlinee(pyfunc)
-                        _, _, _, new_blocks = inline_worker.inline_function(
-                            state.func_ir,
-                            block,
-                            i,
-                            pyfunc,
+                        new_blocks = self._inline(
+                            state, block, i, expr, val, inline_worker
                         )
                         if work_list is not None:
                             for blk in new_blocks:
@@ -1251,9 +1069,258 @@ def _inline_inlinables_do_work(
     return False
 
 
+def _inline_inlinables_inline(
+    self, state, block, i, expr, dispatcher, inline_worker
+):
+    """Inline a call, transforming the callee for the call's argument
+    types when it needs them.
+
+    We first inline the callee without argument types. The transform
+    returns None if a consteval in the callee names one of its
+    parameters, and the callee's untyped run raises InlineeNeedsArgTypes
+    if a callee nested in it does. Both happen before we change the
+    caller's IR, so we can then type the call and inline the callee for
+    those types.
+    """
+    function = inline_worker.transform_inlinee(dispatcher.py_func)
+    if function is not None:
+        try:
+            return inline_worker.inline_function(
+                state.func_ir, block, i, function
+            )[3]
+        except InlineeNeedsArgTypes:
+            pass
+    if any(isinstance(argtype, types.PyObject) for argtype in state.args):
+        # This is the untyped run of an enclosing inlinee, so its caller
+        # types the call.
+        raise InlineeNeedsArgTypes(dispatcher.py_func.__name__)
+    argtypes = self._call_argtypes(state, expr, dispatcher, inline_worker)
+    function = inline_worker.transform_inlinee(dispatcher.py_func, argtypes)
+    _, _, _, new_blocks = inline_worker.inline_function(
+        state.func_ir, block, i, function, arg_typs=argtypes
+    )
+    return new_blocks
+
+
+def _inline_inlinables_call_argtypes(
+    self, state, expr, dispatcher, inline_worker
+):
+    """Fold the call's argument types, as a call would, from a partial
+    typing of the caller.
+
+    We type the caller once per run of this pass and reuse the types for
+    every later call. That is safe because inlining renames only the
+    callee's variables, and the call arguments are the caller's own
+    variables.
+    """
+    from numba_cuda_mlir.numba_cuda.core.typed_passes import (
+        PartialTypeInference,
+    )
+
+    if state.typemap is None:
+        token = inlinee_typer.set(self._inlinee_typer(state, inline_worker))
+        try:
+            PartialTypeInference().run_pass(state)
+        finally:
+            inlinee_typer.reset(token)
+    typemap = state.typemap
+
+    argtypes = [typemap.get(var.name, types.unknown) for var in expr.args]
+    kwtypes = {
+        name: typemap.get(var.name, types.unknown) for name, var in expr.kws
+    }
+    if types.unknown in argtypes or types.unknown in kwtypes.values():
+        for error in state.typing_errors or ():
+            raise error
+        raise _nb_errors.TypingError(
+            "Cannot determine the argument types of the call to "
+            f"{dispatcher.py_func.__name__}",
+            loc=expr.loc,
+        )
+    return tuple(
+        dispatcher._compiler.fold_argument_types(argtypes, kwtypes)[1]
+    )
+
+
+def _inline_inlinables_inlinee_typer(self, state, inline_worker):
+    """Return a function that types a call to one of the caller's callees
+    from its transformed IR.
+
+    The function returns None for any other dispatcher, so that an
+    overload template still compiles its implementation. It also returns
+    None for a callee it is already typing, so that a recursive callee is
+    compiled.
+    """
+    calls = (
+        call
+        for block in state.func_ir.blocks.values()
+        for call in block.find_exprs("call")
+    )
+    callees = {
+        callee
+        for callee in (
+            _nb_untyped_passes.guard(self._callee, state.func_ir, call)
+            for call in calls
+        )
+        if hasattr(callee, "py_func")
+    }
+    typing = set()
+    signatures = {}
+
+    def type_inlinee(dispatcher, argtypes):
+        if dispatcher not in callees or dispatcher in typing:
+            return None
+        if (dispatcher, argtypes) in signatures:
+            return signatures[dispatcher, argtypes]
+        typing.add(dispatcher)
+        try:
+            function = inline_worker.transform_inlinee(
+                dispatcher.py_func, argtypes
+            )
+            _, results = inline_worker.type_callee(function, argtypes)
+        finally:
+            typing.discard(dispatcher)
+        signatures[dispatcher, argtypes] = _nb_templates.Signature(
+            results.return_type, argtypes, None
+        )
+        return signatures[dispatcher, argtypes]
+
+    return type_inlinee
+
+
+def _dispatcher_get_call_template(self, args, kws):
+    """Resolve return type when this dispatcher is called from another
+    jit function. Always compile as a device function so we don't emit
+    kernel metadata for callees."""
+    pysig, args = self._compiler.fold_argument_types(args, kws)
+    kws = {}
+    typer = inlinee_typer.get()
+    try:
+        signature = None if typer is None else typer(self, tuple(args))
+    except _nb_errors.ForceLiteralArg as e:
+
+        def folded(args, kws):
+            return self._compiler.fold_argument_types(args, kws)[1]
+
+        raise e.bind_fold_arguments(folded)
+    if signature is not None:
+        signatures = [signature]
+    else:
+        if self._can_compile:
+            self._compile_as_device_callee(tuple(args))
+        signatures = self.nopython_signatures
+    func_name = self.py_func.__name__
+    name = "CallTemplate({0})".format(func_name)
+    call_template = _nb_typing.make_concrete_template(
+        name, key=func_name, signatures=signatures
+    )
+    return call_template, pysig, args, kws
+
+
+def _overload_template_generic(self, args, kws):
+    """
+    Type the overloaded function by compiling the appropriate
+    implementation for the given args.
+    """
+    from numba_cuda_mlir.numba_cuda.core.typed_passes import (
+        PreLowerStripPhis,
+    )
+
+    disp, new_args = self._get_impl(args, kws)
+    if disp is None:
+        return
+    # Compile and type it for the given types
+    disp_type = types.Dispatcher(disp)
+    # Store the compiled overload for use in the lowering phase if there's
+    # no inlining required (else functions are being compiled which will
+    # never be used as they are inlined)
+    if not self._inline.is_never_inline:
+        # need to run the compiler front end up to type inference to
+        # compute a signature
+        from numba_cuda_mlir.numba_cuda.flags import Flags
+
+        fcomp = disp._compiler
+        flags = Flags()
+
+        # spoof a compiler pipline like the one that will be in use
+        tyctx = fcomp.targetdescr.typing_context
+        tgctx = fcomp.targetdescr.target_context
+
+        compiler_inst = fcomp.pipeline_class(
+            tyctx,
+            tgctx,
+            None,
+            None,
+            None,
+            flags,
+            None,
+        )
+        inline_worker = _nb_icc.InlineWorker(
+            tyctx,
+            tgctx,
+            fcomp.locals,
+            compiler_inst,
+            flags,
+            None,
+        )
+
+        # Resolve first, so that a `literally` call in the inlinee raises
+        # ForceLiteralArg through the dispatcher before the pipeline runs.
+        resolve = disp_type.dispatcher.get_call_template
+        template, pysig, folded_args, kws = resolve(new_args, kws)
+        ir, (typemap, return_type, calltypes, _) = inline_worker.type_callee(
+            disp_type.dispatcher.py_func, folded_args
+        )
+        ir = PreLowerStripPhis()._strip_phi_nodes(ir)
+        ir._definitions = _nb_ir_utils.build_definitions(ir.blocks)
+
+        sig = _nb_templates.Signature(return_type, folded_args, None)
+        # this stores a load of info for the cost model function if
+        # supplied it by default is None
+        self._inline_overloads[sig.args] = {"folded_args": folded_args}
+        # this stores the compiled overloads, if there's no compiled
+        # overload available i.e. function is always inlined, the key
+        # still needs to exist for type resolution
+
+        # NOTE: If lowering is failing on a `_EmptyImplementationEntry`,
+        #       the inliner has failed to inline this entry correctly.
+        impl_init = _nb_templates._EmptyImplementationEntry("always inlined")
+        self._compiled_overloads[sig.args] = impl_init
+        if not self._inline.is_always_inline:
+            # this branch is here because a user has supplied a function
+            # to determine whether to inline or not. As a result both
+            # compiled function and inliner info needed.
+            sig = disp_type.get_call_type(self.context, new_args, kws)
+            self._compiled_overloads[sig.args] = disp_type.get_overload(sig)
+            # store the inliner information, it's used later in the cost
+            # model function call
+        iinfo = _nb_templates._inline_info(ir, typemap, calltypes, sig)
+        self._inline_overloads[sig.args] = {
+            "folded_args": folded_args,
+            "iinfo": iinfo,
+        }
+    else:
+        sig = disp_type.get_call_type(self.context, new_args, kws)
+        if sig is None:  # can't resolve for this target
+            return None
+        self._compiled_overloads[sig.args] = disp_type.get_overload(sig)
+    # Keyed on sig.args, which the return type does not take part in, so
+    # the registrations above stay addressable by the same key.
+    return_type = _nb_templates.strip_star_args(sig.return_type)
+    return (
+        sig
+        if return_type == sig.return_type
+        else sig.replace(return_type=return_type)
+    )
+
+
 def apply_inlined_callee_ast_transforms() -> None:
-    """Transform inlined callees under the calling kernel's options."""
-    _ast_transforms._INLINEE_PARAMETER = _INLINEE_PARAMETER
+    """Transform inlined callees under the calling kernel's options and,
+    when a consteval reads a parameter, its call's argument types."""
+    consteval_transformer = _ast_consteval.ConstevalTransformer
+    consteval_transformer._is_consteval_call = _consteval_is_consteval_call
+    _ast_consteval.reads_parameters = reads_parameters
+    _ast_transforms.reads_parameters = reads_parameters
     _ast_transforms.transform_inline_callee = transform_inline_callee
 
     stock_recompile_function = _ast_common.recompile_function
@@ -1261,7 +1328,9 @@ def apply_inlined_callee_ast_transforms() -> None:
     def recompile_function(func, tree, stored_values=None):
         # Shift the dedented tree onto the function's file lines.
         ast.increment_lineno(tree, func.__code__.co_firstlineno - 1)
-        return stock_recompile_function(func, tree, stored_values)
+        new_func = stock_recompile_function(func, tree, stored_values)
+        new_func.__kwdefaults__ = func.__kwdefaults__
+        return new_func
 
     _ast_common.recompile_function = recompile_function
     _ast_transforms.recompile_function = recompile_function
@@ -1284,6 +1353,8 @@ def apply_inlined_callee_ast_transforms() -> None:
     _mlir_compiler.get_compiler_class = get_compiler_class
     _mlir_compiler.transform_inline_callee = transform_inline_callee
 
+    _nb_icc.inlinee_typer = inlinee_typer
+    _nb_icc.InlineeNeedsArgTypes = InlineeNeedsArgTypes
     worker = _nb_icc.InlineWorker
     stock_worker_init = worker.__init__
 
@@ -1296,11 +1367,25 @@ def apply_inlined_callee_ast_transforms() -> None:
         self.inlinee_transform = inlinee_transform
 
     worker.__init__ = worker_init
+    worker.inline_function = _inline_worker_inline_function
+    worker.type_callee = _inline_worker_type_callee
     worker.transform_inlinee = _inline_worker_transform_inlinee
     worker.run_untyped_passes = _inline_worker_run_untyped_passes
+
     passes = _nb_untyped_passes.InlineInlinables
     passes.run_pass = _inline_inlinables_run_pass
+    passes._callee = _inline_inlinables_callee
     passes._do_work = _inline_inlinables_do_work
+    passes._inline = _inline_inlinables_inline
+    passes._call_argtypes = _inline_inlinables_call_argtypes
+    passes._inlinee_typer = _inline_inlinables_inlinee_typer
+
+    _descriptor.MLIRDispatcher.get_call_template = (
+        _dispatcher_get_call_template
+    )
+    _nb_templates._OverloadFunctionTemplate.generic = (
+        _overload_template_generic
+    )
 
 
 apply_inlined_callee_ast_transforms()
@@ -1309,40 +1394,6 @@ apply_inlined_callee_ast_transforms()
 # ------------------------------------------------------------------ #
 # slice-python-parity                                                #
 # ------------------------------------------------------------------ #
-
-
-def lower_strides(_, mlir_lower, target, array):
-    from numba_cuda_mlir.lowering_utilities import index_of
-
-    array_numba_type = mlir_lower.get_numba_type(array.name)
-    array = mlir_lower.load_var(array)
-    array_type = array.type
-    rank = array_type.rank
-    element_size = _lcuda.storage_itemsize_bytes(array_numba_type)
-
-    if isinstance(array_type, _lcuda.ir.MemRefType):
-        metadata = _lcuda.memref.extract_strided_metadata(array)
-        element_strides = metadata[2 + rank : 2 + 2 * rank]
-        strides = [
-            _lcuda.arith.muli(index_of(stride), index_of(element_size))
-            for stride in element_strides
-        ]
-    elif isinstance(array_type, _lcuda.ir.RankedTensorType):
-        dims = [
-            _lcuda.tensor.dim(
-                source=array,
-                index=_lcuda.arith.constant(result=_lcuda.T.index(), value=i),
-            )
-            for i in range(rank)
-        ]
-        strides = [None] * rank
-        strides[-1] = index_of(element_size)
-        for i in range(rank - 2, -1, -1):
-            strides[i] = _lcuda.arith.muli(strides[i + 1], dims[i + 1])
-    else:
-        raise NotImplementedError(f"strides not implemented for {array_type}")
-
-    mlir_lower.store_var(target, tuple(strides))
 
 
 def _slice_init(self, start=None, stop=None, step=None):
@@ -1505,7 +1556,14 @@ def lower_array_getitem(builder, target, args, kwargs):
     if not array_type.has_rank:
         raise NotImplementedError("NYI: unranked memrefs")
 
-    index = np_._normalize_negative_index(array, index, 0)
+    index = np_._normalize_negative_index(
+        array,
+        index,
+        0,
+        None
+        if isinstance(args[1], int)
+        else builder.get_numba_type(args[1].name),
+    )
     if array_type.rank == 1:
         value = lowering_utilities.array_element_value_load(
             array_numba_type,
@@ -1621,8 +1679,17 @@ def lower_array_tuple_getitem(builder, target, args, kwargs):
     n_indexed = len(tuple_indices)
     n_trailing = source_rank - n_indexed
 
+    dims = [np_.memref.dim(array, np_.index_of(i)) for i in range(source_rank)]
+
+    tuple_numba_type = builder.get_numba_type(args[1].name)
     offsets, sizes, strides, is_scalar = [], [], [], []
     for dim, index in enumerate(tuple_indices):
+        if isinstance(index, slice) and index == slice(None, None, -1):
+            offsets.append(np_.arith.subi(dims[dim], np_.index_of(1)))
+            sizes.append(dims[dim])
+            strides.append(np_.index_of(-1))
+            is_scalar.append(False)
+            continue
         match index:
             case np_.Slice() as slc:
                 if not isinstance(target_type, types.Array):
@@ -1638,8 +1705,11 @@ def lower_array_tuple_getitem(builder, target, args, kwargs):
                 strides.append(s_step)
                 is_scalar.append(False)
             case int() | np_.ir.Value() as value:
+                index_type = tuple_numba_type.types[dim]
                 offsets.append(
-                    np_._normalize_negative_index(array, value, dim)
+                    np_._normalize_negative_index(
+                        array, value, dim, index_type
+                    )
                 )
                 sizes.append(1)
                 strides.append(1)
@@ -1671,7 +1741,12 @@ def lower_array_tuple_getitem(builder, target, args, kwargs):
                 array, full_offsets, full_sizes, full_strides, full_is_scalar
             )
             builder.store_var(target, value)
-        case types.Number() | types.Boolean():
+        case (
+            types.Number()
+            | types.Boolean()
+            | types.NPDatetime()
+            | types.NPTimedelta()
+        ):
             value = lowering_utilities.array_element_value_load(
                 array_numba_type,
                 array,
@@ -1686,60 +1761,9 @@ def lower_array_tuple_getitem(builder, target, args, kwargs):
             )
 
 
-def _request_dynamic_shared_memory(self, mr_type):
-    bytes = _ml.get_type_size_bytes(mr_type.element_type)
-    assert self.mlir_funcOp
-    # Emit at the current insertion point: the entry block may
-    # already have a terminator once the request appears after
-    # control flow. The shared-memory base itself is still created
-    # at the entry block's start by _get_shared_memory_base.
-    bytes_op = _ml.arith.constant(result=_ml.T.index(), value=bytes)
-    shm_base = self._get_shared_memory_base()
-    total_shared_memory_bytes = self._load_total_shared_memory_bytes()
-    # LLVM 7 has no dynamic_smem_size intrinsic; read the sreg directly.
-    smem_size = _ml.llvm.inline_asm(
-        _ml.T.i32(),
-        [],
-        "mov.u32 $0, %dynamic_smem_size;",
-        "=r",
-    )
-    dynamic_shared_bytes = self.mlir_convert(smem_size, _ml.T.index())
-    remaining_bytes = _ml.arith.subi(
-        lhs=dynamic_shared_bytes, rhs=total_shared_memory_bytes
-    )
-    size = _ml.arith.divui(lhs=remaining_bytes, rhs=bytes_op)
-    view = _ml.memref.view(
-        result=mr_type,
-        source=shm_base,
-        byte_shift=total_shared_memory_bytes,
-        sizes=[size],
-    )
-    self._dynamic_shared_memory_values.append(view)
-    return view
-
-
-def _externalize_dynamic_shared_globals(module):
-    """Give zero-length ``__dynamic_shmem__`` globals external linkage
-    so their size is unknown."""
-    ir = _ml.ir
-    external = ir.Attribute.parse("#llvm.linkage<external>")
-
-    def walk(op):
-        for region in op.regions:
-            for block in region.blocks:
-                for child in block.operations:
-                    if child.operation.name == "llvm.mlir.global":
-                        sym = ir.StringAttr(child.attributes["sym_name"]).value
-                        if sym.startswith("__dynamic_shmem__"):
-                            child.attributes["linkage"] = external
-                    walk(child.operation)
-
-    walk(module.operation)
-
-
 def apply_slice_python_parity() -> None:
-    """Resolve slices with Python semantics and alias dynamic shared
-    arrays at the region base."""
+    """Resolve slices with Python semantics and build views by
+    reinterpreting the parent array."""
     _lnumpy.Slice.__init__ = _slice_init
     _lnumpy._resolve_slice = _resolve_slice
     _lnumpy._strided_view = _strided_view
@@ -1761,10 +1785,8 @@ def apply_slice_python_parity() -> None:
     np_lower(operator.getitem, types.Array, types.Tuple)(
         lower_array_tuple_getitem
     )
-    _lcuda.registry.lower_getattr(types.Array, "strides")(lower_strides)
 
     lower_class = _ml.MLIRLower
-    lower_class._request_dynamic_shared_memory = _request_dynamic_shared_memory
     stock_lower_literal = lower_class.lower_literal_if_needed
 
     @functools.wraps(stock_lower_literal)
@@ -1782,16 +1804,6 @@ def apply_slice_python_parity() -> None:
         return stock_lower_literal(self, value, numba_type)
 
     lower_class.lower_literal_if_needed = lower_literal_if_needed
-
-    stock_pre_codegen = _mlir_optimization.run_pre_codegen_patterns
-
-    @functools.wraps(stock_pre_codegen)
-    def run_pre_codegen_patterns(module, *args, **kwargs):
-        result = stock_pre_codegen(module, *args, **kwargs)
-        _externalize_dynamic_shared_globals(module)
-        return result
-
-    _mlir_optimization.run_pre_codegen_patterns = run_pre_codegen_patterns
 
 
 apply_slice_python_parity()

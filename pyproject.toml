@@ -35,7 +35,7 @@ dependencies = [
     "Pint>=0.24",
     "rdflib",
     # cubie's numba-cuda-mlir build; never co-install the stock wheel.
-    "cubie-numba-cuda-mlir==0.5.3.1",
+    "cubie-numba-cuda-mlir==0.6.0.1",
 ]
 
 [project.urls]
@@ -44,8 +44,8 @@ Issues = "https://github.com/ccam80/cubie/issues"
 
 [project.optional-dependencies]
 # The toolkit extras install the CUDA toolkit wheels with the backend.
-cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.5.3.1"]
-cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.5.3.1"]
+cuda12 = ["cubie-numba-cuda-mlir[cu12]==0.6.0.1"]
+cuda13 = ["cubie-numba-cuda-mlir[cu13]==0.6.0.1"]
 test = [
     "pytest",
     "pytest-cov",
