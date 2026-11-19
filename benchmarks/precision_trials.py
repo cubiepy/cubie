@@ -361,7 +361,6 @@ def run_measure(name, arms, n_runs, rounds, target_ms):
 def print_report(report):
     """Print one line per arm, timing relative to the first arm."""
     arms = report["arms"]
-    base = arms[0]["best_ms"]
     print(f"== {report['config']}  runs={report['runs_timed']}")
     for arm in arms:
         paired = arm["paired_delta_pct"]

@@ -174,20 +174,30 @@ The estimate's relative error is under 12.5%; each Newton step squares
 it.
 """
 
+RECIPROCAL_SMALLEST = np.float32(2.0**-126)
+"""Smallest magnitude :func:`fast_reciprocal` inverts."""
+
+RECIPROCAL_LARGEST = np.float32(2.0**126)
+"""Largest magnitude :func:`fast_reciprocal` inverts."""
+
 
 def fast_reciprocal(value):
     """Return ``1 / value`` from a bit estimate and two Newton steps.
 
-    The relative error is under 3e-4 for normal positive and negative
-    ``value``.
+    The magnitude is clamped to ``[2**-126, 2**126]`` first, so zero
+    gives ``2**126`` and infinity ``2**-126``, each with the sign of
+    ``value``. Inside that range the relative error is under 3e-4.
     """
     value = np.float32(value)
-    bits = (RECIPROCAL_ESTIMATE_MAGIC - int(value.view(np.int32))) & 0xFFFFFFFF
+    magnitude = min(max(abs(value), RECIPROCAL_SMALLEST), RECIPROCAL_LARGEST)
+    bits = (
+        RECIPROCAL_ESTIMATE_MAGIC - int(np.float32(magnitude).view(np.int32))
+    ) & 0xFFFFFFFF
     estimate = np.uint32(bits).view(np.float32)
     for _ in range(2):
-        error = np.float32(value * estimate - np.float32(1.0))
+        error = np.float32(magnitude * estimate - np.float32(1.0))
         estimate = np.float32(estimate - estimate * error)
-    return estimate
+    return -estimate if np.signbit(value) else estimate
 
 
 def float_bits(value):
@@ -247,16 +257,24 @@ _inline_asm_intrinsic(
 )
 _inline_asm_intrinsic(
     fast_reciprocal, types.float32, (types.float32,),
-    "{.reg .b32 bits; .reg .f32 estimate, error, negative;"
-    " mov.b32 bits, $1;"
+    "{.reg .b32 bits, sign; .reg .f32 magnitude, estimate, error, negative;"
+    " abs.ftz.f32 magnitude, $1;"
+    " max.ftz.f32 magnitude, magnitude, 0f00800000;"
+    " min.ftz.f32 magnitude, magnitude, 0f7E800000;"
+    " mov.b32 bits, magnitude;"
     " sub.s32 bits, 0x7EF311C3, bits;"
     " mov.b32 estimate, bits;"
-    " fma.rn.ftz.f32 error, $1, estimate, 0fBF800000;"
+    " fma.rn.ftz.f32 error, magnitude, estimate, 0fBF800000;"
     " neg.f32 negative, error;"
     " fma.rn.ftz.f32 estimate, negative, estimate, estimate;"
-    " fma.rn.ftz.f32 error, $1, estimate, 0fBF800000;"
+    " fma.rn.ftz.f32 error, magnitude, estimate, 0fBF800000;"
     " neg.f32 negative, error;"
-    " fma.rn.ftz.f32 $0, negative, estimate, estimate;}",
+    " fma.rn.ftz.f32 estimate, negative, estimate, estimate;"
+    " mov.b32 bits, estimate;"
+    " mov.b32 sign, $1;"
+    " and.b32 sign, sign, 0x80000000;"
+    " or.b32 bits, bits, sign;"
+    " mov.b32 $0, bits;}",
     "=f,f",
 )
 _inline_asm_intrinsic(
