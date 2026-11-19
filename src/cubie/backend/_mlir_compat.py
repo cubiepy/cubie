@@ -828,20 +828,53 @@ class InlineeNeedsArgTypes(Exception):
     InlineInlinables to type the call and inline the callee again."""
 
 
+def _pipeline_callee_cache(worker):
+    """Return the callee cache of ``worker``'s compiler pipeline.
+
+    Store the cache on the pipeline, or on ``worker`` when it has no
+    pipeline, so that Python frees it when the compilation ends.
+    """
+    holder = worker.pipeline if worker.pipeline is not None else worker
+    cache = getattr(holder, _PIPELINE_CALLEE_IR_CACHE_ATTR, None)
+    if cache is None:
+        cache = {}
+        setattr(holder, _PIPELINE_CALLEE_IR_CACHE_ATTR, cache)
+    return cache
+
+
+def _inline_worker_fresh_callee_ir(
+    self, function, enable_ssa=False, arg_typs=None
+):
+    """Return callee IR that is safe for ``inline_ir`` to mutate.
+
+    Cache the canonical IR for each function, flags configuration and
+    argument types on the current compiler pipeline, and return a
+    structural clone of it for each call site.
+    """
+    # Pin enable_ssa before building the key, because
+    # run_untyped_passes rewrites it.
+    self.flags.enable_ssa = enable_ssa
+    cache = _pipeline_callee_cache(self)
+    key = (function, str(self.flags), enable_ssa, arg_typs)
+    canonical_ir = cache.get(key)
+    if canonical_ir is None:
+        canonical_ir = self.run_untyped_passes(
+            function, enable_ssa, arg_typs=arg_typs
+        )
+        cache[key] = canonical_ir
+    return _clone_callee_ir(canonical_ir)
+
+
 def _inline_worker_inline_function(
     self, caller_ir, block, i, function, arg_typs=None
 ):
     """Inline ``function`` into ``caller_ir`` at statement ``i`` of
     ``block``.
 
-    We run the function's untyped passes with ``arg_typs`` as its
-    argument types. A call without ``arg_typs`` takes its callee IR from
-    the pipeline's callee IR cache (perf-inline-callee-ir-cache).
+    Run the function's untyped passes with ``arg_typs`` as its argument
+    types, or take their result from the pipeline's callee IR cache.
     """
-    if arg_typs is None:
-        callee_ir = self._fresh_callee_ir(function)
-    else:
-        callee_ir = self.run_untyped_passes(function, arg_typs=arg_typs)
+    callee_ir = self._fresh_callee_ir(function, arg_typs=arg_typs)
     freevars = function.__code__.co_freevars
     return self.inline_ir(
         caller_ir,
@@ -880,15 +913,25 @@ def _inline_worker_transform_inlinee(self, function, arg_typs=None):
     """Transform an inlinee with the compiling function's inlinee
     transform.
 
-    Without a configured transform we return ``function`` unchanged.
-    Otherwise we return what the transform returns: ``function`` itself
-    when there is nothing to change, a new function when there is, or
-    None when ``arg_typs`` is None and the transform needs the call's
-    argument types.
+    Return ``function`` unchanged when no inlinee transform is
+    configured. Otherwise apply the transform with ``arg_typs`` and
+    return its result: ``function`` itself, a new function, or None if
+    ``arg_typs`` is None and one of the inlinee's parameters appears
+    inside a consteval.
+
+    Store each result in the pipeline's callee cache and return the
+    stored function at later call sites of the same inlinee.
+    ``_fresh_callee_ir`` keys its IR on that function object.
     """
     if self.inlinee_transform is None:
         return function
-    return self.inlinee_transform(function, self.targetoptions, arg_typs)
+    cache = _pipeline_callee_cache(self)
+    key = ("transform", function, id(self.targetoptions), arg_typs)
+    if key not in cache:
+        cache[key] = self.inlinee_transform(
+            function, self.targetoptions, arg_typs
+        )
+    return cache[key]
 
 
 def _inline_worker_run_untyped_passes(
@@ -1367,6 +1410,7 @@ def apply_inlined_callee_ast_transforms() -> None:
         self.inlinee_transform = inlinee_transform
 
     worker.__init__ = worker_init
+    worker._fresh_callee_ir = _inline_worker_fresh_callee_ir
     worker.inline_function = _inline_worker_inline_function
     worker.type_callee = _inline_worker_type_callee
     worker.transform_inlinee = _inline_worker_transform_inlinee
