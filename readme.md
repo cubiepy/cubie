@@ -20,7 +20,7 @@ Cubie runs much faster than SciPy's `solve_ivp` or MATLAB's `ode45/ode23s`, even
 
 ![CuBIE's speedup over SciPy and MATLAB against the number of trajectories](https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/readme/all_multiple.png)
 
-These numbers were obtained running the same batch of parameters on the same ODE systems (Lorenz, POLLU air-pollution, and the [Linder et al. (2025)](https://doi.org/10.1113/JP287557) version of the Fabbri-Severi sino-atrial cell model). MATLAB ran its solves in a parfor loop, using `ode45` for the Lorenz system and `ode23s` for the other two stiff systems. SciPy ran in a `multiprocessing` parallel setup, using the Fortran `dopri5` on Lorenz and `Radau` on the two stiff systems. Both MATLAB and SciPy were given a helping hand by using analytic Jacobians for the stiff systems, and SciPy's RHS was JIT compiled through numba, to give them a fighting chance.
+These numbers were obtained running the same batch of parameters on the same ODE systems (Lorenz, POLLU air-pollution, and the [Linder et al. (2025)](https://doi.org/10.1113/JP287557) version of the Fabbri-Severi sino-atrial cell model). MATLAB ran its solves in a parfor loop, using `ode45` for the Lorenz system and `ode23s` for the two stiff systems. SciPy ran in a `multiprocessing` parallel setup, using the Fortran `dopri5` on Lorenz and `Radau` on the two stiff systems. Both MATLAB and SciPy were given a helping hand by using analytic Jacobians for the stiff systems, and SciPy's RHS was JIT compiled through numba, to give them a fighting chance.
 
 Under the hood, cubie uses [`numba-cuda-mlir`](https://github.com/NVIDIA/numba-cuda-mlir) to compile
 the integration algorithms and your provided ODE/DAE systems into GPU code
@@ -125,7 +125,7 @@ time. Once it's compiled once, every future batch takes 30 to 45 ms, in the
 same and future sessions.
 
 For repeated solves, you would probably keep a `Solver` object and call 
-`Solver.solve()` (see the docs). This cuts repeated solve time to 7ms.
+`Solver.solve()` (see the docs). This cuts repeated solve time to 8ms.
 
 
 ## Documentation
