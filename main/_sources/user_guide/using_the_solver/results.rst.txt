@@ -73,8 +73,7 @@ time-domain point with ``save_every``; see :doc:`timing`.
    rejected_steps = counters[:, 3, :]
 
 Use the iteration counters to spot runs where an implicit algorithm is
-struggling. See :doc:`/theory/solvers` for background on the Newton
-solver.
+struggling.
 
 Summary metrics
 ---------------
