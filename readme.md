@@ -9,7 +9,7 @@
 ![PyPI version](https://img.shields.io/pypi/v/cubie)
 ![PyPI Downloads](https://img.shields.io/pypi/dm/cubie)
 
-Cubie solves large batches of ODEs and DAEs on your computer's NVIDIA GPU. It's as easy to use as SciPy or MATLAB - you write your problem in Python and call `solve_ivp` on it. For a guide on converting your MATLAB or SciPy problem to Cubie, check out [Coming from MATLAB](https://cubiepy.github.io/cubie/v0.19.0/getting_started/coming_from_matlab.html) and [Coming from SciPy](https://cubiepy.github.io/cubie/v0.19.0/getting_started/coming_from_scipy.html).
+Cubie solves large batches of ODEs and DAEs on your computer's NVIDIA GPU. It's as easy to use as SciPy or MATLAB - you write your problem in Python and call `solve_ivp` on it. For a guide on converting your MATLAB or SciPy problem to Cubie, check out [Coming from MATLAB](https://cubiepy.github.io/cubie/main/getting_started/coming_from_matlab.html) and [Coming from SciPy](https://cubiepy.github.io/cubie/main/getting_started/coming_from_scipy.html).
 
 Cubie compiles your system of equations into a GPU kernel that integrates every trajectory in
 a batch of initial values or parameter sets in parallel. Because GPUs are so good at parallel workloads, a batch of ten thousand or so trajectories takes about as long as a batch of one. 
@@ -26,7 +26,7 @@ Under the hood, cubie uses [`numba-cuda-mlir`](https://github.com/NVIDIA/numba-c
 the integration algorithms and your provided ODE/DAE systems into GPU code
 and ferry your data in between your computer and GPU. It goes fast because it strips as much data from the GPUs memory as it can, instead compiling it into the code that the GPU runs.
 
-[[2x comparison plots - to be rendered]]
+![Cubie against other GPU integrators: figures coming soon](https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/readme/gpu_comparison_placeholder.png)
 
 It's the fastest parallel integrator I've found. Similar work has been done in parallel, for JAX on Linux, by [gradsolve](https://github.com/ECLIPSE-AI4Science/gradsolve) and [modax](https://github.com/lawrenceberry/modax), in Julia by [DiffEqGPU.jl](https://github.com/SciML/DiffEqGPU.jl), in CUDA C++ by [MPGOS](https://github.com/FerencHegedus/Massively-Parallel-GPU-ODE-Solver), and in higher-level systems [Diffrax](https://github.com/patrick-kidger/diffrax) and [torchdiffeq](https://github.com/rtqichen/torchdiffeq). Cubie held its own, at the time of measurement. For large systems and implicit algorithms, it really shines.
 
@@ -69,7 +69,7 @@ tearing before Cubie generates solver code.
       `ros34pw` family.
 - Pass MATLAB and SciPy names such as `ode45`, `ode23s` or `Radau` and
   Cubie picks the matching method. Read the
-  [algorithm guide](https://cubiepy.github.io/cubie/v0.19.0/user_guide/algorithms_and_tuning/choosing_algorithms.html)
+  [algorithm guide](https://cubiepy.github.io/cubie/main/user_guide/algorithms_and_tuning/choosing_algorithms.html)
   for help choosing one.
 
 ### Customise (if you want to)
