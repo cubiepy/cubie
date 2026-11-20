@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.19.0](https://github.com/cubiepy/cubie/compare/v0.18.0...v0.19.0) (2026-11-20)
+
+
+### Features
+
+* Adaptive algorithms given no starting dt use Hairer's method to estimate the first step ([#1104](https://github.com/cubiepy/cubie/issues/1104)) ([af0ef58](https://github.com/cubiepy/cubie/commit/af0ef5874f131b6fe0e6ec3fd0a013f8abf90769))
+
+
+### Bug Fixes
+
+* a 1D parameters array is one run per value when one parameter is swept ([#1096](https://github.com/cubiepy/cubie/issues/1096)) ([7b5f0f5](https://github.com/cubiepy/cubie/commit/7b5f0f588071d680fe1686451a0e5e9acbaf7074))
+* array interpolator evaluation kernel indexes threads with int32 ([#1112](https://github.com/cubiepy/cubie/issues/1112)) ([06ca478](https://github.com/cubiepy/cubie/commit/06ca47835abd1ed60a37dea29e2ac73abc9b403b))
+* dict inputs are combinatorial by default, arrays always verbatim ([#1107](https://github.com/cubiepy/cubie/issues/1107)) ([2322ec4](https://github.com/cubiepy/cubie/commit/2322ec4770cb3be929122466ea5c264b73d8a38d))
+* docs version picker placement and order ([#1106](https://github.com/cubiepy/cubie/issues/1106)) ([bd1321d](https://github.com/cubiepy/cubie/commit/bd1321d1a33ae12bf56a37b471c76f8d09118939))
+* dt_min defaults to 1e-9, or dt / 1e6 when dt is given ([#1098](https://github.com/cubiepy/cubie/issues/1098)) ([cd73728](https://github.com/cubiepy/cubie/commit/cd73728991a330be05c611ecac13d7071b04d110))
+* tsit5 is now the default algorithm and the ERK family default tableau ([#1108](https://github.com/cubiepy/cubie/issues/1108)) ([59b0cd7](https://github.com/cubiepy/cubie/commit/59b0cd7e272971c526accd1c6e9fed2cbc94d9c0))
+* versioned docs site with a version picker ([#1103](https://github.com/cubiepy/cubie/issues/1103)) ([ca3d4ae](https://github.com/cubiepy/cubie/commit/ca3d4ae4dc0ac6ec59314d96c281b1c3e2b1566a))
+
+
+### Documentation
+
+* readme opens with the speedup plots and a shorter quick start ([#1113](https://github.com/cubiepy/cubie/issues/1113)) ([50b85c9](https://github.com/cubiepy/cubie/commit/50b85c901ff62ad5ef91256ec70d34434c77433e))
+* user guide restructured and rewritten up to solving/configuration ([#1099](https://github.com/cubiepy/cubie/issues/1099)) ([517d6e5](https://github.com/cubiepy/cubie/commit/517d6e5641428e100ac7928d94b1863c7b481ec8))
+* user guide review round on using the solver and tuning pages ([#1109](https://github.com/cubiepy/cubie/issues/1109)) ([e7bdbae](https://github.com/cubiepy/cubie/commit/e7bdbae64ac56f8d351c630452cd03b9e85ac25d))
+
 ## [0.18.0](https://github.com/cubiepy/cubie/compare/v0.17.0...v0.18.0) (2026-11-10)
 
 
