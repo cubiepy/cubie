@@ -35,12 +35,13 @@ and ``ros3p`` respectively).
 Adaptive or fixed?
 ------------------
 
-"Adaptive: Yes" below means the method produces an embedded error
-estimate, so it can drive an adaptive step-size controller.  Methods
-without an error estimate always run at a fixed step: if you pair one
-with an adaptive controller, CuBIE issues a ``UserWarning`` and
-silently swaps in the fixed-step controller, because there is no error
-signal to adapt on.
+"Adaptive: Yes" in the tables below means that cubie can estimate the
+error of each step of the method, so you can use it with an adaptive
+step-size controller.  An order of ``p(q)`` means the method is of
+order ``p`` and cubie estimates its error with an order ``q`` method.
+Cubie always runs a method without an error estimate at a fixed step:
+if you pair one with an adaptive controller, cubie warns with a
+``UserWarning`` and uses the fixed-step controller instead.
 
 Available Algorithms
 --------------------
@@ -126,29 +127,29 @@ Available Algorithms
      - No
      - Default DIRK tableau; L-stable, stiffly accurate, 3 stages.
    * - ``kvaerno3``
-     - 3
+     - 3(2)
      - Yes
      - A-L stable ESDIRK, 4 stages.
    * - ``kvaerno5``
-     - 5
+     - 5(4)
      - Yes
      - A-L stable ESDIRK, 7 stages; defaults to exact Newton.
    * - ``l_stable_sdirk_4``
-     - 4
+     - 4(3)
      - Yes
      - L-stable, 5 stages; defaults to exact Newton.
    * - ``eldirk32_euler``
-     - 2
+     - 2(3)
      - Yes
-     - ELDIRK: implicit Euler, two explicit stages, third-order estimate.
+     - ELDIRK: implicit Euler and two explicit stages.
    * - ``eldirk32_trapezoidal``
-     - 2
+     - 2(3)
      - Yes
-     - ELDIRK: trapezoidal rule, one explicit stage, third-order estimate.
+     - ELDIRK: trapezoidal rule and one explicit stage.
    * - ``eldirk32_ellsiepen``
-     - 2
+     - 2(3)
      - Yes
-     - ELDIRK: ``sdirk_2_2``, one explicit stage, third-order estimate.
+     - ELDIRK: ``sdirk_2_2`` and one explicit stage.
 
 **Fully Implicit Runge--Kutta (FIRK)**
 
@@ -165,23 +166,27 @@ Available Algorithms
      - No
      - 2-stage Gauss--Legendre; default FIRK.
    * - ``firk_gauss_legendre_4``
-     - 8
+     - 8(2)
      - Yes
-     - 4-stage Gauss--Legendre; conservative step control from a
-       second-order error estimate.
+     - 4-stage Gauss--Legendre. Cubie controls the step conservatively,
+       because it estimates the error with a second-order method.
    * - ``radau_iia_3``
-     - 3
+     - 3(1)
      - Yes
      - 2-stage Radau IIA; the cheapest of the family.
    * - ``radau_iia_5`` / ``radau``
-     - 5
+     - 5(3)
      - Yes
-     - 3-stage Radau IIA; excellent for stiff problems.
+     - 3-stage Radau IIA; excellent for stiff problems. Cubie smooths
+       its error estimate by default, which makes the estimate third
+       order; with ``use_smoothed_error=False`` the order is 5(2).
    * - ``radau_iia_9``
-     - 9
+     - 9(5)
      - Yes
      - 5-stage Radau IIA; for tight tolerances, five coupled stages
-       per step. Defaults to BiCGSTAB with exact Newton.
+       per step. Defaults to BiCGSTAB with exact Newton. Cubie smooths
+       its error estimate by default, which makes the estimate fifth
+       order; with ``use_smoothed_error=False`` the order is 9(4).
 
 **Rosenbrock-W**
 
@@ -194,17 +199,153 @@ Available Algorithms
      - Adaptive
      - Notes
    * - ``ros3p``
-     - 3
+     - 3(2)
      - Yes
-     - Default Rosenbrock; linearly implicit, no Newton iteration.
+     - Lang and Verwer (2001), 3 stages. The default Rosenbrock-W tableau.
    * - ``rodas3p``
-     - 3
+     - 3(2)
      - Yes
-     - Stiffly accurate variant.
+     - Steinebach (2024), 5 stages.
    * - ``rosenbrock23_sciml`` / ``rosenbrock23`` / ``ode23s``
      - 2(3)
      - Yes
-     - MATLAB ``ode23s``-equivalent / SciML-compatible tableau.
+     - Shampine and Reichelt (1997), 3 stages; the method of MATLAB's ``ode23s``.
+   * - ``rosenbrock32``
+     - 3(2)
+     - Yes
+     - Shampine and Reichelt (1997), 3 stages.
+   * - ``ros2``
+     - 2(1)
+     - Yes
+     - Verwer et al. (1999), 2 stages.
+   * - ``ros2pr``
+     - 2(1)
+     - Yes
+     - Rang (2014), 3 stages.
+   * - ``ros2s``
+     - 2(1)
+     - Yes
+     - Rang (2014), 3 stages.
+   * - ``ros3``
+     - 3(2)
+     - Yes
+     - Hairer and Wanner (1996), 3 stages.
+   * - ``ros3pr``
+     - 3(2)
+     - Yes
+     - Rang (2014), 3 stages.
+   * - ``scholz4_7``
+     - 3(2)
+     - Yes
+     - Rang (2014), 3 stages.
+   * - ``ros34pw1a``
+     - 3(2)
+     - Yes
+     - Rang and Angermann (2005), 4 stages.
+   * - ``ros34pw1b``
+     - 3(2)
+     - Yes
+     - Rang and Angermann (2005), 4 stages.
+   * - ``ros34pw2``
+     - 3(2)
+     - Yes
+     - Rang and Angermann (2005), 4 stages.
+   * - ``ros34pw3``
+     - 4(3)
+     - Yes
+     - Rang and Angermann (2005), 4 stages.
+   * - ``ros34prw``
+     - 3(2)
+     - Yes
+     - Rang (2015), 4 stages.
+   * - ``ros3prl``
+     - 3(2)
+     - Yes
+     - Rang (2014), 4 stages.
+   * - ``ros3prl2``
+     - 3(2)
+     - Yes
+     - Rang (2014), 4 stages.
+   * - ``rok4a``
+     - 4(3)
+     - Yes
+     - Tranquilli and Sandu (2014), 4 stages.
+   * - ``rosshamp4``
+     - 4(3)
+     - Yes
+     - Shampine (1982), 4 stages.
+   * - ``veldd4``
+     - 4(3)
+     - Yes
+     - van Veldhuizen (1984), 4 stages.
+   * - ``velds4``
+     - 4(3)
+     - Yes
+     - van Veldhuizen (1984), 4 stages.
+   * - ``grk4t``
+     - 4(3)
+     - Yes
+     - Kaps and Rentrop (1979), 4 stages.
+   * - ``grk4a``
+     - 4(3)
+     - Yes
+     - Kaps and Rentrop (1979), 4 stages.
+   * - ``ros4lstab``
+     - 4(3)
+     - Yes
+     - Hairer and Wanner (1996), 4 stages.
+   * - ``rosenbrockw6s4os``
+     - 4
+     - No
+     - 6 stages.
+   * - ``rodas3``
+     - 3(2)
+     - Yes
+     - Sandu et al. (1997), 4 stages.
+   * - ``rodas3d``
+     - 3(2)
+     - Yes
+     - Yu et al. (2024), 4 stages.
+   * - ``rodas23w``
+     - 2(3)
+     - Yes
+     - Steinebach (2024), 5 stages.
+   * - ``rodas4``
+     - 4(3)
+     - Yes
+     - Hairer and Wanner (1996), 6 stages.
+   * - ``rodas42``
+     - 4(3)
+     - Yes
+     - Hairer and Wanner (1996), 6 stages.
+   * - ``rodas4p``
+     - 4(3)
+     - Yes
+     - Steinebach (1995), 6 stages.
+   * - ``rodas4p2``
+     - 4(3)
+     - Yes
+     - Steinebach (2020), 6 stages.
+   * - ``rodas4pw``
+     - 4(3)
+     - Yes
+     - Steinebach, 9 stages.
+   * - ``rodas5``
+     - 5(4)
+     - Yes
+     - Di Marzo (1993), 8 stages.
+   * - ``rodas5p``
+     - 5(4)
+     - Yes
+     - Steinebach (2023), 8 stages.
+   * - ``rodas5pe``
+     - 5(4)
+     - Yes
+     - Steinebach (2024), 8 stages.
+   * - ``rodas6p``
+     - 6(5)
+     - Yes
+     - Steinebach (2025), 16 stages.
 
 **Simple methods**
 

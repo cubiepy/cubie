@@ -312,12 +312,13 @@ and <code class="docutils literal notranslate"><span class="pre">ros3p</span></c
 </section>
 <section id="adaptive-or-fixed">
 <h2>Adaptive or fixed?<a class="headerlink" href="#adaptive-or-fixed" title="Link to this heading"></a></h2>
-<p>“Adaptive: Yes” below means the method produces an embedded error
-estimate, so it can drive an adaptive step-size controller.  Methods
-without an error estimate always run at a fixed step: if you pair one
-with an adaptive controller, CuBIE issues a <code class="docutils literal notranslate"><span class="pre">UserWarning</span></code> and
-silently swaps in the fixed-step controller, because there is no error
-signal to adapt on.</p>
+<p>“Adaptive: Yes” in the tables below means that cubie can estimate the
+error of each step of the method, so you can use it with an adaptive
+step-size controller.  An order of <code class="docutils literal notranslate"><span class="pre">p(q)</span></code> means the method is of
+order <code class="docutils literal notranslate"><span class="pre">p</span></code> and cubie estimates its error with an order <code class="docutils literal notranslate"><span class="pre">q</span></code> method.
+Cubie always runs a method without an error estimate at a fixed step:
+if you pair one with an adaptive controller, cubie warns with a
+<code class="docutils literal notranslate"><span class="pre">UserWarning</span></code> and uses the fixed-step controller instead.</p>
 </section>
 <section id="available-algorithms">
 <h2>Available Algorithms<a class="headerlink" href="#available-algorithms" title="Link to this heading"></a></h2>
@@ -429,34 +430,34 @@ control.</p></td>
 <td><p>Default DIRK tableau; L-stable, stiffly accurate, 3 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">kvaerno3</span></code></p></td>
-<td><p>3</p></td>
+<td><p>3(2)</p></td>
 <td><p>Yes</p></td>
 <td><p>A-L stable ESDIRK, 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">kvaerno5</span></code></p></td>
-<td><p>5</p></td>
+<td><p>5(4)</p></td>
 <td><p>Yes</p></td>
 <td><p>A-L stable ESDIRK, 7 stages; defaults to exact Newton.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">l_stable_sdirk_4</span></code></p></td>
-<td><p>4</p></td>
+<td><p>4(3)</p></td>
 <td><p>Yes</p></td>
 <td><p>L-stable, 5 stages; defaults to exact Newton.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">eldirk32_euler</span></code></p></td>
-<td><p>2</p></td>
+<td><p>2(3)</p></td>
 <td><p>Yes</p></td>
-<td><p>ELDIRK: implicit Euler, two explicit stages, third-order estimate.</p></td>
+<td><p>ELDIRK: implicit Euler and two explicit stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">eldirk32_trapezoidal</span></code></p></td>
-<td><p>2</p></td>
+<td><p>2(3)</p></td>
 <td><p>Yes</p></td>
-<td><p>ELDIRK: trapezoidal rule, one explicit stage, third-order estimate.</p></td>
+<td><p>ELDIRK: trapezoidal rule and one explicit stage.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">eldirk32_ellsiepen</span></code></p></td>
-<td><p>2</p></td>
+<td><p>2(3)</p></td>
 <td><p>Yes</p></td>
-<td><p>ELDIRK: <code class="docutils literal notranslate"><span class="pre">sdirk_2_2</span></code>, one explicit stage, third-order estimate.</p></td>
+<td><p>ELDIRK: <code class="docutils literal notranslate"><span class="pre">sdirk_2_2</span></code> and one explicit stage.</p></td>
 </tr>
 </tbody>
 </table>
@@ -482,26 +483,30 @@ control.</p></td>
 <td><p>2-stage Gauss–Legendre; default FIRK.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_4</span></code></p></td>
-<td><p>8</p></td>
+<td><p>8(2)</p></td>
 <td><p>Yes</p></td>
-<td><p>4-stage Gauss–Legendre; conservative step control from a
-second-order error estimate.</p></td>
+<td><p>4-stage Gauss–Legendre. Cubie controls the step conservatively,
+because it estimates the error with a second-order method.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_3</span></code></p></td>
-<td><p>3</p></td>
+<td><p>3(1)</p></td>
 <td><p>Yes</p></td>
 <td><p>2-stage Radau IIA; the cheapest of the family.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> / <code class="docutils literal notranslate"><span class="pre">radau</span></code></p></td>
-<td><p>5</p></td>
+<td><p>5(3)</p></td>
 <td><p>Yes</p></td>
-<td><p>3-stage Radau IIA; excellent for stiff problems.</p></td>
+<td><p>3-stage Radau IIA; excellent for stiff problems. Cubie smooths
+its error estimate by default, which makes the estimate third
+order; with <code class="docutils literal notranslate"><span class="pre">use_smoothed_error=False</span></code> the order is 5(2).</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_9</span></code></p></td>
-<td><p>9</p></td>
+<td><p>9(5)</p></td>
 <td><p>Yes</p></td>
 <td><p>5-stage Radau IIA; for tight tolerances, five coupled stages
-per step. Defaults to BiCGSTAB with exact Newton.</p></td>
+per step. Defaults to BiCGSTAB with exact Newton. Cubie smooths
+its error estimate by default, which makes the estimate fifth
+order; with <code class="docutils literal notranslate"><span class="pre">use_smoothed_error=False</span></code> the order is 9(4).</p></td>
 </tr>
 </tbody>
 </table>
@@ -522,19 +527,189 @@ per step. Defaults to BiCGSTAB with exact Newton.</p></td>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros3p</span></code></p></td>
-<td><p>3</p></td>
+<td><p>3(2)</p></td>
 <td><p>Yes</p></td>
-<td><p>Default Rosenbrock; linearly implicit, no Newton iteration.</p></td>
+<td><p>Lang and Verwer (2001), 3 stages. The default Rosenbrock-W tableau.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas3p</span></code></p></td>
-<td><p>3</p></td>
+<td><p>3(2)</p></td>
 <td><p>Yes</p></td>
-<td><p>Stiffly accurate variant.</p></td>
+<td><p>Steinebach (2024), 5 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rosenbrock23_sciml</span></code> / <code class="docutils literal notranslate"><span class="pre">rosenbrock23</span></code> / <code class="docutils literal notranslate"><span class="pre">ode23s</span></code></p></td>
 <td><p>2(3)</p></td>
 <td><p>Yes</p></td>
-<td><p>MATLAB <code class="docutils literal notranslate"><span class="pre">ode23s</span></code>-equivalent / SciML-compatible tableau.</p></td>
+<td><p>Shampine and Reichelt (1997), 3 stages; the method of MATLAB’s <code class="docutils literal notranslate"><span class="pre">ode23s</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rosenbrock32</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Shampine and Reichelt (1997), 3 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros2</span></code></p></td>
+<td><p>2(1)</p></td>
+<td><p>Yes</p></td>
+<td><p>Verwer et al. (1999), 2 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros2pr</span></code></p></td>
+<td><p>2(1)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang (2014), 3 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros2s</span></code></p></td>
+<td><p>2(1)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang (2014), 3 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros3</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Hairer and Wanner (1996), 3 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros3pr</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang (2014), 3 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scholz4_7</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang (2014), 3 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw1a</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang and Angermann (2005), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw1b</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang and Angermann (2005), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw2</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang and Angermann (2005), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw3</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang and Angermann (2005), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros34prw</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang (2015), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros3prl</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang (2014), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros3prl2</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Rang (2014), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rok4a</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Tranquilli and Sandu (2014), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rosshamp4</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Shampine (1982), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">veldd4</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>van Veldhuizen (1984), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">velds4</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>van Veldhuizen (1984), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">grk4t</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Kaps and Rentrop (1979), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">grk4a</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Kaps and Rentrop (1979), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros4lstab</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Hairer and Wanner (1996), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rosenbrockw6s4os</span></code></p></td>
+<td><p>4</p></td>
+<td><p>No</p></td>
+<td><p>6 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas3</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Sandu et al. (1997), 4 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas3d</span></code></p></td>
+<td><p>3(2)</p></td>
+<td><p>Yes</p></td>
+<td><p>Yu et al. (2024), 4 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas23w</span></code></p></td>
+<td><p>2(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Steinebach (2024), 5 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Hairer and Wanner (1996), 6 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas42</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Hairer and Wanner (1996), 6 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4p</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Steinebach (1995), 6 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4p2</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Steinebach (2020), 6 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4pw</span></code></p></td>
+<td><p>4(3)</p></td>
+<td><p>Yes</p></td>
+<td><p>Steinebach, 9 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas5</span></code></p></td>
+<td><p>5(4)</p></td>
+<td><p>Yes</p></td>
+<td><p>Di Marzo (1993), 8 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas5p</span></code></p></td>
+<td><p>5(4)</p></td>
+<td><p>Yes</p></td>
+<td><p>Steinebach (2023), 8 stages.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas5pe</span></code></p></td>
+<td><p>5(4)</p></td>
+<td><p>Yes</p></td>
+<td><p>Steinebach (2024), 8 stages.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas6p</span></code></p></td>
+<td><p>6(5)</p></td>
+<td><p>Yes</p></td>
+<td><p>Steinebach (2025), 16 stages.</p></td>
 </tr>
 </tbody>
 </table>
