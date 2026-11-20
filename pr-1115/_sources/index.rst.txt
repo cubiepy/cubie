@@ -53,5 +53,4 @@ cubie requires an NVIDIA GPU with compute capability 6.0 or higher and an up-to-
    getting_started/index
    user_guide/index
    troubleshooting
-   developer_guide/index
    API_reference/index
