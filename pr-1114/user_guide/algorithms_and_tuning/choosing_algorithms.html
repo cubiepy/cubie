@@ -87,20 +87,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../../tutorials/index.html">Tutorials</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../tutorials/first_sweep.html">Tutorial 1: Your First Parameter Sweep</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../tutorials/extracting_summaries.html">Tutorial 2: Summaries Instead of Trajectories</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../tutorials/stiff_systems.html">Tutorial 3: Stiff Systems, Implicit Methods, and Drivers</a></li>
-</ul>
-</li>
 <li class="toctree-l1"><a class="reference internal" href="../../troubleshooting.html">Troubleshooting</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../theory/index.html">Theory</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../theory/numerical_integration.html">Numerical Integration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../theory/solvers.html">Nonlinear Solvers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../theory/jacobians.html">Jacobians and Symbolic Differentiation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../theory/cuda.html">CUDA and GPU Computing</a></li>
-</ul>
-</li>
 <li class="toctree-l1"><a class="reference internal" href="../../developer_guide/index.html">Developer Guide</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../developer_guide/architecture.html">Architecture Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../developer_guide/adding_algorithms.html">Adding Algorithms</a></li>
@@ -507,15 +494,19 @@ because it estimates the error with a second-order method.</p></td>
 <td><p>2-stage Radau IIA; the cheapest of the family.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> / <code class="docutils literal notranslate"><span class="pre">radau</span></code></p></td>
-<td><p>5(2)</p></td>
+<td><p>5(3)</p></td>
 <td><p>Yes</p></td>
-<td><p>3-stage Radau IIA; excellent for stiff problems.</p></td>
+<td><p>3-stage Radau IIA; excellent for stiff problems. Cubie smooths
+its error estimate by default, which makes the estimate third
+order; with <code class="docutils literal notranslate"><span class="pre">use_smoothed_error=False</span></code> the order is 5(2).</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_9</span></code></p></td>
-<td><p>9(4)</p></td>
+<td><p>9(5)</p></td>
 <td><p>Yes</p></td>
 <td><p>5-stage Radau IIA; for tight tolerances, five coupled stages
-per step. Defaults to BiCGSTAB with exact Newton.</p></td>
+per step. Defaults to BiCGSTAB with exact Newton. Cubie smooths
+its error estimate by default, which makes the estimate fifth
+order; with <code class="docutils literal notranslate"><span class="pre">use_smoothed_error=False</span></code> the order is 9(4).</p></td>
 </tr>
 </tbody>
 </table>

@@ -175,14 +175,18 @@ Available Algorithms
      - Yes
      - 2-stage Radau IIA; the cheapest of the family.
    * - ``radau_iia_5`` / ``radau``
-     - 5(2)
+     - 5(3)
      - Yes
-     - 3-stage Radau IIA; excellent for stiff problems.
+     - 3-stage Radau IIA; excellent for stiff problems. Cubie smooths
+       its error estimate by default, which makes the estimate third
+       order; with ``use_smoothed_error=False`` the order is 5(2).
    * - ``radau_iia_9``
-     - 9(4)
+     - 9(5)
      - Yes
      - 5-stage Radau IIA; for tight tolerances, five coupled stages
-       per step. Defaults to BiCGSTAB with exact Newton.
+       per step. Defaults to BiCGSTAB with exact Newton. Cubie smooths
+       its error estimate by default, which makes the estimate fifth
+       order; with ``use_smoothed_error=False`` the order is 9(4).
 
 **Rosenbrock-W**
 
