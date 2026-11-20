@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.2](https://github.com/cubiepy/cubie/compare/v0.19.1...v0.19.2) (2026-11-20)
+
+
+### Documentation
+
+* readme speedup plot shows the latest cubie_vs_cpu measurements ([#1117](https://github.com/cubiepy/cubie/issues/1117)) ([36be5ac](https://github.com/cubiepy/cubie/commit/36be5accd1e2c9a1e51b16298b401b1d047f6d8d))
+
 ## [0.19.1](https://github.com/cubiepy/cubie/compare/v0.19.0...v0.19.1) (2026-11-20)
 
 
