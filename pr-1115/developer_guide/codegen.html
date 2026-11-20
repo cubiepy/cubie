@@ -20,7 +20,9 @@
       <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
-    <link rel="search" title="Search" href="../search.html" /> 
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Buffer Registry" href="buffer_registry.html" />
+    <link rel="prev" title="Adding Algorithms" href="adding_algorithms.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/pr-1115/_static/version_switcher.js" data-version="pr-1115" data-versions="/cubie/versions.json" defer></script>
 </head>
@@ -45,7 +47,7 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../getting_started/index.html">Getting Started with Cubie</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/coming_from_scipy.html">Coming from SciPy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../getting_started/coming_from_matlab.html">Coming from MATLAB</a></li>
@@ -87,6 +89,15 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Developer Guide</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="architecture.html">Architecture Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adding_algorithms.html">Adding Algorithms</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Code Generation Pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="buffer_registry.html">Buffer Registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adding_metrics.html">Adding Summary Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testing.html">Testing Guide</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../API_reference/index.html">Reference Manual</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../API_reference/batchsolving/index.html">Batch solving</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../API_reference/batchsolving/solver.html">Solver</a></li>
@@ -247,6 +258,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Developer Guide</a></li>
       <li class="breadcrumb-item active">Code Generation Pipeline</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/developer_guide/codegen.rst.txt" rel="nofollow"> View page source</a>
@@ -298,7 +310,7 @@ indices.</p>
 <p>For implicit algorithms, the pipeline differentiates each RHS expression
 with respect to every state variable, applies chain-rule grouping to
 share subexpressions, and produces a function
-<span class="math notranslate nohighlight">\((x, v) \mapsto J\,v\)</span>.  See <a class="reference internal" href="../theory/jacobians.html"><span class="doc">Jacobians and Symbolic Differentiation</span></a>.</p>
+<span class="math notranslate nohighlight">\((x, v) \mapsto J\,v\)</span>.</p>
 </section>
 <section id="expression-engine-and-printer">
 <h2>Expression engine and printer<a class="headerlink" href="#expression-engine-and-printer" title="Link to this heading"></a></h2>
@@ -342,7 +354,10 @@ import.</p>
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="adding_algorithms.html" class="btn btn-neutral float-left" title="Adding Algorithms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="buffer_registry.html" class="btn btn-neutral float-right" title="Buffer Registry" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 
