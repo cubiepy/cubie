@@ -56,15 +56,3 @@ constructing test objects manually.
 
 Key fixtures include pre-built ODE systems (Lotka--Volterra, van der Pol,
 linear test systems) and solver factories parameterised by algorithm.
-
-Philosophy
-----------
-
-- **Failing tests are good.**  Tests should assert intended behaviour.
-  If a test fails, fix the code, not the test (unless the test itself is
-  wrong).
-- **Prefer real objects over mocks.**  Use actual CuBIE objects and real
-  (small) ODE systems.  Never patch ``is_device`` checks or CUDA
-  availability.
-- **Never mark tests ``xfail``** or use ``importorskip`` to hide
-  failures.

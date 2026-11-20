@@ -45,7 +45,7 @@ JVPEquations
 For implicit algorithms, the pipeline differentiates each RHS expression
 with respect to every state variable, applies chain-rule grouping to
 share subexpressions, and produces a function
-:math:`(x, v) \mapsto J\,v`.  See :doc:`/theory/jacobians`.
+:math:`(x, v) \mapsto J\,v`.
 
 Expression engine and printer
 -----------------------------
