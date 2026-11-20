@@ -55,17 +55,18 @@ tearing before Cubie generates solver code.
 ### Choose your solver
 
 - Cubie has a large range of Runge-Kutta methods available to pick from:
-    - Explicit: `tsit5` (the default), `euler`, `heun-21`, `ralston-33`,
-      `rk23`, `rk4`, `rk45`, `cash-karp-54`, `fehlberg-45`, `vern7` and
-      `dop853`.
-    - Diagonally-Implicit: `backwards_euler`, `crank_nicolson`,
-      `implicit_midpoint`, `trapezoidal_dirk`, `sdirk_2_2`, `kvaerno3`,
-      `kvaerno5`, `l_stable_dirk_3`, `l_stable_sdirk_4` and three
-      `eldirk32` variants.
-    - Fully Implicit: `radau_iia_3`, `radau_iia_5`, `radau_iia_9`,
-      `firk_gauss_legendre_2` and `firk_gauss_legendre_4`.
-    - Rosenbrock-W: 37 methods, including `rosenbrock23`, `ros3p`,
-      `rodas4`, `rodas4p`, `rodas5p`, `rodas6p` and the `ros34pw` family.
+    - Explicit: choose from `tsit5` (the default), `euler`, `heun-21`,
+      `ralston-33`, `rk23`, `rk4`, `rk45`, `cash-karp-54`, `fehlberg-45`,
+      `vern7` and `dop853`.
+    - Diagonally-Implicit: choose from `backwards_euler`,
+      `crank_nicolson`, `implicit_midpoint`, `trapezoidal_dirk`,
+      `sdirk_2_2`, `kvaerno3`, `kvaerno5`, `l_stable_dirk_3`,
+      `l_stable_sdirk_4` and three `eldirk32` variants.
+    - Fully Implicit: choose from `radau_iia_3`, `radau_iia_5`,
+      `radau_iia_9`, `firk_gauss_legendre_2` and `firk_gauss_legendre_4`.
+    - Rosenbrock-W: choose from 37 methods, including `rosenbrock23`,
+      `ros3p`, `rodas4`, `rodas4p`, `rodas5p`, `rodas6p` and the
+      `ros34pw` family.
 - Pass MATLAB and SciPy names such as `ode45`, `ode23s` or `Radau` and
   Cubie picks the matching method. Read the
   [algorithm guide](https://cubiepy.github.io/cubie/main/user_guide/algorithms_and_tuning/choosing_algorithms.html)
