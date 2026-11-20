@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.1](https://github.com/cubiepy/cubie/compare/v0.19.0...v0.19.1) (2026-11-20)
+
+
+### Documentation
+
+* AI garbage theory and tutorials sections hidden from the docs site navigation, pending rewrite ([#1115](https://github.com/cubiepy/cubie/issues/1115)) ([be9f856](https://github.com/cubiepy/cubie/commit/be9f856cfd05096ce413928694a0c5ac309423e3))
+* choosing-algorithms tables list every tableau ([#1114](https://github.com/cubiepy/cubie/issues/1114)) ([03bf65c](https://github.com/cubiepy/cubie/commit/03bf65cea9d26af309c0633b5c3d0838b39880b7))
+
 ## [0.19.0](https://github.com/cubiepy/cubie/compare/v0.18.0...v0.19.0) (2026-11-20)
 
 
