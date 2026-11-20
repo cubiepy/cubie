@@ -9,7 +9,7 @@
 ![PyPI version](https://img.shields.io/pypi/v/cubie)
 ![PyPI Downloads](https://img.shields.io/pypi/dm/cubie)
 
-Cubie solves large batches of ODEs and DAEs on your computer's NVIDIA GPU. It's as easy to use as SciPy or MATLAB - you write your problem in Python and call `solve_ivp` on it. For a guide on converting your MATLAB or SciPy problem to Cubie, check out the guides [link to docs pages for coming from matlab, coming from scipy]. 
+Cubie solves large batches of ODEs and DAEs on your computer's NVIDIA GPU. It's as easy to use as SciPy or MATLAB - you write your problem in Python and call `solve_ivp` on it. For a guide on converting your MATLAB or SciPy problem to Cubie, check out [Coming from MATLAB](https://cubiepy.github.io/cubie/main/getting_started/coming_from_matlab.html) and [Coming from SciPy](https://cubiepy.github.io/cubie/main/getting_started/coming_from_scipy.html).
 
 Cubie compiles your system of equations into a GPU kernel that integrates every trajectory in
 a batch of initial values or parameter sets in parallel. Because GPUs are so good at parallel workloads, a batch of ten thousand or so trajectories takes about as long as a batch of one. 
@@ -20,7 +20,7 @@ Cubie runs much faster than SciPy's `solve_ivp` or MATLAB's `ode45/ode23s`, even
 
 ![CuBIE's speedup over SciPy and MATLAB against the number of trajectories](https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/readme/all_multiple.png)
 
-These numbers were obtained running the same batch of parameters on the same ODE systems, with MATLAB running the Lorenz system in a parfor loop using ODE45, and the Pollution and Fabbri cell [link to cellml model/paper] using `ode23s`. Scipy used RK45 on the Lorenz system, and Radauiia5[whatever sciptys name is as code]. Both MATLAB and SciPy were given a helping hand by using Cubie's generated symbolic Jacobian for the stiff systems, and SciPy's RHS got JIT compiled through numba, to give them a fighting chance.
+These numbers were obtained running the same batch of parameters on the same ODE systems, with MATLAB running the Lorenz system in a parfor loop using `ode45`, and the POLLU air-pollution problem and the [Fabbri et al. (2017)](https://doi.org/10.1113/JP273259) sinoatrial node cell, with the [Linder et al. (2025)](https://doi.org/10.1113/JP287557) autonomic signalling cascade, using `ode23s`. SciPy used `RK45`'s Dormand-Prince pair on the Lorenz system, through the Fortran `dopri5` in `scipy.integrate.ode`, and `Radau` on the two stiff systems. Both MATLAB and SciPy were given a helping hand by using analytic Jacobians for the stiff systems (Cubie's generated Jacobian for the Fabbri cell), and SciPy's RHS got JIT compiled through numba, to give them a fighting chance.
 
 Under the hood, cubie uses [`numba-cuda-mlir`](https://github.com/NVIDIA/numba-cuda-mlir) to compile
 the integration algorithms and your provided ODE/DAE systems into GPU code
@@ -28,7 +28,7 @@ and ferry your data in between your computer and GPU. It goes fast because it st
 
 [[2x comparison plots - to be rendered]]
 
-It's the fastest parallel integrator I've found. Similar work has been done in parallel, for JAX on Linux, by GradSolve and Modax [[link these]], in Julia by DiffEqGPU.jl, and in higher-level systems Diffrax and TorchDiffEq[[link all]]. Cubie held its own, at the time of measurement. For large systems and implicit algorithms, it really shines.
+It's the fastest parallel integrator I've found. Similar work has been done in parallel, for JAX on Linux, by [gradsolve](https://github.com/ECLIPSE-AI4Science/gradsolve) and [modax](https://github.com/lawrenceberry/modax), in Julia by [DiffEqGPU.jl](https://github.com/SciML/DiffEqGPU.jl), and in higher-level systems [Diffrax](https://github.com/patrick-kidger/diffrax) and [torchdiffeq](https://github.com/rtqichen/torchdiffeq). Cubie held its own, at the time of measurement. For large systems and implicit algorithms, it really shines.
 
 ## Capabilities
 
@@ -55,10 +55,21 @@ tearing before Cubie generates solver code.
 ### Choose your solver
 
 - Cubie has a large range of Runge-Kutta methods available to pick from:
-    - Explicit:
-    - Diagonally-Implicit:
-    - Fully Implicit:
-    - Rosenbrock-W:
+    - Explicit: `tsit5` (the default), `euler`, `heun-21`, `ralston-33`,
+      `rk23`, `rk4`, `rk45`, `cash-karp-54`, `fehlberg-45`, `vern7` and
+      `dop853`.
+    - Diagonally-Implicit: `backwards_euler`, `crank_nicolson`,
+      `implicit_midpoint`, `trapezoidal_dirk`, `sdirk_2_2`, `kvaerno3`,
+      `kvaerno5`, `l_stable_dirk_3`, `l_stable_sdirk_4` and three
+      `eldirk32` variants.
+    - Fully Implicit: `radau_iia_3`, `radau_iia_5`, `radau_iia_9`,
+      `firk_gauss_legendre_2` and `firk_gauss_legendre_4`.
+    - Rosenbrock-W: 37 methods, including `rosenbrock23`, `ros3p`,
+      `rodas4`, `rodas4p`, `rodas5p`, `rodas6p` and the `ros34pw` family.
+- Pass MATLAB and SciPy names such as `ode45`, `ode23s` or `Radau` and
+  Cubie picks the matching method. Read the
+  [algorithm guide](https://cubiepy.github.io/cubie/main/user_guide/algorithms_and_tuning/choosing_algorithms.html)
+  for help choosing one.
 
 ### Customise (if you want to)
 
@@ -78,11 +89,12 @@ The extra in square brackets installs a CUDA toolkit: `cuda13` for CUDA 13,
 
 ## Requirements
 
-[[make this a bulleted list]]
-Include OS linux, windows
-Cubie requires Python 3.11-3.14, an up-to-date NVIDIA driver, and an NVIDIA GPU
-with compute capability 6.0 or later. Pandas and Matplotlib support can be installed with
-`pip install "cubie[optional]"`.
+- Linux or Windows.
+- Python 3.11-3.14.
+- An NVIDIA GPU with compute capability 6.0 or later.
+- An up-to-date NVIDIA driver.
+- Optionally, Pandas and Matplotlib, which you can install with
+  `pip install "cubie[optional]"`.
 
 ## Quick start
 
