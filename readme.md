@@ -64,7 +64,7 @@ tearing before Cubie generates solver code.
       `l_stable_sdirk_4` and three `eldirk32` variants.
     - Fully Implicit: `radau_iia_3`, `radau_iia_5`,
       `radau_iia_9`, `firk_gauss_legendre_2` and `firk_gauss_legendre_4`.
-    - Rosenbrock-W: choose from 37 methods, including `rosenbrock23`,
+    - Rosenbrock and Rosenbrock-W: choose from 37 methods, including `rosenbrock23`,
       `ros3p`, `rodas4`, `rodas4p`, `rodas5p`, `rodas6p` and the
       `ros34pw` family.
 - Pass MATLAB and SciPy names such as `ode45`, `ode23s` or `Radau` and
@@ -123,6 +123,10 @@ Cubie integrates all 1,048,576 combinations of the 1,024 initial values of
 On an RTX 4070 SUPER, Cubie takes about 1s to compile and run it for the first
 time. Once it's compiled once, every future batch takes 30 to 45 ms, in the 
 same and future sessions.
+
+For repeated solves, you would probably keep a `Solver` object and call 
+`Solver.solve()` (see the docs). This cuts repeated solve time to 7ms.
+
 
 ## Documentation
 
