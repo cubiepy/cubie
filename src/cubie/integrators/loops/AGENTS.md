@@ -72,6 +72,11 @@ Outputs require acceptance (`do_save &= accept`, likewise for summaries).
   `t_next64 = t + float64(dt_raw)` and `t_next = narrow(t_next64)` are computed before
   the step in fixed mode and after the commit in adaptive mode; state, drivers,
   observables, `t` and `t_prec` commit with `selp(accept, new, old)`.
+- Under `low_precision_time` the loop holds time as an unevaluated float32 sum of
+  `t_prec` and a tail `t_tail`. `add_time` adds a step to `t_prec` and the rounding
+  error of that sum to `t_tail`, exactly while the step is no larger than `t_prec`. In
+  fixed mode the loop commits an event time with a zero tail in place of its float64
+  copy.
 - When an output is due, `dt_eff = fmin(next_event - t_prec, dt_raw)` with
   `next_event = min(next_save, next_update_summary, t_end)`; `dt_raw` resumes after the
   boundary. The loop passes `truncated = (dt_eff != dt_raw)` to the controller. A clamped

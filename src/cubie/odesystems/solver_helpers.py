@@ -305,6 +305,8 @@ class SolverHelperRequest:
         ``(unroll, count)`` flag of the element loops.
     unroll_other_small
         ``(unroll, count)`` flag of the series-order loop.
+    low_precision_factors
+        Store prefactored LU factors in ``cached_aux`` as bfloat16 bits.
 
     Raises
     ------
@@ -353,6 +355,9 @@ class SolverHelperRequest:
     )
     unroll_other_small: UnrollFlag = field(
         default=(True, None), converter=unroll_flag_converter
+    )
+    low_precision_factors: bool = field(
+        default=False, validator=validators.instance_of(bool)
     )
     variant: HelperVariant = field(
         default=HelperVariant.PLAIN, init=False, repr=False
@@ -411,6 +416,7 @@ class SolverHelperRequest:
             self.preconditioner_order,
             self.stage_coefficients,
             self.stage_nodes,
+            self.low_precision_factors,
         )
 
 

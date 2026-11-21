@@ -71,6 +71,7 @@ from numpy import (
     full,
     int32 as np_int32,
     int64 as np_int64,
+    uint32 as np_uint32,
     integer as np_integer,
     isfinite as np_isfinite,
     isscalar,
@@ -153,6 +154,7 @@ ALLOWED_BUFFER_DTYPES = {
     np_dtype(np_float64),
     np_dtype(np_int32),
     np_dtype(np_int64),
+    np_dtype(np_uint32),
 }
 
 
@@ -189,7 +191,7 @@ def buffer_dtype_validator(
     if np_dtype(value) not in ALLOWED_BUFFER_DTYPES:
         raise ValueError(
             "Buffer dtype must be one of float16, float32, float64, "
-            "int32, or int64",
+            "int32, int64, or uint32",
         )
 
 

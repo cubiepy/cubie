@@ -43,6 +43,7 @@ from numpy.typing import ArrayLike, NDArray
 
 from cubie.CUDAFactory import (
     ALL_JIT_PARAMETERS,
+    ALL_REDUCED_PRECISION_PARAMETERS,
     ALL_UNROLL_PARAMETERS,
     CUDAFactory,
     CUDADispatcherCache,
@@ -64,7 +65,9 @@ ALL_OUTPUT_FUNCTION_PARAMETERS = {
     "summarised_observable_indices",
     "sample_summaries_every",
     "precision",
-} | ALL_UNROLL_PARAMETERS | ALL_JIT_PARAMETERS
+} | ALL_UNROLL_PARAMETERS | ALL_JIT_PARAMETERS | (
+    ALL_REDUCED_PRECISION_PARAMETERS
+)
 """Keyword arguments accepted by :class:`OutputFunctions`.
 
 These parameters can be passed to :class:`OutputFunctions` or to

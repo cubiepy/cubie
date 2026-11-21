@@ -70,6 +70,7 @@ from numpy.typing import NDArray
 
 from cubie.CUDAFactory import (
     ALL_JIT_PARAMETERS,
+    ALL_REDUCED_PRECISION_PARAMETERS,
     ALL_UNROLL_PARAMETERS,
     CUDAFactory,
     CUDAFactoryConfig,
@@ -117,6 +118,7 @@ ALL_INTERPOLATOR_PARAMETERS = (
     frozenset({"drivers", "order", "wrap", "boundary_condition"})
     | ALL_UNROLL_PARAMETERS
     | ALL_JIT_PARAMETERS
+    | ALL_REDUCED_PRECISION_PARAMETERS
 )
 """Keyword args for the driver samples and interpolation settings."""
 

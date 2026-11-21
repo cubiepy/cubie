@@ -36,11 +36,72 @@ from cubie._utils import (
     PrecisionDType,
 )
 from cubie.integrators.norms import TwoRefMaskedScaledNorm
+from cubie._cudasim_extensions import cuda
+from cubie.backend.intrinsics import bits_float, float_bits, multiply_high
+from cubie.backend.jit import compile_kwargs
+from numba_cuda_mlir.types import int32
+from numpy import float32 as np_float32, int32 as np_int32
 from cubie.integrators.step_control.base_step_controller import (
     BaseStepController,
     BaseStepControllerConfig,
     ControllerCache,
 )
+
+
+ONE_BITS = 0x3F800000
+"""The bits of float32 1.0."""
+
+LARGEST_FINITE_BITS = 0x7F7FFFFF
+"""The bits of the largest finite float32."""
+
+
+def log_bits_constant(value: float) -> int:
+    """Return the bits of float32 ``value`` less the bits of 1.0.
+
+    Divided by ``2**23``, the result is within 0.09 of ``log2(value)``.
+    """
+    return int(np_float32(value).view(np_int32)) - ONE_BITS
+
+
+def power_scale(power: float) -> int:
+    """Return ``power`` as a fixed-point factor for :func:`scaled_power`.
+
+    Raise ValueError unless ``abs(power) < 0.5``, because we store
+    ``power * 2**32`` in an int32.
+    """
+    if not abs(power) < 0.5:
+        raise ValueError(f"power {power} is outside (-0.5, 0.5)")
+    return int(round(power * 2.0**32))
+
+
+# no cover: start
+@cuda.jit(device=True, inline=True, **compile_kwargs)
+def log_bits(value):
+    """Return the bits of a positive float32 less the bits of 1.0."""
+    return int32(float_bits(value) - int32(ONE_BITS))
+
+
+@cuda.jit(device=True, inline=True, **compile_kwargs)
+def scaled_power(logarithm, scale):
+    """Return ``logarithm`` times the fixed-point factor ``scale``."""
+    return multiply_high(logarithm, int32(scale))
+
+
+@cuda.jit(device=True, inline=True, **compile_kwargs)
+def gain_from_log_bits(logarithm):
+    """Return the positive float32 whose log bits are ``logarithm``.
+
+    Return zero or the largest finite float32 for a logarithm past the
+    float32 range.
+    """
+    bits = min(
+        max(int32(logarithm + int32(ONE_BITS)), int32(0)),
+        int32(LARGEST_FINITE_BITS),
+    )
+    return bits_float(bits)
+
+
+# no cover: end
 
 
 class OrderDependentGain:
@@ -234,6 +295,7 @@ class BaseAdaptiveStepController(BaseStepController):
             mass_flags=config.mass_flags,
             jit_flags=config.jit_flags,
             unroll=config.unroll,
+            reduced_precision=config.reduced_precision,
         )
         self.update_compile_settings(
             {"norm_fn": self.norm.device_function},
