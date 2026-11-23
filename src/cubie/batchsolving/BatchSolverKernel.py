@@ -50,6 +50,7 @@ from numpy import (
     float64 as np_float64,
     floating,
     int32 as np_int32,
+    int64 as np_int64,
 )
 from numba_cuda_mlir.types import float64, int32
 from cubie._cudasim_extensions import cuda
@@ -685,7 +686,7 @@ class BatchSolverKernel(CUDAFactory):
             t0,
             save_count,
             summary_count,
-            chunk_run_params.runs,
+            np_int64(chunk_run_params.runs),
         )
 
     def _prepare_batch(
