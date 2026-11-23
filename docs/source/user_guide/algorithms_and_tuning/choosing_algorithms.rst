@@ -25,8 +25,7 @@ Decision Guide
        methods are fast.
    * - Very stiff
      - FIRK
-     - FIRK algorithms like ``radau_iia_5`` handles extreme
-       stiffness well.
+     - Use FIRK algorithms like ``radau_iia_5`` for extreme stiffness.
 
 The bare family names ``erk``, ``dirk``, ``firk``, and ``rosenbrock``
 are also accepted and select each family's default tableau
@@ -455,15 +454,17 @@ few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
 and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
-count.  The batch timed is resized so that it runs for about 20 ms where
-achievable. Setting ``auto_size=False`` times your exact batch instead.
-Candidates whose trajectory failure rate is within 5% of the best are
-ranked by time, then higher-failure results follow ranked by time, with
-their failure rates shown.  By default the winning configuration is
-applied to the solver in place. Passing ``apply=False`` returns the
-results of the race without modifying the solver.
+count.  Cubie resizes the batch it times so that a solve takes about
+20 ms where it can; pass ``auto_size=False`` to time your exact batch
+instead.  Cubie ranks candidates whose trajectories succeed (runs that
+don't end in a step-size or convergence error) at a rate at least 95%
+of the best candidate's rate by time.  Candidates below that threshold
+are ranked afterward, also by time, with their failure rates shown.
+By default cubie applies the winning configuration to the solver in
+place; pass ``apply=False`` to get the results of the race without
+modifying the solver.
 
-``Solver.calibrate()`` compiles a large number of kernels; allow half an
+``calibrate`` compiles a large number of kernels, so allow half an
 hour for a bigger system.
 
 With the algorithm settled, :meth:`Solver.optimize
