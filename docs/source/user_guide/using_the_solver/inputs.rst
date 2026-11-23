@@ -64,7 +64,7 @@ If you're looking for something faster (by ~tens of ms per solve) or are
 generating values programmatically, you can pass arrays instead. Lay each
 array out as ``(n_variables, n_runs)``, with its rows ordered by variable
 name. If the array is already in the same data type as ``solver.precision``,
-cubie makes one fewer copy of it.
+cubie will do one less array copy internally.
 
 .. note::
 
@@ -73,12 +73,12 @@ cubie makes one fewer copy of it.
    outputs, name-ordering makes it easier to reconstruct and index the
    resulting system.
 
-When you pass a dict, cubie compiles every parameter you give a single
-value directly into the GPU code to make it go faster. Under the default
-``fix_constant_parameters=True``, it does the same for each row of an
-array that has the same value in every run. You usually get a faster
-solve, but each solve call takes a few ms longer. To get around this,
-you can:
+When you pass a dict, cubie compiles every non-varying parameter
+directly into the GPU code to make it go faster. It does the same for an
+array (when every value in a row has the same value) under the default
+``fix_constant_parameters=True`` argument. This will usually make the
+solve faster, but costs a few ms per solve call. To get around this, you
+can:
 
 - Pass ``fix_constant_parameters=False``. All parameters, even the constant
   ones, are part of the input array that gets passed to the GPU, and get loaded
