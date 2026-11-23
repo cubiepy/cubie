@@ -293,8 +293,7 @@ methods are fast.</p></td>
 </tr>
 <tr class="row-even"><td><p>Very stiff</p></td>
 <td><p>FIRK</p></td>
-<td><p>FIRK algorithms like <code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> handles extreme
-stiffness well.</p></td>
+<td><p>Use FIRK algorithms like <code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> for extreme stiffness.</p></td>
 </tr>
 </tbody>
 </table>
@@ -816,14 +815,16 @@ few orders of each algorithm family and, for the implicit families,
 the preconditioner, linear-solver, Newton-variant, smoothed-error,
 and dense-predictor settings.  Every candidate is timed on a few
 full-length solves and reported with its solve times and failed-run
-count.  The batch timed is resized so that it runs for about 20 ms where
-achievable. Setting <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code> times your exact batch instead.
-Candidates whose trajectory failure rate is within 5% of the best are
-ranked by time, then higher-failure results follow ranked by time, with
-their failure rates shown.  By default the winning configuration is
-applied to the solver in place. Passing <code class="docutils literal notranslate"><span class="pre">apply=False</span></code> returns the
-results of the race without modifying the solver.</p>
-<p><code class="docutils literal notranslate"><span class="pre">Solver.calibrate()</span></code> compiles a large number of kernels; allow half an
+count.  Cubie resizes the batch it times so that a solve takes about
+20 ms where it can; pass <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code> to time your exact batch
+instead.  Cubie ranks candidates whose trajectories succeed (runs that
+don’t end in a step-size or convergence error) at a rate at least 95%
+of the best candidate’s rate by time.  Candidates below that threshold
+are ranked afterward, also by time, with their failure rates shown.
+By default cubie applies the winning configuration to the solver in
+place; pass <code class="docutils literal notranslate"><span class="pre">apply=False</span></code> to get the results of the race without
+modifying the solver.</p>
+<p><code class="docutils literal notranslate"><span class="pre">calibrate</span></code> compiles a large number of kernels, so allow half an
 hour for a bigger system.</p>
 <p>With the algorithm settled, <a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.optimize" title="cubie.batchsolving.solver.Solver.optimize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Solver.optimize</span></code></a> tries a few different
 configurations of where buffers sit in memory, which loops get
