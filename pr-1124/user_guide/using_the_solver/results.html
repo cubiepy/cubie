@@ -449,9 +449,8 @@ you save.</p>
 <section id="result-formats">
 <h2>Result formats<a class="headerlink" href="#result-formats" title="Link to this heading"></a></h2>
 <p>Cubie returns each output in the <code class="docutils literal notranslate"><span class="pre">SolveResult</span></code> as a NumPy array, indexed
-by time (or summary window) first, then variable, then run. In
-<code class="docutils literal notranslate"><span class="pre">summaries_array</span></code>, cubie places each variable’s metrics side by side
-along the middle axis:</p>
+by time (or summary window) first, then variable (or variable and metric),
+then run:</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">state</span></code> and <code class="docutils literal notranslate"><span class="pre">observables</span></code></dt><dd><p>The state and observable trajectories.</p>
 </dd>
@@ -460,7 +459,8 @@ along the middle axis:</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">time</span></code></dt><dd><p>The time of each saved point, one column per run.</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">summaries_array</span></code></dt><dd><p>Every summary metric, one row per summary window. Read
+<dt><code class="docutils literal notranslate"><span class="pre">summaries_array</span></code></dt><dd><p>Every summary metric, one row per summary window. Along the middle
+axis, cubie places each variable’s metrics side by side. Read
 <code class="docutils literal notranslate"><span class="pre">summaries_legend</span></code> for the name of each column, such as <code class="docutils literal notranslate"><span class="pre">&quot;x</span> <span class="pre">mean&quot;</span></code>
 for a variable without a unit, or <code class="docutils literal notranslate"><span class="pre">&quot;x</span> <span class="pre">[mV]</span> <span class="pre">mean&quot;</span></code> for a variable in
 millivolts.</p>
