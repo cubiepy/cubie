@@ -331,10 +331,11 @@
 <span class="sd">"""</span>
 
 <span class="n">LAUNCH_OCCUPANCY_TIE</span> <span class="o">=</span> <span class="mf">0.9</span>
-<span class="sd">"""Share of the most resident threads a launch must keep to be chosen.</span>
+<span class="sd">"""Share of the most resident threads :func:`default_launch` requires.</span>
 
-<span class="sd">:func:`default_launch` applies this share only to kernels larger than</span>
-<span class="sd">the instruction cache.</span>
+<span class="sd">For a kernel larger than the instruction cache, :func:`default_launch`</span>
+<span class="sd">chooses only among launches with at least this share of the most</span>
+<span class="sd">resident threads.</span>
 
 <span class="sd">Empirical: over the instruction cache the largest block won 52/13 of</span>
 <span class="sd">259 equal-residency comparisons on the RTX 2060 SUPER and 30/13 of 179</span>
