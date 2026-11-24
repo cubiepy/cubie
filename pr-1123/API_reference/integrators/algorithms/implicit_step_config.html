@@ -284,8 +284,8 @@ the type’s default: two for <code class="docutils literal notranslate"><span c
 <li><p><strong>prefactored</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – With <code class="docutils literal notranslate"><span class="pre">inexact_newton</span></code> and a direct solver on a diagonal
 tableau, store finished step-start LU factors per distinct
 tableau diagonal instead of frozen Jacobian entries. This flag
-is ignored for Rosenbrock-W steps, whose matrix is always
-factorised once per step with a direct solver.</p></li>
+is ignored for Rosenbrock-W steps; with a direct solver,
+their matrix is always factorised once per step.</p></li>
 <li><p><strong>cached_auxiliaries_location</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Buffer location for the step-start Jacobian cache.</p></li>
 <li><p><strong>helper_operation_counts</strong> (<em>cubie.odesystems.solver_helpers.OperationCounts</em>) – Operator counts of the helpers the last build requested.</p></li>
 </ul>

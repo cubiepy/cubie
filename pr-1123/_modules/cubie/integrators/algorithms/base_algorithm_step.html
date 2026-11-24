@@ -511,8 +511,8 @@
 <span class="sd">     - :class:`ImplicitStepConfig`</span>
 <span class="sd">     - Store step-start LU factors per tableau diagonal instead of</span>
 <span class="sd">       frozen Jacobian entries (direct solver + ``inexact_newton``).</span>
-<span class="sd">       Ignored for Rosenbrock-W, whose matrix is always factorised</span>
-<span class="sd">       once per step with a direct solver.</span>
+<span class="sd">       This flag is ignored for Rosenbrock-W steps; with a direct</span>
+<span class="sd">       solver, their matrix is always factorised once per step.</span>
 <span class="sd">   * - ``dae_initialisation``</span>
 <span class="sd">     - ``SingleIntegratorRunCore``</span>
 <span class="sd">     - Consistent-initialisation mode for singular-mass systems:</span>
