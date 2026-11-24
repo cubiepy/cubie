@@ -174,7 +174,7 @@ the step status) into `compile_settings.prepare_jacobian_fn`, resizes
 follow `ImplicitStepConfig.prefactored` (default `True`: step-start factors per distinct
 tableau diagonal; `False`: frozen entries factorised per call); FIRK + LU runs the
 stacked prefactored eigenvalue block transform, with smoothing sharing its real block.
-Rosenbrock-W ignores both flags and always requests step-start factors.
+Rosenbrock-W ignores both flags, and with LU always requests step-start factors.
 
 ## Dependencies
 ### Internal

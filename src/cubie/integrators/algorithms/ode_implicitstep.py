@@ -130,6 +130,8 @@ class ImplicitStepConfig(BaseStepConfig):
         With ``inexact_newton`` and a direct solver on a diagonal
         tableau, store finished step-start LU factors per distinct
         tableau diagonal instead of frozen Jacobian entries.
+        Rosenbrock-W steps ignore it and always store step-start LU
+        factors with a direct solver.
     cached_auxiliaries_location
         Buffer location for the step-start Jacobian cache.
     helper_operation_counts
