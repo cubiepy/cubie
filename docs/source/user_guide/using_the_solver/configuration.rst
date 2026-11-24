@@ -238,6 +238,9 @@ Newton options:
     factorises the frozen matrix once per step for each distinct value
     on the tableau's diagonal, and reuses the factors in every solve.
     With ``False``, cubie factorises the frozen matrix in each solve.
+    Cubie ignores this option for Rosenbrock-W algorithms. With
+    ``"lu"``, it factorises their matrix once per step and reuses the
+    factors in every stage.
 
     - Default: ``True``
 

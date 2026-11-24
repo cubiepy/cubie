@@ -161,7 +161,9 @@ mass).
   `Solver.optimize` times.
 - With `linear_correction_type="lu"` (`uses_direct_solver`) steps request the
   `lu_solve` role; `HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
-  `update(lu_solve_fn=..., lu_nnz=...)`.
+  `update(lu_solve_fn=..., lu_nnz=...)`. Rosenbrock-W requests it with
+  `jacobian_at="step"` and `prefactored=True`, so it factorises `W` once per step and
+  substitutes against the stored factors in every stage.
 
 ## Simplified Newton (`inexact_newton`)
 `ImplicitStepConfig.inexact_newton` (default `False`) freezes the Newton iteration
@@ -172,7 +174,7 @@ the step status) into `compile_settings.prepare_jacobian_fn`, resizes
 follow `ImplicitStepConfig.prefactored` (default `True`: step-start factors per distinct
 tableau diagonal; `False`: frozen entries factorised per call); FIRK + LU runs the
 stacked prefactored eigenvalue block transform, with smoothing sharing its real block.
-Rosenbrock-W ignores both flags.
+Rosenbrock-W ignores both flags and always requests step-start factors.
 
 ## Dependencies
 ### Internal

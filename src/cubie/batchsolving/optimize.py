@@ -72,7 +72,10 @@ at, so the cut points are validated at this granularity.
 """
 
 LAUNCH_OCCUPANCY_TIE = 0.9
-"""Share of the most resident threads a larger block must keep to win.
+"""Share of the most resident threads a launch must keep to be chosen.
+
+:func:`default_launch` applies this share only to kernels larger than
+the instruction cache.
 
 Empirical: over the instruction cache the largest block won 52/13 of
 259 equal-residency comparisons on the RTX 2060 SUPER and 30/13 of 179
@@ -300,7 +303,9 @@ def default_launch(
 
     For a kernel larger than the instruction cache, return the launch
     within the occupancy tie band that puts a block on the most SMs,
-    and the largest block among those.
+    and the largest block among those. For a smaller kernel, return
+    the launch with the most resident threads, and the smaller block
+    on a tie.
 
     Parameters
     ----------

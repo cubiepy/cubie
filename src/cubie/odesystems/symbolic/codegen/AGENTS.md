@@ -51,13 +51,16 @@ Each Jacobian-facing generator takes a `HelperVariant`, the internal product of 
   v-dependent assignments are stage-instantiated
   (`build_stage_cached_jvp_assignments`).
 - **`PREFACTORED`** (`lu_solve`/`lu_prepare_blocks` only): substitution against
-  step-start per-diagonal LU factors read from `cached_aux`.
+  step-start per-diagonal LU factors read from `cached_aux`. For a tableau whose
+  diagonal is all zero (every Rosenbrock-W tableau), `lu_prepare_blocks` factorises one
+  block with `a_ij = 1`; `GenericRosenbrockWStep` requests this pair when it solves with
+  LU.
 - **`PREFACTORED_STACKED`** (lu family): the eigenvalue block-transform substitution against step-start block factors.
 - **`CACHED` / `prepare_jac`** (Rosenbrock-W): `state` is the actual state (no substitution);
   selected auxiliaries are precomputed once per step into `cached_aux` by `prepare_jac` and read
-  back by the operator/preconditioner. `GenericRosenbrockWStep` requests the cached
-  operator and preconditioner — each `HelperResult` carries the `prepare_jac`
-  companion and `cached_auxiliary_count` — and runs
+  back by the operator/preconditioner. With an iterative linear solver,
+  `GenericRosenbrockWStep` requests the cached operator and preconditioner, takes the
+  `prepare_jac` companion and `cached_auxiliary_count` from each `HelperResult`, and runs
   `prepare_jacobian` once per step. *Which* auxiliaries get cached is chosen by the planner
   (`parsing/auxiliary_caching.plan_auxiliary_cache`): every v-independent assignment in the
   JVP graph (named auxiliaries, Jacobian entries, `_cse` locals) is a candidate. Selection is
