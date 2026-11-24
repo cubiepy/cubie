@@ -9,7 +9,7 @@ defines it has been imported, users request your metric by name in
 File Location
 -------------
 
-Built-in metrics live in
+cubie keeps its built-in metrics in
 ``src/cubie/outputhandling/summarymetrics/``, one module per metric.
 cubie imports every module in that package's ``__init__.py`` to
 register each metric, so add an import line there for a new built-in
@@ -61,9 +61,9 @@ takes ``precision`` and nothing else.
 
 ``buffer_size``
    The number of working values cubie stores for each summarised
-   variable while it calculates the metric.  For a metric that takes a parameter in its request, such
-   as ``"peaks[5]"``, pass a callable that receives the parameter and
-   returns the size.
+   variable while it calculates the metric.  For a metric that takes a
+   parameter in its request, such as ``"peaks[5]"``, pass a callable
+   that receives the parameter and returns the size.
 
 ``output_size``
    The number of values cubie writes for each variable in each summary
@@ -113,18 +113,19 @@ metric under the CUDA simulator.  Read the precision and
 ``sample_summaries_every`` from ``self.compile_settings`` inside
 ``build()``, and cast constants with ``precision(...)`` so that cubie can
 compile the functions for both ``float32`` and ``float64``.  cubie
-rebuilds the metric when either setting changes.
+rebuilds the metric whenever it changes either setting.
 
 Combined Metrics
 ----------------
 
 When a user requests every metric in certain sets, cubie computes them
 together from one shared buffer: for example, cubie calculates
-``"mean"`` and ``"std"`` together as ``"mean_std"``.  To add a combination for built-in
-metrics, register a combined metric with ``output_names`` set to the
-names of its parts, so that users still see the names they asked for,
-and add the set of names to ``_combined_metrics`` in
-``SummaryMetrics.__attrs_post_init__`` in ``metrics.py``.
+``"mean"`` and ``"std"`` together as ``"mean_std"``.  To add a
+combination for built-in metrics, register a combined metric with
+``output_names`` set to the names of its parts, so that users still see
+the names they asked for, and add the set of names to
+``_combined_metrics`` in ``SummaryMetrics.__attrs_post_init__`` in
+``metrics.py``.
 
 Example: Implementing a "Count" Metric
 --------------------------------------
@@ -178,7 +179,7 @@ the metric like any other:
    import numpy as np
    import cubie as qb
 
-   import count_metric  # registers "count"
+   import count_metric  # import to register "count"
 
    LV = qb.create_ODE_system(
        """

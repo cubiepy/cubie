@@ -271,7 +271,7 @@ defines it has been imported, users request your metric by name in
 <code class="docutils literal notranslate"><span class="pre">output_types</span></code>, just like a built-in one.</p>
 <section id="file-location">
 <h2>File Location<a class="headerlink" href="#file-location" title="Link to this heading"></a></h2>
-<p>Built-in metrics live in
+<p>cubie keeps its built-in metrics in
 <code class="docutils literal notranslate"><span class="pre">src/cubie/outputhandling/summarymetrics/</span></code>, one module per metric.
 cubie imports every module in that package’s <code class="docutils literal notranslate"><span class="pre">__init__.py</span></code> to
 register each metric, so add an import line there for a new built-in
@@ -317,9 +317,9 @@ takes <code class="docutils literal notranslate"><span class="pre">precision</sp
 <dt><code class="docutils literal notranslate"><span class="pre">name</span></code></dt><dd><p>The name users put in <code class="docutils literal notranslate"><span class="pre">output_types</span></code>.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">buffer_size</span></code></dt><dd><p>The number of working values cubie stores for each summarised
-variable while it calculates the metric.  For a metric that takes a parameter in its request, such
-as <code class="docutils literal notranslate"><span class="pre">&quot;peaks[5]&quot;</span></code>, pass a callable that receives the parameter and
-returns the size.</p>
+variable while it calculates the metric.  For a metric that takes a
+parameter in its request, such as <code class="docutils literal notranslate"><span class="pre">&quot;peaks[5]&quot;</span></code>, pass a callable
+that receives the parameter and returns the size.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">output_size</span></code></dt><dd><p>The number of values cubie writes for each variable in each summary
 window.  This can also be a callable of the parameter.</p>
@@ -366,17 +366,18 @@ metric under the CUDA simulator.  Read the precision and
 <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code> from <code class="docutils literal notranslate"><span class="pre">self.compile_settings</span></code> inside
 <code class="docutils literal notranslate"><span class="pre">build()</span></code>, and cast constants with <code class="docutils literal notranslate"><span class="pre">precision(...)</span></code> so that cubie can
 compile the functions for both <code class="docutils literal notranslate"><span class="pre">float32</span></code> and <code class="docutils literal notranslate"><span class="pre">float64</span></code>.  cubie
-rebuilds the metric when either setting changes.</p>
+rebuilds the metric whenever it changes either setting.</p>
 </section>
 <section id="combined-metrics">
 <h2>Combined Metrics<a class="headerlink" href="#combined-metrics" title="Link to this heading"></a></h2>
 <p>When a user requests every metric in certain sets, cubie computes them
 together from one shared buffer: for example, cubie calculates
-<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;std&quot;</span></code> together as <code class="docutils literal notranslate"><span class="pre">&quot;mean_std&quot;</span></code>.  To add a combination for built-in
-metrics, register a combined metric with <code class="docutils literal notranslate"><span class="pre">output_names</span></code> set to the
-names of its parts, so that users still see the names they asked for,
-and add the set of names to <code class="docutils literal notranslate"><span class="pre">_combined_metrics</span></code> in
-<code class="docutils literal notranslate"><span class="pre">SummaryMetrics.__attrs_post_init__</span></code> in <code class="docutils literal notranslate"><span class="pre">metrics.py</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;std&quot;</span></code> together as <code class="docutils literal notranslate"><span class="pre">&quot;mean_std&quot;</span></code>.  To add a
+combination for built-in metrics, register a combined metric with
+<code class="docutils literal notranslate"><span class="pre">output_names</span></code> set to the names of its parts, so that users still see
+the names they asked for, and add the set of names to
+<code class="docutils literal notranslate"><span class="pre">_combined_metrics</span></code> in <code class="docutils literal notranslate"><span class="pre">SummaryMetrics.__attrs_post_init__</span></code> in
+<code class="docutils literal notranslate"><span class="pre">metrics.py</span></code>.</p>
 </section>
 <section id="example-implementing-a-count-metric">
 <h2>Example: Implementing a “Count” Metric<a class="headerlink" href="#example-implementing-a-count-metric" title="Link to this heading"></a></h2>
@@ -424,7 +425,7 @@ the metric like any other:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qb</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">count_metric</span>  <span class="c1"># registers "count"</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">count_metric</span>  <span class="c1"># import to register "count"</span>
 
 <span class="n">LV</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">create_ODE_system</span><span class="p">(</span>
 <span class="w">    </span><span class="sd">"""</span>
