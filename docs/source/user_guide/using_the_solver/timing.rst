@@ -220,7 +220,10 @@ The summary system uses fixed, non-overlapping windows:
    and fed into accumulators (running sum, running max, etc.)
 2. At each ``summarise_every`` interval, final metrics are computed from
    the accumulators, written to output, and accumulators reset
-3. The next window starts fresh with no memory of previous windows
+3. Cubie starts the sums, maxima and minima again in each window. For the
+   derivative metrics (``dxdt_*`` and ``d2xdt2_*``), cubie uses the last
+   samples of the previous window, so the first derivative in a window
+   spans the boundary.
 
 This differs from sliding-window approaches where windows overlap.
 
@@ -230,7 +233,7 @@ This differs from sliding-window approaches where windows overlap.
 
    t=0.0   t=0.25  t=0.5   t=0.75  t=1.0   t=1.25  ...
      |       |       |       |       |       |
-     S       S       S       S      S+W      S      ...
+             S       S       S      S+W      S      ...
 
    S = sample taken, W = window closes (summary written, reset)
 

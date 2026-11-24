@@ -123,10 +123,14 @@ intervals fit together.
      - Both max and min.
    * - ``"max_magnitude"``
      - Maximum absolute value.
-   * - ``"peaks"``
-     - Positive peaks (local maxima).
-   * - ``"negative_peaks"``
-     - Negative peaks (local minima).
+   * - ``"peaks[n]"``
+     - The first n positive peaks (local maxima) in each window. Cubie
+       records each peak as the index of the summary sample it occurred
+       at, not as a time, and counts the index from zero at the first
+       summary sample of the run.
+   * - ``"negative_peaks[n]"``
+     - The first n negative peaks (local minima) in each window, as
+       sample indices like ``"peaks[n]"``.
    * - ``"dxdt_max"``
      - Maximum of the first derivative.
    * - ``"dxdt_min"``
@@ -175,7 +179,9 @@ Result formats
 --------------
 
 Cubie returns each output in the ``SolveResult`` as a NumPy array, indexed
-by time (or summary window) first, then variable, then run:
+by time (or summary window) first, then variable, then run. In
+``summaries_array``, cubie places each variable's metrics side by side
+along the middle axis:
 
 ``state`` and ``observables``
    The state and observable trajectories.
@@ -189,7 +195,9 @@ by time (or summary window) first, then variable, then run:
 
 ``summaries_array``
    Every summary metric, one row per summary window. Read
-   ``summaries_legend`` for the name of each column, such as ``"x mean"``.
+   ``summaries_legend`` for the name of each column, such as ``"x mean"``
+   for a variable without a unit, or ``"x [mV] mean"`` for a variable in
+   millivolts.
 
 ``iteration_counters``
    The solver work between saved points, as described above.
