@@ -58,7 +58,7 @@ updating a PR.
 ## Code style
 - PEP8: 79-char lines, 71-char comments. Descriptive names, not abbreviations.
 - Type hints on function/method **signatures** only (PEP484) — no inline variable annotations, no
-  `from __future__ import annotations` (min Python 3.11). numpydoc docstrings on public API.
+  `from __future__ import annotations` (min Python 3.11).
 - Write comments as the programmer explaining the code to a colleague, in the imperative
   ("Place driver derivatives after drivers in the buffer") or as a plain statement of what the
   code relies on ("The norm function returns a mean square, so square the threshold"). Never
@@ -68,7 +68,8 @@ updating a PR.
 - Write docstrings in the numpydoc imperative, describing what the code does for its caller:
   "Return the names as a sorted tuple." and "Raise ValueError if a name repeats.", not "We sort
   the names". When a docstring tells the user how to use the code, address the user directly:
-  "Pass parameter arrays with their rows in this order."
+  "Pass parameter arrays with their rows in this order." Every docstring, public or private,
+  uses numpydoc structure.
 - Keep a docstring to the object it documents. Cut sentences about related behaviour that a
   reader of this docstring does not need.
 - Give every verb a person, or the function or class being documented, as its subject. Data
