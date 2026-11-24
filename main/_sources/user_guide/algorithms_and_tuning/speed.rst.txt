@@ -1,4 +1,5 @@
-# A lot of this is wrong, but I haven't really gotten into it.
+:orphan:
+
 Making it Faster (basic)
 ========================
 

@@ -482,9 +482,8 @@ fastest configuration for your system:
    )
    print(report.summary())
 
-``optimize`` leaves the settings you gave explicitly, and the ones an
-earlier ``optimize`` set, unchanged unless you pass ``force=True``.
-Like ``calibrate``, it applies the fastest configuration in place
-unless you pass ``apply=False``, and it resizes the batch to take
-about 20 ms unless you pass ``auto_size=False``.
+Settings you gave explicitly, or ones that were set by an earlier
+``optimize``, stay fixed unless ``force=True``. Like ``calibrate()``,
+the fastest configuration is applied in place unless ``apply=False``,
+and batches are autosized for a 20ms runtime unless ``auto_size=False``.
 

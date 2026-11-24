@@ -70,14 +70,6 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#fixed-parameters">Fixed parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#precision-trade-offs">Precision Trade-offs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -279,7 +271,7 @@ checking the method against some known reference as a sanity check, you probably
 don’t need the full time-domain series across the whole integration. To
 cut down the output data, and speed up the solver, you can save only certain
 variables, at only certain times, or you can never save the time-domain signals
-and calculate summary variables (like averages, or peak times) on the GPU
+and instead calculate summary variables (like averages, or peak times) on the GPU
 while integrating.</p>
 <p>We use the Lotka-Volterra system with one observable in the examples on
 this page:</p>
@@ -427,10 +419,6 @@ intervals fit together.</p>
 </tr>
 </tbody>
 </table>
-<p>If you ask for a set of metrics that share running sums, such as
-<code class="docutils literal notranslate"><span class="pre">[&quot;max&quot;,</span> <span class="pre">&quot;min&quot;]</span></code> or <code class="docutils literal notranslate"><span class="pre">[&quot;mean&quot;,</span> <span class="pre">&quot;std&quot;,</span> <span class="pre">&quot;rms&quot;]</span></code>, cubie calculates them
-together in one combined metric. You still get each result under the name
-you asked for.</p>
 </section>
 <section id="selecting-variables">
 <h2>Selecting variables<a class="headerlink" href="#selecting-variables" title="Link to this heading"></a></h2>

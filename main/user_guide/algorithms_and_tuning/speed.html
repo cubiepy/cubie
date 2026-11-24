@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TL/DR &mdash; cubie 0.0.4 documentation</title>
+  <title>Making it Faster (basic) &mdash; cubie 0.0.4 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
@@ -19,9 +19,7 @@
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
-    <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Advanced" href="../advanced/index.html" />
-    <link rel="prev" title="Choosing an Algorithm" href="choosing_algorithms.html" /> 
+    <link rel="search" title="Search" href="../../search.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/version_switcher.js" data-version="main" data-versions="/cubie/versions.json" defer></script>
 </head>
@@ -46,13 +44,13 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="../../getting_started/index.html">Getting Started with Cubie</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../getting_started/coming_from_scipy.html">Coming from SciPy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../getting_started/coming_from_matlab.html">Coming from MATLAB</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="reference internal" href="../index.html">User Manual</a><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../index.html">User Manual</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../defining_systems/index.html">Defining systems</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../defining_systems/systems.html">Creating a “System” of Differential Equations</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../defining_systems/drivers.html">Drivers (Time-dependent functions)</a></li>
@@ -68,16 +66,8 @@
 <li class="toctree-l3"><a class="reference internal" href="../using_the_solver/configuration.html">Solver Options</a></li>
 </ul>
 </li>
-<li class="toctree-l2 current"><a class="reference internal" href="index.html">Algorithms and tuning</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3 current"><a class="current reference internal" href="#">TL/DR</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#parallelism">Parallelism</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#memory">Memory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#fixed-parameters">Fixed parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#profiling-with-timelogger">Profiling with TimeLogger</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#precision-trade-offs">Precision Trade-offs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#buffer-location-tuning">Buffer Location Tuning</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -257,9 +247,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
-          <li class="breadcrumb-item"><a href="../index.html">User Manual</a></li>
-          <li class="breadcrumb-item"><a href="index.html">Algorithms and tuning</a></li>
-      <li class="breadcrumb-item active">TL/DR</li>
+      <li class="breadcrumb-item active">Making it Faster (basic)</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../../_sources/user_guide/algorithms_and_tuning/speed.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -269,11 +257,10 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <p># A lot of this is wrong, but I haven’t really gotten into it.
-Making it Faster (basic)
-========================</p>
+  <section id="making-it-faster-basic">
+<h1>Making it Faster (basic)<a class="headerlink" href="#making-it-faster-basic" title="Link to this heading"></a></h1>
 <section id="tl-dr">
-<h1>TL/DR<a class="headerlink" href="#tl-dr" title="Link to this heading"></a></h1>
+<h2>TL/DR<a class="headerlink" href="#tl-dr" title="Link to this heading"></a></h2>
 <p>To get the best performance from Cubie, try to:</p>
 <ul class="simple">
 <li><p>Solve many problems at once (thousands if possible).</p></li>
@@ -282,7 +269,7 @@ Making it Faster (basic)
 </ul>
 </section>
 <section id="parallelism">
-<h1>Parallelism<a class="headerlink" href="#parallelism" title="Link to this heading"></a></h1>
+<h2>Parallelism<a class="headerlink" href="#parallelism" title="Link to this heading"></a></h2>
 <p>If we compare a like-for-like implementation of an IVP integration using Cubie
 vs using an optimised CPU-utilising library like SciPy, we find that Cubie is
 some linear factor slower. This is expected - GPU hardware isn’t optimised
@@ -293,7 +280,7 @@ once by a factor (n) has little effect on the total time taken - you get (n-1) p
 performance gain from using Cubie is to solve more problems at once.</p>
 </section>
 <section id="memory">
-<h1>Memory<a class="headerlink" href="#memory" title="Link to this heading"></a></h1>
+<h2>Memory<a class="headerlink" href="#memory" title="Link to this heading"></a></h2>
 <p>The big bottleneck in GPU computing is memory traffic. When you’re completing
 32,000 integrations at the same time, they all want to save a sample of
 their state at the same time, and this puts a lot of pressure on the tubes
@@ -314,14 +301,14 @@ don’t even need to save the state history at all!</p></li>
 </ol>
 </section>
 <section id="fixed-parameters">
-<h1>Fixed parameters<a class="headerlink" href="#fixed-parameters" title="Link to this heading"></a></h1>
+<h2>Fixed parameters<a class="headerlink" href="#fixed-parameters" title="Link to this heading"></a></h2>
 <p>Every parameter whose value doesn’t change across a batch is compiled
 into the code as a number. It takes no memory traffic and leaves more room to run
 more runs at once. <a class="reference internal" href="../using_the_solver/inputs.html#parameter-inputs"><span class="std std-ref">Input formats</span></a> describes how Cubie decides
 which parameters those are.</p>
 </section>
 <section id="profiling-with-timelogger">
-<h1>Profiling with TimeLogger<a class="headerlink" href="#profiling-with-timelogger" title="Link to this heading"></a></h1>
+<h2>Profiling with TimeLogger<a class="headerlink" href="#profiling-with-timelogger" title="Link to this heading"></a></h2>
 <p>CuBIE includes a built-in profiler that logs the time spent in each
 phase of a solve.  Enable it by passing <code class="docutils literal notranslate"><span class="pre">time_logging_level</span></code> to
 <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> or the <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code>:</p>
@@ -342,7 +329,7 @@ table to stdout.</p>
 </div>
 </section>
 <section id="precision-trade-offs">
-<h1>Precision Trade-offs<a class="headerlink" href="#precision-trade-offs" title="Link to this heading"></a></h1>
+<h2>Precision Trade-offs<a class="headerlink" href="#precision-trade-offs" title="Link to this heading"></a></h2>
 <p>CuBIE supports <code class="docutils literal notranslate"><span class="pre">float32</span></code> and <code class="docutils literal notranslate"><span class="pre">float64</span></code>. In single precision
 (<code class="docutils literal notranslate"><span class="pre">float32</span></code>) you get about 7 significant figures, and in double
 precision (<code class="docutils literal notranslate"><span class="pre">float64</span></code>) about 15. On recent consumer GPUs, such as the
@@ -355,7 +342,7 @@ tolerances, a <code class="docutils literal notranslate"><span class="pre">float
 on the system and algorithm.</p>
 </section>
 <section id="buffer-location-tuning">
-<h1>Buffer Location Tuning<a class="headerlink" href="#buffer-location-tuning" title="Link to this heading"></a></h1>
+<h2>Buffer Location Tuning<a class="headerlink" href="#buffer-location-tuning" title="Link to this heading"></a></h2>
 <p>Working arrays can be placed in local memory (faster until all
 registers are full, after which it is slow to read and write from) or
 shared memory, which is slower than registers to read and write from
@@ -367,7 +354,7 @@ buffer’s location yourself with its <code class="docutils literal notranslate"
 <a class="reference internal" href="../using_the_solver/configuration.html"><span class="doc">Solver Options</span></a>.</p>
 </section>
 <section id="reusing-solvers">
-<h1>Reusing Solvers<a class="headerlink" href="#reusing-solvers" title="Link to this heading"></a></h1>
+<h2>Reusing Solvers<a class="headerlink" href="#reusing-solvers" title="Link to this heading"></a></h2>
 <p>Cubie uses Numba to just-in-time compile your system of ODEs and chosen
 integration algorithm into a CUDA kernel. This compilation step takes time
 (up to 30s!), so if you’re only solving a few problems at once, it can
@@ -381,14 +368,12 @@ function, create a <code class="xref py py-class docutils literal notranslate"><
 method multiple times. Keeping a reference to the <code class="xref py py-class docutils literal notranslate"><span class="pre">cubie.Solver</span></code>
 object means that subsequent calls to <code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code> will be much faster.</p>
 </section>
+</section>
 
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="choosing_algorithms.html" class="btn btn-neutral float-left" title="Choosing an Algorithm" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../advanced/index.html" class="btn btn-neutral float-right" title="Advanced" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

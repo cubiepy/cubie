@@ -385,8 +385,6 @@ Precision and compilation
 
 **precision** — the floating-point type of the solve.
     Pass ``numpy.float32`` or ``numpy.float64``.
-    See :doc:`/user_guide/algorithms_and_tuning/speed` for how they
-    compare.
 
     - Default: the precision you built the system with, ``float32``
       unless you set it
@@ -424,9 +422,6 @@ Precision and compilation
 
 Performance
 -----------
-
-See :doc:`/user_guide/algorithms_and_tuning/speed` for when these
-options matter.
 
 **auto_performance** — choose buffer locations, loop unrolling and the launch shape for your system and GPU.
     Cubie never overrides a ``*_location``, ``unroll_*`` or

@@ -20,7 +20,7 @@
     <script src="../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="TL/DR" href="speed.html" />
+    <link rel="next" title="Advanced" href="../advanced/index.html" />
     <link rel="prev" title="Algorithms and tuning" href="index.html" /> 
 <meta name="google-site-verification" content="Fpgkmgu5X-0RRG9UUYo4erbY0wd7VmLIQU4UZv_YaXc" />
 <script src="/cubie/version_switcher.js" data-version="main" data-versions="/cubie/versions.json" defer></script>
@@ -70,14 +70,6 @@
 </li>
 <li class="toctree-l2 current"><a class="reference internal" href="index.html">Algorithms and tuning</a><ul class="current">
 <li class="toctree-l3 current"><a class="current reference internal" href="#">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html">TL/DR</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html#parallelism">Parallelism</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html#memory">Memory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html#fixed-parameters">Fixed parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html#precision-trade-offs">Precision Trade-offs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
-<li class="toctree-l3"><a class="reference internal" href="speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -846,11 +838,10 @@ fastest configuration for your system:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">report</span><span class="o">.</span><span class="n">summary</span><span class="p">())</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">optimize</span></code> leaves the settings you gave explicitly, and the ones an
-earlier <code class="docutils literal notranslate"><span class="pre">optimize</span></code> set, unchanged unless you pass <code class="docutils literal notranslate"><span class="pre">force=True</span></code>.
-Like <code class="docutils literal notranslate"><span class="pre">calibrate</span></code>, it applies the fastest configuration in place
-unless you pass <code class="docutils literal notranslate"><span class="pre">apply=False</span></code>, and it resizes the batch to take
-about 20 ms unless you pass <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code>.</p>
+<p>Settings you gave explicitly, or ones that were set by an earlier
+<code class="docutils literal notranslate"><span class="pre">optimize</span></code>, stay fixed unless <code class="docutils literal notranslate"><span class="pre">force=True</span></code>. Like <code class="docutils literal notranslate"><span class="pre">calibrate()</span></code>,
+the fastest configuration is applied in place unless <code class="docutils literal notranslate"><span class="pre">apply=False</span></code>,
+and batches are autosized for a 20ms runtime unless <code class="docutils literal notranslate"><span class="pre">auto_size=False</span></code>.</p>
 </section>
 </section>
 
@@ -859,7 +850,7 @@ about 20 ms unless you pass <code class="docutils literal notranslate"><span cla
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="index.html" class="btn btn-neutral float-left" title="Algorithms and tuning" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="speed.html" class="btn btn-neutral float-right" title="TL/DR" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../advanced/index.html" class="btn btn-neutral float-right" title="Advanced" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

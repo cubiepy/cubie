@@ -70,14 +70,6 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../algorithms_and_tuning/index.html">Algorithms and tuning</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html">Choosing an Algorithm</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html">TL/DR</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#parallelism">Parallelism</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#memory">Memory</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#fixed-parameters">Fixed parameters</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#profiling-with-timelogger">Profiling with TimeLogger</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#precision-trade-offs">Precision Trade-offs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#buffer-location-tuning">Buffer Location Tuning</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../algorithms_and_tuning/speed.html#reusing-solvers">Reusing Solvers</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../advanced/index.html">Advanced</a><ul>
@@ -687,9 +679,7 @@ options.</p>
 <section id="precision-and-compilation">
 <h2>Precision and compilation<a class="headerlink" href="#precision-and-compilation" title="Link to this heading"></a></h2>
 <dl class="simple">
-<dt><strong>precision</strong> — the floating-point type of the solve.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">numpy.float32</span></code> or <code class="docutils literal notranslate"><span class="pre">numpy.float64</span></code>.
-See <a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> for how they
-compare.</p>
+<dt><strong>precision</strong> — the floating-point type of the solve.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">numpy.float32</span></code> or <code class="docutils literal notranslate"><span class="pre">numpy.float64</span></code>.</p>
 <ul class="simple">
 <li><p>Default: the precision you built the system with, <code class="docutils literal notranslate"><span class="pre">float32</span></code>
 unless you set it</p></li>
@@ -734,8 +724,6 @@ appends <code class="docutils literal notranslate"><span class="pre">_ltoon</spa
 </section>
 <section id="performance">
 <h2>Performance<a class="headerlink" href="#performance" title="Link to this heading"></a></h2>
-<p>See <a class="reference internal" href="../algorithms_and_tuning/speed.html"><span class="doc">TL/DR</span></a> for when these
-options matter.</p>
 <dl class="simple">
 <dt><strong>auto_performance</strong> — choose buffer locations, loop unrolling and the launch shape for your system and GPU.</dt><dd><p>Cubie never overrides a <code class="docutils literal notranslate"><span class="pre">*_location</span></code>, <code class="docutils literal notranslate"><span class="pre">unroll_*</span></code> or
 <code class="docutils literal notranslate"><span class="pre">blocksize</span></code> option that you set.</p>
