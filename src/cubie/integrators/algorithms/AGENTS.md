@@ -161,7 +161,7 @@ mass).
   `Solver.optimize` times.
 - With `linear_correction_type="lu"` (`uses_direct_solver`) steps request the
   `lu_solve` role; `HelperResult.lu_nnz` sizes the solver's `lu_factor` buffer via
-  `update(lu_solve_fn=..., lu_nnz=...)`. Rosenbrock-W requests it with
+  `update(lu_solve_fn=..., lu_nnz=...)`. `GenericRosenbrockWStep` requests it with
   `jacobian_at="step"` and `prefactored=True`, so it factorises `W` once per step and
   substitutes against the stored factors in every stage.
 

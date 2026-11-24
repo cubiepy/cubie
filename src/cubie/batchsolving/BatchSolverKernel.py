@@ -1020,9 +1020,7 @@ class BatchSolverKernel(CUDAFactory):
         Parameters
         ----------
         runs
-            Runs in the launch, used to count the SMs each block size
-            fills; pass ``None`` to size a full block and count every
-            SM as filled.
+            Runs in the launch; pass ``None`` to size a full block.
 
         Returns
         -------

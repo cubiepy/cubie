@@ -72,10 +72,11 @@ at, so the cut points are validated at this granularity.
 """
 
 LAUNCH_OCCUPANCY_TIE = 0.9
-"""Share of the most resident threads a launch must keep to be chosen.
+"""Share of the most resident threads :func:`default_launch` requires.
 
-:func:`default_launch` applies this share only to kernels larger than
-the instruction cache.
+For a kernel larger than the instruction cache, :func:`default_launch`
+chooses only among launches with at least this share of the most
+resident threads.
 
 Empirical: over the instruction cache the largest block won 52/13 of
 259 equal-residency comparisons on the RTX 2060 SUPER and 30/13 of 179
