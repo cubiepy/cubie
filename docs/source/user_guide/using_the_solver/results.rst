@@ -179,9 +179,8 @@ Result formats
 --------------
 
 Cubie returns each output in the ``SolveResult`` as a NumPy array, indexed
-by time (or summary window) first, then variable, then run. In
-``summaries_array``, cubie places each variable's metrics side by side
-along the middle axis:
+by time (or summary window) first, then variable (or variable and metric),
+then run:
 
 ``state`` and ``observables``
    The state and observable trajectories.
@@ -194,7 +193,8 @@ along the middle axis:
    The time of each saved point, one column per run.
 
 ``summaries_array``
-   Every summary metric, one row per summary window. Read
+   Every summary metric, one row per summary window. Along the middle
+   axis, cubie places each variable's metrics side by side. Read
    ``summaries_legend`` for the name of each column, such as ``"x mean"``
    for a variable without a unit, or ``"x [mV] mean"`` for a variable in
    millivolts.
