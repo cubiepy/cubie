@@ -385,14 +385,15 @@ intervals fit together.</p>
 <td><p>Maximum absolute value.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;peaks[n]&quot;</span></code></p></td>
-<td><p>The first n positive peaks (local maxima) in each window. Cubie
-records each peak as the index of the summary sample it occurred
-at, not as a time, and counts the index from zero at the first
-summary sample of the run.</p></td>
+<td><p>Cubie records the first n positive peaks (local maxima) in each
+window as the index of the summary sample at each peak, not as a
+time. Cubie counts the index from zero at the first summary sample
+of the run.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;negative_peaks[n]&quot;</span></code></p></td>
-<td><p>The first n negative peaks (local minima) in each window, as
-sample indices like <code class="docutils literal notranslate"><span class="pre">&quot;peaks[n]&quot;</span></code>.</p></td>
+<td><p>Cubie records the first n negative peaks (local minima) in each
+window as summary sample indices, in the same way as
+<code class="docutils literal notranslate"><span class="pre">&quot;peaks[n]&quot;</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;dxdt_max&quot;</span></code></p></td>
 <td><p>Maximum of the first derivative.</p></td>

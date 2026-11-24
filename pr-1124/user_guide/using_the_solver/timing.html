@@ -467,9 +467,9 @@ and fed into accumulators (running sum, running max, etc.)</p></li>
 <li><p>At each <code class="docutils literal notranslate"><span class="pre">summarise_every</span></code> interval, final metrics are computed from
 the accumulators, written to output, and accumulators reset</p></li>
 <li><p>Cubie starts the sums, maxima and minima again in each window. For the
-derivative metrics (<code class="docutils literal notranslate"><span class="pre">dxdt_*</span></code> and <code class="docutils literal notranslate"><span class="pre">d2xdt2_*</span></code>), cubie uses the last
-samples of the previous window, so the first derivative in a window
-spans the boundary.</p></li>
+derivative metrics (<code class="docutils literal notranslate"><span class="pre">dxdt_*</span></code> and <code class="docutils literal notranslate"><span class="pre">d2xdt2_*</span></code>), cubie differences the
+first samples of each window against the last samples of the previous
+window, so you get a derivative across every window boundary.</p></li>
 </ol>
 <p>This differs from sliding-window approaches where windows overlap.</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Timeline with summarise_every=1.0, sample_summaries_every=0.25:

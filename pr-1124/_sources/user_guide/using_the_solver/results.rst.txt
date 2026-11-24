@@ -124,13 +124,14 @@ intervals fit together.
    * - ``"max_magnitude"``
      - Maximum absolute value.
    * - ``"peaks[n]"``
-     - The first n positive peaks (local maxima) in each window. Cubie
-       records each peak as the index of the summary sample it occurred
-       at, not as a time, and counts the index from zero at the first
-       summary sample of the run.
+     - Cubie records the first n positive peaks (local maxima) in each
+       window as the index of the summary sample at each peak, not as a
+       time. Cubie counts the index from zero at the first summary sample
+       of the run.
    * - ``"negative_peaks[n]"``
-     - The first n negative peaks (local minima) in each window, as
-       sample indices like ``"peaks[n]"``.
+     - Cubie records the first n negative peaks (local minima) in each
+       window as summary sample indices, in the same way as
+       ``"peaks[n]"``.
    * - ``"dxdt_max"``
      - Maximum of the first derivative.
    * - ``"dxdt_min"``

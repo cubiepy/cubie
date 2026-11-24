@@ -221,9 +221,9 @@ The summary system uses fixed, non-overlapping windows:
 2. At each ``summarise_every`` interval, final metrics are computed from
    the accumulators, written to output, and accumulators reset
 3. Cubie starts the sums, maxima and minima again in each window. For the
-   derivative metrics (``dxdt_*`` and ``d2xdt2_*``), cubie uses the last
-   samples of the previous window, so the first derivative in a window
-   spans the boundary.
+   derivative metrics (``dxdt_*`` and ``d2xdt2_*``), cubie differences the
+   first samples of each window against the last samples of the previous
+   window, so you get a derivative across every window boundary.
 
 This differs from sliding-window approaches where windows overlap.
 
