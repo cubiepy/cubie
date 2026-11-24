@@ -155,14 +155,16 @@ Put the most peaks you want in each window in the brackets:
 ``"peaks[3]"`` records up to three. For each peak, cubie records the
 number of the summary sample at the peak, counted from 0 at the first
 sample of the run, so multiply it by ``sample_summaries_every`` and add
-the time of the first sample to get the time of the peak. cubie writes
-0 in the slots it doesn't fill. In ``as_numpy_per_summary`` you get
-one array for each slot, named ``"peaks_1"``, ``"peaks_2"`` and so on.
+the time of the first sample to get the time of the peak. If cubie
+finds fewer than ``n`` peaks in a window, it writes 0 for the rest. In
+``as_numpy_per_summary`` you get one array for each of the ``n`` peaks,
+named ``"peaks_1"``, ``"peaks_2"`` and so on, or a single array named
+``"peaks"`` when you ask for ``"peaks[1]"``.
 
 cubie estimates the derivative metrics from the differences between
 consecutive samples, so they are only as accurate as your sampling.
 If you sample ``cos(t)`` every 0.1 time units, cubie reports a
-``"dxdt_max"`` of 0.9989 instead of 1.
+``"dxdt_max"`` of about 0.999 instead of 1.
 
 Selecting variables
 -------------------

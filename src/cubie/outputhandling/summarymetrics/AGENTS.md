@@ -64,12 +64,14 @@ per window.
 `{max,min}`→`extrema`, `{dxdt_max,dxdt_min}`→`dxdt_extrema`,
 `{d2xdt2_max,d2xdt2_min}`→`d2xdt2_extrema`. `preprocess_request` parses parameters,
 substitutes larger combinations first when the whole set is present, then drops
-unregistered names with a `UserWarning`. `legend` numbers multi-output columns
-(`extrema_1`, `extrema_2`).
+unregistered names with a `UserWarning`. `legend` uses a metric's `output_names` when it
+declares them (`extrema` gives `max`, `min`) and otherwise numbers multi-output columns
+(`peaks_1`, `peaks_2`).
 
 ## Buffers and sizing
 - `buffer_size`/`output_size` are an `int` or a `callable(n)` resolved from the parsed
-  parameter; a callable size with parameter `0` warns and yields 0.
+  parameter; a callable size with parameter `0` warns and is evaluated at 0 (a bare
+  `"peaks"` gets a 3-slot buffer and no outputs).
 - `peaks`/`negative_peaks`: `buffer_size = 3 + n`, `output_size = n`.
 - `dxdt_*`/`d2xdt2_*` capture `sample_summaries_every` (or its square) at build and scale
   the finite difference in `save`, committing the extremum with `selp`.
@@ -84,7 +86,7 @@ unregistered names with a `UserWarning`. `legend` numbers multi-output columns
 
 ## Adding a metric
 Subclass `SummaryMetric` (set `name`, `buffer_size`, `output_size`,
-`unit_modification`), implement `build()` returning `MetricFuncCache(update_fn=update, save_fn=save)`,
+`unit_modification`, and `output_names` for a combined metric), implement `build()` returning `MetricFuncCache(update_fn=update, save_fn=save)`,
 decorate with `@register_metric(summary_metrics)` and import the module in
 `__init__.py`. To combine with others, add a `frozenset` entry to `_combined_metrics`.
 

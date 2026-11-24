@@ -93,7 +93,7 @@ class RMS(SummaryMetric):
 
             Notes
             -----
-            Adds the squared value to ``buffer[0]``, starting the sum
+            Add the squared value to ``buffer[0]``, starting the sum
             from zero at the first sample of the run.
             """
             sum_of_squares = buffer[0]
