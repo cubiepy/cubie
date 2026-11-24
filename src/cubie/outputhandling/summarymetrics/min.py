@@ -85,7 +85,8 @@ class Min(SummaryMetric):
             buffer
                 device array. Storage for the current minimum value.
             current_index
-                int. Current integration step index (unused for this metric).
+                int. Summary sample number, counted from zero at the
+                first sample of the run (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused for min).
 
@@ -121,7 +122,7 @@ class Min(SummaryMetric):
             output_array
                 device array. Output location for saving the minimum value.
             summarise_every
-                int. Number of steps between saves (unused for min).
+                int. Number of summary samples in the window (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused for min).
 

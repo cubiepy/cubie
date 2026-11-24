@@ -220,17 +220,21 @@ The summary system uses fixed, non-overlapping windows:
    and fed into accumulators (running sum, running max, etc.)
 2. At each ``summarise_every`` interval, final metrics are computed from
    the accumulators, written to output, and accumulators reset
-3. The next window starts fresh with no memory of previous windows
+3. The next window starts with fresh accumulators, but for the
+   derivative and peak metrics cubie still compares its first samples
+   with the last samples of the window before, so cubie reports a peak
+   on the last sample of one window in the next window's results.
 
 This differs from sliding-window approaches where windows overlap.
 
 .. code-block:: text
 
-   Timeline with summarise_every=1.0, sample_summaries_every=0.25:
+   Timeline from t0=0 with summarise_every=1.0,
+   sample_summaries_every=0.25 and no settling_time:
 
    t=0.0   t=0.25  t=0.5   t=0.75  t=1.0   t=1.25  ...
      |       |       |       |       |       |
-     S       S       S       S      S+W      S      ...
+             S       S       S      S+W      S      ...
 
    S = sample taken, W = window closes (summary written, reset)
 

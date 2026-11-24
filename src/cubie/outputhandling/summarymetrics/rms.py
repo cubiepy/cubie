@@ -86,14 +86,15 @@ class RMS(SummaryMetric):
             buffer
                 device array. Storage containing the running sum of squares.
             current_index
-                int. Current integration step index, used to reset the sum.
+                int. Summary sample number, counted from zero at the
+                first sample of the run.
             customisable_variable
                 int. Metric parameter placeholder (unused for RMS).
 
             Notes
             -----
-            Resets ``buffer[0]`` on the first step of a period before adding
-            the squared value.
+            Adds the squared value to ``buffer[0]``, starting the sum
+            from zero at the first sample of the run.
             """
             sum_of_squares = buffer[0]
             if current_index == 0:
@@ -125,7 +126,7 @@ class RMS(SummaryMetric):
             output_array
                 device array. Output array location for saving the RMS value.
             summarise_every
-                int. Number of steps contributing to each summary window.
+                int. Number of summary samples in the window.
             customisable_variable
                 int. Metric parameter placeholder (unused for RMS).
 

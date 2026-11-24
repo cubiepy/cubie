@@ -30,10 +30,10 @@ class Std(SummaryMetric):
 
     Notes
     -----
-    The metric uses three buffer slots: one for the shift value (first sample),
-    one for the sum of shifted values, and one for the sum of squares of
-    shifted values. The standard deviation is calculated using a numerically
-    stable shifted-data algorithm to avoid catastrophic cancellation.
+    Uses three buffer slots: the shift, the sum of shifted values and
+    the sum of squares of shifted values. The shift is the first sample
+    of the run, then the mean of the previous window. Shifting the data
+    avoids catastrophic cancellation in the variance calculation.
     """
 
     def __init__(self, precision) -> None:
@@ -89,7 +89,8 @@ class Std(SummaryMetric):
                 device array. Storage containing [shift, sum_shifted,
                 sum_sq_shifted].
             current_index
-                int. Current integration step index within the summary period.
+                int. Summary sample number, counted from zero at the
+                first sample of the run.
             customisable_variable
                 int. Metric parameter placeholder (unused for std).
 
@@ -136,7 +137,7 @@ class Std(SummaryMetric):
             output_array
                 device array. Output array location for saving the std value.
             summarise_every
-                int. Number of steps contributing to each summary window.
+                int. Number of summary samples in the window.
             customisable_variable
                 int. Metric parameter placeholder (unused for std).
 

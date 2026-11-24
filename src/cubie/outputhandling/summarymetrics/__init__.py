@@ -32,6 +32,10 @@ from numpy import float32
 
 # This is the only default datatype in the whole game, look here for type
 # mismatch (unexpected float32)
+#: The registry of every summary metric that cubie can calculate.
+#: Register a new metric with :func:`register_metric`. Pass a list of
+#: requested metric names to its methods to get the metrics' buffer
+#: sizes, column names and compiled device functions.
 summary_metrics: SummaryMetrics = SummaryMetrics(precision=float32)
 
 # Import each metric once, to register it with the summary_metrics object.

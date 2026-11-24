@@ -60,9 +60,9 @@ class MetricFuncCache(CUDADispatcherCache):
 
     Attributes
     ----------
-    update
+    update_fn
         Callable update device function.
-    save
+    save_fn
         Callable save device function.
     """
 
@@ -81,8 +81,7 @@ class MetricConfig(CUDAFactoryConfig):
         derivative metrics to scale finite differences. Defaults
         to 0.01.
     precision
-        Numerical precision for metric calculations. Defaults to
-        np.float32.
+        Numerical precision for metric calculations.
     """
 
     _sample_summaries_every: float = field(
@@ -148,7 +147,7 @@ class SummaryMetric(CUDAFactory):
     sample_summaries_every
         Time interval between summary metric samples. Defaults to 0.01.
     precision
-        Numerical precision for metric calculations. Defaults to np.float32.
+        Numerical precision for metric calculations.
 
     Notes
     -----
@@ -189,7 +188,6 @@ class SummaryMetric(CUDAFactory):
             to 0.01.
         precision
             PrecisionDType. Numerical precision for metric calculations.
-            Defaults to np.float32.
         output_names
             Optional[list[str]]. Column headings for each output element,
             in output order. ``None`` (the default) falls back to the
