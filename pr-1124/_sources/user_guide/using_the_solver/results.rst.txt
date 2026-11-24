@@ -127,7 +127,9 @@ intervals fit together.
      - Cubie records the first n positive peaks (local maxima) in each
        window as the index of the summary sample at each peak, not as a
        time. Cubie counts the index from zero at the first summary sample
-       of the run.
+       of the run. Cubie finds a peak when it takes the sample after it,
+       so it records a peak on the last sample of a window in the next
+       window's row.
    * - ``"negative_peaks[n]"``
      - Cubie records the first n negative peaks (local minima) in each
        window as summary sample indices, in the same way as
