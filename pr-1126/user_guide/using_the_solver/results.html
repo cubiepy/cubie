@@ -430,13 +430,15 @@ for <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot
 <code class="docutils literal notranslate"><span class="pre">&quot;peaks[3]&quot;</span></code> records up to three. For each peak, cubie records the
 number of the summary sample at the peak, counted from 0 at the first
 sample of the run, so multiply it by <code class="docutils literal notranslate"><span class="pre">sample_summaries_every</span></code> and add
-the time of the first sample to get the time of the peak. cubie writes
-0 in the slots it doesn’t fill. In <code class="docutils literal notranslate"><span class="pre">as_numpy_per_summary</span></code> you get
-one array for each slot, named <code class="docutils literal notranslate"><span class="pre">&quot;peaks_1&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;peaks_2&quot;</span></code> and so on.</p>
+the time of the first sample to get the time of the peak. If cubie
+finds fewer than <code class="docutils literal notranslate"><span class="pre">n</span></code> peaks in a window, it writes 0 for the rest. In
+<code class="docutils literal notranslate"><span class="pre">as_numpy_per_summary</span></code> you get one array for each of the <code class="docutils literal notranslate"><span class="pre">n</span></code> peaks,
+named <code class="docutils literal notranslate"><span class="pre">&quot;peaks_1&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;peaks_2&quot;</span></code> and so on, or a single array named
+<code class="docutils literal notranslate"><span class="pre">&quot;peaks&quot;</span></code> when you ask for <code class="docutils literal notranslate"><span class="pre">&quot;peaks[1]&quot;</span></code>.</p>
 <p>cubie estimates the derivative metrics from the differences between
 consecutive samples, so they are only as accurate as your sampling.
 If you sample <code class="docutils literal notranslate"><span class="pre">cos(t)</span></code> every 0.1 time units, cubie reports a
-<code class="docutils literal notranslate"><span class="pre">&quot;dxdt_max&quot;</span></code> of 0.9989 instead of 1.</p>
+<code class="docutils literal notranslate"><span class="pre">&quot;dxdt_max&quot;</span></code> of about 0.999 instead of 1.</p>
 </section>
 <section id="selecting-variables">
 <h2>Selecting variables<a class="headerlink" href="#selecting-variables" title="Link to this heading"></a></h2>

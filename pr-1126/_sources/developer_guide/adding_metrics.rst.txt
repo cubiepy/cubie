@@ -170,9 +170,25 @@ in each window:
 
            return MetricFuncCache(update_fn=update, save_fn=save)
 
-After this module has been imported, request the metric like any other:
+Save the metric in ``count_metric.py``, import that module, and request
+the metric like any other:
 
 .. code-block:: python
+
+   import numpy as np
+   import cubie as qb
+
+   import count_metric  # registers "count"
+
+   LV = qb.create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       name="LotkaVolterra",
+   )
 
    result = qb.solve_ivp(
        LV,
