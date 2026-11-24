@@ -64,9 +64,9 @@ per window.
 `{max,min}`→`extrema`, `{dxdt_max,dxdt_min}`→`dxdt_extrema`,
 `{d2xdt2_max,d2xdt2_min}`→`d2xdt2_extrema`. `preprocess_request` parses parameters,
 substitutes larger combinations first when the whole set is present, then drops
-unregistered names with a `UserWarning`. `legend` uses a metric's `output_names` when it
-declares them (`extrema` gives `max`, `min`) and otherwise numbers multi-output columns
-(`peaks_1`, `peaks_2`).
+unregistered names with a `UserWarning`. The `legend` method takes a metric's `output_names`
+when the metric declares them (`max` and `min` for `extrema`) and otherwise numbers
+the columns of a multi-output metric (`peaks_1`, `peaks_2`).
 
 ## Buffers and sizing
 - `buffer_size`/`output_size` are an `int` or a `callable(n)` resolved from the parsed
@@ -82,7 +82,8 @@ declares them (`extrema` gives `max`, `min`) and otherwise numbers multi-output 
   with the last samples of the window before.
 - `std`/`mean_std`/`mean_std_rms`/`std_rms` shift the data by `buffer[0]`: the run's
   first sample, stored when `current_index == 0`, then the previous window's mean, which
-  `save` stores. `rms` starts its sum from zero at `current_index == 0`.
+  `save` stores. The `rms` update function starts its sum from zero at
+  `current_index == 0`.
 
 ## Adding a metric
 Subclass `SummaryMetric` (set `name`, `buffer_size`, `output_size`,
