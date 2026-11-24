@@ -251,8 +251,8 @@ components use this set to filter kwargs before forwarding.
      - :class:`ImplicitStepConfig`
      - Store step-start LU factors per tableau diagonal instead of
        frozen Jacobian entries (direct solver + ``inexact_newton``).
-       Ignored for Rosenbrock-W, whose matrix is always factorised
-       once per step with a direct solver.
+       This flag is ignored for Rosenbrock-W steps; with a direct
+       solver, their matrix is always factorised once per step.
    * - ``dae_initialisation``
      - ``SingleIntegratorRunCore``
      - Consistent-initialisation mode for singular-mass systems:
