@@ -225,8 +225,8 @@ You can also convert the result:
 Keeping results
 ~~~~~~~~~~~~~~~
 
-To save time and memory, cubie gives the ``SolveResult`` the memory the
-solve wrote its outputs into, without copying it. Once you delete the
+To save time and memory, cubie hands you the outputs in the
+``SolveResult`` in the memory it wrote them to, without copying them. Once you delete the
 result, or stop referring to it, cubie writes the next solve's outputs
 into that memory, and any array you took from the result changes with
 it. Keep the result for as long as you use its arrays, or copy what you

@@ -6,7 +6,7 @@ Writeback watcher
 When cubie splits a batch into chunks, it copies each chunk's outputs
 from the GPU through pinned staging buffers. A :class:`WritebackWatcher`
 copies each chunk into the result arrays once the GPU has finished with
-it, so the next chunk can run while the copy happens.
+it, so the GPU can run the next chunk while cubie copies this one.
 
 .. autoclass:: WritebackWatcher
     :members:
