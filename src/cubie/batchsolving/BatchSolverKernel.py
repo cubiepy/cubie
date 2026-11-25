@@ -1020,7 +1020,8 @@ class BatchSolverKernel(CUDAFactory):
         Parameters
         ----------
         runs
-            Runs in the launch; pass ``None`` to size a full block.
+            Number of runs in the launch, or ``None`` for a batch
+            large enough to fill every block.
 
         Returns
         -------

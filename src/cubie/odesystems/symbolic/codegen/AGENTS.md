@@ -51,10 +51,9 @@ Each Jacobian-facing generator takes a `HelperVariant`, the internal product of 
   v-dependent assignments are stage-instantiated
   (`build_stage_cached_jvp_assignments`).
 - **`PREFACTORED`** (`lu_solve`/`lu_prepare_blocks` only): substitution against
-  step-start per-diagonal LU factors read from `cached_aux`. For a tableau whose
-  diagonal is all zero (every Rosenbrock-W tableau), `lu_prepare_blocks` factorises one
-  block with `a_ij = 1`; `GenericRosenbrockWStep` requests this pair when it solves with
-  LU.
+  step-start per-diagonal LU factors read from `cached_aux`. When every diagonal entry
+  is zero, as in a Rosenbrock-W tableau, `lu_prepare_blocks` factorises a single block
+  with `a_ij = 1`.
 - **`PREFACTORED_STACKED`** (lu family): the eigenvalue block-transform substitution against step-start block factors.
 - **`CACHED` / `prepare_jac`** (Rosenbrock-W): `state` is the actual state (no substitution);
   selected auxiliaries are precomputed once per step into `cached_aux` by `prepare_jac` and read

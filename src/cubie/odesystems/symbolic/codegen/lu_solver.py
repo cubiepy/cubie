@@ -17,11 +17,10 @@ Published Functions
 Diagonal factor slots hold the inverse pivot (the reciprocal for
 real blocks, ``conj(p)/|p|**2`` for complex blocks), so
 eliminations and substitutions multiply instead of divide.
-The generators choose static row and column pivots over the
-structural nonzeros, in the order ``lu_pivoting.best_ordering``
-picks for the fewest factor nonzeros, taking same-stage-block
-entries first on stacked FIRK matrices. They raise on a
-structurally singular pattern.
+The generators choose static row and column pivots that give the
+factor the fewest nonzeros, preferring entries inside a stage block
+on stacked FIRK matrices. They raise ValueError on a structurally
+singular pattern.
 Prefactored ``cached_aux`` layouts are compacted by
 ``_prefactored_slot_plan``, computed identically by the prepare,
 solve, and smoothing generators: structurally zero entries read
@@ -804,7 +803,7 @@ def _distinct_diagonals(
     -------
     list of float
         The distinct nonzero diagonal entries, or ``[1.0]`` when every
-        diagonal entry is zero, as in a Rosenbrock-W tableau.
+        diagonal entry is zero.
     """
     values: List[float] = []
     for idx, row in enumerate(coeff_floats):
