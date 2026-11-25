@@ -178,7 +178,10 @@ Cubie returns each output in the ``SolveResult`` as a NumPy array, indexed
 by time (or summary window) first, then variable, then run:
 
 ``state`` and ``observables``
-   The state and observable trajectories.
+   The state and observable trajectories. When you ask for ``"time"``,
+   cubie adds the time of each saved point to ``state`` as its last
+   column. Read ``time_domain_array`` for the states without it, and
+   ``time`` for the times.
 
 ``time_domain_array``
    The states followed by the observables, in one array. Read
@@ -197,7 +200,12 @@ by time (or summary window) first, then variable, then run:
 ``status_codes`` and ``status_messages``
    One status word per run, ``0`` for success. Look up a failed run's
    index in ``status_messages`` to see the names of its status codes; see
-   :doc:`/troubleshooting`.
+   :doc:`/troubleshooting`. When a run fails, cubie fills its output
+   with NaN and warns you with the number of failed runs and their
+   status codes. For an implicit algorithm, the warning also suggests
+   settings that make failures less likely. Pass
+   ``nan_error_trajectories=False`` to keep the output of failed runs,
+   which also turns off the warning.
 
 ``parameter_legend`` and ``fixed_parameter_values``
    Cubie sorts the swept parameters by name, so the same row number can
@@ -213,6 +221,29 @@ You can also convert the result:
   split into one array per metric.
 - ``result.as_pandas`` returns pandas DataFrames of the time-domain output
   and the summaries.
+
+Keeping results
+~~~~~~~~~~~~~~~
+
+To save time and memory, cubie gives the ``SolveResult`` the memory the
+solve wrote its outputs into, without copying it. Once you delete the
+result, or stop referring to it, cubie writes the next solve's outputs
+into that memory, and any array you took from the result changes with
+it. Keep the result for as long as you use its arrays, or copy what you
+want to keep:
+
+.. code-block:: python
+
+   from cubie import Solver
+
+   solver = Solver(LV, algorithm="ode45")
+   final_x = solver.solve(
+       parameters={"b": np.linspace(0.01, 0.05, 10000)},
+       duration=100.0,
+   ).state[-1, 0, :].copy()
+
+``as_numpy``, ``as_numpy_per_summary`` and ``as_pandas`` give you
+copies, which you can keep.
 
 Device-resident results
 ~~~~~~~~~~~~~~~~~~~~~~~

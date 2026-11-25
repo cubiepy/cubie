@@ -436,14 +436,22 @@ Automatic calibration
 
 The fastest algorithm order, linear solver type, preconditioner, and
 Newton variant depend on the system.  Given a representative batch,
-the solver can measure them directly:
+the solver can measure them directly. Here we calibrate the
+Lotka-Volterra system ``LV`` from
+:doc:`/user_guide/using_the_solver/inputs` on a grid of 40,000 runs:
 
 .. code-block:: python
 
-   solver = qb.Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
+   import numpy as np
+   from cubie import Solver
+
+   x0_values = np.linspace(0.1, 2.0, 200)
+   b_values = np.linspace(0.01, 0.05, 200)
+
+   solver = Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
    report = solver.calibrate(
        {"x": x0_values},
-       {"alpha": alpha_values},
+       {"b": b_values},
        duration=10.0,
    )
    print(report.summary())
@@ -477,7 +485,7 @@ fastest configuration for your system:
 
    report = solver.optimize(
        {"x": x0_values},
-       {"alpha": alpha_values},
+       {"b": b_values},
        duration=10.0,
    )
    print(report.summary())

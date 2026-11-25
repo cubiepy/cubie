@@ -147,7 +147,6 @@ ALL_CACHE_PARAMETERS = frozenset(
 )
 """Loose keyword names of the :class:`CacheSettings` fields."""
 
-# Kernel-level kwargs the Solver routes to the kernel.
 ALL_KERNEL_PARAMETERS = (
     frozenset(
         {
@@ -159,6 +158,7 @@ ALL_KERNEL_PARAMETERS = (
     )
     | ALL_CACHE_PARAMETERS
 )
+"""Keyword names of the settings the batch kernel takes itself."""
 
 
 def _as_int_tuple(value: Tuple) -> Tuple[int, ...]:

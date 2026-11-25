@@ -51,7 +51,7 @@ Dependencies
 
 * :mod:`cubie.outputhandling.output_sizes` supplies ``BatchOutputSizes``
   metadata for array shapes and active buffers.
-* :mod:`cubie.batchsolving.ArrayTypes` defines the array typing shared with
+* :data:`cubie.batchsolving.ArrayTypes` defines the array typing shared with
   solver kernels.
 * :mod:`cubie._utils` offers ``slice_variable_dimension`` to convert chunk
   indices into multidimensional slices.

@@ -3,7 +3,8 @@ GPU Memory Management
 
 CuBIE manages GPU memory (VRAM) automatically, but understanding the
 available options lets you run larger batches and avoid out-of-memory
-errors.
+errors. The examples on this page use the Lotka-Volterra system ``LV``
+from :doc:`/user_guide/using_the_solver/inputs`.
 
 Default Behaviour
 -----------------
@@ -26,8 +27,9 @@ can override the proportion of VRAM that CuBIE is allowed to use:
 
 .. code-block:: python
 
-   solver = qb.Solver(system, algorithm="dormand-prince-54",
-                       memory_settings={"mem_proportion": 0.7})
+   from cubie import Solver
+
+   solver = Solver(LV, algorithm="ode45", mem_proportion=0.7)
 
 Set a lower proportion if other processes share the GPU.
 
@@ -45,7 +47,13 @@ exceeds the available VRAM.
 Stream Groups
 -------------
 
-For advanced use, CuBIE supports running multiple chunks concurrently on
-different CUDA streams via *stream groups*.  This can hide data-transfer
-latency behind compute.  Configure via
-``memory_settings={"stream_group": ...}`` on the ``Solver``.
+Cubie runs every solver in a stream group on one CUDA stream, so the GPU
+works through their solves one after another. Each group has its own
+stream, so if you want two solvers' work to be free to run on the GPU at
+the same time, put them in different groups with ``stream_group``.
+Solvers go in the ``"solver"`` group unless you name another.
+
+.. code-block:: python
+
+   fast = Solver(LV, algorithm="ode45", stream_group="fast")
+   slow = Solver(LV, algorithm="ode45", stream_group="slow")

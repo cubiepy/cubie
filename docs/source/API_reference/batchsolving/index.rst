@@ -14,19 +14,23 @@ Batch solving
    solver
    solve_ivp
    solve_result
+   device_solve_result
    solve_spec
    calibration
    optimize
    comparison
+   batch_input_handler
+   solver_settings
+   resolve_defaults
    batch_solver_config
    batch_solver_kernel
    system_interface
+   writeback_watcher
 
-The :class:`Solver` interface is the main entry point. It brings together batch
-grids, array managers, GPU program builds, and system details into a coordinated
-integration pipeline, while :func:`solve_ivp` offers a shortcut for common
-workflows. Supporting modules prepare the GPU programs, describe solver
-outputs, and provide data checks used by attrs-based containers.
+:class:`~cubie.batchsolving.solver.Solver` is the main entry point: build one for your system, then
+call :meth:`~cubie.batchsolving.solver.Solver.solve` for each batch. :func:`~cubie.batchsolving.solver.solve_ivp` builds a
+solver, solves one batch and closes the solver in a single call. Both
+return a :class:`~cubie.batchsolving.solveresult.SolveResult`.
 
 .. toctree::
    :maxdepth: 2
@@ -38,25 +42,46 @@ outputs, and provide data checks used by attrs-based containers.
 Core API
 --------
 
-* :doc:`Solver <solver>` – high-level manager that drives CUDA kernel launches.
-* :doc:`solve_ivp <solve_ivp>` – convenience wrapper for single-run solver configuration.
-* :doc:`SolveResult <solve_result>` – captures state, summaries, and diagnostic metadata.
-* :doc:`SolveSpec <solve_spec>` – checked configuration describing a solver invocation.
+* :doc:`Solver <solver>` – builds the GPU code for your system and
+  solves batches with it.
+* :doc:`solve_ivp <solve_ivp>` – solves one batch in a single call.
+* :doc:`SolveResult <solve_result>` – the outputs, legends and status
+  codes of a solve.
+* :doc:`DeviceSolveResult <device_solve_result>` – the outputs of a
+  solve left on the GPU, from ``solve(on_device=True)``.
+* :doc:`SolveSpec <solve_spec>` – the step, output and tolerance
+  settings of a solve.
 * :doc:`Calibration <calibration>` – races solver configurations on a
-  representative batch and picks the fastest (:meth:`Solver.calibrate`).
+  representative batch and picks the fastest (:meth:`~cubie.batchsolving.solver.Solver.calibrate`).
 * :doc:`Optimisation <optimize>` – times buffer placement, loop unrolling
   and launch shape for one configuration and keeps the fastest
-  (:meth:`Solver.optimize`).
-* :doc:`Candidate comparison <comparison>` – the "race" method to
-  compare different solvers, used by optimize and calibration.
+  (:meth:`~cubie.batchsolving.solver.Solver.optimize`).
+* :doc:`Candidate comparison <comparison>` – times candidate
+  configurations of one solver on one batch, for calibration and
+  optimisation.
 
 Supporting infrastructure
 -------------------------
 
-* :doc:`BatchSolverConfig <batch_solver_config>` – attrs container that tracks solver metadata.
-* :doc:`BatchSolverKernel <batch_solver_kernel>` – compiles device kernels for batch integration.
-* :doc:`SystemInterface <system_interface>` – adapts :class:`cubie.odesystems.baseODE.BaseODE`
-  instances for CUDA execution.
+* :doc:`BatchInputHandler <batch_input_handler>` – turns your initial
+  values and parameters into the arrays the GPU reads.
+* :doc:`Solver settings <solver_settings>` – the settings you gave a
+  solver and the settings it solves with.
+* :doc:`Default resolution <resolve_defaults>` – fills in the settings
+  you leave out.
+* :doc:`BatchSolverConfig <batch_solver_config>` – the compile settings
+  of the batch kernel.
+* :doc:`BatchSolverKernel <batch_solver_kernel>` – compiles and launches
+  the batch kernel.
+* :doc:`SystemInterface <system_interface>` – converts between the names
+  and indices of a system's states, parameters and observables.
+* :doc:`Writeback watcher <writeback_watcher>` – copies the outputs of a
+  chunked solve into the result arrays.
+
+Array types
+-----------
+
+.. autodata:: ArrayTypes
 
 Dependencies
 ------------

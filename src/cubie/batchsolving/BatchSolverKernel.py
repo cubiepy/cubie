@@ -129,6 +129,7 @@ DEFAULT_MEMORY_SETTINGS = {
     "stream_group": "solver",
     "mem_proportion": None,
 }
+"""Memory settings a kernel uses for any you leave out."""
 
 
 @define(frozen=True)

@@ -99,6 +99,28 @@ with ``update``, then pass a tighter ``atol`` to ``solve``:
 
 Cubie keeps both settings for later solves on this solver.
 
+If you'd rather wait for the compile before your first batch, for
+example to keep it out of a timed loop, call
+:meth:`~cubie.batchsolving.solver.Solver.compile` with the parameters
+you'll solve with. Cubie compiles every parameter you give a single value
+into the code, so it needs your parameters to build the same code that
+``solve`` will use:
+
+.. code-block:: python
+
+   solver.compile(parameters={"b": b_values})
+
+A solver keeps its GPU memory between solves, so that the next solve
+can start straight away. When you've finished with it, call
+:meth:`~cubie.batchsolving.solver.Solver.close` to give the memory back,
+or use the solver in a ``with`` block, which closes it at the end of the
+block. ``solve_ivp`` closes its own solver before it returns.
+
+.. code-block:: python
+
+   with Solver(LV, algorithm="ode45") as solver:
+       result = solver.solve(parameters={"b": b_values}, duration=100.0)
+
 Configuring a solve
 -------------------
 

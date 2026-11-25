@@ -23,6 +23,8 @@ from numpy.typing import NDArray
 from cubie._cudasim_extensions import DeviceNDArrayBase, MappedNDArray
 
 ArrayTypes = Optional[Union[NDArray, DeviceNDArrayBase, MappedNDArray]]
+"""Type of an array that cubie accepts or returns, which is a NumPy
+array, a device array, a mapped array or ``None``."""
 
 from cubie.batchsolving.BatchInputHandler import (  # noqa: E402
     BatchInputHandler,
