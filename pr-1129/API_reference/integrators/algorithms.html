@@ -379,9 +379,9 @@ from one step to the next:</p>
 </tbody>
 </table>
 <p>When you use a method’s default controller, cubie also uses gains
-tuned for that method. With an ERK method and the <code class="docutils literal notranslate"><span class="pre">i</span></code> controller,
-cubie uses <code class="docutils literal notranslate"><span class="pre">integral_gain=1.2</span></code>. With a DIRK method and the <code class="docutils literal notranslate"><span class="pre">pi</span></code>
-controller, cubie uses <code class="docutils literal notranslate"><span class="pre">integral_gain=0.3</span> <span class="pre">*</span> <span class="pre">(q</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">q</span></code> and
+tuned for that method. With the ERK methods whose default controller
+is <code class="docutils literal notranslate"><span class="pre">i</span></code>, cubie uses <code class="docutils literal notranslate"><span class="pre">integral_gain=1.2</span></code>. With a DIRK method and the
+<code class="docutils literal notranslate"><span class="pre">pi</span></code> controller, cubie uses <code class="docutils literal notranslate"><span class="pre">integral_gain=0.3</span> <span class="pre">*</span> <span class="pre">(q</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">q</span></code> and
 <code class="docutils literal notranslate"><span class="pre">proportional_gain=0.4</span> <span class="pre">*</span> <span class="pre">(q</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">q</span></code>, where <code class="docutils literal notranslate"><span class="pre">q</span></code> is the lower of
 the method’s two orders. For <code class="docutils literal notranslate"><span class="pre">kvaerno3</span></code>, of order 3(2), these gains
 are 0.45 and 0.6. If you choose a different controller, cubie uses
@@ -408,7 +408,8 @@ each setting does.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">newton_atol</span></code> / <code class="docutils literal notranslate"><span class="pre">newton_rtol</span></code></p></td>
-<td><p>A tenth of your <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code>.</p></td>
+<td><p>A tenth of your <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code>. In <code class="docutils literal notranslate"><span class="pre">float32</span></code>, cubie
+raises a Newton <code class="docutils literal notranslate"><span class="pre">rtol</span></code> below <code class="docutils literal notranslate"><span class="pre">4.8e-7</span></code> to <code class="docutils literal notranslate"><span class="pre">4.8e-7</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">newton_max_iters</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">8</span></code></p></td>
@@ -424,8 +425,8 @@ number of stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">linear_correction_type</span></code></p></td>
 <td><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> for DIRK, FIRK and Rosenbrock-W methods, and for
-every DAE system.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> for DIRK, FIRK and Rosenbrock-W methods other than
+<code class="docutils literal notranslate"><span class="pre">radau_iia_9</span></code>, and for every DAE system.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;bicgstab&quot;</span></code> for <code class="docutils literal notranslate"><span class="pre">radau_iia_9</span></code> on an ODE system.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> for backward Euler and Crank–Nicolson
 on an ODE system.</p></li>

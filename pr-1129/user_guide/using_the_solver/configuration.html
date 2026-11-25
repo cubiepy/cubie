@@ -506,8 +506,8 @@ to them.</p>
 <dt><strong>newton_atol</strong> / <strong>newton_rtol</strong> — Newton convergence tolerances.</dt><dd><p>Cubie accepts a Newton solve when the estimated error of the update
 drops below one percent of these tolerances.</p>
 <ul class="simple">
-<li><p>Default: the step controller’s <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code> divided by
-10</p></li>
+<li><p>Default: a tenth of your <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code>. In <code class="docutils literal notranslate"><span class="pre">float32</span></code>,
+cubie raises a Newton <code class="docutils literal notranslate"><span class="pre">rtol</span></code> below <code class="docutils literal notranslate"><span class="pre">4.8e-7</span></code> to <code class="docutils literal notranslate"><span class="pre">4.8e-7</span></code>.</p></li>
 </ul>
 </dd>
 <dt><strong>newton_max_iters</strong> — the Newton iteration limit.</dt><dd><p>If the Newton solve doesn’t converge within this many iterations,
@@ -556,15 +556,18 @@ fastest, but the least robust. With <code class="docutils literal notranslate"><
 the Jacobian twice in each iteration, where it applies it once with
 the other iterative solvers.</p>
 <ul class="simple">
-<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> for DIRK, FIRK, Rosenbrock-W and every DAE;
-<code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> otherwise</p></li>
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code> for DIRK, FIRK and Rosenbrock-W algorithms
+other than <code class="docutils literal notranslate"><span class="pre">radau_iia_9</span></code>, and for every DAE system.
+<code class="docutils literal notranslate"><span class="pre">&quot;bicgstab&quot;</span></code> for <code class="docutils literal notranslate"><span class="pre">radau_iia_9</span></code> on an ODE system.
+<code class="docutils literal notranslate"><span class="pre">&quot;minimal_residual&quot;</span></code> for backward Euler and Crank–Nicolson on
+an ODE system.</p></li>
 </ul>
 </dd>
 </dl>
 <p><strong>krylov_atol</strong> / <strong>krylov_rtol</strong> — the tolerances cubie uses to weight the iterative linear solver’s stopping test.</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>Default: the step controller’s <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code></p></li>
+<li><p>Default: your <code class="docutils literal notranslate"><span class="pre">atol</span></code> and <code class="docutils literal notranslate"><span class="pre">rtol</span></code></p></li>
 </ul>
 </div></blockquote>
 <p><strong>krylov_max_iters</strong> — the linear iteration limit for each Newton update.</p>

@@ -124,9 +124,9 @@ from one step to the next:
      - 8.0
 
 When you use a method's default controller, cubie also uses gains
-tuned for that method. With an ERK method and the ``i`` controller,
-cubie uses ``integral_gain=1.2``. With a DIRK method and the ``pi``
-controller, cubie uses ``integral_gain=0.3 * (q + 1) / q`` and
+tuned for that method. With the ERK methods whose default controller
+is ``i``, cubie uses ``integral_gain=1.2``. With a DIRK method and the
+``pi`` controller, cubie uses ``integral_gain=0.3 * (q + 1) / q`` and
 ``proportional_gain=0.4 * (q + 1) / q``, where ``q`` is the lower of
 the method's two orders. For ``kvaerno3``, of order 3(2), these gains
 are 0.45 and 0.6. If you choose a different controller, cubie uses
@@ -150,7 +150,8 @@ each setting does.
    * - Setting
      - Default
    * - ``newton_atol`` / ``newton_rtol``
-     - A tenth of your ``atol`` and ``rtol``.
+     - A tenth of your ``atol`` and ``rtol``. In ``float32``, cubie
+       raises a Newton ``rtol`` below ``4.8e-7`` to ``4.8e-7``.
    * - ``newton_max_iters``
      - ``8``
    * - ``krylov_atol`` / ``krylov_rtol``
@@ -161,8 +162,8 @@ each setting does.
        states, or with a FIRK method, the number of states times the
        number of stages.
    * - ``linear_correction_type``
-     - - ``"lu"`` for DIRK, FIRK and Rosenbrock-W methods, and for
-         every DAE system.
+     - - ``"lu"`` for DIRK, FIRK and Rosenbrock-W methods other than
+         ``radau_iia_9``, and for every DAE system.
        - ``"bicgstab"`` for ``radau_iia_9`` on an ODE system.
        - ``"minimal_residual"`` for backward Euler and Crank--Nicolson
          on an ODE system.
