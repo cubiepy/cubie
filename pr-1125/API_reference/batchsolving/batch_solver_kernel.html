@@ -337,7 +337,8 @@ and unroll keys <code class="docutils literal notranslate"><span class="pre">set
 with no block size requested.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>runs</strong> – Runs in the launch; pass <code class="docutils literal notranslate"><span class="pre">None</span></code> to size a full block.</p>
+<dd class="field-odd"><p><strong>runs</strong> – Number of runs in the launch, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for a batch
+large enough to fill every block.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The automatic choice, or the <code class="docutils literal notranslate"><span class="pre">blocksize</span></code> setting (unset:

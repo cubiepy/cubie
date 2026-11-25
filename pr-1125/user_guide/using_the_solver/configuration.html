@@ -518,9 +518,7 @@ as defaulting to exact Newton in
 factorises the frozen matrix once per step for each distinct value
 on the tableau’s diagonal, and reuses the factors in every solve.
 With <code class="docutils literal notranslate"><span class="pre">False</span></code>, cubie factorises the frozen matrix in each solve.
-Cubie ignores this option for Rosenbrock-W algorithms: with
-<code class="docutils literal notranslate"><span class="pre">&quot;lu&quot;</span></code>, it always factorises the matrix once per step and reuses
-the factors in every stage.</p>
+Rosenbrock-W algorithms always prefactor.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
 </ul>
