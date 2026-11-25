@@ -20,9 +20,8 @@ Low GPU Memory
 --------------
 
 Cubie keeps a solver's GPU memory between solves, so that the next solve
-can start straight away. If a new solve needs that memory, cubie frees
-it from the solvers that have finished their work, but other programs on
-the GPU can't use it until you close the solver. In a long session, such
+can start straight away. Other programs on the GPU can't use that memory
+until you close the solver. In a long session, such
 as an IPython or Spyder console, close each solver when you've finished
 with it: call :meth:`~cubie.batchsolving.solver.Solver.close`, or use
 the solver in a ``with`` block, which closes it at the end of the block.
