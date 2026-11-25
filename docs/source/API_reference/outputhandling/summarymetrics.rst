@@ -15,6 +15,7 @@ Summary metrics
    register_metric
    summarymetrics/metrics/summary_metric
    summarymetrics/metrics/summary_metrics
+   summarymetrics/metrics/metric_config
    summarymetrics/metrics/metric_func_cache
    summarymetrics/metrics/mean
    summarymetrics/metrics/max
@@ -25,6 +26,8 @@ Summary metrics
    summarymetrics/metrics/max_magnitude
    summarymetrics/metrics/extrema
    summarymetrics/metrics/negative_peaks
+   summarymetrics/metrics/mean_std
+   summarymetrics/metrics/std_rms
    summarymetrics/metrics/mean_std_rms
    summarymetrics/metrics/dxdt_max
    summarymetrics/metrics/dxdt_min
@@ -46,6 +49,7 @@ Public interface
 * :doc:`register_metric <register_metric>` – decorator used by metric modules to register implementations.
 * :doc:`SummaryMetric <summarymetrics/metrics/summary_metric>` – base class describing summary metric interfaces.
 * :doc:`SummaryMetrics <summarymetrics/metrics/summary_metrics>` – registry container that stores metrics and compiled functions.
+* :doc:`MetricConfig <summarymetrics/metrics/metric_config>` – compile settings of one metric: its precision and ``sample_summaries_every``.
 * :doc:`MetricFuncCache <summarymetrics/metrics/metric_func_cache>` – caches compiled CUDA functions per metric.
 
 Built-in metrics
@@ -58,9 +62,11 @@ Built-in metrics
 * :doc:`Std <summarymetrics/metrics/std>` – standard deviation.
 * :doc:`MaxMagnitude <summarymetrics/metrics/max_magnitude>` – maximum absolute value.
 * :doc:`Extrema <summarymetrics/metrics/extrema>` – both maximum and minimum.
-* :doc:`Peaks <summarymetrics/metrics/peaks>` – peak detection (local maxima).
-* :doc:`NegativePeaks <summarymetrics/metrics/negative_peaks>` – negative peak detection (local minima).
-* :doc:`MeanStdRms <summarymetrics/metrics/mean_std_rms>` – composite metric computing mean, std, and rms efficiently.
+* :doc:`Peaks <summarymetrics/metrics/peaks>` – sample numbers of up to ``n`` local maxima, requested as ``"peaks[n]"``.
+* :doc:`NegativePeaks <summarymetrics/metrics/negative_peaks>` – sample numbers of up to ``n`` local minima, requested as ``"negative_peaks[n]"``.
+* :doc:`MeanStd <summarymetrics/metrics/mean_std>` – mean and std from one shared buffer.
+* :doc:`StdRms <summarymetrics/metrics/std_rms>` – std and rms from one shared buffer.
+* :doc:`MeanStdRms <summarymetrics/metrics/mean_std_rms>` – mean, std and rms from one shared buffer.
 * :doc:`DxdtMax <summarymetrics/metrics/dxdt_max>` – maximum first derivative (slope).
 * :doc:`DxdtMin <summarymetrics/metrics/dxdt_min>` – minimum first derivative (slope).
 * :doc:`DxdtExtrema <summarymetrics/metrics/dxdt_extrema>` – both maximum and minimum first derivative.

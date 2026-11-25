@@ -57,7 +57,7 @@ class D2xdt2Min(SummaryMetric):
         -----
         The update callback computes central finite differences and tracks
         the minimum unscaled second derivative. The save callback scales
-        by sample_summaries_every² and resets the buffers.
+        by sample_summaries_every² and resets the minimum.
         """
 
         sample_summaries_every = self.compile_settings.sample_summaries_every
@@ -140,15 +140,16 @@ class D2xdt2Min(SummaryMetric):
             output_array
                 device array. Output location for minimum second derivative.
             summarise_every
-                int. Number of steps between saves (unused).
+                int. Number of summary samples in the window (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused).
 
             Notes
             -----
             Scales the minimum unscaled second derivative by
-            sample_summaries_every² and saves to output_array[0], then resets
-            buffers to sentinel values.
+            sample_summaries_every² and saves to output_array[0], then
+            resets the minimum to its sentinel and keeps the previous
+            samples for the next window's first difference.
             """
             sample_interval_sq = (precision(sample_summaries_every)
                                   * precision(sample_summaries_every))

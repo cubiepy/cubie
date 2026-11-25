@@ -95,7 +95,9 @@ class Peaks(SummaryMetric):
                 device array. Layout ``[prev, last_different, counter,
                 times...]``.
             current_index
-                int. Current integration step index, used to record peaks.
+                int. Summary sample number, counted from zero at the
+                first sample of the run.
+                Recorded when a peak is found.
             customisable_variable
                 int. Maximum number of peaks to detect.
 
@@ -151,7 +153,7 @@ class Peaks(SummaryMetric):
             output_array
                 device array. Output array for saving peak time indices.
             summarise_every
-                int. Number of steps between saves (unused for peak detection).
+                int. Number of summary samples in the window (unused).
             customisable_variable
                 int. Maximum number of peaks to detect.
 

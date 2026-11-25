@@ -85,7 +85,8 @@ class Max(SummaryMetric):
             buffer
                 device array. Storage for the current maximum value.
             current_index
-                int. Current integration step index (unused for this metric).
+                int. Summary sample number, counted from zero at the
+                first sample of the run (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused for max).
 
@@ -120,7 +121,7 @@ class Max(SummaryMetric):
             output_array
                 device array. Output location for saving the maximum value.
             summarise_every
-                int. Number of steps between saves (unused for max).
+                int. Number of summary samples in the window (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused for max).
 

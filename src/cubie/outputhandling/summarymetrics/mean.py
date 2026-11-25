@@ -31,8 +31,8 @@ class Mean(SummaryMetric):
     Notes
     -----
     The metric uses a single buffer slot per variable to accumulate the sum
-    of values and divides by the number of integration steps when the results
-    are saved.
+    of values and divides by the number of summary samples in the window
+    when the results are saved.
     """
 
     def __init__(self, precision) -> None:
@@ -86,7 +86,8 @@ class Mean(SummaryMetric):
             buffer
                 device array. Location containing the running sum.
             current_index
-                int. Current integration step index (unused for mean).
+                int. Summary sample number, counted from zero at the
+                first sample of the run (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused for mean).
 
@@ -120,7 +121,7 @@ class Mean(SummaryMetric):
             output_array
                 device array. Location for saving the mean value.
             summarise_every
-                int. Number of integration steps contributing to each summary.
+                int. Number of summary samples in the window.
             customisable_variable
                 int. Metric parameter placeholder (unused for mean).
 

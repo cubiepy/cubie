@@ -57,7 +57,8 @@ class DxdtExtrema(SummaryMetric):
         -----
         The update callback computes finite differences and tracks both
         maximum and minimum unscaled derivatives. The save callback scales
-        by sample_summaries_every and resets the buffers.
+        by sample_summaries_every and resets the
+        extrema.
         """
 
         sample_summaries_every = self.compile_settings.sample_summaries_every
@@ -141,7 +142,7 @@ class DxdtExtrema(SummaryMetric):
                 device array. Output location for [max_derivative,
                 min_derivative].
             summarise_every
-                int. Number of steps between saves (unused).
+                int. Number of summary samples in the window (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused).
 
@@ -149,7 +150,8 @@ class DxdtExtrema(SummaryMetric):
             -----
             Scales the extrema by sample_summaries_every and saves to
             output_array[0] (max) and output_array[1] (min), then resets
-            buffers to sentinel values.
+            both to their sentinels and keeps the previous samples for
+            the next window's first difference.
             """
             output_array[0] = buffer[1] / precision(sample_summaries_every)
             output_array[1] = buffer[2] / precision(sample_summaries_every)

@@ -30,9 +30,10 @@ class StdRms(SummaryMetric):
 
     Notes
     -----
-    Uses three buffer slots: shift (first value), sum of shifted values, and
-    sum of squares of shifted values. The shift technique improves numerical
-    stability for the variance calculation.
+    Uses three buffer slots: the shift, the sum of shifted values and
+    the sum of squares of shifted values. The shift is the first sample
+    of the run, then the mean of the previous window. Shifting the data
+    improves the numerical stability of the variance calculation.
 
     The output array contains [std, rms] in that order.
     """
@@ -92,7 +93,8 @@ class StdRms(SummaryMetric):
                 device array. Storage containing [shift, sum_shifted,
                 sum_sq_shifted].
             current_index
-                int. Current integration step index within summary period.
+                int. Summary sample number, counted from zero at the
+                first sample of the run.
             customisable_variable
                 int. Metric parameter placeholder (unused).
 
@@ -136,7 +138,7 @@ class StdRms(SummaryMetric):
             output_array
                 device array. Output location for [std, rms].
             summarise_every
-                int. Number of steps contributing to each summary window.
+                int. Number of summary samples in the window.
             customisable_variable
                 int. Metric parameter placeholder (unused).
 

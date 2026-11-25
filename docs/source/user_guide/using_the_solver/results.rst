@@ -112,7 +112,8 @@ intervals fit together.
    * - ``"mean"``
      - Time-averaged value.
    * - ``"std"``
-     - Standard deviation over time.
+     - Standard deviation over time, dividing by the number of samples
+       as ``np.std`` does.
    * - ``"rms"``
      - Root-mean-square value.
    * - ``"max"``
@@ -123,10 +124,10 @@ intervals fit together.
      - Both max and min.
    * - ``"max_magnitude"``
      - Maximum absolute value.
-   * - ``"peaks"``
-     - Positive peaks (local maxima).
-   * - ``"negative_peaks"``
-     - Negative peaks (local minima).
+   * - ``"peaks[n]"``
+     - The sample numbers of up to ``n`` positive peaks (local maxima).
+   * - ``"negative_peaks[n]"``
+     - The sample numbers of up to ``n`` negative peaks (local minima).
    * - ``"dxdt_max"``
      - Maximum of the first derivative.
    * - ``"dxdt_min"``
@@ -145,6 +146,25 @@ intervals fit together.
      - Standard deviation and RMS combined.
    * - ``"mean_std_rms"``
      - Mean, standard deviation, and RMS combined.
+
+You don't need to ask for the combined metrics yourself. When you ask
+for ``"mean"`` and ``"std"``, cubie calculates them together as
+``"mean_std"``, and you still read them as ``"mean"`` and ``"std"``.
+
+Put the most peaks you want in each window in the brackets:
+``"peaks[3]"`` records up to three. For each peak, cubie records the
+number of the summary sample at the peak, counted from 0 at the first
+sample of the run, so multiply it by ``sample_summaries_every`` and add
+the time of the first sample to get the time of the peak. If cubie
+finds fewer than ``n`` peaks in a window, it writes 0 for the rest. In
+``as_numpy_per_summary`` you get one array for each of the ``n`` peaks,
+named ``"peaks_1"``, ``"peaks_2"`` and so on, or a single array named
+``"peaks"`` when you ask for ``"peaks[1]"``.
+
+cubie estimates the derivative metrics from the differences between
+consecutive samples, so they are only as accurate as your sampling.
+If you sample ``cos(t)`` every 0.1 time units, cubie reports a
+``"dxdt_max"`` of about 0.999 instead of 1.
 
 Selecting variables
 -------------------

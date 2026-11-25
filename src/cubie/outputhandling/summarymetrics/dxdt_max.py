@@ -56,7 +56,7 @@ class DxdtMax(SummaryMetric):
         -----
         The update callback computes finite differences and tracks the
         maximum unscaled derivative. The save callback scales by
-        sample_summaries_every and resets the buffers.
+        sample_summaries_every and resets the maximum.
         """
 
         sample_summaries_every = self.compile_settings.sample_summaries_every
@@ -131,15 +131,16 @@ class DxdtMax(SummaryMetric):
             output_array
                 device array. Output location for maximum derivative.
             summarise_every
-                int. Number of steps between saves (unused).
+                int. Number of summary samples in the window (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused).
 
             Notes
             -----
-            Scales the maximum unscaled derivative by sample_summaries_every
-            and saves to output_array[0], then resets buffers to sentinel
-            values.
+            Scales the maximum unscaled derivative by
+            sample_summaries_every and saves to output_array[0], then
+            resets the maximum to its sentinel and keeps the previous
+            samples for the next window's first difference.
             """
             output_array[0] = buffer[1] / precision(sample_summaries_every)
             buffer[1] = precision(-1.0e30)

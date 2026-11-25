@@ -86,7 +86,8 @@ class MaxMagnitude(SummaryMetric):
             buffer
                 device array. Storage for the current maximum magnitude.
             current_index
-                int. Current integration step index (unused).
+                int. Summary sample number, counted from zero at the
+                first sample of the run (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused).
 
@@ -123,7 +124,7 @@ class MaxMagnitude(SummaryMetric):
             output_array
                 device array. Output location for saving the max magnitude.
             summarise_every
-                int. Number of steps between saves (unused).
+                int. Number of summary samples in the window (unused).
             customisable_variable
                 int. Metric parameter placeholder (unused).
 

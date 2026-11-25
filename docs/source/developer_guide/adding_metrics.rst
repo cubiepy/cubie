@@ -1,118 +1,203 @@
 Adding Summary Metrics
 ======================
 
-CuBIE's summary metrics system is extensible via the
-``@register_metric`` decorator.  This page walks through implementing a
-custom metric.
+You add a summary metric by subclassing ``SummaryMetric`` and registering
+the class with the ``@register_metric`` decorator.  Once the module that
+defines it has been imported, users request your metric by name in
+``output_types``, just like a built-in one.
 
 File Location
 -------------
 
-Built-in metrics live in
-``src/cubie/outputhandling/summarymetrics/``.  Each metric is a
-separate module.
+cubie keeps its built-in metrics in
+``src/cubie/outputhandling/summarymetrics/``, one module per metric.
+cubie imports every module in that package's ``__init__.py`` to
+register each metric, so add an import line there for a new built-in
+metric.  cubie registers a metric defined in your own code when you
+import its module, so import it before you create a ``Solver`` or call
+``solve_ivp``.
 
 The ``@register_metric`` Decorator
 -----------------------------------
 
-Register a new metric by subclassing ``SummaryMetric`` and decorating
-with ``@register_metric``:
+Subclass ``SummaryMetric`` and decorate the class with
+``@register_metric(summary_metrics)``:
 
 .. code-block:: python
 
-   from cubie.outputhandling.summarymetrics.metrics import (
-       SummaryMetric,
-       MetricFuncCache,
+   from cubie.outputhandling.summarymetrics import (
        register_metric,
        summary_metrics,
+   )
+   from cubie.outputhandling.summarymetrics.metrics import (
+       MetricFuncCache,
+       SummaryMetric,
    )
 
    @register_metric(summary_metrics)
    class MyCustomMetric(SummaryMetric):
        def __init__(self, precision):
            super().__init__(
-               buffer_size=2,
-               output_size=1,
                name="my_custom",
                precision=precision,
-               unit_modification="[custom]",
-               sample_summaries_every=None,
+               buffer_size=2,
+               output_size=1,
+               unit_modification="[unit]",
            )
 
        def build(self) -> MetricFuncCache:
-           # Return a MetricFuncCache with update and save callables
+           # Return a MetricFuncCache with the update and save functions
            ...
+
+When the decorator runs, cubie creates one instance of the class,
+passing the registry's precision as the only argument, so ``__init__``
+takes ``precision`` and nothing else.
 
 ``__init__`` Parameters
 ^^^^^^^^^^^^^^^^^^^^^^^
 
+``name``
+   The name users put in ``output_types``.
+
 ``buffer_size``
-   Number of scratch elements per variable needed during accumulation.
-   Can be an ``int`` or a callable that receives the number of
-   summarised variables.
+   The number of working values cubie stores for each summarised
+   variable while it calculates the metric.  For a metric that takes a
+   parameter in its request, such as ``"peaks[5]"``, pass a callable
+   that receives the parameter and returns the size.
 
 ``output_size``
-   Number of output elements per variable written to the result.  Can
-   also be a callable.
-
-``name``
-   String identifier used in ``output_types`` lists.
+   The number of values cubie writes for each variable in each summary
+   window.  This can also be a callable of the parameter.
 
 ``unit_modification``
-   Label suffix appended to variable names in the summary legend
-   (e.g. ``"[mean]"``, ``"[max]"``).
+   The unit of the metric's output for the results legend, written in
+   terms of the variable's unit.  Write ``[unit]`` where the variable's
+   unit goes: use ``"[unit]"`` for a mean and ``"[unit]*s^-1"`` for a
+   first derivative.
 
-``sample_summaries_every``
-   If not ``None``, the metric requests sub-step sampling at this
-   interval.
+``output_names``
+   Optional column names, one for each output value.  Without them,
+   cubie names a single output after the metric and numbers the columns
+   of a longer output (``peaks_1``, ``peaks_2``, ...).
+
+Leave ``sample_summaries_every`` at its default.  Before cubie compiles
+a solver, it sets the precision and ``sample_summaries_every`` of every
+registered metric to the solver's values.
 
 The ``build()`` Method
 ----------------------
 
-``build()`` must return a ``MetricFuncCache`` containing two Numba CUDA
-device functions:
+Return a ``MetricFuncCache(update_fn=update, save_fn=save)`` from
+``build()``, holding two CUDA device functions.  cubie passes both
+functions this metric's slice of the buffer for one variable, starting
+at index 0.
 
-``update(buffer, value, t, dt)``
-   Called at every summary sample point during integration.  Accumulates
-   data into ``buffer``.
+``update(value, buffer, current_index, customisable_variable)``
+   cubie calls ``update`` at every summary sample with the variable's
+   current value.  ``current_index`` is the number of the summary
+   sample, counted from 0 at the first sample of the run; cubie does not
+   restart the count at each window.
+   ``customisable_variable`` is the parameter from the request (``5``
+   for ``"peaks[5]"``), or ``0`` when there is none.
 
-``save(buffer, output, n_samples)``
-   Called at the end of the solve.  Finalises the accumulated data and
-   writes to ``output``.
+``save(buffer, output_array, summarise_every, customisable_variable)``
+   cubie calls ``save`` at the end of each summary window.
+   ``summarise_every`` is the number of samples in the window.  Write
+   ``output_size`` values to ``output_array``, then put ``buffer`` back
+   into its starting state, ready for the next window.
 
-Both functions operate on per-variable slices and must be compatible with
-Numba's CUDA compilation.
+Compile both functions with
+``@cuda.jit(device=True, inline=True, **self.jit_kwargs)``, importing
+``cuda`` from ``cubie._cudasim_extensions`` so that you can also run the
+metric under the CUDA simulator.  Read the precision and
+``sample_summaries_every`` from ``self.compile_settings`` inside
+``build()``, and cast constants with ``precision(...)`` so that cubie can
+compile the functions for both ``float32`` and ``float64``.  cubie
+rebuilds the metric whenever it changes either setting.
+
+Combined Metrics
+----------------
+
+When a user requests every metric in certain sets, cubie computes them
+together from one shared buffer: for example, cubie calculates
+``"mean"`` and ``"std"`` together as ``"mean_std"``.  To add a
+combination for built-in metrics, register a combined metric with
+``output_names`` set to the names of its parts, so that users still see
+the names they asked for, and add the set of names to
+``_combined_metrics`` in ``SummaryMetrics.__attrs_post_init__`` in
+``metrics.py``.
 
 Example: Implementing a "Count" Metric
-----------------------------------------
+--------------------------------------
 
-A metric that counts how many samples were accumulated:
+With the ``Count`` metric below, you get the number of summary samples
+in each window:
 
 .. code-block:: python
 
-   from numba import cuda
+   from cubie._cudasim_extensions import cuda
+   from cubie.outputhandling.summarymetrics import (
+       register_metric,
+       summary_metrics,
+   )
+   from cubie.outputhandling.summarymetrics.metrics import (
+       MetricFuncCache,
+       SummaryMetric,
+   )
 
    @register_metric(summary_metrics)
-   class CountMetric(SummaryMetric):
+   class Count(SummaryMetric):
        def __init__(self, precision):
            super().__init__(
-               buffer_size=1,
-               output_size=1,
                name="count",
                precision=precision,
-               unit_modification="[count]",
+               buffer_size=1,
+               output_size=1,
+               unit_modification="1",
            )
 
        def build(self) -> MetricFuncCache:
-           @cuda.jit(device=True)
-           def update(buffer, value, t, dt):
-               buffer[0] += 1.0
+           precision = self.compile_settings.precision
 
-           @cuda.jit(device=True)
-           def save(buffer, output, n_samples):
-               output[0] = buffer[0]
+           @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+           def update(value, buffer, current_index, customisable_variable):
+               buffer[0] += precision(1.0)
 
-           return MetricFuncCache(update=update, save=save)
+           @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+           def save(buffer, output_array, summarise_every,
+                    customisable_variable):
+               output_array[0] = buffer[0]
+               buffer[0] = precision(0.0)
 
-After adding the file, the metric is available as
-``output_types=["count"]``.
+           return MetricFuncCache(update_fn=update, save_fn=save)
+
+Save the metric in ``count_metric.py``, import that module, and request
+the metric like any other:
+
+.. code-block:: python
+
+   import numpy as np
+   import cubie as qb
+
+   import count_metric  # import to register "count"
+
+   LV = qb.create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       name="LotkaVolterra",
+   )
+
+   result = qb.solve_ivp(
+       LV,
+       parameters={"b": np.linspace(0.01, 0.05, 1000)},
+       method="ode45",
+       duration=50.0,
+       summarise_every=10.0,
+       sample_summaries_every=0.5,
+       output_types=["count"],
+   )
+   result.as_numpy_per_summary["count"][:, 0, 0]  # 20.0 in each window
