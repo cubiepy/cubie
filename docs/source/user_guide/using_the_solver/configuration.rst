@@ -226,8 +226,8 @@ Newton options:
     Cubie accepts a Newton solve when the estimated error of the update
     drops below one percent of these tolerances.
 
-    - Default: the step controller's ``atol`` and ``rtol`` divided by
-      10
+    - Default: a tenth of your ``atol`` and ``rtol``. In ``float32``,
+      cubie raises a Newton ``rtol`` below ``4.8e-7`` to ``4.8e-7``.
 
 **newton_max_iters** — the Newton iteration limit.
     If the Newton solve doesn't converge within this many iterations,
@@ -276,12 +276,15 @@ Linear solver options:
     the Jacobian twice in each iteration, where it applies it once with
     the other iterative solvers.
 
-    - Default: ``"lu"`` for DIRK, FIRK, Rosenbrock-W and every DAE;
-      ``"minimal_residual"`` otherwise
+    - Default: ``"lu"`` for DIRK, FIRK and Rosenbrock-W algorithms
+      other than ``radau_iia_9``, and for every DAE system.
+      ``"bicgstab"`` for ``radau_iia_9`` on an ODE system.
+      ``"minimal_residual"`` for backward Euler and Crank--Nicolson on
+      an ODE system.
 
 **krylov_atol** / **krylov_rtol** — the tolerances cubie uses to weight the iterative linear solver's stopping test.
 
-    - Default: the step controller's ``atol`` and ``rtol``
+    - Default: your ``atol`` and ``rtol``
 
 **krylov_max_iters** — the linear iteration limit for each Newton update.
 
