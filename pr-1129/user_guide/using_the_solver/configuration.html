@@ -458,11 +458,11 @@ divides each gain by <code class="docutils literal notranslate"><span class="pre
 <code class="docutils literal notranslate"><span class="pre">step_controller</span></code>, cubie selects the fastest of <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and
 <code class="docutils literal notranslate"><span class="pre">pid</span></code> that uses it.</p>
 <ul class="simple">
-<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">integral_gain=1.2</span></code> for ERK’s <code class="docutils literal notranslate"><span class="pre">i</span></code> controller and
-<code class="docutils literal notranslate"><span class="pre">1.0</span></code> for <code class="docutils literal notranslate"><span class="pre">i</span></code> otherwise; <code class="docutils literal notranslate"><span class="pre">integral_gain=0.3</span></code> and
-<code class="docutils literal notranslate"><span class="pre">proportional_gain=0.4</span></code> for <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code>, scaled by
-<code class="docutils literal notranslate"><span class="pre">(order</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">order</span></code> for DIRK’s <code class="docutils literal notranslate"><span class="pre">pi</span></code> controller;
-<code class="docutils literal notranslate"><span class="pre">derivative_gain=0.0</span></code></p></li>
+<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">integral_gain=1.2</span></code> for ERK tableaus that default to
+<code class="docutils literal notranslate"><span class="pre">i</span></code>, and <code class="docutils literal notranslate"><span class="pre">1.0</span></code> for <code class="docutils literal notranslate"><span class="pre">i</span></code> otherwise; <code class="docutils literal notranslate"><span class="pre">integral_gain=0.3</span></code> and
+<code class="docutils literal notranslate"><span class="pre">proportional_gain=0.4</span></code> for <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code>, except that DIRK
+tableaus set their default <code class="docutils literal notranslate"><span class="pre">pi</span></code> gains from the order of their
+error estimate; <code class="docutils literal notranslate"><span class="pre">derivative_gain=0.0</span></code></p></li>
 </ul>
 </dd>
 <dt><strong>filter_coefficients</strong> — the exponents of the step law.</dt><dd><p>Pass a <code class="docutils literal notranslate"><span class="pre">(beta1,</span> <span class="pre">beta2,</span> <span class="pre">beta3)</span></code> triple for the step law

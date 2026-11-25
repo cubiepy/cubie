@@ -346,17 +346,19 @@ stages)</p></td>
 <p>Adaptive step control needs an embedded error estimate. When an
 algorithm or tableau is named without setting <code class="docutils literal notranslate"><span class="pre">step_controller</span></code>,
 CuBIE selects the family’s tuned controller if the scheme provides
-an estimate — an integral controller for explicit Runge–Kutta, the
-Gustafsson predictive controller for the implicit families — and a
-fixed-step controller if it does not.
+an estimate: an integral controller for explicit Runge–Kutta, a PI
+controller for DIRK, and the Gustafsson predictive controller for
+FIRK, Rosenbrock-W and Crank–Nicolson. Some tableaus choose a
+different controller. If the scheme has no estimate, CuBIE uses a
+fixed-step controller.
 This is why <code class="docutils literal notranslate"><span class="pre">dirk</span></code> and <code class="docutils literal notranslate"><span class="pre">firk</span></code> run fixed-step out of the box:
-their default tableaus carry no embedded estimate. Aliases that do
+their default tableaus have no embedded estimate. Aliases that do
 (<code class="docutils literal notranslate"><span class="pre">radau</span></code>, for example) enable the family’s adaptive defaults
-automatically. Explicitly pairing an adaptive controller with an
-estimate-free scheme falls back to fixed stepping with a
-<code class="docutils literal notranslate"><span class="pre">UserWarning</span></code>. Gains or <code class="docutils literal notranslate"><span class="pre">filter_coefficients</span></code> passed without a
-<code class="docutils literal notranslate"><span class="pre">step_controller</span></code> select the smallest of <code class="docutils literal notranslate"><span class="pre">i</span></code>/<code class="docutils literal notranslate"><span class="pre">pi</span></code>/<code class="docutils literal notranslate"><span class="pre">pid</span></code> that
-carries every nonzero gain given.</p>
+automatically. If you pair an adaptive controller with an
+estimate-free scheme, CuBIE warns with a <code class="docutils literal notranslate"><span class="pre">UserWarning</span></code> and steps at
+a fixed size. If you pass gains or <code class="docutils literal notranslate"><span class="pre">filter_coefficients</span></code> without
+a <code class="docutils literal notranslate"><span class="pre">step_controller</span></code>, CuBIE selects the smallest of
+<code class="docutils literal notranslate"><span class="pre">i</span></code>/<code class="docutils literal notranslate"><span class="pre">pi</span></code>/<code class="docutils literal notranslate"><span class="pre">pid</span></code> that uses every nonzero gain you gave.</p>
 <p>No family enables a step-freeze deadband by default; pass
 <code class="docutils literal notranslate"><span class="pre">deadband_min</span></code>/<code class="docutils literal notranslate"><span class="pre">deadband_max</span></code> to hold <code class="docutils literal notranslate"><span class="pre">dt</span></code> for gains inside a
 band. Every value can be overridden per solve — see
