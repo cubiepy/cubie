@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -356,24 +357,9 @@ with <code class="docutils literal notranslate"><span class="pre">update</span><
 </pre></div>
 </div>
 <p>Cubie keeps both settings for later solves on this solver.</p>
-<p>If you’d rather wait for the compile before your first batch, for
-example to keep it out of a timed loop, call
+<p>To compile before your first solve, call
 <a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.compile" title="cubie.batchsolving.solver.Solver.compile"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compile()</span></code></a> with the parameters
-you’ll solve with. Cubie compiles every parameter you give a single value
-into the code, so it needs your parameters to build the same code that
-<code class="docutils literal notranslate"><span class="pre">solve</span></code> will use:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">b_values</span><span class="p">})</span>
-</pre></div>
-</div>
-<p>Cubie keeps a solver’s GPU memory between solves, so that the next
-solve can start straight away. When you’ve finished with it, call
-<a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.close" title="cubie.batchsolving.solver.Solver.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a> to give the memory back,
-or use the solver in a <code class="docutils literal notranslate"><span class="pre">with</span></code> block, which closes it at the end of the
-block. <code class="docutils literal notranslate"><span class="pre">solve_ivp</span></code> closes its own solver before it returns.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">)</span> <span class="k">as</span> <span class="n">solver</span><span class="p">:</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">b_values</span><span class="p">},</span> <span class="n">duration</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
-</pre></div>
-</div>
+and settings you’ll pass to <code class="docutils literal notranslate"><span class="pre">solve</span></code>.</p>
 </section>
 <section id="configuring-a-solve">
 <h2>Configuring a solve<a class="headerlink" href="#configuring-a-solve" title="Link to this heading"></a></h2>

@@ -4,9 +4,10 @@ Solver settings
 .. currentmodule:: cubie.batchsolving.solver_settings
 
 A :class:`~cubie.batchsolving.solver.Solver` records the settings you
-give it in a :class:`SolverSettings`, which you can read as
-``solver.given``, and the settings it solves with in an
-:class:`EffectiveSettings`, which you can read as ``solver.effective``.
+gave it in a :class:`SolverSettings`, which you can read as
+``solver.given``. It also records the full set of settings, including
+the ones it worked out from yours, in an :class:`EffectiveSettings`,
+which you can read as ``solver.effective``.
 
 .. autoclass:: SolverSettings
     :members:

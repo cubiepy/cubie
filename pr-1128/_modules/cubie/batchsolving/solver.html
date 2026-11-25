@@ -11,6 +11,7 @@
       <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../../_static/favicon.svg"/>
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -928,11 +929,10 @@
 <span class="sd">            batch frequently, and the compile time is long enough to</span>
 <span class="sd">            make it annoying.</span>
 <span class="sd">        **kwargs</span>
-<span class="sd">            Further settings, which the solver passes to :meth:`update`</span>
-<span class="sd">            and keeps for later solves. See</span>
-<span class="sd">            :doc:`/user_guide/using_the_solver/configuration` for each</span>
-<span class="sd">            one. Pass parameter values in ``parameters``, because the</span>
-<span class="sd">            solver raises ``KeyError`` for a parameter name given here.</span>
+<span class="sd">            Any other solver setting. The solver applies each one as</span>
+<span class="sd">            :meth:`update` does and keeps it for later solves. See</span>
+<span class="sd">            :doc:`/user_guide/using_the_solver/configuration` for what</span>
+<span class="sd">            each one does.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>

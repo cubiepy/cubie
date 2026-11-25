@@ -3,10 +3,11 @@ Default resolution
 
 .. currentmodule:: cubie.batchsolving.resolve_defaults
 
-These functions fill in every setting you leave out of a
-:class:`~cubie.batchsolving.solver.Solver`, from the settings you gave,
-the system and the algorithm. :func:`resolve` returns the result as the
-solver's ``effective`` settings.
+These functions work out the settings that you don't give a
+:class:`~cubie.batchsolving.solver.Solver` from the ones that you do
+give, the nature of your ODE system, and the defaults of the algorithm.
+:func:`resolve` returns the full set of settings, which you can read as
+``solver.effective``.
 
 .. autofunction:: resolve
 

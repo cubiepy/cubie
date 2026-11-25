@@ -27,10 +27,12 @@ Batch solving
    system_interface
    writeback_watcher
 
-:class:`~cubie.batchsolving.solver.Solver` is the main entry point: build one for your system, then
-call :meth:`~cubie.batchsolving.solver.Solver.solve` for each batch. :func:`~cubie.batchsolving.solver.solve_ivp` builds a
-solver, solves one batch and closes the solver in a single call. Both
-return a :class:`~cubie.batchsolving.solveresult.SolveResult`.
+To solve batches of your system, build a
+:class:`~cubie.batchsolving.solver.Solver` for it, then call
+:meth:`~cubie.batchsolving.solver.Solver.solve` for each batch.
+:func:`~cubie.batchsolving.solver.solve_ivp` builds a solver, solves
+one batch and closes the solver in a single call. Both return a
+:class:`~cubie.batchsolving.solveresult.SolveResult`.
 
 .. toctree::
    :maxdepth: 2
@@ -64,10 +66,11 @@ Supporting infrastructure
 -------------------------
 
 * :doc:`BatchInputHandler <batch_input_handler>` – turns your initial
-  values and parameters into the arrays the GPU reads.
+  values and parameters into arrays with one column per run.
 * :doc:`Solver settings <solver_settings>` – the settings you gave a
-  solver and the settings it solves with.
-* :doc:`Default resolution <resolve_defaults>` – fills in the settings
+  solver, and the full set it solves with, including the ones it
+  worked out from yours.
+* :doc:`Default resolution <resolve_defaults>` – works out the settings
   you leave out.
 * :doc:`BatchSolverConfig <batch_solver_config>` – the compile settings
   of the batch kernel.

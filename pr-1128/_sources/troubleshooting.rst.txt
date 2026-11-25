@@ -16,6 +16,42 @@ If cubie cannot find a GPU, it raises an error such as
    ``pip install cubie[cuda12]`` if you see a CUDA version below 13 in the
    ``nvidia-smi`` output.
 
+Low GPU Memory
+--------------
+
+Cubie keeps a solver's GPU memory between solves, so that the next solve
+can start straight away. If a new solve needs that memory, cubie frees
+it from the solvers that have finished their work, but other programs on
+the GPU can't use it until you close the solver. In a long session, such
+as an IPython or Spyder console, close each solver when you've finished
+with it: call :meth:`~cubie.batchsolving.solver.Solver.close`, or use
+the solver in a ``with`` block, which closes it at the end of the block.
+``solve_ivp`` closes its own solver before it returns.
+
+.. code-block:: python
+
+   import numpy as np
+   from cubie import Solver, create_ODE_system
+
+   LV = create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       name="LotkaVolterra",
+   )
+
+   with Solver(LV, algorithm="ode45") as solver:
+       result = solver.solve(
+           parameters={"b": np.linspace(0.01, 0.05, 10000)},
+           duration=100.0,
+       )
+
+To limit how much of the GPU's memory cubie uses, see
+:doc:`/user_guide/advanced/memory`.
+
 Failed Runs
 -----------
 

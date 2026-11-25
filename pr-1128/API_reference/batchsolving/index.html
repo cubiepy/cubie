@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -271,10 +272,12 @@
 <h2><code class="docutils literal notranslate"><span class="pre">cubie.batchsolving</span></code><a class="headerlink" href="#cubie-batchsolving" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
 </div>
-<p><a class="reference internal" href="solver.html#cubie.batchsolving.solver.Solver" title="cubie.batchsolving.solver.Solver"><code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code></a> is the main entry point: build one for your system, then
-call <a class="reference internal" href="solver.html#cubie.batchsolving.solver.Solver.solve" title="cubie.batchsolving.solver.Solver.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a> for each batch. <a class="reference internal" href="solve_ivp.html#cubie.batchsolving.solver.solve_ivp" title="cubie.batchsolving.solver.solve_ivp"><code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code></a> builds a
-solver, solves one batch and closes the solver in a single call. Both
-return a <a class="reference internal" href="solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a>.</p>
+<p>To solve batches of your system, build a
+<a class="reference internal" href="solver.html#cubie.batchsolving.solver.Solver" title="cubie.batchsolving.solver.Solver"><code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code></a> for it, then call
+<a class="reference internal" href="solver.html#cubie.batchsolving.solver.Solver.solve" title="cubie.batchsolving.solver.Solver.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a> for each batch.
+<a class="reference internal" href="solve_ivp.html#cubie.batchsolving.solver.solve_ivp" title="cubie.batchsolving.solver.solve_ivp"><code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code></a> builds a solver, solves
+one batch and closes the solver in a single call. Both return a
+<a class="reference internal" href="solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a>.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Subpackages</span></p>
 <ul>
@@ -308,10 +311,11 @@ optimisation.</p></li>
 <h2>Supporting infrastructure<a class="headerlink" href="#supporting-infrastructure" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="batch_input_handler.html"><span class="doc">BatchInputHandler</span></a> – turns your initial
-values and parameters into the arrays the GPU reads.</p></li>
+values and parameters into arrays with one column per run.</p></li>
 <li><p><a class="reference internal" href="solver_settings.html"><span class="doc">Solver settings</span></a> – the settings you gave a
-solver and the settings it solves with.</p></li>
-<li><p><a class="reference internal" href="resolve_defaults.html"><span class="doc">Default resolution</span></a> – fills in the settings
+solver, and the full set it solves with, including the ones it
+worked out from yours.</p></li>
+<li><p><a class="reference internal" href="resolve_defaults.html"><span class="doc">Default resolution</span></a> – works out the settings
 you leave out.</p></li>
 <li><p><a class="reference internal" href="batch_solver_config.html"><span class="doc">BatchSolverConfig</span></a> – the compile settings
 of the batch kernel.</p></li>
@@ -328,8 +332,13 @@ chunked solve into the result arrays.</p></li>
 <dl class="py data">
 <dt class="sig sig-object py" id="cubie.batchsolving.ArrayTypes">
 <span class="sig-prename descclassname"><span class="pre">cubie.batchsolving.</span></span><span class="sig-name descname"><span class="pre">ArrayTypes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">NDArray</span> <span class="pre">|</span> <span class="pre">cubie.vendored.cudasim.cudadrv.devicearray.FakeCUDAArray</span> <span class="pre">|</span> <span class="pre">None</span></span><a class="headerlink" href="#cubie.batchsolving.ArrayTypes" title="Link to this definition"></a></dt>
-<dd><p>Type of an array that cubie accepts or returns, which is a NumPy
-array, a device array, a mapped array or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<dd><p>a NumPy array, a Numba device
+array, a mapped array, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Arrays that cubie accepts and returns</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

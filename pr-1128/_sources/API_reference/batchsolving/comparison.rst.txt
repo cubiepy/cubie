@@ -3,10 +3,13 @@ Candidate comparison
 
 .. currentmodule:: cubie.batchsolving.comparison
 
+When you call
 :meth:`Solver.calibrate <cubie.batchsolving.solver.Solver.calibrate>`
-and :meth:`Solver.optimize <cubie.batchsolving.solver.Solver.optimize>`
-both time their candidates with a :class:`ComparisonRunner`, which
-switches one solver between candidates and times each on the same batch.
+or :meth:`Solver.optimize <cubie.batchsolving.solver.Solver.optimize>`,
+cubie uses a :class:`ComparisonRunner` to switch your solver between
+candidate configurations and time each one on the same batch. The
+functions below size that batch and warm up the GPU before cubie times
+anything.
 
 .. autoclass:: ComparisonRunner
     :members:

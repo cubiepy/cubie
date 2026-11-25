@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -1008,11 +1009,10 @@ are compiled into the code and the whole thing runs faster.
 Set it <code class="docutils literal notranslate"><span class="pre">False</span></code> if you are changing a single value per
 batch frequently, and the compile time is long enough to
 make it annoying.</p></li>
-<li><p><strong>**kwargs</strong> – Further settings, which the solver passes to <a class="reference internal" href="#cubie.batchsolving.solver.Solver.update" title="cubie.batchsolving.solver.Solver.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>
-and keeps for later solves. See
-<a class="reference internal" href="../../user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a> for each
-one. Pass parameter values in <code class="docutils literal notranslate"><span class="pre">parameters</span></code>, because the
-solver raises <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for a parameter name given here.</p></li>
+<li><p><strong>**kwargs</strong> – Any other solver setting. The solver applies each one as
+<a class="reference internal" href="#cubie.batchsolving.solver.Solver.update" title="cubie.batchsolving.solver.Solver.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> does and keeps it for later solves. See
+<a class="reference internal" href="../../user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a> for what
+each one does.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

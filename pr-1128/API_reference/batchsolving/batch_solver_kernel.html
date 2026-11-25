@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -1306,7 +1307,8 @@ When num_chunks&gt;1, chunk_length represents the standard chunk size.</p>
 <dl class="py data">
 <dt class="sig sig-object py" id="cubie.batchsolving.BatchSolverKernel.DEFAULT_MEMORY_SETTINGS">
 <span class="sig-prename descclassname"><span class="pre">cubie.batchsolving.BatchSolverKernel.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_MEMORY_SETTINGS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'mem_proportion':</span> <span class="pre">None,</span> <span class="pre">'memory_manager':</span> <span class="pre">MemoryManager(totalmem=8589934592,</span> <span class="pre">registry={},</span> <span class="pre">stream_groups=StreamGroups(groups={},</span> <span class="pre">streams={}),</span> <span class="pre">_mode='passive',</span> <span class="pre">_auto_pool=[],</span> <span class="pre">_manual_pool=[],</span> <span class="pre">_queued_allocations={},</span> <span class="pre">_group_chunk_parameters={},</span> <span class="pre">_usage_clock=0,</span> <span class="pre">_pending_teardowns=[],</span> <span class="pre">pinned_max_bytes=8589934592,</span> <span class="pre">allocation_granule_bytes=33554432,</span> <span class="pre">_pinned_lock=&lt;unlocked</span> <span class="pre">_thread.lock</span> <span class="pre">object&gt;,</span> <span class="pre">_pinned_live_bytes=0,</span> <span class="pre">_pinned_releases=deque([]),</span> <span class="pre">_idle_pinned=[],</span> <span class="pre">_pinned_generation=0,</span> <span class="pre">_device_probe_error=None),</span> <span class="pre">'stream_group':</span> <span class="pre">'solver'}</span></span><a class="headerlink" href="#cubie.batchsolving.BatchSolverKernel.DEFAULT_MEMORY_SETTINGS" title="Link to this definition"></a></dt>
-<dd><p>Memory settings a kernel uses for any you leave out.</p>
+<dd><p>Memory manager, stream group and share of GPU memory that cubie
+uses when you don’t set them.</p>
 </dd></dl>
 
 <dl class="py data">

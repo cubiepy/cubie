@@ -11,6 +11,7 @@
       <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../../_static/favicon.svg"/>
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -339,8 +340,12 @@
 <span class="sd">"""Fewest occupancy waves a timed batch fills at any launch."""</span>
 
 <span class="n">HOST_BYTES_PER_RUN</span> <span class="o">=</span> <span class="n">np_dtype</span><span class="p">(</span><span class="n">np_intp</span><span class="p">)</span><span class="o">.</span><span class="n">itemsize</span> <span class="o">+</span> <span class="n">np_dtype</span><span class="p">(</span><span class="n">np_int32</span><span class="p">)</span><span class="o">.</span><span class="n">itemsize</span>
-<span class="sd">"""Host bytes per run besides the grid, for the repeat index and status</span>
-<span class="sd">code."""</span>
+<span class="sd">"""Bytes of host memory that cubie needs for each run of a timed batch,</span>
+<span class="sd">on top of the run's initial values and parameters.</span>
+
+<span class="sd">Cubie uses these bytes for the run's status code and for the index of</span>
+<span class="sd">the grid column that the run repeats.</span>
+<span class="sd">"""</span>
 
 <span class="n">WORKER_STARTUP_SECONDS</span> <span class="o">=</span> <span class="mf">12.0</span>
 <span class="sd">"""Wall seconds a spawned worker spends importing cubie.</span>

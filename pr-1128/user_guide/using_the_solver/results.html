@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -470,11 +471,11 @@ column. Read <code class="docutils literal notranslate"><span class="pre">time_d
 <dt><code class="docutils literal notranslate"><span class="pre">status_codes</span></code> and <code class="docutils literal notranslate"><span class="pre">status_messages</span></code></dt><dd><p>One status word per run, <code class="docutils literal notranslate"><span class="pre">0</span></code> for success. Look up a failed run’s
 index in <code class="docutils literal notranslate"><span class="pre">status_messages</span></code> to see the names of its status codes; see
 <a class="reference internal" href="../../troubleshooting.html"><span class="doc">Troubleshooting</span></a>. When a run fails, cubie fills its output
-with NaN and warns you with the number of failed runs and their
-status codes. For an implicit algorithm, cubie also suggests settings
-in the warning that make failures less likely. Pass
-<code class="docutils literal notranslate"><span class="pre">nan_error_trajectories=False</span></code> to keep the output of failed runs,
-which also turns off the warning.</p>
+with NaN and warns you how many runs failed and which status codes
+they ended with. For an implicit algorithm, cubie also suggests
+settings in the warning that make failures less likely. Pass
+<code class="docutils literal notranslate"><span class="pre">nan_error_trajectories=False</span></code> to turn off both the NaN filling
+and the warning.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">parameter_legend</span></code> and <code class="docutils literal notranslate"><span class="pre">fixed_parameter_values</span></code></dt><dd><p>Cubie sorts the swept parameters by name, so the same row number can
 belong to different parameters in two batches. Read
@@ -493,12 +494,10 @@ and the summaries.</p></li>
 </ul>
 <section id="keeping-results">
 <h3>Keeping results<a class="headerlink" href="#keeping-results" title="Link to this heading"></a></h3>
-<p>To save time and memory, cubie hands you the outputs in the
-<code class="docutils literal notranslate"><span class="pre">SolveResult</span></code> in the memory it wrote them to, without copying them. Once you delete the
-result, or stop referring to it, cubie writes the next solve’s outputs
-into that memory, and any array you took from the result changes with
-it. Keep the result for as long as you use its arrays, or copy what you
-want to keep:</p>
+<p>Once you delete a <code class="docutils literal notranslate"><span class="pre">SolveResult</span></code>, or stop referring to it, a later
+solve on the same solver can overwrite its arrays, including any array
+you took from it. Keep the result for as long as you use its arrays, or
+copy what you want to keep:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span>
 
 <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">)</span>

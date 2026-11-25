@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -268,10 +269,11 @@
              
   <section id="default-resolution">
 <h1>Default resolution<a class="headerlink" href="#default-resolution" title="Link to this heading"></a></h1>
-<p>These functions fill in every setting you leave out of a
-<a class="reference internal" href="solver.html#cubie.batchsolving.solver.Solver" title="cubie.batchsolving.solver.Solver"><code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code></a>, from the settings you gave,
-the system and the algorithm. <a class="reference internal" href="#cubie.batchsolving.resolve_defaults.resolve" title="cubie.batchsolving.resolve_defaults.resolve"><code class="xref py py-func docutils literal notranslate"><span class="pre">resolve()</span></code></a> returns the result as the
-solver’s <code class="docutils literal notranslate"><span class="pre">effective</span></code> settings.</p>
+<p>These functions work out the settings that you don’t give a
+<a class="reference internal" href="solver.html#cubie.batchsolving.solver.Solver" title="cubie.batchsolving.solver.Solver"><code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code></a> from the ones that you do
+give, the nature of your ODE system, and the defaults of the algorithm.
+<a class="reference internal" href="#cubie.batchsolving.resolve_defaults.resolve" title="cubie.batchsolving.resolve_defaults.resolve"><code class="xref py py-func docutils literal notranslate"><span class="pre">resolve()</span></code></a> returns the full set of settings, which you can read as
+<code class="docutils literal notranslate"><span class="pre">solver.effective</span></code>.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="cubie.batchsolving.resolve_defaults.resolve">
 <span class="sig-prename descclassname"><span class="pre">cubie.batchsolving.resolve_defaults.</span></span><span class="sig-name descname"><span class="pre">resolve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">given</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">system</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">interface</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="solver_settings.html#cubie.batchsolving.solver_settings.EffectiveSettings" title="cubie.batchsolving.solver_settings.EffectiveSettings"><span class="pre">EffectiveSettings</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/resolve_defaults.html#resolve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.resolve_defaults.resolve" title="Link to this definition"></a></dt>

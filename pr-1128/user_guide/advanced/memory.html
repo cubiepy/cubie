@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -270,8 +271,20 @@
 <h1>GPU Memory Management<a class="headerlink" href="#gpu-memory-management" title="Link to this heading"></a></h1>
 <p>CuBIE manages GPU memory (VRAM) automatically, but understanding the
 available options lets you run larger batches and avoid out-of-memory
-errors. The examples on this page use the Lotka-Volterra system <code class="docutils literal notranslate"><span class="pre">LV</span></code>
-from <a class="reference internal" href="../using_the_solver/inputs.html"><span class="doc">Batch Inputs</span></a>.</p>
+errors. The examples on this page use this Lotka-Volterra system:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span><span class="p">,</span> <span class="n">create_ODE_system</span>
+
+<span class="n">LV</span> <span class="o">=</span> <span class="n">create_ODE_system</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    dx = a*x - b*x*y</span>
+<span class="sd">    dy = -c*y + d*x*y</span>
+<span class="sd">    """</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
+    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"LotkaVolterra"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 <section id="default-behaviour">
 <h2>Default Behaviour<a class="headerlink" href="#default-behaviour" title="Link to this heading"></a></h2>
 <p>A solver keeps its device and pinned host buffers between calls to
@@ -287,9 +300,7 @@ on the GPU.</p>
 <h2>VRAM Limits<a class="headerlink" href="#vram-limits" title="Link to this heading"></a></h2>
 <p>CuBIE estimates the available VRAM and sizes the batch accordingly.  You
 can override the proportion of VRAM that CuBIE is allowed to use:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span>
-
-<span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span> <span class="n">mem_proportion</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span> <span class="n">mem_proportion</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Set a lower proportion if other processes share the GPU.</p>
@@ -309,8 +320,8 @@ exceeds the available VRAM.</p>
 works through their solves one after another. Cubie gives each group
 its own stream, so if you want two solvers’ work to be free to run on
 the GPU at the same time, put them in different groups with
-<code class="docutils literal notranslate"><span class="pre">stream_group</span></code>.
-Solvers go in the <code class="docutils literal notranslate"><span class="pre">&quot;solver&quot;</span></code> group unless you name another.</p>
+<code class="docutils literal notranslate"><span class="pre">stream_group</span></code>. Cubie puts each solver in the <code class="docutils literal notranslate"><span class="pre">&quot;solver&quot;</span></code> group
+unless you give it a different group name.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">fast</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span> <span class="n">stream_group</span><span class="o">=</span><span class="s2">"fast"</span><span class="p">)</span>
 <span class="n">slow</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span> <span class="n">stream_group</span><span class="o">=</span><span class="s2">"slow"</span><span class="p">)</span>
 </pre></div>

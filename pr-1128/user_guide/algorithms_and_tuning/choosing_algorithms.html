@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -272,6 +273,21 @@
 pick the right one.  Pass the algorithm name as <code class="docutils literal notranslate"><span class="pre">method=</span></code> to
 <code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code> or <code class="docutils literal notranslate"><span class="pre">algorithm=</span></code> to <code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code>;
 names are case-insensitive.</p>
+<p>The examples on this page use this Lotka-Volterra system:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span><span class="p">,</span> <span class="n">create_ODE_system</span>
+
+<span class="n">LV</span> <span class="o">=</span> <span class="n">create_ODE_system</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    dx = a*x - b*x*y</span>
+<span class="sd">    dy = -c*y + d*x*y</span>
+<span class="sd">    """</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">"a"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">,</span> <span class="s2">"d"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
+    <span class="n">states</span><span class="o">=</span><span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">"LotkaVolterra"</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 <section id="decision-guide">
 <h2>Decision Guide<a class="headerlink" href="#decision-guide" title="Link to this heading"></a></h2>
 <table class="docutils align-default">
@@ -792,7 +808,7 @@ rejections are frequent.</p>
 <code class="docutils literal notranslate"><span class="pre">pi</span></code> for DIRK, <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> for FIRK and Rosenbrock, <code class="docutils literal notranslate"><span class="pre">fixed</span></code>
 without an error estimate); some tableaus override it.  To choose a
 different controller, pass its name:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span> <span class="o">=</span> <span class="n">qb</span><span class="o">.</span><span class="n">Solver</span><span class="p">(</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span>
     <span class="n">LV</span><span class="p">,</span>
     <span class="n">algorithm</span><span class="o">=</span><span class="s2">"dormand-prince-54"</span><span class="p">,</span>
     <span class="n">step_controller</span><span class="o">=</span><span class="s2">"gustafsson"</span><span class="p">,</span>
@@ -804,13 +820,8 @@ different controller, pass its name:</p>
 <h2>Automatic calibration<a class="headerlink" href="#automatic-calibration" title="Link to this heading"></a></h2>
 <p>The fastest algorithm order, linear solver type, preconditioner, and
 Newton variant depend on the system.  Given a representative batch,
-the solver can measure them directly. Here we calibrate the
-Lotka-Volterra system <code class="docutils literal notranslate"><span class="pre">LV</span></code> from
-<a class="reference internal" href="../using_the_solver/inputs.html"><span class="doc">Batch Inputs</span></a> on a grid of 40,000 runs:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span>
-
-<span class="n">x0_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+the solver can measure them directly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">x0_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
 <span class="n">b_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
 
 <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ros3p"</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">)</span>
@@ -839,12 +850,6 @@ place; pass <code class="docutils literal notranslate"><span class="pre">apply=F
 modifying the solver.</p>
 <p><code class="docutils literal notranslate"><span class="pre">calibrate</span></code> compiles a large number of kernels, so allow half an
 hour for a bigger system.</p>
-<p>Cubie compiles the candidates in up to <code class="docutils literal notranslate"><span class="pre">max_parallel</span></code> worker
-processes at once, four by default. Python starts each worker by
-running the top level of your script, so in a script, call <code class="docutils literal notranslate"><span class="pre">calibrate</span></code> and
-<code class="docutils literal notranslate"><span class="pre">optimize</span></code> from under <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">__name__</span> <span class="pre">==</span> <span class="pre">&quot;__main__&quot;:</span></code>. Pass
-<code class="docutils literal notranslate"><span class="pre">max_parallel=1</span></code> to compile every candidate in your own process
-instead.</p>
 <p>With the algorithm settled, <a class="reference internal" href="../../API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.optimize" title="cubie.batchsolving.solver.Solver.optimize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Solver.optimize</span></code></a> tries a few different
 configurations of where buffers sit in memory, which loops get
 unrolled, and how many threads run at once on the GPU to find the
