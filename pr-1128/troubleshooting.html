@@ -284,10 +284,9 @@ toolkit included: <code class="docutils literal notranslate"><span class="pre">p
 </section>
 <section id="low-gpu-memory">
 <h2>Low GPU Memory<a class="headerlink" href="#low-gpu-memory" title="Link to this heading"></a></h2>
-<p>Cubie keeps a solver’s GPU memory between solves, so that the next solve
-can start straight away. If a new solve needs that memory, cubie frees
-it from the solvers that have finished their work, but other programs on
-the GPU can’t use it until you close the solver. In a long session, such
+<p>Cubie keeps a solver’s GPU memory between solves, so that it can start
+the next solve straight away. Other programs on the GPU can’t use that memory
+until you close the solver. In a long session, such
 as an IPython or Spyder console, close each solver when you’ve finished
 with it: call <a class="reference internal" href="API_reference/batchsolving/solver.html#cubie.batchsolving.solver.Solver.close" title="cubie.batchsolving.solver.Solver.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>, or use
 the solver in a <code class="docutils literal notranslate"><span class="pre">with</span></code> block, which closes it at the end of the block.
