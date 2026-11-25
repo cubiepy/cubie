@@ -475,6 +475,13 @@ modifying the solver.
 ``calibrate`` compiles a large number of kernels, so allow half an
 hour for a bigger system.
 
+Cubie compiles the candidates in up to ``max_parallel`` worker
+processes at once, four by default. Each worker starts by running the
+top level of your script, so in a script, call ``calibrate`` and
+``optimize`` from under ``if __name__ == "__main__":``. Pass
+``max_parallel=1`` to compile every candidate in your own process
+instead.
+
 With the algorithm settled, :meth:`Solver.optimize
 <cubie.batchsolving.solver.Solver.optimize>` tries a few different
 configurations of where buffers sit in memory, which loops get
