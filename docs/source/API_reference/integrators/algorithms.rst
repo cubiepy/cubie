@@ -32,11 +32,11 @@ Algorithms
 
 To choose an algorithm, pass its name as ``algorithm=`` to
 :class:`~cubie.batchsolving.solver.Solver` or as ``method=`` to
-:func:`~cubie.batchsolving.solver.solve_ivp`.
-:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms` helps you
-pick one and lists every name you can pass. This page gives the
-settings cubie uses with each algorithm unless you set them yourself,
-and lists the classes that implement the algorithms.
+:func:`~cubie.batchsolving.solver.solve_ivp`. To pick one, and to see
+every name you can pass, read
+:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`. Read on
+here for the settings cubie uses with each algorithm unless you set
+them yourself, and for the classes that implement the algorithms.
 
 .. _algorithm-defaults:
 
@@ -139,8 +139,8 @@ Implicit solver settings
 With backward Euler, Crank--Nicolson, DIRK and FIRK methods, cubie
 solves a nonlinear system at every step with Newton's method, and a
 linear system for each Newton update. With Rosenbrock-W methods, cubie
-solves only the linear systems, so the Newton settings don't apply to
-them. See :doc:`/user_guide/using_the_solver/configuration` for what
+solves only the linear systems, so cubie ignores the Newton settings
+for them. See :doc:`/user_guide/using_the_solver/configuration` for what
 each setting does.
 
 .. list-table::
