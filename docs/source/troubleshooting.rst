@@ -19,8 +19,8 @@ If cubie cannot find a GPU, it raises an error such as
 Low GPU Memory
 --------------
 
-Cubie keeps a solver's GPU memory between solves, so that the next solve
-can start straight away. Other programs on the GPU can't use that memory
+Cubie keeps a solver's GPU memory between solves, so that it can start
+the next solve straight away. Other programs on the GPU can't use that memory
 until you close the solver. In a long session, such
 as an IPython or Spyder console, close each solver when you've finished
 with it: call :meth:`~cubie.batchsolving.solver.Solver.close`, or use
