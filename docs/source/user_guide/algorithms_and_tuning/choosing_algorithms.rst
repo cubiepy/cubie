@@ -3,7 +3,7 @@ Choosing an Algorithm
 
 CuBIE ships several integration algorithm families.  This page helps you
 pick the right one.  Pass the algorithm name as ``method=`` to
-:func:`~cubie.solve_ivp` or ``algorithm=`` to :class:`~cubie.Solver`;
+:func:`~cubie.batchsolving.solver.solve_ivp` or ``algorithm=`` to :class:`~cubie.batchsolving.solver.Solver`;
 names are case-insensitive.
 
 Decision Guide
@@ -50,139 +50,166 @@ Available Algorithms
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 10 10 40
+   :widths: 30 10 10 15 35
 
    * - Name
      - Order
      - Adaptive
+     - Default controller
      - Notes
    * - ``heun-21``
      - 2
      - No
+     - ``fixed``
      - Heun's method.
    * - ``ralston-33``
      - 3
      - No
+     - ``fixed``
      - Ralston's third-order method.
    * - ``bogacki-shampine-32`` / ``rk23`` / ``ode23``
      - 3(2)
      - Yes
+     - ``i``
      - Low-order, cheap.
    * - ``classical-rk4`` / ``rk4``
      - 4
      - No
+     - ``fixed``
      - The classical Runge--Kutta method.
    * - ``fehlberg-45``
      - 5(4)
      - Yes
+     - ``i``
      - Fehlberg's method.
    * - ``cash-karp-54``
      - 5(4)
      - Yes
-     - Cash--Karp coefficients; defaults to Gustafsson control.
+     - ``gustafsson``
+     - Cash--Karp coefficients.
    * - ``dormand-prince-54`` / ``dopri54`` / ``rk45`` / ``ode45``
      - 5(4)
      - Yes
+     - ``i``
      - Industry standard.
    * - ``tsit5``
      - 5(4)
      - Yes
+     - ``i``
      - Tsitouras 5(4); often slightly more efficient than
        Dormand--Prince. The default algorithm and the ERK family
        default.
    * - ``vern7``
      - 7(6)
      - Yes
-     - Verner's high-order method; defaults to Gustafsson control.
+     - ``gustafsson``
+     - Verner's high-order method.
    * - ``dormand-prince-853`` / ``dop853``
      - 8(5,3)
      - Yes
-     - High order for smooth problems; defaults to Gustafsson
-       control.
+     - ``gustafsson``
+     - High order for smooth problems.
 
 **Diagonally Implicit Runge--Kutta (DIRK)**
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 10 10 40
+   :widths: 30 10 10 15 35
 
    * - Name
      - Order
      - Adaptive
+     - Default controller
      - Notes
    * - ``implicit_midpoint``
      - 2
      - No
+     - ``fixed``
      - Symmetric, energy-preserving.
    * - ``trapezoidal_dirk`` / ``ode23t``
      - 2
      - No
+     - ``fixed``
      - Trapezoidal rule.
    * - ``sdirk_2_2``
      - 2
      - No
+     - ``fixed``
      - L-stable SDIRK; has no embedded error estimate.
    * - ``l_stable_dirk_3``
      - 3
      - No
+     - ``fixed``
      - Default DIRK tableau; L-stable, stiffly accurate, 3 stages.
    * - ``kvaerno3``
      - 3(2)
      - Yes
+     - ``pi``
      - A-L stable ESDIRK, 4 stages.
    * - ``kvaerno5``
      - 5(4)
      - Yes
+     - ``pi``
      - A-L stable ESDIRK, 7 stages; defaults to exact Newton.
    * - ``l_stable_sdirk_4``
      - 4(3)
      - Yes
+     - ``pi``
      - L-stable, 5 stages; defaults to exact Newton.
    * - ``eldirk32_euler``
      - 2(3)
      - Yes
+     - ``pi``
      - ELDIRK: implicit Euler and two explicit stages.
    * - ``eldirk32_trapezoidal``
      - 2(3)
      - Yes
+     - ``pi``
      - ELDIRK: trapezoidal rule and one explicit stage.
    * - ``eldirk32_ellsiepen``
      - 2(3)
      - Yes
+     - ``pi``
      - ELDIRK: ``sdirk_2_2`` and one explicit stage.
 
 **Fully Implicit Runge--Kutta (FIRK)**
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 10 10 40
+   :widths: 30 10 10 15 35
 
    * - Name
      - Order
      - Adaptive
+     - Default controller
      - Notes
    * - ``firk_gauss_legendre_2``
      - 4
      - No
+     - ``fixed``
      - 2-stage Gauss--Legendre; default FIRK.
    * - ``firk_gauss_legendre_4``
      - 8(2)
      - Yes
+     - ``gustafsson``
      - 4-stage Gauss--Legendre. Cubie controls the step conservatively,
        because it estimates the error with a second-order method.
    * - ``radau_iia_3``
      - 3(1)
      - Yes
+     - ``gustafsson``
      - 2-stage Radau IIA; the cheapest of the family.
    * - ``radau_iia_5`` / ``radau``
      - 5(3)
      - Yes
+     - ``gustafsson``
      - 3-stage Radau IIA; excellent for stiff problems. Cubie smooths
        its error estimate by default, which makes the estimate third
        order; with ``use_smoothed_error=False`` the order is 5(2).
    * - ``radau_iia_9``
      - 9(5)
      - Yes
+     - ``gustafsson``
      - 5-stage Radau IIA; for tight tolerances, five coupled stages
        per step. Defaults to BiCGSTAB with exact Newton. Cubie smooths
        its error estimate by default, which makes the estimate fifth
@@ -192,186 +219,229 @@ Available Algorithms
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 10 10 40
+   :widths: 30 10 10 15 35
 
    * - Name
      - Order
      - Adaptive
+     - Default controller
      - Notes
    * - ``ros3p``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Lang and Verwer (2001), 3 stages. The default Rosenbrock-W tableau.
    * - ``rodas3p``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Steinebach (2024), 5 stages.
    * - ``rosenbrock23_sciml`` / ``rosenbrock23`` / ``ode23s``
      - 2(3)
      - Yes
+     - ``gustafsson``
      - Shampine and Reichelt (1997), 3 stages; the method of MATLAB's ``ode23s``.
    * - ``rosenbrock32``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Shampine and Reichelt (1997), 3 stages.
    * - ``ros2``
      - 2(1)
      - Yes
+     - ``gustafsson``
      - Verwer et al. (1999), 2 stages.
    * - ``ros2pr``
      - 2(1)
      - Yes
+     - ``gustafsson``
      - Rang (2014), 3 stages.
    * - ``ros2s``
      - 2(1)
      - Yes
+     - ``gustafsson``
      - Rang (2014), 3 stages.
    * - ``ros3``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Hairer and Wanner (1996), 3 stages.
    * - ``ros3pr``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang (2014), 3 stages.
    * - ``scholz4_7``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang (2014), 3 stages.
    * - ``ros34pw1a``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang and Angermann (2005), 4 stages.
    * - ``ros34pw1b``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang and Angermann (2005), 4 stages.
    * - ``ros34pw2``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang and Angermann (2005), 4 stages.
    * - ``ros34pw3``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Rang and Angermann (2005), 4 stages.
    * - ``ros34prw``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang (2015), 4 stages.
    * - ``ros3prl``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang (2014), 4 stages.
    * - ``ros3prl2``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Rang (2014), 4 stages.
    * - ``rok4a``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Tranquilli and Sandu (2014), 4 stages.
    * - ``rosshamp4``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Shampine (1982), 4 stages.
    * - ``veldd4``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - van Veldhuizen (1984), 4 stages.
    * - ``velds4``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - van Veldhuizen (1984), 4 stages.
    * - ``grk4t``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Kaps and Rentrop (1979), 4 stages.
    * - ``grk4a``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Kaps and Rentrop (1979), 4 stages.
    * - ``ros4lstab``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Hairer and Wanner (1996), 4 stages.
    * - ``rosenbrockw6s4os``
      - 4
      - No
+     - ``fixed``
      - 6 stages.
    * - ``rodas3``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Sandu et al. (1997), 4 stages.
    * - ``rodas3d``
      - 3(2)
      - Yes
+     - ``gustafsson``
      - Yu et al. (2024), 4 stages.
    * - ``rodas23w``
      - 2(3)
      - Yes
+     - ``gustafsson``
      - Steinebach (2024), 5 stages.
    * - ``rodas4``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Hairer and Wanner (1996), 6 stages.
    * - ``rodas42``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Hairer and Wanner (1996), 6 stages.
    * - ``rodas4p``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Steinebach (1995), 6 stages.
    * - ``rodas4p2``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Steinebach (2020), 6 stages.
    * - ``rodas4pw``
      - 4(3)
      - Yes
+     - ``gustafsson``
      - Steinebach, 9 stages.
    * - ``rodas5``
      - 5(4)
      - Yes
+     - ``gustafsson``
      - Di Marzo (1993), 8 stages.
    * - ``rodas5p``
      - 5(4)
      - Yes
+     - ``gustafsson``
      - Steinebach (2023), 8 stages.
    * - ``rodas5pe``
      - 5(4)
      - Yes
+     - ``gustafsson``
      - Steinebach (2024), 8 stages.
    * - ``rodas6p``
      - 6(5)
      - Yes
+     - ``gustafsson``
      - Steinebach (2025), 16 stages.
 
 **Simple methods**
 
 .. list-table::
    :header-rows: 1
-   :widths: 40 10 10 40
+   :widths: 30 10 10 15 35
 
    * - Name
      - Order
      - Adaptive
+     - Default controller
      - Notes
    * - ``euler``
      - 1
      - No
+     - ``fixed``
      - Forward Euler; explicit.
    * - ``backwards_euler``
      - 1
      - No
+     - ``fixed``
      - Backward Euler; implicit, L-stable.
    * - ``backwards_euler_pc``
      - 1
      - No
+     - ``fixed``
      - Predictor-corrector backward Euler.
    * - ``crank_nicolson``
      - 2
      - Yes
+     - ``gustafsson``
      - Implicit trapezoidal rule; a second backward-Euler solve
        provides the embedded error estimate.
 
@@ -418,14 +488,25 @@ Select one by name with the ``step_controller`` keyword argument:
    ratio.  Widely used with implicit methods; useful when step
    rejections are frequent.
 
-Each algorithm family picks a default controller (``i`` for ERK,
-``pi`` for DIRK, ``gustafsson`` for FIRK and Rosenbrock, ``fixed``
-without an error estimate); some tableaus override it.  To choose a
-different controller, pass its name:
+CuBIE has default controllers tuned for each algorithm, which may not
+be ideal for your specific problem. You'll find each algorithm's
+default controller in the tables above. To choose a different
+controller, pass its name:
 
 .. code-block:: python
 
-   solver = qb.Solver(
+   from cubie import Solver, create_ODE_system
+
+   LV = create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       name="LotkaVolterra",
+   )
+   solver = Solver(
        LV,
        algorithm="dormand-prince-54",
        step_controller="gustafsson",
@@ -440,10 +521,15 @@ the solver can measure them directly:
 
 .. code-block:: python
 
-   solver = qb.Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
+   import numpy as np
+
+   x0_values = np.linspace(0.1, 2.0, 100)
+   b_values = np.linspace(0.01, 0.05, 100)
+
+   solver = Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
    report = solver.calibrate(
        {"x": x0_values},
-       {"alpha": alpha_values},
+       {"b": b_values},
        duration=10.0,
    )
    print(report.summary())
@@ -477,7 +563,7 @@ fastest configuration for your system:
 
    report = solver.optimize(
        {"x": x0_values},
-       {"alpha": alpha_values},
+       {"b": b_values},
        duration=10.0,
    )
    print(report.summary())

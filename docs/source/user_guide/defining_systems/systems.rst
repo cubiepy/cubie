@@ -50,7 +50,7 @@ From equation strings
 
 If your model already exists as equations on paper, you can hand Cubie the
 equations directly as strings and let it parse them with SymPy. Write each
-derivative as ``d<name> = ...``; cubie reads ``x`` as a state because it
+derivative as ``d<name> = ...``; cubie reads ``x`` as a state because
 you wrote a ``dx`` equation for it:
 
 .. code-block:: python

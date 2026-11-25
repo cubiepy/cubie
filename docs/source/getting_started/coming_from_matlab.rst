@@ -46,7 +46,7 @@ in parallel on the GPU.
        output_types=["state", "time"],
    )
    t = result.time    # read run i's time points as t[:, i]
-   y = result.state   # read run i as y[:, :, i], like results{i}
+   y = result.time_domain_array   # read run i as y[:, :, i], like results{i}
 
 Key changes:
 

@@ -51,8 +51,8 @@ The kernel cache lives inside the ``generated/`` directory, under
 Cache Settings
 --------------
 
-Pass these settings to the :class:`~cubie.Solver`, to
-:func:`~cubie.solve_ivp`, or to :meth:`~cubie.Solver.update`:
+Pass these settings to the :class:`~cubie.batchsolving.solver.Solver`, to
+:func:`~cubie.batchsolving.solver.solve_ivp`, or to :meth:`~cubie.batchsolving.solver.Solver.update`:
 
 ``cache_enabled=True`` (default)
    Load compiled kernels from the disk cache and save new ones to it.

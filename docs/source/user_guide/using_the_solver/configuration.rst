@@ -2,8 +2,8 @@ Solver Options
 ==============
 
 Pass any option on this page as a keyword argument to
-:func:`~cubie.solve_ivp`, to :class:`~cubie.Solver`, or to
-:meth:`~cubie.Solver.solve` or :meth:`~cubie.Solver.update`. A solver
+:func:`~cubie.batchsolving.solver.solve_ivp`, to :class:`~cubie.batchsolving.solver.Solver`, or to
+:meth:`~cubie.batchsolving.solver.Solver.solve` or :meth:`~cubie.batchsolving.solver.Solver.update`. A solver
 keeps the options you give it for later solves. If you leave an option
 out, or pass ``None``, cubie uses its default, and if you misspell an
 option, cubie raises ``KeyError``.
@@ -16,7 +16,7 @@ treats each key as a keyword argument.
 Arguments of one solve
 ----------------------
 
-:meth:`~cubie.Solver.solve` and :func:`~cubie.solve_ivp` also take the
+:meth:`~cubie.batchsolving.solver.Solver.solve` and :func:`~cubie.batchsolving.solver.solve_ivp` also take the
 arguments below. Give them to each solve that needs them, because the
 solver doesn't keep them for later solves.
 
@@ -145,17 +145,20 @@ Tuning the step controller
     Pass ``"fixed"``, ``"i"``, ``"pi"``, ``"pid"`` or ``"gustafsson"``
     (see :ref:`choosing-a-controller`).
 
-    - Default: ``"fixed"`` for algorithms without an error estimate;
-      otherwise ``"i"`` for ERK, ``"pi"`` for DIRK and
-      ``"gustafsson"`` for FIRK and Rosenbrock-W. Cubie uses a
-      different default for some tableaus.
+    - Default: cubie has default controllers tuned for each
+      algorithm, which may not be ideal for your specific problem.
+      You'll find each algorithm's default controller in the tables in
+      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`.
 
-Cubie sets its own defaults for the options below for each algorithm
-family, so treat them as expert tuning.
+Cubie sets its own defaults for the options below for each
+algorithm, so treat them as expert tuning.
 
 **min_step_shrink** / **max_step_growth** — bounds on how much cubie changes the step size from one step to the next.
 
-    - Defaults: ``min_step_shrink=0.3``, ``max_step_growth=2.0``
+    - Default ``min_step_shrink``: ``0.2``
+    - Default ``max_step_growth``: ``10.0`` for ERK and DIRK
+      algorithms, and ``8.0`` for FIRK, Rosenbrock-W and
+      Crank--Nicolson
 
 **safety** — a factor on every proposed step.
     Cubie multiplies each proposed step by this factor. With a value
@@ -173,23 +176,33 @@ family, so treat them as expert tuning.
 
 **integral_gain** / **proportional_gain** / **derivative_gain** — the gains of the ``i``, ``pi`` and ``pid`` controllers.
     See :ref:`choosing-a-controller` for what each gain does. Cubie
-    divides each gain by ``order + 1``. If you pass a gain without a
-    ``step_controller``, cubie selects the fastest of ``i``, ``pi`` and
-    ``pid`` that uses it.
+    divides each gain by one more than the lower of the method's two
+    orders. If you pass a gain without a ``step_controller`` and the
+    algorithm's default controller doesn't use that gain, cubie selects
+    the fastest of ``i``, ``pi`` and ``pid`` that does.
 
-    - Defaults: ``integral_gain=1.0`` for ``i`` and ``0.3`` for ``pi``
-      and ``pid``; ``proportional_gain=0.4``; ``derivative_gain=0.0``
+    When you use an algorithm's default controller, cubie uses gains
+    tuned for that algorithm. You'll find them in
+    :ref:`algorithm-defaults`. With any other controller, cubie uses
+    these defaults:
+
+    - ``i``: ``integral_gain=1.0``
+    - ``pi``: ``integral_gain=0.3`` and ``proportional_gain=0.4``
+    - ``pid``: ``integral_gain=0.3``, ``proportional_gain=0.4`` and
+      ``derivative_gain=0.0``, so cubie steps as it would with ``pi``
+      until you give a derivative gain
 
 **filter_coefficients** — the exponents of the step law.
     Pass a ``(beta1, beta2, beta3)`` triple for the step law
     ``dt * error^-beta1 * error_prev^-beta2 * error_prev2^-beta3``, or
     the name of a published controller: ``"basic"``, ``"PI42"``,
     ``"PI33"``, ``"PI34"``, ``"H211PI"`` or ``"H312PID"``. Cubie
-    divides the exponents by ``order + 1``. You can't combine
-    ``filter_coefficients`` with the gains.
+    divides the exponents by one more than the lower of the method's
+    two orders. You can't combine ``filter_coefficients`` with the
+    gains.
 
-    - Default: the gains above, which equal ``"PI34"`` for ``pi`` and
-      ``pid``
+    - Default: cubie uses the gains above. Cubie's own default gains
+      for ``pi`` and ``pid`` are the same as ``"PI34"``.
 
 **newton_target_iters** — the Newton iteration count the ``gustafsson`` controller aims for.
     With the ``gustafsson`` controller, cubie shrinks the step when the
@@ -213,8 +226,8 @@ Newton options:
     Cubie accepts a Newton solve when the estimated error of the update
     drops below one percent of these tolerances.
 
-    - Default: the step controller's ``atol`` and ``rtol`` divided by
-      10
+    - Default: a tenth of your ``atol`` and ``rtol``. In ``float32``,
+      cubie raises a Newton ``rtol`` below ``4.8e-7`` to ``4.8e-7``.
 
 **newton_max_iters** — the Newton iteration limit.
     If the Newton solve doesn't converge within this many iterations,
@@ -228,10 +241,11 @@ Newton options:
     Newton iteration. Cubie ignores this option for Rosenbrock-W
     algorithms.
 
-    - Default: ``True`` for DIRK and FIRK, except the tableaus marked
-      as defaulting to exact Newton in
-      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`;
-      ``False`` otherwise
+    - Default: ``True`` for most DIRK and FIRK algorithms. ``False``
+      for the DIRK and FIRK algorithms marked as using exact Newton in
+      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`,
+      for every other algorithm, and whenever you choose a
+      ``linear_correction_type`` other than the algorithm's default.
 
 **prefactored** — keep the LU factors from the start of each step.
     With ``inexact_newton`` and ``linear_correction_type="lu"``, cubie
@@ -262,12 +276,15 @@ Linear solver options:
     the Jacobian twice in each iteration, where it applies it once with
     the other iterative solvers.
 
-    - Default: ``"lu"`` for DIRK, FIRK, Rosenbrock-W and every DAE;
-      ``"minimal_residual"`` otherwise
+    - Default: ``"lu"`` for DIRK, FIRK and Rosenbrock-W algorithms
+      other than ``radau_iia_9``, and for every DAE system.
+      ``"bicgstab"`` for ``radau_iia_9`` on an ODE system.
+      ``"minimal_residual"`` for backward Euler and Crank--Nicolson on
+      an ODE system.
 
 **krylov_atol** / **krylov_rtol** — the tolerances cubie uses to weight the iterative linear solver's stopping test.
 
-    - Default: the step controller's ``atol`` and ``rtol``
+    - Default: your ``atol`` and ``rtol``
 
 **krylov_max_iters** — the linear iteration limit for each Newton update.
 
@@ -280,9 +297,13 @@ Linear solver options:
     cubie doesn't solve the early Newton updates more accurately than it
     needs to.
 
-    - Defaults: ``krylov_residual_reduction`` is the smallest ``rtol``
-      of an adaptive controller, or machine epsilon for a fixed one;
-      ``krylov_residual_floor`` is the square root of machine epsilon
+    - Default ``krylov_residual_reduction``: your ``rtol`` with an
+      adaptive controller, or a hundredth of it with a Rosenbrock-W
+      algorithm. If you give a different ``rtol`` for each state, cubie
+      uses the smallest of them. With a fixed-step controller, cubie
+      uses ``1.2e-7`` in ``float32`` and ``2.2e-16`` in ``float64``.
+    - Default ``krylov_residual_floor``: ``3.5e-4`` in ``float32`` and
+      ``1.5e-8`` in ``float64``
 
 **preconditioner_type** — the preconditioner.
     Pass ``"jacobi"``, ``"neumann"`` or ``"none"``. With no

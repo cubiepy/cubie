@@ -3,7 +3,7 @@ Defining systems
 
 The first step in solving a system of differential equations is to create a
 system of differential equations.
-:func:`create_ODE_system <cubie.odesystems.symbolic.symbolicODE.create_ODE_system>`
+:func:`create_ODE_system <cubie.odesystems.create_ODE_system>`
 creates a cubie-native
 :class:`SymbolicODE <cubie.odesystems.symbolic.symbolicODE.SymbolicODE>`
 object out of your input, from either a Python function or strings of

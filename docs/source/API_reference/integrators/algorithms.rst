@@ -30,168 +30,196 @@ Algorithms
    algorithms/generic_rosenbrock_tableaus
    algorithms/get_algorithm_step
 
-Factories in :mod:`cubie.integrators.algorithms` assemble explicit and implicit
-step implementations that plug into the CUDA-based integrator loop. Explicit
-steps wrap direct right-hand-side evaluations, while implicit steps couple
-user-supplied device callbacks with matrix-free Newton–Krylov helpers to
-satisfy nonlinear solves. Precision handling is central: every factory
-propagates the configured precision through compiled device helpers and the
-shared linear and nonlinear solver stack.
+To choose an algorithm, pass its name as ``algorithm=`` to
+:class:`~cubie.batchsolving.solver.Solver` or as ``method=`` to
+:func:`~cubie.batchsolving.solver.solve_ivp`. To pick one, and to see
+every name you can pass, read
+:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`. Read on
+here for the settings cubie uses with each algorithm unless you set
+them yourself, and for the classes that implement the algorithms.
 
 .. _algorithm-defaults:
 
 Default settings
 ----------------
 
-Each algorithm ships with a default scheme and a default step
-controller. Requesting an algorithm by family name
-(``algorithm="erk"``) uses the defaults below; requesting a specific
-tableau alias (``algorithm="radau"``) selects that scheme within the
-same family.
+You can pass the general name of a group of methods, such as
+``"erk"`` or ``"dirk"``, and cubie uses the method in the table below.
+You can also pass the name of one method, such as ``"radau"``.
 
 .. list-table::
    :header-rows: 1
-   :widths: 20 36 10 34
+   :widths: 20 40 10 30
 
    * - Name
-     - Default scheme
+     - Method
      - Order
-     - Default step control
+     - Default step controller
    * - ``euler``
-     - Forward Euler (explicit, single stage)
+     - Forward Euler (explicit, one stage)
      - 1
-     - Fixed step
+     - ``fixed``
    * - ``backwards_euler``
-     - Backward Euler (implicit, single stage)
+     - Backward Euler (implicit, one stage)
      - 1
-     - Fixed step
+     - ``fixed``
    * - ``backwards_euler_pc``
-     - Backward Euler with a forward-Euler predictor
+     - Backward Euler with a forward Euler predictor
      - 1
-     - Fixed step
+     - ``fixed``
    * - ``crank_nicolson``
-     - Crank–Nicolson with an embedded backward-Euler error
-       estimate
+     - Crank--Nicolson, with a backward Euler step to estimate the
+       error
      - 2
-     - Gustafsson predictive: step-ratio clamp 0.2–8.0
+     - ``gustafsson``
    * - ``erk``
      - ``tsit5`` (explicit, seven stages)
      - 5(4)
-     - Integral: ``integral_gain=1.2``, step-ratio clamp 0.2–10.0
+     - ``i``
    * - ``dirk``
      - ``l_stable_dirk_3`` (diagonally implicit, three stages)
      - 3
-     - Fixed step — the default tableau has no error estimate
+     - ``fixed``
    * - ``firk``
-     - ``firk_gauss_legendre_2`` (fully implicit, two coupled
-       stages)
+     - ``firk_gauss_legendre_2`` (fully implicit, two stages)
      - 4
-     - Fixed step — the default tableau has no error estimate
+     - ``fixed``
    * - ``rosenbrock``
-     - ``ros3p`` (linearly implicit, three stages)
-     - 3
-     - Gustafsson predictive: step-ratio clamp 0.2–8.0
+     - ``ros3p`` (Rosenbrock-W, three stages)
+     - 3(2)
+     - ``gustafsson``
 
-How the step controller is chosen
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Step controller
+~~~~~~~~~~~~~~~
 
-Adaptive step control needs an embedded error estimate. When an
-algorithm or tableau is named without setting ``step_controller``,
-CuBIE selects the family's tuned controller if the scheme provides
-an estimate — an integral controller for explicit Runge–Kutta, the
-Gustafsson predictive controller for the implicit families — and a
-fixed-step controller if it does not.
-This is why ``dirk`` and ``firk`` run fixed-step out of the box:
-their default tableaus carry no embedded estimate. Aliases that do
-(``radau``, for example) enable the family's adaptive defaults
-automatically. Explicitly pairing an adaptive controller with an
-estimate-free scheme falls back to fixed stepping with a
-``UserWarning``. Gains or ``filter_coefficients`` passed without a
-``step_controller`` select the smallest of ``i``/``pi``/``pid`` that
-carries every nonzero gain given.
+CuBIE has default controllers tuned for each algorithm, which may not
+be ideal for your specific problem. You'll find the default controller
+of every method in the tables in
+:doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`. To use a
+different controller, pass ``step_controller``.
 
-No family enables a step-freeze deadband by default; pass
-``deadband_min``/``deadband_max`` to hold ``dt`` for gains inside a
-band. Every value can be overridden per solve — see
-:doc:`/user_guide/using_the_solver/configuration` for the full parameter list.
+Cubie can only adapt the step size if it can estimate the error of
+each step. With a method that has no error estimate, cubie steps at a
+fixed size, and warns with a ``UserWarning`` if you ask for an
+adaptive controller. Cubie steps at a fixed size with the default
+``dirk`` and ``firk`` methods, because they have no error estimate. To
+adapt the step, pick a method that has one, such as ``kvaerno3`` or
+``radau``.
 
-Implicit solver defaults
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-Implicit algorithms (``backwards_euler``, ``backwards_euler_pc``,
-``crank_nicolson``, ``dirk``, ``firk``) solve their stage equations
-with a matrix-free Newton–Krylov iteration. ``rosenbrock`` is
-linearly implicit: it performs one linear solve per stage, so only
-the Krylov and preconditioner settings below apply to it and the
-``newton_*`` parameters do not.
+With an adaptive method, cubie limits how much the step can change
+from one step to the next:
 
 .. list-table::
    :header-rows: 1
-   :widths: 45 55
+   :widths: 50 25 25
 
-   * - Parameter
+   * - Algorithms
+     - ``min_step_shrink``
+     - ``max_step_growth``
+   * - ERK and DIRK
+     - 0.2
+     - 10.0
+   * - FIRK, Rosenbrock-W and Crank--Nicolson
+     - 0.2
+     - 8.0
+
+When you use a method's default controller, cubie also uses gains
+tuned for that method. With the ERK methods whose default controller
+is ``i``, cubie uses ``integral_gain=1.2``. With a DIRK method and the
+``pi`` controller, cubie uses ``integral_gain=0.3 * (q + 1) / q`` and
+``proportional_gain=0.4 * (q + 1) / q``, where ``q`` is the lower of
+the method's two orders. For ``kvaerno3``, of order 3(2), these gains
+are 0.45 and 0.6. If you choose a different controller, cubie uses
+that controller's own gains, listed in
+:doc:`/user_guide/using_the_solver/configuration`.
+
+Implicit solver settings
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+With backward Euler, Crank--Nicolson, DIRK and FIRK methods, cubie
+solves a nonlinear system at every step with Newton's method, and a
+linear system for each Newton update. With Rosenbrock-W methods, cubie
+solves only the linear systems, so cubie ignores the Newton settings
+for them. See :doc:`/user_guide/using_the_solver/configuration` for what
+each setting does.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - Setting
      - Default
    * - ``newton_atol`` / ``newton_rtol``
-     - ``1e-6``
+     - A tenth of your ``atol`` and ``rtol``. In ``float32``, cubie
+       raises a Newton ``rtol`` below ``4.8e-7`` to ``4.8e-7``.
    * - ``newton_max_iters``
      - ``8``
    * - ``krylov_atol`` / ``krylov_rtol``
-     - ``1e-6``
+     - Your ``atol`` and ``rtol``.
    * - ``krylov_max_iters``
-     - ``ceil(1.5 * solver width)``
+     - One and a half times the number of unknowns cubie solves for in
+       each linear system, rounded up. That number is the number of
+       states, or with a FIRK method, the number of states times the
+       number of stages.
    * - ``linear_correction_type``
-     - ``"lu"`` for ``dirk``, ``firk``, and ``rosenbrock``;
-       ``"minimal_residual"`` otherwise
-   * - ``inexact_newton`` / ``prefactored``
-     - both ``True`` for ``dirk`` and ``firk`` (frozen step-start LU
-       factors); dropped when ``linear_correction_type`` is set
-       explicitly
+     - - ``"lu"`` for DIRK, FIRK and Rosenbrock-W methods other than
+         ``radau_iia_9``, and for every DAE system.
+       - ``"bicgstab"`` for ``radau_iia_9`` on an ODE system.
+       - ``"minimal_residual"`` for backward Euler and Crank--Nicolson
+         on an ODE system.
+   * - ``inexact_newton``
+     - ``True`` for most DIRK and FIRK methods. ``False`` for the DIRK
+       and FIRK methods marked as using exact Newton in
+       :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`,
+       for every other algorithm, and whenever you choose a linear
+       solver other than the method's default.
+   * - ``prefactored``
+     - ``True``
    * - ``preconditioner_type``
      - ``"jacobi"``
    * - ``preconditioner_order``
-     - the type's default: ``2`` for ``"neumann"``, ``0`` for
-       ``"jacobi"``
+     - ``0`` for ``"jacobi"``, and ``2`` for ``"neumann"``
 
-Base infrastructure
--------------------
+Base classes
+------------
 
-* :doc:`BaseStepConfig <algorithms/base_step_config>` – attrs configuration shared by explicit and implicit steps.
-* :doc:`BaseAlgorithmStep <algorithms/base_algorithm_step>` – base class that wires precision and CUDA compilation helpers.
-* :doc:`StepCache <algorithms/step_cache>` – container storing compiled kernels and loop scratch buffers.
+* :doc:`BaseStepConfig <algorithms/base_step_config>` – the settings that explicit and implicit steps share.
+* :doc:`BaseAlgorithmStep <algorithms/base_algorithm_step>` – the base class of every step, which compiles the step in the chosen precision.
+* :doc:`StepCache <algorithms/step_cache>` – the compiled step and its Newton solver, with the step's order and sizes.
 
 Explicit steps
 --------------
 
-* :doc:`ExplicitStepConfig <algorithms/explicit_step_config>` – configuration for explicit step factories.
-* :doc:`ExplicitEulerStep <algorithms/explicit_euler_step>` – Euler step that invokes the RHS device function.
-* :doc:`ERKStep <algorithms/generic_erk_step>` – multistage explicit Runge–Kutta step with adaptive control defaults.
-* :doc:`ERK tableau registry <algorithms/generic_erk_tableaus>` – named explicit Runge–Kutta tableaus and references.
+* :doc:`ExplicitStepConfig <algorithms/explicit_step_config>` – the settings of an explicit step.
+* :doc:`ExplicitEulerStep <algorithms/explicit_euler_step>` – the forward Euler step.
+* :doc:`ERKStep <algorithms/generic_erk_step>` – the explicit Runge–Kutta step, for any ERK tableau.
+* :doc:`ERK tableau registry <algorithms/generic_erk_tableaus>` – the named ERK methods, with references.
 
 Implicit steps
 --------------
 
-* :doc:`ImplicitStepConfig <algorithms/implicit_step_config>` – configuration for implicit step factories.
-* :doc:`BackwardsEulerStep <algorithms/backwards_euler_step>` – backward Euler implicit algorithm.
-* :doc:`BackwardsEulerPCStep <algorithms/backwards_euler_pc_step>` – predictor-corrector backward Euler variant.
-* :doc:`CrankNicolsonStep <algorithms/crank_nicolson_step>` – Crank–Nicolson implicit algorithm.
-* :doc:`DIRKStep <algorithms/generic_dirk_step>` – diagonally implicit Runge–Kutta family with embedded error estimates.
-* :doc:`DIRK tableau registry <algorithms/generic_dirk_tableaus>` – named diagonally implicit Runge–Kutta tableaus and references.
-* :doc:`FIRKStep <algorithms/generic_firk_step>` – fully implicit Runge–Kutta family (Gauss–Legendre, Radau IIA).
-* :doc:`FIRK tableau registry <algorithms/generic_firk_tableaus>` – named fully implicit Runge–Kutta tableaus and references.
-* :doc:`GenericRosenbrockWStep <algorithms/generic_rosenbrock_step>` – linearly implicit Rosenbrock-W methods.
-* :doc:`Rosenbrock tableau registry <algorithms/generic_rosenbrock_tableaus>` – named Rosenbrock-W tableaus and references.
+* :doc:`ImplicitStepConfig <algorithms/implicit_step_config>` – the settings of an implicit step, including its Newton and linear solver settings.
+* :doc:`BackwardsEulerStep <algorithms/backwards_euler_step>` – the backward Euler step.
+* :doc:`BackwardsEulerPCStep <algorithms/backwards_euler_pc_step>` – the backward Euler step with a forward Euler predictor.
+* :doc:`CrankNicolsonStep <algorithms/crank_nicolson_step>` – the Crank–Nicolson step.
+* :doc:`DIRKStep <algorithms/generic_dirk_step>` – the diagonally implicit Runge–Kutta step, for any DIRK tableau.
+* :doc:`DIRK tableau registry <algorithms/generic_dirk_tableaus>` – the named DIRK methods, with references.
+* :doc:`FIRKStep <algorithms/generic_firk_step>` – the fully implicit Runge–Kutta step, for any FIRK tableau, including Gauss–Legendre and Radau IIA.
+* :doc:`FIRK tableau registry <algorithms/generic_firk_tableaus>` – the named FIRK methods, with references.
+* :doc:`GenericRosenbrockWStep <algorithms/generic_rosenbrock_step>` – the Rosenbrock-W step, for any Rosenbrock-W tableau.
+* :doc:`Rosenbrock tableau registry <algorithms/generic_rosenbrock_tableaus>` – the named Rosenbrock-W methods, with references.
 
-Factory helpers
----------------
+Factory function
+----------------
 
-* :doc:`get_algorithm_step <algorithms/get_algorithm_step>` – resolves step factories by enum or name.
+* :doc:`get_algorithm_step <algorithms/get_algorithm_step>` – builds the step for an algorithm name or tableau.
 
 Dependencies
 ------------
 
-Implicit steps depend on :mod:`cubie.integrators.matrix_free_solvers` for the
-linear and Newton–Krylov factories and reuse :class:`cubie.CUDAFactory`
-utilities for JIT compilation and caching. All algorithms expect caller
-supplied device callbacks for time derivatives, operator assembly, and
-observable evaluation, operating on preallocated device buffers whose precision
-matches the configured integration precision.
+Cubie builds the Newton and linear solvers of the implicit steps from
+:mod:`cubie.integrators.matrix_free_solvers`. Each step is a
+:class:`~cubie.CUDAFactory.CUDAFactory`, so cubie compiles it when it is
+first needed and caches the result. Cubie compiles each step with the
+system's right-hand side, Jacobian products and observables, in the
+precision you choose for the solve.

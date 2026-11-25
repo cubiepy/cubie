@@ -48,8 +48,9 @@ fixed value can change which states the equations keep.
 
 When arrays are supplied directly they are treated as fully specified grids
 in (variable, run) format where each column represents a run configuration.
-Dictionary inputs trigger combinatorial expansion before assembly so
-that every value combination is represented in the resulting grid.
+With ``kind="combinatorial"``, the handler builds a run for every
+combination of the values in dict inputs. With ``kind="verbatim"``, it
+pairs the values of dict inputs run for run.
 
 ``BatchInputHandler.__call__`` processes states and params through
 independent paths, materialising each at its aligned run count:
