@@ -270,11 +270,11 @@
 </div>
 <p>To choose an algorithm, pass its name as <code class="docutils literal notranslate"><span class="pre">algorithm=</span></code> to
 <a class="reference internal" href="../batchsolving/solver.html#cubie.batchsolving.solver.Solver" title="cubie.batchsolving.solver.Solver"><code class="xref py py-class docutils literal notranslate"><span class="pre">Solver</span></code></a> or as <code class="docutils literal notranslate"><span class="pre">method=</span></code> to
-<a class="reference internal" href="../batchsolving/solve_ivp.html#cubie.batchsolving.solver.solve_ivp" title="cubie.batchsolving.solver.solve_ivp"><code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code></a>.
-<a class="reference internal" href="../../user_guide/algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a> helps you
-pick one and lists every name you can pass. This page gives the
-settings cubie uses with each algorithm unless you set them yourself,
-and lists the classes that implement the algorithms.</p>
+<a class="reference internal" href="../batchsolving/solve_ivp.html#cubie.batchsolving.solver.solve_ivp" title="cubie.batchsolving.solver.solve_ivp"><code class="xref py py-func docutils literal notranslate"><span class="pre">solve_ivp()</span></code></a>. To pick one, and to see
+every name you can pass, read
+<a class="reference internal" href="../../user_guide/algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>. Read on
+here for the settings cubie uses with each algorithm unless you set
+them yourself, and for the classes that implement the algorithms.</p>
 </section>
 <section id="default-settings">
 <span id="algorithm-defaults"></span><h2>Default settings<a class="headerlink" href="#default-settings" title="Link to this heading"></a></h2>
@@ -393,8 +393,8 @@ that controller’s own gains, listed in
 <p>With backward Euler, Crank–Nicolson, DIRK and FIRK methods, cubie
 solves a nonlinear system at every step with Newton’s method, and a
 linear system for each Newton update. With Rosenbrock-W methods, cubie
-solves only the linear systems, so the Newton settings don’t apply to
-them. See <a class="reference internal" href="../../user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a> for what
+solves only the linear systems, so cubie ignores the Newton settings
+for them. See <a class="reference internal" href="../../user_guide/using_the_solver/configuration.html"><span class="doc">Solver Options</span></a> for what
 each setting does.</p>
 <table class="docutils align-default">
 <colgroup>
