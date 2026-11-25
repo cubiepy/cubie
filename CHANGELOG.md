@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.19.2](https://github.com/cubiepy/cubie/compare/v0.19.1...v0.19.2) (2026-11-25)
+
+
+### Bug Fixes
+
+* solver launches pass the run count as a NumPy int64 ([#1120](https://github.com/cubiepy/cubie/issues/1120)) ([ac39ef4](https://github.com/cubiepy/cubie/commit/ac39ef400405c9d23ea75f4f99d75580e856cd4f))
+
+
+### Documentation
+
+* **agents:** every docstring, public or private, uses numpydoc structure ([#1122](https://github.com/cubiepy/cubie/issues/1122)) ([7f74f3f](https://github.com/cubiepy/cubie/commit/7f74f3f8209d35495ec3208bde8721653b26679e))
+* cubie logo and icon added to the docs tab and readme title ([#1127](https://github.com/cubiepy/cubie/issues/1127)) ([ee72c34](https://github.com/cubiepy/cubie/commit/ee72c34b3cd300460c5fe0cce39f558928758739))
+* readme speedup plot shows the latest cubie_vs_cpu measurements ([#1117](https://github.com/cubiepy/cubie/issues/1117)) ([36be5ac](https://github.com/cubiepy/cubie/commit/36be5accd1e2c9a1e51b16298b401b1d047f6d8d))
+* Rosenbrock-W LU factors, LU pivot order and automatic launch choice match the code ([#1125](https://github.com/cubiepy/cubie/issues/1125)) ([ec5b387](https://github.com/cubiepy/cubie/commit/ec5b38739ae965c5bc0003d3e9768ff4dcdbdfb4))
+* wording errors lost in between commits ([#1121](https://github.com/cubiepy/cubie/issues/1121)) ([43285f2](https://github.com/cubiepy/cubie/commit/43285f2611b14ea6b2da4d1da89eddfa323654f5))
+
 ## [0.19.1](https://github.com/cubiepy/cubie/compare/v0.19.0...v0.19.1) (2026-11-20)
 
 
