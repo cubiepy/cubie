@@ -201,11 +201,11 @@ by time (or summary window) first, then variable, then run:
    One status word per run, ``0`` for success. Look up a failed run's
    index in ``status_messages`` to see the names of its status codes; see
    :doc:`/troubleshooting`. When a run fails, cubie fills its output
-   with NaN and warns you with the number of failed runs and their
-   status codes. For an implicit algorithm, cubie also suggests settings
-   in the warning that make failures less likely. Pass
-   ``nan_error_trajectories=False`` to keep the output of failed runs,
-   which also turns off the warning.
+   with NaN and warns you how many runs failed and which status codes
+   they ended with. For an implicit algorithm, cubie also suggests
+   settings in the warning that make failures less likely. Pass
+   ``nan_error_trajectories=False`` to turn off both the NaN filling
+   and the warning.
 
 ``parameter_legend`` and ``fixed_parameter_values``
    Cubie sorts the swept parameters by name, so the same row number can
@@ -225,12 +225,10 @@ You can also convert the result:
 Keeping results
 ~~~~~~~~~~~~~~~
 
-To save time and memory, cubie hands you the outputs in the
-``SolveResult`` in the memory it wrote them to, without copying them. Once you delete the
-result, or stop referring to it, cubie writes the next solve's outputs
-into that memory, and any array you took from the result changes with
-it. Keep the result for as long as you use its arrays, or copy what you
-want to keep:
+Once you delete a ``SolveResult``, or stop referring to it, a later
+solve on the same solver can overwrite its arrays, including any array
+you took from it. Keep the result for as long as you use its arrays, or
+copy what you want to keep:
 
 .. code-block:: python
 

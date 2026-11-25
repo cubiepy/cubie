@@ -6,6 +6,23 @@ pick the right one.  Pass the algorithm name as ``method=`` to
 :func:`~cubie.solve_ivp` or ``algorithm=`` to :class:`~cubie.Solver`;
 names are case-insensitive.
 
+The examples on this page use this Lotka-Volterra system:
+
+.. code-block:: python
+
+   import numpy as np
+   from cubie import Solver, create_ODE_system
+
+   LV = create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       name="LotkaVolterra",
+   )
+
 Decision Guide
 --------------
 
@@ -425,7 +442,7 @@ different controller, pass its name:
 
 .. code-block:: python
 
-   solver = qb.Solver(
+   solver = Solver(
        LV,
        algorithm="dormand-prince-54",
        step_controller="gustafsson",
@@ -436,14 +453,9 @@ Automatic calibration
 
 The fastest algorithm order, linear solver type, preconditioner, and
 Newton variant depend on the system.  Given a representative batch,
-the solver can measure them directly. Here we calibrate the
-Lotka-Volterra system ``LV`` from
-:doc:`/user_guide/using_the_solver/inputs` on a grid of 40,000 runs:
+the solver can measure them directly:
 
 .. code-block:: python
-
-   import numpy as np
-   from cubie import Solver
 
    x0_values = np.linspace(0.1, 2.0, 200)
    b_values = np.linspace(0.01, 0.05, 200)
@@ -474,13 +486,6 @@ modifying the solver.
 
 ``calibrate`` compiles a large number of kernels, so allow half an
 hour for a bigger system.
-
-Cubie compiles the candidates in up to ``max_parallel`` worker
-processes at once, four by default. Python starts each worker by
-running the top level of your script, so in a script, call ``calibrate`` and
-``optimize`` from under ``if __name__ == "__main__":``. Pass
-``max_parallel=1`` to compile every candidate in your own process
-instead.
 
 With the algorithm settled, :meth:`Solver.optimize
 <cubie.batchsolving.solver.Solver.optimize>` tries a few different

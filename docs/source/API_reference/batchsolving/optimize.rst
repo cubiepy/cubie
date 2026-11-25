@@ -4,8 +4,11 @@ Optimisation
 .. currentmodule:: cubie.batchsolving.optimize
 
 :meth:`Solver.optimize <cubie.batchsolving.solver.Solver.optimize>`
-calls :func:`run_optimization`. The launch functions choose the block
-sizes and residencies cubie times.
+calls :func:`run_optimization`. Cubie times your solver under a range
+of configurations, such as where it keeps its working values in GPU
+memory, which loops it unrolls, and the block sizes and residency
+levels chosen by the launch functions below. It then keeps the fastest
+configuration.
 
 .. autofunction:: run_optimization
 

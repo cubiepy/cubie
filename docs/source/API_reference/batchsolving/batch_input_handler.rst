@@ -3,11 +3,11 @@ BatchInputHandler
 
 .. currentmodule:: cubie.batchsolving.BatchInputHandler
 
-:class:`~cubie.batchsolving.solver.Solver` uses a
-:class:`BatchInputHandler` to turn the initial values and parameters you
-pass to ``solve`` into the arrays the GPU reads, one row per variable and
-one column per run. The grid functions below build those arrays from
-dicts of values.
+Cubie uses a :class:`BatchInputHandler` to turn the initial values and
+parameters you pass to ``solve`` into arrays with one row per variable
+and one column per run. The grid functions below build those arrays
+from dicts of values, either from every combination of the values or
+by pairing them run for run.
 
 .. autoclass:: BatchInputHandler
     :members:

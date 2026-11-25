@@ -4,8 +4,11 @@ Calibration
 .. currentmodule:: cubie.batchsolving.calibration
 
 :meth:`Solver.calibrate <cubie.batchsolving.solver.Solver.calibrate>`
-calls :func:`run_calibration`. The ``*_specs`` functions list the
-candidates cubie races at each stage.
+calls :func:`run_calibration`. For each implicit algorithm family,
+cubie times candidate preconditioners, then linear solvers, then
+error-estimate and predictor options, then algorithm orders, and keeps
+the best choice from each stage for the stages after it. The ``*_specs``
+functions below return the candidates for each stage.
 
 .. autofunction:: run_calibration
 
