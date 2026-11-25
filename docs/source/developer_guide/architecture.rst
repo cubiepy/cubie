@@ -16,7 +16,9 @@ A typical solve involves the following hierarchy::
            ├── IVPLoop
            ├── OutputFunctions
            ├── Algorithm step (e.g. ERKStep, FIRKStep)
-           └── Controller (PI, PID, Gustafsson)
+           ├── Controller (PI, PID, Gustafsson)
+           ├── DAEInitialiser
+           └── StartingStepEstimator
 
 Each component is a :class:`~cubie.CUDAFactory.CUDAFactory` subclass that
 generates CUDA device functions.

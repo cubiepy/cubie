@@ -327,8 +327,10 @@ missing values. The rules differ for adaptive and fixed controllers:
 
 **Fixed-step controllers:**
 
-A fixed controller uses ``dt`` as its step, or ``1e-3`` if you don't give
-one.
+A fixed controller uses ``dt`` as its step. If you don't give ``dt``,
+cubie steps at the geometric mean of ``dt_min`` and ``dt_max`` when you
+give both, at whichever of the two you give, or at ``1e-3`` when you give
+neither.
 
 Build a ``Solver`` to read the step sizes cubie derives:
 

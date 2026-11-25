@@ -1,7 +1,7 @@
 Working with Results
 ====================
 
-Every call to :func:`~cubie.solve_ivp` or
+Every call to :func:`~cubie.batchsolving.solver.solve_ivp` or
 :meth:`~cubie.batchsolving.solver.Solver.solve` returns a
 :class:`~cubie.batchsolving.solveresult.SolveResult`.
 
@@ -178,7 +178,9 @@ Cubie returns each output in the ``SolveResult`` as a NumPy array, indexed
 by time (or summary window) first, then variable, then run:
 
 ``state`` and ``observables``
-   The state and observable trajectories.
+   The state and observable trajectories. When you add ``"time"`` to
+   ``output_types``, ``state`` also holds the time of each saved point in
+   its last column.
 
 ``time_domain_array``
    The states followed by the observables, in one array. Read

@@ -132,20 +132,23 @@ the Krylov and preconditioner settings below apply to it and the
    * - Parameter
      - Default
    * - ``newton_atol`` / ``newton_rtol``
-     - ``1e-6``
+     - the step controller's ``atol`` and ``rtol`` divided by 10
    * - ``newton_max_iters``
      - ``8``
    * - ``krylov_atol`` / ``krylov_rtol``
-     - ``1e-6``
+     - the step controller's ``atol`` and ``rtol``
    * - ``krylov_max_iters``
      - ``ceil(1.5 * solver width)``
    * - ``linear_correction_type``
      - ``"lu"`` for ``dirk``, ``firk``, and ``rosenbrock``;
        ``"minimal_residual"`` otherwise
-   * - ``inexact_newton`` / ``prefactored``
-     - both ``True`` for ``dirk`` and ``firk`` (frozen step-start LU
-       factors); dropped when ``linear_correction_type`` is set
-       explicitly
+   * - ``inexact_newton``
+     - ``True`` for ``dirk`` and ``firk``, except the ``kvaerno5``,
+       ``l_stable_sdirk_4`` and ``radau_iia_9`` tableaus; ``False``
+       otherwise, and whenever you choose a ``linear_correction_type``
+       other than the family's
+   * - ``prefactored``
+     - ``True``
    * - ``preconditioner_type``
      - ``"jacobi"``
    * - ``preconditioner_order``

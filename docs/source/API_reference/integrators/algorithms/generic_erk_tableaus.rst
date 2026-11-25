@@ -14,8 +14,7 @@ coefficients.
 
 The default :class:`ERKStep` configuration uses
 :data:`cubie.integrators.algorithms.generic_erk.DEFAULT_ERK_TABLEAU`, the
-Tsitouras 5(4) pair. The ``"dopri54"`` alias mirrors the longer
-``"dormand-prince-54"`` key so existing controller presets continue to work.
+Tsitouras 5(4) pair.
 
 Available aliases
 -----------------
@@ -32,13 +31,13 @@ Available aliases
    * - ``"ralston-33"``
      - Ralston's third-order method with minimized error constants.
      - [Ralston1962]_
-   * - ``"bogacki-shampine-32"``
+   * - ``"bogacki-shampine-32"``, ``"rk23"`` and ``"ode23"``
      - Bogacki--Shampine embedded 3(2) pair with FSAL property.
      - [BogackiShampine1993]_
-   * - ``"dormand-prince-54"`` and ``"dopri54"``
+   * - ``"dormand-prince-54"``, ``"dopri54"``, ``"rk45"`` and ``"ode45"``
      - Dormand--Prince embedded 5(4) pair with FSAL property.
      - [DormandPrince1980]_
-   * - ``"classical-rk4"``
+   * - ``"classical-rk4"`` and ``"rk4"``
      - Classical fourth-order Runge--Kutta scheme.
      - [Kutta1901]_
    * - ``"cash-karp-54"``
@@ -47,6 +46,15 @@ Available aliases
    * - ``"fehlberg-45"``
      - Runge--Kutta--Fehlberg embedded 5(4) pair.
      - [Fehlberg1969]_
+   * - ``"tsit5"``
+     - Tsitouras embedded 5(4) pair with FSAL property; the default.
+     - [Tsitouras2011]_
+   * - ``"vern7"``
+     - Verner's embedded 7(6) pair.
+     - [Verner2010]_
+   * - ``"dormand-prince-853"`` and ``"dop853"``
+     - Dormand--Prince eighth-order method with 5(3) error estimates.
+     - [HairerNorsettWanner1993]_
 
 Tableau container
 -----------------
@@ -75,3 +83,11 @@ References
 .. [Fehlberg1969] E. Fehlberg. *Low-order classical Runge-Kutta formulas with
    stepsize control and their application to some heat transfer problems.* NASA
    Technical Report 315, 1969.
+.. [Tsitouras2011] Ch. Tsitouras. "Runge--Kutta pairs of order 5(4) satisfying
+   only the first column simplifying assumption." *Comput. Math. Appl.*
+   62(2), 2011.
+.. [Verner2010] J. H. Verner. "Numerically optimal Runge--Kutta pairs with
+   interpolants." *Numer. Algorithms* 53, 2010.
+.. [HairerNorsettWanner1993] E. Hairer, S. P. Nørsett and G. Wanner. *Solving
+   Ordinary Differential Equations I: Nonstiff Problems.* 2nd ed., Springer,
+   1993.

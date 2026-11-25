@@ -4,7 +4,7 @@ Solving ODEs
 Quick Start with ``solve_ivp``
 ------------------------------
 
-The fastest way to get started is :func:`~cubie.solve_ivp`. For a simple
+The fastest way to get started is :func:`~cubie.batchsolving.solver.solve_ivp`. For a simple
 system, you can just write the equations straight into this call as strings.
 Here we solve the Lotka--Volterra system for a batch of parameter values:
 
@@ -40,7 +40,7 @@ The ``Solver`` Class
 
 If you plan to solve the same system multiple times (e.g. exploring
 different parameter sets interactively), build the system once, create a
-:class:`~cubie.Solver` for it and call
+:class:`~cubie.batchsolving.solver.Solver` for it and call
 :meth:`~cubie.batchsolving.solver.Solver.solve` repeatedly. You avoid
 some overhead on each solve this way, and you don't clutter up your solve
 calls with definitions of the system every time:

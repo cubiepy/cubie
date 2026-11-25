@@ -2,8 +2,8 @@ Solver Options
 ==============
 
 Pass any option on this page as a keyword argument to
-:func:`~cubie.solve_ivp`, to :class:`~cubie.Solver`, or to
-:meth:`~cubie.Solver.solve` or :meth:`~cubie.Solver.update`. A solver
+:func:`~cubie.batchsolving.solver.solve_ivp`, to :class:`~cubie.batchsolving.solver.Solver`, or to
+:meth:`~cubie.batchsolving.solver.Solver.solve` or :meth:`~cubie.batchsolving.solver.Solver.update`. A solver
 keeps the options you give it for later solves. If you leave an option
 out, or pass ``None``, cubie uses its default, and if you misspell an
 option, cubie raises ``KeyError``.
@@ -16,7 +16,7 @@ treats each key as a keyword argument.
 Arguments of one solve
 ----------------------
 
-:meth:`~cubie.Solver.solve` and :func:`~cubie.solve_ivp` also take the
+:meth:`~cubie.batchsolving.solver.Solver.solve` and :func:`~cubie.batchsolving.solver.solve_ivp` also take the
 arguments below. Give them to each solve that needs them, because the
 solver doesn't keep them for later solves.
 
@@ -155,7 +155,8 @@ family, so treat them as expert tuning.
 
 **min_step_shrink** / **max_step_growth** — bounds on how much cubie changes the step size from one step to the next.
 
-    - Defaults: ``min_step_shrink=0.3``, ``max_step_growth=2.0``
+    - Defaults: ``min_step_shrink=0.2``; ``max_step_growth=10.0`` for
+      ERK and DIRK, and ``8.0`` for every other adaptive algorithm
 
 **safety** — a factor on every proposed step.
     Cubie multiplies each proposed step by this factor. With a value
@@ -177,8 +178,11 @@ family, so treat them as expert tuning.
     ``step_controller``, cubie selects the fastest of ``i``, ``pi`` and
     ``pid`` that uses it.
 
-    - Defaults: ``integral_gain=1.0`` for ``i`` and ``0.3`` for ``pi``
-      and ``pid``; ``proportional_gain=0.4``; ``derivative_gain=0.0``
+    - Defaults: ``integral_gain=1.2`` for ERK's ``i`` controller and
+      ``1.0`` for ``i`` otherwise; ``integral_gain=0.3`` and
+      ``proportional_gain=0.4`` for ``pi`` and ``pid``, scaled by
+      ``(order + 1) / order`` for DIRK's ``pi`` controller;
+      ``derivative_gain=0.0``
 
 **filter_coefficients** — the exponents of the step law.
     Pass a ``(beta1, beta2, beta3)`` triple for the step law
@@ -281,7 +285,8 @@ Linear solver options:
     needs to.
 
     - Defaults: ``krylov_residual_reduction`` is the smallest ``rtol``
-      of an adaptive controller, or machine epsilon for a fixed one;
+      of an adaptive controller, a hundredth of that for Rosenbrock-W
+      algorithms, or machine epsilon for a fixed controller;
       ``krylov_residual_floor`` is the square root of machine epsilon
 
 **preconditioner_type** — the preconditioner.

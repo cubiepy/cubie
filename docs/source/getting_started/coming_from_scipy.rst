@@ -55,7 +55,7 @@ passes them by matching their name to a key in ``parameters=``.
        output_types=["state", "time"],
    )
    t = result.time
-   y = result.state
+   y = result.time_domain_array
 
 Key changes:
 
