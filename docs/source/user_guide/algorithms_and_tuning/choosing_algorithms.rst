@@ -6,6 +6,23 @@ pick the right one.  Pass the algorithm name as ``method=`` to
 :func:`~cubie.solve_ivp` or ``algorithm=`` to :class:`~cubie.Solver`;
 names are case-insensitive.
 
+The examples on this page use this Lotka-Volterra system:
+
+.. code-block:: python
+
+   import numpy as np
+   from cubie import Solver, create_ODE_system
+
+   LV = create_ODE_system(
+       """
+       dx = a*x - b*x*y
+       dy = -c*y + d*x*y
+       """,
+       parameters={"a": 0.1, "b": 0.02, "c": 0.3, "d": 0.01},
+       states={"x": 0.5, "y": 0.3},
+       name="LotkaVolterra",
+   )
+
 Decision Guide
 --------------
 
@@ -425,7 +442,7 @@ different controller, pass its name:
 
 .. code-block:: python
 
-   solver = qb.Solver(
+   solver = Solver(
        LV,
        algorithm="dormand-prince-54",
        step_controller="gustafsson",
@@ -440,10 +457,13 @@ the solver can measure them directly:
 
 .. code-block:: python
 
-   solver = qb.Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
+   x0_values = np.linspace(0.1, 2.0, 200)
+   b_values = np.linspace(0.01, 0.05, 200)
+
+   solver = Solver(LV, algorithm="ros3p", atol=1e-6, rtol=1e-6)
    report = solver.calibrate(
        {"x": x0_values},
-       {"alpha": alpha_values},
+       {"b": b_values},
        duration=10.0,
    )
    print(report.summary())
@@ -477,7 +497,7 @@ fastest configuration for your system:
 
    report = solver.optimize(
        {"x": x0_values},
-       {"alpha": alpha_values},
+       {"b": b_values},
        duration=10.0,
    )
    print(report.summary())

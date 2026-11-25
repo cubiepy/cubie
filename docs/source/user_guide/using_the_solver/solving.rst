@@ -99,6 +99,10 @@ with ``update``, then pass a tighter ``atol`` to ``solve``:
 
 Cubie keeps both settings for later solves on this solver.
 
+To compile before your first solve, call
+:meth:`~cubie.batchsolving.solver.Solver.compile` with the parameters
+and settings you'll pass to ``solve``.
+
 Configuring a solve
 -------------------
 

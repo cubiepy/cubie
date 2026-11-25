@@ -269,9 +269,11 @@ def solve_ivp(
         Pass ``"combinatorial"`` to solve every combination of the
         values in dict inputs, or ``"verbatim"`` to pair them run for
         run.
-    time_logging_level : str or None, default='default'
-        Time logging verbosity level. Options are 'silent', 'default',
-        'verbose', 'debug', None, or 'None' to disable timing.
+    time_logging_level : str or None, default=None
+        How much timing information to print. Pass ``"default"``,
+        ``"verbose"`` or ``"debug"`` to print more detail,
+        ``"silent"`` to record GPU timings without printing them, or
+        ``None`` to turn timing off.
     nan_error_trajectories : bool, default=True
         When ``True`` (default), trajectories with nonzero solver status
         codes are automatically set to NaN, protecting users from analyzing
@@ -385,9 +387,11 @@ class Solver(DerivedValues):
         Explicit loop configuration overriding solver defaults. Keys such as
         ``save_every`` and ``summarise_every`` may also be supplied as loose
         keyword arguments.
-    time_logging_level : str or None, default='default'
-        Time logging verbosity level. Options are 'silent', 'default',
-        'verbose', 'debug', None, or 'None' to disable timing.
+    time_logging_level : str or None, default=None
+        How much timing information to print. Pass ``"default"``,
+        ``"verbose"`` or ``"debug"`` to print more detail,
+        ``"silent"`` to record GPU timings without printing them, or
+        ``None`` to turn timing off.
     auto_performance : bool, default=True
         Set buffer locations, loop unrolling and launch residency
         from your hardware and CuBIE's best guess. Never overrides
@@ -635,10 +639,10 @@ class Solver(DerivedValues):
             batch frequently, and the compile time is long enough to
             make it annoying.
         **kwargs
-            Additional options forwarded to :meth:`update`. See "Optional
-            Arguments" in the docs for possibilities. Any system
-            parameters passed as kwargs are rejected, as they should be
-            in the ``parameters`` argument.
+            Any other solver setting. The solver applies each one as
+            :meth:`update` does and keeps it for later solves. See
+            :doc:`/user_guide/using_the_solver/configuration` for what
+            each one does.
 
         Returns
         -------
@@ -1581,8 +1585,10 @@ class Solver(DerivedValues):
         Parameters
         ----------
         verbosity : str or None
-            New verbosity level. Options are 'default', 'verbose',
-            'debug', None, or 'None'.
+            New verbosity level. Pass ``"default"``, ``"verbose"`` or
+            ``"debug"`` to print more detail, ``"silent"`` to record GPU
+            timings without printing them, or ``None`` to turn timing
+            off.
 
         Notes
         -----

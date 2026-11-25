@@ -29,7 +29,7 @@ See `CUDAFactory` (root) for build/cache/`update`, config, and attrs conventions
 | `optimize.py` | `Solver.optimize` backend: `run_optimization` times the solver's `optimisation_candidates(force)` at `launch_candidates(kernel, runs=)` through a `ComparisonRunner` and applies the best `LaunchResult` through `apply_launch`. Ramps the duration toward `target_ms` before sizing the batch. |
 | `solveresult.py` | `SolveSpec` (attrs config snapshot); `SolveResult` — owns the solve's host buffers via `OutputArrays.loan_host_arrays` (zero copy), applies NaN-on-error masking in place, carries the solve's `stream`, and derives `time`/`time_domain_array`/`summaries_array` plus `as_numpy`/`as_numpy_per_summary`/`as_pandas` lazily; `DeviceSolveResult` — device-array handles to the solve's output buffers plus the kernel's stream, returned by `Solver.solve(on_device=True)` with no D2H copy. Both are pure data containers: no stream or memory operations happen in this module. |
 | `writeback_watcher.py` | `WritebackWatcher` (daemon thread) + `WritebackTask` — polls CUDA events via `event.query()`, copies completed pinned-buffer data into host arrays (D2H writeback) or just releases H2D staging buffers. |
-| `_utils.py` | Docstring only; no exports. |
+| `_utils.py` | `name_and_compile_kernel` renames the batch kernel function and compiles it; `format_time_domain_label` returns `label [unit]`, or the bare label when the variable is dimensionless, for the time-domain and parameter legends. |
 | `__init__.py` | Defines the `ArrayTypes` alias (`Optional[Union[NDArray, DeviceNDArrayBase, MappedNDArray]]`) and re-exports the public surface. |
 
 ## Subdirectories

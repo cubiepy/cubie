@@ -129,6 +129,8 @@ DEFAULT_MEMORY_SETTINGS = {
     "stream_group": "solver",
     "mem_proportion": None,
 }
+"""Memory manager, stream group and share of GPU memory that cubie
+uses when you don't set them."""
 
 
 @define(frozen=True)

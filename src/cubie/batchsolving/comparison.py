@@ -75,7 +75,12 @@ TIMED_WAVES_FLOOR = 2
 """Fewest occupancy waves a timed batch fills at any launch."""
 
 HOST_BYTES_PER_RUN = np_dtype(np_intp).itemsize + np_dtype(np_int32).itemsize
-"""Host bytes per run besides the grid: the repeat index and status code."""
+"""Bytes of host memory that cubie needs for each run of a timed batch,
+on top of the run's initial values and parameters.
+
+Cubie uses these bytes for the run's status code and for the index of
+the grid column that the run repeats.
+"""
 
 WORKER_STARTUP_SECONDS = 12.0
 """Wall seconds a spawned worker spends importing cubie.
