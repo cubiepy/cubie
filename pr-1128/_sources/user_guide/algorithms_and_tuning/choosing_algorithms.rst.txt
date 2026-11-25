@@ -476,8 +476,8 @@ modifying the solver.
 hour for a bigger system.
 
 Cubie compiles the candidates in up to ``max_parallel`` worker
-processes at once, four by default. Each worker starts by running the
-top level of your script, so in a script, call ``calibrate`` and
+processes at once, four by default. Python starts each worker by
+running the top level of your script, so in a script, call ``calibrate`` and
 ``optimize`` from under ``if __name__ == "__main__":``. Pass
 ``max_parallel=1`` to compile every candidate in your own process
 instead.

@@ -840,8 +840,8 @@ modifying the solver.</p>
 <p><code class="docutils literal notranslate"><span class="pre">calibrate</span></code> compiles a large number of kernels, so allow half an
 hour for a bigger system.</p>
 <p>Cubie compiles the candidates in up to <code class="docutils literal notranslate"><span class="pre">max_parallel</span></code> worker
-processes at once, four by default. Each worker starts by running the
-top level of your script, so in a script, call <code class="docutils literal notranslate"><span class="pre">calibrate</span></code> and
+processes at once, four by default. Python starts each worker by
+running the top level of your script, so in a script, call <code class="docutils literal notranslate"><span class="pre">calibrate</span></code> and
 <code class="docutils literal notranslate"><span class="pre">optimize</span></code> from under <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">__name__</span> <span class="pre">==</span> <span class="pre">&quot;__main__&quot;:</span></code>. Pass
 <code class="docutils literal notranslate"><span class="pre">max_parallel=1</span></code> to compile every candidate in your own process
 instead.</p>
