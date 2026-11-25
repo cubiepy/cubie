@@ -1017,6 +1017,12 @@ class BatchSolverKernel(CUDAFactory):
         """Return the block size and resident blocks per SM of a launch
         with no block size requested.
 
+        Parameters
+        ----------
+        runs
+            Number of runs in the launch, or ``None`` for a batch
+            large enough to fill every block.
+
         Returns
         -------
         tuple[int, int or None]

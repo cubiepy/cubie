@@ -2,9 +2,11 @@
 
 Wraps the generated ``lu_solve`` device function (see
 :mod:`cubie.odesystems.symbolic.codegen.lu_solver`) in the linear
-solver calling contract shared with the iterative solvers. The solve
-factorises ``beta*M - gamma*a_ij*h*J`` at the current evaluation
-point and is exact per call, reporting one iteration.
+solver calling contract shared with the iterative solvers.
+:class:`LUSolver` solves ``beta*M - gamma*a_ij*h*J`` exactly in each
+call and reports one iteration. With a prefactored ``lu_solve``, it
+reuses LU factors computed at the start of the step. Otherwise it
+factorises the matrix in each call.
 
 Published Classes
 -----------------

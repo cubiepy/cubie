@@ -300,7 +300,9 @@ def default_launch(
 
     For a kernel larger than the instruction cache, return the launch
     within the occupancy tie band that puts a block on the most SMs,
-    and the largest block among those.
+    and the largest block among those. For a smaller kernel, return
+    the launch with the most resident threads, and the smaller block
+    on a tie.
 
     Parameters
     ----------

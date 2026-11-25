@@ -17,9 +17,10 @@ Published Functions
 Diagonal factor slots hold the inverse pivot (the reciprocal for
 real blocks, ``conj(p)/|p|**2`` for complex blocks), so
 eliminations and substitutions multiply instead of divide.
-Pivots are static row/column choices over structural nonzeros,
-preferring same-stage-block entries on stacked FIRK matrices;
-a structurally singular pattern raises at generation.
+The generators choose static row and column pivots that give the
+factor the fewest nonzeros, preferring entries inside a stage block
+on stacked FIRK matrices. They raise ValueError on a structurally
+singular pattern.
 Prefactored ``cached_aux`` layouts are compacted by
 ``_prefactored_slot_plan``, computed identically by the prepare,
 solve, and smoothing generators: structurally zero entries read
@@ -791,8 +792,19 @@ def _coefficient_floats(
 def _distinct_diagonals(
     coeff_floats: Tuple[Tuple[float, ...], ...],
 ) -> List[float]:
-    """Return the distinct nonzero tableau diagonals ascending, or
-    ``[1.0]`` when every diagonal is zero."""
+    """Return the distinct nonzero tableau diagonals in ascending order.
+
+    Parameters
+    ----------
+    coeff_floats
+        Tableau ``A`` matrix rows as floats.
+
+    Returns
+    -------
+    list of float
+        The distinct nonzero diagonal entries, or ``[1.0]`` when every
+        diagonal entry is zero.
+    """
     values: List[float] = []
     for idx, row in enumerate(coeff_floats):
         entry = row[idx] if idx < len(row) else 0.0
@@ -1573,7 +1585,9 @@ def generate_lu_prepare_blocks_code(
 
     ``PREFACTORED`` factorises ``beta*M - gamma*h*d_k*J(state)`` for
     each distinct nonzero tableau diagonal ``d_k``, stored
-    consecutively in ``cached_aux``. ``PREFACTORED_STACKED``
+    consecutively in ``cached_aux``. For a tableau whose diagonal is
+    all zero, as in Rosenbrock-W, it factorises one block with
+    ``d_k = 1``. ``PREFACTORED_STACKED``
     factorises the block transform's eigenvalue blocks
     ``(beta*lambda/(gamma*h))*M - J(state)``: real blocks first,
     then one complex block per conjugate pair with interleaved
