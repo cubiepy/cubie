@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -422,23 +423,25 @@ norm of <code class="docutils literal notranslate"><span class="pre">starting_st
 <dt><strong>step_controller</strong> — the step-size controller.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;pid&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code>
 (see <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html#choosing-a-controller"><span class="std std-ref">Choosing a Controller</span></a>).</p>
 <ul class="simple">
-<li><p>Default: <code class="docutils literal notranslate"><span class="pre">&quot;fixed&quot;</span></code> for algorithms without an error estimate;
-otherwise <code class="docutils literal notranslate"><span class="pre">&quot;i&quot;</span></code> for ERK, <code class="docutils literal notranslate"><span class="pre">&quot;pi&quot;</span></code> for DIRK and
-<code class="docutils literal notranslate"><span class="pre">&quot;gustafsson&quot;</span></code> for FIRK and Rosenbrock-W. Cubie uses a
-different default for some tableaus.</p></li>
+<li><p>Default: cubie has default controllers tuned for each
+algorithm, which may not be ideal for your specific problem.
+You’ll find each algorithm’s default controller in the tables in
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>.</p></li>
 </ul>
 </dd>
 </dl>
-<p>Cubie sets its own defaults for the options below for each algorithm
-family, so treat them as expert tuning.</p>
+<p>Cubie sets its own defaults for the options below for each
+algorithm, so treat them as expert tuning.</p>
 <p><strong>min_step_shrink</strong> / <strong>max_step_growth</strong> — bounds on how much cubie changes the step size from one step to the next.</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">min_step_shrink=0.2</span></code>; <code class="docutils literal notranslate"><span class="pre">max_step_growth=10.0</span></code> for
-ERK and DIRK, and <code class="docutils literal notranslate"><span class="pre">8.0</span></code> for every other adaptive algorithm</p></li>
+<li><p>Default <code class="docutils literal notranslate"><span class="pre">min_step_shrink</span></code>: <code class="docutils literal notranslate"><span class="pre">0.2</span></code></p></li>
+<li><p>Default <code class="docutils literal notranslate"><span class="pre">max_step_growth</span></code>: <code class="docutils literal notranslate"><span class="pre">10.0</span></code> for ERK and DIRK
+algorithms, and <code class="docutils literal notranslate"><span class="pre">8.0</span></code> for FIRK, Rosenbrock-W and
+Crank–Nicolson</p></li>
 </ul>
 </div></blockquote>
-<dl class="simple">
+<dl>
 <dt><strong>safety</strong> — a factor on every proposed step.</dt><dd><p>Cubie multiplies each proposed step by this factor. With a value
 below 1.0, cubie takes slightly smaller steps than its error
 estimate allows, so you get fewer rejected steps at a small cost in
@@ -454,26 +457,32 @@ keeps the current step. Set both to 1.0 to turn the band off.</p>
 </ul>
 </dd>
 <dt><strong>integral_gain</strong> / <strong>proportional_gain</strong> / <strong>derivative_gain</strong> — the gains of the <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code> controllers.</dt><dd><p>See <a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html#choosing-a-controller"><span class="std std-ref">Choosing a Controller</span></a> for what each gain does. Cubie
-divides each gain by <code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">+</span> <span class="pre">1</span></code>. If you pass a gain without a
-<code class="docutils literal notranslate"><span class="pre">step_controller</span></code>, cubie selects the fastest of <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and
-<code class="docutils literal notranslate"><span class="pre">pid</span></code> that uses it.</p>
+divides each gain by one more than the lower of the method’s two
+orders. If you pass a gain without a <code class="docutils literal notranslate"><span class="pre">step_controller</span></code> and the
+algorithm’s default controller doesn’t use that gain, cubie selects
+the fastest of <code class="docutils literal notranslate"><span class="pre">i</span></code>, <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code> that does.</p>
+<p>When you use an algorithm’s default controller, cubie uses gains
+tuned for that algorithm. You’ll find them in
+<a class="reference internal" href="../../API_reference/integrators/algorithms.html#algorithm-defaults"><span class="std std-ref">Default settings</span></a>. With any other controller, cubie uses
+these defaults:</p>
 <ul class="simple">
-<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">integral_gain=1.2</span></code> for ERK tableaus that default to
-<code class="docutils literal notranslate"><span class="pre">i</span></code>, and <code class="docutils literal notranslate"><span class="pre">1.0</span></code> for <code class="docutils literal notranslate"><span class="pre">i</span></code> otherwise; <code class="docutils literal notranslate"><span class="pre">integral_gain=0.3</span></code> and
-<code class="docutils literal notranslate"><span class="pre">proportional_gain=0.4</span></code> for <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code>, except that cubie
-sets DIRK’s default <code class="docutils literal notranslate"><span class="pre">pi</span></code> gains from the order of the tableau’s
-error estimate; <code class="docutils literal notranslate"><span class="pre">derivative_gain=0.0</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">i</span></code>: <code class="docutils literal notranslate"><span class="pre">integral_gain=1.0</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pi</span></code>: <code class="docutils literal notranslate"><span class="pre">integral_gain=0.3</span></code> and <code class="docutils literal notranslate"><span class="pre">proportional_gain=0.4</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pid</span></code>: <code class="docutils literal notranslate"><span class="pre">integral_gain=0.3</span></code>, <code class="docutils literal notranslate"><span class="pre">proportional_gain=0.4</span></code> and
+<code class="docutils literal notranslate"><span class="pre">derivative_gain=0.0</span></code>, so cubie steps as it would with <code class="docutils literal notranslate"><span class="pre">pi</span></code>
+until you give a derivative gain</p></li>
 </ul>
 </dd>
 <dt><strong>filter_coefficients</strong> — the exponents of the step law.</dt><dd><p>Pass a <code class="docutils literal notranslate"><span class="pre">(beta1,</span> <span class="pre">beta2,</span> <span class="pre">beta3)</span></code> triple for the step law
 <code class="docutils literal notranslate"><span class="pre">dt</span> <span class="pre">*</span> <span class="pre">error^-beta1</span> <span class="pre">*</span> <span class="pre">error_prev^-beta2</span> <span class="pre">*</span> <span class="pre">error_prev2^-beta3</span></code>, or
 the name of a published controller: <code class="docutils literal notranslate"><span class="pre">&quot;basic&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;PI42&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">&quot;PI33&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;PI34&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;H211PI&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;H312PID&quot;</span></code>. Cubie
-divides the exponents by <code class="docutils literal notranslate"><span class="pre">order</span> <span class="pre">+</span> <span class="pre">1</span></code>. You can’t combine
-<code class="docutils literal notranslate"><span class="pre">filter_coefficients</span></code> with the gains.</p>
+divides the exponents by one more than the lower of the method’s
+two orders. You can’t combine <code class="docutils literal notranslate"><span class="pre">filter_coefficients</span></code> with the
+gains.</p>
 <ul class="simple">
-<li><p>Default: the gains above, which equal <code class="docutils literal notranslate"><span class="pre">&quot;PI34&quot;</span></code> for <code class="docutils literal notranslate"><span class="pre">pi</span></code> and
-<code class="docutils literal notranslate"><span class="pre">pid</span></code></p></li>
+<li><p>Default: cubie uses the gains above. Cubie’s own default gains
+for <code class="docutils literal notranslate"><span class="pre">pi</span></code> and <code class="docutils literal notranslate"><span class="pre">pid</span></code> are the same as <code class="docutils literal notranslate"><span class="pre">&quot;PI34&quot;</span></code>.</p></li>
 </ul>
 </dd>
 <dt><strong>newton_target_iters</strong> — the Newton iteration count the <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller aims for.</dt><dd><p>With the <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> controller, cubie shrinks the step when the
@@ -512,10 +521,11 @@ with a smaller step.</p>
 Newton iteration. Cubie ignores this option for Rosenbrock-W
 algorithms.</p>
 <ul class="simple">
-<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code> for DIRK and FIRK, except the tableaus marked
-as defaulting to exact Newton in
-<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>;
-<code class="docutils literal notranslate"><span class="pre">False</span></code> otherwise</p></li>
+<li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code> for most DIRK and FIRK algorithms. <code class="docutils literal notranslate"><span class="pre">False</span></code>
+for the DIRK and FIRK algorithms marked as using exact Newton in
+<a class="reference internal" href="../algorithms_and_tuning/choosing_algorithms.html"><span class="doc">Choosing an Algorithm</span></a>,
+for every other algorithm, and whenever you choose a
+<code class="docutils literal notranslate"><span class="pre">linear_correction_type</span></code> other than the algorithm’s default.</p></li>
 </ul>
 </dd>
 <dt><strong>prefactored</strong> — keep the LU factors from the start of each step.</dt><dd><p>With <code class="docutils literal notranslate"><span class="pre">inexact_newton</span></code> and <code class="docutils literal notranslate"><span class="pre">linear_correction_type=&quot;lu&quot;</span></code>, cubie
@@ -570,10 +580,13 @@ right-hand side at the start of the solve. With the relative term,
 cubie doesn’t solve the early Newton updates more accurately than it
 needs to.</p>
 <ul class="simple">
-<li><p>Defaults: <code class="docutils literal notranslate"><span class="pre">krylov_residual_reduction</span></code> is the smallest <code class="docutils literal notranslate"><span class="pre">rtol</span></code>
-of an adaptive controller, a hundredth of that for Rosenbrock-W
-algorithms, or machine epsilon for a fixed controller;
-<code class="docutils literal notranslate"><span class="pre">krylov_residual_floor</span></code> is the square root of machine epsilon</p></li>
+<li><p>Default <code class="docutils literal notranslate"><span class="pre">krylov_residual_reduction</span></code>: your <code class="docutils literal notranslate"><span class="pre">rtol</span></code> with an
+adaptive controller, or a hundredth of it with a Rosenbrock-W
+algorithm. If you give a different <code class="docutils literal notranslate"><span class="pre">rtol</span></code> for each state, cubie
+uses the smallest of them. With a fixed-step controller, cubie
+uses <code class="docutils literal notranslate"><span class="pre">1.2e-7</span></code> in <code class="docutils literal notranslate"><span class="pre">float32</span></code> and <code class="docutils literal notranslate"><span class="pre">2.2e-16</span></code> in <code class="docutils literal notranslate"><span class="pre">float64</span></code>.</p></li>
+<li><p>Default <code class="docutils literal notranslate"><span class="pre">krylov_residual_floor</span></code>: <code class="docutils literal notranslate"><span class="pre">3.5e-4</span></code> in <code class="docutils literal notranslate"><span class="pre">float32</span></code> and
+<code class="docutils literal notranslate"><span class="pre">1.5e-8</span></code> in <code class="docutils literal notranslate"><span class="pre">float64</span></code></p></li>
 </ul>
 </dd>
 <dt><strong>preconditioner_type</strong> — the preconditioner.</dt><dd><p>Pass <code class="docutils literal notranslate"><span class="pre">&quot;jacobi&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;neumann&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>. With no

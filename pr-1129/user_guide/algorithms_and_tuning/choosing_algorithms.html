@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -317,15 +318,17 @@ if you pair one with an adaptive controller, cubie warns with a
 <p><strong>Explicit Runge–Kutta (ERK)</strong></p>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 40.0%" />
+<col style="width: 30.0%" />
 <col style="width: 10.0%" />
 <col style="width: 10.0%" />
-<col style="width: 40.0%" />
+<col style="width: 15.0%" />
+<col style="width: 35.0%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Name</p></th>
 <th class="head"><p>Order</p></th>
 <th class="head"><p>Adaptive</p></th>
+<th class="head"><p>Default controller</p></th>
 <th class="head"><p>Notes</p></th>
 </tr>
 </thead>
@@ -333,41 +336,49 @@ if you pair one with an adaptive controller, cubie warns with a
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">heun-21</span></code></p></td>
 <td><p>2</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Heun’s method.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ralston-33</span></code></p></td>
 <td><p>3</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Ralston’s third-order method.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bogacki-shampine-32</span></code> / <code class="docutils literal notranslate"><span class="pre">rk23</span></code> / <code class="docutils literal notranslate"><span class="pre">ode23</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">i</span></code></p></td>
 <td><p>Low-order, cheap.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">classical-rk4</span></code> / <code class="docutils literal notranslate"><span class="pre">rk4</span></code></p></td>
 <td><p>4</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>The classical Runge–Kutta method.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fehlberg-45</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">i</span></code></p></td>
 <td><p>Fehlberg’s method.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cash-karp-54</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
-<td><p>Cash–Karp coefficients; defaults to Gustafsson control.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
+<td><p>Cash–Karp coefficients.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dormand-prince-54</span></code> / <code class="docutils literal notranslate"><span class="pre">dopri54</span></code> / <code class="docutils literal notranslate"><span class="pre">rk45</span></code> / <code class="docutils literal notranslate"><span class="pre">ode45</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">i</span></code></p></td>
 <td><p>Industry standard.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">tsit5</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">i</span></code></p></td>
 <td><p>Tsitouras 5(4); often slightly more efficient than
 Dormand–Prince. The default algorithm and the ERK family
 default.</p></td>
@@ -375,28 +386,31 @@ default.</p></td>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vern7</span></code></p></td>
 <td><p>7(6)</p></td>
 <td><p>Yes</p></td>
-<td><p>Verner’s high-order method; defaults to Gustafsson control.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
+<td><p>Verner’s high-order method.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dormand-prince-853</span></code> / <code class="docutils literal notranslate"><span class="pre">dop853</span></code></p></td>
 <td><p>8(5,3)</p></td>
 <td><p>Yes</p></td>
-<td><p>High order for smooth problems; defaults to Gustafsson
-control.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
+<td><p>High order for smooth problems.</p></td>
 </tr>
 </tbody>
 </table>
 <p><strong>Diagonally Implicit Runge–Kutta (DIRK)</strong></p>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 40.0%" />
+<col style="width: 30.0%" />
 <col style="width: 10.0%" />
 <col style="width: 10.0%" />
-<col style="width: 40.0%" />
+<col style="width: 15.0%" />
+<col style="width: 35.0%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Name</p></th>
 <th class="head"><p>Order</p></th>
 <th class="head"><p>Adaptive</p></th>
+<th class="head"><p>Default controller</p></th>
 <th class="head"><p>Notes</p></th>
 </tr>
 </thead>
@@ -404,51 +418,61 @@ control.</p></td>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">implicit_midpoint</span></code></p></td>
 <td><p>2</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Symmetric, energy-preserving.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">trapezoidal_dirk</span></code> / <code class="docutils literal notranslate"><span class="pre">ode23t</span></code></p></td>
 <td><p>2</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Trapezoidal rule.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sdirk_2_2</span></code></p></td>
 <td><p>2</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>L-stable SDIRK; has no embedded error estimate.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">l_stable_dirk_3</span></code></p></td>
 <td><p>3</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Default DIRK tableau; L-stable, stiffly accurate, 3 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">kvaerno3</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pi</span></code></p></td>
 <td><p>A-L stable ESDIRK, 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">kvaerno5</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pi</span></code></p></td>
 <td><p>A-L stable ESDIRK, 7 stages; defaults to exact Newton.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">l_stable_sdirk_4</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pi</span></code></p></td>
 <td><p>L-stable, 5 stages; defaults to exact Newton.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">eldirk32_euler</span></code></p></td>
 <td><p>2(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pi</span></code></p></td>
 <td><p>ELDIRK: implicit Euler and two explicit stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">eldirk32_trapezoidal</span></code></p></td>
 <td><p>2(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pi</span></code></p></td>
 <td><p>ELDIRK: trapezoidal rule and one explicit stage.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">eldirk32_ellsiepen</span></code></p></td>
 <td><p>2(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pi</span></code></p></td>
 <td><p>ELDIRK: <code class="docutils literal notranslate"><span class="pre">sdirk_2_2</span></code> and one explicit stage.</p></td>
 </tr>
 </tbody>
@@ -456,15 +480,17 @@ control.</p></td>
 <p><strong>Fully Implicit Runge–Kutta (FIRK)</strong></p>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 40.0%" />
+<col style="width: 30.0%" />
 <col style="width: 10.0%" />
 <col style="width: 10.0%" />
-<col style="width: 40.0%" />
+<col style="width: 15.0%" />
+<col style="width: 35.0%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Name</p></th>
 <th class="head"><p>Order</p></th>
 <th class="head"><p>Adaptive</p></th>
+<th class="head"><p>Default controller</p></th>
 <th class="head"><p>Notes</p></th>
 </tr>
 </thead>
@@ -472,22 +498,26 @@ control.</p></td>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_2</span></code></p></td>
 <td><p>4</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>2-stage Gauss–Legendre; default FIRK.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">firk_gauss_legendre_4</span></code></p></td>
 <td><p>8(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>4-stage Gauss–Legendre. Cubie controls the step conservatively,
 because it estimates the error with a second-order method.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_3</span></code></p></td>
 <td><p>3(1)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>2-stage Radau IIA; the cheapest of the family.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_5</span></code> / <code class="docutils literal notranslate"><span class="pre">radau</span></code></p></td>
 <td><p>5(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>3-stage Radau IIA; excellent for stiff problems. Cubie smooths
 its error estimate by default, which makes the estimate third
 order; with <code class="docutils literal notranslate"><span class="pre">use_smoothed_error=False</span></code> the order is 5(2).</p></td>
@@ -495,6 +525,7 @@ order; with <code class="docutils literal notranslate"><span class="pre">use_smo
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">radau_iia_9</span></code></p></td>
 <td><p>9(5)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>5-stage Radau IIA; for tight tolerances, five coupled stages
 per step. Defaults to BiCGSTAB with exact Newton. Cubie smooths
 its error estimate by default, which makes the estimate fifth
@@ -505,15 +536,17 @@ order; with <code class="docutils literal notranslate"><span class="pre">use_smo
 <p><strong>Rosenbrock-W</strong></p>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 40.0%" />
+<col style="width: 30.0%" />
 <col style="width: 10.0%" />
 <col style="width: 10.0%" />
-<col style="width: 40.0%" />
+<col style="width: 15.0%" />
+<col style="width: 35.0%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Name</p></th>
 <th class="head"><p>Order</p></th>
 <th class="head"><p>Adaptive</p></th>
+<th class="head"><p>Default controller</p></th>
 <th class="head"><p>Notes</p></th>
 </tr>
 </thead>
@@ -521,186 +554,223 @@ order; with <code class="docutils literal notranslate"><span class="pre">use_smo
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros3p</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Lang and Verwer (2001), 3 stages. The default Rosenbrock-W tableau.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas3p</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach (2024), 5 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rosenbrock23_sciml</span></code> / <code class="docutils literal notranslate"><span class="pre">rosenbrock23</span></code> / <code class="docutils literal notranslate"><span class="pre">ode23s</span></code></p></td>
 <td><p>2(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Shampine and Reichelt (1997), 3 stages; the method of MATLAB’s <code class="docutils literal notranslate"><span class="pre">ode23s</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rosenbrock32</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Shampine and Reichelt (1997), 3 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros2</span></code></p></td>
 <td><p>2(1)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Verwer et al. (1999), 2 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros2pr</span></code></p></td>
 <td><p>2(1)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang (2014), 3 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros2s</span></code></p></td>
 <td><p>2(1)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang (2014), 3 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros3</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Hairer and Wanner (1996), 3 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros3pr</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang (2014), 3 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">scholz4_7</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang (2014), 3 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw1a</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang and Angermann (2005), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw1b</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang and Angermann (2005), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw2</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang and Angermann (2005), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros34pw3</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang and Angermann (2005), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros34prw</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang (2015), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros3prl</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang (2014), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ros3prl2</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Rang (2014), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rok4a</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Tranquilli and Sandu (2014), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rosshamp4</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Shampine (1982), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">veldd4</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>van Veldhuizen (1984), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">velds4</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>van Veldhuizen (1984), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">grk4t</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Kaps and Rentrop (1979), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">grk4a</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Kaps and Rentrop (1979), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ros4lstab</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Hairer and Wanner (1996), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rosenbrockw6s4os</span></code></p></td>
 <td><p>4</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>6 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas3</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Sandu et al. (1997), 4 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas3d</span></code></p></td>
 <td><p>3(2)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Yu et al. (2024), 4 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas23w</span></code></p></td>
 <td><p>2(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach (2024), 5 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Hairer and Wanner (1996), 6 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas42</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Hairer and Wanner (1996), 6 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4p</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach (1995), 6 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4p2</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach (2020), 6 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas4pw</span></code></p></td>
 <td><p>4(3)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach, 9 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas5</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Di Marzo (1993), 8 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas5p</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach (2023), 8 stages.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">rodas5pe</span></code></p></td>
 <td><p>5(4)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach (2024), 8 stages.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">rodas6p</span></code></p></td>
 <td><p>6(5)</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Steinebach (2025), 16 stages.</p></td>
 </tr>
 </tbody>
@@ -708,15 +778,17 @@ order; with <code class="docutils literal notranslate"><span class="pre">use_smo
 <p><strong>Simple methods</strong></p>
 <table class="docutils align-default">
 <colgroup>
-<col style="width: 40.0%" />
+<col style="width: 30.0%" />
 <col style="width: 10.0%" />
 <col style="width: 10.0%" />
-<col style="width: 40.0%" />
+<col style="width: 15.0%" />
+<col style="width: 35.0%" />
 </colgroup>
 <thead>
 <tr class="row-odd"><th class="head"><p>Name</p></th>
 <th class="head"><p>Order</p></th>
 <th class="head"><p>Adaptive</p></th>
+<th class="head"><p>Default controller</p></th>
 <th class="head"><p>Notes</p></th>
 </tr>
 </thead>
@@ -724,21 +796,25 @@ order; with <code class="docutils literal notranslate"><span class="pre">use_smo
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">euler</span></code></p></td>
 <td><p>1</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Forward Euler; explicit.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">backwards_euler</span></code></p></td>
 <td><p>1</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Backward Euler; implicit, L-stable.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">backwards_euler_pc</span></code></p></td>
 <td><p>1</p></td>
 <td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fixed</span></code></p></td>
 <td><p>Predictor-corrector backward Euler.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">crank_nicolson</span></code></p></td>
 <td><p>2</p></td>
 <td><p>Yes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gustafsson</span></code></p></td>
 <td><p>Implicit trapezoidal rule; a second backward-Euler solve
 provides the embedded error estimate.</p></td>
 </tr>
@@ -783,10 +859,10 @@ ratio.  Widely used with implicit methods; useful when step
 rejections are frequent.</p>
 </dd>
 </dl>
-<p>Each algorithm family picks a default controller (<code class="docutils literal notranslate"><span class="pre">i</span></code> for ERK,
-<code class="docutils literal notranslate"><span class="pre">pi</span></code> for DIRK, <code class="docutils literal notranslate"><span class="pre">gustafsson</span></code> for FIRK and Rosenbrock, <code class="docutils literal notranslate"><span class="pre">fixed</span></code>
-without an error estimate); some tableaus override it.  To choose a
-different controller, pass its name:</p>
+<p>CuBIE has default controllers tuned for each algorithm, which may not
+be ideal for your specific problem. You’ll find each algorithm’s
+default controller in the tables above. To choose a different
+controller, pass its name:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cubie</span><span class="w"> </span><span class="kn">import</span> <span class="n">Solver</span><span class="p">,</span> <span class="n">create_ODE_system</span>
 
 <span class="n">LV</span> <span class="o">=</span> <span class="n">create_ODE_system</span><span class="p">(</span>

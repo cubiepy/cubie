@@ -12,6 +12,7 @@
       <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=1b720227" />
 
   
+    <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../_static/documentation_options.js?v=8c5712d9"></script>
@@ -587,10 +588,11 @@ is below it)</p></td>
 </tbody>
 </table>
 <p><strong>Fixed-step controllers:</strong></p>
-<p>With a fixed controller, cubie steps at <code class="docutils literal notranslate"><span class="pre">dt</span></code>. If you don’t give <code class="docutils literal notranslate"><span class="pre">dt</span></code>,
-cubie steps at the geometric mean of <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> when you
-give both, at whichever of the two you give, or at <code class="docutils literal notranslate"><span class="pre">1e-3</span></code> when you give
-neither.</p>
+<p>With a fixed-step controller, you set the step size with <code class="docutils literal notranslate"><span class="pre">dt</span></code>, which
+defaults to <code class="docutils literal notranslate"><span class="pre">1e-3</span></code>. <code class="docutils literal notranslate"><span class="pre">dt_min</span></code> and <code class="docutils literal notranslate"><span class="pre">dt_max</span></code> don’t otherwise affect a
+fixed-step controller, but if you give one of them without <code class="docutils literal notranslate"><span class="pre">dt</span></code>, cubie
+sets <code class="docutils literal notranslate"><span class="pre">dt</span></code> to it. If you give both, cubie sets <code class="docutils literal notranslate"><span class="pre">dt</span></code> to their geometric
+mean.</p>
 <p>Build a <code class="docutils literal notranslate"><span class="pre">Solver</span></code> to read the step sizes cubie derives:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Give an adaptive controller dt, and cubie derives the bounds</span>
 <span class="n">solver</span> <span class="o">=</span> <span class="n">Solver</span><span class="p">(</span><span class="n">LV</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"ode45"</span><span class="p">,</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>

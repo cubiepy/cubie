@@ -47,7 +47,8 @@ Available aliases
      - Runge--Kutta--Fehlberg embedded 5(4) pair.
      - [Fehlberg1969]_
    * - ``"tsit5"``
-     - Tsitouras embedded 5(4) pair with FSAL property; the default.
+     - Tsitouras embedded 5(4) pair with FSAL property, and the default
+       ERK method.
      - [Tsitouras2011]_
    * - ``"vern7"``
      - Verner's embedded 7(6) pair.
