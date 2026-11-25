@@ -30,6 +30,7 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_favicon = "_static/brand/favicon.svg"
 html_theme_options = {
     # Toc options
     'navigation_depth': 4,

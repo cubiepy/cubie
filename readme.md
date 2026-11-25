@@ -1,4 +1,9 @@
-# Cubie
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/brand/cubie-lockup-dark.svg">
+    <img alt="Cubie" src="https://raw.githubusercontent.com/cubiepy/cubie/main/docs/source/_static/brand/cubie-lockup.svg" height="64">
+  </picture>
+</h1>
 
 ## CUDA Batch Integration Engine
 
