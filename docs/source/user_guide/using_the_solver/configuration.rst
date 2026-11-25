@@ -145,18 +145,20 @@ Tuning the step controller
     Pass ``"fixed"``, ``"i"``, ``"pi"``, ``"pid"`` or ``"gustafsson"``
     (see :ref:`choosing-a-controller`).
 
-    - Default: ``"fixed"`` for algorithms without an error estimate;
-      otherwise ``"i"`` for ERK, ``"pi"`` for DIRK and
-      ``"gustafsson"`` for FIRK and Rosenbrock-W. Cubie uses a
-      different default for some tableaus.
+    - Default: cubie has default controllers tuned for each
+      algorithm, which may not be ideal for your specific problem.
+      You'll find each algorithm's default controller in the tables in
+      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`.
 
-Cubie sets its own defaults for the options below for each algorithm
-family, so treat them as expert tuning.
+Cubie sets its own defaults for the options below for each
+algorithm, so treat them as expert tuning.
 
 **min_step_shrink** / **max_step_growth** — bounds on how much cubie changes the step size from one step to the next.
 
-    - Defaults: ``min_step_shrink=0.2``; ``max_step_growth=10.0`` for
-      ERK and DIRK, and ``8.0`` for every other adaptive algorithm
+    - Default ``min_step_shrink``: ``0.2``
+    - Default ``max_step_growth``: ``10.0`` for ERK and DIRK
+      algorithms, and ``8.0`` for FIRK, Rosenbrock-W and
+      Crank--Nicolson
 
 **safety** — a factor on every proposed step.
     Cubie multiplies each proposed step by this factor. With a value
@@ -174,26 +176,33 @@ family, so treat them as expert tuning.
 
 **integral_gain** / **proportional_gain** / **derivative_gain** — the gains of the ``i``, ``pi`` and ``pid`` controllers.
     See :ref:`choosing-a-controller` for what each gain does. Cubie
-    divides each gain by ``order + 1``. If you pass a gain without a
-    ``step_controller``, cubie selects the fastest of ``i``, ``pi`` and
-    ``pid`` that uses it.
+    divides each gain by one more than the lower of the method's two
+    orders. If you pass a gain without a ``step_controller`` and the
+    algorithm's default controller doesn't use that gain, cubie selects
+    the fastest of ``i``, ``pi`` and ``pid`` that does.
 
-    - Defaults: ``integral_gain=1.2`` for ERK tableaus that default to
-      ``i``, and ``1.0`` for ``i`` otherwise; ``integral_gain=0.3`` and
-      ``proportional_gain=0.4`` for ``pi`` and ``pid``, except that cubie
-      sets DIRK's default ``pi`` gains from the order of the tableau's
-      error estimate; ``derivative_gain=0.0``
+    When you use an algorithm's default controller, cubie uses gains
+    tuned for that algorithm. You'll find them in
+    :ref:`algorithm-defaults`. With any other controller, cubie uses
+    these defaults:
+
+    - ``i``: ``integral_gain=1.0``
+    - ``pi``: ``integral_gain=0.3`` and ``proportional_gain=0.4``
+    - ``pid``: ``integral_gain=0.3``, ``proportional_gain=0.4`` and
+      ``derivative_gain=0.0``, so cubie steps as it would with ``pi``
+      until you give a derivative gain
 
 **filter_coefficients** — the exponents of the step law.
     Pass a ``(beta1, beta2, beta3)`` triple for the step law
     ``dt * error^-beta1 * error_prev^-beta2 * error_prev2^-beta3``, or
     the name of a published controller: ``"basic"``, ``"PI42"``,
     ``"PI33"``, ``"PI34"``, ``"H211PI"`` or ``"H312PID"``. Cubie
-    divides the exponents by ``order + 1``. You can't combine
-    ``filter_coefficients`` with the gains.
+    divides the exponents by one more than the lower of the method's
+    two orders. You can't combine ``filter_coefficients`` with the
+    gains.
 
-    - Default: the gains above, which equal ``"PI34"`` for ``pi`` and
-      ``pid``
+    - Default: cubie uses the gains above. Cubie's own default gains
+      for ``pi`` and ``pid`` are the same as ``"PI34"``.
 
 **newton_target_iters** — the Newton iteration count the ``gustafsson`` controller aims for.
     With the ``gustafsson`` controller, cubie shrinks the step when the
@@ -232,10 +241,11 @@ Newton options:
     Newton iteration. Cubie ignores this option for Rosenbrock-W
     algorithms.
 
-    - Default: ``True`` for DIRK and FIRK, except the tableaus marked
-      as defaulting to exact Newton in
-      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`;
-      ``False`` otherwise
+    - Default: ``True`` for most DIRK and FIRK algorithms. ``False``
+      for the DIRK and FIRK algorithms marked as using exact Newton in
+      :doc:`/user_guide/algorithms_and_tuning/choosing_algorithms`,
+      for every other algorithm, and whenever you choose a
+      ``linear_correction_type`` other than the algorithm's default.
 
 **prefactored** — keep the LU factors from the start of each step.
     With ``inexact_newton`` and ``linear_correction_type="lu"``, cubie
@@ -284,10 +294,13 @@ Linear solver options:
     cubie doesn't solve the early Newton updates more accurately than it
     needs to.
 
-    - Defaults: ``krylov_residual_reduction`` is the smallest ``rtol``
-      of an adaptive controller, a hundredth of that for Rosenbrock-W
-      algorithms, or machine epsilon for a fixed controller;
-      ``krylov_residual_floor`` is the square root of machine epsilon
+    - Default ``krylov_residual_reduction``: your ``rtol`` with an
+      adaptive controller, or a hundredth of it with a Rosenbrock-W
+      algorithm. If you give a different ``rtol`` for each state, cubie
+      uses the smallest of them. With a fixed-step controller, cubie
+      uses ``1.2e-7`` in ``float32`` and ``2.2e-16`` in ``float64``.
+    - Default ``krylov_residual_floor``: ``3.5e-4`` in ``float32`` and
+      ``1.5e-8`` in ``float64``
 
 **preconditioner_type** — the preconditioner.
     Pass ``"jacobi"``, ``"neumann"`` or ``"none"``. With no
