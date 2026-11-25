@@ -48,9 +48,10 @@ Stream Groups
 -------------
 
 Cubie runs every solver in a stream group on one CUDA stream, so the GPU
-works through their solves one after another. Each group has its own
-stream, so if you want two solvers' work to be free to run on the GPU at
-the same time, put them in different groups with ``stream_group``.
+works through their solves one after another. Cubie gives each group
+its own stream, so if you want two solvers' work to be free to run on
+the GPU at the same time, put them in different groups with
+``stream_group``.
 Solvers go in the ``"solver"`` group unless you name another.
 
 .. code-block:: python

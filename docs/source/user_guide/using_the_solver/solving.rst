@@ -110,8 +110,8 @@ into the code, so it needs your parameters to build the same code that
 
    solver.compile(parameters={"b": b_values})
 
-A solver keeps its GPU memory between solves, so that the next solve
-can start straight away. When you've finished with it, call
+Cubie keeps a solver's GPU memory between solves, so that the next
+solve can start straight away. When you've finished with it, call
 :meth:`~cubie.batchsolving.solver.Solver.close` to give the memory back,
 or use the solver in a ``with`` block, which closes it at the end of the
 block. ``solve_ivp`` closes its own solver before it returns.

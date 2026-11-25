@@ -202,8 +202,8 @@ by time (or summary window) first, then variable, then run:
    index in ``status_messages`` to see the names of its status codes; see
    :doc:`/troubleshooting`. When a run fails, cubie fills its output
    with NaN and warns you with the number of failed runs and their
-   status codes. For an implicit algorithm, the warning also suggests
-   settings that make failures less likely. Pass
+   status codes. For an implicit algorithm, cubie also suggests settings
+   in the warning that make failures less likely. Pass
    ``nan_error_trajectories=False`` to keep the output of failed runs,
    which also turns off the warning.
 

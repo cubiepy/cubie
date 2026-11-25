@@ -639,10 +639,11 @@ class Solver(DerivedValues):
             batch frequently, and the compile time is long enough to
             make it annoying.
         **kwargs
-            Further settings, passed to :meth:`update`; see
-            :doc:`/user_guide/using_the_solver/configuration`. The
-            solver keeps them for later solves. A parameter name raises
-            ``KeyError``; pass parameter values in ``parameters``.
+            Further settings, which the solver passes to :meth:`update`
+            and keeps for later solves. See
+            :doc:`/user_guide/using_the_solver/configuration` for each
+            one. Pass parameter values in ``parameters``, because the
+            solver raises ``KeyError`` for a parameter name given here.
 
         Returns
         -------
