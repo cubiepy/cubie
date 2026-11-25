@@ -100,9 +100,9 @@ algorithm or tableau is named without setting ``step_controller``,
 CuBIE selects the family's tuned controller if the scheme provides
 an estimate: an integral controller for explicit Runge–Kutta, a PI
 controller for DIRK, and the Gustafsson predictive controller for
-FIRK, Rosenbrock-W and Crank–Nicolson. Some tableaus choose a
-different controller. If the scheme has no estimate, CuBIE uses a
-fixed-step controller.
+FIRK, Rosenbrock-W and Crank–Nicolson. CuBIE uses a different
+controller for some tableaus. If the scheme has no estimate, CuBIE uses
+a fixed-step controller.
 This is why ``dirk`` and ``firk`` run fixed-step out of the box:
 their default tableaus have no embedded estimate. Aliases that do
 (``radau``, for example) enable the family's adaptive defaults

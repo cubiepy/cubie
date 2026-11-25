@@ -180,8 +180,8 @@ family, so treat them as expert tuning.
 
     - Defaults: ``integral_gain=1.2`` for ERK tableaus that default to
       ``i``, and ``1.0`` for ``i`` otherwise; ``integral_gain=0.3`` and
-      ``proportional_gain=0.4`` for ``pi`` and ``pid``, except that DIRK
-      tableaus set their default ``pi`` gains from the order of their
+      ``proportional_gain=0.4`` for ``pi`` and ``pid``, except that cubie
+      sets DIRK's default ``pi`` gains from the order of the tableau's
       error estimate; ``derivative_gain=0.0``
 
 **filter_coefficients** — the exponents of the step law.
