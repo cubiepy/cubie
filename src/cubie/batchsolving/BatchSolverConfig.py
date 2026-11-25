@@ -158,8 +158,8 @@ ALL_KERNEL_PARAMETERS = (
     )
     | ALL_CACHE_PARAMETERS
 )
-"""Names of the settings that control how cubie compiles, caches and
-launches the batch kernel."""
+"""Names of the settings you pass to choose how cubie compiles, caches
+and launches the batch kernel."""
 
 
 def _as_int_tuple(value: Tuple) -> Tuple[int, ...]:
