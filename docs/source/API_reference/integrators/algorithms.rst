@@ -98,17 +98,19 @@ How the step controller is chosen
 Adaptive step control needs an embedded error estimate. When an
 algorithm or tableau is named without setting ``step_controller``,
 CuBIE selects the family's tuned controller if the scheme provides
-an estimate — an integral controller for explicit Runge–Kutta, the
-Gustafsson predictive controller for the implicit families — and a
-fixed-step controller if it does not.
+an estimate: an integral controller for explicit Runge–Kutta, a PI
+controller for DIRK, and the Gustafsson predictive controller for
+FIRK, Rosenbrock-W and Crank–Nicolson. Some tableaus choose a
+different controller. If the scheme has no estimate, CuBIE uses a
+fixed-step controller.
 This is why ``dirk`` and ``firk`` run fixed-step out of the box:
-their default tableaus carry no embedded estimate. Aliases that do
+their default tableaus have no embedded estimate. Aliases that do
 (``radau``, for example) enable the family's adaptive defaults
-automatically. Explicitly pairing an adaptive controller with an
-estimate-free scheme falls back to fixed stepping with a
-``UserWarning``. Gains or ``filter_coefficients`` passed without a
-``step_controller`` select the smallest of ``i``/``pi``/``pid`` that
-carries every nonzero gain given.
+automatically. If you pair an adaptive controller with an
+estimate-free scheme, CuBIE warns with a ``UserWarning`` and steps at
+a fixed size. If you pass gains or ``filter_coefficients`` without
+a ``step_controller``, CuBIE selects the smallest of
+``i``/``pi``/``pid`` that uses every nonzero gain you gave.
 
 No family enables a step-freeze deadband by default; pass
 ``deadband_min``/``deadband_max`` to hold ``dt`` for gains inside a

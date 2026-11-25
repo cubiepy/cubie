@@ -178,11 +178,11 @@ family, so treat them as expert tuning.
     ``step_controller``, cubie selects the fastest of ``i``, ``pi`` and
     ``pid`` that uses it.
 
-    - Defaults: ``integral_gain=1.2`` for ERK's ``i`` controller and
-      ``1.0`` for ``i`` otherwise; ``integral_gain=0.3`` and
-      ``proportional_gain=0.4`` for ``pi`` and ``pid``, scaled by
-      ``(order + 1) / order`` for DIRK's ``pi`` controller;
-      ``derivative_gain=0.0``
+    - Defaults: ``integral_gain=1.2`` for ERK tableaus that default to
+      ``i``, and ``1.0`` for ``i`` otherwise; ``integral_gain=0.3`` and
+      ``proportional_gain=0.4`` for ``pi`` and ``pid``, except that DIRK
+      tableaus set their default ``pi`` gains from the order of their
+      error estimate; ``derivative_gain=0.0``
 
 **filter_coefficients** — the exponents of the step law.
     Pass a ``(beta1, beta2, beta3)`` triple for the step law
