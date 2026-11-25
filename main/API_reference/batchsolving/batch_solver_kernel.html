@@ -336,12 +336,16 @@ and unroll keys <code class="docutils literal notranslate"><span class="pre">set
 <dd><p>Return the block size and resident blocks per SM of a launch
 with no block size requested.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The automatic choice, or the <code class="docutils literal notranslate"><span class="pre">blocksize</span></code> setting (unset:
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>runs</strong> – Number of runs in the launch, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for a batch
+large enough to fill every block.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The automatic choice, or the <code class="docutils literal notranslate"><span class="pre">blocksize</span></code> setting (unset:
 <code class="docutils literal notranslate"><span class="pre">DEFAULT_BLOCKSIZE</span></code>) with <code class="docutils literal notranslate"><span class="pre">None</span></code> when none is made.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)">int</a>, <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)">int</a> or None]</p>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)">int</a>, <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)">int</a> or None]</p>
 </dd>
 </dl>
 </dd></dl>

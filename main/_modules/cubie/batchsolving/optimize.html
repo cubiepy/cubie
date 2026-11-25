@@ -571,7 +571,9 @@
 
 <span class="sd">    For a kernel larger than the instruction cache, return the launch</span>
 <span class="sd">    within the occupancy tie band that puts a block on the most SMs,</span>
-<span class="sd">    and the largest block among those.</span>
+<span class="sd">    and the largest block among those. For a smaller kernel, return</span>
+<span class="sd">    the launch with the most resident threads, and the smaller block</span>
+<span class="sd">    on a tie.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>

@@ -517,7 +517,8 @@ as defaulting to exact Newton in
 <dt><strong>prefactored</strong> — keep the LU factors from the start of each step.</dt><dd><p>With <code class="docutils literal notranslate"><span class="pre">inexact_newton</span></code> and <code class="docutils literal notranslate"><span class="pre">linear_correction_type=&quot;lu&quot;</span></code>, cubie
 factorises the frozen matrix once per step for each distinct value
 on the tableau’s diagonal, and reuses the factors in every solve.
-With <code class="docutils literal notranslate"><span class="pre">False</span></code>, cubie factorises the frozen matrix in each solve.</p>
+With <code class="docutils literal notranslate"><span class="pre">False</span></code>, cubie factorises the frozen matrix in each solve.
+Rosenbrock-W algorithms always prefactor.</p>
 <ul class="simple">
 <li><p>Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
 </ul>
