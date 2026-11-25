@@ -179,8 +179,8 @@ by time (or summary window) first, then variable, then run:
 
 ``state`` and ``observables``
    The state and observable trajectories. When you add ``"time"`` to
-   ``output_types``, ``state`` also holds the time of each saved point in
-   its last column.
+   ``output_types``, cubie adds the time of each saved point to ``state``
+   as its last column.
 
 ``time_domain_array``
    The states followed by the observables, in one array. Read
