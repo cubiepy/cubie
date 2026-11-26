@@ -67,9 +67,15 @@ from cubie.CUDAFactory import (
     CUDAFactoryConfig,
     build_config,
 )
-from numba_cuda_mlir.types import int32
+from numba_cuda_mlir.types import int32, uint32
 from cubie._cudasim_extensions import cuda
-from cubie.backend.intrinsics import unroll_if
+from cubie.backend.intrinsics import (
+    bf16x2_fma,
+    bf16x2_high,
+    bf16x2_low,
+    bf16x2_pack,
+    unroll_if,
+)
 from cubie.integrators.algorithms.base_algorithm_step import (
     ButcherTableau,
 )
@@ -506,6 +512,12 @@ class DenseStagePredictor(CUDAFactory):
         alloc_previous_values = getalloc(
             "predictor_previous_values", self
         )
+        if config.uses_reduced_precision("low_precision_predictor"):
+            return DenseStagePredictorCache(
+                predictor_fn=self._packed_predictor(
+                    alloc_transform, alloc_previous_values
+                )
+            )
 
         # no cover: start
         @cuda.jit(
@@ -578,3 +590,132 @@ class DenseStagePredictor(CUDAFactory):
 
         # no cover: end
         return DenseStagePredictorCache(predictor_fn=predict)
+
+    def _packed_predictor(self, alloc_transform, alloc_previous_values):
+        """Compile the read-ahead with bfloat16 pairs of states.
+
+        Multiply two states per packed operation, and the last state in
+        run precision when the state count is odd.
+        """
+        config = self.compile_settings
+        typed_zero = config.numba_precision(0.0)
+        n = int32(config.n_states)
+        pair_count = int32(config.n_states // 2)
+        odd = config.n_states % 2 == 1
+        last_state = int32(config.n_states - 1)
+        stage_count = int32(config.stage_count)
+        transform_size = int32(config.transform_size)
+        first_predicted = int32(config.first_predicted_row)
+        predicted_count = int32(config.predicted_count)
+        power_count = int32(config.power_count)
+        ratio_coefficients = config.ratio_coefficients
+        unroll_stage = config.unroll.unroll_stage
+        unroll_step_element = config.unroll.unroll_step_element
+        unroll_other_small = config.unroll.unroll_other_small
+        packed_zero = uint32(0)
+        transform_length = int(config.transform_size)
+        stage_length = int(config.stage_count)
+
+        # no cover: start
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def predict(
+            stage_increment,
+            step_ratio,
+            apply_flag,
+            shared,
+            persistent_local,
+        ):
+            transform = alloc_transform(shared, persistent_local)
+            previous_values = alloc_previous_values(
+                shared, persistent_local
+            )
+            packed_transform = cuda.local.array(transform_length, uint32)
+            packed_previous = cuda.local.array(stage_length, uint32)
+
+            for entry_idx in unroll_if(
+                range(transform_size), unroll_other_small
+            ):
+                accumulator = typed_zero
+                for power_idx in unroll_if(
+                    range(power_count), unroll_other_small
+                ):
+                    flat_idx = (
+                        (power_count - int32(1) - power_idx)
+                        * transform_size
+                        + entry_idx
+                    )
+                    accumulator = (
+                        accumulator * step_ratio
+                        + ratio_coefficients[flat_idx]
+                    )
+                entry = accumulator * step_ratio
+                transform[entry_idx] = entry
+                packed_transform[entry_idx] = bf16x2_pack(entry, entry)
+
+            for pair_idx in unroll_if(
+                range(pair_count), unroll_step_element
+            ):
+                state_idx = int32(2) * pair_idx
+                for stage_idx in unroll_if(
+                    range(stage_count), unroll_stage
+                ):
+                    base = stage_idx * n + state_idx
+                    packed_previous[stage_idx] = bf16x2_pack(
+                        stage_increment[base],
+                        stage_increment[base + int32(1)],
+                    )
+                for row_idx in unroll_if(
+                    range(predicted_count), unroll_stage
+                ):
+                    accumulator = packed_zero
+                    row_base = row_idx * stage_count
+                    for source_idx in unroll_if(
+                        range(stage_count), unroll_stage
+                    ):
+                        accumulator = bf16x2_fma(
+                            packed_transform[row_base + source_idx],
+                            packed_previous[source_idx],
+                            accumulator,
+                        )
+                    target_idx = (
+                        (first_predicted + row_idx) * n + state_idx
+                    )
+                    stage_increment[target_idx] = cuda.selp(
+                        apply_flag,
+                        bf16x2_high(accumulator),
+                        stage_increment[target_idx],
+                    )
+                    stage_increment[target_idx + int32(1)] = cuda.selp(
+                        apply_flag,
+                        bf16x2_low(accumulator),
+                        stage_increment[target_idx + int32(1)],
+                    )
+
+            if odd:
+                for stage_idx in unroll_if(
+                    range(stage_count), unroll_stage
+                ):
+                    previous_values[stage_idx] = stage_increment[
+                        stage_idx * n + last_state
+                    ]
+                for row_idx in unroll_if(
+                    range(predicted_count), unroll_stage
+                ):
+                    value = typed_zero
+                    row_base = row_idx * stage_count
+                    for source_idx in unroll_if(
+                        range(stage_count), unroll_stage
+                    ):
+                        value += (
+                            transform[row_base + source_idx]
+                            * previous_values[source_idx]
+                        )
+                    target_idx = (
+                        (first_predicted + row_idx) * n + last_state
+                    )
+                    stage_increment[target_idx] = cuda.selp(
+                        apply_flag, value, stage_increment[target_idx]
+                    )
+
+        # no cover: end
+        return predict

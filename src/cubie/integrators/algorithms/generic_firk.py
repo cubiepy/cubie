@@ -402,6 +402,7 @@ class FIRKStep(ODEImplicitStep):
                     prefactored=True,
                     stacked=True,
                     **stage_kwargs,
+                    **self._factor_request_kwargs(),
                 )
                 prepare_function = lu_result.prepare_jac
                 cached_count = lu_result.cached_auxiliary_count
@@ -482,7 +483,12 @@ class FIRKStep(ODEImplicitStep):
             counts["preconditioner"] = preconditioner_result.operation_count
 
         buffer_registry.update_buffer(
-            "cached_auxiliaries", self, size=cached_count
+            "cached_auxiliaries",
+            self,
+            **self._cached_auxiliaries_layout(
+                cached_count,
+                self.uses_cached_solve and self.uses_direct_solver,
+            ),
         )
 
         apply_mass_fn = None
@@ -497,6 +503,7 @@ class FIRKStep(ODEImplicitStep):
                         prefactored=True,
                         stacked=True,
                         **stage_kwargs,
+                        **self._factor_request_kwargs(),
                     )
                     self.error_solver.update(
                         lu_solve_fn=smoothing.device_function,

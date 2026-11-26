@@ -44,6 +44,7 @@ from cubie.backend.intrinsics import narrow_f64, unroll_if
 
 from cubie.CUDAFactory import (
     ALL_JIT_PARAMETERS,
+    ALL_REDUCED_PRECISION_PARAMETERS,
     ALL_UNROLL_PARAMETERS,
     CUDAFactory,
     CUDADispatcherCache,
@@ -93,7 +94,9 @@ ALL_LOOP_SETTINGS = {
     "dt_location",
     "accept_step_location",
     "proposed_counters_location",
-} | ALL_UNROLL_PARAMETERS | ALL_JIT_PARAMETERS
+} | ALL_UNROLL_PARAMETERS | ALL_JIT_PARAMETERS | (
+    ALL_REDUCED_PRECISION_PARAMETERS
+)
 """Compile-critical loop configuration parameters accepted by
 :class:`IVPLoop`.
 
@@ -419,6 +422,24 @@ class IVPLoop(CUDAFactory):
         precision = config.numba_precision
         # narrow_f64 skips the ftz subnormal guard on the t narrowing.
         narrow_time = narrow_f64 if precision == float32 else precision
+        # Hold time as an unevaluated float32 sum t_prec + t_tail
+        # instead of a float64.
+        low_time = config.uses_reduced_precision("low_precision_time")
+
+        # no cover: start
+        @cuda.jit(device=True, inline=True, **self.jit_kwargs)
+        def add_time(head, tail, increment):
+            """Return ``head + tail + increment`` as a head and tail.
+
+            The tail is the rounding error of the head's sum, exact
+            while the increment is no larger than the head.
+            """
+            corrected = increment + tail
+            new_head = head + corrected
+            new_tail = corrected - (new_head - head)
+            return new_head, new_tail
+
+        # no cover: end
 
         success = int32(CUBIE_RESULT_CODES.SUCCESS)
         step_too_small = int32(CUBIE_RESULT_CODES.STEP_TOO_SMALL)
@@ -579,8 +600,12 @@ class IVPLoop(CUDAFactory):
             int
                 Status code aggregating errors and iteration counts.
             """
-            t = float64(t0)
-            t_prec = narrow_time(t)
+            if low_time:
+                t_prec = precision(t0)
+                t_tail = typed_zero
+            else:
+                t = float64(t0)
+                t_prec = narrow_time(t)
             t_end = precision(settling_time + t0 + duration)
             # Fixed mode keeps f64 copies of the event times.
             if fixed_mode:
@@ -769,8 +794,11 @@ class IVPLoop(CUDAFactory):
             dt[0] = dt_raw
             accept_step[0] = int32(0)
             # Time an unclamped step would reach.
-            t_next64 = t + float64(dt_raw)
-            t_next = narrow_time(t_next64)
+            if low_time:
+                t_next, t_next_tail = add_time(t_prec, t_tail, dt_raw)
+            else:
+                t_next64 = t + float64(dt_raw)
+                t_next = narrow_time(t_next64)
 
             # Initialize iteration counters
             for i in unroll_if(range(n_counters), unroll_other_small):
@@ -885,28 +913,48 @@ class IVPLoop(CUDAFactory):
                         do_final_summary |= at_end
 
                     # An unclamped step ends at t_next.
-                    t_proposal = t_next64
+                    if low_time:
+                        t_tail_proposal = t_next_tail
+                    else:
+                        t_proposal = t_next64
                     t_prec_proposal = t_next
                     # A clamped step lands on the event time:
                     if truncated:
                         # fixed mode commits the f64 copy,
                         if fixed_mode:
-                            t_proposal = next_event64
+                            if low_time:
+                                t_tail_proposal = typed_zero
+                            else:
+                                t_proposal = next_event64
                             t_prec_proposal = next_event
                         # adaptive mode adds the clamped step to t.
                         else:
-                            t_proposal = t + float64(dt_eff)
-                            t_prec_proposal = narrow_time(t_proposal)
+                            if low_time:
+                                t_prec_proposal, t_tail_proposal = add_time(
+                                    t_prec, t_tail, dt_eff
+                                )
+                            else:
+                                t_proposal = t + float64(dt_eff)
+                                t_prec_proposal = narrow_time(t_proposal)
                     # Land the final at_end step exactly on t_end.
                     if save_last or summarise_last:
                         t_prec_proposal = cuda.selp(
                             at_end, t_end, t_prec_proposal
                         )
+                        if low_time:
+                            t_tail_proposal = cuda.selp(
+                                at_end, typed_zero, t_tail_proposal
+                            )
                     time_advances = bool_(dt_eff > typed_zero)
                     # Fixed control's next dt is already known.
                     if fixed_mode:
-                        t_next64 = t_proposal + float64(dt_raw)
-                        t_next = narrow_time(t_next64)
+                        if low_time:
+                            t_next, t_next_tail = add_time(
+                                t_prec_proposal, t_tail_proposal, dt_raw
+                            )
+                        else:
+                            t_next64 = t_proposal + float64(dt_raw)
+                            t_next = narrow_time(t_next64)
 
                     # Take a step
                     proposed_counters[0] = int32(0)
@@ -1029,12 +1077,20 @@ class IVPLoop(CUDAFactory):
                     if accept:
                         iteration_status = int32(0)
 
-                    t = cuda.selp(accept, t_proposal, t)
+                    if low_time:
+                        t_tail = cuda.selp(accept, t_tail_proposal, t_tail)
+                    else:
+                        t = cuda.selp(accept, t_proposal, t)
                     t_prec = cuda.selp(accept, t_prec_proposal, t_prec)
                     # Adaptive mode's next step time is available now.
                     if not fixed_mode:
-                        t_next64 = t + float64(dt_raw)
-                        t_next = narrow_time(t_next64)
+                        if low_time:
+                            t_next, t_next_tail = add_time(
+                                t_prec, t_tail, dt_raw
+                            )
+                        else:
+                            t_next64 = t + float64(dt_raw)
+                            t_next = narrow_time(t_next64)
 
                     for i in unroll_if(range(n_states), unroll_step_element):
                         newv = state_proposal_buffer[i]

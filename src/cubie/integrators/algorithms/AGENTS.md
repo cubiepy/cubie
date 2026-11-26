@@ -149,7 +149,10 @@ mass).
   **kwargs).device_function` with a role name (`"residual"`, `"linear_operator"`,
   `"apply_mass"`, ...) or the configured `preconditioner_type`: `jacobian_at="step"` for
   frozen-J chains, `stacked=True` for FIRK, `jacobian_at="state"` for error smoothing,
-  `prefactored=True` for step-start LU factors. `preconditioner_type` is validated
+  `prefactored=True` for step-start LU factors. Under `low_precision_factors` the
+  step adds `_factor_request_kwargs()` to its prefactored LU requests and registers
+  `cached_auxiliaries` through `_cached_auxiliaries_layout` as `(count + 1) // 2`
+  `uint32` words. `preconditioner_type` is validated
   against `PRECONDITIONER_ROLES`.
 - Constructors and `update` (after a recognised key) run `build_implicit_helpers()`,
   which requests the helpers, pushes them into the solver children and writes their

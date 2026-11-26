@@ -852,12 +852,41 @@ def _system_pattern_structure(
     )
 
 
+class PairedBfloat16Storage:
+    """Print factor slots as bfloat16 pairs in 32-bit words.
+
+    Store slot ``k`` in word ``k // 2``, even slots in the low half and
+    odd slots in the high half.
+    """
+
+    @staticmethod
+    def load(name: str, index: int) -> str:
+        """Return the text reading slot ``index`` as a float32."""
+        lane = "bf16x2_high" if index % 2 else "bf16x2_low"
+        return f"{lane}({name}[{index // 2}])"
+
+    @staticmethod
+    def store(name: str, index: int, value: str) -> str:
+        """Return the line writing ``value`` into slot ``index``."""
+        insert = "bf16x2_insert_high" if index % 2 else "bf16x2_insert_low"
+        word = f"{name}[{index // 2}]"
+        return f"{word} = {insert}({word}, {value})"
+
+
+def _factor_storage(low_precision_factors: bool):
+    """Return the printer's stored-array map for the factor storage."""
+    if low_precision_factors:
+        return {"cached_aux": PairedBfloat16Storage}
+    return None
+
+
 def _finalise_prepare_body(
     exprs: List[Tuple[ir.Expr, ir.Expr]],
     total_reals: int,
     sysir: SystemIR,
     operation_ordering: str,
     cse: bool,
+    low_precision_factors: bool = False,
 ) -> str:
     """Sort, prune, and print a block-preparation body."""
     exprs = list(exprs)
@@ -878,6 +907,7 @@ def _finalise_prepare_body(
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
         nonfloat_functions=sysir.nonfloat_functions,
+        stored_arrays=_factor_storage(low_precision_factors),
     )
     return "\n".join("        " + ln for ln in lines)
 
@@ -1018,6 +1048,7 @@ def _finalise_solve_lines(
     sysir: SystemIR,
     operation_ordering: str,
     cse: bool = True,
+    low_precision_factors: bool = False,
 ) -> List[str]:
     """Sort, prune to ``x``, and print a substitution-solve body."""
     if cse:
@@ -1035,6 +1066,7 @@ def _finalise_solve_lines(
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
         nonfloat_functions=sysir.nonfloat_functions,
+        stored_arrays=_factor_storage(low_precision_factors),
     )
 
 
@@ -1048,6 +1080,7 @@ def _prefactored_solve_source(
     func_name: str,
     operation_ordering: str,
     cse: bool = True,
+    low_precision_factors: bool = False,
 ) -> Tuple[str, int]:
     """Emit the per-diagonal prefactored substitution factory."""
     row_perm, col_perm, lu_pattern, slots, nnz, _ = (
@@ -1080,6 +1113,7 @@ def _prefactored_solve_source(
         lines = _finalise_solve_lines(
             exprs, len(col_perm), sysir, operation_ordering,
             cse=cse,
+            low_precision_factors=low_precision_factors,
         )
         branch_bodies.append(lines)
 
@@ -1136,6 +1170,7 @@ def _transformed_solve_source(
     operation_ordering: str,
     gamma: float,
     cse: bool = True,
+    low_precision_factors: bool = False,
 ) -> Tuple[str, int]:
     """Emit the eigenvalue block-transform substitution factory."""
     n = len(sysir.state_symbols)
@@ -1286,7 +1321,12 @@ def _transformed_solve_source(
             exprs.append((ir.arr("x", j * n + comp), combo))
 
     lines = _finalise_solve_lines(
-        exprs, stage_count * n, sysir, operation_ordering, cse=cse
+        exprs,
+        stage_count * n,
+        sysir,
+        operation_ordering,
+        cse=cse,
+        low_precision_factors=low_precision_factors,
     )
     body = "\n".join("        " + ln for ln in lines)
     description = (
@@ -1322,6 +1362,7 @@ def generate_lu_solve_code(
     gamma: float = 1.0,
     a_ij: Optional[float] = None,
     jacobian: Optional[List[List[ir.Expr]]] = None,
+    low_precision_factors: bool = False,
 ) -> Tuple[str, int]:
     """Generate the direct LU solve factory for one variant.
 
@@ -1394,6 +1435,7 @@ def generate_lu_solve_code(
             func_name,
             operation_ordering,
             cse=cse,
+            low_precision_factors=low_precision_factors,
         )
         default_timelogger.stop_event(event)
         return code, lu_nnz
@@ -1408,6 +1450,7 @@ def generate_lu_solve_code(
             operation_ordering,
             gamma=gamma,
             cse=cse,
+            low_precision_factors=low_precision_factors,
         )
         default_timelogger.stop_event(event)
         return code, lu_nnz
@@ -1580,6 +1623,7 @@ def generate_lu_prepare_blocks_code(
     beta: float = 1.0,
     gamma: float = 1.0,
     jacobian: Optional[List[List[ir.Expr]]] = None,
+    low_precision_factors: bool = False,
 ) -> Tuple[str, int]:
     """Generate the step-start LU block factorisation factory.
 
@@ -1857,6 +1901,7 @@ def generate_lu_prepare_blocks_code(
         sysir,
         operation_ordering,
         cse,
+        low_precision_factors=low_precision_factors,
     )
     code = LU_PREPARE_TEMPLATE.format(
         func_name=func_name,
@@ -1881,6 +1926,7 @@ def generate_lu_smoothing_solve_code(
     beta: float = 1.0,
     gamma: float = 1.0,
     jacobian: Optional[List[List[ir.Expr]]] = None,
+    low_precision_factors: bool = False,
 ) -> Tuple[str, int]:
     """Generate the smoothing solve sharing the real eigen block.
 
@@ -1948,7 +1994,11 @@ def generate_lu_smoothing_solve_code(
         )
     )
     lines = _finalise_solve_lines(
-        exprs, len(col_perm), sysir, operation_ordering
+        exprs,
+        len(col_perm),
+        sysir,
+        operation_ordering,
+        low_precision_factors=low_precision_factors,
     )
     body = "\n".join("        " + ln for ln in lines)
     description = (

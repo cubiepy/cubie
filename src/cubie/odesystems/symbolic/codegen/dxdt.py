@@ -23,6 +23,8 @@ See Also
     Disk cache that stores and imports the generated code.
 """
 
+from typing import Optional
+
 from cubie.odesystems.symbolic.engine import expr as ir
 from cubie.odesystems.symbolic.engine.adapter import system_ir
 from cubie.odesystems.symbolic.engine.assignments import (
@@ -103,6 +105,7 @@ def generate_dxdt_lines(
     layout: SystemLayout,
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
+    reciprocal: Optional[str] = None,
 ) -> list[str]:
     """Generate CUDA assignment statements for ``dx/dt`` updates.
 
@@ -114,6 +117,9 @@ def generate_dxdt_lines(
         The buffer layout that gives each symbol's array reference.
     cse
         Whether to apply common subexpression elimination before emission.
+    reciprocal
+        Name of a device function to print divisions as products with;
+        pass ``None`` to print divisions.
 
     Returns
     -------
@@ -149,6 +155,7 @@ def generate_dxdt_lines(
         symbol_map=sysir.arrayrefs,
         function_aliases=sysir.function_aliases,
         nonfloat_functions=sysir.nonfloat_functions,
+        reciprocal=reciprocal,
     )
     if not dxdt_lines:
         dxdt_lines = ["pass"]
@@ -235,6 +242,7 @@ def generate_dxdt_fac_code(
     func_name: str = "dxdt_factory",
     cse: bool = True,
     operation_ordering: str = operation_ordering_default(),
+    reciprocal: Optional[str] = None,
 ) -> str:
     """Emit Python source for a ``dx/dt`` CUDA factory.
 
@@ -248,6 +256,9 @@ def generate_dxdt_fac_code(
         Name of the generated factory function.
     cse
         Whether to apply common subexpression elimination before emission.
+    reciprocal
+        Name of a device function to print divisions as products with;
+        pass ``None`` to print divisions.
 
     Returns
     -------
@@ -265,6 +276,7 @@ def generate_dxdt_fac_code(
         layout=layout,
         cse=cse,
         operation_ordering=operation_ordering,
+        reciprocal=reciprocal,
     )
 
     code = DXDT_TEMPLATE.format(

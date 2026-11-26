@@ -202,6 +202,14 @@ class SolverSettings(_CubieConfigBase):
     ftz: Optional[bool] = None
     lto: Optional[bool] = None
 
+    # -- Reduced precision --------------------------------------------
+    low_precision_time: Optional[bool] = None
+    low_precision_norms: Optional[bool] = None
+    low_precision_controller: Optional[bool] = None
+    low_precision_predictor: Optional[bool] = None
+    low_precision_factors: Optional[bool] = None
+    low_precision_rhs: Optional[bool] = None
+
     def is_given(self, name: str) -> bool:
         """Return whether ``name`` was given."""
         return getattr(self, name) is not None

@@ -128,6 +128,12 @@ Subpackage `AGENTS.md` files describe only what they add to these conventions.
   immutable values (tuples, not lists).
 - A system runs at **one precision** (`ALLOWED_PRECISIONS` = float16/32/64); float
   members are returned cast via `self.precision(...)`.
+- Every config also holds `reduced_precision: ReducedPrecisionFlags`, switches that move
+  chosen device-code values below run precision (`low_precision_time`, `_norms`,
+  `_controller`, `_predictor`, `_factors`, `_rhs`; loose keys in
+  `ALL_REDUCED_PRECISION_PARAMETERS`, all default `False`). A `build()` reads one through
+  `config.uses_reduced_precision(name)`, which is `False` for any precision but float32.
+  Time and score them with `benchmarks/precision_trials.py`.
 - `build()` writes the sizes, flags and device functions a parent reads into the
   cache; parents read children's `products` at update time to feed siblings.
 - **Settings resolve at the `Solver`:** `batchsolving/solver_settings.py` records the

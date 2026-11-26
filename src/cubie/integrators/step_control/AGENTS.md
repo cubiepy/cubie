@@ -50,6 +50,14 @@ Gustafsson 2 (previous `dt` and norm); fixed and I register nothing. Query its s
 `persistent_local_buffer_size`. On the first call, PI/PID fall back to the current norm
 and Gustafsson to `max(..., 1e-16)`; the buffer is not pre-filled.
 
+## Reduced-precision gains
+Under `low_precision_controller` the I, PI, PID and Gustafsson controllers compute gains
+from float32 bit patterns. `log_bits(x)`, the bits of `x` less those of 1.0, approximates
+`2**23 * log2(x)`. The controllers multiply and divide by adding and subtracting log
+bits, raise to a power `p` with one `multiply_high` by `power_scale(p)` (`|p| < 0.5`),
+and convert the sum back with `gain_from_log_bits`, which clamps it to the finite
+float32 range. The helpers are in `adaptive_step_controller.py`.
+
 ## Controller specifics
 - Step bounds are plain fields with `DEFAULT_*` defaults. The config raises
   `ValueError` on contradictory bounds.
