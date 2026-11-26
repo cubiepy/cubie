@@ -318,7 +318,7 @@ class InputArrays(BaseArrayManager):
         bool
             True if every given array is the host array already
             attached, with the slot's dtype, and no device input is
-            attached. :meth:`update` then has nothing more to do.
+            attached.
         """
 
         # Device inputs always take the full update path.

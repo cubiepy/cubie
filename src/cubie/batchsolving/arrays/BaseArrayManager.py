@@ -142,9 +142,9 @@ class ManagedArray:
     is_chunked
         Whether the array may be split into chunks along its run axis.
     array
-        Accepted for its shape only: construction replaces it with a
-        zero array of the same shape. Attach data afterwards through
-        :attr:`array`.
+        Array whose shape to start from. The class keeps only the
+        shape and attaches a zero array of that shape instead, so
+        attach your data afterwards through :attr:`array`.
     chunked_shape
         Shape of one chunk, set once the memory manager has allocated
         the array.
