@@ -14,7 +14,7 @@ Published Classes
 See Also
 --------
 :class:`~cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays`
-    Consumer that submits writeback tasks during chunked transfers.
+    Consumer that submits a writeback task for each staged block.
 :class:`~cubie.memory.chunk_buffer_pool.ChunkBufferPool`
     Pool managing pinned buffer allocation and reuse.
 """

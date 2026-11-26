@@ -16,7 +16,7 @@ Allocation, streams, and chunk math live in `cubie.memory`.
 ## Key Files
 | File | Description |
 |------|-------------|
-| `BaseArrayManager.py` | `ManagedArray` (per-array metadata: dtype, `stride_order`, shapes, chunk axis/length, backing array), `ArrayContainer` (ABC), `BaseArrayManager` (ABC: registration, size/dtype checks, host updates, allocation, chunk-aware transfer). |
+| `BaseArrayManager.py` | `ManagedArray` (per-array metadata: dtype, `stride_order`, shapes, chunk axis/length, backing array), `ArrayContainer` (ABC), `BaseArrayManager` (ABC: registration, size/dtype checks, host updates, allocation, chunk-aware transfer), `staging_blocks`. |
 | `BatchInputArrays.py` | `InputArrayContainer` (`initial_values`, `parameters`, `driver_coefficients`) + `InputArrays` — sizes from `BatchInputSizes`; `initialise` stages H2D for the queued slots, skipping zero-size host data; `update` with `driver_coefficients=None` leaves the attached table in place. |
 | `BatchOutputArrays.py` | `OutputArrayContainer` (`state`, `observables`, `state_summaries`, `observable_summaries`, `status_codes`, `iteration_counters`) + `OutputArrays` — sizes from `BatchOutputSizes`; `finalise` does D2H + async writeback. |
 | `__init__.py` | Empty — managers are imported from their modules. |
@@ -44,7 +44,8 @@ slots are `"device"`.
 - `InputArrays.update(...)` refreshes sizes, precision and run count, attaches host
   arrays verbatim with their backing recorded (the only copy is a dtype cast; same
   shape queues `_needs_overwrite`, a new shape also queues reallocation) and calls
-  `allocate()`.
+  `allocate()`. When every given host array is the attached one, with no device inputs,
+  `_fast_path_update` queues only the uploads.
 - `OutputArrays.update(solver, transfer_outputs)` refreshes the sizes; when they
   changed it drops host buffers of another shape and queues every device output.
 - `allocate()` queues `ArrayRequest`s shaped by `_request_shape(label)` and drops the
@@ -66,7 +67,9 @@ slots are `"device"`.
   return the attached device array.
 
 ## Per-chunk hooks
-- `initialise(chunk_index)` (pre-launch, `InputArrays`): H2D for the queued slots.
+- `initialise(chunk_index)` (pre-launch, `InputArrays`): H2D for the queued slots in an
+  unchunked run, and for every input in a chunked run (chunked inputs by slice,
+  `driver_coefficients` whole).
   Pinned contiguous sources transfer directly; everything else stages block by block
   through `ChunkBufferPool` buffers, each handed to the transfer watcher with its own
   event.
@@ -90,7 +93,8 @@ pinned budget.
 `loan_host_arrays(result)` empties every host slot into the returned `SolveResult`.
 `reclaim_or_release_loan()` (in `update_from_solver` for a transferring run, and in
 `SolveResult.from_solver`) returns a collected owner's buffers to their slots; a live
-owner keeps them and the next transfer builds fresh host backing.
+owner keeps them and the next transfer builds fresh host backing. The loan tracks only the
+owner, so an array a caller kept from a collected owner is overwritten by the next solve.
 
 ## Writeback and teardown
 Transfer watchers release pinned buffers once their CUDA event completes; output tasks
@@ -109,7 +113,8 @@ dimension is concrete.
 ## Dependencies
 ### Internal
 - `cubie.memory` (`default_memmgr`, `MemoryManager`, `ArrayRequest`/`ArrayResponse`,
-  `chunk_buffer_pool.ChunkBufferPool`/`PinnedBuffer`); `cubie.outputhandling.output_sizes`
+  `chunk_buffer_pool.ChunkBufferPool`/`PinnedBuffer`, `mem_manager.HOST_STAGING_BYTES`/
+  `defer_instance_teardown`); `cubie.outputhandling.output_sizes`
   (`ArraySizingClass`, `BatchInputSizes`, `BatchOutputSizes`); `cubie.batchsolving`
   (`ArrayTypes`); `cubie.batchsolving.writeback_watcher` (`WritebackWatcher`);
   `cubie._cudasim_extensions` (`cuda`, `DeviceNDArrayBase`); `cubie.memory.driver_memory`

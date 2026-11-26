@@ -83,13 +83,13 @@ class InputArrayContainer(ArrayContainer):
     def host_factory(
         cls, memory_type: str = "pinned"
     ) -> "InputArrayContainer":
-        """Create a container configured for host memory transfers.
+        """Create a container for host-side input arrays.
 
         Parameters
         ----------
         memory_type
-            Memory type for host arrays: "pinned" or "host".
-            Default is "pinned" for non-chunked operation.
+            Memory type to give every slot until an array is attached:
+            ``"pinned"`` or ``"host"``.
 
         Returns
         -------
@@ -98,10 +98,8 @@ class InputArrayContainer(ArrayContainer):
 
         Notes
         -----
-        Uses pinned (page-locked) memory to enable asynchronous
-        host-to-device transfers with CUDA streams. Using ``"host"``
-        memory type instead would result in pageable memory that blocks
-        async transfers due to required intermediate buffering.
+        The manager records the backing of each array attached to a
+        slot, so this memory type lasts only until the first attach.
         """
         container = cls()
         container.set_memory_type(memory_type)
@@ -109,7 +107,7 @@ class InputArrayContainer(ArrayContainer):
 
     @classmethod
     def device_factory(cls) -> "InputArrayContainer":
-        """Create a container configured for device memory transfers.
+        """Create a container for device-side input arrays.
 
         Returns
         -------
@@ -125,21 +123,23 @@ class InputArrayContainer(ArrayContainer):
 class InputArrays(BaseArrayManager):
     """Manage allocation and transfer of batch input arrays.
 
+    The manager holds the initial values, parameters and driver
+    coefficients of a solve. It attaches the host arrays it is given
+    without copying them, unless their dtype differs from the solve's
+    precision, and copies them to the device before the kernel reads
+    them. It hands device arrays to the kernel as they are.
+
     Parameters
     ----------
-    _sizes
+    sizes
         Size specifications for the input arrays.
     host
         Container for host-side arrays.
-    device
-        Container for device-side arrays.
 
     Notes
     -----
-    Instances are configured from
-    :class:`~cubie.batchsolving.BatchSolverKernel` metadata. Updates request
-    memory through the shared manager, ensure array heights match solver
-    expectations, and attach received buffers prior to device transfers.
+    Build an instance with :meth:`from_solver`. The other parameters,
+    except ``device``, are those of :class:`.BaseArrayManager`.
     """
 
     _sizes: Optional[BatchInputSizes] = field(
@@ -172,12 +172,11 @@ class InputArrays(BaseArrayManager):
     _device_inputs: Dict[str, object] = field(factory=dict, init=False)
 
     def __attrs_post_init__(self) -> None:
-        """Ensure host and device containers use explicit memory types.
+        """Register the manager and set the containers' memory types.
 
-        Notes
-        -----
-        Host containers use pinned memory to enable asynchronous
-        host-to-device transfers with CUDA streams.
+        Start the host slots as ``"pinned"`` and the device slots as
+        ``"device"``. The manager then records the backing of each
+        host array attached to a slot.
         """
         super().__attrs_post_init__()
         self.host.set_memory_type("pinned")
@@ -201,15 +200,26 @@ class InputArrays(BaseArrayManager):
         parameters
             Parameter values for each integration run.
         driver_coefficients
-            Driver coefficient table; ``None`` keeps the attached one.
+            Driver coefficient table, or ``None`` to keep the attached
+            table.
+
+        Raises
+        ------
+        ValueError
+            If a host array, or a device array, does not have the
+            expected shape.
+        TypeError
+            If a device array's dtype differs from the solve's
+            precision.
 
         Notes
         -----
-        Inputs supplied as device arrays are attached directly as the
-        kernel's device inputs: no host staging or host-to-device
-        transfer occurs, and no managed device buffer is allocated for
-        them. They must already match the expected shape and dtype.
-        A slot's own device buffer supplied back is not re-uploaded.
+        The manager attaches device arrays as the kernel's inputs
+        directly. It allocates no device buffer for them and copies
+        nothing to the device. If you pass back the same host arrays
+        as the last call, the manager only queues their values for
+        upload. If you pass back one of the manager's own device
+        buffers, it uploads nothing for that array.
         """
         self.update_from_solver(solver_instance)
         if self._fast_path_update(
@@ -292,7 +302,24 @@ class InputArrays(BaseArrayManager):
         parameters: NDArray,
         driver_coefficients: Optional[NDArray],
     ) -> bool:
-        """Queue overwrites when the attached inputs are re-supplied."""
+        """Queue only the uploads when the attached inputs come back.
+
+        Parameters
+        ----------
+        initial_values
+            Initial values passed to :meth:`update`.
+        parameters
+            Parameters passed to :meth:`update`.
+        driver_coefficients
+            Driver coefficients passed to :meth:`update`, or ``None``.
+
+        Returns
+        -------
+        bool
+            True if every given array is the host array already
+            attached, with the slot's dtype, and no device input is
+            attached.
+        """
 
         # Device inputs always take the full update path.
         if self._device_inputs:
@@ -319,13 +346,27 @@ class InputArrays(BaseArrayManager):
         return True
 
     def _matches_slot(self, name: str, array: NDArray) -> bool:
-        """Return whether ``array`` is the attached, dtype-current slot."""
+        """Return whether ``array`` is the host array of ``name``.
+
+        Parameters
+        ----------
+        name
+            Name of the input array.
+        array
+            Array to compare with the attached one.
+
+        Returns
+        -------
+        bool
+            True if ``array`` is the attached array and has the slot's
+            dtype.
+        """
         slot = self.host.get_managed_array(name)
         return array is slot.array and array.dtype == slot.dtype
 
     @property
     def has_device_inputs(self) -> bool:
-        """Whether any input was supplied as a device array."""
+        """Return whether any input was supplied as a device array."""
         return bool(self._device_inputs)
 
     @property
@@ -404,13 +445,16 @@ class InputArrays(BaseArrayManager):
         )
 
     def update_from_solver(self, solver_instance: "BatchSolverKernel") -> None:
-        """Refresh size, precision, and chunk axis from the solver.
+        """Refresh the sizes, precision and run count from the solver.
+
+        Give every floating-point array the solver's precision. Do
+        nothing when the run count, precision, system sizes and driver
+        coefficient shape are those of the last call.
 
         Parameters
         ----------
         solver_instance
             The solver instance to update from.
-
         """
         # Input sizes are system sizes scaled by num_runs; skip the rebuild
         # (attrs construction) when those determinants are unchanged.
@@ -435,23 +479,39 @@ class InputArrays(BaseArrayManager):
         self._size_sig = sig
 
     def finalise(self, chunk_index: int, stream=None) -> None:
-        """Finish input handling for a chunk."""
-
-    def initialise(self, chunk_index: int, stream=None) -> None:
-        """Copy a batch chunk of host data to device buffers.
+        """Do nothing, because inputs need no work after a chunk.
 
         Parameters
         ----------
         chunk_index
-            Indices for the chunk being initialized.
+            Index of the chunk that has just been launched.
+        stream
+            Unused.
+        """
+
+    def initialise(self, chunk_index: int, stream=None) -> None:
+        """Queue the copies of a chunk's host inputs to the device.
+
+        In an unchunked run, copy only the arrays queued since the
+        last copy. In a chunked run, copy every input: the slice for
+        ``chunk_index`` of each chunked input, and the whole of the
+        driver coefficients. Skip host arrays with no elements.
+
+        Parameters
+        ----------
+        chunk_index
+            Index of the chunk about to be launched.
+        stream
+            Stream to queue the copies on, or ``None`` for the
+            manager's stream.
 
         Notes
         -----
-        Pinned host arrays transfer directly and asynchronously.
-        Everything else stages through pooled pinned buffers whose
-        releases are event-driven via the transfer watcher, so this
-        method never blocks on the stream: with the pool deep enough,
-        the CPU stages the next chunk while the previous kernel runs.
+        Copy pinned, C-contiguous host arrays straight to the device.
+        Stage every other array, and every chunk slice, through pooled
+        pinned buffers, each released by the transfer watcher once its
+        copy completes. This method does not wait for the GPU, so the
+        host can stage the next chunk while the previous kernel runs.
         """
         if stream is None:
             stream = self._memory_manager.get_stream(self)
@@ -500,13 +560,25 @@ class InputArrays(BaseArrayManager):
     ) -> None:
         """Stage one non-pinned input through pooled pinned buffers.
 
-        The host source may be a strided view (a chunk slice or a
-        memmap) whose run extent is smaller than the device array's on
-        the final chunk, so each block is copied into its buffer with
-        shape-aware indexing; a flat copy would misalign the runs.
-        Blocks come from :func:`staging_blocks`. Each block's buffer is
-        handed to the transfer watcher with its own event, so it
-        returns to the pool as soon as its copy lands on the device.
+        Cut the arrays into blocks with :func:`staging_blocks`, copy
+        each host block into a pinned buffer and queue the buffer's
+        copy to the device. The host source can be a strided view,
+        such as a chunk slice or a memmap, and on the final chunk
+        there can be fewer runs in it than in the device array. Copy
+        each block by its shape, so the runs line up. Hand each buffer
+        to the transfer watcher with its own event, so the buffer is
+        returned to the pool as soon as its copy reaches the device.
+
+        Parameters
+        ----------
+        array_name
+            Name of the input array.
+        host_array
+            Host array or chunk slice to copy.
+        device_array
+            Destination device array.
+        stream
+            Stream to queue the copies on.
         """
         dtype = host_array.dtype
         for device_block, host_block in staging_blocks(
@@ -542,24 +614,41 @@ class InputArrays(BaseArrayManager):
                 raise
 
     def wait_pending(self, timeout: Optional[float] = None) -> None:
-        """Wait for pending staging-buffer releases."""
+        """Wait until the transfer watcher releases every buffer.
+
+        Parameters
+        ----------
+        timeout
+            Maximum seconds to wait, or ``None`` to wait until done.
+        """
         self._transfer_watcher.wait_all(timeout=timeout)
 
     def _invalidate_hook(self) -> None:
-        """Drop device inputs; attached host data refills new buffers."""
+        """Drop the device arrays and queue the host data for upload.
+
+        Forget any attached device inputs. The next copy uploads the
+        attached host arrays into the new device buffers.
+        """
         super()._invalidate_hook()
         self._device_inputs.clear()
         self._needs_overwrite.extend(self.host.array_names())
 
     def reset(self) -> None:
-        """Clear all cached arrays and reset allocation tracking."""
+        """Release the arrays and buffers and stop the watcher."""
         super().reset()
         self._transfer_watcher.shutdown()
         self._buffer_pool.clear()
         self._device_inputs.clear()
 
     def _teardown_cleanups(self):
-        """Return transfer cleanup calls."""
+        """Return the calls that stop the watcher and free the buffers.
+
+        Returns
+        -------
+        list of callable
+            Calls that shut down the transfer watcher, free the
+            staging buffers and drop the device arrays.
+        """
         return [
             self._transfer_watcher.shutdown,
             self._buffer_pool.clear,

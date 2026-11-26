@@ -19,6 +19,7 @@ Batch solving
    optimize
    comparison
    batch_solver_config
+   active_outputs
    batch_solver_kernel
    system_interface
 
@@ -54,6 +55,7 @@ Supporting infrastructure
 -------------------------
 
 * :doc:`BatchSolverConfig <batch_solver_config>` – attrs container that tracks solver metadata.
+* :doc:`ActiveOutputs <active_outputs>` – which outputs and summaries a solve records, as booleans.
 * :doc:`BatchSolverKernel <batch_solver_kernel>` – compiles device kernels for batch integration.
 * :doc:`SystemInterface <system_interface>` – adapts :class:`cubie.odesystems.baseODE.BaseODE`
   instances for CUDA execution.

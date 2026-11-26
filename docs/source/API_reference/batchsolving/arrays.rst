@@ -14,44 +14,70 @@ Arrays
    array_container
    base_array_manager
    managed_array
+   staging_blocks
    input_array_container
    input_arrays
    output_array_container
-   active_outputs
    output_arrays
 
-The ``batchsolving.arrays`` package coordinates host and device array
-management for batch solver runs. ``InputArrays`` and ``OutputArrays`` are the
-key classes: they collect stride metadata, request GPU allocations via
-:mod:`cubie.memory`, and expose helpers for copying data between the CPU and
-CUDA kernels. ``OutputArrays`` mirrors requested state, observable, and summary
-buffers on the host and GPU for every solver launch.
+The classes in this package hold the arrays of a batch solve and move
+them between the host and the GPU. You don't create them yourself: each
+solver has one :class:`~cubie.batchsolving.arrays.BatchInputArrays.InputArrays`
+for the initial values, parameters and driver coefficients, and one
+:class:`~cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays` for
+the outputs.
+
+If you pass host arrays in the solver's precision, cubie uses them as
+they are and copies them to the GPU when it solves. If you pass them in
+another precision, cubie makes one converted copy of each. If a batch
+does not fit in GPU memory, cubie splits it into chunks of runs and
+copies each chunk's inputs and outputs in turn. Cubie hands the host
+outputs of a solve to the
+:class:`~cubie.batchsolving.solveresult.SolveResult` it returns.
+
+Each manager keeps a host and a device
+:class:`~cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer`,
+which hold one
+:class:`~cubie.batchsolving.arrays.BaseArrayManager.ManagedArray` for
+each array. Cubie allocates the managers' device memory through
+:mod:`cubie.memory`, and decides there how many chunks a batch needs.
 
 Base utilities
 ^^^^^^^^^^^^^^
 
-* :doc:`ArrayContainer <array_container>` – attrs container shared by input and output managers.
-* :doc:`BaseArrayManager <base_array_manager>` – helper that manages host/device array bindings and synchronisation.
+* :doc:`ArrayContainer <array_container>` – the base class for the
+  containers of host or device arrays.
+* :doc:`BaseArrayManager <base_array_manager>` – the base class of the
+  input and output managers, which handles registration, size checks,
+  allocation and copies.
+* :doc:`ManagedArray <managed_array>` – the shape, dtype, memory type
+  and chunking of one array.
+* :doc:`staging_blocks <staging_blocks>` – cuts a copy into blocks that
+  fit a pinned staging buffer.
 
 Input arrays
 ^^^^^^^^^^^^
 
-* :doc:`InputArrayContainer <input_array_container>` – checked attrs container describing solver inputs.
-* :doc:`InputArrays <input_arrays>` – handles allocation, host buffers, and CUDA copies for input data.
+* :doc:`InputArrayContainer <input_array_container>` – the container
+  for the initial values, parameters and driver coefficients.
+* :doc:`InputArrays <input_arrays>` – attaches a solve's inputs and
+  copies them to the GPU.
 
 Output arrays
 ^^^^^^^^^^^^^
 
-* :doc:`OutputArrayContainer <output_array_container>` – attrs container for state, observables, and summary outputs.
-* :doc:`ActiveOutputs <active_outputs>` – boolean flags describing which outputs and summaries are requested.
-* :doc:`OutputArrays <output_arrays>` – prepares host/device arrays, handles CUDA transfers, and exposes host views.
+* :doc:`OutputArrayContainer <output_array_container>` – the container
+  for the state and observable trajectories, their summaries, the
+  status codes and the iteration counters.
+* :doc:`OutputArrays <output_arrays>` – allocates the outputs and
+  copies the ones the solve records back to the host.
 
 Dependencies
 ------------
 
-* :mod:`cubie.outputhandling.output_sizes` supplies ``BatchOutputSizes``
-  metadata for array shapes and active buffers.
-* :mod:`cubie.batchsolving.ArrayTypes` defines the array typing shared with
-  solver kernels.
-* :mod:`cubie._utils` offers ``slice_variable_dimension`` to convert chunk
-  indices into multidimensional slices.
+* :mod:`cubie.outputhandling.output_sizes`: ``BatchInputSizes`` and
+  ``BatchOutputSizes``, the expected shape of each array.
+* :mod:`cubie.memory`: the allocation of the device arrays, pinned host
+  buffers and staging buffers, and the choice of chunks.
+* :mod:`cubie.batchsolving.writeback_watcher`: the background thread
+  that finishes the staged copies.
