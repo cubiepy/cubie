@@ -109,25 +109,23 @@ class OutputArrayContainer(ArrayContainer):
         cls, memory_type: str = "pinned"
     ) -> "OutputArrayContainer":
         """
-        Create a new host memory container.
+        Create a container for host-side output arrays.
 
         Parameters
         ----------
         memory_type
-            Memory type for host arrays: "pinned" or "host".
-            Default is "pinned" for non-chunked operation.
+            Memory type to give every slot until a buffer is attached:
+            ``"pinned"`` or ``"host"``.
 
         Returns
         -------
         OutputArrayContainer
-            A new container configured for the specified memory type.
+            Host-side container instance.
 
         Notes
         -----
-        Uses pinned (page-locked) memory to enable asynchronous
-        device-to-host transfers with CUDA streams. Using ``"host"``
-        memory type instead would result in pageable memory that blocks
-        async transfers due to required intermediate buffering.
+        Each slot records the backing of the buffer attached to it,
+        so this memory type lasts only until the first attach.
         """
         container = cls()
         container.set_memory_type(memory_type)
@@ -136,12 +134,12 @@ class OutputArrayContainer(ArrayContainer):
     @classmethod
     def device_factory(cls) -> "OutputArrayContainer":
         """
-        Create a new device memory container.
+        Create a container for device-side output arrays.
 
         Returns
         -------
         OutputArrayContainer
-            A new container configured for device memory.
+            Device-side container instance.
         """
         container = cls()
         container.set_memory_type("device")
@@ -153,26 +151,25 @@ class OutputArrays(BaseArrayManager):
     """
     Manage batch integration output arrays between host and device.
 
-    This class manages the allocation, transfer, and synchronization of output
-    arrays generated during batch integration operations. It handles state
-    trajectories, observables, summary statistics, and per-run status codes.
+    The manager allocates the device arrays the kernel writes: state and
+    observable trajectories, their summaries, per-run status codes and
+    iteration counters. For a solve that returns host results, it
+    copies the outputs the kernel writes back to host buffers after
+    each chunk, then lends those buffers to the
+    :class:`~cubie.batchsolving.solveresult.SolveResult`.
 
     Parameters
     ----------
-    _sizes
+    sizes
         Size specifications for the output arrays.
     host
         Container for host-side arrays.
-    device
-        Container for device-side arrays.
 
     Notes
     -----
-    This class is initialized with a BatchOutputSizes instance (which is drawn
-    from a solver instance using the from_solver factory method), which sets
-    the allowable 3D array sizes from the ODE system's data and run settings.
-    Once initialized, the object can be updated with a solver instance to
-    update the expected sizes, check the cache, and allocate if required.
+    Build an instance with :meth:`from_solver`, then call
+    :meth:`update` before each solve. Its other parameters are those of
+    :class:`.BaseArrayManager`.
     """
 
     _sizes: BatchOutputSizes = field(
@@ -206,13 +203,11 @@ class OutputArrays(BaseArrayManager):
     _transfer: bool = field(default=True, init=False)
 
     def __attrs_post_init__(self) -> None:
-        """
-        Configure default memory types after initialization.
+        """Register the manager and set the containers' memory types.
 
-        Notes
-        -----
-        Host containers use pinned memory to enable asynchronous
-        device-to-host transfers with CUDA streams.
+        The host slots start as ``"pinned"`` and the device slots as
+        ``"device"``. Each host slot then records the backing of the
+        buffer attached to it.
         """
         super().__attrs_post_init__()
         self.host.set_memory_type("pinned")
@@ -225,6 +220,9 @@ class OutputArrays(BaseArrayManager):
     ) -> None:
         """
         Size the device outputs for a run and queue their allocation.
+
+        Record which outputs the kernel writes in this run, so that
+        :meth:`finalise` copies only those outputs.
 
         Parameters
         ----------
@@ -399,11 +397,36 @@ class OutputArrays(BaseArrayManager):
         return True
 
     def _request_shape(self, label: str) -> tuple:
-        """Device shape of ``label`` from the sizes, never a host array."""
+        """Return the device shape of ``label`` from the output sizes.
+
+        Parameters
+        ----------
+        label
+            Name of the output array.
+
+        Returns
+        -------
+        tuple
+            The shape in the manager's sizes, whatever host buffer is
+            attached.
+        """
         return tuple(getattr(self._sizes, label))
 
     def _host_fits(self, label: str, slot: ManagedArray) -> bool:
-        """Whether the slot's host array has the sized shape and dtype."""
+        """Return whether the host array has the sized shape and dtype.
+
+        Parameters
+        ----------
+        label
+            Name of the output array.
+        slot
+            The output's host wrapper.
+
+        Returns
+        -------
+        bool
+            False when no host array is attached.
+        """
         array = slot.array
         return (
             array is not None
@@ -412,7 +435,7 @@ class OutputArrays(BaseArrayManager):
         )
 
     def _after_allocation(self) -> None:
-        """Back the host outputs once the run is known to transfer."""
+        """Give the outputs host buffers if the run copies them back."""
         if self._transfer:
             self._ensure_host_arrays()
 
@@ -457,21 +480,27 @@ class OutputArrays(BaseArrayManager):
             slot.memory_type = backing
 
     def finalise(self, chunk_index: int, stream=None) -> None:
-        """Queue device-to-host transfers for a chunk.
+        """Queue the copies of a chunk's outputs back to the host.
+
+        Copy only the outputs the kernel writes in this run. Before
+        the first chunk's copies, give every output a host buffer.
 
         Parameters
         ----------
         chunk_index
-            Indices for the chunk being finalized.
+            Index of the chunk that has just been launched.
+        stream
+            Stream to queue the copies on, or ``None`` for the
+            manager's stream.
 
         Notes
         -----
-        Host slices are made contiguous before transfer to ensure
-        compatible strides with device arrays. For chunked mode, data
-        is transferred to pooled pinned buffers and submitted to the
-        watcher thread for async writeback. For non-chunked mode,
-        the writeback call is made immediately (but will happen
-        asynchronously).
+        Copy an unchunked output with a pinned host buffer straight
+        into that buffer. Stage every other output, and every chunk,
+        through pooled pinned buffers. The writeback watcher copies
+        each staged block into the host buffer once its transfer
+        completes. This method does not wait for the GPU, so the copy
+        of one chunk overlaps the next chunk's kernel.
         """
         from_ = []
         to_ = []
@@ -513,17 +542,26 @@ class OutputArrays(BaseArrayManager):
     ) -> None:
         """Stage one device output through pooled pinned buffers.
 
-        The host target may be a strided view (a chunk slice or a
-        memmap), so completed blocks are written through strided
-        assignment; flattening such a view would silently copy it and
-        discard the writeback. Blocks come from :func:`staging_blocks`,
-        and the buffer is trimmed to the host block's shape because the
-        device array can carry extra run-axis padding on the final
-        chunk. Each block is handed to the writeback watcher with its
-        own event: the watcher copies it to the host target and
-        releases the buffer as soon as its transfer lands, so this
-        method never blocks on the stream and the drain of one chunk
-        overlaps the next chunk's kernel.
+        Cut the arrays into blocks with :func:`staging_blocks`, and
+        queue each device block's copy into a pinned buffer. Hand each
+        buffer to the writeback watcher with its own event and the
+        host block as its target. Once the block's copy completes, the
+        watcher writes the buffer, trimmed to the host block's shape,
+        into the host target and releases the buffer. The host target
+        can be a strided view, such as a chunk slice or a memmap, and
+        on the final chunk the device array can hold more runs than
+        the host block. This method does not wait for the GPU.
+
+        Parameters
+        ----------
+        array_name
+            Name of the output array.
+        device_array
+            Device array to copy from.
+        host_array
+            Host array or chunk slice to write into.
+        stream
+            Stream to queue the copies on.
         """
         dtype = host_array.dtype
         for device_block, host_block in staging_blocks(
@@ -557,43 +595,46 @@ class OutputArrays(BaseArrayManager):
                 raise
 
     def wait_pending(self, timeout: Optional[float] = None) -> None:
-        """Wait for all pending async writebacks to complete.
+        """Wait until the writeback watcher writes every staged block.
+
+        This waits only for staged outputs, because the watcher does
+        not handle the outputs copied straight into pinned buffers.
 
         Parameters
         ----------
         timeout
-            Maximum seconds to wait. None waits indefinitely.
-
-        Notes
-        -----
-        Only applies to chunked mode with watcher-based writebacks.
+            Maximum seconds to wait, or ``None`` to wait until done.
         """
         self._watcher.wait_all(timeout=timeout)
 
     def initialise(self, chunk_index: int, stream=None) -> None:
         """
-        Initialize device arrays before kernel execution.
+        Do nothing, because outputs need no work before a chunk.
 
         Parameters
         ----------
         chunk_index
-            Indices for the chunk being initialized.
-
-        Notes
-        -----
-        No initialization to zeros is needed unless chunk calculations in time
-        leave a dangling sample at the end, which is possible but not expected.
+            Index of the chunk about to be launched.
+        stream
+            Unused.
         """
         pass
 
     def reset(self) -> None:
-        """Drain transfers and clear all arrays and staging buffers."""
+        """Release the arrays and buffers and stop the watcher."""
         super().reset()
         self._watcher.shutdown()
         self._buffer_pool.clear()
 
     def _teardown_cleanups(self):
-        """Return writeback cleanup calls."""
+        """Return the calls that stop the watcher and free the buffers.
+
+        Returns
+        -------
+        list of callable
+            Calls that shut down the writeback watcher, free the
+            staging buffers and drop the device arrays.
+        """
         return [
             self._watcher.shutdown,
             self._buffer_pool.clear,

@@ -13,11 +13,18 @@ Published Classes
     Abstract coordinator for host and device array allocation,
     transfer, and chunking.
 
+Published Functions
+-------------------
+:func:`staging_blocks`
+    Cut a device array and its host counterpart into matching blocks
+    that each fit a staging buffer.
+
 Notes
 -----
-Array chunking for memory management is performed along the run axis when
-batches exceed available GPU memory. The chunking process coordinates transfers
-and synchronization across chunks automatically.
+A batch that does not fit in GPU memory is split into chunks along the
+run axis. The managers then copy each chunk's inputs to the device
+before its launch and its outputs back to the host after it, without
+making the host wait for the GPU.
 
 See Also
 --------
@@ -74,9 +81,30 @@ def staging_blocks(
     host_array: NDArray,
     budget_bytes: int,
 ) -> Iterator[tuple[DeviceNDArrayBase, NDArray]]:
-    """Yield contiguous ``(device_block, host_block)`` pairs of at most
-    ``budget_bytes``, cut along the leading axis and descending into
-    rows over budget, over the extent both arrays share on every axis.
+    """Yield matching device and host blocks within ``budget_bytes``.
+
+    Cut both arrays along their leading axis into groups of whole
+    rows. When a single row is larger than the budget, cut each row
+    along its own leading axis in the same way. Each device block is
+    a contiguous region of device memory. Cut only the leading-axis
+    extent that the two arrays share, so a host array with fewer rows
+    than the device array gets blocks up to its own length.
+
+    Parameters
+    ----------
+    device_array
+        Device array to cut.
+    host_array
+        Host array, or host view, that matches ``device_array`` up to
+        its leading extent.
+    budget_bytes
+        Largest size of one device block, in bytes.
+
+    Yields
+    ------
+    tuple[DeviceNDArrayBase, numpy.ndarray]
+        A device block and the host block that holds the same
+        elements.
     """
     itemsize = device_array.dtype.itemsize
     row_bytes = int(prod(device_array.shape[1:])) * itemsize
@@ -97,7 +125,32 @@ def staging_blocks(
 
 @define(slots=False)
 class ManagedArray:
-    """Metadata wrapper for a single managed array."""
+    """Metadata wrapper for a single managed array.
+
+    Parameters
+    ----------
+    dtype
+        NumPy scalar type of the array's elements.
+    stride_order
+        Name of each axis, such as ``("time", "variable", "run")``.
+        The axis named ``"run"`` is the one cubie chunks.
+    default_shape
+        Shape to report while no array is attached.
+    memory_type
+        Backing of the attached array: ``"device"``, ``"pinned"``,
+        ``"host"`` (pageable) or ``"memmap"``.
+    is_chunked
+        Whether the array may be split into chunks along its run axis.
+    chunked_shape
+        Shape of one chunk, set once the memory manager has allocated
+        the array.
+    chunk_length
+        Number of runs in each chunk except the last.
+    num_chunks
+        Number of chunks the batch is split into.
+    num_runs
+        Total number of runs in the batch.
+    """
 
     dtype: type = field(
         default=np_float32, validator=attrsval_instance_of(type)
@@ -173,11 +226,10 @@ class ManagedArray:
 
     @property
     def needs_chunked_transfer(self) -> bool:
-        """Return True if this array requires chunked transfers.
+        """Return True if this array transfers one chunk at a time.
 
-        Chunked transfers are needed when the array's full shape differs
-        from its per-chunk shape. This comparison replaces complex
-        is_chunked flag logic.
+        Return True only when the memory manager has set a chunk
+        shape and the array's full shape differs from it.
         """
         if self.chunked_shape is None:
             return False
@@ -205,9 +257,10 @@ class ManagedArray:
 
         Notes
         -----
-        When chunking is inactive (is_chunked=False or _chunk_axis_index=None),
-        returns the full array. Otherwise computes slice based on stored
-        chunk parameters and _chunk_axis_index.
+        Return the full array when the array has no run axis, when
+        ``is_chunked`` is False, or before a chunk length is set. The
+        last chunk runs to the end of the run axis, so it holds the
+        remaining runs.
         """
         # Validate chunk_index type
         if not isinstance(chunk_index, int):
@@ -245,21 +298,39 @@ class ManagedArray:
     def array(
         self, value: Optional[Union[NDArray, DeviceNDArrayBase]]
     ) -> None:
-        """Attach an array and update stored shape metadata."""
+        """Attach an array, or detach it with ``None``.
+
+        Parameters
+        ----------
+        value
+            Host or device array to attach, or ``None``.
+        """
 
         self._array = value
 
 
 @define(slots=False)
 class ArrayContainer(ABC):
-    """Store per-array metadata and references for CUDA managers."""
+    """Store per-array metadata and references for CUDA managers.
+
+    Subclasses declare one :class:`ManagedArray` field per array. The
+    container finds those fields by scanning its attributes, and each
+    field name is the label of its array.
+    """
 
     _managed_map_cache: Optional[Dict[str, ManagedArray]] = field(
         default=None, init=False, eq=False, repr=False
     )
 
     def _managed_map(self) -> Dict[str, ManagedArray]:
-        """Map array labels to ManagedArray fields, built once."""
+        """Return a dict from array labels to their ManagedArray fields.
+
+        Returns
+        -------
+        dict[str, ManagedArray]
+            The container's managed arrays by label, built on the
+            first call and reused afterwards.
+        """
         if self._managed_map_cache is None:
             self._managed_map_cache = {
                 name: value
@@ -269,20 +340,55 @@ class ArrayContainer(ABC):
         return self._managed_map_cache
 
     def _iter_field_items(self) -> Iterator[tuple[str, ManagedArray]]:
+        """Return an iterator over ``(label, managed)`` pairs.
+
+        Returns
+        -------
+        Iterator[tuple[str, ManagedArray]]
+            Each array's label and metadata wrapper.
+        """
         return iter(self._managed_map().items())
 
     def iter_managed_arrays(self) -> Iterator[tuple[str, ManagedArray]]:
-        """Yield ``(label, managed)`` pairs for each array."""
+        """Return an iterator over ``(label, managed)`` pairs.
+
+        Returns
+        -------
+        Iterator[tuple[str, ManagedArray]]
+            Each array's label and metadata wrapper.
+        """
 
         return self._iter_field_items()
 
     def array_names(self) -> List[str]:
-        """Return array labels managed by this container."""
+        """Return the labels of the arrays in this container.
+
+        Returns
+        -------
+        list[str]
+            One label per managed array.
+        """
 
         return list(self._managed_map())
 
     def get_managed_array(self, label: str) -> ManagedArray:
-        """Retrieve the metadata wrapper for ``label``."""
+        """Return the metadata wrapper for ``label``.
+
+        Parameters
+        ----------
+        label
+            Name of the array.
+
+        Returns
+        -------
+        ManagedArray
+            The array's metadata wrapper.
+
+        Raises
+        ------
+        AttributeError
+            If the container has no array called ``label``.
+        """
 
         managed = self._managed_map().get(label)
         if managed is None:
@@ -294,38 +400,90 @@ class ArrayContainer(ABC):
     def get_array(
         self, label: str
     ) -> Optional[Union[NDArray, DeviceNDArrayBase]]:
-        """Return the stored array for ``label``."""
+        """Return the array attached to ``label``.
+
+        Parameters
+        ----------
+        label
+            Name of the array.
+
+        Returns
+        -------
+        numpy.ndarray, DeviceNDArrayBase or None
+            The attached array, or ``None`` when nothing is attached.
+
+        Raises
+        ------
+        AttributeError
+            If the container has no array called ``label``.
+        """
 
         return self.get_managed_array(label).array
 
     def set_array(
         self, label: str, array: Optional[Union[NDArray, DeviceNDArrayBase]]
     ) -> None:
-        """Attach an array reference to ``label``."""
+        """Attach ``array`` to ``label``.
+
+        Parameters
+        ----------
+        label
+            Name of the array.
+        array
+            Host or device array to attach, or ``None`` to detach.
+
+        Raises
+        ------
+        AttributeError
+            If the container has no array called ``label``.
+        """
         self.get_managed_array(label).array = array
 
     def set_memory_type(self, memory_type: str) -> None:
-        """Apply ``memory_type`` to all managed arrays."""
+        """Set the memory type of every managed array.
+
+        Parameters
+        ----------
+        memory_type
+            ``"device"``, ``"pinned"``, ``"host"`` or ``"memmap"``.
+        """
 
         for _, managed in self.iter_managed_arrays():
             managed.memory_type = memory_type
 
     @property
     def memory_type(self) -> str:
-        """Return the memory type of the first managed array."""
+        """Return the memory type of the first managed array.
+
+        Return ``"No arrays managed"`` for a container with no arrays.
+        """
 
         for _, managed in self.iter_managed_arrays():
             return managed.memory_type
         return "No arrays managed"
 
     def delete_all(self) -> None:
-        """Delete all array references."""
+        """Detach every array, leaving each slot empty."""
 
         for _, managed in self.iter_managed_arrays():
             managed.array = None
 
     def attach(self, label: str, array: NDArray) -> None:
-        """Attach an array to this container."""
+        """Attach ``array`` to ``label``, or warn for an unknown label.
+
+        Parameters
+        ----------
+        label
+            Name of the array.
+        array
+            Host or device array to attach.
+
+        Warns
+        -----
+        UserWarning
+            If the container has no array called ``label``. The
+            container then ignores ``array``.
+        """
 
         try:
             self.set_array(label, array)
@@ -342,33 +500,38 @@ class BaseArrayManager(ABC):
 
     Parameters
     ----------
-    _precision
-        Precision factory used to create new arrays.
-    _sizes
-        Size specifications for arrays managed by this instance.
+    precision
+        NumPy floating type of the solve. The manager gives every
+        floating-point array this dtype.
+    sizes
+        Expected shape of each managed array.
     device
         Container for device-side arrays.
     host
         Container for host-side arrays.
-    _chunks
-        Number of chunks for memory management. Chunking is always
-        performed along the run axis.
-    _stream_group
-        Stream group identifier for CUDA operations.
-    _memory_proportion
-        Proportion of available memory to use.
-    _needs_reallocation
-        Array names that require device reallocation.
-    _needs_overwrite
-        Array names that require host overwrite.
-    _memory_manager
-        Memory manager instance for handling GPU memory.
+    chunks
+        Number of chunks the batch is split into along the run axis.
+    stream_group
+        Name of the stream group to register in.
+    memory_proportion
+        Fraction of GPU memory this manager may use, or ``None`` to
+        take an equal share, with the other managers that give no
+        fraction, of the memory no fraction has claimed.
+    memory_manager
+        Memory manager that allocates the device arrays.
+    memory_owner
+        Object to register the manager's allocations under. The
+        memory manager evicts all of an owner's allocations together.
+        ``None`` registers the manager as its own owner.
+    num_runs
+        Total number of runs in the batch.
 
     Notes
     -----
-    Subclasses must implement :meth:`update`, :meth:`finalise`, and
-    :meth:`initialise` to wire batching behaviour into host and device
-    execution paths.
+    Subclasses implement :meth:`update` to attach a solve's arrays,
+    :meth:`initialise` to copy a chunk's data to the device before
+    its launch, and :meth:`finalise` to copy a chunk's data back
+    after it.
     """
 
     _precision: type = field(
@@ -417,14 +580,10 @@ class BaseArrayManager(ABC):
     _finalizer: object = field(default=None, init=False, eq=False, repr=False)
 
     def __attrs_post_init__(self) -> None:
-        """
-        Initialize the array manager after attrs initialization.
+        """Register the manager and queue every device array.
 
-        Notes
-        -----
-        This method registers with the memory manager and sets up
-        invalidation hooks.
-
+        Every device array starts queued for allocation, and the first
+        :meth:`allocate` call requests it.
         """
         self.register_with_memory_manager()
         self._invalidate_hook()
@@ -435,17 +594,15 @@ class BaseArrayManager(ABC):
         return self._chunks > 1
 
     def set_array_runs(self, num_runs: int) -> None:
-        """Update num_runs in all ManagedArray instances.
+        """Set the batch's run count on the manager and every array.
 
-        This method sets the num_runs attribute to specify the total number
-        of runs in the batch. This value is used during allocation to
-        determine chunking behavior.
+        The chunks are sized from this count when the arrays are
+        allocated.
 
         Parameters
         ----------
-        num_runs : int
-            Total number of runs in the batch. Must be >= 1.
-
+        num_runs
+            Total number of runs in the batch, at least 1.
         """
         # Update the num_runs attribute
         self.num_runs = num_runs
@@ -454,13 +611,13 @@ class BaseArrayManager(ABC):
 
     @property
     def _iter_managed_arrays(self) -> Iterator[tuple[str, ManagedArray]]:
-        """
-        Yield ``(label, managed)`` pairs for each managed array.
+        """Yield ``(label, managed)`` pairs for device and host arrays.
 
         Returns
         -------
         Iterator[tuple[str, ManagedArray]]
-            Iterator over array labels and their metadata wrappers.
+            The device container's arrays, then the host container's
+            arrays.
         """
         for label, managed in self.device.iter_managed_arrays():
             yield label, managed
@@ -469,29 +626,18 @@ class BaseArrayManager(ABC):
 
     @abstractmethod
     def update(self, *args: object, **kwargs: object) -> None:
-        """
-        Update arrays from external data.
-
-        This method should handle updating the manager's arrays based on
-        provided input data and trigger reallocation/allocation as needed.
+        """Attach a solve's arrays and queue their allocation.
 
         Parameters
         ----------
         *args
-            Positional arguments passed by subclasses.
+            Positional arguments defined by the subclass.
         **kwargs
-            Keyword arguments passed by subclasses.
-
-        Notes
-        -----
-        This is an abstract method that must be implemented by subclasses
-        with the desired behavior for updating arrays from external data.
-
+            Keyword arguments defined by the subclass.
         """
 
     def _on_allocation_complete(self, response: ArrayResponse) -> None:
-        """
-        Callback for when the allocation response is received.
+        """Attach the allocated device arrays and record the chunking.
 
         Parameters
         ----------
@@ -501,16 +647,16 @@ class BaseArrayManager(ABC):
         Warns
         -----
         UserWarning
-            If a device array is not found in the allocation response.
-
+            If an array requested in the last :meth:`allocate` call is
+            missing from the response.
 
         Notes
         -----
-        Warnings are only issued if the response contains some arrays but
-        not the expected one, indicating a potential allocation mismatch.
-
-        Stores chunk parameters from response in ManagedArray objects for
-        both host and device containers.
+        Do nothing for a response with no arrays. Otherwise attach each
+        array the manager was waiting for, store the chunk shape,
+        chunk length and chunk count on its host and device wrappers,
+        then call :meth:`_after_allocation`. Leave any array missing
+        from the response queued for the next allocation.
         """
         chunked_shapes = response.chunked_shapes
         arrays = response.arr
@@ -554,24 +700,38 @@ class BaseArrayManager(ABC):
         self._after_allocation()
 
     def _after_allocation(self) -> None:
-        """Hook run once the chunk partition of an allocation is known."""
+        """Run subclass work once an allocation's chunking is known.
+
+        The base class does nothing here.
+        """
 
     def _request_shape(self, label: str) -> Optional[tuple]:
-        """Shape to request for ``label``; ``None`` while it has no data."""
+        """Return the device shape to request for ``label``.
+
+        Parameters
+        ----------
+        label
+            Name of the array.
+
+        Returns
+        -------
+        tuple or None
+            The shape of the attached host array, or ``None`` while no
+            host array is attached. A host array with a zero dimension
+            gets a shape of all ones.
+        """
         host_array = self.host.get_managed_array(label).array
         if host_array is None:
             return None
         return ensure_nonzero_size(tuple(host_array.shape))
 
     def register_with_memory_manager(self) -> None:
-        """
-        Register this instance with the MemoryManager.
+        """Register this manager with its memory manager.
 
-        Notes
-        -----
-        This method sets up the necessary hooks and callbacks for memory
-        management integration.
-
+        Register :meth:`_invalidate_hook` and
+        :meth:`_on_allocation_complete` as the manager's callbacks, and
+        attach a finalizer that releases the registration and the
+        device arrays when the manager is garbage collected.
         """
         self._memory_manager.register(
             self,
@@ -592,11 +752,25 @@ class BaseArrayManager(ABC):
         )
 
     def _teardown_cleanups(self) -> List[Callable[[], None]]:
-        """Return cleanup calls that do not capture this manager."""
+        """Return the calls that release this manager's resources.
+
+        The calls hold no reference to the manager, so the finalizer
+        can run them after the manager is garbage collected.
+
+        Returns
+        -------
+        list of callable
+            Calls that take no arguments.
+        """
         return [self.device.delete_all]
 
     def close(self) -> None:
-        """Release this manager's resources."""
+        """Release this manager's buffers and its memory registration.
+
+        Do nothing if the manager is not registered. If a cleanup call
+        raises, the manager stays registered and you can call
+        ``close`` again.
+        """
         settings = self._memory_manager.registry.get(id(self))
         if settings is None:
             return
@@ -611,36 +785,28 @@ class BaseArrayManager(ABC):
         self,
         request: dict[str, ArrayRequest],
     ) -> None:
-        """
-        Send a request for allocation of device arrays.
+        """Queue a request for device arrays with the memory manager.
+
+        When ``allocate_queue`` next runs for this manager's owner, the
+        queued requests of every manager with that owner are allocated
+        together, and :meth:`_on_allocation_complete` is called with
+        the result.
 
         Parameters
         ----------
         request
             Dictionary mapping array names to allocation requests.
-
-        Notes
-        -----
-        If the object is the only instance in its stream group, or is on
-        the default group, then the request will be sent as a "single"
-        request and be allocated immediately. If the object shares a stream
-        group, then the response will be queued, and the allocation will be
-        grouped with other requests in the same group, until one of the
-        instances calls "process_queue" to process the queue. This behaviour
-        can be overridden by setting force_type to "single" or "group".
-
         """
         self._memory_manager.queue_request(self, request)
 
     def _invalidate_hook(self) -> None:
-        """
-        Drop all references and assign all arrays for reallocation.
+        """Drop every device array and queue each one for reallocation.
 
-        Notes
-        -----
-        This method is called when the memory cache needs to be invalidated.
-        It clears all device array references and marks them for reallocation.
-
+        This is called when the memory manager frees the manager's
+        device memory, for example when the GPU runs short of memory
+        for another allocation.
+        The next :meth:`update_from_solver` call also rebuilds the
+        array sizes.
         """
         self._needs_reallocation.clear()
         self._needs_overwrite.clear()
@@ -658,7 +824,7 @@ class BaseArrayManager(ABC):
         shape_only: bool = False,
     ) -> bool:
         """
-        Check if two arrays are equal in shape and optionally content.
+        Return whether two arrays match in shape and optionally content.
 
         Parameters
         ----------
@@ -691,7 +857,7 @@ class BaseArrayManager(ABC):
 
     def update_sizes(self, sizes: ArraySizingClass) -> None:
         """
-        Update the expected sizes for arrays in this manager.
+        Replace the expected sizes of the arrays in this manager.
 
         Parameters
         ----------
@@ -701,8 +867,8 @@ class BaseArrayManager(ABC):
         Raises
         ------
         TypeError
-            If the new sizes object is not the same size as the existing one.
-
+            If ``sizes`` is not an instance of the current sizes
+            object's class.
         """
         if not isinstance(sizes, type(self._sizes)):
             raise TypeError(
@@ -714,7 +880,7 @@ class BaseArrayManager(ABC):
 
     def check_type(self, arrays: Dict[str, NDArray]) -> Dict[str, bool]:
         """
-        Check if the dtype of arrays matches their stored dtype.
+        Return whether each array's dtype matches its host slot's dtype.
 
         Parameters
         ----------
@@ -724,8 +890,8 @@ class BaseArrayManager(ABC):
         Returns
         -------
         Dict[str, bool]
-            Dictionary indicating whether each array matches the expected
-            precision.
+            Whether each array matches its slot's dtype. A ``None``
+            array counts as a match.
         """
         matches = {}
         for array_name, array in arrays.items():
@@ -740,7 +906,7 @@ class BaseArrayManager(ABC):
         self, new_arrays: Dict[str, NDArray], location: str = "host"
     ) -> Dict[str, bool]:
         """
-        Check whether arrays match configured sizes and stride order.
+        Return whether each array has the shape the manager expects.
 
         Parameters
         ----------
@@ -752,8 +918,11 @@ class BaseArrayManager(ABC):
         Returns
         -------
         Dict[str, bool]
-            Dictionary indicating whether each array matches its expected
-            shape.
+            Whether each array matches its expected shape. An array
+            matches when it has the expected number of dimensions and
+            every dimension that the sizes fix, or when it holds no
+            elements. A name the container does not hold never
+            matches.
 
         Raises
         ------
@@ -797,32 +966,30 @@ class BaseArrayManager(ABC):
     @abstractmethod
     def finalise(self, chunk_index: int) -> None:
         """
-        Execute post-chunk behaviour for device outputs.
+        Queue the work that follows a chunk's kernel launch.
 
         Parameters
         ----------
         chunk_index
-            Chunk index about to run on the device
-
+            Index of the chunk that has just been launched.
         """
 
     @abstractmethod
     def initialise(self, chunk_index: int) -> None:
         """
-        Execute pre-chunk behaviour for device inputs.
+        Queue the work that precedes a chunk's kernel launch.
 
         Parameters
         ----------
         chunk_index
-            Chunk index about to run on the device.
-
+            Index of the chunk about to be launched.
         """
 
     def check_incoming_arrays(
         self, arrays: Dict[str, NDArray], location: str = "host"
     ) -> Dict[str, bool]:
         """
-        Validate shape and precision for incoming arrays.
+        Return whether each array has the expected shape and dtype.
 
         Parameters
         ----------
@@ -834,7 +1001,8 @@ class BaseArrayManager(ABC):
         Returns
         -------
         Dict[str, bool]
-            Dictionary indicating whether each array is ready for attachment.
+            Whether each array passes both :meth:`check_sizes` and
+            :meth:`check_type`.
         """
         dims_ok = self.check_sizes(arrays, location=location)
         types_ok = self.check_type(arrays)
@@ -913,11 +1081,17 @@ class BaseArrayManager(ABC):
     def loan_host_arrays(self, owner: object) -> None:
         """Hand every host buffer to ``owner``, emptying the slots.
 
-        ``owner`` (a result object that already references the
-        arrays) keeps the data for as long as it lives. If it has
-        been garbage collected by the next solve, the buffers return
-        to their slots and are reused; otherwise the next solve
-        allocates fresh backing.
+        ``owner`` is a result object that already references the
+        arrays, and it keeps the data for as long as it lives. If it
+        has been garbage collected by the next solve, the buffers
+        return to their slots and the solve reuses them. Otherwise the
+        next solve allocates new buffers.
+
+        Parameters
+        ----------
+        owner
+            Object to hand the buffers to. The manager holds only a
+            weak reference to it.
         """
         self.reclaim_or_release_loan()
         arrays = {}
@@ -931,10 +1105,12 @@ class BaseArrayManager(ABC):
     def reclaim_or_release_loan(self) -> None:
         """Recover loaned host buffers if their owner was collected.
 
-        A live owner keeps its buffers: the loan record is dropped so
-        the arrays belong solely to the owner, and the next transfer
-        builds fresh backing. A collected owner cannot be holding
-        views, so the buffers return to their slots for reuse.
+        If the owner is still alive, forget the loan, so the buffers
+        belong to the owner alone and the next transfer allocates new
+        ones. If the owner has been collected, return the buffers to
+        their slots for reuse. The manager tracks only the owner, so
+        the next solve also overwrites any of these arrays that other
+        code kept after the owner was collected.
         """
         if self._loan is None:
             return
@@ -949,12 +1125,24 @@ class BaseArrayManager(ABC):
 
     @staticmethod
     def _host_memory_type(array: NDArray) -> str:
-        """Classify a host array's actual backing.
+        """Return the memory type of a host array's backing.
 
-        ``"pinned"`` requires C-contiguous page-locked memory, which
-        transfers directly and asynchronously. Strided or pageable
-        arrays stage through bounded pinned blocks, and memmaps are
-        disk-backed.
+        Only C-contiguous page-locked memory counts as ``"pinned"``,
+        and the managers copy it to and from the device directly. The
+        managers copy every other array through pinned staging
+        buffers.
+
+        Parameters
+        ----------
+        array
+            Host array to classify.
+
+        Returns
+        -------
+        str
+            ``"memmap"`` for a :class:`numpy.memmap`, ``"pinned"`` for
+            C-contiguous page-locked memory, and ``"host"`` for every
+            other array.
         """
         if isinstance(array, np_memmap):
             return "memmap"
@@ -964,18 +1152,41 @@ class BaseArrayManager(ABC):
 
     @staticmethod
     def _requires_staging(array: NDArray, memory_type: str) -> bool:
-        """Return whether a host array needs pinned staging."""
+        """Return whether a host array needs pinned staging.
+
+        Parameters
+        ----------
+        array
+            Host array to transfer.
+        memory_type
+            The array's memory type.
+
+        Returns
+        -------
+        bool
+            True for every memory type except ``"pinned"``.
+        """
         return memory_type != "pinned"
 
     def update_host_arrays(self, new_arrays: Dict[str, NDArray]) -> None:
         """
-        Update host arrays and record allocation requirements.
+        Attach new host arrays and queue their uploads and allocations.
 
         Parameters
         ----------
         new_arrays
             Dictionary mapping array names to new host arrays.
 
+        Raises
+        ------
+        ValueError
+            If an array does not have the shape the manager expects.
+
+        Warns
+        -----
+        UserWarning
+            If ``new_arrays`` names an array the manager does not hold.
+            The manager ignores that entry.
         """
         host_names = set(self.host.array_names())
         badnames = [
@@ -1013,12 +1224,11 @@ class BaseArrayManager(ABC):
 
         Notes
         -----
-        Builds :class:`ArrayRequest` objects for arrays marked for
-        reallocation and sets the ``unchunkable`` hint based on host metadata.
-
-        Chunking is always performed along the run axis by convention.
-        The specific axis index is determined by each array's chunk_axis_index.
-
+        Build one :class:`ArrayRequest` for each queued array whose
+        shape is known, and drop the device array it replaces. The
+        request lets the memory manager chunk the array along its run
+        axis unless the array's ``is_chunked`` is False. An input
+        array with no host data stays queued until data arrives.
         """
         requests = {}
         for array_label in list(set(self._needs_reallocation)):
@@ -1045,7 +1255,11 @@ class BaseArrayManager(ABC):
             self.request_allocation(requests)
 
     def reset(self) -> None:
-        """Clear cached arrays and allocation tracking."""
+        """Release the host arrays and queue every device array again.
+
+        Release loaned buffers too when their owner has been
+        collected. A live owner keeps its buffers.
+        """
         if self._loan is not None:
             owner_ref, arrays, _ = self._loan
             self._loan = None
@@ -1066,15 +1280,17 @@ class BaseArrayManager(ABC):
         stream: Optional[Any] = None,
     ) -> None:
         """
-        Copy host arrays to the device using the memory manager.
+        Queue copies of host arrays to the device.
 
         Parameters
         ----------
         from_arrays
-            Host arrays to copy.
+            Pinned, C-contiguous host arrays to copy.
         to_arrays
             Destination device arrays.
-
+        stream
+            Stream to queue the copies on, or ``None`` for the
+            manager's stream.
         """
         self._memory_manager.to_device(
             self, from_arrays, to_arrays, stream=stream
@@ -1087,15 +1303,17 @@ class BaseArrayManager(ABC):
         stream: Optional[Any] = None,
     ) -> None:
         """
-        Copy device arrays back to the host using the memory manager.
+        Queue copies of device arrays back to the host.
 
         Parameters
         ----------
         from_arrays
             Device arrays to copy.
         to_arrays
-            Destination host arrays.
-
+            Pinned, C-contiguous destination host arrays.
+        stream
+            Stream to queue the copies on, or ``None`` for the
+            manager's stream.
         """
         self._memory_manager.from_device(
             self, from_arrays, to_arrays, stream=stream
