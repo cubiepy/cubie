@@ -68,7 +68,8 @@ slots are `"device"`.
 
 ## Per-chunk hooks
 - `initialise(chunk_index)` (pre-launch, `InputArrays`): H2D for the queued slots in an
-  unchunked run, and for every input's chunk slice in a chunked run.
+  unchunked run, and for every input in a chunked run (chunked inputs by slice,
+  `driver_coefficients` whole).
   Pinned contiguous sources transfer directly; everything else stages block by block
   through `ChunkBufferPool` buffers, each handed to the transfer watcher with its own
   event.

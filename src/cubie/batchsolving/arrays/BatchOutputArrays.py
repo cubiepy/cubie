@@ -124,8 +124,8 @@ class OutputArrayContainer(ArrayContainer):
 
         Notes
         -----
-        Each slot records the backing of the buffer attached to it,
-        so this memory type lasts only until the first attach.
+        The manager records the backing of each buffer attached to a
+        slot, so this memory type lasts only until the first attach.
         """
         container = cls()
         container.set_memory_type(memory_type)
@@ -168,8 +168,8 @@ class OutputArrays(BaseArrayManager):
     Notes
     -----
     Build an instance with :meth:`from_solver`, then call
-    :meth:`update` before each solve. Its other parameters are those of
-    :class:`.BaseArrayManager`.
+    :meth:`update` before each solve. The other parameters, except
+    ``device``, are those of :class:`.BaseArrayManager`.
     """
 
     _sizes: BatchOutputSizes = field(
@@ -205,9 +205,9 @@ class OutputArrays(BaseArrayManager):
     def __attrs_post_init__(self) -> None:
         """Register the manager and set the containers' memory types.
 
-        The host slots start as ``"pinned"`` and the device slots as
-        ``"device"``. Each host slot then records the backing of the
-        buffer attached to it.
+        Start the host slots as ``"pinned"`` and the device slots as
+        ``"device"``. The manager then records the backing of each
+        host buffer attached to a slot.
         """
         super().__attrs_post_init__()
         self.host.set_memory_type("pinned")
@@ -497,10 +497,10 @@ class OutputArrays(BaseArrayManager):
         -----
         Copy an unchunked output with a pinned host buffer straight
         into that buffer. Stage every other output, and every chunk,
-        through pooled pinned buffers. The writeback watcher copies
-        each staged block into the host buffer once its transfer
-        completes. This method does not wait for the GPU, so the copy
-        of one chunk overlaps the next chunk's kernel.
+        through pooled pinned buffers. Each staged block is copied
+        into the host buffer by the writeback watcher once its
+        transfer completes. This method does not wait for the GPU, so
+        the copy of one chunk overlaps the next chunk's kernel.
         """
         from_ = []
         to_ = []
@@ -546,11 +546,11 @@ class OutputArrays(BaseArrayManager):
         queue each device block's copy into a pinned buffer. Hand each
         buffer to the writeback watcher with its own event and the
         host block as its target. Once the block's copy completes, the
-        watcher writes the buffer, trimmed to the host block's shape,
-        into the host target and releases the buffer. The host target
-        can be a strided view, such as a chunk slice or a memmap, and
-        on the final chunk the device array can hold more runs than
-        the host block. This method does not wait for the GPU.
+        buffer, trimmed to the host block's shape, is written into the
+        host target and released. The host target can be a strided
+        view, such as a chunk slice or a memmap, and on the final
+        chunk there can be more runs in the device array than in the
+        host block. This method does not wait for the GPU.
 
         Parameters
         ----------

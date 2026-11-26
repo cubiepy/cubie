@@ -28,13 +28,12 @@ for the initial values, parameters and driver coefficients, and one
 the outputs.
 
 If you pass host arrays in the solver's precision, cubie uses them as
-they are and copies them to the GPU when it solves. Arrays in another
-precision cost one extra copy. If a batch does not fit in GPU memory,
-cubie splits it into chunks of runs and copies each chunk's inputs and
-outputs in turn. Cubie hands the host outputs of a solve to the
-:class:`~cubie.batchsolving.solveresult.SolveResult` it returns, and
-while you hold that result, later solves on the same solver write into
-new arrays.
+they are and copies them to the GPU when it solves. If you pass them in
+another precision, cubie makes one converted copy of each. If a batch
+does not fit in GPU memory, cubie splits it into chunks of runs and
+copies each chunk's inputs and outputs in turn. Cubie hands the host
+outputs of a solve to the
+:class:`~cubie.batchsolving.solveresult.SolveResult` it returns.
 
 Each manager keeps a host and a device
 :class:`~cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer`,

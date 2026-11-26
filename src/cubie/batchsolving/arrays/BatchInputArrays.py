@@ -98,8 +98,8 @@ class InputArrayContainer(ArrayContainer):
 
         Notes
         -----
-        Each slot records the backing of the array attached to it,
-        so this memory type lasts only until the first attach.
+        The manager records the backing of each array attached to a
+        slot, so this memory type lasts only until the first attach.
         """
         container = cls()
         container.set_memory_type(memory_type)
@@ -138,8 +138,8 @@ class InputArrays(BaseArrayManager):
 
     Notes
     -----
-    Build an instance with :meth:`from_solver`. Its other parameters
-    are those of :class:`.BaseArrayManager`.
+    Build an instance with :meth:`from_solver`. The other parameters,
+    except ``device``, are those of :class:`.BaseArrayManager`.
     """
 
     _sizes: Optional[BatchInputSizes] = field(
@@ -174,9 +174,9 @@ class InputArrays(BaseArrayManager):
     def __attrs_post_init__(self) -> None:
         """Register the manager and set the containers' memory types.
 
-        The host slots start as ``"pinned"`` and the device slots as
-        ``"device"``. Each host slot then records the backing of the
-        array attached to it.
+        Start the host slots as ``"pinned"`` and the device slots as
+        ``"device"``. The manager then records the backing of each
+        host array attached to a slot.
         """
         super().__attrs_post_init__()
         self.host.set_memory_type("pinned")
@@ -493,8 +493,9 @@ class InputArrays(BaseArrayManager):
         """Queue the copies of a chunk's host inputs to the device.
 
         In an unchunked run, copy only the arrays queued since the
-        last copy. In a chunked run, copy every input's slice for
-        ``chunk_index``. Skip host arrays with no elements.
+        last copy. In a chunked run, copy every input: the slice for
+        ``chunk_index`` of each chunked input, and the whole of the
+        driver coefficients. Skip host arrays with no elements.
 
         Parameters
         ----------
@@ -562,11 +563,11 @@ class InputArrays(BaseArrayManager):
         Cut the arrays into blocks with :func:`staging_blocks`, copy
         each host block into a pinned buffer and queue the buffer's
         copy to the device. The host source can be a strided view,
-        such as a chunk slice or a memmap, and on the final chunk it
-        can hold fewer runs than the device array. Copy each block by
-        its shape, so the runs line up. Hand each buffer to the
-        transfer watcher with its own event, so the buffer is returned
-        to the pool as soon as its copy reaches the device.
+        such as a chunk slice or a memmap, and on the final chunk
+        there can be fewer runs in it than in the device array. Copy
+        each block by its shape, so the runs line up. Hand each buffer
+        to the transfer watcher with its own event, so the buffer is
+        returned to the pool as soon as its copy reaches the device.
 
         Parameters
         ----------

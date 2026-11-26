@@ -141,6 +141,10 @@ class ManagedArray:
         ``"host"`` (pageable) or ``"memmap"``.
     is_chunked
         Whether the array may be split into chunks along its run axis.
+    array
+        Accepted for its shape only: construction replaces it with a
+        zero array of the same shape. Attach data afterwards through
+        :attr:`array`.
     chunked_shape
         Shape of one chunk, set once the memory manager has allocated
         the array.
@@ -514,9 +518,9 @@ class BaseArrayManager(ABC):
     stream_group
         Name of the stream group to register in.
     memory_proportion
-        Fraction of GPU memory this manager may use, or ``None`` to
-        take an equal share, with the other managers that give no
-        fraction, of the memory no fraction has claimed.
+        Fraction of GPU memory this manager may use. Pass ``None`` to
+        share the memory that no fraction claims equally with the
+        other managers that give no fraction.
     memory_manager
         Memory manager that allocates the device arrays.
     memory_owner
@@ -729,9 +733,9 @@ class BaseArrayManager(ABC):
         """Register this manager with its memory manager.
 
         Register :meth:`_invalidate_hook` and
-        :meth:`_on_allocation_complete` as the manager's callbacks, and
-        attach a finalizer that releases the registration and the
-        device arrays when the manager is garbage collected.
+        :meth:`_on_allocation_complete` as the manager's callbacks.
+        Attach a finalizer that, once the manager is garbage collected,
+        queues the release of its registration and its buffers.
         """
         self._memory_manager.register(
             self,
@@ -920,8 +924,9 @@ class BaseArrayManager(ABC):
         Dict[str, bool]
             Whether each array matches its expected shape. An array
             matches when it has the expected number of dimensions and
-            every dimension that the sizes fix, or when it holds no
-            elements. A name the container does not hold never
+            every dimension that the sizes fix. An array with the
+            expected number of dimensions also matches when it holds
+            no elements. A name the container does not hold never
             matches.
 
         Raises
@@ -1083,8 +1088,8 @@ class BaseArrayManager(ABC):
 
         ``owner`` is a result object that already references the
         arrays, and it keeps the data for as long as it lives. If it
-        has been garbage collected by the next solve, the buffers
-        return to their slots and the solve reuses them. Otherwise the
+        has been garbage collected by the next solve, the manager puts
+        the buffers back in their slots and reuses them. Otherwise the
         next solve allocates new buffers.
 
         Parameters
@@ -1109,8 +1114,8 @@ class BaseArrayManager(ABC):
         belong to the owner alone and the next transfer allocates new
         ones. If the owner has been collected, return the buffers to
         their slots for reuse. The manager tracks only the owner, so
-        the next solve also overwrites any of these arrays that other
-        code kept after the owner was collected.
+        cubie overwrites, in the next solve, any of these arrays that
+        other code kept after the owner was collected.
         """
         if self._loan is None:
             return
@@ -1225,10 +1230,10 @@ class BaseArrayManager(ABC):
         Notes
         -----
         Build one :class:`ArrayRequest` for each queued array whose
-        shape is known, and drop the device array it replaces. The
-        request lets the memory manager chunk the array along its run
-        axis unless the array's ``is_chunked`` is False. An input
-        array with no host data stays queued until data arrives.
+        shape is known, and drop the device array it replaces. Mark
+        each request as chunkable along the array's run axis unless
+        the array's ``is_chunked`` is False. Leave an input array with
+        no host data queued until data arrives.
         """
         requests = {}
         for array_label in list(set(self._needs_reallocation)):
