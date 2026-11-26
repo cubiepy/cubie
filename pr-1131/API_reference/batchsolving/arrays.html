@@ -286,8 +286,8 @@ outputs of a solve to the
 <a class="reference internal" href="array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer" title="cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ArrayContainer</span></code></a>,
 which hold one
 <a class="reference internal" href="managed_array.html#cubie.batchsolving.arrays.BaseArrayManager.ManagedArray" title="cubie.batchsolving.arrays.BaseArrayManager.ManagedArray"><code class="xref py py-class docutils literal notranslate"><span class="pre">ManagedArray</span></code></a> for
-each array. The managers request their device memory from
-<code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.memory</span></code>, which decides how many chunks a batch needs.</p>
+each array. Cubie allocates the managers’ device memory through
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.memory</span></code>, and decides there how many chunks a batch needs.</p>
 <section id="base-utilities">
 <h3>Base utilities<a class="headerlink" href="#base-utilities" title="Link to this heading"></a></h3>
 <ul class="simple">
@@ -325,12 +325,12 @@ copies the ones the solve records back to the host.</p></li>
 <section id="dependencies">
 <h2>Dependencies<a class="headerlink" href="#dependencies" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.outputhandling.output_sizes</span></code> supplies <code class="docutils literal notranslate"><span class="pre">BatchInputSizes</span></code>
-and <code class="docutils literal notranslate"><span class="pre">BatchOutputSizes</span></code>, the expected shape of each array.</p></li>
-<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.memory</span></code> allocates the device arrays, pinned host buffers
-and staging buffers, and sets the chunking.</p></li>
-<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.batchsolving.writeback_watcher</span></code> finishes the staged copies
-in a background thread.</p></li>
+<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.outputhandling.output_sizes</span></code>: <code class="docutils literal notranslate"><span class="pre">BatchInputSizes</span></code> and
+<code class="docutils literal notranslate"><span class="pre">BatchOutputSizes</span></code>, the expected shape of each array.</p></li>
+<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.memory</span></code>: the allocation of the device arrays, pinned host
+buffers and staging buffers, and the choice of chunks.</p></li>
+<li><p><code class="xref py py-mod docutils literal notranslate"><span class="pre">cubie.batchsolving.writeback_watcher</span></code>: the background thread
+that finishes the staged copies.</p></li>
 </ul>
 </section>
 </section>

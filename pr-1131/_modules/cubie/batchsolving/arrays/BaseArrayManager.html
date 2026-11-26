@@ -408,9 +408,9 @@
 <span class="sd">    is_chunked</span>
 <span class="sd">        Whether the array may be split into chunks along its run axis.</span>
 <span class="sd">    array</span>
-<span class="sd">        Accepted for its shape only: construction replaces it with a</span>
-<span class="sd">        zero array of the same shape. Attach data afterwards through</span>
-<span class="sd">        :attr:`array`.</span>
+<span class="sd">        Array whose shape to start from. The class keeps only the</span>
+<span class="sd">        shape and attaches a zero array of that shape instead, so</span>
+<span class="sd">        attach your data afterwards through :attr:`array`.</span>
 <span class="sd">    chunked_shape</span>
 <span class="sd">        Shape of one chunk, set once the memory manager has allocated</span>
 <span class="sd">        the array.</span>

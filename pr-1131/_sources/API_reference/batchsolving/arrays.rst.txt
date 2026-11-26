@@ -39,8 +39,8 @@ Each manager keeps a host and a device
 :class:`~cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer`,
 which hold one
 :class:`~cubie.batchsolving.arrays.BaseArrayManager.ManagedArray` for
-each array. The managers request their device memory from
-:mod:`cubie.memory`, which decides how many chunks a batch needs.
+each array. Cubie allocates the managers' device memory through
+:mod:`cubie.memory`, and decides there how many chunks a batch needs.
 
 Base utilities
 ^^^^^^^^^^^^^^
@@ -75,9 +75,9 @@ Output arrays
 Dependencies
 ------------
 
-* :mod:`cubie.outputhandling.output_sizes` supplies ``BatchInputSizes``
-  and ``BatchOutputSizes``, the expected shape of each array.
-* :mod:`cubie.memory` allocates the device arrays, pinned host buffers
-  and staging buffers, and sets the chunking.
-* :mod:`cubie.batchsolving.writeback_watcher` finishes the staged copies
-  in a background thread.
+* :mod:`cubie.outputhandling.output_sizes`: ``BatchInputSizes`` and
+  ``BatchOutputSizes``, the expected shape of each array.
+* :mod:`cubie.memory`: the allocation of the device arrays, pinned host
+  buffers and staging buffers, and the choice of chunks.
+* :mod:`cubie.batchsolving.writeback_watcher`: the background thread
+  that finishes the staged copies.
