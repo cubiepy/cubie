@@ -407,6 +407,10 @@
 <span class="sd">        ``"host"`` (pageable) or ``"memmap"``.</span>
 <span class="sd">    is_chunked</span>
 <span class="sd">        Whether the array may be split into chunks along its run axis.</span>
+<span class="sd">    array</span>
+<span class="sd">        Accepted for its shape only: construction replaces it with a</span>
+<span class="sd">        zero array of the same shape. Attach data afterwards through</span>
+<span class="sd">        :attr:`array`.</span>
 <span class="sd">    chunked_shape</span>
 <span class="sd">        Shape of one chunk, set once the memory manager has allocated</span>
 <span class="sd">        the array.</span>
@@ -819,9 +823,9 @@
 <span class="sd">    stream_group</span>
 <span class="sd">        Name of the stream group to register in.</span>
 <span class="sd">    memory_proportion</span>
-<span class="sd">        Fraction of GPU memory this manager may use, or ``None`` to</span>
-<span class="sd">        take an equal share, with the other managers that give no</span>
-<span class="sd">        fraction, of the memory no fraction has claimed.</span>
+<span class="sd">        Fraction of GPU memory this manager may use. Pass ``None`` to</span>
+<span class="sd">        share the memory that no fraction claims equally with the</span>
+<span class="sd">        other managers that give no fraction.</span>
 <span class="sd">    memory_manager</span>
 <span class="sd">        Memory manager that allocates the device arrays.</span>
 <span class="sd">    memory_owner</span>
@@ -1051,9 +1055,9 @@
 <span class="w">        </span><span class="sd">"""Register this manager with its memory manager.</span>
 
 <span class="sd">        Register :meth:`_invalidate_hook` and</span>
-<span class="sd">        :meth:`_on_allocation_complete` as the manager's callbacks, and</span>
-<span class="sd">        attach a finalizer that releases the registration and the</span>
-<span class="sd">        device arrays when the manager is garbage collected.</span>
+<span class="sd">        :meth:`_on_allocation_complete` as the manager's callbacks.</span>
+<span class="sd">        Attach a finalizer that, once the manager is garbage collected,</span>
+<span class="sd">        queues the release of its registration and its buffers.</span>
 <span class="sd">        """</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_memory_manager</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
@@ -1266,8 +1270,9 @@
 <span class="sd">        Dict[str, bool]</span>
 <span class="sd">            Whether each array matches its expected shape. An array</span>
 <span class="sd">            matches when it has the expected number of dimensions and</span>
-<span class="sd">            every dimension that the sizes fix, or when it holds no</span>
-<span class="sd">            elements. A name the container does not hold never</span>
+<span class="sd">            every dimension that the sizes fix. An array with the</span>
+<span class="sd">            expected number of dimensions also matches when it holds</span>
+<span class="sd">            no elements. A name the container does not hold never</span>
 <span class="sd">            matches.</span>
 
 <span class="sd">        Raises</span>
@@ -1444,8 +1449,8 @@
 
 <span class="sd">        ``owner`` is a result object that already references the</span>
 <span class="sd">        arrays, and it keeps the data for as long as it lives. If it</span>
-<span class="sd">        has been garbage collected by the next solve, the buffers</span>
-<span class="sd">        return to their slots and the solve reuses them. Otherwise the</span>
+<span class="sd">        has been garbage collected by the next solve, the manager puts</span>
+<span class="sd">        the buffers back in their slots and reuses them. Otherwise the</span>
 <span class="sd">        next solve allocates new buffers.</span>
 
 <span class="sd">        Parameters</span>
@@ -1473,8 +1478,8 @@
 <span class="sd">        belong to the owner alone and the next transfer allocates new</span>
 <span class="sd">        ones. If the owner has been collected, return the buffers to</span>
 <span class="sd">        their slots for reuse. The manager tracks only the owner, so</span>
-<span class="sd">        the next solve also overwrites any of these arrays that other</span>
-<span class="sd">        code kept after the owner was collected.</span>
+<span class="sd">        cubie overwrites, in the next solve, any of these arrays that</span>
+<span class="sd">        other code kept after the owner was collected.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loan</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
@@ -1601,10 +1606,10 @@
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
 <span class="sd">        Build one :class:`ArrayRequest` for each queued array whose</span>
-<span class="sd">        shape is known, and drop the device array it replaces. The</span>
-<span class="sd">        request lets the memory manager chunk the array along its run</span>
-<span class="sd">        axis unless the array's ``is_chunked`` is False. An input</span>
-<span class="sd">        array with no host data stays queued until data arrives.</span>
+<span class="sd">        shape is known, and drop the device array it replaces. Mark</span>
+<span class="sd">        each request as chunkable along the array's run axis unless</span>
+<span class="sd">        the array's ``is_chunked`` is False. Leave an input array with</span>
+<span class="sd">        no host data queued until data arrives.</span>
 <span class="sd">        """</span>
         <span class="n">requests</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">array_label</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_needs_reallocation</span><span class="p">)):</span>

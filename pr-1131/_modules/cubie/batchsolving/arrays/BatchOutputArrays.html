@@ -389,8 +389,8 @@
 
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
-<span class="sd">        Each slot records the backing of the buffer attached to it,</span>
-<span class="sd">        so this memory type lasts only until the first attach.</span>
+<span class="sd">        The manager records the backing of each buffer attached to a</span>
+<span class="sd">        slot, so this memory type lasts only until the first attach.</span>
 <span class="sd">        """</span>
         <span class="n">container</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
         <span class="n">container</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="n">memory_type</span><span class="p">)</span>
@@ -440,8 +440,8 @@
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
 <span class="sd">    Build an instance with :meth:`from_solver`, then call</span>
-<span class="sd">    :meth:`update` before each solve. Its other parameters are those of</span>
-<span class="sd">    :class:`.BaseArrayManager`.</span>
+<span class="sd">    :meth:`update` before each solve. The other parameters, except</span>
+<span class="sd">    ``device``, are those of :class:`.BaseArrayManager`.</span>
 <span class="sd">    """</span>
 
     <span class="n">_sizes</span><span class="p">:</span> <span class="n">BatchOutputSizes</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
@@ -477,9 +477,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Register the manager and set the containers' memory types.</span>
 
-<span class="sd">        The host slots start as ``"pinned"`` and the device slots as</span>
-<span class="sd">        ``"device"``. Each host slot then records the backing of the</span>
-<span class="sd">        buffer attached to it.</span>
+<span class="sd">        Start the host slots as ``"pinned"`` and the device slots as</span>
+<span class="sd">        ``"device"``. The manager then records the backing of each</span>
+<span class="sd">        host buffer attached to a slot.</span>
 <span class="sd">        """</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__attrs_post_init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="s2">"pinned"</span><span class="p">)</span>
@@ -792,10 +792,10 @@
 <span class="sd">        -----</span>
 <span class="sd">        Copy an unchunked output with a pinned host buffer straight</span>
 <span class="sd">        into that buffer. Stage every other output, and every chunk,</span>
-<span class="sd">        through pooled pinned buffers. The writeback watcher copies</span>
-<span class="sd">        each staged block into the host buffer once its transfer</span>
-<span class="sd">        completes. This method does not wait for the GPU, so the copy</span>
-<span class="sd">        of one chunk overlaps the next chunk's kernel.</span>
+<span class="sd">        through pooled pinned buffers. Each staged block is copied</span>
+<span class="sd">        into the host buffer by the writeback watcher once its</span>
+<span class="sd">        transfer completes. This method does not wait for the GPU, so</span>
+<span class="sd">        the copy of one chunk overlaps the next chunk's kernel.</span>
 <span class="sd">        """</span>
         <span class="n">from_</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">to_</span> <span class="o">=</span> <span class="p">[]</span>
@@ -844,11 +844,11 @@
 <span class="sd">        queue each device block's copy into a pinned buffer. Hand each</span>
 <span class="sd">        buffer to the writeback watcher with its own event and the</span>
 <span class="sd">        host block as its target. Once the block's copy completes, the</span>
-<span class="sd">        watcher writes the buffer, trimmed to the host block's shape,</span>
-<span class="sd">        into the host target and releases the buffer. The host target</span>
-<span class="sd">        can be a strided view, such as a chunk slice or a memmap, and</span>
-<span class="sd">        on the final chunk the device array can hold more runs than</span>
-<span class="sd">        the host block. This method does not wait for the GPU.</span>
+<span class="sd">        buffer, trimmed to the host block's shape, is written into the</span>
+<span class="sd">        host target and released. The host target can be a strided</span>
+<span class="sd">        view, such as a chunk slice or a memmap, and on the final</span>
+<span class="sd">        chunk there can be more runs in the device array than in the</span>
+<span class="sd">        host block. This method does not wait for the GPU.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>

@@ -287,8 +287,8 @@ each chunk, then lends those buffers to the
 </dl>
 <p class="rubric">Notes</p>
 <p>Build an instance with <a class="reference internal" href="#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.from_solver" title="cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.from_solver"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_solver()</span></code></a>, then call
-<a class="reference internal" href="#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.update" title="cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> before each solve. Its other parameters are those of
-<a class="reference internal" href="base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager" title="cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseArrayManager</span></code></a>.</p>
+<a class="reference internal" href="#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.update" title="cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> before each solve. The other parameters, except
+<code class="docutils literal notranslate"><span class="pre">device</span></code>, are those of <a class="reference internal" href="base_array_manager.html#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager" title="cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseArrayManager</span></code></a>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays._after_allocation">
 <span class="sig-name descname"><span class="pre">_after_allocation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/arrays/BatchOutputArrays.html#OutputArrays._after_allocation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays._after_allocation" title="Link to this definition"></a></dt>
@@ -352,11 +352,11 @@ attached.</p>
 queue each device block’s copy into a pinned buffer. Hand each
 buffer to the writeback watcher with its own event and the
 host block as its target. Once the block’s copy completes, the
-watcher writes the buffer, trimmed to the host block’s shape,
-into the host target and releases the buffer. The host target
-can be a strided view, such as a chunk slice or a memmap, and
-on the final chunk the device array can hold more runs than
-the host block. This method does not wait for the GPU.</p>
+buffer, trimmed to the host block’s shape, is written into the
+host target and released. The host target can be a strided
+view, such as a chunk slice or a memmap, and on the final
+chunk there can be more runs in the device array than in the
+host block. This method does not wait for the GPU.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -443,10 +443,10 @@ manager’s stream.</p></li>
 <p class="rubric">Notes</p>
 <p>Copy an unchunked output with a pinned host buffer straight
 into that buffer. Stage every other output, and every chunk,
-through pooled pinned buffers. The writeback watcher copies
-each staged block into the host buffer once its transfer
-completes. This method does not wait for the GPU, so the copy
-of one chunk overlaps the next chunk’s kernel.</p>
+through pooled pinned buffers. Each staged block is copied
+into the host buffer by the writeback watcher once its
+transfer completes. This method does not wait for the GPU, so
+the copy of one chunk overlaps the next chunk’s kernel.</p>
 </dd></dl>
 
 <dl class="py method">

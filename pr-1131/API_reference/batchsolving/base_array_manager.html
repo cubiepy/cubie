@@ -281,9 +281,9 @@ floating-point array this dtype.</p></li>
 <li><p><strong>host</strong> (<a class="reference internal" href="array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer" title="cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer"><em>cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer</em></a>) – Container for host-side arrays.</p></li>
 <li><p><strong>chunks</strong> – Number of chunks the batch is split into along the run axis.</p></li>
 <li><p><strong>stream_group</strong> – Name of the stream group to register in.</p></li>
-<li><p><strong>memory_proportion</strong> – Fraction of GPU memory this manager may use, or <code class="docutils literal notranslate"><span class="pre">None</span></code> to
-take an equal share, with the other managers that give no
-fraction, of the memory no fraction has claimed.</p></li>
+<li><p><strong>memory_proportion</strong> – Fraction of GPU memory this manager may use. Pass <code class="docutils literal notranslate"><span class="pre">None</span></code> to
+share the memory that no fraction claims equally with the
+other managers that give no fraction.</p></li>
 <li><p><strong>memory_manager</strong> – Memory manager that allocates the device arrays.</p></li>
 <li><p><strong>memory_owner</strong> – Object to register the manager’s allocations under. The
 memory manager evicts all of an owner’s allocations together.
@@ -470,10 +470,10 @@ integrates.</p>
 <dd><p>Queue allocation requests for arrays that need reallocation.</p>
 <p class="rubric">Notes</p>
 <p>Build one <code class="xref py py-class docutils literal notranslate"><span class="pre">ArrayRequest</span></code> for each queued array whose
-shape is known, and drop the device array it replaces. The
-request lets the memory manager chunk the array along its run
-axis unless the array’s <code class="docutils literal notranslate"><span class="pre">is_chunked</span></code> is False. An input
-array with no host data stays queued until data arrives.</p>
+shape is known, and drop the device array it replaces. Mark
+each request as chunkable along the array’s run axis unless
+the array’s <code class="docutils literal notranslate"><span class="pre">is_chunked</span></code> is False. Leave an input array with
+no host data queued until data arrives.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -511,8 +511,9 @@ array with no host data stays queued until data arrives.</p>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Whether each array matches its expected shape. An array
 matches when it has the expected number of dimensions and
-every dimension that the sizes fix, or when it holds no
-elements. A name the container does not hold never
+every dimension that the sizes fix. An array with the
+expected number of dimensions also matches when it holds
+no elements. A name the container does not hold never
 matches.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
@@ -611,8 +612,8 @@ manager’s stream.</p></li>
 <dd><p>Hand every host buffer to <code class="docutils literal notranslate"><span class="pre">owner</span></code>, emptying the slots.</p>
 <p><code class="docutils literal notranslate"><span class="pre">owner</span></code> is a result object that already references the
 arrays, and it keeps the data for as long as it lives. If it
-has been garbage collected by the next solve, the buffers
-return to their slots and the solve reuses them. Otherwise the
+has been garbage collected by the next solve, the manager puts
+the buffers back in their slots and reuses them. Otherwise the
 next solve allocates new buffers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -635,8 +636,8 @@ weak reference to it.</p>
 belong to the owner alone and the next transfer allocates new
 ones. If the owner has been collected, return the buffers to
 their slots for reuse. The manager tracks only the owner, so
-the next solve also overwrites any of these arrays that other
-code kept after the owner was collected.</p>
+cubie overwrites, in the next solve, any of these arrays that
+other code kept after the owner was collected.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -644,9 +645,9 @@ code kept after the owner was collected.</p>
 <span class="sig-name descname"><span class="pre">register_with_memory_manager</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/cubie/batchsolving/arrays/BaseArrayManager.html#BaseArrayManager.register_with_memory_manager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager.register_with_memory_manager" title="Link to this definition"></a></dt>
 <dd><p>Register this manager with its memory manager.</p>
 <p>Register <a class="reference internal" href="#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._invalidate_hook" title="cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._invalidate_hook"><code class="xref py py-meth docutils literal notranslate"><span class="pre">_invalidate_hook()</span></code></a> and
-<a class="reference internal" href="#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._on_allocation_complete" title="cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._on_allocation_complete"><code class="xref py py-meth docutils literal notranslate"><span class="pre">_on_allocation_complete()</span></code></a> as the manager’s callbacks, and
-attach a finalizer that releases the registration and the
-device arrays when the manager is garbage collected.</p>
+<a class="reference internal" href="#cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._on_allocation_complete" title="cubie.batchsolving.arrays.BaseArrayManager.BaseArrayManager._on_allocation_complete"><code class="xref py py-meth docutils literal notranslate"><span class="pre">_on_allocation_complete()</span></code></a> as the manager’s callbacks.
+Attach a finalizer that, once the manager is garbage collected,
+queues the release of its registration and its buffers.</p>
 </dd></dl>
 
 <dl class="py method">

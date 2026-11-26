@@ -363,8 +363,8 @@
 
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
-<span class="sd">        Each slot records the backing of the array attached to it,</span>
-<span class="sd">        so this memory type lasts only until the first attach.</span>
+<span class="sd">        The manager records the backing of each array attached to a</span>
+<span class="sd">        slot, so this memory type lasts only until the first attach.</span>
 <span class="sd">        """</span>
         <span class="n">container</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
         <span class="n">container</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="n">memory_type</span><span class="p">)</span>
@@ -410,8 +410,8 @@
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
-<span class="sd">    Build an instance with :meth:`from_solver`. Its other parameters</span>
-<span class="sd">    are those of :class:`.BaseArrayManager`.</span>
+<span class="sd">    Build an instance with :meth:`from_solver`. The other parameters,</span>
+<span class="sd">    except ``device``, are those of :class:`.BaseArrayManager`.</span>
 <span class="sd">    """</span>
 
     <span class="n">_sizes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BatchInputSizes</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
@@ -446,9 +446,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">__attrs_post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Register the manager and set the containers' memory types.</span>
 
-<span class="sd">        The host slots start as ``"pinned"`` and the device slots as</span>
-<span class="sd">        ``"device"``. Each host slot then records the backing of the</span>
-<span class="sd">        array attached to it.</span>
+<span class="sd">        Start the host slots as ``"pinned"`` and the device slots as</span>
+<span class="sd">        ``"device"``. The manager then records the backing of each</span>
+<span class="sd">        host array attached to a slot.</span>
 <span class="sd">        """</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__attrs_post_init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">set_memory_type</span><span class="p">(</span><span class="s2">"pinned"</span><span class="p">)</span>
@@ -788,8 +788,9 @@
 <span class="w">        </span><span class="sd">"""Queue the copies of a chunk's host inputs to the device.</span>
 
 <span class="sd">        In an unchunked run, copy only the arrays queued since the</span>
-<span class="sd">        last copy. In a chunked run, copy every input's slice for</span>
-<span class="sd">        ``chunk_index``. Skip host arrays with no elements.</span>
+<span class="sd">        last copy. In a chunked run, copy every input: the slice for</span>
+<span class="sd">        ``chunk_index`` of each chunked input, and the whole of the</span>
+<span class="sd">        driver coefficients. Skip host arrays with no elements.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -860,11 +861,11 @@
 <span class="sd">        Cut the arrays into blocks with :func:`staging_blocks`, copy</span>
 <span class="sd">        each host block into a pinned buffer and queue the buffer's</span>
 <span class="sd">        copy to the device. The host source can be a strided view,</span>
-<span class="sd">        such as a chunk slice or a memmap, and on the final chunk it</span>
-<span class="sd">        can hold fewer runs than the device array. Copy each block by</span>
-<span class="sd">        its shape, so the runs line up. Hand each buffer to the</span>
-<span class="sd">        transfer watcher with its own event, so the buffer is returned</span>
-<span class="sd">        to the pool as soon as its copy reaches the device.</span>
+<span class="sd">        such as a chunk slice or a memmap, and on the final chunk</span>
+<span class="sd">        there can be fewer runs in it than in the device array. Copy</span>
+<span class="sd">        each block by its shape, so the runs line up. Hand each buffer</span>
+<span class="sd">        to the transfer watcher with its own event, so the buffer is</span>
+<span class="sd">        returned to the pool as soon as its copy reaches the device.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>

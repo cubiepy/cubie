@@ -276,13 +276,12 @@ for the initial values, parameters and driver coefficients, and one
 <a class="reference internal" href="output_arrays.html#cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays" title="cubie.batchsolving.arrays.BatchOutputArrays.OutputArrays"><code class="xref py py-class docutils literal notranslate"><span class="pre">OutputArrays</span></code></a> for
 the outputs.</p>
 <p>If you pass host arrays in the solver’s precision, cubie uses them as
-they are and copies them to the GPU when it solves. Arrays in another
-precision cost one extra copy. If a batch does not fit in GPU memory,
-cubie splits it into chunks of runs and copies each chunk’s inputs and
-outputs in turn. Cubie hands the host outputs of a solve to the
-<a class="reference internal" href="solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a> it returns, and
-while you hold that result, later solves on the same solver write into
-new arrays.</p>
+they are and copies them to the GPU when it solves. If you pass them in
+another precision, cubie makes one converted copy of each. If a batch
+does not fit in GPU memory, cubie splits it into chunks of runs and
+copies each chunk’s inputs and outputs in turn. Cubie hands the host
+outputs of a solve to the
+<a class="reference internal" href="solve_result.html#cubie.batchsolving.solveresult.SolveResult" title="cubie.batchsolving.solveresult.SolveResult"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolveResult</span></code></a> it returns.</p>
 <p>Each manager keeps a host and a device
 <a class="reference internal" href="array_container.html#cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer" title="cubie.batchsolving.arrays.BaseArrayManager.ArrayContainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ArrayContainer</span></code></a>,
 which hold one
